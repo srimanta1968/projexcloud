@@ -1,0 +1,473 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>ProjexCloud v3.1 · P7 Data Model — Field · Evidence · Hyperscale</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<style>
+  :root { --bg:#0b0f17; --panel:#121826; --panel-2:#1a2234; --line:#243049; --text:#e6ecf5; --muted:#8a98b3; --accent:#c9a86a; --accent-2:#6aa9ff; --teal:#2dd4bf; --green:#5dd39e; --red:#ff6b6b; --yellow:#f5c451; --purple:#b88dff; --code-bg:#0f1422; }
+  *{box-sizing:border-box;} html,body{background:var(--bg);color:var(--text);font-family:ui-sans-serif,-apple-system,"Segoe UI",Roboto,sans-serif;margin:0;padding:0;line-height:1.55;}
+  .page{max-width:1260px;margin:0 auto;padding:56px 32px 96px;}
+  header.cover{border-bottom:1px solid var(--line);padding-bottom:36px;margin-bottom:48px;}
+  header.cover .eyebrow{color:var(--accent);letter-spacing:0.18em;text-transform:uppercase;font-size:12px;font-weight:700;}
+  header.cover h1{font-size:40px;line-height:1.15;margin:12px 0 8px;letter-spacing:-0.02em;}
+  header.cover .sub{color:var(--muted);font-size:16px;max-width:900px;}
+  header.cover .meta{display:flex;gap:24px;flex-wrap:wrap;margin-top:24px;color:var(--muted);font-size:13px;}
+  header.cover .meta b{color:var(--text);font-weight:600;}
+  h2{font-size:26px;margin:56px 0 18px;padding-bottom:8px;border-bottom:1px solid var(--line);}
+  h3{font-size:19px;margin:28px 0 10px;color:var(--text);}
+  h4{font-size:13px;margin:18px 0 8px;color:var(--accent);text-transform:uppercase;letter-spacing:0.12em;}
+  p{color:#c8d1e3;}
+  .grid{display:grid;gap:16px;} .grid.cols-2{grid-template-columns:repeat(2,minmax(0,1fr));} .grid.cols-3{grid-template-columns:repeat(3,minmax(0,1fr));}
+  @media(max-width:900px){.grid.cols-2,.grid.cols-3{grid-template-columns:1fr;} header.cover h1{font-size:30px;}}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px 18px;} .card .label{color:var(--accent);font-size:11px;text-transform:uppercase;letter-spacing:0.14em;font-weight:700;} .card .title{font-weight:600;margin:6px 0;} .card .body{color:var(--muted);font-size:13.5px;}
+  .pill{display:inline-block;padding:3px 10px;border-radius:999px;font-size:11px;border:1px solid var(--line);color:var(--muted);margin-right:6px;}
+  .pill.blue{color:var(--accent-2);border-color:rgba(106,169,255,0.4);} .pill.purple{color:var(--purple);border-color:rgba(184,141,255,0.4);} .pill.green{color:var(--green);border-color:rgba(93,211,158,0.4);} .pill.yellow{color:var(--yellow);border-color:rgba(245,196,81,0.4);} .pill.teal{color:var(--teal);border-color:rgba(45,212,191,0.4);} .pill.red{color:var(--red);border-color:rgba(255,107,107,0.4);}
+  table{width:100%;border-collapse:collapse;margin-top:12px;font-size:13.5px;} th,td{text-align:left;padding:9px 11px;border-bottom:1px solid var(--line);vertical-align:top;} th{color:var(--muted);font-weight:600;font-size:11.5px;text-transform:uppercase;letter-spacing:0.08em;} td code{font-size:12px;}
+  pre,code{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;} pre{background:var(--code-bg);border:1px solid var(--line);border-radius:10px;padding:14px 16px;overflow-x:auto;font-size:12.5px;} code{background:var(--code-bg);padding:1px 6px;border-radius:4px;font-size:12px;}
+  .diagram-wrap{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:22px;overflow-x:auto;} .caption{color:var(--muted);font-size:12.5px;margin-top:10px;text-align:center;} .mermaid{background:transparent;}
+  nav.toc{position:sticky;top:0;background:rgba(11,15,23,0.92);backdrop-filter:blur(10px);border-bottom:1px solid var(--line);padding:10px 32px;z-index:10;} nav.toc .row{max-width:1260px;margin:0 auto;display:flex;flex-wrap:wrap;gap:10px;font-size:12px;} nav.toc a{color:var(--muted);text-decoration:none;border-bottom:1px solid transparent;} nav.toc a:hover{color:var(--accent);border-color:var(--accent);}
+  .callout{border-left:3px solid var(--accent);background:var(--panel-2);padding:14px 18px;border-radius:0 10px 10px 0;margin:18px 0;color:#d6deef;font-size:14px;} .callout.blue{border-color:var(--accent-2);} .callout.green{border-color:var(--green);} .callout.purple{border-color:var(--purple);} .callout.red{border-color:var(--red);}
+  .sdk-block{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:22px 24px;margin:22px 0 28px;} .sdk-block .sdk-header{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;margin-bottom:6px;} .sdk-block .sdk-header h3{margin:0;font-size:22px;color:var(--accent);} .sdk-block .purpose{color:#c8d1e3;font-size:14.5px;margin:4px 0 14px;}
+  .meta-strip{display:flex;flex-wrap:wrap;gap:18px;font-size:12.5px;color:var(--muted);margin:6px 0 18px;padding:10px 14px;background:var(--panel-2);border-radius:8px;} .meta-strip b{color:var(--text);}
+</style>
+</head>
+<body>
+
+<nav class="toc">
+  <div class="row">
+    <a href="#overview">1 · Overview</a>
+    <a href="#phase-erd">2 · Phase ERD</a>
+    <a href="#pool-map">3 · Pool placement</a>
+    <a href="#sdk-storm">4 · sdk-storm</a>
+    <a href="#sdk-dispatch">5 · sdk-dispatch</a>
+    <a href="#sdk-assignment">6 · sdk-assignment</a>
+    <a href="#sdk-lead-scoring">7 · sdk-lead-scoring</a>
+    <a href="#sdk-evidence">8 · sdk-evidence</a>
+    <a href="#sdk-diagnostic">9 · sdk-diagnostic-telemetry</a>
+    <a href="#federation">10 · Pool federation (G10)</a>
+    <a href="#iceberg">11 · Iceberg federation (G11)</a>
+    <a href="#hard-caps">12 · Meter hard caps</a>
+    <a href="#hdk">13 · hdk-measure / watermark</a>
+  </div>
+</nav>
+
+<div class="page">
+
+<header class="cover">
+  <div class="eyebrow">Data Model · Phase 7 · Wave W7 + Final HDK Modules</div>
+  <h1>P7 — Field · Evidence · Hyperscale</h1>
+  <div class="sub">Field-grade SDKs (Storm · Dispatch · Assignment · Lead Scoring · Evidence · Diagnostic Telemetry), full <b>Pool Federation Runtime (G10)</b>, full <b>Iceberg lakehouse federation (G11)</b>, meter <b>hard caps (DENY)</b>, plus HDK measure + watermark.</div>
+  <div class="meta">
+    <div><b>Phase:</b> P7 (Weeks 44–50)</div>
+    <div><b>Maps to wave:</b> W7 + final HDK</div>
+    <div><b>Gates closed:</b> G10 · G11</div>
+    <div><b>PRD:</b> <code>prd/P7-Field-Hyperscale.md</code></div>
+    <div><b>Anchor docs:</b> Architecture §10 · §22A · SDK Build Plan §W7</div>
+  </div>
+</header>
+
+<section id="overview">
+  <h2>1 · Overview</h2>
+  <div class="grid cols-3">
+    <div class="card"><div class="label">Domain SDKs</div><div class="title">Field + Evidence</div><div class="body">Evidence is the last domain SDK to ship — its chain-of-custody depends on every encryption tier, audit chain, and lineage edge being in place.</div></div>
+    <div class="card"><div class="label">G10 closer</div><div class="title">Pool Federation Runtime</div><div class="body">Real regional federation router (not just hooks from P1). Activates when pool count exceeds 200. Per-region capacity; auto-failover for Tier-G.</div></div>
+    <div class="card"><div class="label">G11 closer</div><div class="title">Iceberg full federation</div><div class="body">All cross-pool reports route through Iceberg, not Warehouse ClickHouse alone. Per-region Iceberg catalog.</div></div>
+  </div>
+
+  <div class="callout red">
+    <b>Mode flip — meter hard caps.</b> P1 = emit-only · P4 = soft caps (WARN headers) · <b>P7 = hard caps (DENY)</b>. 30 weeks of meter data have calibrated the catalog by this point. Tenants past <code>quota_policy.hard_cap</code> receive <code>QuotaExceeded</code> responses; alert paths fire for ops + tenant admin.
+  </div>
+</section>
+
+<section id="phase-erd">
+  <h2>2 · Phase ERD</h2>
+  <div class="diagram-wrap">
+    <pre class="mermaid">
+erDiagram
+  STORM_EVENT ||--o{ STORM_INTENSITY_CELL : ""
+  STORM_EVENT }o--|| GEO_NODE : ""
+
+  DISPATCH_QUEUE ||--o{ DISPATCH_TASK : ""
+  DISPATCH_TASK }o--|| ENCOUNTER : ""
+  ASSIGNMENT ||--|| DISPATCH_TASK : ""
+  ASSIGNMENT }o--|| PERSONA : ""
+
+  LEAD_SCORE }o--|| CRM_CONTACT : ""
+  LEAD_SCORE }o--|| STORM_EVENT : "storm-impact factor"
+
+  EVIDENCE_CAPTURE }o--|| ENCOUNTER : ""
+  EVIDENCE_CAPTURE }o--|| DEVICE : ""
+  EVIDENCE_CAPTURE ||--o{ EVIDENCE_VARIANT : "raw + edits"
+  EVIDENCE_CAPTURE ||--|| CHAIN_OF_CUSTODY : ""
+  EVIDENCE_LEGAL_EXPORT ||--o{ EVIDENCE_CAPTURE : ""
+
+  DIAGNOSTIC_CRASH }o--|| DEVICE : ""
+
+  POOL_FEDERATION ||--o{ FEDERATION_ROUTE : ""
+
+  ICEBERG_CATALOG ||--o{ ICEBERG_TABLE : ""
+
+  QUOTA_POLICY ||--o{ QUOTA_DENIAL : "hard-cap"
+    </pre>
+  </div>
+  <div class="caption">Figure 2.1 — Field SDKs, evidence chain-of-custody, federation + lakehouse, hard-cap mechanics.</div>
+</section>
+
+<section id="pool-map">
+  <h2>3 · Pool placement matrix</h2>
+  <table>
+    <thead><tr><th>SDK</th><th>Schema</th><th>Pool</th><th>Non-OLTP</th></tr></thead>
+    <tbody>
+      <tr><td><code>sdk-storm</code></td><td><code>storm</code></td><td>Global Catalog (overlay) + App Pool (per-tenant overlays)</td><td>—</td></tr>
+      <tr><td><code>sdk-dispatch</code></td><td><code>dispatch</code></td><td>App Pool</td><td>WebSocket gateway</td></tr>
+      <tr><td><code>sdk-assignment</code></td><td><code>assignment</code></td><td>App Pool</td><td>—</td></tr>
+      <tr><td><code>sdk-lead-scoring</code></td><td><code>lead_scoring</code></td><td>App Pool</td><td>Vector store (per-tenant model)</td></tr>
+      <tr><td><code>sdk-evidence</code></td><td><code>evidence</code></td><td>Evidence Pool (metadata)</td><td>S3 (raw + edited blobs)</td></tr>
+      <tr><td><code>sdk-diagnostic-telemetry</code></td><td><code>diagnostic</code></td><td>Admin</td><td>ClickHouse (rollups)</td></tr>
+      <tr><td>Pool federation runtime</td><td><code>federation</code></td><td>Admin (per region) + cross-region registry</td><td>Redis (federation route cache)</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- sdk-storm -->
+<section id="sdk-storm">
+  <h2>4 · <code>sdk-storm</code> — Storm Overlays &amp; Intensity Grids</h2>
+  <div class="sdk-block">
+    <div class="sdk-header"><h3>sdk-storm</h3><span class="pill blue">NEW</span></div>
+    <div class="purpose">Pre/post-event overlays from weather APIs; intensity grids per bbox; historical archive; per-region event registry.</div>
+    <div class="meta-strip"><span><b>PRD §:</b> 5.1</span><span><b>Pool:</b> Global Catalog + App Pool</span><span><b>Schema:</b> <code>storm</code></span></div>
+
+    <h4>4.1 · Tables</h4>
+
+    <p><b>storm.event</b></p>
+    <table><thead><tr><th>Column</th><th>Type</th><th>Purpose</th></tr></thead><tbody>
+      <tr><td><code>event_id</code></td><td>ULID PK</td><td>Surrogate.</td></tr>
+      <tr><td><code>name</code></td><td>text</td><td>e.g., <code>Hurricane Iris 2026</code>.</td></tr>
+      <tr><td><code>kind</code></td><td>enum</td><td><code>hurricane · tornado · hail · flood · wildfire · winter</code></td></tr>
+      <tr><td><code>provider · provider_event_id</code></td><td>enum · text</td><td><code>noaa · dtn · weather-underground</code>.</td></tr>
+      <tr><td><code>geom</code></td><td>geography(Polygon,4326)</td><td>Coverage area.</td></tr>
+      <tr><td><code>started_at · ended_at</code></td><td>timestamptz</td><td>Lifecycle.</td></tr>
+      <tr><td><code>severity</code></td><td>enum</td><td>Provider-specific scale.</td></tr>
+    </tbody></table>
+
+    <p><b>storm.intensity_cell</b> — gridded measurements.</p>
+    <table><thead><tr><th>Column</th><th>Type</th><th>Purpose</th></tr></thead><tbody>
+      <tr><td><code>cell_id</code></td><td>ULID PK</td><td>Surrogate.</td></tr>
+      <tr><td><code>event_id</code></td><td>FK</td><td>Parent.</td></tr>
+      <tr><td><code>cell_geom</code></td><td>geography(Polygon,4326)</td><td>Cell footprint.</td></tr>
+      <tr><td><code>wind_mph · hail_in · rainfall_in · gust_mph</code></td><td>numeric</td><td>Measurements.</td></tr>
+      <tr><td><code>captured_at</code></td><td>timestamptz</td><td>Snapshot time.</td></tr>
+    </tbody></table>
+
+    <p><b>SKUs:</b> <code>storm.overlay.query</code> — <code>flat_per_call</code>.</p>
+  </div>
+</section>
+
+<!-- sdk-dispatch -->
+<section id="sdk-dispatch">
+  <h2>5 · <code>sdk-dispatch</code> — Unified Queue + Route Optimization</h2>
+  <div class="sdk-block">
+    <div class="sdk-header"><h3>sdk-dispatch</h3><span class="pill blue">MODIFIED</span></div>
+    <div class="purpose">Engagement-aware queue (work units are encounters), live WS updates, route optimization, per-tenant dispatch policies.</div>
+    <div class="meta-strip"><span><b>PRD §:</b> 5.2</span><span><b>Pool:</b> App Pool</span><span><b>Schema:</b> <code>dispatch</code></span></div>
+
+    <p><b>dispatch.queue · dispatch.task · dispatch.route</b></p>
+    <table><thead><tr><th>Table</th><th>Key columns</th></tr></thead><tbody>
+      <tr><td><code>dispatch.queue</code></td><td><code>queue_id PK · tenant_id · name · policy jsonb (priority · territory · skill rules) · status</code></td></tr>
+      <tr><td><code>dispatch.task</code></td><td><code>task_id PK · queue_id FK · encounter_id FK · address_id FK · priority · status (queued · assigned · in-progress · completed · cancelled) · scheduled_for</code></td></tr>
+      <tr><td><code>dispatch.route</code></td><td><code>route_id PK · persona_id (dispatcher) · stops jsonb (ordered task_ids) · optimized_at · total_drive_mins</code></td></tr>
+    </tbody></table>
+
+    <p><b>SKUs:</b> <code>dispatch.queue.enqueue · dispatch.route.optimize</code> — <code>tiered_per_call</code>.</p>
+  </div>
+</section>
+
+<!-- sdk-assignment -->
+<section id="sdk-assignment">
+  <h2>6 · <code>sdk-assignment</code> — Auto-Assign</h2>
+  <div class="sdk-block">
+    <div class="sdk-header"><h3>sdk-assignment</h3><span class="pill blue">NEW</span></div>
+    <div class="purpose">Auto-assignment by radius / skill / availability with territory rules and workload balancing.</div>
+    <div class="meta-strip"><span><b>PRD §:</b> 5.3</span><span><b>Pool:</b> App Pool</span><span><b>Schema:</b> <code>assignment</code></span></div>
+
+    <p><b>assignment.assignment · assignment.territory · assignment.workload</b></p>
+    <table><thead><tr><th>Table</th><th>Key columns</th></tr></thead><tbody>
+      <tr><td><code>assignment.assignment</code></td><td><code>assignment_id PK · task_id FK · persona_id FK · assigned_at · accepted_at · status (proposed · accepted · rejected · completed)</code></td></tr>
+      <tr><td><code>assignment.territory</code></td><td><code>territory_id PK · tenant_id · name · geom geography · primary_persona_ids text[] · backup_persona_ids text[]</code></td></tr>
+      <tr><td><code>assignment.workload</code></td><td><code>persona_id PK · open_tasks int · capacity_per_day int · skills text[] · available_from · available_to</code></td></tr>
+    </tbody></table>
+
+    <p><b>SKUs:</b> <code>assignment.assign</code> — <code>flat_per_call</code>.</p>
+  </div>
+</section>
+
+<!-- sdk-lead-scoring -->
+<section id="sdk-lead-scoring">
+  <h2>7 · <code>sdk-lead-scoring</code> — Proximity · Expertise · Intent · Storm-Impact</h2>
+  <div class="sdk-block">
+    <div class="sdk-header"><h3>sdk-lead-scoring</h3><span class="pill blue">NEW</span></div>
+    <div class="purpose">Per-tenant scoring model combining proximity (geo), expertise (persona), intent (engagement signals), storm-impact (sdk-storm), next-best-action (sdk-recommendation).</div>
+    <div class="meta-strip"><span><b>PRD §:</b> 5.4</span><span><b>Pool:</b> App Pool</span><span><b>Schema:</b> <code>lead_scoring</code></span></div>
+
+    <p><b>lead_scoring.model · lead_scoring.score · lead_scoring.feature_weight</b></p>
+    <table><thead><tr><th>Table</th><th>Key columns</th></tr></thead><tbody>
+      <tr><td><code>lead_scoring.model</code></td><td><code>model_id PK · tenant_id · vertical · trained_at · feature_set jsonb · status</code></td></tr>
+      <tr><td><code>lead_scoring.score</code></td><td><code>score_id PK · model_id FK · contact_id FK · score numeric · components jsonb (proximity · expertise · intent · storm-impact subscores) · computed_at · trace_id</code></td></tr>
+      <tr><td><code>lead_scoring.feature_weight</code></td><td><code>weight_id PK · model_id FK · feature · weight numeric · last_tuned_at</code></td></tr>
+    </tbody></table>
+
+    <p><b>SKUs:</b> <code>lead-scoring.score · lead-scoring.next-action</code> — <code>tiered_per_call</code>.</p>
+  </div>
+</section>
+
+<!-- sdk-evidence -->
+<section id="sdk-evidence">
+  <h2>8 · <code>sdk-evidence</code> — Chain-of-Custody Linchpin</h2>
+  <div class="sdk-block">
+    <div class="sdk-header"><h3>sdk-evidence</h3><span class="pill purple">MODIFIED v3 · Last domain SDK</span></div>
+    <div class="purpose">Provenance-stamped captures (GPS · IMU · device_uuid · timestamp · consent_ref); raw + edited retention (edits never overwrite raw); chain-of-custody hash linked to Audit; legal-export API.</div>
+    <div class="meta-strip"><span><b>PRD §:</b> 5.5</span><span><b>FRs:</b> FR-EVD-1 … FR-EVD-8</span><span><b>Pool:</b> Evidence Pool (metadata) + S3 (blobs)</span><span><b>Schema:</b> <code>evidence</code></span></div>
+
+    <h4>8.1 · Tables</h4>
+
+    <p><b>evidence.capture</b></p>
+    <table><thead><tr><th>Column</th><th>Type</th><th>Purpose</th></tr></thead><tbody>
+      <tr><td><code>capture_id</code></td><td>ULID PK</td><td>Surrogate.</td></tr>
+      <tr><td><code>tenant_id</code></td><td>FK</td><td>RLS.</td></tr>
+      <tr><td><code>encounter_id</code></td><td>FK</td><td>Required; sealed encounters block new captures.</td></tr>
+      <tr><td><code>capturer_persona_id</code></td><td>FK</td><td>Subject.</td></tr>
+      <tr><td><code>device_uuid</code></td><td>FK → device.device</td><td>Provenance.</td></tr>
+      <tr><td><code>device_attestation_id</code></td><td>FK</td><td>Signed attestation at time of capture.</td></tr>
+      <tr><td><code>raw_blob_id</code></td><td>FK → media.blob</td><td>Original (never overwritten).</td></tr>
+      <tr><td><code>captured_at</code></td><td>timestamptz</td><td>Device clock + server-time delta.</td></tr>
+      <tr><td><code>lat · lng · altitude</code></td><td>numeric · numeric · numeric</td><td>GPS.</td></tr>
+      <tr><td><code>imu_signature</code></td><td>bytea</td><td>Motion-sensor signature at capture.</td></tr>
+      <tr><td><code>consent_ref</code></td><td>FK → consent.receipt</td><td>Capture-purpose consent.</td></tr>
+      <tr><td><code>retention_class</code></td><td>text</td><td>e.g., <code>HIPAA-25y · Insurance-7y</code>.</td></tr>
+      <tr><td><code>retention_expires_at</code></td><td>timestamptz</td><td>Shred deadline.</td></tr>
+      <tr><td><code>status</code></td><td>enum</td><td><code>active · sealed · shredded</code></td></tr>
+    </tbody></table>
+
+    <p><b>evidence.variant</b> — edits / annotations / watermarks (raw kept separately).</p>
+    <table><thead><tr><th>Column</th><th>Type</th><th>Purpose</th></tr></thead><tbody>
+      <tr><td><code>variant_id</code></td><td>ULID PK</td><td>Surrogate.</td></tr>
+      <tr><td><code>capture_id</code></td><td>FK</td><td>Parent.</td></tr>
+      <tr><td><code>kind</code></td><td>enum</td><td><code>edited · watermarked · annotated · redacted</code></td></tr>
+      <tr><td><code>variant_blob_id</code></td><td>FK → media.blob</td><td>The variant bytes.</td></tr>
+      <tr><td><code>edit_log</code></td><td>jsonb</td><td>From hdk-image-editor / hdk-watermark.</td></tr>
+      <tr><td><code>created_by_persona_id</code></td><td>FK</td><td>Editor.</td></tr>
+      <tr><td><code>created_at</code></td><td>timestamptz</td><td>Time.</td></tr>
+    </tbody></table>
+
+    <p><b>evidence.chain_of_custody</b> — append-only hash chain per capture.</p>
+    <table><thead><tr><th>Column</th><th>Type</th><th>Purpose</th></tr></thead><tbody>
+      <tr><td><code>entry_id</code></td><td>ULID PK</td><td>Surrogate.</td></tr>
+      <tr><td><code>capture_id</code></td><td>FK</td><td>Subject.</td></tr>
+      <tr><td><code>seq</code></td><td>int</td><td>Sequence per capture.</td></tr>
+      <tr><td><code>action</code></td><td>enum</td><td><code>captured · transferred · edited · watermarked · exported · accessed</code></td></tr>
+      <tr><td><code>actor_persona_id</code></td><td>FK</td><td>Who.</td></tr>
+      <tr><td><code>blob_checksum</code></td><td>bytea</td><td>SHA-256 of relevant blob.</td></tr>
+      <tr><td><code>prev_hash · entry_hash</code></td><td>bytea · bytea</td><td>Chain.</td></tr>
+      <tr><td><code>audit_entry_id</code></td><td>FK → audit.entry</td><td>Cross-chain link.</td></tr>
+      <tr><td><code>occurred_at</code></td><td>timestamptz</td><td>Time.</td></tr>
+    </tbody></table>
+
+    <p><b>evidence.legal_export</b> — signed bundle generation.</p>
+    <table><thead><tr><th>Column</th><th>Type</th><th>Purpose</th></tr></thead><tbody>
+      <tr><td><code>export_id</code></td><td>ULID PK</td><td>Surrogate.</td></tr>
+      <tr><td><code>requestor_persona_id</code></td><td>FK</td><td>Who.</td></tr>
+      <tr><td><code>jurisdiction</code></td><td>text</td><td>Determines bundle format (US-court · GDPR · India IT Act · …).</td></tr>
+      <tr><td><code>capture_ids</code></td><td>text[]</td><td>Included captures.</td></tr>
+      <tr><td><code>artifact_s3_key</code></td><td>text</td><td>Signed bundle.</td></tr>
+      <tr><td><code>signature_envelope</code></td><td>bytea</td><td>Detached signature.</td></tr>
+      <tr><td><code>chain_verifications</code></td><td>jsonb</td><td>Per-capture verify results at export time.</td></tr>
+      <tr><td><code>generated_at</code></td><td>timestamptz</td><td>Time.</td></tr>
+    </tbody></table>
+
+    <h4>8.2 · ERD</h4>
+    <div class="diagram-wrap"><pre class="mermaid">
+erDiagram
+  CAPTURE ||--o{ VARIANT : ""
+  CAPTURE ||--|| CHAIN_OF_CUSTODY : ""
+  CAPTURE }o--|| ENCOUNTER : ""
+  CAPTURE }o--|| DEVICE : ""
+  CAPTURE }o--|| CONSENT_RECEIPT : ""
+  LEGAL_EXPORT ||--o{ CAPTURE : ""
+  CAPTURE {
+    string capture_id PK
+    string tenant_id
+    string encounter_id FK
+    string device_uuid FK
+    string raw_blob_id FK
+    timestamp captured_at
+    numeric lat
+    numeric lng
+    string retention_class
+    string status
+  }
+  CHAIN_OF_CUSTODY {
+    string entry_id PK
+    string capture_id FK
+    int    seq
+    string action
+    bytes  prev_hash
+    bytes  entry_hash
+  }
+  LEGAL_EXPORT {
+    string export_id PK
+    string jurisdiction
+    text[] capture_ids
+    string artifact_s3_key
+    bytes  signature_envelope
+  }
+    </pre></div>
+
+    <p><b>Events:</b> <code>evidence.captured.v1 · evidence.legal-export.generated.v1 · evidence.shredded.v1</code>.</p>
+    <p><b>SKUs:</b> <code>evidence.capture</code> (per-GB) · <code>evidence.legal-export.generate</code> (per-export) · <code>evidence.shred</code> (per-blob).</p>
+  </div>
+</section>
+
+<!-- sdk-diagnostic-telemetry -->
+<section id="sdk-diagnostic">
+  <h2>9 · <code>sdk-diagnostic-telemetry</code></h2>
+  <div class="sdk-block">
+    <div class="sdk-header"><h3>sdk-diagnostic-telemetry</h3><span class="pill blue">NEW</span></div>
+    <div class="purpose">Crash snapshots tied to <code>device_uuid</code>; permissions/Wi-Fi/battery/sensor health; session replay (privacy-sanitized).</div>
+    <div class="meta-strip"><span><b>PRD §:</b> 5.6</span><span><b>Pool:</b> Admin (metadata)</span><span><b>Schema:</b> <code>diagnostic</code></span><span><b>Non-OLTP:</b> ClickHouse rollups</span></div>
+
+    <p><b>diagnostic.crash · diagnostic.health_snapshot · diagnostic.session_replay_event</b></p>
+    <table><thead><tr><th>Table</th><th>Key columns</th></tr></thead><tbody>
+      <tr><td><code>diagnostic.crash</code></td><td><code>crash_id PK · device_uuid FK · person_id · app_version · os_version · stack_envelope bytea · occurred_at</code></td></tr>
+      <tr><td><code>diagnostic.health_snapshot</code></td><td><code>snapshot_id PK · device_uuid FK · permissions jsonb · battery_pct · wifi_state · sensor_state · captured_at</code></td></tr>
+      <tr><td><code>diagnostic.session_replay_event</code></td><td><code>event_id PK · device_uuid FK · sanitized_event_kind · payload jsonb · occurred_at</code></td></tr>
+    </tbody></table>
+
+    <p><b>SKUs:</b> <code>diagnostic.crash.report · diagnostic.session-replay.event</code> — <code>flat_per_call</code>.</p>
+  </div>
+</section>
+
+<!-- federation -->
+<section id="federation">
+  <h2>10 · Pool Federation Runtime (G10)</h2>
+  <div class="sdk-block">
+    <div class="sdk-header"><h3>Pool federation runtime</h3><span class="pill purple">G10 closer · Real runtime</span></div>
+    <div class="purpose">Activates when pool count exceeds 200. Selects routes across federations per <code>PoolFederationManifest</code> (schema delivered in P1; runtime delivered here). Auto-failover for Tier-G.</div>
+    <div class="meta-strip"><span><b>PRD §:</b> 5.7</span><span><b>Pool:</b> Admin (per region)</span><span><b>Schema:</b> <code>federation</code></span></div>
+
+    <h4>10.1 · Tables</h4>
+
+    <p><b>federation.federation</b> — a named federation of pools.</p>
+    <table><thead><tr><th>Column</th><th>Type</th><th>Purpose</th></tr></thead><tbody>
+      <tr><td><code>federation_id</code></td><td>ULID PK</td><td>Surrogate.</td></tr>
+      <tr><td><code>region</code></td><td>text</td><td>Owning region.</td></tr>
+      <tr><td><code>name · description</code></td><td>text</td><td>UX.</td></tr>
+      <tr><td><code>pool_indexes</code></td><td>text[]</td><td>Member pools.</td></tr>
+      <tr><td><code>capacity_class</code></td><td>enum</td><td><code>standard · premium · tier-g</code></td></tr>
+      <tr><td><code>activated_at</code></td><td>timestamptz</td><td>When federation went live.</td></tr>
+    </tbody></table>
+
+    <p><b>federation.route</b> — resolved cross-pool query route.</p>
+    <table><thead><tr><th>Column</th><th>Type</th><th>Purpose</th></tr></thead><tbody>
+      <tr><td><code>route_id</code></td><td>ULID PK</td><td>Surrogate.</td></tr>
+      <tr><td><code>federation_id</code></td><td>FK</td><td>Parent.</td></tr>
+      <tr><td><code>query_class</code></td><td>enum</td><td><code>resolver · dsar · analytics · lineage</code> (matches P1 sanctions).</td></tr>
+      <tr><td><code>target_pool_indexes</code></td><td>text[]</td><td>Selected pools.</td></tr>
+      <tr><td><code>execution_plan</code></td><td>jsonb</td><td>Per-pool sub-query &amp; merge strategy.</td></tr>
+      <tr><td><code>created_at · last_used_at</code></td><td>timestamptz</td><td>Cache markers.</td></tr>
+    </tbody></table>
+
+    <p><b>federation.failover_event</b></p>
+    <table><thead><tr><th>Column</th><th>Type</th><th>Purpose</th></tr></thead><tbody>
+      <tr><td><code>event_id</code></td><td>ULID PK</td><td>Surrogate.</td></tr>
+      <tr><td><code>federation_id</code></td><td>FK</td><td>Subject.</td></tr>
+      <tr><td><code>from_region · to_region</code></td><td>text · text</td><td>Failover destination.</td></tr>
+      <tr><td><code>trigger</code></td><td>enum</td><td><code>chaos-drill · production-failover · operator-initiated</code></td></tr>
+      <tr><td><code>rpo_observed · rto_observed</code></td><td>int · int</td><td>Seconds.</td></tr>
+      <tr><td><code>occurred_at</code></td><td>timestamptz</td><td>Time.</td></tr>
+    </tbody></table>
+
+    <h4>10.2 · Redis</h4>
+    <table><thead><tr><th>Key</th><th>Value</th><th>TTL</th></tr></thead><tbody>
+      <tr><td><code>fed:route:{federation_id}:{query_class}</code></td><td>Serialized execution plan</td><td>60s</td></tr>
+    </tbody></table>
+
+    <p><b>Events:</b> <code>federation.route.resolved.v1 · federation.failover.executed.v1</code>.</p>
+  </div>
+</section>
+
+<!-- iceberg -->
+<section id="iceberg">
+  <h2>11 · Iceberg Full Lakehouse Federation (G11)</h2>
+  <div class="sdk-block">
+    <div class="sdk-header"><h3>Iceberg lakehouse</h3><span class="pill purple">G11 closer</span></div>
+    <div class="purpose">Upgrades P6B's partial layer. All cross-pool reports route through Iceberg, not Warehouse ClickHouse alone. Per-region catalog (Glue or Nessie). Partition <code>(region, tenant, time)</code> + Z-order.</div>
+
+    <h4>11.1 · Catalog &amp; bookkeeping (server-side)</h4>
+    <table><thead><tr><th>Table</th><th>Key columns</th></tr></thead><tbody>
+      <tr><td><code>federation.iceberg_catalog</code></td><td><code>catalog_id PK · region · backend (glue · nessie · hive) · root_url · capacity_tier · status</code></td></tr>
+      <tr><td><code>federation.iceberg_table_binding</code></td><td><code>binding_id PK · catalog_id FK · table_ref · source_clickhouse_table · partition_strategy jsonb · z_order_cols text[] · last_compacted_at</code></td></tr>
+      <tr><td><code>federation.lakehouse_query_log</code></td><td><code>query_id PK · tenant_id · agent_run_id FK · sql_text · bytes_scanned · cost · trace_id · occurred_at</code></td></tr>
+    </tbody></table>
+
+    <p><b>Events:</b> <code>iceberg.table.compacted.v1 · iceberg.query.executed.v1</code>.</p>
+  </div>
+</section>
+
+<!-- hard-caps -->
+<section id="hard-caps">
+  <h2>12 · Meter Hard Caps — mode flip</h2>
+  <div class="sdk-block">
+    <div class="sdk-header"><h3>Meter mode change</h3><span class="pill red">DENY mode activates</span></div>
+    <div class="purpose">No schema additions; behavior change in <code>sdk-meter</code> gate. <code>quota_policy.hard_cap</code> is now enforced: gate returns DENY when crossed. <code>usage.hardcap.exceeded.v1</code> events activated.</div>
+
+    <h4>12.1 · New table — meter.quota_denial</h4>
+    <table><thead><tr><th>Column</th><th>Type</th><th>Purpose</th></tr></thead><tbody>
+      <tr><td><code>denial_id</code></td><td>ULID PK</td><td>Surrogate.</td></tr>
+      <tr><td><code>tenant_id</code></td><td>FK</td><td>Subject.</td></tr>
+      <tr><td><code>sku</code></td><td>text</td><td>Denied SKU.</td></tr>
+      <tr><td><code>policy_id</code></td><td>FK → meter.quota_policy</td><td>Cap that denied.</td></tr>
+      <tr><td><code>denied_at</code></td><td>timestamptz</td><td>Time.</td></tr>
+      <tr><td><code>request_count_24h</code></td><td>int</td><td>For triage.</td></tr>
+      <tr><td><code>operator_override_until</code></td><td>timestamptz, null</td><td>Temporary lift.</td></tr>
+    </tbody></table>
+
+    <p><b>Events:</b> <code>usage.hardcap.exceeded.v1</code> (regulated; was reserved in P1).</p>
+  </div>
+</section>
+
+<!-- hdk -->
+<section id="hdk">
+  <h2>13 · <code>hdk-measure</code> &amp; <code>hdk-watermark</code></h2>
+  <div class="sdk-block">
+    <div class="sdk-header"><h3>HDK final modules</h3><span class="pill purple">HDK</span></div>
+    <div class="purpose">AR-based measurement (ARCore/ARKit); image/video watermarking for evidence integrity. Both queue offline via hdk-sync.</div>
+    <div class="meta-strip"><span><b>PRD §:</b> 5.9</span><span><b>Pool:</b> On-device + evidence anchors</span></div>
+
+    <h4>13.1 · Server anchors</h4>
+    <table><thead><tr><th>Table</th><th>Key columns</th></tr></thead><tbody>
+      <tr><td><code>hdk_measure.measurement</code></td><td><code>measurement_id PK · capture_id FK · kind (area · distance · volume) · value numeric · unit · accuracy_class · device_uuid · captured_at</code></td></tr>
+      <tr><td><code>hdk_watermark.application</code></td><td><code>application_id PK · variant_id FK → evidence.variant · scheme (visible · invisible · cryptographic) · payload_envelope bytea · applied_at</code></td></tr>
+    </tbody></table>
+
+    <h4>13.2 · Events</h4>
+    <table><thead><tr><th>Event</th><th>Retention</th></tr></thead><tbody>
+      <tr><td><code>hdk-measure.captured.v1</code></td><td>regulated</td></tr>
+      <tr><td><code>hdk-watermark.applied.v1</code></td><td>regulated</td></tr>
+    </tbody></table>
+  </div>
+</section>
+
+<div class="callout green">
+  <b>P7 closes the v3.1 estate.</b> At end of P7, all 57 SDKs are at v1.0, all 12 gates are closed, all three meter modes have been exercised, the lakehouse is the system of record for cross-pool analytics + lineage, and Evidence has the chain-of-custody story regulators and courts will accept. The remaining work (P8) is deployment variants.
+</div>
+
+</div>
+
+<script>
+  mermaid.initialize({ startOnLoad: true, theme: 'dark', themeVariables: { background: '#0b0f17', primaryColor: '#1a2234', primaryBorderColor: '#c9a86a', primaryTextColor: '#e6ecf5', lineColor: '#6aa9ff', secondaryColor: '#1d1830', tertiaryColor: '#16241c' } });
+</script>
+
+</body>
+</html>

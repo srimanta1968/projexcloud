@@ -1,0 +1,485 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>ProjexCloud v3.1 · P5 Data Model — Engagement · Enterprise Connectors</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<style>
+  :root { --bg:#0b0f17; --panel:#121826; --panel-2:#1a2234; --line:#243049; --text:#e6ecf5; --muted:#8a98b3; --accent:#c9a86a; --accent-2:#6aa9ff; --teal:#2dd4bf; --green:#5dd39e; --red:#ff6b6b; --yellow:#f5c451; --purple:#b88dff; --code-bg:#0f1422; }
+  *{box-sizing:border-box;} html,body{background:var(--bg);color:var(--text);font-family:ui-sans-serif,-apple-system,"Segoe UI",Roboto,sans-serif;margin:0;padding:0;line-height:1.55;}
+  .page{max-width:1260px;margin:0 auto;padding:56px 32px 96px;}
+  header.cover{border-bottom:1px solid var(--line);padding-bottom:36px;margin-bottom:48px;}
+  header.cover .eyebrow{color:var(--accent);letter-spacing:0.18em;text-transform:uppercase;font-size:12px;font-weight:700;}
+  header.cover h1{font-size:40px;line-height:1.15;margin:12px 0 8px;letter-spacing:-0.02em;}
+  header.cover .sub{color:var(--muted);font-size:16px;max-width:900px;}
+  header.cover .meta{display:flex;gap:24px;flex-wrap:wrap;margin-top:24px;color:var(--muted);font-size:13px;}
+  header.cover .meta b{color:var(--text);font-weight:600;}
+  h2{font-size:26px;margin:56px 0 18px;padding-bottom:8px;border-bottom:1px solid var(--line);}
+  h3{font-size:19px;margin:28px 0 10px;color:var(--text);}
+  h4{font-size:13px;margin:18px 0 8px;color:var(--accent);text-transform:uppercase;letter-spacing:0.12em;}
+  p{color:#c8d1e3;}
+  .grid{display:grid;gap:16px;} .grid.cols-2{grid-template-columns:repeat(2,minmax(0,1fr));} .grid.cols-3{grid-template-columns:repeat(3,minmax(0,1fr));}
+  @media(max-width:900px){.grid.cols-2,.grid.cols-3{grid-template-columns:1fr;} header.cover h1{font-size:30px;}}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px 18px;} .card .label{color:var(--accent);font-size:11px;text-transform:uppercase;letter-spacing:0.14em;font-weight:700;} .card .title{font-weight:600;margin:6px 0;} .card .body{color:var(--muted);font-size:13.5px;}
+  .pill{display:inline-block;padding:3px 10px;border-radius:999px;font-size:11px;border:1px solid var(--line);color:var(--muted);margin-right:6px;}
+  .pill.blue{color:var(--accent-2);border-color:rgba(106,169,255,0.4);} .pill.purple{color:var(--purple);border-color:rgba(184,141,255,0.4);} .pill.green{color:var(--green);border-color:rgba(93,211,158,0.4);} .pill.yellow{color:var(--yellow);border-color:rgba(245,196,81,0.4);} .pill.teal{color:var(--teal);border-color:rgba(45,212,191,0.4);} .pill.red{color:var(--red);border-color:rgba(255,107,107,0.4);}
+  table{width:100%;border-collapse:collapse;margin-top:12px;font-size:13.5px;} th,td{text-align:left;padding:9px 11px;border-bottom:1px solid var(--line);vertical-align:top;} th{color:var(--muted);font-weight:600;font-size:11.5px;text-transform:uppercase;letter-spacing:0.08em;} td code{font-size:12px;}
+  pre,code{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;} pre{background:var(--code-bg);border:1px solid var(--line);border-radius:10px;padding:14px 16px;overflow-x:auto;font-size:12.5px;} code{background:var(--code-bg);padding:1px 6px;border-radius:4px;font-size:12px;}
+  .diagram-wrap{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:22px;overflow-x:auto;} .caption{color:var(--muted);font-size:12.5px;margin-top:10px;text-align:center;} .mermaid{background:transparent;}
+  nav.toc{position:sticky;top:0;background:rgba(11,15,23,0.92);backdrop-filter:blur(10px);border-bottom:1px solid var(--line);padding:10px 32px;z-index:10;} nav.toc .row{max-width:1260px;margin:0 auto;display:flex;flex-wrap:wrap;gap:10px;font-size:12px;} nav.toc a{color:var(--muted);text-decoration:none;border-bottom:1px solid transparent;} nav.toc a:hover{color:var(--accent);border-color:var(--accent);}
+  .callout{border-left:3px solid var(--accent);background:var(--panel-2);padding:14px 18px;border-radius:0 10px 10px 0;margin:18px 0;color:#d6deef;font-size:14px;} .callout.blue{border-color:var(--accent-2);} .callout.green{border-color:var(--green);} .callout.purple{border-color:var(--purple);} .callout.red{border-color:var(--red);}
+  .sdk-block{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:22px 24px;margin:22px 0 28px;} .sdk-block .sdk-header{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;margin-bottom:6px;} .sdk-block .sdk-header h3{margin:0;font-size:22px;color:var(--accent);} .sdk-block .purpose{color:#c8d1e3;font-size:14.5px;margin:4px 0 14px;}
+  .meta-strip{display:flex;flex-wrap:wrap;gap:18px;font-size:12.5px;color:var(--muted);margin:6px 0 18px;padding:10px 14px;background:var(--panel-2);border-radius:8px;} .meta-strip b{color:var(--text);}
+</style>
+</head>
+<body>
+
+<nav class="toc">
+  <div class="row">
+    <a href="#overview">1 · Overview</a>
+    <a href="#phase-erd">2 · Phase ERD</a>
+    <a href="#pool-map">3 · Pool placement</a>
+    <a href="#sdk-engagement">4 · sdk-engagement</a>
+    <a href="#sdk-crm">5 · sdk-crm</a>
+    <a href="#sdk-content">6 · sdk-content</a>
+    <a href="#sdk-sr">7 · sdk-service-request</a>
+    <a href="#sdk-event">8 · sdk-event</a>
+    <a href="#sdk-campaign">9 · sdk-campaign</a>
+    <a href="#sdk-social">10 · sdk-social</a>
+    <a href="#connectors">11 · Enterprise connectors</a>
+    <a href="#hdk-editors">12 · HDK editors</a>
+  </div>
+</nav>
+
+<div class="page">
+
+<header class="cover">
+  <div class="eyebrow">Data Model · Phase 5 · Wave W5 + HDK Editors</div>
+  <h1>P5 — Engagement (Domain Layer) · Enterprise Connectors</h1>
+  <div class="sub">Encounter (L5) and Relationship (L6) lifecycles; CRM · Content · Service Request · Event · Campaign · Social — all referencing <code>encounter_id</code>. Plus the enterprise connector roster (Salesforce · M365 · GWorkspace · Jira · Linear · Zendesk · HubSpot · Zoom) and HDK editors.</div>
+  <div class="meta">
+    <div><b>Phase:</b> P5 (Weeks 29–35)</div>
+    <div><b>Maps to wave:</b> W5 + HDK editors</div>
+    <div><b>Gates closed:</b> —</div>
+    <div><b>PRD:</b> <code>prd/P5-Engagement-Connectors.md</code></div>
+    <div><b>Anchor docs:</b> Architecture §13 · §15 · AgenticIntegration §6</div>
+  </div>
+</header>
+
+<section id="overview">
+  <h2>1 · Overview</h2>
+  <div class="grid cols-3">
+    <div class="card"><div class="label">Domain layer</div><div class="title">Encounter + Relationship</div><div class="body">Encounter (L5) is the unit-of-work for every vertical (visit, order, deal, session, capital call). Per-encounter Vault key opened on open, shredded on seal.</div></div>
+    <div class="card"><div class="label">Lint rule</div><div class="title">No parallel work-unit primitives</div><div class="body">Verticals must reference <code>encounter_id</code> — no separate visit/order/session tables. Enforced by CI from this phase forward.</div></div>
+    <div class="card"><div class="label">Connector roster</div><div class="title">8 enterprise connectors</div><div class="body">Salesforce · M365 · GWorkspace · Jira · Linear · Zendesk · HubSpot · Zoom. All on the framework from P4; each exposes a tool manifest for the P6A agent CapabilityGraph.</div></div>
+  </div>
+</section>
+
+<section id="phase-erd">
+  <h2>2 · Phase ERD</h2>
+  <div class="diagram-wrap">
+    <pre class="mermaid">
+erDiagram
+  TENANT ||--o{ ENCOUNTER : ""
+  ENCOUNTER ||--o{ ENCOUNTER_PARTICIPANT : ""
+  ENCOUNTER ||--o{ ENCOUNTER_GRANT : ""
+  ENCOUNTER }o--|| VAULT_KEY : "per-encounter key"
+  ENCOUNTER ||--o{ ENCOUNTER_EXTENSION : "vertical-specific"
+  PERSONA }o--o{ RELATIONSHIP : "rebac edge"
+  RELATIONSHIP }o--o| ENCOUNTER : "supports access"
+
+  CRM_CONTACT }o--|| PERSONA : "keyed by"
+  CRM_DEAL }o--|| ENCOUNTER : "deal cycle"
+  CRM_ACTIVITY }o--|| ENCOUNTER : ""
+
+  CONTENT_ITEM ||--o{ CONTENT_VERSION : ""
+
+  SR_TICKET }o--|| ENCOUNTER : "kind=support"
+  EVENT_SESSION }o--|| ENCOUNTER : "kind=session"
+  EVENT_TICKET ||--|| EVENT_SESSION : ""
+
+  CAMPAIGN ||--o{ CAMPAIGN_SEGMENT : ""
+  CAMPAIGN ||--o{ CAMPAIGN_JOURNEY_RUN : ""
+
+  SOCIAL_HANDLE ||--o{ SOCIAL_INTERACTION : ""
+
+  CONNECTOR_INSTALL ||--o{ EXTERNAL_OBJECT_MIRROR : ""
+    </pre>
+  </div>
+  <div class="caption">Figure 2.1 — Engagement core + thin domain SDKs + connector mirrors in P5.</div>
+</section>
+
+<section id="pool-map">
+  <h2>3 · Pool placement matrix</h2>
+  <table>
+    <thead><tr><th>SDK</th><th>Schema</th><th>Pool</th><th>Notes</th></tr></thead>
+    <tbody>
+      <tr><td><code>sdk-engagement</code></td><td><code>engagement</code></td><td>App Pool</td><td>Per-tenant. Vault opens encounter key at open.</td></tr>
+      <tr><td><code>sdk-crm</code></td><td><code>crm</code></td><td>App Pool</td><td>Contacts keyed by Persona; deals reference Encounter.</td></tr>
+      <tr><td><code>sdk-content</code></td><td><code>content</code></td><td>App Pool</td><td>Tenant-defined taxonomies.</td></tr>
+      <tr><td><code>sdk-service-request</code></td><td><code>service_request</code></td><td>App Pool</td><td>Tickets as <code>encounter.kind=support</code>.</td></tr>
+      <tr><td><code>sdk-event</code></td><td><code>event</code></td><td>App Pool</td><td>Sessions as <code>encounter.kind=session</code>.</td></tr>
+      <tr><td><code>sdk-campaign</code></td><td><code>campaign</code></td><td>App Pool</td><td>Segment DSL + journeys.</td></tr>
+      <tr><td><code>sdk-social</code></td><td><code>social</code></td><td>App Pool</td><td>Composes connector framework.</td></tr>
+      <tr><td>Connectors (8)</td><td><code>connector_{kind}</code></td><td>Admin (creds, cursor) + App Pool (mirrors)</td><td>All extend <code>sdk-connectors</code> framework from P4.</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- sdk-engagement -->
+<section id="sdk-engagement">
+  <h2>4 · <code>sdk-engagement</code> — Encounter (L5) + Relationship (L6)</h2>
+  <div class="sdk-block">
+    <div class="sdk-header"><h3>sdk-engagement</h3><span class="pill purple">NEW v3 · Domain layer</span></div>
+    <div class="purpose">Encounter CRUD with states <code>open · in-progress · closed · sealed</code>; participants; per-encounter Vault key; Encounter Grants; Relationship CRUD (re-using rebac engine); extension hooks.</div>
+    <div class="meta-strip"><span><b>PRD §:</b> 5.1</span><span><b>FRs:</b> FR-EN-1 … FR-EN-7</span><span><b>Pool:</b> App Pool</span><span><b>Schema:</b> <code>engagement</code></span></div>
+
+    <h4>4.1 · Tables</h4>
+
+    <p><b>engagement.encounter</b> — the L5 entity.</p>
+    <table><thead><tr><th>Column</th><th>Type</th><th>Purpose</th></tr></thead><tbody>
+      <tr><td><code>encounter_id</code></td><td>ULID PK</td><td>Surrogate.</td></tr>
+      <tr><td><code>tenant_id</code></td><td>FK</td><td>RLS.</td></tr>
+      <tr><td><code>kind</code></td><td>text</td><td><code>visit · order · session · deal · capital-call · support · meeting · …</code></td></tr>
+      <tr><td><code>state</code></td><td>enum</td><td><code>open · in-progress · closed · sealed</code></td></tr>
+      <tr><td><code>vault_key_ref</code></td><td>FK → vault.key</td><td>Per-encounter envelope key.</td></tr>
+      <tr><td><code>opened_at · closed_at · sealed_at</code></td><td>timestamptz</td><td>Lifecycle.</td></tr>
+      <tr><td><code>retention_policy</code></td><td>text</td><td>e.g., <code>HIPAA-25y · RBI-8y · GDPR-erasable</code></td></tr>
+      <tr><td><code>retention_expires_at</code></td><td>timestamptz, null</td><td>Computed shred deadline.</td></tr>
+      <tr><td><code>parent_encounter_id</code></td><td>FK, null</td><td>For multi-visit chains.</td></tr>
+      <tr><td><code>address_id</code></td><td>FK → geo.address, null</td><td>Location.</td></tr>
+      <tr><td><code>billing_ref</code></td><td>text, null</td><td>Optional billing-side reference.</td></tr>
+    </tbody></table>
+
+    <p><b>engagement.encounter_participant</b> — typed persona refs with roles per encounter.</p>
+    <table><thead><tr><th>Column</th><th>Type</th><th>Purpose</th></tr></thead><tbody>
+      <tr><td><code>participant_id</code></td><td>ULID PK</td><td>Surrogate.</td></tr>
+      <tr><td><code>encounter_id</code></td><td>FK</td><td>Parent.</td></tr>
+      <tr><td><code>persona_id</code></td><td>FK</td><td>Participant.</td></tr>
+      <tr><td><code>role</code></td><td>text</td><td>e.g., <code>patient · doctor · agent · buyer · seller · attendee</code></td></tr>
+      <tr><td><code>joined_at · left_at</code></td><td>timestamptz</td><td>Lifecycle.</td></tr>
+      <tr><td><code>required</code></td><td>bool</td><td>For closure validation.</td></tr>
+    </tbody></table>
+
+    <p><b>engagement.encounter_grant</b> — time/scope-bounded tokens for non-participants.</p>
+    <table><thead><tr><th>Column</th><th>Type</th><th>Purpose</th></tr></thead><tbody>
+      <tr><td><code>grant_id</code></td><td>ULID PK</td><td>Surrogate.</td></tr>
+      <tr><td><code>encounter_id</code></td><td>FK</td><td>Parent.</td></tr>
+      <tr><td><code>grantee_persona_id</code></td><td>FK</td><td>Recipient.</td></tr>
+      <tr><td><code>issuer_persona_id</code></td><td>FK</td><td>Granting persona.</td></tr>
+      <tr><td><code>scope</code></td><td>jsonb</td><td>Method allow-list (e.g., <code>{chart.read, vitals.read}</code>).</td></tr>
+      <tr><td><code>issued_at · expires_at · revoked_at</code></td><td>timestamptz</td><td>Lifecycle.</td></tr>
+      <tr><td><code>capability_token_ref</code></td><td>text, null</td><td>Forward link to P6A capability token.</td></tr>
+    </tbody></table>
+
+    <p><b>engagement.encounter_extension</b> (logical) — each vertical defines a per-kind extension table in the App Pool, referencing <code>encounter_id</code>. Examples:</p>
+    <table><thead><tr><th>Extension</th><th>Vertical</th></tr></thead><tbody>
+      <tr><td><code>encounter_chart</code> (chart root + sections + notes)</td><td>Healthcare</td></tr>
+      <tr><td><code>encounter_property_visit</code> (property_id, inspection_notes)</td><td>Realty</td></tr>
+      <tr><td><code>encounter_order_lines</code> (line_items, totals)</td><td>eCommerce</td></tr>
+      <tr><td><code>encounter_capital_call</code> (fund_id, amount, drawdown)</td><td>Realty / Funds</td></tr>
+    </tbody></table>
+
+    <h4>4.2 · ERD</h4>
+    <div class="diagram-wrap"><pre class="mermaid">
+erDiagram
+  ENCOUNTER ||--o{ ENCOUNTER_PARTICIPANT : ""
+  ENCOUNTER ||--o{ ENCOUNTER_GRANT : ""
+  ENCOUNTER }o--|| VAULT_KEY : ""
+  ENCOUNTER ||--o| ENCOUNTER_EXTENSION : ""
+  ENCOUNTER }o--o| ENCOUNTER : "parent"
+  ENCOUNTER {
+    string encounter_id PK
+    string tenant_id
+    string kind
+    string state
+    string vault_key_ref FK
+    timestamp opened_at
+    timestamp sealed_at
+    string retention_policy
+  }
+  ENCOUNTER_PARTICIPANT {
+    string participant_id PK
+    string encounter_id FK
+    string persona_id FK
+    string role
+  }
+  ENCOUNTER_GRANT {
+    string grant_id PK
+    string encounter_id FK
+    string grantee_persona_id FK
+    jsonb  scope
+    timestamp expires_at
+  }
+    </pre></div>
+
+    <p><b>Events:</b> <code>engagement.encounter.opened.v1 · engagement.encounter.closed.v1 · engagement.encounter.sealed.v1 · engagement.relationship.created.v1 · engagement.relationship.terminated.v1 · engagement.encounter.grant.issued.v1</code> (all regulated).</p>
+    <p><b>SKUs:</b> <code>engagement.encounter.open · engagement.encounter.close · engagement.encounter.seal · engagement.relationship.create · engagement.encounter.grant.issue</code> — <code>tiered_per_call</code>.</p>
+  </div>
+</section>
+
+<!-- sdk-crm -->
+<section id="sdk-crm">
+  <h2>5 · <code>sdk-crm</code> — Contacts · Deals · Activities</h2>
+  <div class="sdk-block">
+    <div class="sdk-header"><h3>sdk-crm</h3><span class="pill blue">SDK · MODIFIED v3</span></div>
+    <div class="purpose">Contacts keyed by Persona; deals reference Encounter; activities are sub-units of Encounter. Bidirectional sync target for connector-salesforce + connector-hubspot.</div>
+    <div class="meta-strip"><span><b>PRD §:</b> 5.2</span><span><b>FRs:</b> FR-CRM-1 … FR-CRM-5</span><span><b>Pool:</b> App Pool</span><span><b>Schema:</b> <code>crm</code></span></div>
+
+    <h4>5.1 · Tables</h4>
+
+    <p><b>crm.contact</b> — references Persona (which is keyed off Master Person via L2/L3).</p>
+    <table><thead><tr><th>Column</th><th>Type</th><th>Purpose</th></tr></thead><tbody>
+      <tr><td><code>contact_id</code></td><td>ULID PK</td><td>Surrogate.</td></tr>
+      <tr><td><code>tenant_id</code></td><td>FK</td><td>RLS.</td></tr>
+      <tr><td><code>persona_id</code></td><td>FK</td><td>Canonical anchor.</td></tr>
+      <tr><td><code>lifecycle_stage</code></td><td>enum</td><td><code>lead · prospect · customer · churned · former</code></td></tr>
+      <tr><td><code>source</code></td><td>text</td><td>Acquisition source.</td></tr>
+      <tr><td><code>owner_persona_id</code></td><td>FK</td><td>Sales rep.</td></tr>
+      <tr><td><code>custom_fields</code></td><td>jsonb</td><td>Per-vertical typed (via sdk-taxonomy in P6A).</td></tr>
+      <tr><td><code>external_refs</code></td><td>jsonb</td><td>Map <code>{connector_kind → external_id}</code>.</td></tr>
+    </tbody></table>
+
+    <p><b>crm.deal</b> — references Encounter for the deal cycle.</p>
+    <table><thead><tr><th>Column</th><th>Type</th><th>Purpose</th></tr></thead><tbody>
+      <tr><td><code>deal_id</code></td><td>ULID PK</td><td>Surrogate.</td></tr>
+      <tr><td><code>encounter_id</code></td><td>FK</td><td>Cycle anchor.</td></tr>
+      <tr><td><code>contact_id</code></td><td>FK</td><td>Primary contact.</td></tr>
+      <tr><td><code>name · amount · currency</code></td><td>text · numeric · char(3)</td><td>Display + value.</td></tr>
+      <tr><td><code>stage</code></td><td>enum</td><td>Maps to encounter state (qualifying · proposal · negotiation · closed-won · closed-lost).</td></tr>
+      <tr><td><code>close_probability</code></td><td>numeric(5,2)</td><td>Forecast.</td></tr>
+      <tr><td><code>custom_fields</code></td><td>jsonb</td><td>Vertical extension.</td></tr>
+    </tbody></table>
+
+    <p><b>crm.activity</b> — sub-units of an Encounter (calls, emails, meetings logged).</p>
+    <table><thead><tr><th>Column</th><th>Type</th><th>Purpose</th></tr></thead><tbody>
+      <tr><td><code>activity_id</code></td><td>ULID PK</td><td>Surrogate.</td></tr>
+      <tr><td><code>encounter_id</code></td><td>FK</td><td>Parent encounter (NOT a separate timeline).</td></tr>
+      <tr><td><code>kind</code></td><td>enum</td><td><code>call · email · meeting · note · task</code></td></tr>
+      <tr><td><code>actor_persona_id</code></td><td>FK</td><td>Who.</td></tr>
+      <tr><td><code>summary</code></td><td>text</td><td>Body.</td></tr>
+      <tr><td><code>occurred_at</code></td><td>timestamptz</td><td>Time.</td></tr>
+    </tbody></table>
+
+    <p><b>SKUs:</b> <code>crm.contact.create · crm.contact.update · crm.deal.transition · crm.activity.log</code> — <code>tiered_per_call</code>.</p>
+  </div>
+</section>
+
+<!-- sdk-content -->
+<section id="sdk-content">
+  <h2>6 · <code>sdk-content</code> — Typed Content + Versions</h2>
+  <div class="sdk-block">
+    <div class="sdk-header"><h3>sdk-content</h3><span class="pill blue">NEW</span></div>
+    <div class="purpose">Generic typed-content store with tenant-defined taxonomies, publishing workflow, signed playback hooks.</div>
+    <div class="meta-strip"><span><b>PRD §:</b> 5.3</span><span><b>Pool:</b> App Pool</span><span><b>Schema:</b> <code>content</code></span></div>
+
+    <p><b>content.item · content.version</b></p>
+    <table><thead><tr><th>Table</th><th>Key columns</th></tr></thead><tbody>
+      <tr><td><code>content.item</code></td><td><code>item_id PK · tenant_id · type_code · slug · current_version_id FK · status (draft · published · archived) · owner_persona_id</code></td></tr>
+      <tr><td><code>content.version</code></td><td><code>version_id PK · item_id FK · version_no · payload jsonb · media_refs · published_at · published_by · taxonomy_tags text[]</code></td></tr>
+      <tr><td><code>content.taxonomy</code></td><td><code>taxonomy_id PK · tenant_id · name · structure jsonb (tenant-defined hierarchy)</code></td></tr>
+    </tbody></table>
+
+    <p><b>SKUs:</b> <code>content.publish · content.read</code> — <code>flat_per_call</code>.</p>
+  </div>
+</section>
+
+<!-- sdk-service-request -->
+<section id="sdk-sr">
+  <h2>7 · <code>sdk-service-request</code> — Tickets as Encounters</h2>
+  <div class="sdk-block">
+    <div class="sdk-header"><h3>sdk-service-request</h3><span class="pill blue">SDK · MODIFIED</span></div>
+    <div class="purpose">Tickets modeled as <code>encounter.kind=support</code>; routing rules; SLA timers; escalation via sdk-workflow + sdk-approval. Bidirectional with Zendesk and Jira via connectors.</div>
+    <div class="meta-strip"><span><b>PRD §:</b> 5.4</span><span><b>Pool:</b> App Pool</span><span><b>Schema:</b> <code>service_request</code></span></div>
+
+    <p><b>service_request.ticket</b></p>
+    <table><thead><tr><th>Column</th><th>Type</th><th>Purpose</th></tr></thead><tbody>
+      <tr><td><code>ticket_id</code></td><td>ULID PK</td><td>Surrogate.</td></tr>
+      <tr><td><code>encounter_id</code></td><td>FK</td><td>Anchor.</td></tr>
+      <tr><td><code>requester_persona_id · assignee_persona_id</code></td><td>FK · FK</td><td>Routing.</td></tr>
+      <tr><td><code>queue_id</code></td><td>FK</td><td>Routing queue.</td></tr>
+      <tr><td><code>priority · severity</code></td><td>enum · enum</td><td>—</td></tr>
+      <tr><td><code>status</code></td><td>enum</td><td><code>new · in-progress · awaiting-customer · resolved · closed</code></td></tr>
+      <tr><td><code>sla_first_response_at · sla_resolution_at</code></td><td>timestamptz</td><td>SLA deadlines.</td></tr>
+      <tr><td><code>external_refs</code></td><td>jsonb</td><td>Zendesk/Jira IDs.</td></tr>
+    </tbody></table>
+
+    <p><b>service_request.queue · service_request.routing_rule</b> — queues with priority and skill-routing rules (jsonb predicate).</p>
+
+    <p><b>SKUs:</b> <code>service-request.ticket.create · service-request.assign</code> — <code>tiered_per_call</code>.</p>
+  </div>
+</section>
+
+<!-- sdk-event -->
+<section id="sdk-event">
+  <h2>8 · <code>sdk-event</code> — Sessions as Encounters · Ticketing · Check-In</h2>
+  <div class="sdk-block">
+    <div class="sdk-header"><h3>sdk-event</h3><span class="pill blue">SDK · MODIFIED</span></div>
+    <div class="purpose">Event sessions as <code>encounter.kind=session</code>; ticketing; QR check-in; venue (<code>address_id</code>); capacity rules.</div>
+    <div class="meta-strip"><span><b>PRD §:</b> 5.5</span><span><b>Pool:</b> App Pool</span><span><b>Schema:</b> <code>event</code></span></div>
+
+    <p><b>event.session · event.ticket · event.checkin</b></p>
+    <table><thead><tr><th>Table</th><th>Key columns</th></tr></thead><tbody>
+      <tr><td><code>event.session</code></td><td><code>session_id PK · encounter_id FK · title · address_id FK · capacity · sold_count · starts_at · ends_at · status</code></td></tr>
+      <tr><td><code>event.ticket</code></td><td><code>ticket_id PK · session_id FK · holder_persona_id · price · status (issued · used · refunded · void) · qr_token</code></td></tr>
+      <tr><td><code>event.checkin</code></td><td><code>checkin_id PK · ticket_id FK · device_uuid · checked_in_at · checked_in_by_persona_id</code></td></tr>
+    </tbody></table>
+
+    <p><b>SKUs:</b> <code>event.ticket.issue · event.checkin</code> — <code>flat_per_call</code>.</p>
+  </div>
+</section>
+
+<!-- sdk-campaign -->
+<section id="sdk-campaign">
+  <h2>9 · <code>sdk-campaign</code> — Segments &amp; Journeys</h2>
+  <div class="sdk-block">
+    <div class="sdk-header"><h3>sdk-campaign</h3><span class="pill blue">NEW</span></div>
+    <div class="purpose">Segment DSL over event stream; drip journeys; A/B variants via sdk-feature-flags.</div>
+    <div class="meta-strip"><span><b>PRD §:</b> 5.6</span><span><b>Pool:</b> App Pool</span><span><b>Schema:</b> <code>campaign</code></span></div>
+
+    <p><b>campaign.campaign · campaign.segment · campaign.journey · campaign.journey_run</b></p>
+    <table><thead><tr><th>Table</th><th>Key columns</th></tr></thead><tbody>
+      <tr><td><code>campaign.campaign</code></td><td><code>campaign_id PK · tenant_id · name · status (draft · scheduled · running · paused · completed) · variant_flag_id</code></td></tr>
+      <tr><td><code>campaign.segment</code></td><td><code>segment_id PK · campaign_id FK · dsl jsonb · population_estimate · last_computed_at</code></td></tr>
+      <tr><td><code>campaign.journey</code></td><td><code>journey_id PK · campaign_id FK · steps jsonb (delays · branches · notification refs)</code></td></tr>
+      <tr><td><code>campaign.journey_run</code></td><td><code>run_id PK · journey_id FK · subject_persona_id · current_step · state · started_at</code></td></tr>
+    </tbody></table>
+
+    <p><b>SKUs:</b> <code>campaign.segment.compute · campaign.journey.advance</code> — <code>tiered_per_call</code>.</p>
+  </div>
+</section>
+
+<!-- sdk-social -->
+<section id="sdk-social">
+  <h2>10 · <code>sdk-social</code> — Social Channels &amp; Inbox</h2>
+  <div class="sdk-block">
+    <div class="sdk-header"><h3>sdk-social</h3><span class="pill blue">NEW</span></div>
+    <div class="purpose">Pluggable channel connectors (composes sdk-connectors); DM / comment ingestion; <code>social.lead.captured</code> events feeding CRM.</div>
+    <div class="meta-strip"><span><b>PRD §:</b> 5.7</span><span><b>Pool:</b> App Pool</span><span><b>Schema:</b> <code>social</code></span></div>
+
+    <p><b>social.handle · social.interaction</b></p>
+    <table><thead><tr><th>Table</th><th>Key columns</th></tr></thead><tbody>
+      <tr><td><code>social.handle</code></td><td><code>handle_id PK · tenant_id · network (twitter · linkedin · instagram · facebook · tiktok) · external_handle_id · authorized_persona_id</code></td></tr>
+      <tr><td><code>social.interaction</code></td><td><code>interaction_id PK · handle_id FK · kind (dm · comment · mention · review) · author_external_id · author_persona_id (if resolved) · body · received_at · captured_lead_contact_id FK</code></td></tr>
+    </tbody></table>
+
+    <p><b>Events:</b> <code>social.lead.captured.v1</code> (feeds CRM).</p>
+  </div>
+</section>
+
+<!-- enterprise connectors -->
+<section id="connectors">
+  <h2>11 · Enterprise connectors — common shape</h2>
+  <div class="sdk-block">
+    <div class="sdk-header"><h3>connector-salesforce · connector-microsoft365 · connector-gworkspace · connector-jira · connector-linear · connector-zendesk · connector-hubspot · connector-zoom</h3><span class="pill purple">v3.1</span></div>
+    <div class="purpose">All connectors extend <code>sdk-connectors</code> from P4. Each adds vendor-specific mirror tables and a tool manifest entry for the P6A CapabilityGraph. Common shape below; per-connector specifics follow.</div>
+    <div class="meta-strip"><span><b>PRD §:</b> 5.8 – 5.10</span><span><b>Pool:</b> Admin (creds) + App Pool (mirrors)</span></div>
+
+    <h4>11.1 · Common per-connector tables</h4>
+    <table><thead><tr><th>Table</th><th>Purpose</th></tr></thead><tbody>
+      <tr><td><code>connector_{kind}.external_object_mirror</code></td><td>One row per mirrored object: <code>mirror_id PK · install_id FK · object_kind · external_id · canonical_ref (e.g. crm.contact_id) · last_seen_etag · last_sync_at · status (active · deleted-upstream)</code></td></tr>
+      <tr><td><code>connector_{kind}.tool_manifest</code></td><td><code>tool_id PK · install_id FK · tool_name · args_schema jsonb · sku_required text · enabled_for_agents bool</code></td></tr>
+    </tbody></table>
+
+    <h4>11.2 · Per-connector mirrors (selected)</h4>
+
+    <p><b>connector-salesforce</b></p>
+    <table><thead><tr><th>Table</th><th>Maps to canonical</th></tr></thead><tbody>
+      <tr><td><code>sf_account</code></td><td>persona (kind=<code>salesforce_account</code>)</td></tr>
+      <tr><td><code>sf_contact</code></td><td>persona (kind=<code>salesforce_contact</code>) + crm.contact</td></tr>
+      <tr><td><code>sf_lead</code></td><td>crm.lead</td></tr>
+      <tr><td><code>sf_opportunity</code></td><td>crm.deal (encounter)</td></tr>
+      <tr><td><code>sf_streaming_cursor</code></td><td>connector.sync_cursor (CDC channel state)</td></tr>
+    </tbody></table>
+
+    <p><b>connector-microsoft365</b></p>
+    <table><thead><tr><th>Table</th><th>Notes</th></tr></thead><tbody>
+      <tr><td><code>m365_drive_item</code></td><td>SharePoint/OneDrive files; metadata only, blobs lazy-fetched.</td></tr>
+      <tr><td><code>m365_calendar_event</code></td><td>Maps to <code>encounter.kind=meeting</code>.</td></tr>
+      <tr><td><code>m365_teams_message</code></td><td>Inbound only; outbound via tool manifest.</td></tr>
+      <tr><td><code>m365_mail_sent</code></td><td>Audit-relevant outbound from sdk-notification when channel=Outlook.</td></tr>
+    </tbody></table>
+
+    <p><b>connector-gworkspace</b> · <b>connector-jira</b> · <b>connector-linear</b> · <b>connector-zendesk</b> · <b>connector-hubspot</b> · <b>connector-zoom</b> — each follows the same pattern with vendor-named tables (<code>gws_drive_file · jira_issue · linear_issue · zendesk_ticket · hubspot_contact · zoom_meeting · zoom_recording</code>) and a tool manifest row per exposed API.</p>
+
+    <h4>11.3 · Tool manifest example (for P6A CapabilityGraph)</h4>
+    <pre>{
+  "tool_name": "salesforce.opportunity.update",
+  "args_schema": {
+    "type": "object",
+    "properties": {
+      "opportunity_id": {"type": "string"},
+      "stage": {"type": "string"},
+      "close_date": {"type": "string", "format": "date"}
+    },
+    "required": ["opportunity_id", "stage"]
+  },
+  "sku_required": "connector.salesforce.api.call",
+  "enabled_for_agents": true
+}
+</pre>
+
+    <h4>11.4 · Per-connector ERD</h4>
+    <div class="diagram-wrap"><pre class="mermaid">
+erDiagram
+  CONNECTOR_INSTALL ||--o{ EXTERNAL_OBJECT_MIRROR : ""
+  CONNECTOR_INSTALL ||--o{ TOOL_MANIFEST : ""
+  EXTERNAL_OBJECT_MIRROR }o--o| CRM_CONTACT : "canonical_ref"
+  EXTERNAL_OBJECT_MIRROR }o--o| CRM_DEAL : "canonical_ref"
+  EXTERNAL_OBJECT_MIRROR }o--o| ENCOUNTER : "canonical_ref"
+  EXTERNAL_OBJECT_MIRROR {
+    string mirror_id PK
+    string install_id FK
+    string object_kind
+    string external_id
+    string canonical_ref
+    string status
+    timestamp last_sync_at
+  }
+  TOOL_MANIFEST {
+    string tool_id PK
+    string install_id FK
+    string tool_name
+    jsonb  args_schema
+    string sku_required
+    bool   enabled_for_agents
+  }
+    </pre></div>
+
+    <p><b>SKUs:</b> per-connector <code>connector.{kind}.sync.record · connector.{kind}.api.call</code> — per-unit + flat.</p>
+  </div>
+</section>
+
+<!-- hdk editors -->
+<section id="hdk-editors">
+  <h2>12 · HDK editors — scanner · image · video</h2>
+  <div class="sdk-block">
+    <div class="sdk-header"><h3>HDK editors</h3><span class="pill purple">HDK · NEW</span></div>
+    <div class="purpose">Barcode/QR/document scanning + offline-capable image and video editors. All flow through <code>hdk-sync</code> for offline saves. Server-side state is minimal — edits land as new <code>media.blob</code> versions in P4's schema; legal-grade provenance gets the <code>evidence</code> anchor in P7.</div>
+    <div class="meta-strip"><span><b>PRD §:</b> 5.11</span><span><b>Pool:</b> On-device + media metadata</span></div>
+
+    <h4>12.1 · Edit-event payloads (queued in hdk_sync.outbox)</h4>
+    <table><thead><tr><th>Event</th><th>Conflict policy</th></tr></thead><tbody>
+      <tr><td><code>hdk-image.edit.applied.v1</code></td><td>event-sourcing (raw preserved; edit ops append)</td></tr>
+      <tr><td><code>hdk-video.trim.applied.v1</code></td><td>event-sourcing</td></tr>
+      <tr><td><code>hdk-scanner.code.captured.v1</code></td><td>lww</td></tr>
+    </tbody></table>
+
+    <h4>12.2 · Server-side new fields on media.blob</h4>
+    <p>P5 adds two columns to <code>media.blob</code> (additive migration):</p>
+    <table><thead><tr><th>Column</th><th>Type</th><th>Purpose</th></tr></thead><tbody>
+      <tr><td><code>edit_history</code></td><td>jsonb</td><td>Append-only sequence of edit ops applied (sourced from hdk-sync).</td></tr>
+      <tr><td><code>raw_blob_id</code></td><td>FK → media.blob, null</td><td>If this row is an edited variant, points to the raw original (which is never overwritten).</td></tr>
+    </tbody></table>
+  </div>
+</section>
+
+</div>
+
+<script>
+  mermaid.initialize({ startOnLoad: true, theme: 'dark', themeVariables: { background: '#0b0f17', primaryColor: '#1a2234', primaryBorderColor: '#c9a86a', primaryTextColor: '#e6ecf5', lineColor: '#6aa9ff', secondaryColor: '#1d1830', tertiaryColor: '#16241c' } });
+</script>
+
+</body>
+</html>

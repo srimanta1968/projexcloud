@@ -1,0 +1,935 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>ProjexCloud v3.1 · P2 Data Model — Identity &amp; Access</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<style>
+  :root { --bg:#0b0f17; --panel:#121826; --panel-2:#1a2234; --line:#243049; --text:#e6ecf5; --muted:#8a98b3; --accent:#c9a86a; --accent-2:#6aa9ff; --teal:#2dd4bf; --green:#5dd39e; --red:#ff6b6b; --yellow:#f5c451; --purple:#b88dff; --code-bg:#0f1422; }
+  *{box-sizing:border-box;} html,body{background:var(--bg);color:var(--text);font-family:ui-sans-serif,-apple-system,"Segoe UI",Roboto,sans-serif;margin:0;padding:0;line-height:1.55;}
+  .page{max-width:1260px;margin:0 auto;padding:56px 32px 96px;}
+  header.cover{border-bottom:1px solid var(--line);padding-bottom:36px;margin-bottom:48px;}
+  header.cover .eyebrow{color:var(--accent);letter-spacing:0.18em;text-transform:uppercase;font-size:12px;font-weight:700;}
+  header.cover h1{font-size:40px;line-height:1.15;margin:12px 0 8px;letter-spacing:-0.02em;}
+  header.cover .sub{color:var(--muted);font-size:16px;max-width:900px;}
+  header.cover .meta{display:flex;gap:24px;flex-wrap:wrap;margin-top:24px;color:var(--muted);font-size:13px;}
+  header.cover .meta b{color:var(--text);font-weight:600;}
+  h2{font-size:26px;margin:56px 0 18px;padding-bottom:8px;border-bottom:1px solid var(--line);}
+  h3{font-size:19px;margin:28px 0 10px;color:var(--text);}
+  h4{font-size:13px;margin:18px 0 8px;color:var(--accent);text-transform:uppercase;letter-spacing:0.12em;}
+  p{color:#c8d1e3;} small,.muted{color:var(--muted);}
+  .grid{display:grid;gap:16px;} .grid.cols-2{grid-template-columns:repeat(2,minmax(0,1fr));} .grid.cols-3{grid-template-columns:repeat(3,minmax(0,1fr));}
+  @media(max-width:900px){.grid.cols-2,.grid.cols-3{grid-template-columns:1fr;} header.cover h1{font-size:30px;}}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px 18px;}
+  .card .label{color:var(--accent);font-size:11px;text-transform:uppercase;letter-spacing:0.14em;font-weight:700;}
+  .card .title{font-weight:600;margin:6px 0;} .card .body{color:var(--muted);font-size:13.5px;}
+  .pill{display:inline-block;padding:3px 10px;border-radius:999px;font-size:11px;border:1px solid var(--line);color:var(--muted);margin-right:6px;}
+  .pill.gold{color:var(--accent);border-color:rgba(201,168,106,0.4);} .pill.blue{color:var(--accent-2);border-color:rgba(106,169,255,0.4);}
+  .pill.teal{color:var(--teal);border-color:rgba(45,212,191,0.4);} .pill.green{color:var(--green);border-color:rgba(93,211,158,0.4);}
+  .pill.red{color:var(--red);border-color:rgba(255,107,107,0.4);} .pill.yellow{color:var(--yellow);border-color:rgba(245,196,81,0.4);} .pill.purple{color:var(--purple);border-color:rgba(184,141,255,0.4);}
+  table{width:100%;border-collapse:collapse;margin-top:12px;font-size:13.5px;}
+  th,td{text-align:left;padding:9px 11px;border-bottom:1px solid var(--line);vertical-align:top;}
+  th{color:var(--muted);font-weight:600;font-size:11.5px;text-transform:uppercase;letter-spacing:0.08em;}
+  td code{font-size:12px;}
+  pre,code{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;}
+  pre{background:var(--code-bg);border:1px solid var(--line);border-radius:10px;padding:14px 16px;overflow-x:auto;font-size:12.5px;}
+  code{background:var(--code-bg);padding:1px 6px;border-radius:4px;font-size:12px;}
+  .diagram-wrap{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:22px;overflow-x:auto;}
+  .caption{color:var(--muted);font-size:12.5px;margin-top:10px;text-align:center;} .mermaid{background:transparent;}
+  nav.toc{position:sticky;top:0;background:rgba(11,15,23,0.92);backdrop-filter:blur(10px);border-bottom:1px solid var(--line);padding:10px 32px;z-index:10;}
+  nav.toc .row{max-width:1260px;margin:0 auto;display:flex;flex-wrap:wrap;gap:10px;font-size:12px;}
+  nav.toc a{color:var(--muted);text-decoration:none;border-bottom:1px solid transparent;} nav.toc a:hover{color:var(--accent);border-color:var(--accent);}
+  .callout{border-left:3px solid var(--accent);background:var(--panel-2);padding:14px 18px;border-radius:0 10px 10px 0;margin:18px 0;color:#d6deef;font-size:14px;}
+  .callout.blue{border-color:var(--accent-2);} .callout.green{border-color:var(--green);} .callout.red{border-color:var(--red);} .callout.purple{border-color:var(--purple);} .callout.teal{border-color:var(--teal);}
+  .sdk-block{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:22px 24px;margin:22px 0 28px;}
+  .sdk-block .sdk-header{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;margin-bottom:6px;}
+  .sdk-block .sdk-header h3{margin:0;font-size:22px;color:var(--accent);}
+  .sdk-block .purpose{color:#c8d1e3;font-size:14.5px;margin:4px 0 14px;}
+  .meta-strip{display:flex;flex-wrap:wrap;gap:18px;font-size:12.5px;color:var(--muted);margin:6px 0 18px;padding:10px 14px;background:var(--panel-2);border-radius:8px;}
+  .meta-strip b{color:var(--text);}
+</style>
+</head>
+<body>
+
+<nav class="toc">
+  <div class="row">
+    <a href="#overview">1 · Overview</a>
+    <a href="#phase-erd">2 · Phase ERD</a>
+    <a href="#pool-map">3 · Pool placement</a>
+    <a href="#sdk-tenant">4 · sdk-tenant</a>
+    <a href="#sdk-identity">5 · sdk-identity</a>
+    <a href="#sdk-consent">6 · sdk-consent</a>
+    <a href="#sdk-policy">7 · sdk-policy</a>
+    <a href="#sdk-rebac">8 · sdk-rebac</a>
+    <a href="#sdk-api-keys">9 · sdk-api-keys</a>
+    <a href="#projection">10 · Identity Projection (G4)</a>
+    <a href="#events">11 · New events</a>
+  </div>
+</nav>
+
+<div class="page">
+
+<header class="cover">
+  <div class="eyebrow">Data Model · Phase 2 · Wave W2</div>
+  <h1>P2 — Identity &amp; Access at Scale</h1>
+  <div class="sub">Tenant + extended hierarchy (Reseller · sub-tenant · BU recursion · GeographicNode · RoleTemplate · FiscalPeriod), six-layer JWT identity, consent receipts, ABAC + IQL, ReBAC with safeguards, end-customer API keys, and the Identity Projection System that closes G4.</div>
+  <div class="meta">
+    <div><b>Phase:</b> P2 (Weeks 9–15)</div>
+    <div><b>Maps to wave:</b> W2</div>
+    <div><b>Gates closed:</b> G4 (Identity Projection System)</div>
+    <div><b>PRD:</b> <code>prd/P2-Identity-Access.md</code></div>
+    <div><b>Anchor docs:</b> Architecture §7 · §11 · AIM-Identity-Model-v3.1</div>
+  </div>
+</header>
+
+<section id="overview">
+  <h2>1 · Overview</h2>
+  <p>P2 turns the substrate from P1 into a multi-tenant identity system. The data model centers on the <b>six-layer identity tuple</b> (Master Person · App Identity · Tenant Membership · Persona · [Encounter · Relationship]) and the <b>Identity Projection</b> that turns the runtime graph walk into a Redis-backed sub-millisecond read.</p>
+
+  <div class="grid cols-3">
+    <div class="card"><div class="label">Extended hierarchy</div><div class="title">Reseller · sub-tenant · BU · Geo</div><div class="body">First-class Reseller (commission · white-label); recursive <code>parent_tenant_id</code> + <code>parent_bu_id</code>; <code>GeographicNode</code> tree (Region→Country→State→City→Locality); RoleTemplate inheritance; FiscalPeriod per tenant.</div></div>
+    <div class="card"><div class="label">G4 closer</div><div class="title">Identity Projection</div><div class="body">Materialized <code>subject_view</code> per <code>(person, app, tenant)</code> in Redis (hot) + Postgres (durable). p99 ≤ 0.5ms warm. Refresh ≤ 1s after any membership/relationship/consent/policy event.</div></div>
+    <div class="card"><div class="label">Access mesh</div><div class="title">ABAC · ReBAC · Grants</div><div class="body">ABAC + IQL DSL · ReBAC with <code>ReBACTraversalBudget</code> safeguards (depth cap 4) · Encounter Grants (P5). All decisions log to audit.</div></div>
+  </div>
+</section>
+
+<section id="phase-erd">
+  <h2>2 · Phase ERD — How P2 entities relate</h2>
+  <div class="diagram-wrap">
+    <pre class="mermaid">
+erDiagram
+  ORG ||--o{ APP : "owns"
+  ORG ||--o{ RESELLER : "may be reseller"
+  APP ||--o{ TENANT : "hosts"
+  RESELLER }o--o{ TENANT : "manages"
+  TENANT ||--o{ TENANT : "parent_tenant_id"
+  TENANT ||--o{ BU : "has"
+  BU ||--o{ BU : "parent_bu_id"
+  TENANT ||--|| FISCAL_PERIOD : "fiscal calendar"
+  TENANT ||--o{ ROLE_TEMPLATE : "per-app"
+  GEO_NODE ||--o{ GEO_NODE : "parent_geo_node_id"
+  TENANT }o--|| GEO_NODE : "located in"
+
+  PERSON ||--o{ ALIAS : "graph"
+  PERSON ||--o{ APP_IDENTITY : "L2"
+  APP_IDENTITY ||--o{ TENANT_MEMBERSHIP : "L3"
+  TENANT_MEMBERSHIP ||--o{ PERSONA : "L4"
+  PERSONA ||--o{ ROLE_ASSIGNMENT : "roles"
+  ROLE_ASSIGNMENT }o--|| ROLE_TEMPLATE : "instance of"
+
+  PERSON ||--o{ CONSENT_RECEIPT : "grants"
+  CONSENT_RECEIPT ||--o{ CONSENT_REVOCATION : "may revoke"
+
+  POLICY ||--o{ POLICY_DECISION : "evaluates"
+  POLICY ||--o{ IQL_BUNDLE : "compiles from"
+
+  PERSONA ||--o{ RELATIONSHIP : "subject_of"
+  RELATIONSHIP ||--o{ RELATIONSHIP_DECISION : "audited"
+
+  API_KEY }o--|| PERSONA : "synthetic"
+
+  PERSON ||--|| SUBJECT_VIEW : "projection"
+  SUBJECT_VIEW }o--|| APP : "per-app"
+  SUBJECT_VIEW }o--|| TENANT : "per-tenant"
+
+  PERSON {
+    string person_id PK
+    string home_region
+    string status
+    bytes  person_key_ref
+  }
+  APP_IDENTITY {
+    string app_identity_id PK
+    string person_id FK
+    string app_id FK
+    string status
+  }
+  TENANT_MEMBERSHIP {
+    string membership_id PK
+    string app_identity_id FK
+    string tenant_id FK
+    string status
+  }
+  PERSONA {
+    string persona_id PK
+    string membership_id FK
+    string kind
+    string primary_role
+    string bu_id FK
+    string status
+  }
+  TENANT {
+    string tenant_id PK
+    string app_id FK
+    string parent_tenant_id FK
+    string reseller_id FK
+    string isolation_tier
+    string region
+  }
+  BU {
+    string bu_id PK
+    string tenant_id FK
+    string parent_bu_id FK
+    string name
+  }
+  ROLE_TEMPLATE {
+    string role_template_id PK
+    string tenant_id FK
+    string app_id
+    string parent_role_template_id FK
+    jsonb  permissions
+  }
+  GEO_NODE {
+    string geo_node_id PK
+    string parent_geo_node_id FK
+    string kind
+    string code
+    string name
+  }
+  CONSENT_RECEIPT {
+    string receipt_id PK
+    string person_id
+    string purpose
+    string processor
+    string app_id
+    string jurisdiction
+    string status
+    timestamp granted_at
+  }
+  RELATIONSHIP {
+    string relationship_id PK
+    string kind
+    string persona_a FK
+    string persona_b FK
+    string scope
+    string status
+    timestamp expires_at
+    string consent_ref
+  }
+  POLICY {
+    string policy_id PK
+    string tenant_id
+    int    version
+    string status
+    bytes  cedar_compiled
+  }
+  API_KEY {
+    string key_id PK
+    string tenant_id
+    string synthetic_persona_id FK
+    string prefix
+    bytes  hash
+    string scopes
+    timestamp expires_at
+  }
+  SUBJECT_VIEW {
+    string person_id PK
+    string app_id PK
+    string tenant_id PK
+    string primary_persona_id
+    string effective_role_closure
+    string abac_attributes
+    string rebac_edges
+    string active_consents
+    bigint projection_version
+  }
+    </pre>
+  </div>
+  <div class="caption">Figure 2.1 — Six-layer identity entities and access mesh in P2.</div>
+</section>
+
+<section id="pool-map">
+  <h2>3 · Pool placement matrix</h2>
+  <table>
+    <thead><tr><th>SDK</th><th>Schema</th><th>Pool</th><th>Non-OLTP</th><th>Notes</th></tr></thead>
+    <tbody>
+      <tr><td><code>sdk-tenant</code></td><td><code>tenant</code></td><td>Admin (per region)</td><td>Global Catalog for <code>GeographicNode</code></td><td>Reseller, tenant, sub-tenant, BU, role templates, fiscal periods.</td></tr>
+      <tr><td><code>sdk-identity</code></td><td><code>identity</code></td><td>Admin (person home region)</td><td>JWKS in Vault; sessions in Redis</td><td>Credentials hashed with per-tenant pepper.</td></tr>
+      <tr><td><code>sdk-consent</code></td><td><code>consent</code></td><td>Admin (person home region)</td><td>—</td><td>Cross-tenant receipts indexed by source + target membership.</td></tr>
+      <tr><td><code>sdk-policy</code></td><td><code>policy</code></td><td>Admin (per tenant)</td><td>Redis (decision cache keyed by <code>projection_version</code>)</td><td>IQL bundles compile to Cedar terms.</td></tr>
+      <tr><td><code>sdk-rebac</code></td><td><code>rebac</code></td><td>App Pool (in-app) + Admin (cross-tenant)</td><td>Redis (reachability projection)</td><td>Edge indexes; depth cap default 4.</td></tr>
+      <tr><td><code>sdk-api-keys</code></td><td><code>api_keys</code></td><td>Admin</td><td>—</td><td>Hashed-at-rest; gateway broadcast on revoke.</td></tr>
+      <tr><td><code>sdk-identity-resolver</code> (P3 publishes API; worker ships here)</td><td><code>projection</code></td><td>Admin (person home region)</td><td>Redis (hot)</td><td><code>subject_view</code> projection — G4 closer.</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- sdk-tenant -->
+<section id="sdk-tenant">
+  <h2>4 · <code>sdk-tenant</code> — Org / Tenant / BU / Geo Registry</h2>
+  <div class="sdk-block">
+    <div class="sdk-header"><h3>sdk-tenant</h3><span class="pill blue">SDK</span><span class="pill purple">Extended hierarchy v3.1</span></div>
+    <div class="purpose">Registry for the full scope spine including Reseller, recursive sub-tenant, recursive BU, GeographicNode tree, RoleTemplate inheritance, and FiscalPeriod.</div>
+    <div class="meta-strip"><span><b>PRD §:</b> 5.1</span><span><b>FRs:</b> FR-TNT-1 … FR-TNT-10</span><span><b>Pool:</b> Admin (per region)</span><span><b>Schema:</b> <code>tenant</code></span></div>
+
+    <h4>4.1 · Tables</h4>
+
+    <p><b>tenant.org</b> — top-level organization (rare; one per platform customer).</p>
+    <table><thead><tr><th>Column</th><th>Type</th><th>Purpose</th></tr></thead>
+    <tbody>
+      <tr><td><code>org_id</code></td><td>ULID PK</td><td>Surrogate.</td></tr>
+      <tr><td><code>parent_org_id</code></td><td>FK, null</td><td>Reseller chains.</td></tr>
+      <tr><td><code>name</code></td><td>text</td><td>Display.</td></tr>
+      <tr><td><code>created_at</code></td><td>timestamptz</td><td>Lifecycle.</td></tr>
+    </tbody></table>
+
+    <p><b>tenant.app</b> — vertical applications (healthcare, realty, ecommerce, …).</p>
+    <table><thead><tr><th>Column</th><th>Type</th><th>Purpose</th></tr></thead>
+    <tbody>
+      <tr><td><code>app_id</code></td><td>text PK</td><td>Slug — referenced by pool families.</td></tr>
+      <tr><td><code>org_id</code></td><td>FK</td><td>Owning org.</td></tr>
+      <tr><td><code>display_name</code></td><td>text</td><td>UI.</td></tr>
+      <tr><td><code>status</code></td><td>enum</td><td><code>active · sunset · retired</code></td></tr>
+    </tbody></table>
+
+    <p><b>tenant.reseller</b> — first-class reseller entity (commission · white-label).</p>
+    <table><thead><tr><th>Column</th><th>Type</th><th>Purpose</th></tr></thead>
+    <tbody>
+      <tr><td><code>reseller_id</code></td><td>ULID PK</td><td>Surrogate.</td></tr>
+      <tr><td><code>org_id</code></td><td>FK</td><td>Reseller's home org.</td></tr>
+      <tr><td><code>brand_name</code></td><td>text</td><td>White-label display.</td></tr>
+      <tr><td><code>cname_host</code></td><td>text, null</td><td>Custom domain.</td></tr>
+      <tr><td><code>support_contact</code></td><td>jsonb</td><td>L1 contact info.</td></tr>
+      <tr><td><code>commission_rules</code></td><td>jsonb</td><td>Per-SKU or % of revenue.</td></tr>
+      <tr><td><code>invoice_aggregation</code></td><td>enum</td><td><code>per-tenant · consolidated</code></td></tr>
+      <tr><td><code>portfolio_kill_switch</code></td><td>bool</td><td>Operator-level halt.</td></tr>
+    </tbody></table>
+
+    <p><b>tenant.tenant</b> — the workhorse table. Recursive via <code>parent_tenant_id</code>.</p>
+    <table><thead><tr><th>Column</th><th>Type</th><th>Purpose</th></tr></thead>
+    <tbody>
+      <tr><td><code>tenant_id</code></td><td>ULID PK</td><td>Surrogate.</td></tr>
+      <tr><td><code>app_id</code></td><td>FK</td><td>App family.</td></tr>
+      <tr><td><code>parent_tenant_id</code></td><td>FK, null</td><td>Sub-tenant chain.</td></tr>
+      <tr><td><code>root_tenant_id</code></td><td>FK</td><td>Materialized root (denormalized for fast ancestor queries).</td></tr>
+      <tr><td><code>reseller_id</code></td><td>FK, null</td><td>Reseller-managed tenant.</td></tr>
+      <tr><td><code>isolation_tier</code></td><td>enum</td><td><code>S (shared) · P (premium) · G (dedicated)</code></td></tr>
+      <tr><td><code>region</code></td><td>text</td><td>Home region.</td></tr>
+      <tr><td><code>geo_node_id</code></td><td>FK, null</td><td>Geographic placement.</td></tr>
+      <tr><td><code>brand_domain</code></td><td>text, null</td><td>Custom domain.</td></tr>
+      <tr><td><code>admin_pool_index</code></td><td>FK → routing.pool</td><td>Provisioned at create.</td></tr>
+      <tr><td><code>app_pool_index</code></td><td>jsonb</td><td>Map <code>app_id → pool_index</code>.</td></tr>
+      <tr><td><code>module_subscriptions</code></td><td>text[]</td><td>Which vertical modules enabled.</td></tr>
+      <tr><td><code>status</code></td><td>enum</td><td><code>provisioned · trial · active · suspended · offboarding · offboarded</code> (full FSM lands in P4 sdk-tenant-lifecycle).</td></tr>
+      <tr><td><code>created_at</code></td><td>timestamptz</td><td>Lifecycle.</td></tr>
+    </tbody></table>
+
+    <p><b>tenant.bu</b> — Business Unit tree (recursive).</p>
+    <table><thead><tr><th>Column</th><th>Type</th><th>Purpose</th></tr></thead>
+    <tbody>
+      <tr><td><code>bu_id</code></td><td>ULID PK</td><td>Surrogate.</td></tr>
+      <tr><td><code>tenant_id</code></td><td>FK</td><td>Owning tenant.</td></tr>
+      <tr><td><code>parent_bu_id</code></td><td>FK, null</td><td>Tree edge.</td></tr>
+      <tr><td><code>name</code></td><td>text</td><td>Display.</td></tr>
+      <tr><td><code>kind</code></td><td>text</td><td><code>region · country · site · department · team</code> (tenant-defined).</td></tr>
+      <tr><td><code>ancestors</code></td><td>text[]</td><td>Materialized path (for IQL <code>subject.bu.ancestors()</code>).</td></tr>
+    </tbody></table>
+
+    <p><b>tenant.role_template</b> — per-app role registry with inheritance.</p>
+    <table><thead><tr><th>Column</th><th>Type</th><th>Purpose</th></tr></thead>
+    <tbody>
+      <tr><td><code>role_template_id</code></td><td>ULID PK</td><td>Surrogate.</td></tr>
+      <tr><td><code>tenant_id</code></td><td>FK, null</td><td>Null = platform default; non-null = tenant override.</td></tr>
+      <tr><td><code>app_id</code></td><td>text</td><td>App scope.</td></tr>
+      <tr><td><code>name</code></td><td>text</td><td><code>junior_doctor · senior_doctor · chief_of_medicine</code></td></tr>
+      <tr><td><code>parent_role_template_id</code></td><td>FK, null</td><td>Inheritance.</td></tr>
+      <tr><td><code>permissions</code></td><td>jsonb</td><td>Effective permission set (compiled at deploy time).</td></tr>
+    </tbody></table>
+
+    <p><b>tenant.fiscal_period</b> — per-tenant fiscal calendar.</p>
+    <table><thead><tr><th>Column</th><th>Type</th><th>Purpose</th></tr></thead>
+    <tbody>
+      <tr><td><code>fiscal_period_id</code></td><td>ULID PK</td><td>Surrogate.</td></tr>
+      <tr><td><code>tenant_id</code></td><td>FK</td><td>Owning tenant.</td></tr>
+      <tr><td><code>year_start_month</code></td><td>int 1-12</td><td>Fiscal year start.</td></tr>
+      <tr><td><code>base_currency</code></td><td>char(3)</td><td>ISO-4217.</td></tr>
+      <tr><td><code>period_kind</code></td><td>enum</td><td><code>year · quarter · month · week</code></td></tr>
+      <tr><td><code>label</code></td><td>text</td><td>e.g., <code>FY2026-Q3</code></td></tr>
+      <tr><td><code>starts_at · ends_at</code></td><td>date</td><td>Bounds.</td></tr>
+    </tbody></table>
+
+    <p><b>tenant.geo_node</b> (replicated to Global Catalog) — Region → Country → State → City → Locality.</p>
+    <table><thead><tr><th>Column</th><th>Type</th><th>Purpose</th></tr></thead>
+    <tbody>
+      <tr><td><code>geo_node_id</code></td><td>ULID PK</td><td>Surrogate.</td></tr>
+      <tr><td><code>parent_geo_node_id</code></td><td>FK, null</td><td>Tree edge.</td></tr>
+      <tr><td><code>kind</code></td><td>enum</td><td><code>region · country · state · city · locality</code></td></tr>
+      <tr><td><code>code</code></td><td>text</td><td>ISO codes where applicable.</td></tr>
+      <tr><td><code>name</code></td><td>text</td><td>Display.</td></tr>
+      <tr><td><code>residency_class</code></td><td>enum</td><td><code>open · regulated · sovereign</code> (drives cross-region routing).</td></tr>
+    </tbody></table>
+
+    <h4>4.2 · ERD</h4>
+    <div class="diagram-wrap">
+      <pre class="mermaid">
+erDiagram
+  ORG ||--o{ APP : ""
+  ORG ||--o{ RESELLER : ""
+  RESELLER }o--o{ TENANT : ""
+  APP ||--o{ TENANT : ""
+  TENANT ||--o{ TENANT : "parent_tenant_id"
+  TENANT ||--o{ BU : ""
+  BU ||--o{ BU : "parent_bu_id"
+  TENANT ||--o{ ROLE_TEMPLATE : "overrides"
+  ROLE_TEMPLATE ||--o{ ROLE_TEMPLATE : "parent_role_template_id"
+  TENANT ||--o{ FISCAL_PERIOD : ""
+  GEO_NODE ||--o{ GEO_NODE : "parent_geo_node_id"
+  TENANT }o--|| GEO_NODE : ""
+      </pre>
+    </div>
+
+    <h4>4.3 · Events published</h4>
+    <table><thead><tr><th>Event</th><th>Retention</th><th>Conflict</th></tr></thead><tbody>
+      <tr><td><code>tenant.created.v1</code></td><td>regulated</td><td>event-sourcing</td></tr>
+      <tr><td><code>tenant.pool.assigned.v1</code></td><td>regulated</td><td>event-sourcing</td></tr>
+      <tr><td><code>tenant.subtenant.created.v1</code></td><td>regulated</td><td>event-sourcing</td></tr>
+      <tr><td><code>reseller.tenant.attached.v1</code></td><td>regulated</td><td>event-sourcing</td></tr>
+      <tr><td><code>tenant.bu.created.v1</code></td><td>operational</td><td>event-sourcing</td></tr>
+      <tr><td><code>tenant.bu.moved.v1</code></td><td>operational</td><td>event-sourcing</td></tr>
+      <tr><td><code>tenant.role-template.updated.v1</code></td><td>regulated</td><td>event-sourcing</td></tr>
+      <tr><td><code>tenant.fiscal-calendar.updated.v1</code></td><td>operational</td><td>event-sourcing</td></tr>
+    </tbody></table>
+
+    <h4>4.4 · SKUs</h4>
+    <p><code>tenant.create</code> · <code>tenant.update</code> · <code>tenant.subtenant.create</code> · <code>tenant.bu.create</code> · <code>reseller.attach</code> — <code>flat_per_call</code>.</p>
+  </div>
+</section>
+
+<!-- sdk-identity -->
+<section id="sdk-identity">
+  <h2>5 · <code>sdk-identity</code> — Master Person · OIDC · Federation</h2>
+  <div class="sdk-block">
+    <div class="sdk-header"><h3>sdk-identity</h3><span class="pill blue">SDK</span><span class="pill green">Six-layer JWT</span></div>
+    <div class="purpose">OIDC server, credentials, MDM alias graph, JWT mint with full six-layer claims, SAML/SCIM federation, social IdPs, and tenant impersonation flow.</div>
+    <div class="meta-strip"><span><b>PRD §:</b> 5.2</span><span><b>FRs:</b> FR-IDN-1 … FR-IDN-11</span><span><b>Pool:</b> Admin (person home region)</span><span><b>Schema:</b> <code>identity</code></span></div>
+
+    <h4>5.1 · Tables</h4>
+
+    <p><b>identity.person</b> — the canonical Master Person (L1). Person key tier from Vault wraps everything below.</p>
+    <table><thead><tr><th>Column</th><th>Type</th><th>Purpose</th></tr></thead><tbody>
+      <tr><td><code>person_id</code></td><td>ULID PK</td><td>Canonical ID.</td></tr>
+      <tr><td><code>home_region</code></td><td>text</td><td>Residency pin.</td></tr>
+      <tr><td><code>person_key_ref</code></td><td>FK → vault.key</td><td>Person KEK.</td></tr>
+      <tr><td><code>status</code></td><td>enum</td><td><code>active · suspended · erased</code></td></tr>
+      <tr><td><code>mdm_method</code></td><td>enum</td><td><code>registry · consolidation · coexistence · centralization</code></td></tr>
+      <tr><td><code>created_at</code></td><td>timestamptz</td><td>Lifecycle.</td></tr>
+      <tr><td><code>erased_at</code></td><td>timestamptz, null</td><td>When Person Key shred completed.</td></tr>
+    </tbody></table>
+
+    <p><b>identity.alias</b> — MDM alias graph (email · phone · biometric · gov-IDs → <code>person_id</code>).</p>
+    <table><thead><tr><th>Column</th><th>Type</th><th>Purpose</th></tr></thead><tbody>
+      <tr><td><code>alias_id</code></td><td>ULID PK</td><td>Surrogate.</td></tr>
+      <tr><td><code>person_id</code></td><td>FK</td><td>Canonical owner.</td></tr>
+      <tr><td><code>kind</code></td><td>enum</td><td><code>email · phone · gov_id · biometric_template_ref · social_idp_subject · saml_nameid</code></td></tr>
+      <tr><td><code>value_envelope</code></td><td>bytea</td><td>Envelope-encrypted under Person Key (or Device Key for biometric).</td></tr>
+      <tr><td><code>value_hash</code></td><td>bytea</td><td>Deterministic hash for dedup / lookup.</td></tr>
+      <tr><td><code>verified_at</code></td><td>timestamptz, null</td><td>Verification timestamp.</td></tr>
+      <tr><td><code>merged_into_alias_id</code></td><td>FK, null</td><td>If this alias was deduped.</td></tr>
+    </tbody></table>
+
+    <p><b>identity.credential</b> — passwords + MFA secrets (vaulted).</p>
+    <table><thead><tr><th>Column</th><th>Type</th><th>Purpose</th></tr></thead><tbody>
+      <tr><td><code>credential_id</code></td><td>ULID PK</td><td>Surrogate.</td></tr>
+      <tr><td><code>person_id</code></td><td>FK</td><td>Owner.</td></tr>
+      <tr><td><code>kind</code></td><td>enum</td><td><code>password · totp · webauthn · sms_otp · passkey</code></td></tr>
+      <tr><td><code>secret_envelope</code></td><td>bytea</td><td>Argon2id hash + per-tenant pepper (passwords); credential bytes vaulted (others).</td></tr>
+      <tr><td><code>status</code></td><td>enum</td><td><code>active · rotated · revoked</code></td></tr>
+      <tr><td><code>last_used_at</code></td><td>timestamptz, null</td><td>Telemetry.</td></tr>
+    </tbody></table>
+
+    <p><b>identity.federation_config</b> — per-tenant SAML / SCIM / Social IdP config.</p>
+    <table><thead><tr><th>Column</th><th>Type</th><th>Purpose</th></tr></thead><tbody>
+      <tr><td><code>federation_id</code></td><td>ULID PK</td><td>Surrogate.</td></tr>
+      <tr><td><code>tenant_id</code></td><td>FK</td><td>Owning tenant.</td></tr>
+      <tr><td><code>protocol</code></td><td>enum</td><td><code>saml · scim · oidc-social</code></td></tr>
+      <tr><td><code>idp_metadata_url</code></td><td>text, null</td><td>SAML metadata.</td></tr>
+      <tr><td><code>idp_cert</code></td><td>bytea, null</td><td>Signing cert.</td></tr>
+      <tr><td><code>scim_bearer_envelope</code></td><td>bytea, null</td><td>SCIM token vaulted.</td></tr>
+      <tr><td><code>group_role_map</code></td><td>jsonb</td><td>IdP group → role_template_id mapping.</td></tr>
+      <tr><td><code>jit_enabled</code></td><td>bool</td><td>Just-in-time provisioning.</td></tr>
+    </tbody></table>
+
+    <p><b>identity.session</b> — active sessions (also held in Redis for hot lookup).</p>
+    <table><thead><tr><th>Column</th><th>Type</th><th>Purpose</th></tr></thead><tbody>
+      <tr><td><code>session_id</code></td><td>ULID PK</td><td>Surrogate.</td></tr>
+      <tr><td><code>person_id</code></td><td>FK</td><td>Owner.</td></tr>
+      <tr><td><code>tenant_id</code></td><td>FK</td><td>Active tenant context.</td></tr>
+      <tr><td><code>persona_id</code></td><td>FK, null</td><td>Active persona (lands in P3 sdk-persona).</td></tr>
+      <tr><td><code>device_uuid</code></td><td>text</td><td>From sdk-device (lands in P3).</td></tr>
+      <tr><td><code>issued_at · expires_at · idle_at</code></td><td>timestamptz</td><td>TTL state.</td></tr>
+      <tr><td><code>mfa_satisfied</code></td><td>bool</td><td>MFA state.</td></tr>
+      <tr><td><code>impersonator_user_id</code></td><td>text, null</td><td>Support-impersonation marker.</td></tr>
+    </tbody></table>
+
+    <p><b>identity.impersonation_grant</b> — manager-approved + customer-consented support sessions.</p>
+    <table><thead><tr><th>Column</th><th>Type</th><th>Purpose</th></tr></thead><tbody>
+      <tr><td><code>grant_id</code></td><td>ULID PK</td><td>Surrogate.</td></tr>
+      <tr><td><code>support_user_id</code></td><td>text</td><td>Engineer requesting access.</td></tr>
+      <tr><td><code>target_tenant_id</code></td><td>FK</td><td>Tenant being impersonated.</td></tr>
+      <tr><td><code>ticket_ref</code></td><td>text</td><td>Support ticket ID.</td></tr>
+      <tr><td><code>manager_approval_id</code></td><td>FK → approval.step (P4)</td><td>Internal approval.</td></tr>
+      <tr><td><code>customer_consent_ref</code></td><td>FK → consent.receipt</td><td>Customer-side consent.</td></tr>
+      <tr><td><code>expires_at</code></td><td>timestamptz</td><td>Time-bounded.</td></tr>
+      <tr><td><code>certificate_audit_id</code></td><td>FK → audit.entry, null</td><td>Cert of impersonation at end.</td></tr>
+    </tbody></table>
+
+    <h4>5.2 · ERD</h4>
+    <div class="diagram-wrap"><pre class="mermaid">
+erDiagram
+  PERSON ||--o{ ALIAS : ""
+  PERSON ||--o{ CREDENTIAL : ""
+  PERSON ||--o{ SESSION : ""
+  TENANT ||--o{ FEDERATION_CONFIG : ""
+  SESSION ||--o| IMPERSONATION_GRANT : "may carry"
+  PERSON {
+    string person_id PK
+    string home_region
+    string status
+  }
+  ALIAS {
+    string alias_id PK
+    string person_id FK
+    string kind
+    bytes  value_envelope
+    bytes  value_hash
+  }
+  CREDENTIAL {
+    string credential_id PK
+    string person_id FK
+    string kind
+    string status
+  }
+  FEDERATION_CONFIG {
+    string federation_id PK
+    string tenant_id FK
+    string protocol
+    jsonb  group_role_map
+  }
+  IMPERSONATION_GRANT {
+    string grant_id PK
+    string support_user_id
+    string target_tenant_id FK
+    timestamp expires_at
+  }
+    </pre></div>
+
+    <h4>5.3 · The six-layer JWT claim set (FR-IDN-4)</h4>
+    <table><thead><tr><th>Claim</th><th>Source</th></tr></thead><tbody>
+      <tr><td><code>sub</code> = <code>person_id</code></td><td>identity.person</td></tr>
+      <tr><td><code>org_id · app_id · tenant_id · bu_id</code></td><td>tenant tables</td></tr>
+      <tr><td><code>parent_tenant_id · root_tenant_id · reseller_id</code></td><td>tenant.tenant (denormalized)</td></tr>
+      <tr><td><code>primary_persona_id · all_persona_ids[]</code></td><td>persona tables (P3)</td></tr>
+      <tr><td><code>admin_pool_index · app_pool_index</code></td><td>routing tables (P1)</td></tr>
+      <tr><td><code>projection_version</code></td><td>subject_view.projection_version (G4)</td></tr>
+      <tr><td><code>encounter_id</code></td><td>Set when token is encounter-scoped (P5).</td></tr>
+      <tr><td><code>actor.kind</code></td><td><code>human · service · agent · support_impersonator</code></td></tr>
+      <tr><td><code>amr</code></td><td>MFA methods satisfied.</td></tr>
+    </tbody></table>
+
+    <h4>5.4 · Events published</h4>
+    <table><thead><tr><th>Event</th><th>Retention</th><th>Conflict</th></tr></thead><tbody>
+      <tr><td><code>identity.login.v1</code></td><td>operational</td><td>lww</td></tr>
+      <tr><td><code>identity.app-identity.created.v1</code></td><td>regulated</td><td>event-sourcing</td></tr>
+      <tr><td><code>identity.alias.merged.v1</code></td><td>regulated</td><td>event-sourcing</td></tr>
+      <tr><td><code>identity.federation.configured.v1</code></td><td>regulated</td><td>event-sourcing</td></tr>
+      <tr><td><code>identity.impersonation.granted.v1</code></td><td>regulated</td><td>event-sourcing</td></tr>
+      <tr><td><code>identity.impersonation.ended.v1</code></td><td>regulated</td><td>event-sourcing</td></tr>
+    </tbody></table>
+
+    <h4>5.5 · SKUs</h4>
+    <p><code>identity.jwt.mint · identity.jwt.verify · identity.mdm.merge · identity.mfa.challenge · identity.impersonation.request</code> — <code>tiered_per_call</code>.</p>
+  </div>
+</section>
+
+<!-- sdk-consent -->
+<section id="sdk-consent">
+  <h2>6 · <code>sdk-consent</code> — Receipts &amp; Revocations</h2>
+  <div class="sdk-block">
+    <div class="sdk-header"><h3>sdk-consent</h3><span class="pill blue">SDK</span></div>
+    <div class="purpose">Consent receipts keyed by canonical <code>person_id</code>; revocation log; offline-grant replay queue (used by HDK in P3); purpose registry; cross-border + cross-tenant support.</div>
+    <div class="meta-strip"><span><b>PRD §:</b> 5.3</span><span><b>FRs:</b> FR-CNS-1 … FR-CNS-6</span><span><b>Pool:</b> Admin (person home region)</span><span><b>Schema:</b> <code>consent</code></span></div>
+
+    <h4>6.1 · Tables</h4>
+
+    <p><b>consent.purpose</b> — typed purpose registry per app.</p>
+    <table><thead><tr><th>Column</th><th>Type</th><th>Purpose</th></tr></thead><tbody>
+      <tr><td><code>purpose_id</code></td><td>text PK</td><td>e.g., <code>marketing-email · clinical-decision-support · ai-training</code></td></tr>
+      <tr><td><code>app_id</code></td><td>text</td><td>App scope.</td></tr>
+      <tr><td><code>description</code></td><td>text</td><td>Customer-facing wording.</td></tr>
+      <tr><td><code>legal_basis</code></td><td>enum</td><td><code>consent · contract · legitimate-interest · vital · public-task · legal-obligation</code></td></tr>
+      <tr><td><code>default_jurisdictions</code></td><td>text[]</td><td>Where this purpose ships enabled by default.</td></tr>
+    </tbody></table>
+
+    <p><b>consent.receipt</b> — one row per consent grant.</p>
+    <table><thead><tr><th>Column</th><th>Type</th><th>Purpose</th></tr></thead><tbody>
+      <tr><td><code>receipt_id</code></td><td>ULID PK</td><td>Surrogate.</td></tr>
+      <tr><td><code>person_id</code></td><td>FK</td><td>Subject.</td></tr>
+      <tr><td><code>purpose_id</code></td><td>FK</td><td>What is consented to.</td></tr>
+      <tr><td><code>processor</code></td><td>text</td><td>Who processes (tenant · platform · third-party).</td></tr>
+      <tr><td><code>app_id · tenant_id · jurisdiction</code></td><td>text · text · text</td><td>Scope dimensions.</td></tr>
+      <tr><td><code>status</code></td><td>enum</td><td><code>granted · revoked · expired</code></td></tr>
+      <tr><td><code>granted_at · expires_at</code></td><td>timestamptz</td><td>Time bounds.</td></tr>
+      <tr><td><code>granted_via</code></td><td>enum</td><td><code>web · mobile · paper-form · phone · hdk-offline · cross-tenant-handoff</code></td></tr>
+      <tr><td><code>device_uuid · ip · user_agent</code></td><td>text</td><td>Forensic provenance.</td></tr>
+      <tr><td><code>signature_envelope</code></td><td>bytea</td><td>Cryptographic receipt (vaulted).</td></tr>
+      <tr><td><code>source_membership_id · target_membership_id</code></td><td>FK, null</td><td>Cross-tenant receipt (referral / handoff).</td></tr>
+    </tbody></table>
+
+    <p><b>consent.revocation</b> — append-only revocation log.</p>
+    <table><thead><tr><th>Column</th><th>Type</th><th>Purpose</th></tr></thead><tbody>
+      <tr><td><code>revocation_id</code></td><td>ULID PK</td><td>Surrogate.</td></tr>
+      <tr><td><code>receipt_id</code></td><td>FK</td><td>Subject receipt.</td></tr>
+      <tr><td><code>actor_kind · actor_id</code></td><td>enum · text</td><td>Who revoked.</td></tr>
+      <tr><td><code>reason</code></td><td>text</td><td>Free-form reason.</td></tr>
+      <tr><td><code>occurred_at</code></td><td>timestamptz</td><td>Time.</td></tr>
+      <tr><td><code>audit_entry_id</code></td><td>FK → audit.entry</td><td>Chain anchor.</td></tr>
+    </tbody></table>
+
+    <p><b>consent.offline_grant_queue</b> — receipts captured offline by HDK; replayed on reconnect (P3).</p>
+    <table><thead><tr><th>Column</th><th>Type</th><th>Purpose</th></tr></thead><tbody>
+      <tr><td><code>queue_id</code></td><td>ULID PK</td><td>Surrogate.</td></tr>
+      <tr><td><code>device_uuid</code></td><td>text</td><td>Origin device.</td></tr>
+      <tr><td><code>payload_envelope</code></td><td>bytea</td><td>Pending receipt body (vaulted).</td></tr>
+      <tr><td><code>queued_at · replayed_at</code></td><td>timestamptz</td><td>Lifecycle.</td></tr>
+      <tr><td><code>status</code></td><td>enum</td><td><code>pending · applied · conflict-human-review · expired</code></td></tr>
+    </tbody></table>
+
+    <h4>6.2 · ERD</h4>
+    <div class="diagram-wrap"><pre class="mermaid">
+erDiagram
+  PURPOSE ||--o{ RECEIPT : ""
+  PERSON ||--o{ RECEIPT : ""
+  RECEIPT ||--o{ REVOCATION : ""
+  RECEIPT }o--o| MEMBERSHIP : "cross-tenant"
+  PURPOSE {
+    string purpose_id PK
+    string app_id
+    string legal_basis
+  }
+  RECEIPT {
+    string receipt_id PK
+    string person_id FK
+    string purpose_id FK
+    string processor
+    string status
+    string jurisdiction
+    timestamp granted_at
+  }
+  REVOCATION {
+    string revocation_id PK
+    string receipt_id FK
+    string actor_id
+    timestamp occurred_at
+  }
+    </pre></div>
+
+    <h4>6.3 · Events &amp; SKUs</h4>
+    <p><b>Events:</b> <code>consent.granted.v1 · consent.revoked.v1 · consent.purpose.registered.v1 · consent.cross-tenant.granted.v1</code> (all regulated, event-sourcing).</p>
+    <p><b>SKUs:</b> <code>consent.grant · consent.revoke · consent.check · consent.export</code> — <code>flat_per_call</code>.</p>
+  </div>
+</section>
+
+<!-- sdk-policy -->
+<section id="sdk-policy">
+  <h2>7 · <code>sdk-policy</code> — ABAC + IQL + Precomputation</h2>
+  <div class="sdk-block">
+    <div class="sdk-header"><h3>sdk-policy</h3><span class="pill blue">SDK</span><span class="pill purple">IQL DSL · v3.1</span></div>
+    <div class="purpose">Cedar-style ABAC evaluator with a typed Identity Query Language (IQL) DSL, decision log, and hot-decision precomputation keyed by <code>projection_version</code>.</div>
+    <div class="meta-strip"><span><b>PRD §:</b> 5.4</span><span><b>FRs:</b> FR-POL-1 … FR-POL-9</span><span><b>Pool:</b> Admin (per tenant)</span><span><b>Schema:</b> <code>policy</code></span></div>
+
+    <h4>7.1 · Tables</h4>
+
+    <p><b>policy.policy</b> — a versioned policy bundle.</p>
+    <table><thead><tr><th>Column</th><th>Type</th><th>Purpose</th></tr></thead><tbody>
+      <tr><td><code>policy_id</code></td><td>ULID PK</td><td>Surrogate.</td></tr>
+      <tr><td><code>tenant_id</code></td><td>FK, null</td><td>Tenant scope (null = platform policy).</td></tr>
+      <tr><td><code>name · description</code></td><td>text</td><td>Display.</td></tr>
+      <tr><td><code>version</code></td><td>semver</td><td>Versioning.</td></tr>
+      <tr><td><code>status</code></td><td>enum</td><td><code>draft · active · deprecated · retired</code></td></tr>
+      <tr><td><code>iql_source</code></td><td>text</td><td>Authored DSL.</td></tr>
+      <tr><td><code>cedar_compiled</code></td><td>bytea</td><td>Compiled Cedar term (binary form).</td></tr>
+      <tr><td><code>attribute_dependencies</code></td><td>text[]</td><td>Fetcher names this policy reads.</td></tr>
+      <tr><td><code>created_by · created_at · published_at</code></td><td>text · timestamptz</td><td>Lifecycle.</td></tr>
+    </tbody></table>
+
+    <p><b>policy.attribute_fetcher</b> — registered attribute fetcher names (MDM-backed).</p>
+    <table><thead><tr><th>Column</th><th>Type</th><th>Purpose</th></tr></thead><tbody>
+      <tr><td><code>fetcher_id</code></td><td>text PK</td><td>e.g., <code>person.kyc_status · tenant.tier · device.attested</code></td></tr>
+      <tr><td><code>source_sdk</code></td><td>text</td><td>Which SDK owns the truth.</td></tr>
+      <tr><td><code>return_type</code></td><td>text</td><td>Schema reference.</td></tr>
+      <tr><td><code>cacheable</code></td><td>bool</td><td>Whether result may be cached against <code>projection_version</code>.</td></tr>
+    </tbody></table>
+
+    <p><b>policy.decision</b> — sampled decision log (also flows to audit for ALLOW/DENY on regulated targets).</p>
+    <table><thead><tr><th>Column</th><th>Type</th><th>Purpose</th></tr></thead><tbody>
+      <tr><td><code>decision_id</code></td><td>ULID PK</td><td>Surrogate.</td></tr>
+      <tr><td><code>policy_id</code></td><td>FK</td><td>Which policy.</td></tr>
+      <tr><td><code>policy_version</code></td><td>semver</td><td>Snapshot.</td></tr>
+      <tr><td><code>subject_person_id</code></td><td>FK</td><td>Subject of decision.</td></tr>
+      <tr><td><code>target_kind · target_id</code></td><td>enum · text</td><td>What was checked.</td></tr>
+      <tr><td><code>decision</code></td><td>enum</td><td><code>ALLOW · DENY</code></td></tr>
+      <tr><td><code>reason</code></td><td>text</td><td>Reason string.</td></tr>
+      <tr><td><code>layers_used</code></td><td>text[]</td><td>Which six-layer attributes were read.</td></tr>
+      <tr><td><code>projection_version</code></td><td>bigint</td><td>For cache invalidation.</td></tr>
+      <tr><td><code>cache_hit</code></td><td>bool</td><td>Telemetry.</td></tr>
+      <tr><td><code>occurred_at</code></td><td>timestamptz</td><td>Time.</td></tr>
+    </tbody></table>
+
+    <p><b>policy.precomp_cache</b> (Redis) — hot decision cache.</p>
+    <table><thead><tr><th>Key</th><th>Value</th><th>TTL</th></tr></thead><tbody>
+      <tr><td><code>pol:{policy_id}:{policy_version}:{subject_id}:{target_id}:{pv}</code></td><td>ALLOW/DENY + reason</td><td>15min, invalidated on <code>projection_version</code> bump</td></tr>
+    </tbody></table>
+
+    <h4>7.2 · IQL grammar overview</h4>
+    <pre>// IQL → Cedar term compilation
+subject.persona(role="senior_doctor")
+  and relationship(type="care-team", target=encounter.patient)
+  and consent(purpose="clinical-decision-support") = granted
+  and encounter(active=true)
+</pre>
+
+    <h4>7.3 · ERD</h4>
+    <div class="diagram-wrap"><pre class="mermaid">
+erDiagram
+  POLICY ||--o{ POLICY_DECISION : ""
+  POLICY }o--o{ ATTRIBUTE_FETCHER : "depends on"
+  POLICY {
+    string policy_id PK
+    string tenant_id FK
+    string version
+    string status
+    bytes  cedar_compiled
+  }
+  POLICY_DECISION {
+    string decision_id PK
+    string policy_id FK
+    string subject_person_id
+    string target_kind
+    string decision
+    bigint projection_version
+    timestamp occurred_at
+  }
+  ATTRIBUTE_FETCHER {
+    string fetcher_id PK
+    string source_sdk
+    bool   cacheable
+  }
+    </pre></div>
+
+    <h4>7.4 · Events &amp; SKUs</h4>
+    <p><b>Events:</b> <code>policy.evaluated.v1</code> (sampled · operational) · <code>policy.updated.v1</code> (regulated).</p>
+    <p><b>SKUs:</b> <code>policy.evaluate · policy.update · policy.iql.compile</code> — <code>flat_per_call</code>.</p>
+  </div>
+</section>
+
+<!-- sdk-rebac -->
+<section id="sdk-rebac">
+  <h2>8 · <code>sdk-rebac</code> — Relationship Graph &amp; Safeguards</h2>
+  <div class="sdk-block">
+    <div class="sdk-header"><h3>sdk-rebac</h3><span class="pill blue">SDK</span><span class="pill yellow">Traversal budget · v3.1</span></div>
+    <div class="purpose">Typed relationship graph; ReBAC evaluator; cross-tenant relationship coordinator; lifecycle &amp; re-attestation; computational safeguards (depth cap, edge indexes, async reachability projection).</div>
+    <div class="meta-strip"><span><b>PRD §:</b> 5.5</span><span><b>FRs:</b> FR-REB-1 … FR-REB-10</span><span><b>Pool:</b> App Pool (in-app) + Admin (cross-tenant)</span><span><b>Schema:</b> <code>rebac</code></span></div>
+
+    <h4>8.1 · Tables</h4>
+
+    <p><b>rebac.relationship</b> — the edges of the graph.</p>
+    <table><thead><tr><th>Column</th><th>Type</th><th>Purpose</th></tr></thead><tbody>
+      <tr><td><code>relationship_id</code></td><td>ULID PK</td><td>Surrogate.</td></tr>
+      <tr><td><code>kind</code></td><td>text</td><td><code>care-team · primary-care · agent-buyer · investor-fund · referral · …</code></td></tr>
+      <tr><td><code>persona_a · persona_b</code></td><td>FK, FK</td><td>Endpoints (canonical alphabetical order for dedup).</td></tr>
+      <tr><td><code>scope</code></td><td>jsonb</td><td>Per-kind scope payload (e.g., chart-section list, fund subset).</td></tr>
+      <tr><td><code>tenant_id_a · tenant_id_b</code></td><td>text · text</td><td>For cross-tenant edges.</td></tr>
+      <tr><td><code>cross_tenant_key_ref</code></td><td>FK → vault.key, null</td><td>Re-encryption tier when cross-tenant.</td></tr>
+      <tr><td><code>status</code></td><td>enum</td><td><code>open · active · suspended · terminated · expired</code></td></tr>
+      <tr><td><code>created_at · expires_at · terminated_at</code></td><td>timestamptz</td><td>Lifecycle.</td></tr>
+      <tr><td><code>consent_ref</code></td><td>FK → consent.receipt, null</td><td>Underlying consent.</td></tr>
+      <tr><td><code>reattest_cadence_days</code></td><td>int</td><td>e.g., 365 for PCP.</td></tr>
+      <tr><td><code>last_reattested_at</code></td><td>timestamptz, null</td><td>Re-attest tracking.</td></tr>
+    </tbody></table>
+
+    <p><b>rebac.relationship_decision</b> — sampled decisions for the audit fan-out.</p>
+    <table><thead><tr><th>Column</th><th>Type</th><th>Purpose</th></tr></thead><tbody>
+      <tr><td><code>decision_id</code></td><td>ULID PK</td><td>Surrogate.</td></tr>
+      <tr><td><code>subject_persona_id · target_persona_id</code></td><td>FK · FK</td><td>Decision pair.</td></tr>
+      <tr><td><code>required_kind · required_status</code></td><td>text · enum</td><td>Required edge.</td></tr>
+      <tr><td><code>decision</code></td><td>enum</td><td>ALLOW · DENY</td></tr>
+      <tr><td><code>traversal_depth · nodes_visited</code></td><td>int · int</td><td>Budget telemetry.</td></tr>
+      <tr><td><code>cache_hit</code></td><td>bool</td><td>Hit on reachability cache.</td></tr>
+    </tbody></table>
+
+    <p><b>rebac.reachability_cache</b> (Redis projection) — precomputed multi-hop reachability per <code>(subject, kind, depth_budget)</code>.</p>
+    <table><thead><tr><th>Key</th><th>Value</th><th>TTL</th></tr></thead><tbody>
+      <tr><td><code>rb:{subject}:{kind}:depth{n}</code></td><td>Set of reachable persona_ids</td><td>15min; invalidated on <code>relationship.*</code> event for participants</td></tr>
+    </tbody></table>
+
+    <h4>8.2 · Safeguards (FR-REB-6 … 9)</h4>
+    <table><thead><tr><th>Safeguard</th><th>Default</th><th>Why</th></tr></thead><tbody>
+      <tr><td><code>ReBACTraversalBudget.depth_cap</code></td><td>4</td><td>Bound graph walk cost.</td></tr>
+      <tr><td><code>ReBACTraversalBudget.node_visit_cap</code></td><td>1024</td><td>Bound RAM use.</td></tr>
+      <tr><td>TTL with auto-expiry</td><td>per-kind</td><td>Relationships rot; force re-attestation.</td></tr>
+      <tr><td>Edge indexes</td><td><code>(kind, persona_a, persona_b, status)</code></td><td>Sub-ms lookup.</td></tr>
+      <tr><td>Async reachability projection</td><td>1s p99 refresh</td><td>Precompute &quot;all reachable via care-team within N hops&quot;.</td></tr>
+    </tbody></table>
+
+    <h4>8.3 · ERD</h4>
+    <div class="diagram-wrap"><pre class="mermaid">
+erDiagram
+  RELATIONSHIP }o--|| PERSONA : "persona_a"
+  RELATIONSHIP }o--|| PERSONA : "persona_b"
+  RELATIONSHIP ||--o{ RELATIONSHIP_DECISION : ""
+  RELATIONSHIP }o--o| VAULT_KEY : "cross-tenant"
+  RELATIONSHIP }o--o| CONSENT_RECEIPT : "consent_ref"
+  RELATIONSHIP {
+    string relationship_id PK
+    string kind
+    string persona_a FK
+    string persona_b FK
+    string scope
+    string status
+    timestamp expires_at
+  }
+  RELATIONSHIP_DECISION {
+    string decision_id PK
+    string subject_persona_id FK
+    string target_persona_id FK
+    string decision
+    int    traversal_depth
+  }
+    </pre></div>
+
+    <h4>8.4 · Events &amp; SKUs</h4>
+    <p><b>Events:</b> <code>rebac.relationship.created.v1 · rebac.relationship.scope.changed.v1 · rebac.relationship.terminated.v1 · rebac.decision.v1</code> (sampled).</p>
+    <p><b>SKUs:</b> <code>rebac.relationship.create · rebac.check · rebac.scope.update</code> — <code>flat_per_call</code>.</p>
+  </div>
+</section>
+
+<!-- sdk-api-keys -->
+<section id="sdk-api-keys">
+  <h2>9 · <code>sdk-api-keys</code> — Programmatic Access</h2>
+  <div class="sdk-block">
+    <div class="sdk-header"><h3>sdk-api-keys</h3><span class="pill blue">SDK</span></div>
+    <div class="purpose">End-customer programmatic-access keys distinct from human OIDC sessions. Each key bound to a synthetic persona so audit + ReBAC behave consistently.</div>
+    <div class="meta-strip"><span><b>PRD §:</b> 5.6</span><span><b>FRs:</b> FR-APK-1 … FR-APK-9</span><span><b>Pool:</b> Admin</span><span><b>Schema:</b> <code>api_keys</code></span></div>
+
+    <h4>9.1 · Tables</h4>
+
+    <p><b>api_keys.key</b> — one row per issued key (hashed at rest).</p>
+    <table><thead><tr><th>Column</th><th>Type</th><th>Purpose</th></tr></thead><tbody>
+      <tr><td><code>key_id</code></td><td>ULID PK</td><td>Surrogate.</td></tr>
+      <tr><td><code>tenant_id</code></td><td>FK</td><td>Owning tenant.</td></tr>
+      <tr><td><code>name · description</code></td><td>text</td><td>UX.</td></tr>
+      <tr><td><code>prefix</code></td><td>text</td><td>Visible portion (e.g., <code>pk_live_abc</code>).</td></tr>
+      <tr><td><code>hash</code></td><td>bytea</td><td>Argon2id hash of full key (full key only at issue).</td></tr>
+      <tr><td><code>synthetic_persona_id</code></td><td>FK → persona (P3)</td><td>Audit-side identity.</td></tr>
+      <tr><td><code>scopes</code></td><td>text[]</td><td>e.g., <code>['crm.contact.read','engagement.encounter.create']</code></td></tr>
+      <tr><td><code>rate_limit_sku</code></td><td>text, null</td><td>Composed with sdk-meter.</td></tr>
+      <tr><td><code>status</code></td><td>enum</td><td><code>active · rotated · revoked</code></td></tr>
+      <tr><td><code>issued_at · rotated_at · revoked_at · last_used_at · expires_at</code></td><td>timestamptz</td><td>Lifecycle &amp; telemetry.</td></tr>
+      <tr><td><code>rotation_grace_until</code></td><td>timestamptz, null</td><td>Old key honored during grace.</td></tr>
+    </tbody></table>
+
+    <h4>9.2 · ERD</h4>
+    <div class="diagram-wrap"><pre class="mermaid">
+erDiagram
+  API_KEY }o--|| TENANT : ""
+  API_KEY }o--|| PERSONA : "synthetic"
+  API_KEY {
+    string key_id PK
+    string tenant_id FK
+    string prefix
+    bytes  hash
+    string scopes
+    string status
+    timestamp issued_at
+    timestamp expires_at
+  }
+    </pre></div>
+
+    <h4>9.3 · Events &amp; SKUs</h4>
+    <p><b>Events:</b> <code>api-key.issued.v1 · api-key.rotated.v1 · api-key.revoked.v1 · api-key.used.v1</code> (sampled).</p>
+    <p><b>SKUs:</b> <code>api-key.issue · api-key.rotate · api-key.revoke</code> — <code>flat_per_call</code>.</p>
+  </div>
+</section>
+
+<!-- projection -->
+<section id="projection">
+  <h2>10 · Identity Projection System (G4)</h2>
+  <div class="sdk-block">
+    <div class="sdk-header"><h3>services/identity-projector + projection schema</h3><span class="pill purple">G4 closer</span><span class="pill teal">p99 ≤ 0.5 ms warm</span></div>
+    <div class="purpose">Background worker subscribes to every membership / relationship / consent / policy / role-template / BU change event and materializes a flattened <code>subject_view</code> per <code>(person, app, tenant)</code> into Redis (hot) + Postgres (durable). Resolver (P3) reads from this projection.</div>
+    <div class="meta-strip"><span><b>PRD §:</b> 5.7</span><span><b>FRs:</b> FR-IPS-1 … FR-IPS-7</span><span><b>Pool:</b> Admin (person home region)</span><span><b>Schema:</b> <code>projection</code></span></div>
+
+    <h4>10.1 · projection.subject_view</h4>
+    <p>One row per <code>(person_id, app_id, tenant_id)</code>; primary key is the composite triple.</p>
+    <table><thead><tr><th>Column</th><th>Type</th><th>Purpose</th></tr></thead><tbody>
+      <tr><td><code>person_id</code></td><td>FK</td><td>Subject.</td></tr>
+      <tr><td><code>app_id</code></td><td>text</td><td>App context.</td></tr>
+      <tr><td><code>tenant_id</code></td><td>FK</td><td>Tenant context.</td></tr>
+      <tr><td><code>bu_id</code></td><td>FK, null</td><td>BU placement.</td></tr>
+      <tr><td><code>bu_ancestors</code></td><td>text[]</td><td>Materialized ancestor chain.</td></tr>
+      <tr><td><code>parent_tenant_id · root_tenant_id · reseller_id</code></td><td>text · text · text, null</td><td>Denormalized scope spine.</td></tr>
+      <tr><td><code>geo_node_id</code></td><td>FK, null</td><td>Residency context.</td></tr>
+      <tr><td><code>primary_persona_id</code></td><td>FK</td><td>Default persona for the tuple.</td></tr>
+      <tr><td><code>all_persona_ids</code></td><td>text[]</td><td>All personas attached to this (person, app, tenant) tuple.</td></tr>
+      <tr><td><code>effective_role_closure</code></td><td>text[]</td><td>Full role-template permission closure (inheritance applied).</td></tr>
+      <tr><td><code>abac_attributes</code></td><td>jsonb</td><td>Pre-fetched ABAC attributes (KYC, tier, device.attested, …).</td></tr>
+      <tr><td><code>rebac_edges</code></td><td>jsonb</td><td>Map <code>kind → [persona_id]</code> of reachable personas within depth budget.</td></tr>
+      <tr><td><code>active_consents</code></td><td>jsonb</td><td>Map <code>purpose → receipt_id</code>.</td></tr>
+      <tr><td><code>effective_scopes</code></td><td>text[]</td><td>Computed scopes for policy evaluation.</td></tr>
+      <tr><td><code>admin_pool_index · app_pool_index</code></td><td>text</td><td>For O(1) routing.</td></tr>
+      <tr><td><code>projection_version</code></td><td>bigint</td><td>Monotonic per row; bumped on any refresh.</td></tr>
+      <tr><td><code>refreshed_at</code></td><td>timestamptz</td><td>Last refresh.</td></tr>
+      <tr><td><code>expires_at</code></td><td>timestamptz</td><td>Safety re-projection TTL (1h default).</td></tr>
+    </tbody></table>
+
+    <h4>10.2 · Redis hot store</h4>
+    <table><thead><tr><th>Key</th><th>Value</th><th>TTL</th></tr></thead><tbody>
+      <tr><td><code>sv:{person_id}:{app_id}:{tenant_id}</code></td><td>Serialized subject_view JSON</td><td>15min; refreshed on event</td></tr>
+      <tr><td><code>sv:invalidate</code></td><td>Pub/Sub channel</td><td>—</td></tr>
+    </tbody></table>
+
+    <h4>10.3 · Projector worker — subscribed events</h4>
+    <p><code>identity.persona.created.v1 · identity.persona.shred.v1 · identity.membership.created.v1 · identity.membership.suspended.v1 · identity.membership.reactivated.v1 · identity.role.assigned.v1 · identity.role.revoked.v1 · rebac.relationship.created.v1 · rebac.relationship.scope.changed.v1 · rebac.relationship.terminated.v1 · consent.granted.v1 · consent.revoked.v1 · tenant.bu.moved.v1 · tenant.role-template.updated.v1</code></p>
+
+    <h4>10.4 · Events emitted</h4>
+    <table><thead><tr><th>Event</th><th>Retention</th><th>Conflict</th></tr></thead><tbody>
+      <tr><td><code>identity.projection.refreshed.v1</code></td><td>operational (sampled)</td><td>lww</td></tr>
+      <tr><td><code>identity.projection.miss.v1</code></td><td>operational</td><td>lww</td></tr>
+    </tbody></table>
+  </div>
+</section>
+
+<!-- events -->
+<section id="events">
+  <h2>11 · New event types added to the registry in P2</h2>
+  <p>All conflict policies <code>event-sourcing</code> unless noted; retention as listed.</p>
+  <table>
+    <thead><tr><th>Event</th><th>Producer</th><th>Retention</th></tr></thead>
+    <tbody>
+      <tr><td><code>tenant.created.v1</code> · <code>tenant.pool.assigned.v1</code> · <code>tenant.subtenant.created.v1</code> · <code>reseller.tenant.attached.v1</code></td><td>sdk-tenant</td><td>regulated</td></tr>
+      <tr><td><code>tenant.bu.created.v1</code> · <code>tenant.bu.moved.v1</code></td><td>sdk-tenant</td><td>operational</td></tr>
+      <tr><td><code>tenant.role-template.updated.v1</code></td><td>sdk-tenant</td><td>regulated</td></tr>
+      <tr><td><code>tenant.fiscal-calendar.updated.v1</code></td><td>sdk-tenant</td><td>operational</td></tr>
+      <tr><td><code>identity.login.v1</code></td><td>sdk-identity</td><td>operational</td></tr>
+      <tr><td><code>identity.app-identity.created.v1</code> · <code>identity.alias.merged.v1</code> · <code>identity.federation.configured.v1</code> · <code>identity.impersonation.granted.v1</code> · <code>identity.impersonation.ended.v1</code></td><td>sdk-identity</td><td>regulated</td></tr>
+      <tr><td><code>consent.granted.v1</code> · <code>consent.revoked.v1</code> · <code>consent.purpose.registered.v1</code> · <code>consent.cross-tenant.granted.v1</code></td><td>sdk-consent</td><td>regulated</td></tr>
+      <tr><td><code>policy.evaluated.v1</code> (sampled)</td><td>sdk-policy</td><td>operational</td></tr>
+      <tr><td><code>policy.updated.v1</code></td><td>sdk-policy</td><td>regulated</td></tr>
+      <tr><td><code>rebac.relationship.created.v1</code> · <code>rebac.relationship.scope.changed.v1</code> · <code>rebac.relationship.terminated.v1</code></td><td>sdk-rebac</td><td>regulated</td></tr>
+      <tr><td><code>rebac.decision.v1</code> (sampled)</td><td>sdk-rebac</td><td>operational</td></tr>
+      <tr><td><code>api-key.issued.v1</code> · <code>api-key.rotated.v1</code> · <code>api-key.revoked.v1</code></td><td>sdk-api-keys</td><td>regulated</td></tr>
+      <tr><td><code>api-key.used.v1</code> (sampled)</td><td>sdk-api-keys</td><td>operational</td></tr>
+      <tr><td><code>identity.projection.refreshed.v1</code> · <code>identity.projection.miss.v1</code></td><td>identity-projector</td><td>operational</td></tr>
+    </tbody>
+  </table>
+</section>
+
+</div>
+
+<script>
+  mermaid.initialize({ startOnLoad: true, theme: 'dark', themeVariables: { background: '#0b0f17', primaryColor: '#1a2234', primaryBorderColor: '#c9a86a', primaryTextColor: '#e6ecf5', lineColor: '#6aa9ff', secondaryColor: '#1d1830', tertiaryColor: '#16241c' } });
+</script>
+
+</body>
+</html>

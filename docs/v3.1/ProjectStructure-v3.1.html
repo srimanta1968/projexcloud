@@ -1,0 +1,1077 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>ProjexCloud Project Structure v3.1 — Repos · SDKs · Databases · Portals</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<style>
+  :root {
+    --bg: #0b0f17;
+    --panel: #121826;
+    --panel-2: #1a2234;
+    --line: #243049;
+    --text: #e6ecf5;
+    --muted: #8a98b3;
+    --accent: #c9a86a;
+    --accent-2: #6aa9ff;
+    --teal: #2dd4bf;
+    --green: #5dd39e;
+    --red: #ff6b6b;
+    --yellow: #f5c451;
+    --purple: #b88dff;
+    --code-bg: #0f1422;
+  }
+  * { box-sizing: border-box; }
+  html, body { background: var(--bg); color: var(--text); font-family: ui-sans-serif, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", sans-serif; margin: 0; padding: 0; line-height: 1.55; }
+  .page { max-width: 1260px; margin: 0 auto; padding: 56px 32px 96px; }
+  header.cover { border-bottom: 1px solid var(--line); padding-bottom: 36px; margin-bottom: 48px; }
+  header.cover .eyebrow { color: var(--accent); letter-spacing: 0.18em; text-transform: uppercase; font-size: 12px; font-weight: 700; }
+  header.cover h1 { font-size: 42px; line-height: 1.15; margin: 12px 0 8px; letter-spacing: -0.02em; }
+  header.cover .sub { color: var(--muted); font-size: 17px; max-width: 900px; }
+  header.cover .meta { display: flex; gap: 24px; flex-wrap: wrap; margin-top: 24px; color: var(--muted); font-size: 13px; }
+  header.cover .meta b { color: var(--text); font-weight: 600; }
+  header.cover .changelog { margin-top: 22px; background: var(--panel-2); border-left: 3px solid var(--accent-2); border-radius: 0 10px 10px 0; padding: 14px 18px; font-size: 13.5px; color: #d6deef; }
+  header.cover .changelog b { color: var(--accent-2); }
+
+  h2 { font-size: 26px; letter-spacing: -0.01em; margin: 56px 0 18px; padding-bottom: 8px; border-bottom: 1px solid var(--line); }
+  h3 { font-size: 18px; margin: 28px 0 10px; color: var(--text); }
+  h4 { font-size: 13px; margin: 18px 0 8px; color: var(--accent); text-transform: uppercase; letter-spacing: 0.12em; }
+  p { color: #c8d1e3; }
+  small, .muted { color: var(--muted); }
+
+  .grid { display: grid; gap: 16px; }
+  .grid.cols-2 { grid-template-columns: repeat(2, minmax(0,1fr)); }
+  .grid.cols-3 { grid-template-columns: repeat(3, minmax(0,1fr)); }
+  .grid.cols-4 { grid-template-columns: repeat(4, minmax(0,1fr)); }
+  @media (max-width: 900px) { .grid.cols-2, .grid.cols-3, .grid.cols-4 { grid-template-columns: 1fr; } header.cover h1 { font-size: 30px; } }
+
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 18px 18px 16px; }
+  .card .label { color: var(--accent); font-size: 11px; text-transform: uppercase; letter-spacing: 0.14em; font-weight: 700; }
+  .card .title { font-weight: 600; margin: 6px 0 6px; font-size: 15px; }
+  .card .body { color: var(--muted); font-size: 13.5px; }
+
+  .pill { display: inline-block; padding: 3px 10px; border-radius: 999px; font-size: 11px; border: 1px solid var(--line); color: var(--muted); margin-right: 6px; }
+  .pill.gold { color: var(--accent); border-color: rgba(201,168,106,0.4); }
+  .pill.blue { color: var(--accent-2); border-color: rgba(106,169,255,0.4); }
+  .pill.teal { color: var(--teal); border-color: rgba(45,212,191,0.4); }
+  .pill.green { color: var(--green); border-color: rgba(93,211,158,0.4); }
+  .pill.red { color: var(--red); border-color: rgba(255,107,107,0.4); }
+  .pill.yellow { color: var(--yellow); border-color: rgba(245,196,81,0.4); }
+  .pill.purple { color: var(--purple); border-color: rgba(184,141,255,0.4); }
+
+  table { width: 100%; border-collapse: collapse; margin-top: 12px; font-size: 13.5px; }
+  th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { color: var(--muted); font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; }
+
+  pre, code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+  pre { background: var(--code-bg); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; overflow-x: auto; font-size: 12.5px; line-height: 1.5; }
+  code { background: var(--code-bg); padding: 1px 6px; border-radius: 4px; font-size: 12.5px; }
+
+  .diagram-wrap { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 22px; overflow-x: auto; }
+  .caption { color: var(--muted); font-size: 12.5px; margin-top: 10px; text-align: center; }
+  .mermaid { background: transparent; }
+
+  nav.toc { position: sticky; top: 0; background: rgba(11,15,23,0.92); backdrop-filter: blur(10px); border-bottom: 1px solid var(--line); padding: 10px 32px; z-index: 10; }
+  nav.toc .row { max-width: 1260px; margin: 0 auto; display: flex; flex-wrap: wrap; gap: 10px; font-size: 12px; }
+  nav.toc a { color: var(--muted); text-decoration: none; border-bottom: 1px solid transparent; }
+  nav.toc a:hover { color: var(--accent); border-color: var(--accent); }
+
+  .callout { border-left: 3px solid var(--accent); background: var(--panel-2); padding: 14px 18px; border-radius: 0 10px 10px 0; margin: 18px 0; color: #d6deef; font-size: 14px; }
+  .callout.blue { border-color: var(--accent-2); }
+  .callout.green { border-color: var(--green); }
+  .callout.red { border-color: var(--red); }
+  .callout.purple { border-color: var(--purple); }
+  .callout.teal { border-color: var(--teal); }
+
+  ul.tight li { margin: 4px 0; color: #c8d1e3; font-size: 14px; }
+  .new-tag { display: inline-block; font-size: 10px; padding: 1px 6px; border-radius: 4px; background: rgba(184,141,255,0.18); color: var(--purple); margin-left: 8px; vertical-align: middle; letter-spacing: 0.08em; }
+
+  .surface { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 18px 20px 16px; margin-bottom: 12px; }
+  .surface .top { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; flex-wrap: wrap; margin-bottom: 6px; }
+  .surface .top .name { font-weight: 700; font-size: 17px; color: var(--text); }
+  .surface .top .url { font-family: ui-monospace, Consolas, monospace; color: var(--accent); font-size: 12.5px; }
+  .surface .meta-row { font-size: 12px; color: var(--muted); margin-top: 2px; }
+  .surface .row { display: grid; grid-template-columns: 110px 1fr; gap: 10px; font-size: 13px; margin-top: 6px; }
+  .surface .row .k { color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; font-size: 10.5px; padding-top: 2px; font-weight: 600; }
+  .surface .row .v { color: #c8d1e3; }
+  .surface.internal { border-left: 4px solid var(--red); }
+  .surface.tenant { border-left: 4px solid var(--accent-2); }
+  .surface.vertical { border-left: 4px solid var(--teal); }
+  .surface.workspace { border-left: 4px solid var(--purple); }
+  .surface.custom { border-left: 4px solid var(--green); }
+</style>
+</head>
+<body>
+
+<nav class="toc">
+  <div class="row">
+    <a href="#overview">1 · Overview</a>
+    <a href="#audiences">2 · Five Audiences</a>
+    <a href="#repo-strategy">3 · Repo Strategy</a>
+    <a href="#monorepo-layout">4 · Platform Monorepo</a>
+    <a href="#sdk-template">5 · SDK Template</a>
+    <a href="#databases">6 · Database Strategy</a>
+    <a href="#surfaces">7 · Five Surface Types</a>
+    <a href="#projexcloud-admin">8 · ProjexCloud Admin</a>
+    <a href="#tenant-admin">9 · Tenant Admin</a>
+    <a href="#verticals">10 · Vertical Apps</a>
+    <a href="#workspace">11 · Tenant Workspace</a>
+    <a href="#custom-apps">12 · Tenant Custom Apps</a>
+    <a href="#registry">13 · Registry &amp; Publishing</a>
+    <a href="#build">14 · Build &amp; Release</a>
+    <a href="#onboarding">15 · Developer Onboarding</a>
+  </div>
+</nav>
+
+<div class="page">
+
+<header class="cover">
+  <div class="eyebrow">ProjexCloud · Project Structure · v3.1 · Source of Truth</div>
+  <h1>Repos · SDKs · Databases · Portals — How the Project Is Organized</h1>
+  <p class="sub">This document is the <b>canonical source of truth</b> for: which repositories exist, what each contains, how SDKs are structured, how databases are organized, what admin and end-user surfaces ProjexCloud ships, and how tenant developers build their own apps on top. Every decision below is committed to the <code>v3.1</code> design and matches the SDK Build Plan's phase model.</p>
+  <div class="meta">
+    <div><b>Companion docs</b> · <code>./Architecture-v3.1.html</code> · <code>./SDK-Build-Plan-v3.1.html</code> · <code>./AIM-Identity-Model-v3.1.html</code> · <code>./AgenticIntegration-v3.1.html</code></div>
+    <div><b>Status</b> · v3.1 commitment</div>
+    <div><b>Scope</b> · platform repo · vertical repos · customer repos · 5 surface types</div>
+  </div>
+  <div class="changelog">
+    <b>The five decisions this doc commits to.</b> (1) <b>Multi-repo at the org boundary, monorepo within each org</b>: one platform monorepo + one repo per vertical + customer-owned repos for custom apps. (2) <b>One typed SDK template</b> followed by all 55 SDKs — same directory shape, same code-gen, same release cadence. (3) <b>Per-service per-pool schema isolation</b> in shared Postgres clusters (one schema per SDK, RLS per tenant) — semantically "database per service" without the operational explosion. (4) <b>Three platform-owned portals</b> — ProjexCloud Admin (internal), Tenant Admin (per-tenant), Consolidated Tenant Workspace (the launcher). (5) <b>Private npm registry</b> for SDK distribution to vertical teams and tenant developers; same gated/metered/audited consumption as internal code.
+  </div>
+</header>
+
+<!-- ============ OVERVIEW ============ -->
+<section id="overview">
+  <h2>1 · Overview — Why this doc exists</h2>
+  <p>The v3.1 architecture commits to <b>55 SDKs + 11 HDK modules + 6 foundation packages</b> across <b>8 dependency-driven phases</b>, plus a multi-tenant platform that sells to enterprise customers who themselves build apps on top. Without a single canonical answer to "where does the code live, how is it shipped, and what surfaces does the platform expose," every team will invent its own answer and the platform will fragment.</p>
+  <p>This document fixes the answers. It is the <b>"how do I navigate the project"</b> guide for new hires, vertical owners, customer developers, and platform operators.</p>
+
+  <div class="grid cols-3" style="margin-top:16px">
+    <div class="card"><div class="label">Source of truth</div><div class="title">Every repo is named, every surface is placed</div><div class="body">If a piece of code or a deployed surface isn't in this doc, it shouldn't exist. New artifacts require a PR to this doc first.</div></div>
+    <div class="card"><div class="label">Built-in scale</div><div class="title">Designed for 1 platform + N verticals + N customers</div><div class="body">The structure assumes ProjexCloud will host its own verticals AND host customer-built custom apps. Both have first-class places.</div></div>
+    <div class="card"><div class="label">CI-enforced</div><div class="title">The Opinionated Constraints (Arch §3A) apply here too</div><div class="body">No alternative repo topologies, no forks of the SDK template, no per-vertical Kafka or per-team Postgres. The platform owns the substrate.</div></div>
+  </div>
+</section>
+
+<!-- ============ AUDIENCES ============ -->
+<section id="audiences">
+  <h2>2 · The Five Developer Audiences</h2>
+  <p>Every design choice below is shaped by who consumes the output. Naming the five audiences upfront prevents the doc from drifting into "one-size-fits-no-one."</p>
+
+  <table>
+    <thead><tr><th>Audience</th><th>Role</th><th>Works in</th><th>Sees</th></tr></thead>
+    <tbody>
+      <tr><td><b>Platform engineer</b></td><td>Builds and operates the 55 SDKs + HDK + platform portals</td><td><code>projex-platform/</code> monorepo</td><td>Everything: contracts, SDKs, services, admin portals, infra</td></tr>
+      <tr><td><b>Vertical product engineer</b></td><td>Builds a ProjexCloud-owned vertical product (Healthcare, Realty, Seva, …)</td><td><code>projex-vertical-{name}/</code> separate repo</td><td>Platform SDKs from registry + their own vertical code</td></tr>
+      <tr><td><b>ProjexCloud operator</b></td><td>Runs the platform: tenant onboarding, billing ops, support, pool health, regulatory ops</td><td>ProjexCloud Admin Portal (web)</td><td>All tenants, all billing, all health signals, agent kill switches</td></tr>
+      <tr><td><b>Tenant admin</b></td><td>Configures their tenant: users, roles, integrations, billing</td><td>Tenant Admin Portal + Tenant Workspace</td><td>Only their tenant's data; admin surfaces for their tenant</td></tr>
+      <tr><td><b>Tenant developer</b></td><td>Builds custom apps for their tenant on top of ProjexCloud SDKs</td><td>Their own repo, outside our orgs</td><td>SDK packages from registry; deploys their app; registers it in the Tenant Workspace</td></tr>
+    </tbody>
+  </table>
+
+  <div class="callout">
+    <b>One more audience: tenant employee / end user.</b> They don't write code — they use the Tenant Workspace + vertical apps + custom apps. The structure must produce a coherent end-user experience even though five different developer audiences contributed to it.
+  </div>
+</section>
+
+<!-- ============ REPO STRATEGY ============ -->
+<section id="repo-strategy">
+  <h2>3 · Repository Strategy — Multi-repo at the Org Boundary</h2>
+  <p>The decision: <b>monorepo within each organizational boundary; separate repos across boundaries</b>. Three repo categories.</p>
+
+  <div class="diagram-wrap">
+    <pre class="mermaid">
+flowchart TB
+  classDef plat fill:#1d1830,stroke:#b88dff,color:#fff;
+  classDef vert fill:#16241c,stroke:#2dd4bf,color:#e6ecf5;
+  classDef cust fill:#162420,stroke:#5dd39e,color:#e6ecf5;
+  classDef reg fill:#241f10,stroke:#f5c451,color:#e6ecf5;
+
+  PLAT["<b>projex-platform/</b><br/>(monorepo · ProjexCloud-owned)<br/>contracts · 55 SDKs · 11 HDK · 3 portals ·<br/>services · infra · docs · tools"]:::plat
+
+  REG[("Private npm registry<br/>npm.projexcloud.com<br/>@projexlight/sdk-*<br/>@projexlight/contracts<br/>@projexlight/design-system")]:::reg
+
+  V1["<b>projex-vertical-healthcare/</b><br/>(separate repo · vertical team)"]:::vert
+  V2["<b>projex-vertical-realty/</b><br/>(separate repo · vertical team)"]:::vert
+  V3["<b>projex-vertical-seva/</b>"]:::vert
+  V4["<b>projex-vertical-fieldops/</b>"]:::vert
+  V5["… more verticals"]:::vert
+
+  C1["<b>(tenant)/custom-app-1/</b><br/>(customer's own repo, outside our orgs)"]:::cust
+  C2["<b>(tenant)/custom-app-2/</b>"]:::cust
+  C3["<b>(tenant)/integration-jobs/</b>"]:::cust
+
+  PLAT -->|publishes| REG
+  REG -->|consumed by| V1
+  REG -->|consumed by| V2
+  REG -->|consumed by| V3
+  REG -->|consumed by| V4
+  REG -->|consumed by| V5
+  REG -.->|consumed by| C1
+  REG -.->|consumed by| C2
+  REG -.->|consumed by| C3
+    </pre>
+    <div class="caption">Solid edges = internal teams. Dotted edges = external tenant developers.</div>
+  </div>
+
+  <h3>3.1 · The three repo categories</h3>
+
+  <div class="grid cols-3">
+    <div class="card">
+      <div class="label">Category 1</div>
+      <div class="title">Platform monorepo</div>
+      <div class="body">
+        <code>projex-platform/</code> (also addressable as <code>projex_common/</code> per the existing README). <b>One repo</b>. Holds: contracts, all 55 SDKs, all 11 HDK modules, foundation packages, the 3 platform-owned portals, services, infra, internal tooling. pnpm + turbo workspace. Owned by the ProjexCloud platform team.
+      </div>
+    </div>
+    <div class="card">
+      <div class="label">Category 2</div>
+      <div class="title">Vertical repos (one per vertical)</div>
+      <div class="body">
+        <code>projex-vertical-{healthcare,realty,seva,fieldops,oneestate,music,bidwork,leadpulse,…}/</code>. <b>One repo per vertical</b>. Holds the vertical product's frontend + backend + vertical-specific domain types. Consumes <code>@projexlight/sdk-*</code> from the private registry. Owned by each vertical's product team.
+      </div>
+    </div>
+    <div class="card">
+      <div class="label">Category 3</div>
+      <div class="title">Tenant custom app repos</div>
+      <div class="body">
+        Customer-owned, outside ProjexCloud's GitHub org entirely. ProjexCloud has zero source-code access. Customer's developers install <code>@projexlight/sdk-*</code> from the registry (with their per-tenant token) and build whatever they want. Their app registers in the Tenant Workspace via Tenant Admin.
+      </div>
+    </div>
+  </div>
+
+  <h3>3.2 · Why this split (and not a single monorepo for everything)</h3>
+  <table>
+    <thead><tr><th>Force</th><th>Conclusion</th></tr></thead>
+    <tbody>
+      <tr><td><b>Atomic contract changes across all SDKs</b></td><td>Pushes toward monorepo for the platform → confirms platform stays as one monorepo.</td></tr>
+      <tr><td><b>Vertical teams need independent release cadence</b> (Healthcare ships weekly, Seva ships monthly, both shouldn't be coupled to platform releases)</td><td>Pushes toward separate vertical repos consuming a versioned platform → confirms verticals as separate repos.</td></tr>
+      <tr><td><b>Customer source code must never enter ProjexCloud's repo</b> (legal, IP, security)</td><td>Pushes toward customer-owned repos. Hard rule — customer apps cannot be in our monorepo even if convenient.</td></tr>
+      <tr><td><b>Atomic refactors across vertical apps</b></td><td>Sometimes useful, but rare — verticals share contracts (which are atomic via the platform monorepo) and rarely need cross-vertical refactors. The cost of breaking vertical independence is higher than the cost of occasional multi-repo PRs.</td></tr>
+      <tr><td><b>Search across the whole codebase</b></td><td>Use Sourcegraph or GitHub code search across orgs. Not a reason to monorepo everything.</td></tr>
+    </tbody>
+  </table>
+
+  <h3>3.3 · Early-stage workspace linking (sibling-folder pattern)</h3>
+  <p>The existing <code>projex_common/README.md</code> states: <i>"The verticals' workspaces are siblings of <code>projex_common/</code> and link via the parent pnpm workspace (or via a published private registry once we promote artifacts to packages)."</i> v3.1 confirms this as the <b>early-stage pattern</b>:</p>
+  <ul class="tight">
+    <li><b>Until contracts v1.0 ships (end of Phase 1):</b> verticals live as sibling folders next to <code>projex-platform/</code> and link via parent pnpm workspace. Fast iteration; breaking contract changes ripple immediately.</li>
+    <li><b>After contracts v1.0 ships:</b> verticals migrate to their own repos and consume <code>@projexlight/contracts</code> + <code>@projexlight/sdk-*</code> from the private registry. Releases become semver-gated.</li>
+    <li><b>Tenant custom apps</b> consume from the registry from day one — never sibling-folder.</li>
+  </ul>
+</section>
+
+<!-- ============ MONOREPO LAYOUT ============ -->
+<section id="monorepo-layout">
+  <h2>4 · Platform Monorepo Layout — <code>projex-platform/</code></h2>
+  <p>The single repo every ProjexCloud platform engineer works in. pnpm + turbo workspace.</p>
+
+<pre>projex-platform/
+├── packages/                        # All publishable npm packages
+│   ├── contracts/                   # @projexlight/contracts — types, events, IQL grammar, semantic types
+│   ├── config/                      # @projexlight/config — env loader
+│   ├── telemetry/                   # @projexlight/telemetry — OTel, Langfuse helpers
+│   ├── i18n/                        # @projexlight/i18n
+│   ├── design-system/               # @projexlight/design-system — React + RN primitives
+│   ├── branding/                    # @projexlight/branding — per-tenant theming
+│   │
+│   ├── sdk-secrets/                 # @projexlight/sdk-secrets        (W1 / P1)
+│   ├── sdk-vault/                   # @projexlight/sdk-vault          (W1 / P1)
+│   ├── sdk-audit/                   # @projexlight/sdk-audit          (W1 / P1)
+│   ├── sdk-pool-router/             # @projexlight/sdk-pool-router    (W1 / P1)
+│   ├── sdk-meter/                   # @projexlight/sdk-meter          (W1 / P1)
+│   │
+│   ├── sdk-tenant/                  # @projexlight/sdk-tenant         (W2 / P2)
+│   ├── sdk-identity/                # @projexlight/sdk-identity       (W2 / P2)
+│   ├── sdk-consent/                 # @projexlight/sdk-consent
+│   ├── sdk-policy/                  # @projexlight/sdk-policy (with IQL)
+│   ├── sdk-rebac/                   # @projexlight/sdk-rebac (with safeguards)
+│   ├── sdk-api-keys/                # @projexlight/sdk-api-keys
+│   │
+│   ├── sdk-profile/                 # @projexlight/sdk-profile        (W3 / P3)
+│   ├── sdk-persona/                 # @projexlight/sdk-persona
+│   ├── sdk-identity-resolver/       # @projexlight/sdk-identity-resolver (with Projection)
+│   ├── sdk-data-rights/             # @projexlight/sdk-data-rights
+│   ├── sdk-geo/                     # @projexlight/sdk-geo
+│   ├── sdk-device/                  # @projexlight/sdk-device
+│   ├── sdk-feature-flags/           # @projexlight/sdk-feature-flags
+│   │
+│   ├── sdk-media/                   # @projexlight/sdk-media          (W4 / P4)
+│   ├── sdk-notification/            # @projexlight/sdk-notification
+│   ├── sdk-payment/                 # @projexlight/sdk-payment
+│   ├── sdk-workflow/                # @projexlight/sdk-workflow
+│   ├── sdk-search/                  # @projexlight/sdk-search
+│   ├── sdk-billing/                 # @projexlight/sdk-billing
+│   ├── sdk-webhook/                 # @projexlight/sdk-webhook
+│   ├── sdk-approval/                # @projexlight/sdk-approval
+│   ├── sdk-tenant-lifecycle/        # @projexlight/sdk-tenant-lifecycle
+│   ├── sdk-connectors/              # @projexlight/sdk-connectors        (framework for external-system connectors)
+│   ├── connector-slack/             # @projexlight/connector-slack       (P4 · bidirectional)
+│   │
+│   ├── sdk-engagement/              # @projexlight/sdk-engagement     (W5 / P5)
+│   ├── sdk-crm/                     # @projexlight/sdk-crm
+│   ├── sdk-content/                 # … and Service Request, Event, Campaign, Social
+│   ├── connector-salesforce/        # @projexlight/connector-salesforce  (P5)
+│   ├── connector-microsoft365/      # @projexlight/connector-microsoft365
+│   ├── connector-gworkspace/        # @projexlight/connector-gworkspace
+│   ├── connector-jira/              # @projexlight/connector-jira
+│   ├── connector-linear/            # @projexlight/connector-linear
+│   ├── connector-zendesk/           # @projexlight/connector-zendesk
+│   ├── connector-hubspot/           # @projexlight/connector-hubspot
+│   ├── connector-zoom/              # @projexlight/connector-zoom
+│   │
+│   ├── sdk-ai-gateway/              # @projexlight/sdk-ai-gateway     (W6 / P6A)
+│   ├── sdk-taxonomy/
+│   ├── sdk-agent-runtime/           # … with full Agent Isolation Runtime
+│   ├── sdk-trace/                   # @projexlight/sdk-trace          (W6 / P6A)
+│   ├── sdk-mcp-bridge/              # @projexlight/sdk-mcp-bridge     (W6 / P6A · bidirectional MCP)
+│   ├── sdk-knowledge-rag/           # … and Parsing, Conversation, Recommendation (P6B)
+│   ├── sdk-analytics/               # @projexlight/sdk-analytics (with Iceberg)
+│   ├── sdk-lineage/
+│   ├── sdk-semantic/                # 6 types: Object · Relation · CapabilityGraph · Ontology · Intent · Policy
+│   ├── connector-snowflake/         # @projexlight/connector-snowflake (P6B · query federation + Iceberg bridge)
+│   ├── connector-github/            # @projexlight/connector-github (P6A · complements public MCP server)
+│   │
+│   └── sdk-storm/ sdk-dispatch/ sdk-assignment/ sdk-lead-scoring/ sdk-evidence/ sdk-diagnostic-telemetry/  (W7 / P7)
+│
+├── native/                          # HDK — native Kotlin / Swift + TS facades
+│   ├── hdk-idp/
+│   ├── hdk-permissions/
+│   ├── hdk-diagnostic/
+│   ├── hdk-sync/                    # NEW v3.1 · offline queue + Conflict Resolution Model execution
+│   ├── hdk-camera/
+│   ├── hdk-map/
+│   ├── hdk-scanner/
+│   ├── hdk-image-editor/
+│   ├── hdk-video-editor/
+│   ├── hdk-measure/
+│   └── hdk-watermark/
+│
+├── services/                        # Long-running service binaries (deployed to Kubernetes)
+│   ├── identity-service/            # OIDC server, SAML SP, SCIM endpoint
+│   ├── audit-service/               # Append-only ledger + hash-chain verifier
+│   ├── pool-router-service/         # Pool Registry + routing API
+│   ├── meter-collector/             # Kafka consumer → ClickHouse rollups
+│   ├── identity-projector/          # Background worker for subject_view projections
+│   ├── billing-service/             # Catalog application + invoice generator
+│   ├── webhook-dispatcher/          # Outbound delivery workers
+│   ├── conflict-reconciler/         # Server-side hdk-sync counterpart
+│   ├── trace-collector/             # sdk-trace backend
+│   ├── ai-gateway-service/          # Multi-provider gateway
+│   ├── agent-runtime-service/       # Sandboxed agent execution
+│   ├── lineage-projector/           # Cross-pool lineage worker → Iceberg
+│   └── semantic-service/            # Ontology registry + Intent planner
+│
+├── apps/                            # The 3 platform-owned portals
+│   ├── projexcloud-admin/           # Internal admin SPA (Next.js)
+│   ├── tenant-admin/                # Per-tenant admin SPA (Next.js)
+│   └── tenant-workspace/            # Consolidated tenant launcher (Next.js + Module Federation)
+│
+├── agents/                          # 12 horizontal AI agents (Engagement, CRM Intelligence, …)
+│   ├── engagement/
+│   ├── crm-intelligence/
+│   ├── cost-safety-steward/
+│   ├── operations-monitor/
+│   └── … (the other 8)
+│
+├── infra/                           # Deployment
+│   ├── helm/                        # Per-service Helm charts
+│   ├── terraform/                   # Cloud infra (KMS, S3, Kafka, ClickHouse, OpenSearch, Iceberg, ...)
+│   ├── k8s/                         # Cluster manifests
+│   └── ci/                          # GitHub Actions / Jenkins pipelines
+│
+├── tools/                           # Internal tooling
+│   ├── meter-codegen/               # Generates wrapper middleware from @meter decorators
+│   ├── contract-diff/               # CI tool: PR-time diff of @projexlight/contracts
+│   ├── migration-runner/            # Per-pool DB migration orchestrator
+│   ├── lint-rules/                  # Custom ESLint rules (OC-1 .. OC-10)
+│   └── pool-allocator/              # Pool capacity planner
+│
+├── docs/                            # All architecture and design docs (this folder)
+│   ├── v3.1/
+│   │   ├── Architecture-v3.1.html
+│   │   ├── SDK-Build-Plan-v3.1.html
+│   │   ├── AIM-Identity-Model-v3.1.html
+│   │   └── ProjectStructure-v3.1.html    ← this document
+│   └── …
+│
+├── pnpm-workspace.yaml
+├── turbo.json
+├── tsconfig.base.json
+├── package.json
+├── .npmrc                           # Points to private registry
+└── README.md</pre>
+
+  <h3>4.1 · Top-level conventions</h3>
+  <ul class="tight">
+    <li><b>Everything publishable</b> lives in <code>packages/</code>. Internal-only services live in <code>services/</code>. Native modules live in <code>native/</code>. Apps (portals) in <code>apps/</code>.</li>
+    <li><b>Package names</b> use the <code>@projexlight/</code> scope: <code>@projexlight/sdk-identity</code>, <code>@projexlight/contracts</code>, <code>@projexlight/design-system</code>.</li>
+    <li><b>Workspace dependencies</b> use <code>workspace:*</code> in <code>package.json</code> — pnpm resolves to the in-tree version. CI rejects PRs that import a sibling-package's <code>workspace:^0</code> (rule OC-10 from Architecture §3A).</li>
+    <li><b>Turbo pipelines</b> define <code>build · test · lint · publish</code> with proper input/output caching. Builds are content-addressed.</li>
+  </ul>
+</section>
+
+<!-- ============ SDK TEMPLATE ============ -->
+<section id="sdk-template">
+  <h2>5 · SDK Package Template — Every SDK Looks The Same</h2>
+  <p>One template, 55 instances. The shape is the contract; deviations require Working Group sign-off.</p>
+
+<pre>packages/sdk-{name}/
+├── src/
+│   ├── index.ts                     # Public exports — the package's surface
+│   ├── client/                      # Client-side API (used by other SDKs and by apps)
+│   │   ├── index.ts                 # Typed HTTP/gRPC client wrappers
+│   │   └── types.ts                 # Re-exports relevant types from @projexlight/contracts
+│   ├── server/                      # Server-side implementation (deployed in services/)
+│   │   ├── routes.ts                # Route handlers (Fastify/Express)
+│   │   ├── middleware.ts            # Per-SDK middleware (meter gate, audit emit)
+│   │   ├── handlers/                # Business logic
+│   │   └── index.ts                 # Server entry (registers routes + middleware)
+│   ├── db/                          # Database (per-pool schema)
+│   │   ├── migrations/              # SQL migration files
+│   │   │   ├── 001_init.sql
+│   │   │   ├── 002_add_index.sql
+│   │   │   └── …
+│   │   ├── schema.sql               # Authoritative schema reference
+│   │   ├── queries.ts               # Typed queries (kysely / drizzle / pg-typed)
+│   │   └── rls.sql                  # Row-level security policies
+│   ├── events/                      # Domain event emitters and handlers
+│   │   ├── publishers.ts            # Emits events (registered in EventTypeRegistry)
+│   │   └── subscribers.ts           # Listens to events from other SDKs
+│   ├── codegen/                     # Generated meter wrappers (DO NOT EDIT)
+│   │   └── meter.gen.ts             # Output of tools/meter-codegen
+│   ├── decorators.ts                # @meter, @cross_pool_sanctioned applied to methods
+│   ├── client-id.ts                 # Unique SDK identifier registered with the platform
+│   └── lint.ts                      # Package-specific lint hints (consumed by tools/lint-rules)
+│
+├── tests/
+│   ├── unit/                        # Pure logic
+│   ├── integration/                 # Against a real DB + Kafka in test container
+│   ├── contract/                    # Cross-consumer contract tests (verifies API stability)
+│   └── chaos/                       # Optional — chaos tests for compliance-critical SDKs (vault, audit, meter)
+│
+├── docs/
+│   ├── README.md                    # What this SDK does, who depends on it
+│   ├── api.md                       # API reference (auto-gen from TypeScript)
+│   ├── pool-placement.md            # Where this SDK's data lives (cross-ref to Arch §8A)
+│   ├── events.md                    # Events it publishes + subscribes
+│   ├── pricing.md                   # SKUs it exposes (cross-ref to billing catalog)
+│   └── examples/                    # Usage snippets
+│
+├── package.json                     # @projexlight/sdk-{name}, depends on @projexlight/contracts
+├── tsconfig.json
+├── turbo.json                       # Build pipeline (extends root)
+├── jest.config.ts                   # or vitest.config.ts
+└── CHANGELOG.md                     # Auto-generated by changesets</pre>
+
+  <h3>5.1 · The exported surface</h3>
+  <pre>// packages/sdk-identity/src/index.ts
+//
+// Every SDK exports the same 4 surfaces:
+
+export * as client from './client';      // For consumers (other SDKs, apps)
+export * as server from './server';      // For the service binary that hosts this SDK
+export * as types from './client/types'; // Type re-exports
+export * as events from './events';      // Publishers + subscribers
+
+// Plus optional surfaces:
+export * as db from './db';              // Migrations for the migration runner
+export * as middleware from './server/middleware'; // Reusable middleware</pre>
+
+  <h3>5.2 · What's enforced by CI on every SDK PR</h3>
+  <ul class="tight">
+    <li><b>Pool Placement declared</b> — must update Architecture §8A row for this SDK if pool placement changes.</li>
+    <li><b><code>@meter</code> decorator</b> on every billable public method (OC-1).</li>
+    <li><b>Event types registered</b> in <code>@projexlight/contracts</code> before any emit (OC-2).</li>
+    <li><b>Uses <code>withTenant(...)</code></b> for every DB read; no raw clients (OC-3).</li>
+    <li><b>Doesn't import sdk-identity or sdk-persona</b> if not the resolver (OC-4).</li>
+    <li><b>Tests pass</b> — unit + integration + contract.</li>
+    <li><b>Docs updated</b> — README, api.md, events.md must reflect the change.</li>
+    <li><b>CHANGELOG entry</b> via changesets.</li>
+    <li><b>Pricing surface declared</b> — pricing.md lists the SKUs.</li>
+  </ul>
+</section>
+
+<!-- ============ DATABASES ============ -->
+<section id="databases">
+  <h2>6 · Database Strategy — Per-Service Per-Pool Schema Isolation</h2>
+  <p>The v3.1 architecture commits to two principles that govern this:</p>
+  <ul class="tight">
+    <li><b>P1 (Architecture §4)</b>: "Database per service. No cross-service joins. Services expose APIs and emit events; consumers project their own read models." — <i>v3 refinement:</i> "per service per pool."</li>
+    <li><b>§8B Polyglot Persistence</b>: "Postgres is the right choice — but not for everything." Different workloads route to different storage engines.</li>
+  </ul>
+  <p>Together, these answer the user's question — <b>"separate database for each SDK?"</b> — as follows.</p>
+
+  <h3>6.1 · The OLTP answer: one schema per SDK within a shared Postgres cluster per pool</h3>
+  <table>
+    <thead><tr><th>Question</th><th>Answer</th></tr></thead>
+    <tbody>
+      <tr><td><b>Does each SDK get its own database server?</b></td><td>No — that's operationally untenable. At 200 pools × 55 SDKs = 11,000 Postgres clusters. Unmanageable.</td></tr>
+      <tr><td><b>Does each SDK get its own logical database within a cluster?</b></td><td>No — same operational issue at a smaller scale, plus connection-pool explosion.</td></tr>
+      <tr><td><b>What then?</b></td><td><b>Each SDK gets its own Postgres schema within the pool's cluster.</b> One pool = one Postgres cluster; within that cluster, schemas are named <code>{sdk_name}</code> (e.g., <code>identity</code>, <code>persona</code>, <code>engagement</code>, <code>payment</code>). RLS isolates tenants within each schema's tables. No cross-schema foreign keys — services communicate via events.</td></tr>
+    </tbody>
+  </table>
+
+  <h3>6.2 · The naming and isolation rules</h3>
+<pre>-- Pool: app-healthcare-007 (a Postgres cluster)
+-- Connection: app-healthcare-007.cluster.internal:5432
+--
+-- Schemas within the cluster:
+
+CREATE SCHEMA identity;                  -- owned by sdk-identity
+CREATE SCHEMA persona;                   -- owned by sdk-persona
+CREATE SCHEMA engagement;                -- owned by sdk-engagement
+CREATE SCHEMA payment;                   -- owned by sdk-payment
+CREATE SCHEMA audit;                     -- owned by sdk-audit (per-pool chain)
+CREATE SCHEMA workflow;                  -- owned by sdk-workflow
+CREATE SCHEMA approval;                  -- owned by sdk-approval
+-- … one per SDK that holds OLTP data in this pool
+
+-- Each schema's tables get RLS:
+CREATE TABLE persona.persona (
+  persona_id text PRIMARY KEY,
+  tenant_id  text NOT NULL,
+  ...
+);
+ALTER TABLE persona.persona ENABLE ROW LEVEL SECURITY;
+CREATE POLICY pol_tenant ON persona.persona
+  USING (tenant_id = current_setting('app.tenant_id')::text);
+
+-- Cross-schema foreign keys are FORBIDDEN at the SQL level via a CI lint:
+--   ✗ ALTER TABLE engagement.encounter ADD CONSTRAINT fk_persona FOREIGN KEY ... REFERENCES persona.persona;
+-- Instead:
+--   ✓ engagement.encounter stores persona_id as a value; sdk-persona emits persona.created.v1;
+--     sdk-engagement projects its own read model if it needs persona data inline.
+
+-- Permissions: each SDK's service binary gets its own DB role with USAGE on its schema only.
+CREATE ROLE svc_persona;
+GRANT USAGE ON SCHEMA persona TO svc_persona;
+GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA persona TO svc_persona;
+-- svc_persona cannot read svc_payment's tables.</pre>
+
+  <h3>6.3 · Migrations</h3>
+  <ul class="tight">
+    <li>Each SDK owns its own <code>db/migrations/</code> folder.</li>
+    <li><code>tools/migration-runner</code> orchestrates: for each pool, run pending migrations <i>per SDK schema</i>, in SDK dependency order.</li>
+    <li>Migrations are idempotent and versioned. Rollback scripts required for schema-altering migrations.</li>
+    <li>The migration runner refuses to start a Phase N+1 SDK's migrations against a pool that hasn't completed Phase N migrations.</li>
+  </ul>
+
+  <h3>6.4 · The polyglot answer (non-OLTP workloads)</h3>
+  <p>Some SDKs use non-Postgres storage per Architecture §8B. This is the full map:</p>
+
+  <table>
+    <thead><tr><th>SDK</th><th>OLTP schema</th><th>Other storage</th></tr></thead>
+    <tbody>
+      <tr><td><code>sdk-vault</code></td><td><code>vault</code> (key metadata only)</td><td>AWS KMS / GCP KMS / HSM (key material — never in Postgres)</td></tr>
+      <tr><td><code>sdk-audit</code></td><td><code>audit</code> (append-only per-pool chain)</td><td>S3 for long-term archival; <code>EventTypeRegistry</code> in <code>contracts</code></td></tr>
+      <tr><td><code>sdk-meter</code></td><td><code>meter</code> (quota state)</td><td>Kafka (events) → shared ClickHouse cluster partitioned by <code>pool_index</code> (rollups); Redis (live counter + quota cache)</td></tr>
+      <tr><td><code>sdk-billing</code></td><td><code>billing</code> (invoices, line items)</td><td>Reads ClickHouse rollups</td></tr>
+      <tr><td><code>sdk-media</code></td><td><code>media</code> (metadata only)</td><td>S3 (blobs, encrypted under vault keys)</td></tr>
+      <tr><td><code>sdk-search</code></td><td>—</td><td>OpenSearch per-pool indexes</td></tr>
+      <tr><td><code>sdk-workflow</code></td><td>—</td><td>Temporal cluster (with its own backend)</td></tr>
+      <tr><td><code>sdk-knowledge-rag</code></td><td><code>rag</code> (corpus metadata)</td><td>pgvector in <code>rag</code> schema (v1); dedicated vector store (Pinecone/Qdrant) at hyperscale</td></tr>
+      <tr><td><code>sdk-agent-runtime</code></td><td><code>agents</code> (agent defs, execution logs)</td><td>Vector store namespace per tenant (sandboxed memory)</td></tr>
+      <tr><td><code>sdk-analytics</code></td><td>—</td><td>ClickHouse (hot rollups, ≤90d); Iceberg lakehouse (cold + cross-pool, PB scale)</td></tr>
+      <tr><td><code>sdk-lineage</code></td><td><code>lineage</code> (in-pool subgraph)</td><td>Iceberg <code>cross_pool_lineage</code> table (async projection)</td></tr>
+      <tr><td><code>sdk-identity-resolver</code></td><td><code>projection</code> (durable subject_view)</td><td>Redis (live hot reads, sub-ms)</td></tr>
+      <tr><td><code>sdk-trace</code></td><td>—</td><td>Stateless reader — pulls from sdk-telemetry's OTel + sdk-audit + sdk-meter + sdk-lineage</td></tr>
+      <tr><td><code>sdk-pool-router</code></td><td><code>routing</code> (Pool Registry)</td><td>Redis per region (routing cache)</td></tr>
+    </tbody>
+  </table>
+
+  <div class="callout green">
+    <b>What this gives us.</b> Each SDK is logically "its own database" — its own schema, its own RLS, its own permissions, its own migrations, no cross-schema joins. Operationally, we run ~200 Postgres clusters (one per pool) plus the polyglot stack — not 11,000. The architectural promise of "database per service" is preserved; the operational nightmare is avoided.
+  </div>
+</section>
+
+<!-- ============ SURFACES ============ -->
+<section id="surfaces">
+  <h2>7 · The Five Surface Types</h2>
+  <p>"Surface" = a deployed application that humans interact with. ProjexCloud ships five types. Three are platform-owned (in the monorepo); two are external (verticals + customer apps).</p>
+
+  <div class="diagram-wrap">
+    <pre class="mermaid">
+flowchart TB
+  classDef internal fill:#241622,stroke:#ff6b6b,color:#fff;
+  classDef tenadm fill:#0f1422,stroke:#6aa9ff,color:#fff;
+  classDef workspace fill:#1d1830,stroke:#b88dff,color:#fff;
+  classDef vert fill:#16241c,stroke:#2dd4bf,color:#fff;
+  classDef cust fill:#162420,stroke:#5dd39e,color:#fff;
+  classDef enduser fill:#241f10,stroke:#f5c451,color:#fff;
+
+  STAFF["ProjexCloud Staff"]:::enduser
+  TADMIN["Tenant Admin User"]:::enduser
+  TEMP["Tenant Employee / End User"]:::enduser
+  TDEV["Tenant Developer"]:::enduser
+
+  PADMIN["<b>Surface 1 · ProjexCloud Admin Portal</b><br/>admin.projexcloud.com<br/>(internal, platform-team-owned)"]:::internal
+  TADMINP["<b>Surface 2 · Tenant Admin Portal</b><br/>admin.{tenant}.projexcloud.com<br/>(per-tenant admin, platform-team-owned)"]:::tenadm
+  TWS["<b>Surface 4 · Consolidated Tenant Workspace</b><br/>app.{tenant}.projexcloud.com<br/>(the launcher / hub)"]:::workspace
+  V1["<b>Surface 3a · Healthcare Vertical App</b>"]:::vert
+  V2["<b>Surface 3b · Realty Vertical App</b>"]:::vert
+  V3["<b>Surface 3c · Other Verticals…</b>"]:::vert
+  C1["<b>Surface 5a · Tenant Custom App 1</b>"]:::cust
+  C2["<b>Surface 5b · Tenant Custom App 2</b>"]:::cust
+
+  STAFF -->|uses| PADMIN
+  TADMIN -->|uses| TADMINP
+  TADMIN -->|registers custom apps in| TWS
+  TEMP -->|launches everything from| TWS
+  TWS -->|embeds / routes to| V1
+  TWS -->|embeds / routes to| V2
+  TWS -->|embeds / routes to| V3
+  TWS -.->|embeds / routes to| C1
+  TWS -.->|embeds / routes to| C2
+  TDEV -->|builds, then registers| C1
+  TDEV -->|builds, then registers| C2
+    </pre>
+  </div>
+
+  <h3>7.1 · The five types at a glance</h3>
+  <table>
+    <thead><tr><th>#</th><th>Surface</th><th>Audience</th><th>Repo</th><th>URL pattern</th></tr></thead>
+    <tbody>
+      <tr><td><b>1</b></td><td>ProjexCloud Admin Portal</td><td>ProjexCloud staff only</td><td><code>projex-platform/apps/projexcloud-admin/</code></td><td><code>admin.projexcloud.com</code></td></tr>
+      <tr><td><b>2</b></td><td>Tenant Admin Portal</td><td>Tenant's admin users</td><td><code>projex-platform/apps/tenant-admin/</code></td><td><code>admin.&lt;tenant&gt;.projexcloud.com</code></td></tr>
+      <tr><td><b>3</b></td><td>Vertical Apps (Healthcare, Realty, Seva, …)</td><td>Tenant employees / end users</td><td><code>projex-vertical-{name}/</code></td><td><code>{vertical}.&lt;tenant&gt;.projexcloud.com</code> or routed through workspace</td></tr>
+      <tr><td><b>4</b></td><td>Consolidated Tenant Workspace</td><td>Tenant employees / end users</td><td><code>projex-platform/apps/tenant-workspace/</code></td><td><code>app.&lt;tenant&gt;.projexcloud.com</code></td></tr>
+      <tr><td><b>5</b></td><td>Tenant Custom Apps</td><td>Tenant employees (built by tenant developers)</td><td><i>Tenant's own repo, outside our org</i></td><td><code>custom-{slug}.&lt;tenant&gt;.projexcloud.com</code> OR tenant's own domain</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ============ PROJEXCLOUD ADMIN ============ -->
+<section id="projexcloud-admin">
+  <h2>8 · Surface 1 · ProjexCloud Admin Portal</h2>
+
+  <div class="surface internal">
+    <div class="top">
+      <span class="name">ProjexCloud Admin Portal</span>
+      <span class="url">admin.projexcloud.com</span>
+    </div>
+    <div class="meta-row">Internal · Platform-team-owned · Lives in <code>projex-platform/apps/projexcloud-admin/</code></div>
+    <div class="row"><div class="k">Audience</div><div class="v">ProjexCloud employees only: CSMs, support, platform ops, billing ops, compliance, security.</div></div>
+    <div class="row"><div class="k">Auth</div><div class="v">ProjexCloud SSO (Okta or Google Workspace) via SAML federation through <code>sdk-identity</code>. Hard-fenced: only <code>@projexcloud.com</code> domain principals.</div></div>
+    <div class="row"><div class="k">SDK consumption</div><div class="v">Uses every SDK with <b>elevated platform scope</b> — i.e., reads can span tenants (via sanctioned cross-tenant patterns through <code>sdk-trace</code>'s lakehouse projections, never live cross-pool joins).</div></div>
+    <div class="row"><div class="k">Key surfaces</div><div class="v">
+      <b>Tenant Management</b> — provision · suspend · offboard · pool migration scheduling (uses sdk-tenant-lifecycle).<br/>
+      <b>Billing Operations</b> — invoice review · catalog version control · reprice dry-runs · revenue dashboards (sdk-billing + sdk-meter + sdk-analytics).<br/>
+      <b>Support Console</b> — tenant impersonation (consent + approval gated; sdk-identity), audit trail viewer (sdk-trace + sdk-audit), Cost & Safety Steward recommendations review.<br/>
+      <b>Pool Health</b> — capacity dashboard, migration coordinator, federation status (sdk-pool-router).<br/>
+      <b>Agent Operations</b> — kill switches per agent per tenant (sdk-feature-flags), agent execution traces (sdk-trace), deterministic replay UI for incident response.<br/>
+      <b>Regulatory Ops</b> — DSAR queue (sdk-data-rights), per-region compliance dashboards, audit export portal.<br/>
+      <b>Reseller Management</b> — onboard resellers, commission rules, white-label config.
+    </div></div>
+    <div class="row"><div class="k">Phase</div><div class="v">MVP version in P2 (tenant + billing only); full version reaches feature-completeness as later SDKs land (sdk-trace in P6A unlocks the support console; sdk-data-rights in P3 unlocks regulatory ops).</div></div>
+  </div>
+
+  <h3>8.1 · Directory structure</h3>
+<pre>projex-platform/apps/projexcloud-admin/
+├── src/
+│   ├── pages/                       # Next.js routes
+│   │   ├── tenants/                 # /tenants, /tenants/[id], etc.
+│   │   ├── billing/
+│   │   ├── support/
+│   │   ├── pools/
+│   │   ├── agents/
+│   │   ├── regulatory/
+│   │   └── resellers/
+│   ├── components/                  # SPA-specific components (consumes design-system)
+│   ├── lib/                         # SDK clients wired up
+│   └── auth.ts                      # ProjexCloud SSO config
+├── tests/
+├── public/
+├── next.config.js
+└── package.json                     # depends on @projexlight/design-system, sdk-*</pre>
+</section>
+
+<!-- ============ TENANT ADMIN ============ -->
+<section id="tenant-admin">
+  <h2>9 · Surface 2 · Tenant Admin Portal</h2>
+
+  <div class="surface tenant">
+    <div class="top">
+      <span class="name">Tenant Admin Portal</span>
+      <span class="url">admin.&lt;tenant_slug&gt;.projexcloud.com</span>
+    </div>
+    <div class="meta-row">Per-tenant admin · Platform-team-owned · Lives in <code>projex-platform/apps/tenant-admin/</code></div>
+    <div class="row"><div class="k">Audience</div><div class="v">Tenant admin personas (the tenant's IT lead, billing lead, compliance officer).</div></div>
+    <div class="row"><div class="k">Auth</div><div class="v">Tenant's IdP via federation (SAML/SCIM) OR platform OIDC. JWT carries six-layer claim; only personas with <code>tenant_admin</code> role-template see this surface. Read-only views may be granted to other roles.</div></div>
+    <div class="row"><div class="k">SDK consumption</div><div class="v">Uses platform SDKs scoped to <b>this tenant's tenant_id</b>. Cannot cross tenants.</div></div>
+    <div class="row"><div class="k">Key surfaces</div><div class="v">
+      <b>Users &amp; Personas</b> — manage employees, assign role templates, configure persona kinds (sdk-tenant + sdk-persona).<br/>
+      <b>Sub-tenants &amp; BUs</b> — manage tenant hierarchy (parent → sub-tenant → sub-sub-tenant), BU tree, geo nodes, role-template overrides (sdk-tenant).<br/>
+      <b>Identity Federation</b> — connect Okta / Azure AD / Ping; configure SCIM provisioning; group → role-template mapping (sdk-identity).<br/>
+      <b>API Keys</b> — issue, scope, rotate, revoke per-integration keys (sdk-api-keys).<br/>
+      <b>Webhooks</b> — register endpoints, subscribe to event types, view delivery health (sdk-webhook).<br/>
+      <b>Billing &amp; Usage</b> — view current month's usage, projected cost, breakdown by app / BU / persona / encounter (sdk-billing + sdk-meter dashboards).<br/>
+      <b>Audit Log</b> — read this tenant's own audit chain; export for SOC2/HIPAA self-audit (sdk-audit customer-read API).<br/>
+      <b>Consent &amp; Data Rights</b> — manage consent policies, handle DSAR requests for the tenant's data subjects (sdk-consent + sdk-data-rights).<br/>
+      <b>Approval Routes</b> — configure approval chains for sensitive operations (sdk-approval).<br/>
+      <b>Feature Flags</b> — per-tenant flag overrides (sdk-feature-flags).<br/>
+      <b>Custom App Registry</b> — register tenant-built custom apps so they appear in the Tenant Workspace (sdk-tenant-lifecycle).<br/>
+      <b>Tenant Lifecycle</b> — manage sandboxes, plan upgrades, request offboarding (sdk-tenant-lifecycle).
+    </div></div>
+    <div class="row"><div class="k">Phase</div><div class="v">MVP in P2 (users + federation); fully featured by end of P4 (when billing + webhook + approval + lifecycle all ship).</div></div>
+  </div>
+
+  <div class="callout">
+    <b>Why one Tenant Admin Portal, not N.</b> Modern SaaS pattern: one multi-tenant SPA where the JWT determines what tenant data is visible. URL subdomain (<code>admin.&lt;tenant&gt;.projexcloud.com</code>) is for branding and bookmarking, not isolation — the actual data scoping is in <code>resolveIdentityContext()</code>. Avoids deploying 1000+ admin portal instances.
+  </div>
+</section>
+
+<!-- ============ VERTICALS ============ -->
+<section id="verticals">
+  <h2>10 · Surface 3 · Vertical Apps (Pre-Built Products)</h2>
+
+  <div class="surface vertical">
+    <div class="top">
+      <span class="name">ProjexCloud Verticals</span>
+      <span class="url">{vertical}.&lt;tenant_slug&gt;.projexcloud.com  OR  routed via Workspace</span>
+    </div>
+    <div class="meta-row">Pre-built apps · Each in its own repo (<code>projex-vertical-{name}/</code>) · Owned by vertical product teams</div>
+    <div class="row"><div class="k">Audience</div><div class="v">Tenant employees and end users (patients in Healthcare, agents in Realty, devotees in Seva, contractors in FieldOps, etc.).</div></div>
+    <div class="row"><div class="k">Repos</div><div class="v">
+      <code>projex-vertical-healthcare/</code> · <code>projex-vertical-realty/</code> · <code>projex-vertical-seva/</code> · <code>projex-vertical-fieldops/</code> · <code>projex-vertical-oneestate/</code> · <code>projex-vertical-music/</code> · <code>projex-vertical-bidwork/</code> · <code>projex-vertical-leadpulse/</code> · and any future vertical
+    </div></div>
+    <div class="row"><div class="k">Auth</div><div class="v">Platform OIDC (sdk-identity). JWT pass-through from Tenant Workspace via the platform's SSO.</div></div>
+    <div class="row"><div class="k">SDK consumption</div><div class="v">Each vertical's <code>package.json</code> depends on <code>@projexlight/sdk-*</code> from the private registry. Versions pinned via semver. Verticals upgrade SDK versions on their own cadence (within compatibility windows).</div></div>
+  </div>
+
+  <h3>10.1 · Vertical repo template</h3>
+<pre>projex-vertical-healthcare/
+├── apps/
+│   ├── healthcare-web/              # React app (consumes @projexlight/design-system)
+│   ├── healthcare-mobile/           # React Native app (consumes HDK modules)
+│   └── healthcare-api/              # Backend service (consumes platform SDKs)
+├── packages/
+│   ├── healthcare-domain/           # Vertical-specific types (not promoted to common)
+│   │                                # e.g., chart_root, prescription, vitals, lab_result
+│   └── healthcare-ontology/         # Healthcare Domain Ontology (registers with sdk-semantic)
+├── services/
+│   ├── chart-service/               # Domain-specific service (not common)
+│   ├── prescription-service/
+│   └── claims-service/
+├── infra/                           # Helm charts for vertical services
+├── docs/
+├── package.json                     # Depends on @projexlight/sdk-*, @projexlight/contracts
+├── .npmrc                           # Points to private registry
+└── README.md</pre>
+
+  <h3>10.2 · The vertical's relationship to platform</h3>
+  <ul class="tight">
+    <li><b>Consumes platform SDKs from the registry.</b> Never copies platform code.</li>
+    <li><b>Owns its own domain entities</b> (chart, prescription, deal, listing, donation, etc.) — these are vertical-specific and stay in the vertical repo unless promoted via Rule of Three.</li>
+    <li><b>Owns its own Domain Ontology</b> (registers with <code>sdk-semantic</code> as a tenant of the semantic registry).</li>
+    <li><b>Emits events using common event types</b> from <code>@projexlight/contracts</code> + may register vertical-specific event types (in the registry, scoped to the vertical).</li>
+    <li><b>Uses common authz</b> — sdk-policy, sdk-rebac, sdk-identity-resolver. No vertical-private authorization.</li>
+    <li><b>Bills through sdk-meter</b> — every method call from vertical → platform SDK is metered like any other; verticals don't have their own billing.</li>
+  </ul>
+</section>
+
+<!-- ============ WORKSPACE ============ -->
+<section id="workspace">
+  <h2>11 · Surface 4 · Consolidated Tenant Workspace (the Launcher)</h2>
+
+  <div class="surface workspace">
+    <div class="top">
+      <span class="name">Tenant Workspace</span>
+      <span class="url">app.&lt;tenant_slug&gt;.projexcloud.com</span>
+    </div>
+    <div class="meta-row">The unified hub · Platform-team-owned · Lives in <code>projex-platform/apps/tenant-workspace/</code></div>
+    <div class="row"><div class="k">Audience</div><div class="v">Every tenant employee / end user — patients, doctors, agents, contractors, devotees, customers — anyone who actually does work on the platform.</div></div>
+    <div class="row"><div class="k">What it does</div><div class="v">
+      <b>1) Aggregates surfaces.</b> Shows the tenant all subscribed verticals (Healthcare · Realty · etc.) AND all registered custom apps in one navigation.<br/>
+      <b>2) Shared shell.</b> One nav bar, one notifications dropdown, one profile menu, one switcher — consistent across vertical / custom apps.<br/>
+      <b>3) SSO bridge.</b> User logs into the workspace once; platform JWT propagates to every vertical and custom app the user opens. No re-login.<br/>
+      <b>4) Global search.</b> Federated search across all apps the user has access to (via sdk-search + sdk-policy).<br/>
+      <b>5) Cross-app workflows.</b> Approvals, notifications, and inboxes aggregate from every app into one place.<br/>
+      <b>6) Personalization &amp; agents.</b> The Engagement Agent + Conversation Agent live here — a single AI conversational surface that has context across the tenant's apps.<br/>
+      <b>7) App switcher.</b> Persona switcher when the user holds multiple personas (e.g., a doctor at Hospital A AND a patient at Hospital B sees both views).
+    </div></div>
+    <div class="row"><div class="k">Composition model</div><div class="v">
+      <b>Module Federation</b> (Webpack 5 / Vite Module Federation) for ProjexCloud-owned verticals — each vertical app exposes a remote entry; the workspace composes them as micro-frontends sharing React, design-system, identity context. Lazy-loaded per user permissions.<br/><br/>
+      <b>iframes</b> for tenant custom apps — safer interop (different React versions, different domains, different security postures). Custom app authenticates via OAuth handshake against sdk-identity; communicates with workspace shell via <code>postMessage</code> protocol the platform defines.
+    </div></div>
+    <div class="row"><div class="k">Auth</div><div class="v">Platform OIDC with full six-layer JWT. The workspace's IdentityContext propagates to every embedded app (Module Federation: shared context; iframes: via postMessage).</div></div>
+    <div class="row"><div class="k">Phase</div><div class="v">MVP shell in P3 (just shows static cards for subscribed apps); Module Federation host in P4; cross-app workflows + global search in P5; agent surface in P6A.</div></div>
+  </div>
+
+  <h3>11.1 · The Workspace's role in the platform</h3>
+  <p>The Workspace is the <b>only URL most tenant users will ever remember</b>. Vertical apps and custom apps are reached <i>through</i> the workspace. Direct URLs to verticals still work for bookmarking, but the workspace is the canonical entry point.</p>
+
+  <div class="diagram-wrap">
+    <pre class="mermaid">
+flowchart TB
+  classDef shell fill:#1d1830,stroke:#b88dff,color:#fff;
+  classDef mf fill:#16241c,stroke:#2dd4bf,color:#fff;
+  classDef iframe fill:#162420,stroke:#5dd39e,color:#fff;
+  classDef ai fill:#241f10,stroke:#f5c451,color:#fff;
+
+  SHELL["<b>Workspace Shell</b><br/>Nav · Notifications · Profile · Switcher · Search · Inbox"]:::shell
+
+  MF1["Healthcare app<br/>(Module Federation remote)"]:::mf
+  MF2["Realty app<br/>(Module Federation remote)"]:::mf
+  MF3["Seva app<br/>(Module Federation remote)"]:::mf
+
+  IF1["Custom App A<br/>(iframe + postMessage)"]:::iframe
+  IF2["Custom App B<br/>(iframe + postMessage)"]:::iframe
+
+  AI["AI Conversation surface<br/>(sdk-conversation · spans context across apps)"]:::ai
+
+  SHELL --- MF1
+  SHELL --- MF2
+  SHELL --- MF3
+  SHELL -.- IF1
+  SHELL -.- IF2
+  SHELL --- AI
+    </pre>
+    <div class="caption">Solid links = Module Federation (shared React/identity context). Dotted = iframe + postMessage (sandboxed).</div>
+  </div>
+
+  <h3>11.2 · How a custom app shows up here</h3>
+  <ol class="tight" style="color:#c8d1e3">
+    <li>Tenant developer builds their custom app (separate repo, outside our orgs).</li>
+    <li>Tenant admin registers the app in the <b>Tenant Admin Portal → Custom Apps</b>: provides a manifest (name, icon, URL, OAuth client_id, required scopes, permissions matrix).</li>
+    <li>Platform validates the manifest (sdk-tenant-lifecycle), provisions an OAuth client for the app, registers it in the tenant's workspace config.</li>
+    <li>Next time a tenant employee opens the workspace, the custom app appears alongside verticals in the app switcher.</li>
+    <li>Click → workspace opens the custom app in an iframe; postMessage handshake establishes JWT context; custom app makes API calls (gated/metered like any other SDK consumer).</li>
+  </ol>
+</section>
+
+<!-- ============ CUSTOM APPS ============ -->
+<section id="custom-apps">
+  <h2>12 · Surface 5 · Tenant Custom Apps</h2>
+
+  <div class="surface custom">
+    <div class="top">
+      <span class="name">Tenant Custom App</span>
+      <span class="url">custom-&lt;slug&gt;.&lt;tenant&gt;.projexcloud.com  OR  customer's own domain</span>
+    </div>
+    <div class="meta-row">Customer-owned · Repo outside ProjexCloud's GitHub org · Consumes from private npm registry</div>
+    <div class="row"><div class="k">Audience</div><div class="v">Built by tenant developers; used by tenant employees through the Tenant Workspace.</div></div>
+    <div class="row"><div class="k">Hosting</div><div class="v">Two options: (a) <b>Hosted by ProjexCloud</b> — tenant pushes a container image; we deploy to a sub-domain under <code>custom-&lt;slug&gt;.&lt;tenant&gt;.projexcloud.com</code>. (b) <b>Self-hosted</b> — tenant runs the app on their own infrastructure; only the OAuth client + manifest register with us.</div></div>
+    <div class="row"><div class="k">Auth</div><div class="v">OAuth 2.0 / OIDC against sdk-identity. Custom app receives a JWT with the tenant's user's six-layer claim. Custom app's backend calls platform SDKs using the JWT — gated and metered exactly like ProjexCloud-owned code.</div></div>
+    <div class="row"><div class="k">SDK access</div><div class="v">Customer installs <code>@projexlight/sdk-*</code> from the private registry using a per-tenant auth token issued by Tenant Admin. Only client-side SDKs are exposed publicly — service-side SDKs (sdk-meter server, sdk-audit server) are not consumable by customer code.</div></div>
+    <div class="row"><div class="k">What customer can use</div><div class="v">
+      <b>Client SDKs:</b> sdk-identity (client) · sdk-tenant (client) · sdk-persona (client) · sdk-engagement (client) · sdk-crm · sdk-content · sdk-payment · sdk-notification · sdk-workflow · sdk-media · sdk-search · sdk-ai-gateway · sdk-conversation · sdk-recommendation · sdk-analytics (read-only) · sdk-semantic (read).<br/>
+      <b>Mobile SDKs:</b> all HDK modules.<br/>
+      <b>Design system:</b> @projexlight/design-system so custom apps look native to the workspace.<br/>
+      <b>Not exposed:</b> sdk-vault (server only) · sdk-secrets · sdk-pool-router (internal) · sdk-audit (server, customer-read only) · sdk-meter (server, gate only) · sdk-billing (server) · sdk-tenant-lifecycle (server) · sdk-data-rights (server).
+    </div></div>
+  </div>
+
+  <h3>12.1 · Customer custom app repo template (suggested)</h3>
+<pre>(customer)/custom-app-{name}/
+├── apps/
+│   ├── web/                         # Customer's React/Vue/Svelte SPA
+│   └── api/                         # Customer's backend (Node/Python/Go)
+├── packages/
+│   └── domain/                      # Customer-specific types
+├── infra/                           # Customer's deploy config (or use ProjexCloud hosting)
+├── package.json                     # Depends on @projexlight/sdk-* (client-side only)
+├── .npmrc                           # Points to private registry with tenant token
+└── README.md</pre>
+
+  <h3>12.2 · The five guarantees we make to tenant developers</h3>
+  <div class="grid cols-2">
+    <div class="card"><div class="label">G1</div><div class="title">Same SDK surface as our own teams</div><div class="body">Custom apps use the exact same <code>@projexlight/sdk-*</code> packages our verticals use. Same documentation, same support cadence, same versioning. No "lesser SDK for customers."</div></div>
+    <div class="card"><div class="label">G2</div><div class="title">Same auth + RLS guarantees</div><div class="body">Custom app code cannot bypass tenant isolation, ABAC, ReBAC, or consent. The platform enforces these at the SDK gate, not in customer code.</div></div>
+    <div class="card"><div class="label">G3</div><div class="title">First-class billing &amp; metering</div><div class="body">Custom apps' usage shows in the same billing surface as verticals. Customers see per-custom-app breakdown in their bill (the showback dimensions include the app_id of the custom app).</div></div>
+    <div class="card"><div class="label">G4</div><div class="title">First-class workspace integration</div><div class="body">A registered custom app appears alongside verticals; users SSO into it; cross-app workflows (approvals, notifications, AI conversation) include the custom app.</div></div>
+    <div class="card"><div class="label">G5</div><div class="title">Source code stays the customer's</div><div class="body">ProjexCloud has zero access to customer code. Customer can leave any time; their app data is theirs; their app source is theirs.</div></div>
+    <div class="card"><div class="label">Caveat</div><div class="title">What customers do NOT get</div><div class="body">No access to sdk-vault, sdk-meter (gate side), sdk-tenant-lifecycle (operator side), sdk-audit (write side), sdk-data-rights (operator side), or any cross-tenant scope. These are platform-operator-only.</div></div>
+  </div>
+</section>
+
+<!-- ============ REGISTRY ============ -->
+<section id="registry">
+  <h2>13 · Registry &amp; Publishing</h2>
+
+  <h3>13.1 · One private npm registry, one source of truth</h3>
+  <ul class="tight">
+    <li><b>Registry:</b> private npm registry hosted at <code>npm.projexcloud.com</code> (Verdaccio, GitHub Packages, or Cloudsmith — operational choice).</li>
+    <li><b>Scope:</b> <code>@projexlight/</code> — all packages published under this scope.</li>
+    <li><b>Auth tokens:</b>
+      <ul class="tight">
+        <li>Platform CI publishes (write).</li>
+        <li>Vertical repos read with <b>full-scope tokens</b> issued to vertical teams.</li>
+        <li>Tenant developers read with <b>per-tenant tokens</b> issued via Tenant Admin → API Keys; tokens are limited to <b>client-side SDK packages only</b> (registry enforces via custom resolver).</li>
+      </ul>
+    </li>
+    <li><b>Versioning:</b> semver via changesets. Breaking changes ship as new major version + 6-month deprecation of previous.</li>
+    <li><b>Release cadence:</b> weekly for non-breaking; major versions on a published roadmap.</li>
+  </ul>
+
+  <h3>13.2 · What gets published vs what stays internal</h3>
+  <table>
+    <thead><tr><th>Publishes to registry</th><th>Stays internal (services/ folder)</th></tr></thead>
+    <tbody>
+      <tr><td>All <code>packages/</code> (contracts, SDKs, design-system, branding, i18n, telemetry, config)</td><td>Long-running service binaries (identity-service, audit-service, billing-service, ...)</td></tr>
+      <tr><td>All <code>native/</code> HDK modules (TS facades + native binaries via npm + Maven/CocoaPods)</td><td>Internal CLI tools (meter-codegen, contract-diff, migration-runner)</td></tr>
+      <tr><td>—</td><td>Apps (projexcloud-admin, tenant-admin, tenant-workspace — these are deployed, not published)</td></tr>
+      <tr><td>—</td><td>Infra config (helm, terraform — these are applied, not published)</td></tr>
+    </tbody>
+  </table>
+
+  <h3>13.3 · Tenant developer onboarding to the registry</h3>
+<pre># Customer developer's onboarding flow:
+
+# 1. Tenant admin creates a registry token in the Tenant Admin Portal
+#    The token is scoped to client-side packages only
+
+# 2. Developer configures their .npmrc
+echo "@projexlight:registry=https://npm.projexcloud.com" &gt;&gt; .npmrc
+echo "//npm.projexcloud.com/:_authToken=&lt;token-from-admin&gt;" &gt;&gt; .npmrc
+
+# 3. Install
+pnpm add @projexlight/sdk-identity @projexlight/sdk-engagement \
+         @projexlight/design-system
+
+# 4. Use
+import { resolveIdentityContext } from '@projexlight/sdk-identity-resolver/client';
+import { Button } from '@projexlight/design-system';</pre>
+</section>
+
+<!-- ============ BUILD ============ -->
+<section id="build">
+  <h2>14 · Build, Release &amp; CI</h2>
+
+  <h3>14.1 · Turbo pipelines</h3>
+<pre># turbo.json (at root of projex-platform)
+{
+  "pipeline": {
+    "build":      { "dependsOn": ["^build"], "outputs": ["dist/**"] },
+    "test":       { "dependsOn": ["build"], "outputs": [] },
+    "lint":       { "outputs": [] },
+    "contract-test": { "dependsOn": ["build"], "outputs": [] },
+    "publish":    { "dependsOn": ["build", "test", "lint", "contract-test"], "outputs": [] },
+    "migrate":    { "outputs": [] }
+  }
+}</pre>
+
+  <h3>14.2 · Per-PR CI matrix</h3>
+  <ol class="tight" style="color:#c8d1e3">
+    <li><b>Workspace install</b> (pnpm with content-addressed cache)</li>
+    <li><b>Type-check</b> every changed package + downstream consumers</li>
+    <li><b>Lint</b> — including the OC-1..OC-10 custom rules from <code>tools/lint-rules</code></li>
+    <li><b>Contract diff</b> — fails if a published package's public types have breaking changes without a major-version changeset</li>
+    <li><b>Test</b> — unit + integration + contract</li>
+    <li><b>Pool-placement-matrix freshness check</b> — fails if a new SDK doesn't appear in Architecture §8A</li>
+    <li><b>Cross-tenant prompt-leakage test</b> (for any PR touching sdk-agent-runtime or any tool used by agents)</li>
+    <li><b>Doctrine compliance</b> — Opinionated Constraints checked against the PR diff</li>
+  </ol>
+
+  <h3>14.3 · Release pipeline</h3>
+  <ul class="tight">
+    <li>Merge to <code>main</code> triggers changeset processing.</li>
+    <li>Changesets bumps versions and writes <code>CHANGELOG.md</code> per package.</li>
+    <li>Tagged release publishes all bumped packages to registry.</li>
+    <li>Services rebuild and roll via ArgoCD / Flux to staging → prod.</li>
+    <li>Each vertical's CI listens for registry publishes; opens PRs in their repos to bump <code>@projexlight/*</code> versions.</li>
+  </ul>
+
+  <h3>14.4 · Migrations</h3>
+  <ul class="tight">
+    <li>Each SDK's <code>db/migrations/</code> is versioned with timestamp prefixes.</li>
+    <li><code>tools/migration-runner</code> orchestrates per-pool migrations on a controlled rollout (one pool → 10 pools → 100% in a region → next region).</li>
+    <li>Migrations are <b>forward-only in production</b>; rollback is via a new migration (never reverting). Down-migrations exist only for dev/staging.</li>
+    <li>Phase exit gates require all required migrations to be deployed across all production pools before the next phase's SDKs can start coding.</li>
+  </ul>
+</section>
+
+<!-- ============ ONBOARDING ============ -->
+<section id="onboarding">
+  <h2>15 · Developer Onboarding — by Audience</h2>
+
+  <h3>15.1 · Platform engineer (new to the team)</h3>
+  <pre>git clone git@github.com:projexcloud/projex-platform.git
+cd projex-platform
+pnpm install
+pnpm build              # turbo-cached; first run ~10min, subsequent &lt;1min
+pnpm test               # run all tests
+pnpm dev:projexcloud-admin   # spin up the admin portal locally
+# Read docs/v3.1/Architecture-v3.1.html (start here)
+# Read docs/v3.1/SDK-Build-Plan-v3.1.html §0A (Phase Plan)
+# Read docs/v3.1/ProjectStructure-v3.1.html (this doc)
+# Pick a task from the wave you're in</pre>
+
+  <h3>15.2 · Vertical product engineer (joining Healthcare team)</h3>
+  <pre>git clone git@github.com:projexcloud/projex-vertical-healthcare.git
+cd projex-vertical-healthcare
+# .npmrc already configured to point to the private registry
+pnpm install            # pulls @projexlight/* from npm.projexcloud.com
+pnpm dev                # start healthcare-web + healthcare-api locally
+# Backend points to a shared staging platform (or local docker-compose for full isolation)
+# Read docs in projex-platform for SDK references
+# Healthcare ontology in packages/healthcare-ontology/ — extend as the vertical evolves</pre>
+
+  <h3>15.3 · ProjexCloud operator (CSM / billing ops / support)</h3>
+  <ul class="tight">
+    <li>Get added to <code>@projexcloud.com</code> SSO group <code>projexcloud-admin-users</code>.</li>
+    <li>Open <code>admin.projexcloud.com</code> in browser.</li>
+    <li>Tour the portal — Tenants · Billing · Support · Pool Health · Agent Ops · Regulatory · Resellers.</li>
+    <li>Read the in-app runbooks (each surface has a Runbooks button linking to ops docs).</li>
+  </ul>
+
+  <h3>15.4 · Tenant admin (a customer's IT lead)</h3>
+  <ul class="tight">
+    <li>Receive invitation email after tenant provisioning.</li>
+    <li>Log in to <code>admin.&lt;tenant&gt;.projexcloud.com</code> via your IdP or platform OIDC.</li>
+    <li>Tour: Users · Federation · API Keys · Webhooks · Billing · Audit · Custom Apps.</li>
+    <li>Onboarding wizard walks through: connecting your IdP · provisioning first users · subscribing to verticals · creating an API key for integrations.</li>
+  </ul>
+
+  <h3>15.5 · Tenant developer (customer's engineering team)</h3>
+<pre># 1. Tenant admin gives you a registry token and an OAuth client_id/secret
+# 2. In your custom app repo:
+echo "@projexlight:registry=https://npm.projexcloud.com" &gt; .npmrc
+echo "//npm.projexcloud.com/:_authToken=$TENANT_TOKEN" &gt;&gt; .npmrc
+
+# 3. Install client SDKs
+pnpm add @projexlight/sdk-identity @projexlight/sdk-engagement \
+         @projexlight/sdk-crm @projexlight/design-system
+
+# 4. Build your app (any framework — React, Vue, Svelte, Next.js, Remix, ...)
+# 5. Register the app via Tenant Admin Portal → Custom Apps
+#    Provide: manifest.json (name, icon, URL, required scopes, permissions matrix)
+# 6. Your app appears in users' Tenant Workspace
+# 7. SDK calls are billed against your tenant's account; usage shows in Tenant Admin → Billing</pre>
+</section>
+
+<!-- ============ APPENDIX ============ -->
+<section>
+  <h2>Appendix · Cross-references</h2>
+  <table>
+    <thead><tr><th>You're looking for</th><th>Document</th></tr></thead>
+    <tbody>
+      <tr><td>Why these architectural decisions</td><td><code>./Architecture-v3.1.html</code> (see §3A Opinionated Constraints, §3B Localize Complexity, §8A Pool Placement, §8B Polyglot Persistence)</td></tr>
+      <tr><td>Which SDKs ship when</td><td><code>./SDK-Build-Plan-v3.1.html</code> (see §0A Phase Plan)</td></tr>
+      <tr><td>The six-layer identity model</td><td><code>./AIM-Identity-Model-v3.1.html</code></td></tr>
+      <tr><td>This document</td><td><code>./ProjectStructure-v3.1.html</code> — repo topology · SDK template · DB strategy · 5 surfaces</td></tr>
+    </tbody>
+  </table>
+</section>
+
+</div>
+
+<script>
+  mermaid.initialize({
+    startOnLoad: true,
+    theme: 'dark',
+    themeVariables: {
+      background: '#0b0f17',
+      primaryColor: '#1a2234',
+      primaryTextColor: '#e6ecf5',
+      primaryBorderColor: '#c9a86a',
+      lineColor: '#8a98b3',
+      secondaryColor: '#16241c',
+      tertiaryColor: '#241622'
+    },
+    flowchart: { curve: 'basis', useMaxWidth: true },
+    sequence: { useMaxWidth: true }
+  });
+</script>
+</body>
+</html>

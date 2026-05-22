@@ -1,0 +1,767 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>ProjexCloud v3.1 · P4 Data Model — Operational Core · Billing · Integration Framework</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<style>
+  :root { --bg:#0b0f17; --panel:#121826; --panel-2:#1a2234; --line:#243049; --text:#e6ecf5; --muted:#8a98b3; --accent:#c9a86a; --accent-2:#6aa9ff; --teal:#2dd4bf; --green:#5dd39e; --red:#ff6b6b; --yellow:#f5c451; --purple:#b88dff; --code-bg:#0f1422; }
+  *{box-sizing:border-box;} html,body{background:var(--bg);color:var(--text);font-family:ui-sans-serif,-apple-system,"Segoe UI",Roboto,sans-serif;margin:0;padding:0;line-height:1.55;}
+  .page{max-width:1260px;margin:0 auto;padding:56px 32px 96px;}
+  header.cover{border-bottom:1px solid var(--line);padding-bottom:36px;margin-bottom:48px;}
+  header.cover .eyebrow{color:var(--accent);letter-spacing:0.18em;text-transform:uppercase;font-size:12px;font-weight:700;}
+  header.cover h1{font-size:40px;line-height:1.15;margin:12px 0 8px;letter-spacing:-0.02em;}
+  header.cover .sub{color:var(--muted);font-size:16px;max-width:900px;}
+  header.cover .meta{display:flex;gap:24px;flex-wrap:wrap;margin-top:24px;color:var(--muted);font-size:13px;}
+  header.cover .meta b{color:var(--text);font-weight:600;}
+  h2{font-size:26px;margin:56px 0 18px;padding-bottom:8px;border-bottom:1px solid var(--line);}
+  h3{font-size:19px;margin:28px 0 10px;color:var(--text);}
+  h4{font-size:13px;margin:18px 0 8px;color:var(--accent);text-transform:uppercase;letter-spacing:0.12em;}
+  p{color:#c8d1e3;}
+  .grid{display:grid;gap:16px;} .grid.cols-2{grid-template-columns:repeat(2,minmax(0,1fr));} .grid.cols-3{grid-template-columns:repeat(3,minmax(0,1fr));}
+  @media(max-width:900px){.grid.cols-2,.grid.cols-3{grid-template-columns:1fr;} header.cover h1{font-size:30px;}}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px 18px;} .card .label{color:var(--accent);font-size:11px;text-transform:uppercase;letter-spacing:0.14em;font-weight:700;} .card .title{font-weight:600;margin:6px 0;} .card .body{color:var(--muted);font-size:13.5px;}
+  .pill{display:inline-block;padding:3px 10px;border-radius:999px;font-size:11px;border:1px solid var(--line);color:var(--muted);margin-right:6px;}
+  .pill.blue{color:var(--accent-2);border-color:rgba(106,169,255,0.4);} .pill.purple{color:var(--purple);border-color:rgba(184,141,255,0.4);} .pill.green{color:var(--green);border-color:rgba(93,211,158,0.4);} .pill.yellow{color:var(--yellow);border-color:rgba(245,196,81,0.4);} .pill.teal{color:var(--teal);border-color:rgba(45,212,191,0.4);} .pill.red{color:var(--red);border-color:rgba(255,107,107,0.4);}
+  table{width:100%;border-collapse:collapse;margin-top:12px;font-size:13.5px;} th,td{text-align:left;padding:9px 11px;border-bottom:1px solid var(--line);vertical-align:top;} th{color:var(--muted);font-weight:600;font-size:11.5px;text-transform:uppercase;letter-spacing:0.08em;} td code{font-size:12px;}
+  pre,code{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;} pre{background:var(--code-bg);border:1px solid var(--line);border-radius:10px;padding:14px 16px;overflow-x:auto;font-size:12.5px;} code{background:var(--code-bg);padding:1px 6px;border-radius:4px;font-size:12px;}
+  .diagram-wrap{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:22px;overflow-x:auto;} .caption{color:var(--muted);font-size:12.5px;margin-top:10px;text-align:center;} .mermaid{background:transparent;}
+  nav.toc{position:sticky;top:0;background:rgba(11,15,23,0.92);backdrop-filter:blur(10px);border-bottom:1px solid var(--line);padding:10px 32px;z-index:10;} nav.toc .row{max-width:1260px;margin:0 auto;display:flex;flex-wrap:wrap;gap:10px;font-size:12px;} nav.toc a{color:var(--muted);text-decoration:none;border-bottom:1px solid transparent;} nav.toc a:hover{color:var(--accent);border-color:var(--accent);}
+  .callout{border-left:3px solid var(--accent);background:var(--panel-2);padding:14px 18px;border-radius:0 10px 10px 0;margin:18px 0;color:#d6deef;font-size:14px;} .callout.blue{border-color:var(--accent-2);} .callout.green{border-color:var(--green);} .callout.purple{border-color:var(--purple);} .callout.red{border-color:var(--red);}
+  .sdk-block{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:22px 24px;margin:22px 0 28px;} .sdk-block .sdk-header{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;margin-bottom:6px;} .sdk-block .sdk-header h3{margin:0;font-size:22px;color:var(--accent);} .sdk-block .purpose{color:#c8d1e3;font-size:14.5px;margin:4px 0 14px;}
+  .meta-strip{display:flex;flex-wrap:wrap;gap:18px;font-size:12.5px;color:var(--muted);margin:6px 0 18px;padding:10px 14px;background:var(--panel-2);border-radius:8px;} .meta-strip b{color:var(--text);}
+</style>
+</head>
+<body>
+
+<nav class="toc">
+  <div class="row">
+    <a href="#overview">1 · Overview</a>
+    <a href="#phase-erd">2 · Phase ERD</a>
+    <a href="#pool-map">3 · Pool placement</a>
+    <a href="#sdk-media">4 · sdk-media</a>
+    <a href="#sdk-notification">5 · sdk-notification</a>
+    <a href="#sdk-payment">6 · sdk-payment</a>
+    <a href="#sdk-workflow">7 · sdk-workflow</a>
+    <a href="#sdk-search">8 · sdk-search</a>
+    <a href="#sdk-billing">9 · sdk-billing</a>
+    <a href="#sdk-webhook">10 · sdk-webhook</a>
+    <a href="#sdk-approval">11 · sdk-approval</a>
+    <a href="#sdk-tenant-lifecycle">12 · sdk-tenant-lifecycle</a>
+    <a href="#sdk-connectors">13 · sdk-connectors</a>
+    <a href="#connector-slack">14 · connector-slack</a>
+    <a href="#hdk-cam-map">15 · hdk-camera/map</a>
+  </div>
+</nav>
+
+<div class="page">
+
+<header class="cover">
+  <div class="eyebrow">Data Model · Phase 4 · Wave W4 + HDK Track</div>
+  <h1>P4 — Operational Core · Billing · Integration Framework</h1>
+  <div class="sub">Operational SDKs (Media · Notification · Payment · Workflow · Search), Billing with reprice-dry-run, Webhook outbound + DLQ, Approval routing, Tenant Lifecycle FSM, the sdk-connectors framework, connector-slack, and the HDK camera + map modules.</div>
+  <div class="meta">
+    <div><b>Phase:</b> P4 (Weeks 22–29)</div>
+    <div><b>Maps to wave:</b> W4 + HDK track</div>
+    <div><b>Gates closed:</b> — (activates soft caps)</div>
+    <div><b>PRD:</b> <code>prd/P4-Operational-Billing.md</code></div>
+    <div><b>Anchor docs:</b> Architecture §10A · AgenticIntegration §5</div>
+  </div>
+</header>
+
+<section id="overview">
+  <h2>1 · Overview</h2>
+  <div class="grid cols-3">
+    <div class="card"><div class="label">Mode flip</div><div class="title">Meter → soft caps</div><div class="body">Emit-only mode (P1) flips to soft caps. <code>quota_policy.action_on_soft = warn</code> by default; response carries <code>X-Projex-Quota-Remaining</code>.</div></div>
+    <div class="card"><div class="label">Billing first invoices</div><div class="title">Catalog v1 ⇒ PDF + Stripe push</div><div class="body">Monthly cron reads ClickHouse rollups, applies catalog rates, writes <code>invoice</code> + line items, generates PDF, pushes to Stripe / Razorpay.</div></div>
+    <div class="card"><div class="label">Integration framework</div><div class="title">Common connector spine</div><div class="body">OAuth + schema mapping + bidirectional sync + rate-limit handling + webhook ingestion + cursor state. Every later connector implements this contract.</div></div>
+  </div>
+</section>
+
+<section id="phase-erd">
+  <h2>2 · Phase ERD</h2>
+  <div class="diagram-wrap">
+    <pre class="mermaid">
+erDiagram
+  TENANT ||--o{ MEDIA_BLOB : ""
+  ENCOUNTER ||--o{ MEDIA_BLOB : "per-encounter keyed"
+  MEDIA_BLOB ||--o| TRANSCODE_JOB : ""
+
+  TENANT ||--o{ NOTIFICATION : ""
+  NOTIFICATION_TEMPLATE ||--o{ NOTIFICATION : ""
+  NOTIFICATION }o--|| CONSENT_RECEIPT : "pre-flight"
+
+  TENANT ||--o{ PAYMENT_METHOD : ""
+  PAYMENT_METHOD ||--o{ CHARGE : ""
+  CHARGE ||--o{ REFUND : ""
+  CHARGE ||--o{ DISTRIBUTION : ""
+
+  WORKFLOW_DEFINITION ||--o{ WORKFLOW_RUN : ""
+  WORKFLOW_RUN ||--o{ WORKFLOW_STEP : ""
+  WORKFLOW_STEP ||--o| COMPENSATION : ""
+
+  INDEX_DEFINITION ||--o{ INDEX_PARTITION : ""
+
+  PRICING_CATALOG ||--o{ PRICING_RATE : ""
+  TENANT ||--o{ INVOICE : ""
+  INVOICE ||--o{ INVOICE_LINE_ITEM : ""
+  INVOICE }o--|| PRICING_CATALOG : "priced under"
+
+  WEBHOOK_ENDPOINT ||--o{ WEBHOOK_SUBSCRIPTION : ""
+  WEBHOOK_SUBSCRIPTION ||--o{ WEBHOOK_DELIVERY : ""
+  WEBHOOK_DELIVERY ||--o{ WEBHOOK_DELIVERY_ATTEMPT : ""
+
+  APPROVAL_ROUTE ||--o{ APPROVAL_REQUEST : ""
+  APPROVAL_REQUEST ||--o{ APPROVAL_STEP : ""
+
+  TENANT ||--|| TENANT_LIFECYCLE_STATE : ""
+  TENANT_LIFECYCLE_STATE ||--o{ TENANT_LIFECYCLE_EVENT : ""
+  TENANT ||--o| TENANT_SANDBOX : ""
+
+  CONNECTOR_INSTALL ||--o{ CONNECTOR_SYNC_CURSOR : ""
+  CONNECTOR_INSTALL ||--o{ CONNECTOR_HEALTH_SNAPSHOT : ""
+  CONNECTOR_INSTALL ||--o{ CONNECTOR_INBOUND_EVENT : ""
+    </pre>
+  </div>
+  <div class="caption">Figure 2.1 — Operational entities, billing flow, integration framework anchors in P4.</div>
+</section>
+
+<section id="pool-map">
+  <h2>3 · Pool placement matrix</h2>
+  <table>
+    <thead><tr><th>SDK</th><th>Schema</th><th>Pool</th><th>Non-OLTP</th></tr></thead>
+    <tbody>
+      <tr><td><code>sdk-media</code></td><td><code>media</code></td><td>Admin (metadata)</td><td>S3 (blobs)</td></tr>
+      <tr><td><code>sdk-notification</code></td><td><code>notification</code></td><td>Admin</td><td>Kafka (delivery queue)</td></tr>
+      <tr><td><code>sdk-payment</code></td><td><code>payment</code></td><td>Admin (tokens, charges, ledger)</td><td>—</td></tr>
+      <tr><td><code>sdk-workflow</code></td><td><code>workflow</code></td><td>Admin (definitions, runs)</td><td>Temporal store per pool family</td></tr>
+      <tr><td><code>sdk-search</code></td><td><code>search</code> (metadata)</td><td>Admin (index defs)</td><td>OpenSearch per pool</td></tr>
+      <tr><td><code>sdk-billing</code></td><td><code>billing</code></td><td>Admin (per tenant)</td><td>ClickHouse (read rollups)</td></tr>
+      <tr><td><code>sdk-webhook</code></td><td><code>webhook</code></td><td>Per-pool outbox + Admin (registry)</td><td>Kafka (delivery queue)</td></tr>
+      <tr><td><code>sdk-approval</code></td><td><code>approval</code></td><td>App Pool (per tenant)</td><td>—</td></tr>
+      <tr><td><code>sdk-tenant-lifecycle</code></td><td><code>tenant_lifecycle</code></td><td>Admin</td><td>—</td></tr>
+      <tr><td><code>sdk-connectors</code></td><td><code>connector</code></td><td>Admin (creds, cursor) + App Pool (synced data)</td><td>—</td></tr>
+      <tr><td><code>connector-slack</code></td><td><code>connector_slack</code></td><td>Admin</td><td>—</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- sdk-media -->
+<section id="sdk-media">
+  <h2>4 · <code>sdk-media</code> — Blob Metadata + Vault Envelopes</h2>
+  <div class="sdk-block">
+    <div class="sdk-header"><h3>sdk-media</h3><span class="pill blue">SDK</span></div>
+    <div class="purpose">Signed upload/download URLs, S3 prefix per tenant, envelope-encrypted blobs (per-tenant key; per-encounter key when bound), transcoding pipeline.</div>
+    <div class="meta-strip"><span><b>PRD §:</b> 5.1</span><span><b>FRs:</b> FR-MED-1 … FR-MED-5</span><span><b>Pool:</b> Admin + S3</span><span><b>Schema:</b> <code>media</code></span></div>
+
+    <h4>4.1 · Tables</h4>
+
+    <p><b>media.blob</b> — metadata for every blob (bytes in S3).</p>
+    <table><thead><tr><th>Column</th><th>Type</th><th>Purpose</th></tr></thead><tbody>
+      <tr><td><code>blob_id</code></td><td>ULID PK</td><td>Surrogate.</td></tr>
+      <tr><td><code>tenant_id</code></td><td>FK</td><td>RLS.</td></tr>
+      <tr><td><code>encounter_id</code></td><td>FK (P5), null</td><td>When encounter-bound, drives key tier + retention.</td></tr>
+      <tr><td><code>persona_id</code></td><td>FK</td><td>Uploader.</td></tr>
+      <tr><td><code>s3_key</code></td><td>text</td><td>Object location.</td></tr>
+      <tr><td><code>content_type</code></td><td>text</td><td>MIME.</td></tr>
+      <tr><td><code>byte_size</code></td><td>bigint</td><td>For billing.</td></tr>
+      <tr><td><code>vault_key_ref</code></td><td>FK → vault.key</td><td>Per-tenant or per-encounter key.</td></tr>
+      <tr><td><code>checksum</code></td><td>bytea</td><td>SHA-256 of plaintext.</td></tr>
+      <tr><td><code>variants</code></td><td>jsonb</td><td>Map <code>kind → s3_key</code> for transcoded outputs.</td></tr>
+      <tr><td><code>uploaded_at</code></td><td>timestamptz</td><td>Lifecycle.</td></tr>
+      <tr><td><code>status</code></td><td>enum</td><td><code>uploading · ready · transcoded · shredded</code></td></tr>
+    </tbody></table>
+
+    <p><b>media.signed_url</b> — issued URLs (audit-relevant).</p>
+    <table><thead><tr><th>Column</th><th>Type</th><th>Purpose</th></tr></thead><tbody>
+      <tr><td><code>url_id</code></td><td>ULID PK</td><td>Surrogate.</td></tr>
+      <tr><td><code>blob_id</code></td><td>FK</td><td>Subject.</td></tr>
+      <tr><td><code>kind</code></td><td>enum</td><td><code>upload · download</code></td></tr>
+      <tr><td><code>persona_id</code></td><td>FK</td><td>Requestor.</td></tr>
+      <tr><td><code>expires_at</code></td><td>timestamptz</td><td>TTL.</td></tr>
+      <tr><td><code>issued_at</code></td><td>timestamptz</td><td>Time.</td></tr>
+    </tbody></table>
+
+    <p><b>media.transcode_job</b></p>
+    <table><thead><tr><th>Column</th><th>Type</th><th>Purpose</th></tr></thead><tbody>
+      <tr><td><code>job_id</code></td><td>ULID PK</td><td>Surrogate.</td></tr>
+      <tr><td><code>blob_id</code></td><td>FK</td><td>Source.</td></tr>
+      <tr><td><code>pipeline</code></td><td>enum</td><td><code>video-mp4-hls · image-optimize · pdf-thumbnail</code></td></tr>
+      <tr><td><code>status</code></td><td>enum</td><td><code>queued · running · succeeded · failed</code></td></tr>
+      <tr><td><code>started_at · completed_at</code></td><td>timestamptz</td><td>Lifecycle.</td></tr>
+      <tr><td><code>output_blob_ids</code></td><td>text[]</td><td>Resulting variants.</td></tr>
+      <tr><td><code>billed_units</code></td><td>numeric</td><td>For per-minute billing.</td></tr>
+    </tbody></table>
+
+    <h4>4.2 · ERD</h4>
+    <div class="diagram-wrap"><pre class="mermaid">
+erDiagram
+  BLOB ||--o{ SIGNED_URL : ""
+  BLOB ||--o{ TRANSCODE_JOB : ""
+  BLOB }o--|| VAULT_KEY : ""
+  BLOB }o--o| ENCOUNTER : ""
+  BLOB {
+    string blob_id PK
+    string tenant_id
+    string encounter_id FK
+    string s3_key
+    bigint byte_size
+    string vault_key_ref FK
+  }
+  TRANSCODE_JOB {
+    string job_id PK
+    string blob_id FK
+    string pipeline
+    string status
+  }
+    </pre></div>
+
+    <p><b>Events:</b> <code>media.blob.uploaded.v1 · media.transcode.completed.v1 · media.blob.shredded.v1</code>.</p>
+    <p><b>SKUs:</b> <code>media.upload</code> (per-MB) · <code>media.transcode</code> (per-min) · <code>media.playback.signed-url</code> (flat).</p>
+  </div>
+</section>
+
+<!-- sdk-notification -->
+<section id="sdk-notification">
+  <h2>5 · <code>sdk-notification</code> — Channels &amp; Templates</h2>
+  <div class="sdk-block">
+    <div class="sdk-header"><h3>sdk-notification</h3><span class="pill blue">SDK</span></div>
+    <div class="purpose">Multi-channel routing (WhatsApp · SMS · email · push) with template engine + consent pre-flight + quiet hours + per-app notification-routing band lookup.</div>
+    <div class="meta-strip"><span><b>PRD §:</b> 5.2</span><span><b>FRs:</b> FR-NTF-1 … FR-NTF-6</span><span><b>Pool:</b> Admin</span><span><b>Schema:</b> <code>notification</code></span></div>
+
+    <h4>5.1 · Tables</h4>
+
+    <p><b>notification.template</b></p>
+    <table><thead><tr><th>Column</th><th>Type</th><th>Purpose</th></tr></thead><tbody>
+      <tr><td><code>template_id</code></td><td>ULID PK</td><td>Surrogate.</td></tr>
+      <tr><td><code>tenant_id</code></td><td>FK, null</td><td>Null = platform default.</td></tr>
+      <tr><td><code>code</code></td><td>text</td><td>e.g., <code>welcome-email</code>.</td></tr>
+      <tr><td><code>channel</code></td><td>enum</td><td><code>email · sms · whatsapp · push · slack</code></td></tr>
+      <tr><td><code>locale_bundles</code></td><td>jsonb</td><td>Locale → ICU strings.</td></tr>
+      <tr><td><code>required_consent_purpose</code></td><td>text</td><td>Linked to consent.purpose.</td></tr>
+      <tr><td><code>version · status</code></td><td>semver · enum</td><td>Versioning.</td></tr>
+    </tbody></table>
+
+    <p><b>notification.message</b></p>
+    <table><thead><tr><th>Column</th><th>Type</th><th>Purpose</th></tr></thead><tbody>
+      <tr><td><code>message_id</code></td><td>ULID PK</td><td>Surrogate.</td></tr>
+      <tr><td><code>tenant_id</code></td><td>FK</td><td>RLS.</td></tr>
+      <tr><td><code>template_id</code></td><td>FK</td><td>Template.</td></tr>
+      <tr><td><code>person_id · app_identity_id</code></td><td>FK · FK</td><td>Recipient routing.</td></tr>
+      <tr><td><code>channel</code></td><td>enum</td><td>Selected channel.</td></tr>
+      <tr><td><code>provider</code></td><td>enum</td><td><code>twilio · ses · whatsapp-bsp · apns · fcm · slack-outbound</code></td></tr>
+      <tr><td><code>destination_envelope</code></td><td>bytea</td><td>To-address envelope-encrypted.</td></tr>
+      <tr><td><code>status</code></td><td>enum</td><td><code>queued · sending · sent · delivered · failed · bounced · suppressed</code></td></tr>
+      <tr><td><code>scheduled_at · sent_at · delivered_at</code></td><td>timestamptz</td><td>Lifecycle.</td></tr>
+      <tr><td><code>consent_check_ref</code></td><td>FK → consent.receipt</td><td>Pre-flight evidence.</td></tr>
+      <tr><td><code>provider_message_id</code></td><td>text, null</td><td>Provider-side ID.</td></tr>
+    </tbody></table>
+
+    <p><b>notification.quiet_hours</b></p>
+    <table><thead><tr><th>Column</th><th>Type</th><th>Purpose</th></tr></thead><tbody>
+      <tr><td><code>persona_id</code></td><td>FK PK</td><td>Subject.</td></tr>
+      <tr><td><code>windows</code></td><td>jsonb</td><td>Array of <code>{dow, start, end, tz}</code>.</td></tr>
+      <tr><td><code>dnd</code></td><td>bool</td><td>Hard do-not-disturb.</td></tr>
+    </tbody></table>
+
+    <p><b>Events:</b> <code>notification.sent.v1 · notification.delivered.v1 · notification.failed.v1</code>.</p>
+    <p><b>SKUs:</b> <code>notification.send.{channel}</code> — <code>passthrough_plus_margin</code>.</p>
+  </div>
+</section>
+
+<!-- sdk-payment -->
+<section id="sdk-payment">
+  <h2>6 · <code>sdk-payment</code> — Tokens · Charges · Distribution Ledger</h2>
+  <div class="sdk-block">
+    <div class="sdk-header"><h3>sdk-payment</h3><span class="pill blue">SDK</span><span class="pill red">PCI tokenized · never raw PAN</span></div>
+    <div class="purpose">Provider abstraction with PCI-tokenized references in Secure Data band, refund/chargeback workflow, immutable distribution ledger, encounter-retention compliance.</div>
+    <div class="meta-strip"><span><b>PRD §:</b> 5.3</span><span><b>FRs:</b> FR-PAY-1 … FR-PAY-5</span><span><b>Pool:</b> Admin</span><span><b>Schema:</b> <code>payment</code></span></div>
+
+    <h4>6.1 · Tables</h4>
+
+    <p><b>payment.payment_method</b> — PCI-tokenized references only.</p>
+    <table><thead><tr><th>Column</th><th>Type</th><th>Purpose</th></tr></thead><tbody>
+      <tr><td><code>method_id</code></td><td>ULID PK</td><td>Surrogate.</td></tr>
+      <tr><td><code>tenant_id · persona_id</code></td><td>FK · FK</td><td>Owner.</td></tr>
+      <tr><td><code>provider</code></td><td>enum</td><td><code>stripe · razorpay · plaid · ach</code></td></tr>
+      <tr><td><code>provider_token</code></td><td>text</td><td>Vendor token (NEVER raw PAN).</td></tr>
+      <tr><td><code>kind</code></td><td>enum</td><td><code>card · bank-account · upi · wallet</code></td></tr>
+      <tr><td><code>last4 · brand · exp_month · exp_year</code></td><td>text · text · int · int</td><td>Display only.</td></tr>
+      <tr><td><code>secure_data_field_ref</code></td><td>text</td><td>Link into <code>profile.secure_data</code> (per-field envelope).</td></tr>
+      <tr><td><code>status</code></td><td>enum</td><td><code>active · expired · revoked</code></td></tr>
+    </tbody></table>
+
+    <p><b>payment.charge</b></p>
+    <table><thead><tr><th>Column</th><th>Type</th><th>Purpose</th></tr></thead><tbody>
+      <tr><td><code>charge_id</code></td><td>ULID PK</td><td>Surrogate.</td></tr>
+      <tr><td><code>tenant_id</code></td><td>FK</td><td>RLS.</td></tr>
+      <tr><td><code>method_id</code></td><td>FK</td><td>Source.</td></tr>
+      <tr><td><code>encounter_id</code></td><td>FK (P5), null</td><td>If encounter-scoped.</td></tr>
+      <tr><td><code>amount</code></td><td>numeric(18,4)</td><td>Charge amount.</td></tr>
+      <tr><td><code>currency</code></td><td>char(3)</td><td>ISO-4217.</td></tr>
+      <tr><td><code>provider_charge_id</code></td><td>text</td><td>Vendor-side.</td></tr>
+      <tr><td><code>status</code></td><td>enum</td><td><code>requires_action · authorized · captured · failed · refunded · disputed</code></td></tr>
+      <tr><td><code>occurred_at · captured_at</code></td><td>timestamptz</td><td>Lifecycle.</td></tr>
+    </tbody></table>
+
+    <p><b>payment.refund · payment.distribution</b> — refunds + immutable fund-distribution ledger (event-sourced).</p>
+    <table><thead><tr><th>Table</th><th>Key columns</th></tr></thead><tbody>
+      <tr><td><code>payment.refund</code></td><td><code>refund_id PK · charge_id FK · amount · reason · status · approval_ref · audit_entry_id</code></td></tr>
+      <tr><td><code>payment.distribution</code></td><td><code>distribution_id PK · charge_id FK · party_persona_id · share · occurred_at · prev_hash · entry_hash</code></td></tr>
+    </tbody></table>
+
+    <p><b>Events:</b> <code>payment.charge.v1 · payment.refund.v1 · payment.distributed.v1</code>.</p>
+    <p><b>SKUs:</b> <code>payment.charge · payment.refund · payment.distribute</code> — <code>tiered_per_call</code>.</p>
+  </div>
+</section>
+
+<!-- sdk-workflow -->
+<section id="sdk-workflow">
+  <h2>7 · <code>sdk-workflow</code> — Temporal Facade</h2>
+  <div class="sdk-block">
+    <div class="sdk-header"><h3>sdk-workflow</h3><span class="pill blue">SDK</span></div>
+    <div class="purpose">Typed Temporal facade with envelope-context propagation, durable workflow registry, compensable steps, per-pool-family namespace.</div>
+    <div class="meta-strip"><span><b>PRD §:</b> 5.4</span><span><b>FRs:</b> FR-WFL-1 … FR-WFL-5</span><span><b>Pool:</b> Admin (registry) + Temporal backend per family</span><span><b>Schema:</b> <code>workflow</code></span></div>
+
+    <h4>7.1 · Tables</h4>
+
+    <p><b>workflow.definition</b></p>
+    <table><thead><tr><th>Column</th><th>Type</th><th>Purpose</th></tr></thead><tbody>
+      <tr><td><code>workflow_def_id</code></td><td>ULID PK</td><td>Surrogate.</td></tr>
+      <tr><td><code>name</code></td><td>text</td><td>e.g., <code>refund-approval</code>.</td></tr>
+      <tr><td><code>version</code></td><td>semver</td><td>Versioning.</td></tr>
+      <tr><td><code>namespace</code></td><td>text</td><td>One per pool family.</td></tr>
+      <tr><td><code>step_specs</code></td><td>jsonb</td><td>Ordered steps with compensations.</td></tr>
+      <tr><td><code>status</code></td><td>enum</td><td><code>draft · active · deprecated</code></td></tr>
+    </tbody></table>
+
+    <p><b>workflow.run</b></p>
+    <table><thead><tr><th>Column</th><th>Type</th><th>Purpose</th></tr></thead><tbody>
+      <tr><td><code>run_id</code></td><td>ULID PK</td><td>Surrogate (mirrors Temporal RunID).</td></tr>
+      <tr><td><code>workflow_def_id</code></td><td>FK</td><td>Definition.</td></tr>
+      <tr><td><code>tenant_id · persona_id</code></td><td>FK · FK</td><td>Envelope context.</td></tr>
+      <tr><td><code>trace_id</code></td><td>text</td><td>OTel link.</td></tr>
+      <tr><td><code>status</code></td><td>enum</td><td><code>running · completed · failed · compensated · terminated</code></td></tr>
+      <tr><td><code>started_at · completed_at</code></td><td>timestamptz</td><td>Lifecycle.</td></tr>
+    </tbody></table>
+
+    <p><b>workflow.step</b> · <b>workflow.compensation</b> — per-step records with rollback anchors.</p>
+
+    <p><b>SKUs:</b> <code>workflow.start · workflow.signal · workflow.query · workflow.step.execute</code> — <code>flat_per_call</code>.</p>
+  </div>
+</section>
+
+<!-- sdk-search -->
+<section id="sdk-search">
+  <h2>8 · <code>sdk-search</code> — OpenSearch Indexes</h2>
+  <div class="sdk-block">
+    <div class="sdk-header"><h3>sdk-search</h3><span class="pill blue">SDK</span></div>
+    <div class="purpose">Per-tenant OpenSearch indexes, per-tenant aliases, ABAC-filtered queries (effective_scopes applied at query time), per-pool sharding.</div>
+    <div class="meta-strip"><span><b>PRD §:</b> 5.5</span><span><b>FRs:</b> FR-SRC-1 … FR-SRC-6</span><span><b>Pool:</b> Admin (definitions) + OpenSearch per pool</span><span><b>Schema:</b> <code>search</code></span></div>
+
+    <h4>8.1 · Tables</h4>
+    <table><thead><tr><th>Table</th><th>Key columns</th></tr></thead><tbody>
+      <tr><td><code>search.index_definition</code></td><td><code>index_def_id PK · tenant_id · entity_kind · opensearch_alias · field_mappings jsonb · status</code></td></tr>
+      <tr><td><code>search.index_partition</code></td><td><code>partition_id PK · index_def_id FK · pool_index FK · shard · last_indexed_at</code></td></tr>
+      <tr><td><code>search.saved_query</code></td><td><code>query_id PK · tenant_id · persona_id · name · dsl jsonb · created_at</code></td></tr>
+    </tbody></table>
+
+    <p><b>SKUs:</b> <code>search.query · search.index</code> — <code>tiered_per_call</code>.</p>
+  </div>
+</section>
+
+<!-- sdk-billing -->
+<section id="sdk-billing">
+  <h2>9 · <code>sdk-billing</code> — Catalogs · Invoices · Showback</h2>
+  <div class="sdk-block">
+    <div class="sdk-header"><h3>sdk-billing</h3><span class="pill purple">NEW v3.1 · The wedge</span></div>
+    <div class="purpose">Reads ClickHouse rollups; applies versioned <code>pricing.catalog.vN</code>; monthly invoice gen + line items; showback per <code>(app, BU, persona-kind, encounter)</code>; reprice-dry-run; <code>/billing/live</code> real-time.</div>
+    <div class="meta-strip"><span><b>PRD §:</b> 5.6</span><span><b>FRs:</b> FR-BIL-1 … FR-BIL-8</span><span><b>Pool:</b> Admin (per tenant)</span><span><b>Schema:</b> <code>billing</code></span></div>
+
+    <h4>9.1 · Tables</h4>
+
+    <p><b>billing.invoice</b></p>
+    <table><thead><tr><th>Column</th><th>Type</th><th>Purpose</th></tr></thead><tbody>
+      <tr><td><code>invoice_id</code></td><td>ULID PK</td><td>Surrogate.</td></tr>
+      <tr><td><code>tenant_id</code></td><td>FK</td><td>RLS.</td></tr>
+      <tr><td><code>catalog_id</code></td><td>FK → meter.pricing_catalog</td><td>The catalog applied (immutable per invoice).</td></tr>
+      <tr><td><code>fiscal_period_id</code></td><td>FK → tenant.fiscal_period</td><td>Fiscal alignment.</td></tr>
+      <tr><td><code>period_start · period_end</code></td><td>date</td><td>Coverage window.</td></tr>
+      <tr><td><code>subtotal · tax · total</code></td><td>numeric(18,4)</td><td>Amounts.</td></tr>
+      <tr><td><code>currency</code></td><td>char(3)</td><td>From fiscal period.</td></tr>
+      <tr><td><code>status</code></td><td>enum</td><td><code>draft · finalized · paid · failed · void</code></td></tr>
+      <tr><td><code>pdf_s3_key</code></td><td>text</td><td>Rendered PDF.</td></tr>
+      <tr><td><code>stripe_invoice_id</code></td><td>text, null</td><td>Provider reference.</td></tr>
+      <tr><td><code>generated_at · finalized_at · paid_at</code></td><td>timestamptz</td><td>Lifecycle.</td></tr>
+    </tbody></table>
+
+    <p><b>billing.line_item</b> — per-SKU + showback dimensions.</p>
+    <table><thead><tr><th>Column</th><th>Type</th><th>Purpose</th></tr></thead><tbody>
+      <tr><td><code>line_id</code></td><td>ULID PK</td><td>Surrogate.</td></tr>
+      <tr><td><code>invoice_id</code></td><td>FK</td><td>Parent.</td></tr>
+      <tr><td><code>sku</code></td><td>text</td><td>SKU.</td></tr>
+      <tr><td><code>app_id · bu_id · persona_kind · encounter_id</code></td><td>text</td><td>Showback dimensions.</td></tr>
+      <tr><td><code>units</code></td><td>numeric(18,6)</td><td>Measured units.</td></tr>
+      <tr><td><code>rate</code></td><td>numeric(18,8)</td><td>Applied rate (tiered may be effective rate).</td></tr>
+      <tr><td><code>amount</code></td><td>numeric(18,4)</td><td>units × rate.</td></tr>
+      <tr><td><code>actor_kind</code></td><td>enum</td><td><code>human · agent · service</code> — for agent-vs-human split.</td></tr>
+    </tbody></table>
+
+    <p><b>billing.dunning_state</b> — workflow state per overdue invoice.</p>
+    <table><thead><tr><th>Column</th><th>Type</th><th>Purpose</th></tr></thead><tbody>
+      <tr><td><code>dunning_id</code></td><td>ULID PK</td><td>Surrogate.</td></tr>
+      <tr><td><code>invoice_id</code></td><td>FK</td><td>Subject.</td></tr>
+      <tr><td><code>stage</code></td><td>enum</td><td><code>reminder-1 · reminder-2 · final-notice · service-suspend · written-off</code></td></tr>
+      <tr><td><code>workflow_run_id</code></td><td>FK → workflow.run</td><td>Driver.</td></tr>
+      <tr><td><code>last_action_at</code></td><td>timestamptz</td><td>Telemetry.</td></tr>
+    </tbody></table>
+
+    <p><b>billing.reprice_dry_run</b> — what-if jobs.</p>
+    <table><thead><tr><th>Column</th><th>Type</th><th>Purpose</th></tr></thead><tbody>
+      <tr><td><code>dry_run_id</code></td><td>ULID PK</td><td>Surrogate.</td></tr>
+      <tr><td><code>tenant_id · period_start · period_end</code></td><td>text · date · date</td><td>Scope.</td></tr>
+      <tr><td><code>baseline_catalog_id · target_catalog_id</code></td><td>FK · FK</td><td>Comparison.</td></tr>
+      <tr><td><code>delta_amount</code></td><td>numeric(18,4)</td><td>Net change.</td></tr>
+      <tr><td><code>delta_by_sku</code></td><td>jsonb</td><td>Per-SKU breakdown.</td></tr>
+      <tr><td><code>computed_at</code></td><td>timestamptz</td><td>Run time.</td></tr>
+    </tbody></table>
+
+    <h4>9.2 · ERD</h4>
+    <div class="diagram-wrap"><pre class="mermaid">
+erDiagram
+  PRICING_CATALOG ||--o{ PRICING_RATE : ""
+  INVOICE }o--|| PRICING_CATALOG : ""
+  INVOICE ||--o{ LINE_ITEM : ""
+  INVOICE ||--o| DUNNING_STATE : ""
+  REPRICE_DRY_RUN }o--|| PRICING_CATALOG : "baseline"
+  REPRICE_DRY_RUN }o--|| PRICING_CATALOG : "target"
+  INVOICE {
+    string invoice_id PK
+    string tenant_id
+    string catalog_id FK
+    date period_start
+    date period_end
+    numeric total
+    string status
+  }
+  LINE_ITEM {
+    string line_id PK
+    string invoice_id FK
+    string sku
+    string app_id
+    string bu_id
+    string persona_kind
+    string encounter_id
+    numeric units
+    numeric amount
+    string actor_kind
+  }
+    </pre></div>
+
+    <p><b>Events:</b> <code>billing.invoice.finalized.v1 · billing.invoice.paid.v1 · billing.dunning.advanced.v1 · billing.reprice.dry-run.completed.v1</code>.</p>
+    <p><b>SKUs:</b> internal (catalog/billing operations).</p>
+  </div>
+</section>
+
+<!-- sdk-webhook -->
+<section id="sdk-webhook">
+  <h2>10 · <code>sdk-webhook</code> — Outbound Delivery + DLQ</h2>
+  <div class="sdk-block">
+    <div class="sdk-header"><h3>sdk-webhook</h3><span class="pill purple">NEW v3.1</span></div>
+    <div class="purpose">Per-tenant endpoint registry, HMAC-signed payloads, exponential-backoff retries, DLQ with 30-day replay UI, per-endpoint circuit breaker, mTLS option.</div>
+    <div class="meta-strip"><span><b>PRD §:</b> 5.7</span><span><b>FRs:</b> FR-WHK-1 … FR-WHK-8</span><span><b>Pool:</b> Per-pool outbox + Admin (registry)</span><span><b>Schema:</b> <code>webhook</code></span></div>
+
+    <h4>10.1 · Tables</h4>
+
+    <p><b>webhook.endpoint</b></p>
+    <table><thead><tr><th>Column</th><th>Type</th><th>Purpose</th></tr></thead><tbody>
+      <tr><td><code>endpoint_id</code></td><td>ULID PK</td><td>Surrogate.</td></tr>
+      <tr><td><code>tenant_id</code></td><td>FK</td><td>RLS.</td></tr>
+      <tr><td><code>url</code></td><td>text</td><td>HTTPS URL.</td></tr>
+      <tr><td><code>signing_key_ref</code></td><td>FK → vault.key</td><td>HMAC signing key.</td></tr>
+      <tr><td><code>signing_algo</code></td><td>enum</td><td><code>hmac-sha256 · hmac-sha512</code></td></tr>
+      <tr><td><code>mtls_client_cert_ref</code></td><td>text, null</td><td>Optional mTLS.</td></tr>
+      <tr><td><code>status</code></td><td>enum</td><td><code>active · paused · circuit-open</code></td></tr>
+      <tr><td><code>failure_streak</code></td><td>int</td><td>For circuit breaker.</td></tr>
+      <tr><td><code>last_success_at · last_failure_at</code></td><td>timestamptz</td><td>Telemetry.</td></tr>
+    </tbody></table>
+
+    <p><b>webhook.subscription</b> — endpoint × event_type</p>
+    <table><thead><tr><th>Column</th><th>Type</th><th>Purpose</th></tr></thead><tbody>
+      <tr><td><code>subscription_id</code></td><td>ULID PK</td><td>Surrogate.</td></tr>
+      <tr><td><code>endpoint_id</code></td><td>FK</td><td>Target.</td></tr>
+      <tr><td><code>event_type</code></td><td>text</td><td>Must be in registry.</td></tr>
+      <tr><td><code>filter_predicate</code></td><td>jsonb, null</td><td>Optional payload filter.</td></tr>
+      <tr><td><code>active</code></td><td>bool</td><td>—</td></tr>
+    </tbody></table>
+
+    <p><b>webhook.delivery</b> (per-pool outbox)</p>
+    <table><thead><tr><th>Column</th><th>Type</th><th>Purpose</th></tr></thead><tbody>
+      <tr><td><code>delivery_id</code></td><td>ULID PK</td><td>Surrogate.</td></tr>
+      <tr><td><code>subscription_id</code></td><td>FK</td><td>Target.</td></tr>
+      <tr><td><code>event_id</code></td><td>text</td><td>Source event idempotency.</td></tr>
+      <tr><td><code>payload</code></td><td>jsonb</td><td>Body.</td></tr>
+      <tr><td><code>status</code></td><td>enum</td><td><code>pending · delivering · succeeded · failed · dlq</code></td></tr>
+      <tr><td><code>attempts</code></td><td>int</td><td>Counter.</td></tr>
+      <tr><td><code>next_attempt_at · last_attempt_at</code></td><td>timestamptz</td><td>Backoff scheduling.</td></tr>
+      <tr><td><code>dlq_until</code></td><td>timestamptz, null</td><td>30-day replay window.</td></tr>
+    </tbody></table>
+
+    <p><b>webhook.delivery_attempt</b> — every HTTP attempt.</p>
+    <table><thead><tr><th>Column</th><th>Type</th><th>Purpose</th></tr></thead><tbody>
+      <tr><td><code>attempt_id</code></td><td>ULID PK</td><td>Surrogate.</td></tr>
+      <tr><td><code>delivery_id</code></td><td>FK</td><td>Parent.</td></tr>
+      <tr><td><code>http_status</code></td><td>int</td><td>Response.</td></tr>
+      <tr><td><code>response_excerpt</code></td><td>text</td><td>First 1KB.</td></tr>
+      <tr><td><code>latency_ms</code></td><td>int</td><td>Time.</td></tr>
+      <tr><td><code>attempted_at</code></td><td>timestamptz</td><td>Time.</td></tr>
+    </tbody></table>
+
+    <p><b>SKUs:</b> <code>webhook.endpoint.register · webhook.delivery</code> — <code>tiered_per_call</code>.</p>
+  </div>
+</section>
+
+<!-- sdk-approval -->
+<section id="sdk-approval">
+  <h2>11 · <code>sdk-approval</code> — Approval Routing</h2>
+  <div class="sdk-block">
+    <div class="sdk-header"><h3>sdk-approval</h3><span class="pill purple">NEW v3.1</span></div>
+    <div class="purpose">Generic approval-routing primitive — hierarchical chains, parallel M-of-N approvals, SLA escalation, delegation rules. Powers agent delegated-authority in P6A.</div>
+    <div class="meta-strip"><span><b>PRD §:</b> 5.8</span><span><b>FRs:</b> FR-APP-1 … FR-APP-7</span><span><b>Pool:</b> App Pool (per tenant)</span><span><b>Schema:</b> <code>approval</code></span></div>
+
+    <h4>11.1 · Tables</h4>
+
+    <p><b>approval.route</b> — reusable route definition.</p>
+    <table><thead><tr><th>Column</th><th>Type</th><th>Purpose</th></tr></thead><tbody>
+      <tr><td><code>route_id</code></td><td>ULID PK</td><td>Surrogate.</td></tr>
+      <tr><td><code>tenant_id</code></td><td>FK</td><td>RLS.</td></tr>
+      <tr><td><code>name · description</code></td><td>text</td><td>UX.</td></tr>
+      <tr><td><code>kind_pattern</code></td><td>text</td><td>Trigger pattern (e.g., <code>payment.refund &gt; 10000 USD</code>).</td></tr>
+      <tr><td><code>steps</code></td><td>jsonb</td><td>Ordered or parallel approver groups with SLAs.</td></tr>
+      <tr><td><code>delegation_rules</code></td><td>jsonb</td><td>Out-of-office handling.</td></tr>
+      <tr><td><code>status</code></td><td>enum</td><td><code>draft · active · deprecated</code></td></tr>
+    </tbody></table>
+
+    <p><b>approval.request</b></p>
+    <table><thead><tr><th>Column</th><th>Type</th><th>Purpose</th></tr></thead><tbody>
+      <tr><td><code>request_id</code></td><td>ULID PK</td><td>Surrogate.</td></tr>
+      <tr><td><code>route_id</code></td><td>FK</td><td>Route.</td></tr>
+      <tr><td><code>tenant_id</code></td><td>FK</td><td>RLS.</td></tr>
+      <tr><td><code>subject_kind · subject_id</code></td><td>enum · text</td><td>What is being approved.</td></tr>
+      <tr><td><code>initiator_persona_id</code></td><td>FK</td><td>Requestor.</td></tr>
+      <tr><td><code>status</code></td><td>enum</td><td><code>pending · approved · rejected · escalated · timed-out · cancelled</code></td></tr>
+      <tr><td><code>final_decision</code></td><td>enum, null</td><td><code>approve · reject</code></td></tr>
+      <tr><td><code>requested_at · resolved_at</code></td><td>timestamptz</td><td>Lifecycle.</td></tr>
+    </tbody></table>
+
+    <p><b>approval.step</b> — per-step records.</p>
+    <table><thead><tr><th>Column</th><th>Type</th><th>Purpose</th></tr></thead><tbody>
+      <tr><td><code>step_id</code></td><td>ULID PK</td><td>Surrogate.</td></tr>
+      <tr><td><code>request_id</code></td><td>FK</td><td>Parent.</td></tr>
+      <tr><td><code>step_index</code></td><td>int</td><td>Order.</td></tr>
+      <tr><td><code>approver_persona_id</code></td><td>FK</td><td>Approver.</td></tr>
+      <tr><td><code>decision</code></td><td>enum, null</td><td><code>approve · reject</code></td></tr>
+      <tr><td><code>reason</code></td><td>text</td><td>Free-form.</td></tr>
+      <tr><td><code>sla_deadline · acted_at</code></td><td>timestamptz</td><td>SLA + actual.</td></tr>
+      <tr><td><code>delegated_from</code></td><td>FK, null</td><td>If reassigned.</td></tr>
+      <tr><td><code>auto_escalated</code></td><td>bool</td><td>Timer-driven.</td></tr>
+    </tbody></table>
+
+    <p><b>SKUs:</b> <code>approval.route.create · approval.step.execute · approval.timeout.escalate</code> — <code>flat_per_call</code>.</p>
+  </div>
+</section>
+
+<!-- sdk-tenant-lifecycle -->
+<section id="sdk-tenant-lifecycle">
+  <h2>12 · <code>sdk-tenant-lifecycle</code> — Provision · Trial · Suspend · Offboard</h2>
+  <div class="sdk-block">
+    <div class="sdk-header"><h3>sdk-tenant-lifecycle</h3><span class="pill purple">NEW v3.1</span></div>
+    <div class="purpose">Full state machine over a tenant's lifecycle; per-tenant sandbox sub-pool with masked PII; trial → paid conversion via sdk-billing; offboarding via sdk-data-rights.</div>
+    <div class="meta-strip"><span><b>PRD §:</b> 5.9</span><span><b>FRs:</b> FR-TLC-1 … FR-TLC-7</span><span><b>Pool:</b> Admin</span><span><b>Schema:</b> <code>tenant_lifecycle</code></span></div>
+
+    <h4>12.1 · Tables</h4>
+
+    <p><b>tenant_lifecycle.state</b> — one row per tenant.</p>
+    <table><thead><tr><th>Column</th><th>Type</th><th>Purpose</th></tr></thead><tbody>
+      <tr><td><code>tenant_id</code></td><td>FK PK</td><td>Subject.</td></tr>
+      <tr><td><code>state</code></td><td>enum</td><td><code>provisioned · trial · active · suspended · offboarding · offboarded</code></td></tr>
+      <tr><td><code>trial_ends_at</code></td><td>timestamptz, null</td><td>For trial state.</td></tr>
+      <tr><td><code>suspension_reason</code></td><td>text, null</td><td>For suspended.</td></tr>
+      <tr><td><code>offboard_request_id</code></td><td>FK → data_rights.request, null</td><td>For offboarding/offboarded.</td></tr>
+      <tr><td><code>last_transition_at</code></td><td>timestamptz</td><td>Time of last state change.</td></tr>
+    </tbody></table>
+
+    <p><b>tenant_lifecycle.event</b> — transition log.</p>
+    <table><thead><tr><th>Column</th><th>Type</th><th>Purpose</th></tr></thead><tbody>
+      <tr><td><code>event_id</code></td><td>ULID PK</td><td>Surrogate.</td></tr>
+      <tr><td><code>tenant_id</code></td><td>FK</td><td>Subject.</td></tr>
+      <tr><td><code>from_state · to_state</code></td><td>enum · enum</td><td>Transition.</td></tr>
+      <tr><td><code>reason · operator_id</code></td><td>text · text</td><td>Provenance.</td></tr>
+      <tr><td><code>occurred_at</code></td><td>timestamptz</td><td>Time.</td></tr>
+      <tr><td><code>audit_entry_id</code></td><td>FK → audit.entry</td><td>Anchor.</td></tr>
+    </tbody></table>
+
+    <p><b>tenant_lifecycle.sandbox</b> — sandbox sub-pool config.</p>
+    <table><thead><tr><th>Column</th><th>Type</th><th>Purpose</th></tr></thead><tbody>
+      <tr><td><code>sandbox_id</code></td><td>ULID PK</td><td>Surrogate.</td></tr>
+      <tr><td><code>tenant_id</code></td><td>FK</td><td>Parent tenant.</td></tr>
+      <tr><td><code>pool_index</code></td><td>FK → routing.pool</td><td>Where sandbox lives.</td></tr>
+      <tr><td><code>masking_profile_id</code></td><td>text</td><td>PII masking config.</td></tr>
+      <tr><td><code>last_refreshed_at</code></td><td>timestamptz</td><td>Refresh marker.</td></tr>
+      <tr><td><code>refresh_consent_ref</code></td><td>FK → consent.receipt, null</td><td>Consent for refresh-from-prod.</td></tr>
+    </tbody></table>
+
+    <p><b>Events:</b> <code>tenant.lifecycle.transitioned.v1</code>.</p>
+    <p><b>SKUs:</b> <code>tenant.provision · tenant.suspend · tenant.offboard · tenant.sandbox.create</code> — <code>flat_per_call</code>.</p>
+  </div>
+</section>
+
+<!-- sdk-connectors -->
+<section id="sdk-connectors">
+  <h2>13 · <code>sdk-connectors</code> — Common Framework</h2>
+  <div class="sdk-block">
+    <div class="sdk-header"><h3>sdk-connectors</h3><span class="pill purple">NEW v3.1 · Framework</span></div>
+    <div class="purpose">OAuth/credential management, typed schema mapping, bidirectional sync, rate-limit handling, webhook ingestion, polling fallback, cursor state, health monitoring.</div>
+    <div class="meta-strip"><span><b>PRD §:</b> 5.10</span><span><b>FRs:</b> FR-CON-1 … FR-CON-8</span><span><b>Pool:</b> Admin (creds, cursor) + App Pool (synced data)</span><span><b>Schema:</b> <code>connector</code></span></div>
+
+    <h4>13.1 · Tables</h4>
+
+    <p><b>connector.install</b> — per-tenant install of one connector kind.</p>
+    <table><thead><tr><th>Column</th><th>Type</th><th>Purpose</th></tr></thead><tbody>
+      <tr><td><code>install_id</code></td><td>ULID PK</td><td>Surrogate.</td></tr>
+      <tr><td><code>tenant_id</code></td><td>FK</td><td>RLS.</td></tr>
+      <tr><td><code>connector_kind</code></td><td>text</td><td><code>slack · salesforce · m365 · …</code></td></tr>
+      <tr><td><code>account_ref</code></td><td>text</td><td>External account identifier.</td></tr>
+      <tr><td><code>oauth_token_envelope</code></td><td>bytea</td><td>Vault-wrapped access + refresh tokens.</td></tr>
+      <tr><td><code>scopes</code></td><td>text[]</td><td>Granted scopes.</td></tr>
+      <tr><td><code>status</code></td><td>enum</td><td><code>connected · refresh-needed · revoked · error</code></td></tr>
+      <tr><td><code>token_expires_at · last_refreshed_at</code></td><td>timestamptz</td><td>OAuth lifecycle.</td></tr>
+    </tbody></table>
+
+    <p><b>connector.schema_mapping</b> — typed mapping per object kind.</p>
+    <table><thead><tr><th>Column</th><th>Type</th><th>Purpose</th></tr></thead><tbody>
+      <tr><td><code>mapping_id</code></td><td>ULID PK</td><td>Surrogate.</td></tr>
+      <tr><td><code>install_id</code></td><td>FK</td><td>Parent install.</td></tr>
+      <tr><td><code>source_object</code></td><td>text</td><td><code>salesforce.Account</code>, <code>slack.message</code>, …</td></tr>
+      <tr><td><code>target_canonical</code></td><td>text</td><td>e.g., <code>crm.Contact</code>, <code>engagement.Encounter</code>.</td></tr>
+      <tr><td><code>field_mapping</code></td><td>jsonb</td><td>Source → canonical field translation.</td></tr>
+      <tr><td><code>conflict_policy</code></td><td>text</td><td>Per §6A.</td></tr>
+    </tbody></table>
+
+    <p><b>connector.sync_cursor</b> — durable cursor state.</p>
+    <table><thead><tr><th>Column</th><th>Type</th><th>Purpose</th></tr></thead><tbody>
+      <tr><td><code>cursor_id</code></td><td>ULID PK</td><td>Surrogate.</td></tr>
+      <tr><td><code>install_id</code></td><td>FK</td><td>Parent.</td></tr>
+      <tr><td><code>direction</code></td><td>enum</td><td><code>inbound · outbound</code></td></tr>
+      <tr><td><code>resource</code></td><td>text</td><td>Resource being synced.</td></tr>
+      <tr><td><code>cursor_value</code></td><td>text</td><td>Provider-defined.</td></tr>
+      <tr><td><code>last_synced_at</code></td><td>timestamptz</td><td>Telemetry.</td></tr>
+    </tbody></table>
+
+    <p><b>connector.health_snapshot</b> — periodic health snapshots.</p>
+    <table><thead><tr><th>Column</th><th>Type</th><th>Purpose</th></tr></thead><tbody>
+      <tr><td><code>snapshot_id</code></td><td>ULID PK</td><td>Surrogate.</td></tr>
+      <tr><td><code>install_id</code></td><td>FK</td><td>Subject.</td></tr>
+      <tr><td><code>error_count_24h · success_rate</code></td><td>int · numeric</td><td>Health metrics.</td></tr>
+      <tr><td><code>rate_limit_state</code></td><td>jsonb</td><td>Remaining quota per resource.</td></tr>
+      <tr><td><code>captured_at</code></td><td>timestamptz</td><td>Time.</td></tr>
+    </tbody></table>
+
+    <p><b>connector.inbound_event</b> — webhook-ingested events landing.</p>
+    <table><thead><tr><th>Column</th><th>Type</th><th>Purpose</th></tr></thead><tbody>
+      <tr><td><code>event_id</code></td><td>ULID PK</td><td>Surrogate.</td></tr>
+      <tr><td><code>install_id</code></td><td>FK</td><td>Parent.</td></tr>
+      <tr><td><code>source_event_id</code></td><td>text</td><td>External idempotency.</td></tr>
+      <tr><td><code>event_type</code></td><td>text</td><td>e.g., <code>slack.message · salesforce.account.updated</code></td></tr>
+      <tr><td><code>payload</code></td><td>jsonb</td><td>Body.</td></tr>
+      <tr><td><code>received_at · processed_at</code></td><td>timestamptz</td><td>Lifecycle.</td></tr>
+      <tr><td><code>status</code></td><td>enum</td><td><code>received · processed · failed · suppressed</code></td></tr>
+    </tbody></table>
+
+    <h4>13.2 · ERD</h4>
+    <div class="diagram-wrap"><pre class="mermaid">
+erDiagram
+  CONNECTOR_INSTALL ||--o{ SCHEMA_MAPPING : ""
+  CONNECTOR_INSTALL ||--o{ SYNC_CURSOR : ""
+  CONNECTOR_INSTALL ||--o{ HEALTH_SNAPSHOT : ""
+  CONNECTOR_INSTALL ||--o{ INBOUND_EVENT : ""
+  CONNECTOR_INSTALL {
+    string install_id PK
+    string tenant_id
+    string connector_kind
+    string status
+    timestamp token_expires_at
+  }
+  SCHEMA_MAPPING {
+    string mapping_id PK
+    string install_id FK
+    string source_object
+    string target_canonical
+    string conflict_policy
+  }
+  SYNC_CURSOR {
+    string cursor_id PK
+    string install_id FK
+    string direction
+    string resource
+    text   cursor_value
+  }
+    </pre></div>
+
+    <p><b>SKUs:</b> <code>connector.connect · connector.sync.record · connector.poll.cycle</code> — flat + per_unit.</p>
+  </div>
+</section>
+
+<!-- connector-slack -->
+<section id="connector-slack">
+  <h2>14 · <code>connector-slack</code> — First Connector</h2>
+  <div class="sdk-block">
+    <div class="sdk-header"><h3>connector-slack</h3><span class="pill purple">NEW v3.1</span></div>
+    <div class="purpose">Bidirectional Slack — read threads, post messages, slash commands, app shortcuts, webhook ingestion, tool manifest for agent CapabilityGraph (P6A).</div>
+    <div class="meta-strip"><span><b>PRD §:</b> 5.11</span><span><b>FRs:</b> FR-SLK-1 … FR-SLK-6</span><span><b>Pool:</b> Admin</span><span><b>Schema:</b> <code>connector_slack</code></span></div>
+
+    <h4>14.1 · Tables</h4>
+    <table><thead><tr><th>Table</th><th>Key columns</th></tr></thead><tbody>
+      <tr><td><code>connector_slack.workspace</code></td><td><code>workspace_id PK · install_id FK · slack_team_id · team_name · enterprise_id · installed_at</code></td></tr>
+      <tr><td><code>connector_slack.channel</code></td><td><code>channel_id PK · workspace_id FK · slack_channel_id · name · is_private · allowed_for_agents bool</code></td></tr>
+      <tr><td><code>connector_slack.message_outbound</code></td><td><code>message_id PK · workspace_id FK · channel_id FK · persona_id · slack_message_ts · body_envelope · sent_at · status</code></td></tr>
+      <tr><td><code>connector_slack.interaction</code></td><td><code>interaction_id PK · workspace_id FK · kind (slash · shortcut · block_action) · payload jsonb · processed_at</code></td></tr>
+    </tbody></table>
+
+    <p><b>Events:</b> <code>slack.thread.message.v1 · slack.message.posted.v1 · slack.interaction.received.v1</code>.</p>
+    <p><b>SKUs:</b> <code>slack.message.post · slack.thread.read · slack.event.ingest</code> — <code>flat_per_call</code>.</p>
+  </div>
+</section>
+
+<!-- hdk camera + map -->
+<section id="hdk-cam-map">
+  <h2>15 · <code>hdk-camera</code> &amp; <code>hdk-map</code></h2>
+  <div class="sdk-block">
+    <div class="sdk-header"><h3>HDK media trio (camera + map; scanner lands P5)</h3><span class="pill purple">HDK</span></div>
+    <div class="purpose">Native camera with provenance metadata; native map. Both depend on <code>hdk-sync</code> for offline writes and <code>hdk-permissions</code> for surface checks. Server-side anchors are minimal here — most state lives in <code>media</code>, <code>geo</code>, and the eventual <code>evidence</code> schema (P7).</div>
+    <div class="meta-strip"><span><b>PRD §:</b> 5.12</span><span><b>Pool:</b> On-device + media metadata in Admin</span></div>
+
+    <h4>15.1 · Capture provenance fields (stamped on every capture)</h4>
+    <table><thead><tr><th>Field</th><th>Source</th></tr></thead><tbody>
+      <tr><td><code>device_uuid</code></td><td>hdk-idp</td></tr>
+      <tr><td><code>persona_id</code></td><td>Active persona (resolver)</td></tr>
+      <tr><td><code>encounter_id</code></td><td>Active encounter (set if open)</td></tr>
+      <tr><td><code>lat · lng · altitude · imu_signature</code></td><td>hdk-map + device sensors</td></tr>
+      <tr><td><code>captured_at</code></td><td>Device clock + server-time delta</td></tr>
+      <tr><td><code>consent_ref</code></td><td>consent receipt for the capture purpose</td></tr>
+      <tr><td><code>checksum</code></td><td>SHA-256 of raw bytes (locked before vault wrap)</td></tr>
+    </tbody></table>
+
+    <p>These fields are written into <code>media.blob</code> metadata (this phase) and into <code>evidence.capture</code> in P7 (where the full chain-of-custody anchor lives).</p>
+  </div>
+</section>
+
+</div>
+
+<script>
+  mermaid.initialize({ startOnLoad: true, theme: 'dark', themeVariables: { background: '#0b0f17', primaryColor: '#1a2234', primaryBorderColor: '#c9a86a', primaryTextColor: '#e6ecf5', lineColor: '#6aa9ff', secondaryColor: '#1d1830', tertiaryColor: '#16241c' } });
+</script>
+
+</body>
+</html>

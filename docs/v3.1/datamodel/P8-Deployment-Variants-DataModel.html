@@ -1,0 +1,402 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>ProjexCloud v3.1 · P8 Data Model — Deployment Variants</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<style>
+  :root { --bg:#0b0f17; --panel:#121826; --panel-2:#1a2234; --line:#243049; --text:#e6ecf5; --muted:#8a98b3; --accent:#c9a86a; --accent-2:#6aa9ff; --teal:#2dd4bf; --green:#5dd39e; --red:#ff6b6b; --yellow:#f5c451; --purple:#b88dff; --code-bg:#0f1422; }
+  *{box-sizing:border-box;} html,body{background:var(--bg);color:var(--text);font-family:ui-sans-serif,-apple-system,"Segoe UI",Roboto,sans-serif;margin:0;padding:0;line-height:1.55;}
+  .page{max-width:1260px;margin:0 auto;padding:56px 32px 96px;}
+  header.cover{border-bottom:1px solid var(--line);padding-bottom:36px;margin-bottom:48px;}
+  header.cover .eyebrow{color:var(--accent);letter-spacing:0.18em;text-transform:uppercase;font-size:12px;font-weight:700;}
+  header.cover h1{font-size:40px;line-height:1.15;margin:12px 0 8px;letter-spacing:-0.02em;}
+  header.cover .sub{color:var(--muted);font-size:16px;max-width:900px;}
+  header.cover .meta{display:flex;gap:24px;flex-wrap:wrap;margin-top:24px;color:var(--muted);font-size:13px;}
+  header.cover .meta b{color:var(--text);font-weight:600;}
+  h2{font-size:26px;margin:56px 0 18px;padding-bottom:8px;border-bottom:1px solid var(--line);}
+  h3{font-size:19px;margin:28px 0 10px;color:var(--text);}
+  h4{font-size:13px;margin:18px 0 8px;color:var(--accent);text-transform:uppercase;letter-spacing:0.12em;}
+  p{color:#c8d1e3;}
+  .grid{display:grid;gap:16px;} .grid.cols-2{grid-template-columns:repeat(2,minmax(0,1fr));} .grid.cols-3{grid-template-columns:repeat(3,minmax(0,1fr));}
+  @media(max-width:900px){.grid.cols-2,.grid.cols-3{grid-template-columns:1fr;} header.cover h1{font-size:30px;}}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px 18px;} .card .label{color:var(--accent);font-size:11px;text-transform:uppercase;letter-spacing:0.14em;font-weight:700;} .card .title{font-weight:600;margin:6px 0;} .card .body{color:var(--muted);font-size:13.5px;}
+  .pill{display:inline-block;padding:3px 10px;border-radius:999px;font-size:11px;border:1px solid var(--line);color:var(--muted);margin-right:6px;}
+  .pill.blue{color:var(--accent-2);border-color:rgba(106,169,255,0.4);} .pill.purple{color:var(--purple);border-color:rgba(184,141,255,0.4);} .pill.green{color:var(--green);border-color:rgba(93,211,158,0.4);} .pill.yellow{color:var(--yellow);border-color:rgba(245,196,81,0.4);} .pill.teal{color:var(--teal);border-color:rgba(45,212,191,0.4);} .pill.red{color:var(--red);border-color:rgba(255,107,107,0.4);}
+  table{width:100%;border-collapse:collapse;margin-top:12px;font-size:13.5px;} th,td{text-align:left;padding:9px 11px;border-bottom:1px solid var(--line);vertical-align:top;} th{color:var(--muted);font-weight:600;font-size:11.5px;text-transform:uppercase;letter-spacing:0.08em;} td code{font-size:12px;}
+  pre,code{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;} pre{background:var(--code-bg);border:1px solid var(--line);border-radius:10px;padding:14px 16px;overflow-x:auto;font-size:12.5px;} code{background:var(--code-bg);padding:1px 6px;border-radius:4px;font-size:12px;}
+  .diagram-wrap{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:22px;overflow-x:auto;} .caption{color:var(--muted);font-size:12.5px;margin-top:10px;text-align:center;} .mermaid{background:transparent;}
+  nav.toc{position:sticky;top:0;background:rgba(11,15,23,0.92);backdrop-filter:blur(10px);border-bottom:1px solid var(--line);padding:10px 32px;z-index:10;} nav.toc .row{max-width:1260px;margin:0 auto;display:flex;flex-wrap:wrap;gap:10px;font-size:12px;} nav.toc a{color:var(--muted);text-decoration:none;border-bottom:1px solid transparent;} nav.toc a:hover{color:var(--accent);border-color:var(--accent);}
+  .callout{border-left:3px solid var(--accent);background:var(--panel-2);padding:14px 18px;border-radius:0 10px 10px 0;margin:18px 0;color:#d6deef;font-size:14px;} .callout.blue{border-color:var(--accent-2);} .callout.green{border-color:var(--green);} .callout.purple{border-color:var(--purple);} .callout.red{border-color:var(--red);}
+  .sdk-block{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:22px 24px;margin:22px 0 28px;} .sdk-block .sdk-header{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;margin-bottom:6px;} .sdk-block .sdk-header h3{margin:0;font-size:22px;color:var(--accent);} .sdk-block .purpose{color:#c8d1e3;font-size:14.5px;margin:4px 0 14px;}
+  .meta-strip{display:flex;flex-wrap:wrap;gap:18px;font-size:12.5px;color:var(--muted);margin:6px 0 18px;padding:10px 14px;background:var(--panel-2);border-radius:8px;} .meta-strip b{color:var(--text);}
+</style>
+</head>
+<body>
+
+<nav class="toc">
+  <div class="row">
+    <a href="#overview">1 · Overview</a>
+    <a href="#phase-erd">2 · Phase ERD</a>
+    <a href="#byok">3 · Variant A · BYOK / CMEK</a>
+    <a href="#sovereign">4 · Variant B · Sovereign Cloud</a>
+    <a href="#onprem">5 · Variant C · On-Prem / Air-Gapped</a>
+    <a href="#active-active">6 · Variant D · Active-Active Tier-G+</a>
+  </div>
+</nav>
+
+<div class="page">
+
+<header class="cover">
+  <div class="eyebrow">Data Model · Phase 8 · Parallel from week 22</div>
+  <h1>P8 — Deployment Variants</h1>
+  <div class="sub">Four deployment topologies for enterprise and regulated buyers. <b>BYOK / CMEK</b> · <b>Sovereign Cloud</b> · <b>On-Prem / Air-Gapped</b> · <b>Active-Active Tier-G+</b>. No new SDKs — these are topology + operational changes that extend the existing schemas with variant-specific tables.</div>
+  <div class="meta">
+    <div><b>Phase:</b> P8 (parallel from week 22+)</div>
+    <div><b>Maps to wave:</b> n/a — variant-specific</div>
+    <div><b>Gates closed:</b> — per-variant</div>
+    <div><b>PRD:</b> <code>prd/P8-Deployment-Variants.md</code></div>
+    <div><b>Anchor docs:</b> Architecture §22A</div>
+  </div>
+</header>
+
+<section id="overview">
+  <h2>1 · Overview</h2>
+  <div class="grid cols-2">
+    <div class="card"><div class="label">Variant A · BYOK / CMEK</div><div class="title">Customer key wraps Tenant Key</div><div class="body">Customer CMK sits between Pool KEK and Tenant Key. Revoke renders tenant data undecryptable. Composes <code>sdk-vault</code> + <code>sdk-secrets</code>.</div></div>
+    <div class="card"><div class="label">Variant B · Sovereign Cloud</div><div class="title">Isolated regions · partner-operated</div><div class="body">FedRAMP · IL5 · China PIPL · EU sovereign. SDK estate identical; topology + operator differ.</div></div>
+    <div class="card"><div class="label">Variant C · On-Prem / Air-Gapped</div><div class="title">Single-cluster K8s · signed quarterly bundles</div><div class="body">Local AI Gateway against Llama/Mistral; webhook outbound restricted in-cluster; federation disabled.</div></div>
+    <div class="card"><div class="label">Variant D · Active-Active Tier-G+</div><div class="title">RPO ≤ 5s · RTO ≤ 60s</div><div class="body">Sync replication for audit / payment; async for the rest; monthly chaos drills.</div></div>
+  </div>
+
+  <div class="callout blue">
+    <b>How P8 extends earlier schemas.</b> Rather than introducing a parallel domain, P8 adds variant-specific columns and tables that sit alongside the existing schemas from P1–P7. The matrix below is organized per-variant, with each table noting the schema it extends.
+  </div>
+</section>
+
+<section id="phase-erd">
+  <h2>2 · Phase ERD — Variant-specific entities</h2>
+  <div class="diagram-wrap">
+    <pre class="mermaid">
+erDiagram
+  TENANT ||--o| BYOK_BINDING : "variant A"
+  BYOK_BINDING ||--o{ CMK_USE_LOG : ""
+  BYOK_BINDING }o--|| VAULT_KEY : "wraps tenant key"
+
+  REGION ||--o| SOVEREIGN_REGION_CONFIG : "variant B"
+  SOVEREIGN_REGION_CONFIG ||--o{ SOVEREIGN_BUNDLE_RELEASE : ""
+  SOVEREIGN_REGION_CONFIG ||--o{ SOVEREIGN_ATTESTATION : ""
+
+  CLUSTER ||--|| ONPREM_INSTALL : "variant C"
+  ONPREM_INSTALL ||--o{ ONPREM_BUNDLE_APPLY : ""
+  ONPREM_INSTALL ||--o{ LOCAL_LLM_MODEL : ""
+
+  TENANT ||--o| ACTIVE_ACTIVE_PROFILE : "variant D"
+  ACTIVE_ACTIVE_PROFILE ||--o{ FAILOVER_DRILL : ""
+  ACTIVE_ACTIVE_PROFILE ||--o{ REPLICATION_STREAM : ""
+    </pre>
+  </div>
+  <div class="caption">Figure 2.1 — Variant-specific entities sit alongside the core estate.</div>
+</section>
+
+<!-- BYOK -->
+<section id="byok">
+  <h2>3 · Variant A · BYOK / CMEK</h2>
+  <div class="sdk-block">
+    <div class="sdk-header"><h3>BYOK / CMEK extension to <code>sdk-vault</code></h3><span class="pill purple">Variant A · MODIFIED</span></div>
+    <div class="purpose">Customer's CMK becomes the wrapping key for the Tenant Key — sits between Pool KEK and Tenant Key. Revoke ⇒ tenant data undecryptable across all pools.</div>
+    <div class="meta-strip"><span><b>PRD §:</b> 5.A</span><span><b>FRs:</b> FR-BYOK-1 … FR-BYOK-6</span><span><b>Extends:</b> <code>vault</code> + <code>routing</code> schemas</span></div>
+
+    <h4>3.1 · New tables in <code>vault</code> schema</h4>
+
+    <p><b>vault.byok_binding</b> — one row per tenant that has opted into BYOK.</p>
+    <table><thead><tr><th>Column</th><th>Type</th><th>Purpose</th></tr></thead><tbody>
+      <tr><td><code>binding_id</code></td><td>ULID PK</td><td>Surrogate.</td></tr>
+      <tr><td><code>tenant_id</code></td><td>FK PK</td><td>Subject tenant (one-to-one).</td></tr>
+      <tr><td><code>provider</code></td><td>enum</td><td><code>aws-kms · gcp-kms · hsm-pkcs11</code></td></tr>
+      <tr><td><code>customer_kms_key_arn</code></td><td>text</td><td>Customer-controlled key (grant / handle / PKCS#11 alias).</td></tr>
+      <tr><td><code>tenant_key_id</code></td><td>FK → vault.key</td><td>The wrapped tenant key.</td></tr>
+      <tr><td><code>grant_status</code></td><td>enum</td><td><code>active · revoking · revoked · degraded</code></td></tr>
+      <tr><td><code>bound_at · revoked_at</code></td><td>timestamptz</td><td>Lifecycle.</td></tr>
+      <tr><td><code>sla_revoke_propagation_seconds</code></td><td>int</td><td>Default 30s.</td></tr>
+      <tr><td><code>siem_forwarder_endpoint</code></td><td>text, null</td><td>Customer's SIEM (Splunk / Elastic / Sumo).</td></tr>
+    </tbody></table>
+
+    <p><b>vault.cmk_use_log</b> — every CMK call (audit + optional SIEM forward).</p>
+    <table><thead><tr><th>Column</th><th>Type</th><th>Purpose</th></tr></thead><tbody>
+      <tr><td><code>log_id</code></td><td>ULID PK</td><td>Surrogate.</td></tr>
+      <tr><td><code>binding_id</code></td><td>FK</td><td>Parent.</td></tr>
+      <tr><td><code>operation</code></td><td>enum</td><td><code>wrap · unwrap · rotate · grant-check</code></td></tr>
+      <tr><td><code>occurred_at · latency_ms</code></td><td>timestamptz · int</td><td>Telemetry.</td></tr>
+      <tr><td><code>provider_response</code></td><td>jsonb</td><td>Provider-side metadata.</td></tr>
+      <tr><td><code>forwarded_to_siem_at</code></td><td>timestamptz, null</td><td>SIEM ship marker.</td></tr>
+      <tr><td><code>audit_entry_id</code></td><td>FK → audit.entry</td><td>Chain anchor.</td></tr>
+    </tbody></table>
+
+    <p><b>vault.cmk_rotation</b></p>
+    <table><thead><tr><th>Column</th><th>Type</th><th>Purpose</th></tr></thead><tbody>
+      <tr><td><code>rotation_id</code></td><td>ULID PK</td><td>Surrogate.</td></tr>
+      <tr><td><code>binding_id</code></td><td>FK</td><td>Parent.</td></tr>
+      <tr><td><code>started_at · completed_at</code></td><td>timestamptz</td><td>Lifecycle.</td></tr>
+      <tr><td><code>previous_tenant_key_id · new_tenant_key_id</code></td><td>FK · FK</td><td>Before / after.</td></tr>
+      <tr><td><code>leaf_reencryption_needed</code></td><td>bool</td><td>Should always be <code>false</code> (transparent re-wrap).</td></tr>
+    </tbody></table>
+
+    <h4>3.2 · ERD</h4>
+    <div class="diagram-wrap"><pre class="mermaid">
+erDiagram
+  TENANT ||--o| BYOK_BINDING : ""
+  BYOK_BINDING }o--|| VAULT_KEY : "wraps"
+  BYOK_BINDING ||--o{ CMK_USE_LOG : ""
+  BYOK_BINDING ||--o{ CMK_ROTATION : ""
+  BYOK_BINDING {
+    string binding_id PK
+    string tenant_id
+    string provider
+    string customer_kms_key_arn
+    string tenant_key_id FK
+    string grant_status
+    timestamp bound_at
+  }
+  CMK_USE_LOG {
+    string log_id PK
+    string binding_id FK
+    string operation
+    timestamp occurred_at
+    timestamp forwarded_to_siem_at
+  }
+  CMK_ROTATION {
+    string rotation_id PK
+    string binding_id FK
+    string previous_tenant_key_id FK
+    string new_tenant_key_id FK
+    bool   leaf_reencryption_needed
+  }
+    </pre></div>
+
+    <p><b>Events:</b> <code>byok.binding.created.v1 · byok.cmk.used.v1 · byok.cmk.rotated.v1 · byok.binding.revoked.v1</code> (all regulated).</p>
+  </div>
+</section>
+
+<!-- Sovereign -->
+<section id="sovereign">
+  <h2>4 · Variant B · Sovereign Cloud</h2>
+  <div class="sdk-block">
+    <div class="sdk-header"><h3>Sovereign region topology</h3><span class="pill purple">Variant B</span></div>
+    <div class="purpose">Sovereign region = isolated pool family (own Admin · App · Evidence · Vector · Warehouse · KMS) with no data, telemetry, audit, or control-plane signal leaving the region. SDK estate identical; topology + operator differ.</div>
+    <div class="meta-strip"><span><b>PRD §:</b> 5.B</span><span><b>FRs:</b> FR-SOV-1 … FR-SOV-8</span><span><b>Extends:</b> <code>routing</code> + new <code>sovereign</code> schema</span></div>
+
+    <h4>4.1 · New schema — <code>sovereign</code></h4>
+
+    <p><b>sovereign.region_config</b> — declarative config for each sovereign region.</p>
+    <table><thead><tr><th>Column</th><th>Type</th><th>Purpose</th></tr></thead><tbody>
+      <tr><td><code>region_id</code></td><td>text PK</td><td>e.g., <code>us-gov-east-1 · cn-bj-1 · eu-sovereign-1</code></td></tr>
+      <tr><td><code>regime</code></td><td>enum</td><td><code>fedramp-high · il5 · pipl · eu-sovereign · uae-trd</code></td></tr>
+      <tr><td><code>operator_partner</code></td><td>text</td><td>In-region MSP (US-cleared / Chinese cloud / EU partner).</td></tr>
+      <tr><td><code>terminal_federation</code></td><td>bool</td><td>If true, Pool Router federation manifest treats this as terminal.</td></tr>
+      <tr><td><code>kms_provider</code></td><td>enum</td><td>Per-region KMS (potentially distinct from default).</td></tr>
+      <tr><td><code>activated_at</code></td><td>timestamptz</td><td>Lifecycle.</td></tr>
+      <tr><td><code>attestation_state</code></td><td>enum</td><td><code>in-progress · attested · expired</code></td></tr>
+    </tbody></table>
+
+    <p><b>sovereign.bundle_release</b> — quarterly signed-bundle releases delivered to partner.</p>
+    <table><thead><tr><th>Column</th><th>Type</th><th>Purpose</th></tr></thead><tbody>
+      <tr><td><code>release_id</code></td><td>ULID PK</td><td>Surrogate.</td></tr>
+      <tr><td><code>region_id</code></td><td>FK</td><td>Target region.</td></tr>
+      <tr><td><code>version</code></td><td>semver</td><td>SDK estate version.</td></tr>
+      <tr><td><code>bundle_artifact_ref</code></td><td>text</td><td>Pointer to signed container/Helm bundle.</td></tr>
+      <tr><td><code>signature</code></td><td>bytea</td><td>Detached signature.</td></tr>
+      <tr><td><code>shipped_at</code></td><td>timestamptz</td><td>Time.</td></tr>
+      <tr><td><code>applied_at</code></td><td>timestamptz, null</td><td>When partner applied.</td></tr>
+      <tr><td><code>rollback_to_release_id</code></td><td>FK, null</td><td>If rollback was triggered.</td></tr>
+    </tbody></table>
+
+    <p><b>sovereign.attestation</b> — per-region attestation records.</p>
+    <table><thead><tr><th>Column</th><th>Type</th><th>Purpose</th></tr></thead><tbody>
+      <tr><td><code>attestation_id</code></td><td>ULID PK</td><td>Surrogate.</td></tr>
+      <tr><td><code>region_id</code></td><td>FK</td><td>Subject.</td></tr>
+      <tr><td><code>regime</code></td><td>enum</td><td>Same enum as region_config.</td></tr>
+      <tr><td><code>auditor_id</code></td><td>text</td><td>External auditor.</td></tr>
+      <tr><td><code>issued_at · expires_at</code></td><td>timestamptz</td><td>Validity window.</td></tr>
+      <tr><td><code>artifact_ref</code></td><td>text</td><td>Signed attestation document.</td></tr>
+    </tbody></table>
+
+    <p><b>sovereign.leak_monitor_alert</b> — continuous DPI / network-policy alerts.</p>
+    <table><thead><tr><th>Column</th><th>Type</th><th>Purpose</th></tr></thead><tbody>
+      <tr><td><code>alert_id</code></td><td>ULID PK</td><td>Surrogate.</td></tr>
+      <tr><td><code>region_id</code></td><td>FK</td><td>Subject.</td></tr>
+      <tr><td><code>kind</code></td><td>enum</td><td><code>egress-attempt · cross-region-route · policy-violation</code></td></tr>
+      <tr><td><code>severity</code></td><td>enum</td><td><code>info · warn · critical</code></td></tr>
+      <tr><td><code>raised_at · resolved_at</code></td><td>timestamptz</td><td>Lifecycle.</td></tr>
+      <tr><td><code>incident_ref</code></td><td>text, null</td><td>Linked incident.</td></tr>
+    </tbody></table>
+
+    <p><b>Events:</b> <code>sovereign.bundle.shipped.v1 · sovereign.bundle.applied.v1 · sovereign.attestation.issued.v1 · sovereign.leak.alert.v1</code>.</p>
+  </div>
+</section>
+
+<!-- On-Prem -->
+<section id="onprem">
+  <h2>5 · Variant C · On-Prem / Air-Gapped</h2>
+  <div class="sdk-block">
+    <div class="sdk-header"><h3>On-prem K8s distribution</h3><span class="pill purple">Variant C</span></div>
+    <div class="purpose">Single-cluster K8s distribution for banks / government; quarterly signed bundles via approved media or one-way diode; local AI Gateway against Llama / Mistral; webhook outbound restricted in-cluster.</div>
+    <div class="meta-strip"><span><b>PRD §:</b> 5.C</span><span><b>FRs:</b> FR-ONP-1 … FR-ONP-10</span><span><b>Extends:</b> new <code>onprem</code> schema; modifies <code>ai_gateway · billing · webhook</code></span></div>
+
+    <h4>5.1 · New schema — <code>onprem</code></h4>
+
+    <p><b>onprem.install</b> — one row per on-prem cluster.</p>
+    <table><thead><tr><th>Column</th><th>Type</th><th>Purpose</th></tr></thead><tbody>
+      <tr><td><code>install_id</code></td><td>ULID PK</td><td>Surrogate.</td></tr>
+      <tr><td><code>customer_id · cluster_name</code></td><td>text · text</td><td>Customer + cluster identifier.</td></tr>
+      <tr><td><code>k8s_distribution</code></td><td>enum</td><td><code>vanilla · openshift · rancher · tanzu</code></td></tr>
+      <tr><td><code>installed_version</code></td><td>semver</td><td>Current platform version.</td></tr>
+      <tr><td><code>installed_at · last_updated_at</code></td><td>timestamptz</td><td>Lifecycle.</td></tr>
+      <tr><td><code>air_gap_mode</code></td><td>enum</td><td><code>strict · diode-in · diode-bidi</code></td></tr>
+      <tr><td><code>phone_home</code></td><td>bool</td><td>Must be <code>false</code> in strict mode.</td></tr>
+      <tr><td><code>billing_mode</code></td><td>enum</td><td><code>internal-report-only · flat-fee · per-incident</code></td></tr>
+    </tbody></table>
+
+    <p><b>onprem.bundle_apply</b> — quarterly bundle apply history.</p>
+    <table><thead><tr><th>Column</th><th>Type</th><th>Purpose</th></tr></thead><tbody>
+      <tr><td><code>apply_id</code></td><td>ULID PK</td><td>Surrogate.</td></tr>
+      <tr><td><code>install_id</code></td><td>FK</td><td>Parent.</td></tr>
+      <tr><td><code>bundle_version</code></td><td>semver</td><td>Version applied.</td></tr>
+      <tr><td><code>signature_verified</code></td><td>bool</td><td>Validation outcome.</td></tr>
+      <tr><td><code>migrations_applied</code></td><td>jsonb</td><td>List of executed migrations.</td></tr>
+      <tr><td><code>started_at · completed_at</code></td><td>timestamptz</td><td>Lifecycle.</td></tr>
+      <tr><td><code>rollback_to_version</code></td><td>semver, null</td><td>If rollback needed.</td></tr>
+    </tbody></table>
+
+    <p><b>onprem.local_llm_model</b> — local model registry for AI Gateway.</p>
+    <table><thead><tr><th>Column</th><th>Type</th><th>Purpose</th></tr></thead><tbody>
+      <tr><td><code>model_id</code></td><td>text PK</td><td>e.g., <code>llama-3.1-70b-instruct</code>.</td></tr>
+      <tr><td><code>install_id</code></td><td>FK</td><td>Owning install.</td></tr>
+      <tr><td><code>backend</code></td><td>enum</td><td><code>ollama · vllm · text-generation-inference</code></td></tr>
+      <tr><td><code>endpoint_url</code></td><td>text</td><td>In-cluster URL.</td></tr>
+      <tr><td><code>quantization</code></td><td>enum</td><td><code>fp16 · int8 · int4 · awq</code></td></tr>
+      <tr><td><code>status</code></td><td>enum</td><td><code>ready · loading · disabled</code></td></tr>
+    </tbody></table>
+
+    <p><b>onprem.billing_report</b> — internal-only billing reports (no external invoicing).</p>
+    <table><thead><tr><th>Column</th><th>Type</th><th>Purpose</th></tr></thead><tbody>
+      <tr><td><code>report_id</code></td><td>ULID PK</td><td>Surrogate.</td></tr>
+      <tr><td><code>install_id</code></td><td>FK</td><td>Parent.</td></tr>
+      <tr><td><code>period_start · period_end</code></td><td>date</td><td>Coverage.</td></tr>
+      <tr><td><code>usage_summary</code></td><td>jsonb</td><td>Per-SKU rollups.</td></tr>
+      <tr><td><code>artifact_local_path</code></td><td>text</td><td>On-cluster PDF/CSV.</td></tr>
+    </tbody></table>
+
+    <h4>5.2 · Modifications to existing schemas</h4>
+    <table><thead><tr><th>Schema</th><th>Change</th></tr></thead><tbody>
+      <tr><td><code>ai_gateway.provider</code></td><td>Add <code>local_install_id FK</code> (null in cloud; set in on-prem rows).</td></tr>
+      <tr><td><code>webhook.endpoint</code></td><td>Add <code>in_cluster_only bool</code> (validation blocks external URLs in strict mode).</td></tr>
+      <tr><td><code>routing.pool_federation_manifest</code></td><td>Honored as terminal in on-prem (federation disabled).</td></tr>
+      <tr><td><code>billing.invoice</code></td><td>Skipped entirely; <code>onprem.billing_report</code> replaces it.</td></tr>
+    </tbody></table>
+
+    <p><b>Events:</b> <code>onprem.bundle.applied.v1 · onprem.bundle.rolled-back.v1 · onprem.local-llm.loaded.v1</code>.</p>
+  </div>
+</section>
+
+<!-- Active-Active -->
+<section id="active-active">
+  <h2>6 · Variant D · Active-Active Tier-G+</h2>
+  <div class="sdk-block">
+    <div class="sdk-header"><h3>Active-Active extension to <code>sdk-pool-router</code></h3><span class="pill purple">Variant D</span></div>
+    <div class="purpose">Synchronous replication for audit / payment; async for everything else. Per-tenant home-region pin with low-latency read replicas in paired regions. RPO ≤ 5s · RTO ≤ 60s.</div>
+    <div class="meta-strip"><span><b>PRD §:</b> 5.D</span><span><b>FRs:</b> FR-AA-1 … FR-AA-7</span><span><b>Extends:</b> <code>routing</code> + new <code>active_active</code> schema</span></div>
+
+    <h4>6.1 · New schema — <code>active_active</code></h4>
+
+    <p><b>active_active.profile</b> — per-tenant Active-Active configuration.</p>
+    <table><thead><tr><th>Column</th><th>Type</th><th>Purpose</th></tr></thead><tbody>
+      <tr><td><code>profile_id</code></td><td>ULID PK</td><td>Surrogate.</td></tr>
+      <tr><td><code>tenant_id</code></td><td>FK PK</td><td>Subject (one-to-one).</td></tr>
+      <tr><td><code>tier</code></td><td>enum</td><td><code>tier-g+</code> required.</td></tr>
+      <tr><td><code>home_region</code></td><td>text</td><td>OLTP write region.</td></tr>
+      <tr><td><code>paired_regions</code></td><td>text[]</td><td>Replicas + failover targets.</td></tr>
+      <tr><td><code>rpo_target_seconds · rto_target_seconds</code></td><td>int · int</td><td>Defaults 5 / 60.</td></tr>
+      <tr><td><code>contract_addendum_ref</code></td><td>text</td><td>Sales contract reference.</td></tr>
+      <tr><td><code>activated_at</code></td><td>timestamptz</td><td>Lifecycle.</td></tr>
+    </tbody></table>
+
+    <p><b>active_active.replication_stream</b> — per-SDK replication mode mapping.</p>
+    <table><thead><tr><th>Column</th><th>Type</th><th>Purpose</th></tr></thead><tbody>
+      <tr><td><code>stream_id</code></td><td>ULID PK</td><td>Surrogate.</td></tr>
+      <tr><td><code>profile_id</code></td><td>FK</td><td>Parent.</td></tr>
+      <tr><td><code>sdk_kind</code></td><td>text</td><td><code>sdk-audit · sdk-payment · sdk-search · sdk-telemetry · …</code></td></tr>
+      <tr><td><code>mode</code></td><td>enum</td><td><code>sync · async · single-region</code></td></tr>
+      <tr><td><code>lag_seconds_p99</code></td><td>numeric</td><td>Measured replication lag.</td></tr>
+      <tr><td><code>updated_at</code></td><td>timestamptz</td><td>Telemetry.</td></tr>
+    </tbody></table>
+
+    <p><b>active_active.failover_drill</b> — monthly chaos drills.</p>
+    <table><thead><tr><th>Column</th><th>Type</th><th>Purpose</th></tr></thead><tbody>
+      <tr><td><code>drill_id</code></td><td>ULID PK</td><td>Surrogate.</td></tr>
+      <tr><td><code>profile_id</code></td><td>FK</td><td>Subject.</td></tr>
+      <tr><td><code>from_region · to_region</code></td><td>text · text</td><td>Failover path.</td></tr>
+      <tr><td><code>started_at · resumed_at</code></td><td>timestamptz</td><td>Lifecycle.</td></tr>
+      <tr><td><code>rpo_observed_seconds · rto_observed_seconds</code></td><td>numeric</td><td>Measured.</td></tr>
+      <tr><td><code>passed</code></td><td>bool</td><td>Targets met.</td></tr>
+      <tr><td><code>audit_entry_id</code></td><td>FK → audit.entry</td><td>Chain anchor.</td></tr>
+      <tr><td><code>tier_downgrade_triggered</code></td><td>bool</td><td>If a fail caused a tier downgrade.</td></tr>
+    </tbody></table>
+
+    <h4>6.2 · Modifications to existing schemas</h4>
+    <table><thead><tr><th>Schema</th><th>Change</th></tr></thead><tbody>
+      <tr><td><code>routing.tenant_pool_map</code></td><td>Add <code>replica_pool_indexes jsonb</code> (per-region read replicas) and <code>active_active_profile_id FK</code>.</td></tr>
+      <tr><td><code>routing.pool</code></td><td>Add <code>replication_role enum (primary · replica · standby)</code> and <code>replicates_from_pool_index FK</code>.</td></tr>
+      <tr><td><code>federation.failover_event</code></td><td>Add <code>active_active_drill_id FK</code> linking drills into the federation event log.</td></tr>
+    </tbody></table>
+
+    <h4>6.3 · ERD</h4>
+    <div class="diagram-wrap"><pre class="mermaid">
+erDiagram
+  TENANT ||--o| AA_PROFILE : ""
+  AA_PROFILE ||--o{ REPLICATION_STREAM : ""
+  AA_PROFILE ||--o{ FAILOVER_DRILL : ""
+  AA_PROFILE }o--|| POOL : "home_region"
+  AA_PROFILE {
+    string profile_id PK
+    string tenant_id
+    string home_region
+    text[] paired_regions
+    int    rpo_target_seconds
+    int    rto_target_seconds
+  }
+  REPLICATION_STREAM {
+    string stream_id PK
+    string profile_id FK
+    string sdk_kind
+    string mode
+    numeric lag_seconds_p99
+  }
+  FAILOVER_DRILL {
+    string drill_id PK
+    string profile_id FK
+    string from_region
+    string to_region
+    numeric rpo_observed_seconds
+    numeric rto_observed_seconds
+    bool   passed
+  }
+    </pre></div>
+
+    <p><b>Events:</b> <code>active-active.profile.activated.v1 · active-active.failover.drill.v1 · active-active.tier.downgraded.v1</code>.</p>
+  </div>
+</section>
+
+<div class="callout green">
+  <b>End of v3.1 data model series.</b> Eight HTML data-model files now cover P1–P8 — each carrying per-SDK tables, ERDs, events with retention + conflict policies, SKUs, and cross-references back to the source PRD and Architecture sections.
+</div>
+
+</div>
+
+<script>
+  mermaid.initialize({ startOnLoad: true, theme: 'dark', themeVariables: { background: '#0b0f17', primaryColor: '#1a2234', primaryBorderColor: '#c9a86a', primaryTextColor: '#e6ecf5', lineColor: '#6aa9ff', secondaryColor: '#1d1830', tertiaryColor: '#16241c' } });
+</script>
+
+</body>
+</html>

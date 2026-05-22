@@ -1,0 +1,13 @@
+export * as client from './client';
+export * as server from './server';
+export * as types from './services/poolRegistry';
+export * as events from './events';
+export { migrationsDir } from './db';
+export { resolveTenantPool, listActivePools } from './services/poolRegistry';
+export { withTenant, TenantNotFoundError } from './services/withTenant';
+export type { TenantContext, TenantBoundDb } from './services/withTenant';
+export { InMemoryRouteCache, setCache, getCache, getDefaultTtlMs } from './services/routeCache';
+export type { RouteCache } from './services/routeCache';
+export { RedisRouteCache, POOL_FLIP_CHANNEL, broadcastPoolFlip } from './services/redisRouteCache';
+export { recordPoolTransition } from './services/poolLifecycle';
+export type { LifecycleTransitionInput } from './services/poolLifecycle';

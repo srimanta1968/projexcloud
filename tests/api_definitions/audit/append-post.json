@@ -1,0 +1,41 @@
+{
+  "name": "POST /api/audit/append - Append entry to audit chain",
+  "endpoint": "/api/audit/append",
+  "method": "POST",
+  "requiresAuth": true,
+  "expectedStatus": 201,
+  "taskId": "17087035-d9ed-4636-b2ea-06ea5bdc884e",
+  "sprintId": "8ef1d09e-dd8e-4daf-8d03-54dcd9f812f8",
+  "featureId": "f7abad9d-e317-4d90-a5cb-b4a7d0a9b598",
+  "epicId": "249cbae0-e76c-42c0-8afd-9c825f5419c7",
+  "testCases": [
+    {
+      "name": "Append entry to canonical audit chain",
+      "payload": {
+        "pool_index": "app-healthcare-007",
+        "event_type": "test.event.v1",
+        "payload": {"action": "create", "resource": "{{dynamic:name}}"},
+        "actor_kind": "human",
+        "retention_class": "operational"
+      },
+      "expectedStatus": 201,
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.register.response.data.token}}"
+      }
+    }
+  ],
+  "dependsOn": ["POST /api/auth/register"],
+  "expectedResponse": {
+    "data": {
+      "entry_id": "string",
+      "pool_index": "string",
+      "seq": "number",
+      "entry_hash": "string",
+      "retention_class": "string"
+    }
+  },
+  "captureResponse": {
+    "audit.append.response.data.entry_id": "data.entry_id",
+    "audit.append.response.data.entry_hash": "data.entry_hash"
+  }
+}

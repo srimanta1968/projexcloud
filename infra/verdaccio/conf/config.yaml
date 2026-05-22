@@ -1,0 +1,52 @@
+storage: /verdaccio/storage
+plugins: /verdaccio/plugins
+
+web:
+  enable: true
+  title: ProjexCloud Private Registry
+  primary_color: "#c9a86a"
+
+auth:
+  htpasswd:
+    file: /verdaccio/storage/htpasswd
+    max_users: 100
+
+uplinks:
+  npmjs:
+    url: https://registry.npmjs.org/
+    cache: true
+    timeout: 30s
+
+packages:
+  '@projexlight/*':
+    access: $authenticated
+    publish: $authenticated
+    unpublish: $authenticated
+    # Do not proxy upstream for our own scope — these are private.
+
+  '@*/*':
+    access: $all
+    publish: $authenticated
+    unpublish: $authenticated
+    proxy: npmjs
+
+  '**':
+    access: $all
+    publish: $authenticated
+    unpublish: $authenticated
+    proxy: npmjs
+
+server:
+  keepAliveTimeout: 60
+
+middlewares:
+  audit:
+    enabled: true
+
+log:
+  type: stdout
+  format: pretty
+  level: http
+
+listen:
+  - 0.0.0.0:4873

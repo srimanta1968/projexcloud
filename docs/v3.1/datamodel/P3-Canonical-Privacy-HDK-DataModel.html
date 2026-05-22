@@ -1,0 +1,752 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>ProjexCloud v3.1 · P3 Data Model — Canonical Entities · Privacy · HDK Foundation</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<style>
+  :root { --bg:#0b0f17; --panel:#121826; --panel-2:#1a2234; --line:#243049; --text:#e6ecf5; --muted:#8a98b3; --accent:#c9a86a; --accent-2:#6aa9ff; --teal:#2dd4bf; --green:#5dd39e; --red:#ff6b6b; --yellow:#f5c451; --purple:#b88dff; --code-bg:#0f1422; }
+  *{box-sizing:border-box;} html,body{background:var(--bg);color:var(--text);font-family:ui-sans-serif,-apple-system,"Segoe UI",Roboto,sans-serif;margin:0;padding:0;line-height:1.55;}
+  .page{max-width:1260px;margin:0 auto;padding:56px 32px 96px;}
+  header.cover{border-bottom:1px solid var(--line);padding-bottom:36px;margin-bottom:48px;}
+  header.cover .eyebrow{color:var(--accent);letter-spacing:0.18em;text-transform:uppercase;font-size:12px;font-weight:700;}
+  header.cover h1{font-size:40px;line-height:1.15;margin:12px 0 8px;letter-spacing:-0.02em;}
+  header.cover .sub{color:var(--muted);font-size:16px;max-width:900px;}
+  header.cover .meta{display:flex;gap:24px;flex-wrap:wrap;margin-top:24px;color:var(--muted);font-size:13px;}
+  header.cover .meta b{color:var(--text);font-weight:600;}
+  h2{font-size:26px;margin:56px 0 18px;padding-bottom:8px;border-bottom:1px solid var(--line);}
+  h3{font-size:19px;margin:28px 0 10px;color:var(--text);}
+  h4{font-size:13px;margin:18px 0 8px;color:var(--accent);text-transform:uppercase;letter-spacing:0.12em;}
+  p{color:#c8d1e3;}
+  .grid{display:grid;gap:16px;} .grid.cols-2{grid-template-columns:repeat(2,minmax(0,1fr));} .grid.cols-3{grid-template-columns:repeat(3,minmax(0,1fr));}
+  @media(max-width:900px){.grid.cols-2,.grid.cols-3{grid-template-columns:1fr;} header.cover h1{font-size:30px;}}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px 18px;}
+  .card .label{color:var(--accent);font-size:11px;text-transform:uppercase;letter-spacing:0.14em;font-weight:700;}
+  .card .title{font-weight:600;margin:6px 0;} .card .body{color:var(--muted);font-size:13.5px;}
+  .pill{display:inline-block;padding:3px 10px;border-radius:999px;font-size:11px;border:1px solid var(--line);color:var(--muted);margin-right:6px;}
+  .pill.blue{color:var(--accent-2);border-color:rgba(106,169,255,0.4);} .pill.purple{color:var(--purple);border-color:rgba(184,141,255,0.4);}
+  .pill.green{color:var(--green);border-color:rgba(93,211,158,0.4);} .pill.yellow{color:var(--yellow);border-color:rgba(245,196,81,0.4);}
+  .pill.teal{color:var(--teal);border-color:rgba(45,212,191,0.4);} .pill.red{color:var(--red);border-color:rgba(255,107,107,0.4);}
+  table{width:100%;border-collapse:collapse;margin-top:12px;font-size:13.5px;} th,td{text-align:left;padding:9px 11px;border-bottom:1px solid var(--line);vertical-align:top;}
+  th{color:var(--muted);font-weight:600;font-size:11.5px;text-transform:uppercase;letter-spacing:0.08em;} td code{font-size:12px;}
+  pre,code{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;}
+  pre{background:var(--code-bg);border:1px solid var(--line);border-radius:10px;padding:14px 16px;overflow-x:auto;font-size:12.5px;}
+  code{background:var(--code-bg);padding:1px 6px;border-radius:4px;font-size:12px;}
+  .diagram-wrap{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:22px;overflow-x:auto;} .caption{color:var(--muted);font-size:12.5px;margin-top:10px;text-align:center;} .mermaid{background:transparent;}
+  nav.toc{position:sticky;top:0;background:rgba(11,15,23,0.92);backdrop-filter:blur(10px);border-bottom:1px solid var(--line);padding:10px 32px;z-index:10;}
+  nav.toc .row{max-width:1260px;margin:0 auto;display:flex;flex-wrap:wrap;gap:10px;font-size:12px;} nav.toc a{color:var(--muted);text-decoration:none;border-bottom:1px solid transparent;} nav.toc a:hover{color:var(--accent);border-color:var(--accent);}
+  .callout{border-left:3px solid var(--accent);background:var(--panel-2);padding:14px 18px;border-radius:0 10px 10px 0;margin:18px 0;color:#d6deef;font-size:14px;} .callout.blue{border-color:var(--accent-2);} .callout.green{border-color:var(--green);} .callout.purple{border-color:var(--purple);} .callout.red{border-color:var(--red);}
+  .sdk-block{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:22px 24px;margin:22px 0 28px;} .sdk-block .sdk-header{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;margin-bottom:6px;} .sdk-block .sdk-header h3{margin:0;font-size:22px;color:var(--accent);} .sdk-block .purpose{color:#c8d1e3;font-size:14.5px;margin:4px 0 14px;}
+  .meta-strip{display:flex;flex-wrap:wrap;gap:18px;font-size:12.5px;color:var(--muted);margin:6px 0 18px;padding:10px 14px;background:var(--panel-2);border-radius:8px;} .meta-strip b{color:var(--text);}
+</style>
+</head>
+<body>
+
+<nav class="toc">
+  <div class="row">
+    <a href="#overview">1 · Overview</a>
+    <a href="#phase-erd">2 · Phase ERD</a>
+    <a href="#pool-map">3 · Pool placement</a>
+    <a href="#sdk-profile">4 · sdk-profile</a>
+    <a href="#sdk-persona">5 · sdk-persona</a>
+    <a href="#sdk-resolver">6 · sdk-identity-resolver</a>
+    <a href="#sdk-data-rights">7 · sdk-data-rights (G5)</a>
+    <a href="#sdk-geo">8 · sdk-geo</a>
+    <a href="#sdk-device">9 · sdk-device</a>
+    <a href="#sdk-ff">10 · sdk-feature-flags</a>
+    <a href="#hdk-sync">11 · hdk-sync (G6)</a>
+    <a href="#hdk-foundation">12 · hdk-idp/permissions/diagnostic</a>
+  </div>
+</nav>
+
+<div class="page">
+
+<header class="cover">
+  <div class="eyebrow">Data Model · Phase 3 · Wave W3 + HDK Track</div>
+  <h1>P3 — Canonical Entities · Privacy Ops · HDK Foundation</h1>
+  <div class="sub">Profile bands re-homed to App Identity; Persona CRUD (L2/L3/L4); the canonical resolver; DSAR + <code>person_pool_residency</code> (G5); Geo · Device · Feature Flags; and the load-bearing <b>hdk-sync</b> module that owns the Conflict Resolution Model (G6).</div>
+  <div class="meta">
+    <div><b>Phase:</b> P3 (Weeks 15–22)</div>
+    <div><b>Maps to wave:</b> W3 + HDK foundations</div>
+    <div><b>Gates closed:</b> G5 · G6</div>
+    <div><b>PRD:</b> <code>prd/P3-Canonical-Privacy-HDK.md</code></div>
+    <div><b>Anchor docs:</b> Architecture §6A · §7.5 · §8A · AIM-Identity-Model-v3.1</div>
+  </div>
+</header>
+
+<section id="overview">
+  <h2>1 · Overview</h2>
+  <div class="grid cols-3">
+    <div class="card"><div class="label">Identity layers L2–L4</div><div class="title">App Identity · Membership · Persona</div><div class="body">App Identity (L2) per <code>(person, app)</code>; Tenant Membership (L3) per <code>(app_identity, tenant)</code>; Persona (L4) per typed kind. Extensions live in app pools.</div></div>
+    <div class="card"><div class="label">G5 closer</div><div class="title">person_pool_residency</div><div class="body">First-touch registry pinpointing every pool a person's data lives in. DSAR fan-out across 200+ pools becomes verifiable.</div></div>
+    <div class="card"><div class="label">G6 closer</div><div class="title">hdk-sync + Conflict Resolution Model</div><div class="body">Offline write queue + replay engine; five strategies (CRDT · LWW · merge · event-sourcing · human-review) declared per event type.</div></div>
+  </div>
+</section>
+
+<section id="phase-erd">
+  <h2>2 · Phase ERD</h2>
+  <div class="diagram-wrap">
+    <pre class="mermaid">
+erDiagram
+  PERSON ||--o{ APP_IDENTITY : "L2"
+  APP_IDENTITY ||--o{ TENANT_MEMBERSHIP : "L3"
+  TENANT_MEMBERSHIP ||--o{ PERSONA : "L4"
+  PERSONA ||--o{ PERSONA_EXTENSION : "app-pool data"
+  APP_IDENTITY ||--|| PROFILE_BAND : "Profile/Pref/Notif (L2)"
+  PERSON ||--|| SECURE_DATA_BAND : "DL · PAN · SSN · PCI (L1)"
+
+  PERSON ||--o{ POOL_RESIDENCY : "tracked across pools"
+  POOL_RESIDENCY }o--|| POOL : "in"
+
+  PERSON ||--o{ DSAR_REQUEST : "submits"
+  DSAR_REQUEST ||--o{ DSAR_EXECUTION : "fans out per pool"
+  DSAR_REQUEST ||--o| DSAR_CERTIFICATE : "concludes"
+
+  ADDRESS ||--o{ ADDRESS_ALIAS : "consolidates"
+  ADDRESS }o--|| GEO_NODE : "located"
+  PERSON ||--o{ DEVICE_LINK : "uses"
+  DEVICE ||--o{ DEVICE_LINK : ""
+  DEVICE ||--o{ DEVICE_ATTESTATION : ""
+
+  FLAG ||--o{ FLAG_ROLLOUT : ""
+  FLAG ||--o{ FLAG_EVALUATION : "sampled"
+
+  EVENT_TYPE ||--o{ CONFLICT_POLICY : "declared"
+  HDK_SYNC_QUEUE_ITEM }o--|| EVENT_TYPE : ""
+  HDK_SYNC_QUEUE_ITEM ||--o{ CONFLICT_RESOLUTION : ""
+  CONFLICT_RESOLUTION ||--o| HUMAN_REVIEW_TASK : "escalates"
+    </pre>
+  </div>
+  <div class="caption">Figure 2.1 — Canonical entities, privacy machinery, and the HDK sync envelope.</div>
+</section>
+
+<section id="pool-map">
+  <h2>3 · Pool placement matrix</h2>
+  <table>
+    <thead><tr><th>SDK</th><th>Schema</th><th>Pool</th><th>Non-OLTP</th><th>Notes</th></tr></thead>
+    <tbody>
+      <tr><td><code>sdk-profile</code></td><td><code>profile</code></td><td>Admin (Secure Data + L2 bands)</td><td>Per-field envelope from Vault</td><td>Per-field shred independent of person shred.</td></tr>
+      <tr><td><code>sdk-persona</code></td><td><code>persona</code> + per-app <code>{persona_ext}</code></td><td>Admin (identity facet) + App Pool (extension)</td><td>—</td><td>Extension data follows the app pool.</td></tr>
+      <tr><td><code>sdk-identity-resolver</code></td><td>reads <code>projection</code></td><td>Stateless</td><td>Redis hot store (from P2)</td><td>Lint OC-4 enforces resolver-only reads.</td></tr>
+      <tr><td><code>sdk-data-rights</code></td><td><code>data_rights</code></td><td>Admin (workflow) + person-home Admin (residency)</td><td>S3 (export bundles)</td><td>Fans out to every pool listed in residency.</td></tr>
+      <tr><td><code>sdk-geo</code></td><td><code>geo</code></td><td>Admin (PostGIS) + Global Catalog (GeoNode)</td><td>—</td><td>Address consolidation.</td></tr>
+      <tr><td><code>sdk-device</code></td><td><code>device</code></td><td>Admin</td><td>—</td><td>Coexistence pattern with HDK.</td></tr>
+      <tr><td><code>sdk-feature-flags</code></td><td><code>feature_flags</code></td><td>Admin</td><td>Redis (evaluator cache)</td><td>Per-agent kill switches critical for P6A.</td></tr>
+      <tr><td><code>hdk-sync</code></td><td>—</td><td>On-device SQLite + server reconciler in App Pool</td><td>—</td><td>Mediates every later HDK module's offline writes.</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- sdk-profile -->
+<section id="sdk-profile">
+  <h2>4 · <code>sdk-profile</code> — Bands &amp; Per-Field Envelopes</h2>
+  <div class="sdk-block">
+    <div class="sdk-header"><h3>sdk-profile</h3><span class="pill blue">SDK · MODIFIED v3</span></div>
+    <div class="purpose">Profile / Preference / Notification-routing bands live on L2 App Identity (per-app). Secure Data band (DL · PAN · Aadhaar · SSN · Passport · PCI tokens) stays on L1 Master Person with per-field envelope encryption.</div>
+    <div class="meta-strip"><span><b>PRD §:</b> 5.1</span><span><b>FRs:</b> FR-PRF-1 … FR-PRF-6</span><span><b>Pool:</b> Admin</span><span><b>Schema:</b> <code>profile</code></span></div>
+
+    <h4>4.1 · Tables</h4>
+
+    <p><b>profile.band_l2</b> — Profile / Preference / Notification-routing per App Identity.</p>
+    <table><thead><tr><th>Column</th><th>Type</th><th>Purpose</th></tr></thead><tbody>
+      <tr><td><code>band_id</code></td><td>ULID PK</td><td>Surrogate.</td></tr>
+      <tr><td><code>app_identity_id</code></td><td>FK</td><td>L2 anchor.</td></tr>
+      <tr><td><code>band_kind</code></td><td>enum</td><td><code>profile · preference · notification_routing</code></td></tr>
+      <tr><td><code>tenant_id</code></td><td>FK</td><td>RLS scope.</td></tr>
+      <tr><td><code>fields_envelope</code></td><td>jsonb</td><td>Each field value envelope-encrypted under the Person Key (per-app salt) — stored as base64 envelopes inside JSON.</td></tr>
+      <tr><td><code>updated_at</code></td><td>timestamptz</td><td>Last update.</td></tr>
+    </tbody></table>
+
+    <p><b>profile.secure_data</b> — Master Person regulated data (per-field envelopes under Person Key).</p>
+    <table><thead><tr><th>Column</th><th>Type</th><th>Purpose</th></tr></thead><tbody>
+      <tr><td><code>person_id</code></td><td>FK PK</td><td>Subject.</td></tr>
+      <tr><td><code>field_envelopes</code></td><td>jsonb</td><td>Map <code>field_name → envelope_bytea</code> (per-field; each field independently shreddable).</td></tr>
+      <tr><td><code>field_states</code></td><td>jsonb</td><td>Map <code>field_name → {state, shredded_at}</code>.</td></tr>
+    </tbody></table>
+
+    <p><b>profile.field_shred_log</b> — every per-field shred (regulated audit).</p>
+    <table><thead><tr><th>Column</th><th>Type</th><th>Purpose</th></tr></thead><tbody>
+      <tr><td><code>shred_id</code></td><td>ULID PK</td><td>Surrogate.</td></tr>
+      <tr><td><code>person_id</code></td><td>FK</td><td>Subject.</td></tr>
+      <tr><td><code>field_name</code></td><td>text</td><td>e.g., <code>pan</code>, <code>passport</code>.</td></tr>
+      <tr><td><code>reason</code></td><td>enum</td><td><code>retention-expiry · dsar-erasure · operator-request</code></td></tr>
+      <tr><td><code>audit_entry_id</code></td><td>FK → audit.entry</td><td>Chain anchor.</td></tr>
+      <tr><td><code>occurred_at</code></td><td>timestamptz</td><td>Time.</td></tr>
+    </tbody></table>
+
+    <h4>4.2 · ERD</h4>
+    <div class="diagram-wrap"><pre class="mermaid">
+erDiagram
+  APP_IDENTITY ||--o{ BAND_L2 : ""
+  PERSON ||--|| SECURE_DATA : ""
+  PERSON ||--o{ FIELD_SHRED_LOG : ""
+  BAND_L2 {
+    string band_id PK
+    string app_identity_id FK
+    string band_kind
+    jsonb fields_envelope
+  }
+  SECURE_DATA {
+    string person_id PK
+    jsonb field_envelopes
+    jsonb field_states
+  }
+  FIELD_SHRED_LOG {
+    string shred_id PK
+    string person_id FK
+    string field_name
+    timestamp occurred_at
+  }
+    </pre></div>
+
+    <h4>4.3 · Events &amp; SKUs</h4>
+    <p><b>Events:</b> <code>profile.band.updated.v1</code> (operational) · <code>profile.field.shredded.v1</code> (regulated).</p>
+    <p><b>SKUs:</b> <code>profile.read · profile.update · profile.field.shred</code> — <code>flat_per_call</code>.</p>
+  </div>
+</section>
+
+<!-- sdk-persona -->
+<section id="sdk-persona">
+  <h2>5 · <code>sdk-persona</code> — App Identity · Membership · Persona</h2>
+  <div class="sdk-block">
+    <div class="sdk-header"><h3>sdk-persona</h3><span class="pill blue">SDK · NEW v3</span></div>
+    <div class="purpose">The L2/L3/L4 identity layer. Domain SDKs always navigate through Persona.</div>
+    <div class="meta-strip"><span><b>PRD §:</b> 5.2</span><span><b>FRs:</b> FR-PSN-1 … FR-PSN-9</span><span><b>Pool:</b> Admin (identity facet) + App Pool (extension)</span><span><b>Schema:</b> <code>persona</code></span></div>
+
+    <h4>5.1 · Tables</h4>
+
+    <p><b>persona.app_identity</b> (L2) — one row per <code>(person_id, app_id)</code>.</p>
+    <table><thead><tr><th>Column</th><th>Type</th><th>Purpose</th></tr></thead><tbody>
+      <tr><td><code>app_identity_id</code></td><td>ULID PK</td><td>Surrogate.</td></tr>
+      <tr><td><code>person_id</code></td><td>FK</td><td>L1 anchor.</td></tr>
+      <tr><td><code>app_id</code></td><td>text</td><td>App.</td></tr>
+      <tr><td><code>status</code></td><td>enum</td><td><code>active · suspended · merged_into · erased</code></td></tr>
+      <tr><td><code>created_at</code></td><td>timestamptz</td><td>Lifecycle.</td></tr>
+    </tbody></table>
+
+    <p><b>persona.membership</b> (L3) — one row per <code>(app_identity_id, tenant_id)</code>.</p>
+    <table><thead><tr><th>Column</th><th>Type</th><th>Purpose</th></tr></thead><tbody>
+      <tr><td><code>membership_id</code></td><td>ULID PK</td><td>Surrogate.</td></tr>
+      <tr><td><code>app_identity_id</code></td><td>FK</td><td>L2 anchor.</td></tr>
+      <tr><td><code>tenant_id</code></td><td>FK</td><td>Tenant.</td></tr>
+      <tr><td><code>status</code></td><td>enum</td><td><code>active · suspended · terminated</code></td></tr>
+      <tr><td><code>joined_at · terminated_at</code></td><td>timestamptz</td><td>Lifecycle.</td></tr>
+    </tbody></table>
+
+    <p><b>persona.persona</b> (L4) — typed by kind. Multiple personas allowed per membership.</p>
+    <table><thead><tr><th>Column</th><th>Type</th><th>Purpose</th></tr></thead><tbody>
+      <tr><td><code>persona_id</code></td><td>ULID PK</td><td>Surrogate.</td></tr>
+      <tr><td><code>membership_id</code></td><td>FK</td><td>L3 anchor.</td></tr>
+      <tr><td><code>kind</code></td><td>text</td><td>Patient · Doctor · Buyer · Donor · Investor · Customer · …</td></tr>
+      <tr><td><code>primary_role_template_id</code></td><td>FK → tenant.role_template</td><td>Default role.</td></tr>
+      <tr><td><code>bu_id</code></td><td>FK, null</td><td>BU placement.</td></tr>
+      <tr><td><code>persona_key_ref</code></td><td>FK → vault.key, null</td><td>Optional per-persona envelope key.</td></tr>
+      <tr><td><code>status</code></td><td>enum</td><td><code>active · suspended · shredded</code></td></tr>
+      <tr><td><code>created_at · shredded_at</code></td><td>timestamptz</td><td>Lifecycle (shred independent of person).</td></tr>
+    </tbody></table>
+
+    <p><b>persona.role_assignment</b> — many-to-many between persona and role_template.</p>
+    <table><thead><tr><th>Column</th><th>Type</th><th>Purpose</th></tr></thead><tbody>
+      <tr><td><code>assignment_id</code></td><td>ULID PK</td><td>Surrogate.</td></tr>
+      <tr><td><code>persona_id</code></td><td>FK</td><td>Subject.</td></tr>
+      <tr><td><code>role_template_id</code></td><td>FK</td><td>Role.</td></tr>
+      <tr><td><code>assigned_at · revoked_at</code></td><td>timestamptz</td><td>Lifecycle.</td></tr>
+      <tr><td><code>assigned_by</code></td><td>text</td><td>Actor.</td></tr>
+    </tbody></table>
+
+    <p><b>{persona_ext_kind}</b> in App Pool — per-kind extension table (donor history, patient chart root, investor stake, …). Schema defined by the vertical; one table per kind.</p>
+    <table><thead><tr><th>Column</th><th>Type</th><th>Purpose</th></tr></thead><tbody>
+      <tr><td><code>persona_id</code></td><td>FK PK</td><td>L4 anchor (cross-pool FK; logical).</td></tr>
+      <tr><td><code>tenant_id</code></td><td>text</td><td>RLS scope.</td></tr>
+      <tr><td><code>extension_payload</code></td><td>jsonb</td><td>Per-kind shape; envelope-encrypted as needed.</td></tr>
+      <tr><td><code>updated_at</code></td><td>timestamptz</td><td>Last update.</td></tr>
+    </tbody></table>
+
+    <h4>5.2 · ERD</h4>
+    <div class="diagram-wrap"><pre class="mermaid">
+erDiagram
+  PERSON ||--o{ APP_IDENTITY : ""
+  APP_IDENTITY ||--o{ MEMBERSHIP : ""
+  MEMBERSHIP ||--o{ PERSONA : ""
+  PERSONA ||--o{ ROLE_ASSIGNMENT : ""
+  PERSONA ||--o| PERSONA_EXT : "app pool"
+  PERSONA }o--o| VAULT_KEY : "persona_key"
+  PERSONA {
+    string persona_id PK
+    string membership_id FK
+    string kind
+    string primary_role_template_id FK
+    string status
+  }
+  PERSONA_EXT {
+    string persona_id PK
+    string tenant_id
+    jsonb  extension_payload
+  }
+    </pre></div>
+
+    <h4>5.3 · Events &amp; SKUs</h4>
+    <table><thead><tr><th>Event</th><th>Retention</th></tr></thead><tbody>
+      <tr><td><code>identity.persona.created.v1</code></td><td>regulated</td></tr>
+      <tr><td><code>identity.persona.shred.v1</code></td><td>regulated</td></tr>
+      <tr><td><code>identity.membership.created.v1 · identity.membership.suspended.v1 · identity.membership.reactivated.v1</code></td><td>regulated</td></tr>
+      <tr><td><code>identity.role.assigned.v1 · identity.role.revoked.v1</code></td><td>regulated</td></tr>
+    </tbody></table>
+    <p><b>SKUs:</b> <code>persona.create · persona.shred · persona.role.assign · persona.extension.read · persona.extension.write</code> — flat / tiered.</p>
+  </div>
+</section>
+
+<!-- sdk-identity-resolver -->
+<section id="sdk-resolver">
+  <h2>6 · <code>sdk-identity-resolver</code> — The Single Read Entry Point</h2>
+  <div class="sdk-block">
+    <div class="sdk-header"><h3>sdk-identity-resolver</h3><span class="pill blue">SDK · NEW v3.1</span><span class="pill teal">p99 ≤ 0.5 ms warm</span></div>
+    <div class="purpose">Public API for the Identity Projection store. Hot path = Redis (≤ 0.5ms); cold path = Postgres (≤ 5ms); fallback = live six-layer resolve (rare, alert-emitting).</div>
+    <div class="meta-strip"><span><b>PRD §:</b> 5.3</span><span><b>FRs:</b> FR-IDR-1 … FR-IDR-8</span><span><b>Pool:</b> Stateless reader</span><span><b>Schema:</b> reads <code>projection.subject_view</code></span></div>
+
+    <h4>6.1 · Logical entities</h4>
+    <p>Reads from the <code>subject_view</code> table defined in P2. Two new logical entities are introduced here:</p>
+
+    <p><b>IdentityContext</b> — the frozen object returned per request.</p>
+    <table><thead><tr><th>Field</th><th>Type</th><th>Notes</th></tr></thead><tbody>
+      <tr><td><code>person_id · app_id · tenant_id · bu_id</code></td><td>scope IDs</td><td>Required.</td></tr>
+      <tr><td><code>bu_ancestors · parent_tenant_id · root_tenant_id · reseller_id · geo_node_id</code></td><td>denormalized</td><td>For O(1) policy fetches.</td></tr>
+      <tr><td><code>primary_persona_id · all_persona_ids</code></td><td>FK · FK[]</td><td>L4 identifiers.</td></tr>
+      <tr><td><code>effective_role_closure</code></td><td>text[]</td><td>Inheritance-flattened roles.</td></tr>
+      <tr><td><code>abac_attributes · rebac_edges · active_consents · effective_scopes</code></td><td>jsonb</td><td>Pre-fetched.</td></tr>
+      <tr><td><code>admin_pool_index · app_pool_index</code></td><td>text</td><td>Routing hints.</td></tr>
+      <tr><td><code>projection_version</code></td><td>bigint</td><td>For caches downstream.</td></tr>
+    </tbody></table>
+
+    <p><b>AttributeProvenance</b> — debug-time, returned by <code>explain(ctx, attribute)</code>: <code>{attribute, source_sdk, source_event_id, computed_at, projection_version}</code>.</p>
+
+    <h4>6.2 · Events &amp; SKUs</h4>
+    <p><b>Events:</b> none emitted by reader (projector emits refresh events).</p>
+    <p><b>SKUs:</b> <code>resolver.resolve</code> — <code>flat_per_call</code> (cheap; bundled).</p>
+  </div>
+</section>
+
+<!-- sdk-data-rights -->
+<section id="sdk-data-rights">
+  <h2>7 · <code>sdk-data-rights</code> — DSAR + <code>person_pool_residency</code> (G5)</h2>
+  <div class="sdk-block">
+    <div class="sdk-header"><h3>sdk-data-rights</h3><span class="pill purple">G5 closer</span><span class="pill red">Right-to-erasure</span></div>
+    <div class="purpose">End-to-end DSAR workflow with cross-pool fan-out. The <code>person_pool_residency</code> registry is written on first-touch by every data-bearing SDK so DSAR knows where to fan out.</div>
+    <div class="meta-strip"><span><b>PRD §:</b> 5.4</span><span><b>FRs:</b> FR-DR-1 … FR-DR-9</span><span><b>Pool:</b> Admin (workflow) + person-home Admin (residency)</span><span><b>Schema:</b> <code>data_rights</code></span></div>
+
+    <h4>7.1 · Tables</h4>
+
+    <p><b>data_rights.person_pool_residency</b> — the G5 registry.</p>
+    <table><thead><tr><th>Column</th><th>Type</th><th>Purpose</th></tr></thead><tbody>
+      <tr><td><code>residency_id</code></td><td>ULID PK</td><td>Surrogate.</td></tr>
+      <tr><td><code>person_id</code></td><td>FK</td><td>Subject.</td></tr>
+      <tr><td><code>pool_index</code></td><td>FK → routing.pool</td><td>Pool with data.</td></tr>
+      <tr><td><code>tenant_id</code></td><td>text</td><td>Tenant in that pool.</td></tr>
+      <tr><td><code>data_classes</code></td><td>text[]</td><td><code>profile · persona · encounter · evidence · payment · consent · …</code></td></tr>
+      <tr><td><code>first_touched_at · last_touched_at</code></td><td>timestamptz</td><td>Lifecycle.</td></tr>
+      <tr><td><code>last_reconciled_at</code></td><td>timestamptz</td><td>Weekly reconciliation marker.</td></tr>
+    </tbody></table>
+
+    <p><b>data_rights.request</b> — DSAR request workflow.</p>
+    <table><thead><tr><th>Column</th><th>Type</th><th>Purpose</th></tr></thead><tbody>
+      <tr><td><code>request_id</code></td><td>ULID PK</td><td>Surrogate.</td></tr>
+      <tr><td><code>person_id</code></td><td>FK</td><td>Subject.</td></tr>
+      <tr><td><code>tenant_id</code></td><td>FK, null</td><td>If submitted via tenant portal.</td></tr>
+      <tr><td><code>kind</code></td><td>enum</td><td><code>access · erasure · rectification · restriction · objection · portability</code></td></tr>
+      <tr><td><code>jurisdiction</code></td><td>text</td><td>e.g., <code>GDPR · DPDP · CCPA · LGPD</code></td></tr>
+      <tr><td><code>sla_deadline</code></td><td>timestamptz</td><td>Regulator clock.</td></tr>
+      <tr><td><code>status</code></td><td>enum</td><td><code>submitted · identity-verified · approval-pending · grace-period · executing · certificate-issued · audited · rejected</code></td></tr>
+      <tr><td><code>submitted_at · verified_at · approved_at · grace_until · executed_at · certificate_at</code></td><td>timestamptz</td><td>Step timestamps.</td></tr>
+      <tr><td><code>approval_policy</code></td><td>enum</td><td><code>auto · manager-approval · cross-tenant-approval</code></td></tr>
+      <tr><td><code>approval_ref</code></td><td>FK → approval (P4), null</td><td>Approval anchor.</td></tr>
+    </tbody></table>
+
+    <p><b>data_rights.execution</b> — per-pool fan-out execution.</p>
+    <table><thead><tr><th>Column</th><th>Type</th><th>Purpose</th></tr></thead><tbody>
+      <tr><td><code>execution_id</code></td><td>ULID PK</td><td>Surrogate.</td></tr>
+      <tr><td><code>request_id</code></td><td>FK</td><td>Parent request.</td></tr>
+      <tr><td><code>pool_index</code></td><td>FK → routing.pool</td><td>Target pool.</td></tr>
+      <tr><td><code>action</code></td><td>enum</td><td><code>shred-person-key · shred-persona-key · shred-encounter-key · export · rectify</code></td></tr>
+      <tr><td><code>shred_target_key_id</code></td><td>FK → vault.key, null</td><td>Subject key.</td></tr>
+      <tr><td><code>status</code></td><td>enum</td><td><code>pending · running · succeeded · failed</code></td></tr>
+      <tr><td><code>started_at · completed_at</code></td><td>timestamptz</td><td>Lifecycle.</td></tr>
+      <tr><td><code>audit_entry_id</code></td><td>FK → audit.entry</td><td>Chain anchor.</td></tr>
+    </tbody></table>
+
+    <p><b>data_rights.certificate</b> — signed completion certificate.</p>
+    <table><thead><tr><th>Column</th><th>Type</th><th>Purpose</th></tr></thead><tbody>
+      <tr><td><code>certificate_id</code></td><td>ULID PK</td><td>Surrogate.</td></tr>
+      <tr><td><code>request_id</code></td><td>FK</td><td>Parent request.</td></tr>
+      <tr><td><code>format</code></td><td>enum</td><td><code>pdf · jsonl</code></td></tr>
+      <tr><td><code>artifact_s3_key</code></td><td>text</td><td>Signed bundle location.</td></tr>
+      <tr><td><code>shred_proofs</code></td><td>jsonb</td><td>Map <code>pool_index → audit_entry_hash</code> (cryptographic proof of shred).</td></tr>
+      <tr><td><code>signed_by_audit_entry_id</code></td><td>FK → audit.entry</td><td>Top-level seal.</td></tr>
+      <tr><td><code>issued_at</code></td><td>timestamptz</td><td>Time.</td></tr>
+    </tbody></table>
+
+    <p><b>data_rights.reconciliation_run</b> — weekly job comparing residency to actual data presence.</p>
+    <table><thead><tr><th>Column</th><th>Type</th><th>Purpose</th></tr></thead><tbody>
+      <tr><td><code>run_id</code></td><td>ULID PK</td><td>Surrogate.</td></tr>
+      <tr><td><code>started_at · completed_at</code></td><td>timestamptz</td><td>Lifecycle.</td></tr>
+      <tr><td><code>discrepancies</code></td><td>jsonb</td><td>List of <code>(person_id, pool_index, expected, actual)</code>.</td></tr>
+      <tr><td><code>state</code></td><td>enum</td><td><code>green · red</code> — red blocks subsequent DSAR completions.</td></tr>
+    </tbody></table>
+
+    <h4>7.2 · ERD</h4>
+    <div class="diagram-wrap"><pre class="mermaid">
+erDiagram
+  PERSON ||--o{ POOL_RESIDENCY : "tracked"
+  POOL_RESIDENCY }o--|| POOL : ""
+  PERSON ||--o{ DSAR_REQUEST : ""
+  DSAR_REQUEST ||--o{ DSAR_EXECUTION : ""
+  DSAR_REQUEST ||--o| DSAR_CERTIFICATE : ""
+  DSAR_EXECUTION }o--|| VAULT_KEY : "shreds"
+  RECONCILIATION_RUN ||--o{ POOL_RESIDENCY : "audits"
+  POOL_RESIDENCY {
+    string residency_id PK
+    string person_id FK
+    string pool_index FK
+    string tenant_id
+    text[] data_classes
+    timestamp first_touched_at
+  }
+  DSAR_REQUEST {
+    string request_id PK
+    string person_id FK
+    string kind
+    string jurisdiction
+    string status
+    timestamp sla_deadline
+  }
+  DSAR_EXECUTION {
+    string execution_id PK
+    string request_id FK
+    string pool_index FK
+    string action
+    string status
+  }
+  DSAR_CERTIFICATE {
+    string certificate_id PK
+    string request_id FK
+    string artifact_s3_key
+    jsonb  shred_proofs
+  }
+    </pre></div>
+
+    <h4>7.3 · Events &amp; SKUs</h4>
+    <table><thead><tr><th>Event</th><th>Retention</th></tr></thead><tbody>
+      <tr><td><code>data-rights.request.submitted.v1</code></td><td>regulated</td></tr>
+      <tr><td><code>data-rights.executed.v1</code></td><td>regulated</td></tr>
+      <tr><td><code>data-rights.certificate.issued.v1</code></td><td>regulated</td></tr>
+      <tr><td><code>pool-residency.touched.v1</code></td><td>operational</td></tr>
+    </tbody></table>
+    <p><b>SKUs:</b> <code>data-rights.request.submit · data-rights.execute · data-rights.export</code> — flat + per-unit (export per-MB).</p>
+  </div>
+</section>
+
+<!-- sdk-geo -->
+<section id="sdk-geo">
+  <h2>8 · <code>sdk-geo</code> — Canonical Addresses + PostGIS</h2>
+  <div class="sdk-block">
+    <div class="sdk-header"><h3>sdk-geo</h3><span class="pill blue">SDK</span></div>
+    <div class="purpose">Canonical <code>address_id</code> registry (Consolidation pattern), geocoding facade, bounding-box queries, GeographicNode tagging.</div>
+    <div class="meta-strip"><span><b>PRD §:</b> 5.5</span><span><b>FRs:</b> FR-GEO-1 … FR-GEO-5</span><span><b>Pool:</b> Admin + Global Catalog</span><span><b>Schema:</b> <code>geo</code></span></div>
+
+    <h4>8.1 · Tables</h4>
+
+    <p><b>geo.address</b> — canonical addresses.</p>
+    <table><thead><tr><th>Column</th><th>Type</th><th>Purpose</th></tr></thead><tbody>
+      <tr><td><code>address_id</code></td><td>ULID PK</td><td>Canonical ID.</td></tr>
+      <tr><td><code>street · city · region · postal_code · country</code></td><td>text</td><td>Components.</td></tr>
+      <tr><td><code>lat · lng</code></td><td>numeric(9,6)</td><td>Coordinates.</td></tr>
+      <tr><td><code>geom</code></td><td>geography(Point,4326)</td><td>PostGIS point.</td></tr>
+      <tr><td><code>geo_node_id</code></td><td>FK → tenant.geo_node</td><td>Geographic node tag.</td></tr>
+      <tr><td><code>provider_refs</code></td><td>jsonb</td><td><code>{mapbox, google, osm}</code> provider IDs.</td></tr>
+      <tr><td><code>created_at</code></td><td>timestamptz</td><td>Lifecycle.</td></tr>
+    </tbody></table>
+
+    <p><b>geo.address_alias</b> — input variants that resolve to the same canonical address.</p>
+    <table><thead><tr><th>Column</th><th>Type</th><th>Purpose</th></tr></thead><tbody>
+      <tr><td><code>alias_id</code></td><td>ULID PK</td><td>Surrogate.</td></tr>
+      <tr><td><code>address_id</code></td><td>FK</td><td>Canonical owner.</td></tr>
+      <tr><td><code>raw_input</code></td><td>text</td><td>The submitted string.</td></tr>
+      <tr><td><code>hash</code></td><td>bytea</td><td>Dedup key.</td></tr>
+    </tbody></table>
+
+    <p><b>geo.merge_event</b> — when duplicates collapse.</p>
+    <table><thead><tr><th>Column</th><th>Type</th><th>Purpose</th></tr></thead><tbody>
+      <tr><td><code>merge_id</code></td><td>ULID PK</td><td>Surrogate.</td></tr>
+      <tr><td><code>winner_address_id · loser_address_id</code></td><td>FK · FK</td><td>Outcome.</td></tr>
+      <tr><td><code>occurred_at</code></td><td>timestamptz</td><td>Time.</td></tr>
+      <tr><td><code>operator_id</code></td><td>text</td><td>Who.</td></tr>
+    </tbody></table>
+
+    <h4>8.2 · ERD</h4>
+    <div class="diagram-wrap"><pre class="mermaid">
+erDiagram
+  ADDRESS ||--o{ ADDRESS_ALIAS : ""
+  ADDRESS }o--|| GEO_NODE : ""
+  ADDRESS ||--o{ MERGE_EVENT : "winner"
+  ADDRESS ||--o{ MERGE_EVENT : "loser"
+  ADDRESS {
+    string address_id PK
+    string street
+    string city
+    string country
+    numeric lat
+    numeric lng
+    string geo_node_id FK
+  }
+  ADDRESS_ALIAS {
+    string alias_id PK
+    string address_id FK
+    text   raw_input
+    bytes  hash
+  }
+    </pre></div>
+
+    <p><b>Events:</b> <code>geo.address.canonicalized.v1 · geo.address.merged.v1</code>.</p>
+    <p><b>SKUs:</b> <code>geo.geocode · geo.reverse-geocode · geo.bbox-query</code> — <code>passthrough_plus_margin</code>.</p>
+  </div>
+</section>
+
+<!-- sdk-device -->
+<section id="sdk-device">
+  <h2>9 · <code>sdk-device</code> — Devices + Attestation</h2>
+  <div class="sdk-block">
+    <div class="sdk-header"><h3>sdk-device</h3><span class="pill blue">SDK</span></div>
+    <div class="purpose">Canonical <code>device_uuid</code> registry with attestation (Coexistence pattern with HDK).</div>
+    <div class="meta-strip"><span><b>PRD §:</b> 5.6</span><span><b>FRs:</b> FR-DEV-1 … FR-DEV-5</span><span><b>Pool:</b> Admin</span><span><b>Schema:</b> <code>device</code></span></div>
+
+    <h4>9.1 · Tables</h4>
+
+    <p><b>device.device</b></p>
+    <table><thead><tr><th>Column</th><th>Type</th><th>Purpose</th></tr></thead><tbody>
+      <tr><td><code>device_uuid</code></td><td>text PK</td><td>Canonical ID (issued by HDK-idp on first run).</td></tr>
+      <tr><td><code>device_key_ref</code></td><td>FK → vault.key</td><td>Device Key tier from Vault.</td></tr>
+      <tr><td><code>platform</code></td><td>enum</td><td><code>ios · android · web · desktop</code></td></tr>
+      <tr><td><code>os_version · app_version</code></td><td>text</td><td>Provenance.</td></tr>
+      <tr><td><code>status</code></td><td>enum</td><td><code>active · revoked · stolen</code></td></tr>
+      <tr><td><code>first_seen_at · last_seen_at</code></td><td>timestamptz</td><td>Telemetry.</td></tr>
+    </tbody></table>
+
+    <p><b>device.attestation</b> — signed device claim history.</p>
+    <table><thead><tr><th>Column</th><th>Type</th><th>Purpose</th></tr></thead><tbody>
+      <tr><td><code>attestation_id</code></td><td>ULID PK</td><td>Surrogate.</td></tr>
+      <tr><td><code>device_uuid</code></td><td>FK</td><td>Subject.</td></tr>
+      <tr><td><code>method</code></td><td>enum</td><td><code>secure-enclave · key-attestation · safetynet · play-integrity</code></td></tr>
+      <tr><td><code>signature_envelope</code></td><td>bytea</td><td>Signed claim payload.</td></tr>
+      <tr><td><code>occurred_at · expires_at</code></td><td>timestamptz</td><td>Lifecycle.</td></tr>
+      <tr><td><code>verified</code></td><td>bool</td><td>Verification outcome.</td></tr>
+    </tbody></table>
+
+    <p><b>device.person_link</b> — many-to-many person ↔ device.</p>
+    <table><thead><tr><th>Column</th><th>Type</th><th>Purpose</th></tr></thead><tbody>
+      <tr><td><code>link_id</code></td><td>ULID PK</td><td>Surrogate.</td></tr>
+      <tr><td><code>device_uuid</code></td><td>FK</td><td>Device.</td></tr>
+      <tr><td><code>person_id</code></td><td>FK</td><td>Person.</td></tr>
+      <tr><td><code>first_used_at · last_used_at</code></td><td>timestamptz</td><td>Lifecycle.</td></tr>
+      <tr><td><code>status</code></td><td>enum</td><td><code>active · suspended · revoked</code></td></tr>
+    </tbody></table>
+
+    <p><b>Events:</b> <code>device.registered.v1 · device.attested.v1 · device.revoked.v1</code> (regulated).</p>
+    <p><b>SKUs:</b> <code>device.register · device.attest · device.revoke</code> — <code>flat_per_call</code>.</p>
+  </div>
+</section>
+
+<!-- sdk-feature-flags -->
+<section id="sdk-ff">
+  <h2>10 · <code>sdk-feature-flags</code> — Flags &amp; Kill Switches</h2>
+  <div class="sdk-block">
+    <div class="sdk-header"><h3>sdk-feature-flags</h3><span class="pill blue">SDK</span><span class="pill red">Per-agent kill switches</span></div>
+    <div class="purpose">Per-tenant flag store with kill switches (especially per-agent), rollout cohorts, and client-side evaluator. Kill switches are load-bearing for P6A agent safety.</div>
+    <div class="meta-strip"><span><b>PRD §:</b> 5.7</span><span><b>FRs:</b> FR-FF-1 … FR-FF-5</span><span><b>Pool:</b> Admin</span><span><b>Schema:</b> <code>feature_flags</code></span></div>
+
+    <h4>10.1 · Tables</h4>
+
+    <p><b>feature_flags.flag</b></p>
+    <table><thead><tr><th>Column</th><th>Type</th><th>Purpose</th></tr></thead><tbody>
+      <tr><td><code>flag_id</code></td><td>text PK</td><td>e.g., <code>agent.cost-steward.enabled</code></td></tr>
+      <tr><td><code>description</code></td><td>text</td><td>UX.</td></tr>
+      <tr><td><code>kind</code></td><td>enum</td><td><code>boolean · variant · numeric · json</code></td></tr>
+      <tr><td><code>default_value</code></td><td>jsonb</td><td>When no rule matches.</td></tr>
+      <tr><td><code>kill_switch</code></td><td>bool</td><td>If true, flag participates in emergency-kill paths.</td></tr>
+      <tr><td><code>schema_ref</code></td><td>text</td><td>For json kind — schema reference.</td></tr>
+    </tbody></table>
+
+    <p><b>feature_flags.rollout</b></p>
+    <table><thead><tr><th>Column</th><th>Type</th><th>Purpose</th></tr></thead><tbody>
+      <tr><td><code>rollout_id</code></td><td>ULID PK</td><td>Surrogate.</td></tr>
+      <tr><td><code>flag_id</code></td><td>FK</td><td>Subject flag.</td></tr>
+      <tr><td><code>tenant_id</code></td><td>FK, null</td><td>Null = platform-wide.</td></tr>
+      <tr><td><code>predicate</code></td><td>jsonb</td><td>Cohort rules (% rollout, BU list, persona-kind filter).</td></tr>
+      <tr><td><code>value</code></td><td>jsonb</td><td>Result if predicate matches.</td></tr>
+      <tr><td><code>priority</code></td><td>int</td><td>Resolution order.</td></tr>
+      <tr><td><code>active</code></td><td>bool</td><td>Live or paused.</td></tr>
+    </tbody></table>
+
+    <p><b>feature_flags.evaluation_sample</b> — sampled telemetry.</p>
+    <table><thead><tr><th>Column</th><th>Type</th></tr></thead><tbody>
+      <tr><td><code>sample_id</code></td><td>ULID PK</td></tr><tr><td><code>flag_id</code></td><td>FK</td></tr>
+      <tr><td><code>tenant_id · persona_id</code></td><td>text</td></tr><tr><td><code>resolved_value</code></td><td>jsonb</td></tr>
+      <tr><td><code>matched_rollout_id</code></td><td>FK, null</td></tr><tr><td><code>occurred_at</code></td><td>timestamptz</td></tr>
+    </tbody></table>
+
+    <p><b>Events:</b> <code>feature-flag.updated.v1</code> (operational).</p>
+    <p><b>SKUs:</b> <code>feature-flag.evaluate · feature-flag.update</code> — flat (evaluate bundled).</p>
+  </div>
+</section>
+
+<!-- hdk-sync -->
+<section id="hdk-sync">
+  <h2>11 · <code>hdk-sync</code> — Offline Queue &amp; Conflict Resolution Model (G6)</h2>
+  <div class="sdk-block">
+    <div class="sdk-header"><h3>hdk-sync</h3><span class="pill purple">HDK · NEW v3.1 · G6 closer</span></div>
+    <div class="purpose">Owns the offline write queue + replay engine + per-event-type Conflict Resolution Model. Five strategies (CRDT · LWW · merge · event-sourcing · human-review) declared per <code>event_type</code> in the registry.</div>
+    <div class="meta-strip"><span><b>PRD §:</b> 5.8</span><span><b>FRs:</b> FR-HS-1 … FR-HS-7</span><span><b>Pool:</b> On-device SQLite + server reconciler in App Pool</span><span><b>Schema:</b> <code>hdk_sync</code> (server side)</span></div>
+
+    <h4>11.1 · On-device tables (SQLite)</h4>
+
+    <p><b>hdk_sync.outbox</b> (on-device)</p>
+    <table><thead><tr><th>Column</th><th>Type</th><th>Purpose</th></tr></thead><tbody>
+      <tr><td><code>item_id</code></td><td>ULID PK</td><td>Surrogate.</td></tr>
+      <tr><td><code>event_type</code></td><td>text</td><td>Must be in registry.</td></tr>
+      <tr><td><code>payload</code></td><td>blob</td><td>Local encrypted envelope.</td></tr>
+      <tr><td><code>device_uuid · persona_id · tenant_id · encounter_id</code></td><td>text</td><td>Envelope context.</td></tr>
+      <tr><td><code>queued_at</code></td><td>timestamptz</td><td>Local time of enqueue.</td></tr>
+      <tr><td><code>priority</code></td><td>int</td><td>Default 50; 0 = highest.</td></tr>
+      <tr><td><code>status</code></td><td>enum</td><td><code>pending · in-flight · acked · failed · dropped</code></td></tr>
+      <tr><td><code>retry_count</code></td><td>int</td><td>For backoff.</td></tr>
+      <tr><td><code>last_error</code></td><td>text</td><td>Diagnostic.</td></tr>
+    </tbody></table>
+
+    <h4>11.2 · Server-side tables (App Pool)</h4>
+
+    <p><b>hdk_sync.replay_log</b> — server records of replay batches.</p>
+    <table><thead><tr><th>Column</th><th>Type</th><th>Purpose</th></tr></thead><tbody>
+      <tr><td><code>batch_id</code></td><td>ULID PK</td><td>Surrogate.</td></tr>
+      <tr><td><code>device_uuid</code></td><td>text</td><td>Origin.</td></tr>
+      <tr><td><code>tenant_id</code></td><td>text</td><td>RLS scope.</td></tr>
+      <tr><td><code>event_count</code></td><td>int</td><td>Items processed.</td></tr>
+      <tr><td><code>conflict_count</code></td><td>int</td><td>Of which conflicted.</td></tr>
+      <tr><td><code>started_at · completed_at</code></td><td>timestamptz</td><td>Lifecycle.</td></tr>
+    </tbody></table>
+
+    <p><b>hdk_sync.conflict</b> — every conflict resolution record (audited).</p>
+    <table><thead><tr><th>Column</th><th>Type</th><th>Purpose</th></tr></thead><tbody>
+      <tr><td><code>conflict_id</code></td><td>ULID PK</td><td>Surrogate.</td></tr>
+      <tr><td><code>batch_id</code></td><td>FK</td><td>Replay anchor.</td></tr>
+      <tr><td><code>event_type</code></td><td>text</td><td>Subject type.</td></tr>
+      <tr><td><code>conflict_policy</code></td><td>enum</td><td><code>crdt · lww · merge · event-sourcing · human-review</code></td></tr>
+      <tr><td><code>strategy_detail</code></td><td>text</td><td>e.g., <code>crdt:rga-text</code>, <code>merge:additive</code></td></tr>
+      <tr><td><code>input_a · input_b</code></td><td>jsonb · jsonb</td><td>Conflicting payloads.</td></tr>
+      <tr><td><code>resolved</code></td><td>jsonb, null</td><td>Output (null if escalated).</td></tr>
+      <tr><td><code>escalated_to_human</code></td><td>bool</td><td>Routed to review queue.</td></tr>
+      <tr><td><code>audit_entry_id</code></td><td>FK → audit.entry</td><td>Chain anchor.</td></tr>
+      <tr><td><code>resolved_at</code></td><td>timestamptz, null</td><td>Time.</td></tr>
+    </tbody></table>
+
+    <p><b>hdk_sync.human_review_task</b> — items requiring human reconciliation.</p>
+    <table><thead><tr><th>Column</th><th>Type</th><th>Purpose</th></tr></thead><tbody>
+      <tr><td><code>task_id</code></td><td>ULID PK</td><td>Surrogate.</td></tr>
+      <tr><td><code>conflict_id</code></td><td>FK</td><td>Originating conflict.</td></tr>
+      <tr><td><code>assignee_persona_id</code></td><td>FK, null</td><td>Reviewer.</td></tr>
+      <tr><td><code>status</code></td><td>enum</td><td><code>open · in-review · resolved · rejected</code></td></tr>
+      <tr><td><code>resolved_value</code></td><td>jsonb, null</td><td>Final decision.</td></tr>
+      <tr><td><code>resolved_at</code></td><td>timestamptz, null</td><td>Time.</td></tr>
+    </tbody></table>
+
+    <h4>11.3 · Conflict Resolution Model — five strategies</h4>
+    <table><thead><tr><th>Strategy</th><th>Use case</th><th>Example event</th></tr></thead><tbody>
+      <tr><td><code>crdt</code> (G-counter · PN-counter · LWW-set · OR-set · RGA-text)</td><td>Collaborative data</td><td><code>clinical.note.edit.v1</code> (RGA-text)</td></tr>
+      <tr><td><code>lww</code></td><td>Ephemeral state</td><td><code>device.location.update.v1</code></td></tr>
+      <tr><td><code>merge</code> (per-field: additive / max / last-write / veto)</td><td>Structured docs</td><td><code>property.inspection.update.v1</code></td></tr>
+      <tr><td><code>event-sourcing</code></td><td>Ledger-style</td><td><code>payment.refund.v1</code></td></tr>
+      <tr><td><code>human-review</code></td><td>Sensitive</td><td><code>clinical.prescription.correct.v1</code></td></tr>
+    </tbody></table>
+
+    <h4>11.4 · ERD</h4>
+    <div class="diagram-wrap"><pre class="mermaid">
+erDiagram
+  OUTBOX_ITEM ||--|| EVENT_TYPE : ""
+  REPLAY_LOG ||--o{ CONFLICT : ""
+  CONFLICT ||--o| HUMAN_REVIEW_TASK : ""
+  CONFLICT }o--|| AUDIT_ENTRY : ""
+  OUTBOX_ITEM {
+    string item_id PK
+    string event_type
+    string device_uuid
+    string status
+    int    priority
+  }
+  REPLAY_LOG {
+    string batch_id PK
+    string device_uuid
+    string tenant_id
+    int    event_count
+    int    conflict_count
+  }
+  CONFLICT {
+    string conflict_id PK
+    string batch_id FK
+    string conflict_policy
+    string strategy_detail
+    bool   escalated_to_human
+  }
+  HUMAN_REVIEW_TASK {
+    string task_id PK
+    string conflict_id FK
+    string status
+    string assignee_persona_id
+  }
+    </pre></div>
+
+    <p><b>Events:</b> <code>hdk-sync.queue.replayed.v1 · hdk-sync.conflict.resolved.v1 · hdk-sync.conflict.escalated-to-human.v1</code>.</p>
+    <p><b>SKUs:</b> <code>hdk-sync.event.enqueue · hdk-sync.event.reconcile · hdk-sync.conflict.human-review</code> — flat per call (human-review at higher rate).</p>
+  </div>
+</section>
+
+<!-- hdk foundation -->
+<section id="hdk-foundation">
+  <h2>12 · <code>hdk-idp</code> · <code>hdk-permissions</code> · <code>hdk-diagnostic</code></h2>
+  <div class="sdk-block">
+    <div class="sdk-header"><h3>HDK foundation trio</h3><span class="pill purple">HDK · Cross-platform parity</span></div>
+    <div class="purpose">Three foundation HDK modules. Standard TS facade + iOS Swift + Android Kotlin natives; CI verifies parity. Storage is mostly on-device; server-side anchors below.</div>
+    <div class="meta-strip"><span><b>PRD §:</b> 5.9</span><span><b>Pool:</b> On-device + Admin (for server anchors)</span></div>
+
+    <h4>12.1 · hdk-idp (server anchor)</h4>
+    <table><thead><tr><th>Table</th><th>Columns (selected)</th></tr></thead><tbody>
+      <tr><td><code>hdk_idp.device_claim</code></td><td><code>claim_id PK · device_uuid FK · person_id FK · biometric_template_envelope · pin_envelope · last_used_at</code></td></tr>
+      <tr><td><code>hdk_idp.offline_auth_log</code></td><td><code>log_id PK · device_uuid · person_id · method · occurred_at · synced_at</code></td></tr>
+    </tbody></table>
+
+    <h4>12.2 · hdk-permissions (server anchor)</h4>
+    <table><thead><tr><th>Table</th><th>Columns (selected)</th></tr></thead><tbody>
+      <tr><td><code>hdk_permissions.surface_snapshot</code></td><td><code>snapshot_id PK · device_uuid · tenant_id · persona_id · permission_set jsonb · taken_at</code></td></tr>
+    </tbody></table>
+
+    <h4>12.3 · hdk-diagnostic (stubs for P7)</h4>
+    <p>Captures diagnostic events into <code>hdk_sync.outbox</code> for later upload. Server-side schema in P7 sdk-diagnostic-telemetry.</p>
+
+    <h4>12.4 · Events</h4>
+    <table><thead><tr><th>Event</th><th>Retention</th></tr></thead><tbody>
+      <tr><td><code>hdk-idp.device-claim.registered.v1</code></td><td>regulated</td></tr>
+      <tr><td><code>hdk-idp.offline-auth.synced.v1</code></td><td>operational</td></tr>
+      <tr><td><code>hdk-permissions.surface.snapshot.v1</code></td><td>operational</td></tr>
+    </tbody></table>
+  </div>
+</section>
+
+<div class="callout green">
+  <b>P3 reminders for downstream phases.</b> Every later data-bearing SDK MUST write into <code>person_pool_residency</code> on first touch (FR-DR-1). Every later event MUST declare a <code>conflict_policy</code> in the registry (G6 / Architecture §6A). Every later SDK MUST read identity via <code>resolveIdentityContext()</code> — direct sdk-identity / sdk-persona imports are blocked by lint OC-4.
+</div>
+
+</div>
+
+<script>
+  mermaid.initialize({ startOnLoad: true, theme: 'dark', themeVariables: { background: '#0b0f17', primaryColor: '#1a2234', primaryBorderColor: '#c9a86a', primaryTextColor: '#e6ecf5', lineColor: '#6aa9ff', secondaryColor: '#1d1830', tertiaryColor: '#16241c' } });
+</script>
+
+</body>
+</html>

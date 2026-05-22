@@ -1,0 +1,1516 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Projexlight SDK Build Plan v3.1 — Complete Edition</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<style>
+  :root {
+    --bg: #0b0f17;
+    --panel: #121826;
+    --panel-2: #1a2234;
+    --line: #243049;
+    --text: #e6ecf5;
+    --muted: #8a98b3;
+    --accent: #c9a86a;
+    --accent-2: #6aa9ff;
+    --teal: #2dd4bf;
+    --green: #5dd39e;
+    --red: #ff6b6b;
+    --yellow: #f5c451;
+    --purple: #b88dff;
+    --code-bg: #0f1422;
+  }
+  * { box-sizing: border-box; }
+  html, body { background: var(--bg); color: var(--text); font-family: ui-sans-serif, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", sans-serif; margin: 0; padding: 0; line-height: 1.55; }
+  .page { max-width: 1260px; margin: 0 auto; padding: 56px 32px 96px; }
+  header.cover { border-bottom: 1px solid var(--line); padding-bottom: 36px; margin-bottom: 48px; }
+  header.cover .eyebrow { color: var(--accent); letter-spacing: 0.18em; text-transform: uppercase; font-size: 12px; font-weight: 700; }
+  header.cover h1 { font-size: 42px; line-height: 1.15; margin: 12px 0 8px; letter-spacing: -0.02em; }
+  header.cover .sub { color: var(--muted); font-size: 17px; max-width: 900px; }
+  header.cover .meta { display: flex; gap: 24px; flex-wrap: wrap; margin-top: 24px; color: var(--muted); font-size: 13px; }
+  header.cover .meta b { color: var(--text); font-weight: 600; }
+  header.cover .preamble { margin-top: 22px; background: var(--panel-2); border-left: 3px solid var(--accent-2); border-radius: 0 10px 10px 0; padding: 14px 18px; font-size: 13.5px; color: #d6deef; }
+  header.cover .preamble b { color: var(--accent-2); }
+
+  h2 { font-size: 26px; letter-spacing: -0.01em; margin: 56px 0 18px; padding-bottom: 8px; border-bottom: 1px solid var(--line); }
+  h3 { font-size: 18px; margin: 28px 0 10px; color: var(--text); }
+  h4 { font-size: 13px; margin: 18px 0 8px; color: var(--accent); text-transform: uppercase; letter-spacing: 0.12em; }
+  p { color: #c8d1e3; }
+  small, .muted { color: var(--muted); }
+
+  .grid { display: grid; gap: 16px; }
+  .grid.cols-2 { grid-template-columns: repeat(2, minmax(0,1fr)); }
+  .grid.cols-3 { grid-template-columns: repeat(3, minmax(0,1fr)); }
+  @media (max-width: 900px) { .grid.cols-2, .grid.cols-3 { grid-template-columns: 1fr; } header.cover h1 { font-size: 30px; } }
+
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 18px 18px 16px; }
+  .card .label { color: var(--accent); font-size: 11px; text-transform: uppercase; letter-spacing: 0.14em; font-weight: 700; }
+  .card .title { font-weight: 600; margin: 6px 0 6px; font-size: 15px; }
+  .card .body { color: var(--muted); font-size: 13.5px; }
+
+  .pill { display: inline-block; padding: 3px 10px; border-radius: 999px; font-size: 11px; border: 1px solid var(--line); color: var(--muted); margin-right: 6px; }
+  .pill.gold { color: var(--accent); border-color: rgba(201,168,106,0.4); }
+  .pill.blue { color: var(--accent-2); border-color: rgba(106,169,255,0.4); }
+  .pill.teal { color: var(--teal); border-color: rgba(45,212,191,0.4); }
+  .pill.green { color: var(--green); border-color: rgba(93,211,158,0.4); }
+  .pill.red { color: var(--red); border-color: rgba(255,107,107,0.4); }
+  .pill.yellow { color: var(--yellow); border-color: rgba(245,196,81,0.4); }
+  .pill.purple { color: var(--purple); border-color: rgba(184,141,255,0.4); }
+
+  table { width: 100%; border-collapse: collapse; margin-top: 12px; font-size: 13.5px; }
+  th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { color: var(--muted); font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; }
+
+  pre, code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+  pre { background: var(--code-bg); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; overflow-x: auto; font-size: 13px; }
+  code { background: var(--code-bg); padding: 1px 6px; border-radius: 4px; font-size: 12.5px; }
+
+  .diagram-wrap { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 22px; overflow-x: auto; }
+  .caption { color: var(--muted); font-size: 12.5px; margin-top: 10px; text-align: center; }
+  .mermaid { background: transparent; }
+
+  nav.toc { position: sticky; top: 0; background: rgba(11,15,23,0.92); backdrop-filter: blur(10px); border-bottom: 1px solid var(--line); padding: 10px 32px; z-index: 10; }
+  nav.toc .row { max-width: 1260px; margin: 0 auto; display: flex; flex-wrap: wrap; gap: 10px; font-size: 12px; }
+  nav.toc a { color: var(--muted); text-decoration: none; border-bottom: 1px solid transparent; }
+  nav.toc a:hover { color: var(--accent); border-color: var(--accent); }
+
+  .callout { border-left: 3px solid var(--accent); background: var(--panel-2); padding: 14px 18px; border-radius: 0 10px 10px 0; margin: 18px 0; color: #d6deef; font-size: 14px; }
+  .callout.blue { border-color: var(--accent-2); }
+  .callout.green { border-color: var(--green); }
+  .callout.red { border-color: var(--red); }
+  .callout.purple { border-color: var(--purple); }
+  .callout.teal { border-color: var(--teal); }
+
+  ul.tight li { margin: 4px 0; color: #c8d1e3; font-size: 14px; }
+
+  .wave-header { display: flex; align-items: center; gap: 16px; padding: 18px 22px; background: linear-gradient(135deg, rgba(201,168,106,0.10), rgba(106,169,255,0.06)); border: 1px solid rgba(201,168,106,0.35); border-radius: 14px; margin: 40px 0 18px; }
+  .wave-header .badge { width: 64px; height: 64px; flex-shrink: 0; border-radius: 16px; display: grid; place-items: center; background: linear-gradient(135deg, var(--accent), #9c7d3b); color: #1a1208; font-weight: 800; font-size: 24px; }
+  .wave-header h2 { margin: 0; border: none; padding: 0; font-size: 22px; }
+  .wave-header .sub { color: var(--muted); font-size: 13px; margin-top: 4px; }
+  .wave-header .timing { color: var(--accent-2); font-size: 12px; font-weight: 600; margin-top: 6px; letter-spacing: 0.06em; text-transform: uppercase; }
+
+  .why { background: var(--panel-2); border: 1px solid rgba(255,107,107,0.30); border-left: 4px solid var(--red); border-radius: 0 10px 10px 0; padding: 16px 20px; margin: 14px 0 22px; font-size: 14px; color: #e6d4d4; }
+  .why .why-label { color: var(--red); font-size: 11px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; margin-bottom: 6px; display: block; }
+
+  .sdk { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 16px 18px 14px; margin-bottom: 12px; }
+  .sdk.new { border-color: rgba(184,141,255,0.45); box-shadow: 0 0 0 1px rgba(184,141,255,0.10); }
+  .sdk.modified { border-color: rgba(106,169,255,0.45); }
+  .sdk .top { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+  .sdk .top .name { font-weight: 700; font-size: 16px; color: var(--text); }
+  .sdk .top .pkg { font-family: ui-monospace, Consolas, monospace; color: var(--accent); font-size: 12.5px; }
+  .sdk .top .tag { font-size: 10px; padding: 2px 8px; border-radius: 4px; font-weight: 700; letter-spacing: 0.08em; }
+  .sdk .top .tag.new { background: rgba(184,141,255,0.18); color: var(--purple); }
+  .sdk .top .tag.mod { background: rgba(106,169,255,0.18); color: var(--accent-2); }
+  .sdk .meta-row { font-size: 12px; color: var(--muted); margin-top: 4px; }
+  .sdk .body { color: #c8d1e3; font-size: 13.5px; margin-top: 8px; }
+  .sdk .row { display: grid; grid-template-columns: 90px 1fr; gap: 10px; font-size: 13px; margin-top: 6px; }
+  .sdk .row .k { color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; font-size: 10.5px; padding-top: 2px; font-weight: 600; }
+  .sdk .row .v { color: #c8d1e3; }
+  .sdk .row .v code { font-size: 11.5px; }
+
+  .effort-S { color: var(--green); font-weight: 600; }
+  .effort-M { color: var(--accent-2); font-weight: 600; }
+  .effort-L { color: var(--yellow); font-weight: 600; }
+  .effort-XL { color: var(--red); font-weight: 600; }
+
+  .new-tag { display: inline-block; font-size: 10px; padding: 1px 6px; border-radius: 4px; background: rgba(184,141,255,0.18); color: var(--purple); margin-left: 8px; vertical-align: middle; letter-spacing: 0.08em; }
+</style>
+</head>
+<body>
+
+<nav class="toc">
+  <div class="row">
+    <a href="#phase-plan">0A · Phase Plan</a>
+    <a href="#overview">1 · Overview</a>
+    <a href="#rules">2 · Build Order Rules</a>
+    <a href="#dep-graph">3 · Dependency Graph</a>
+    <a href="#summary">4 · Wave Summary</a>
+    <a href="#wave-0">W0 · Foundations</a>
+    <a href="#wave-1">W1 · Compliance + Pool + Meter</a>
+    <a href="#wave-2">W2 · Identity Triad + ReBAC</a>
+    <a href="#wave-3">W3 · Persona + Extensions</a>
+    <a href="#wave-4">W4 · Operational + Billing</a>
+    <a href="#wave-5">W5 · Engagement</a>
+    <a href="#wave-6">W6 · AI &amp; Semantic</a>
+    <a href="#wave-7">W7 · Field</a>
+    <a href="#wave-hdk">HDK Track</a>
+    <a href="#timeline">5 · Timeline</a>
+    <a href="#parallel">6 · Parallelization</a>
+    <a href="#gates">7 · Wave Gates</a>
+    <a href="#risk">8 · Risks</a>
+  </div>
+</nav>
+
+<div class="page">
+
+<header class="cover">
+  <div class="eyebrow">Projexlight Platform · SDK Build Plan · v3.1 · Complete Edition</div>
+  <h1>SDK Build Sequence — Complete Wave-by-Wave Roadmap</h1>
+  <p class="sub">A wave-by-wave plan for building the <b>57 SDK packages + ~10 connector packages + 11 HDK modules + 6 foundation packages</b> (~84 total) that span <code>projex_common/packages/</code> and <code>projex_common/native/</code>, organized into <b>8 dependency-driven phases with hard exit gates</b> (see §0A). v3.1 integrates v2's full SDK estate with v3's four new SDKs (<code>sdk-pool-router</code> · <code>sdk-rebac</code> · <code>sdk-persona</code> · <code>sdk-engagement</code>), five modifications, and <span class="new-tag">v3.1</span> <b>ten new SDKs</b>: two for metering/billing (<code>sdk-meter</code> · <code>sdk-billing</code> — every call gated and priced per method per tenant per app); six for hierarchy + functional gaps (<code>sdk-api-keys</code> · <code>sdk-data-rights</code> · <code>sdk-webhook</code> · <code>sdk-approval</code> · <code>sdk-tenant-lifecycle</code> · <code>sdk-lineage</code>); two from Analyze.txt mandates (<code>sdk-identity-resolver</code> — centralized layer resolution; <code>sdk-semantic</code> — the Enterprise Semantic Model Layer, "the largest architectural gap"). Plus extensions to <code>sdk-tenant</code> (reseller + sub-tenant + recursive BU + geo + roles + fiscal), <code>sdk-identity</code> (SAML/SCIM federation + tenant impersonation), <code>sdk-audit</code> (customer-read API + event taxonomy + retention/compaction), <code>sdk-policy</code> (Identity Query Language), <code>sdk-rebac</code> (computational safeguards), <code>sdk-agent-runtime</code> (agent identity + memory isolation), and <code>sdk-pool-router</code> (federation hooks for the 1000+ pool world). Every wave names the SDKs, their dependencies, what they unlock, and <b>why this order and not another</b>.</p>
+  <div class="meta">
+    <div><b>Source analyses</b> · <code>../../Analyze.txt</code> · <code>./Architecture-v3.1.html</code></div>
+    <div><b>Companion identity model</b> · <code>./AIM-Identity-Model-v3.1.html</code></div>
+    <div><b>Total waves</b> · 8 sequential + 1 parallel (HDK)</div>
+    <div><b>Total packages</b> · ~84 (6 foundation + 57 SDKs + ~10 connector packages + 11 HDK)</div>
+    <div><b>Indicative duration</b> · 50 weeks serial · 28–32 weeks with parallel teams</div>
+  </div>
+  <div class="preamble">
+    <b>How to read this document.</b> Each wave is a hard sequence — earlier waves must complete (or at least stabilize public APIs in <code>@projexlight/contracts</code>) before later waves start coding against them. <i>Within</i> a wave, SDKs without inter-dependencies ship in parallel. The "Why this wave now" callout under every wave header is the load-bearing argument — skip it and you skip the whole point.
+  </div>
+</header>
+
+<!-- ============ PHASE PLAN ============ -->
+<section id="phase-plan">
+  <h2>0A · Phase Plan — Dependency-Driven Delivery <span class="new-tag">v3.1</span></h2>
+  <p>The wave-by-wave plan that follows (§1–§8) is the SDK-level schedule. <b>This section is the doctrinal layer above it</b> — the 8 phases that define what must be true before the next layer of code can start. The phases are not aspirational; they are dependency-derived. Every phase has a hard exit gate, and CI enforces that no PR in Phase N can import an unstable Phase N-1 SDK.</p>
+
+  <div class="callout">
+    <b>Why this section exists.</b> Two independent architectural reviews (<code>../../Analyze.txt</code> · <code>../../Analyze2.txt</code>) converged on the same critique: at hyperscale, the v3.1 estate's dependency cycles will collapse under their own weight unless the ordering is enforced at the planning layer, not discovered at integration time. The 8 phases below are the answer. The 12 numbered gaps (G1–G12) referenced throughout are the items that must be closed by specific phases to prevent later collapse.
+  </div>
+
+  <h3>0A.1 · The 8 phases at a glance</h3>
+  <table>
+    <thead><tr><th>Phase</th><th>Theme</th><th>Maps to waves</th><th>Window</th><th>Gates closed</th><th>Headline output</th></tr></thead>
+    <tbody>
+      <tr><td><b>P1</b></td><td>Foundation Spine + Doctrines</td><td>W0 + W1</td><td>Weeks 1–9</td><td>G1 · G2 · G3</td><td>Contracts · Vault · Audit · Pool Router · Meter (emit-only) · Opinionated Constraints + Polyglot Persistence doctrines published and CI-enforced</td></tr>
+      <tr><td><b>P2</b></td><td>Identity &amp; Access at scale</td><td>W2</td><td>Weeks 9–15</td><td>G4</td><td>Six-layer JWT · ABAC + ReBAC + safeguards · IQL · API Keys · <b>Identity Projection System</b></td></tr>
+      <tr><td><b>P3</b></td><td>Canonical Entities + Privacy Ops + HDK Foundation</td><td>W3 (+ HDK kickoff)</td><td>Weeks 15–22</td><td>G5 · G6</td><td>Profile · Persona · Geo · Device · Resolver · Data Rights with <b>person_pool_residency</b> · HDK idp/permissions/diagnostic · <b>hdk-sync with Conflict Resolution Model</b></td></tr>
+      <tr><td><b>P4</b></td><td>Operational Core + Pay-as-you-use + Integration framework</td><td>W4</td><td>Weeks 22–29</td><td>—</td><td>Media · Notification · Payment · Workflow · Search · Billing · Webhook · Approval · Tenant Lifecycle · HDK camera + map · meter soft caps on · <b>sdk-connectors framework + connector-slack</b></td></tr>
+      <tr><td><b>P5</b></td><td>Engagement (Domain Layer) + Enterprise Connectors</td><td>W5</td><td>Weeks 29–35</td><td>—</td><td>Encounter + Relationship lifecycles · CRM · Content · SR · Event · Campaign · Social · HDK scanner/image/video editors · <b>connector-salesforce · connector-microsoft365 · connector-gworkspace · connector-jira · connector-linear · connector-zendesk · connector-hubspot · connector-zoom</b></td></tr>
+      <tr><td><b>P6A</b></td><td>AI Infrastructure + Agent Isolation + MCP Bridge</td><td>W6 first half</td><td>Weeks 35–40</td><td>G7 · G12</td><td>AI Gateway · Taxonomy · Agent Runtime with <b>full isolation runtime</b> (capability tokens, execution TTL, deterministic replay, sandboxed memory) · <b>sdk-trace</b> cross-system trace viewer · <b>sdk-mcp-bridge</b> (Model Context Protocol — agents reach external systems via the open standard)</td></tr>
+      <tr><td><b>P6B</b></td><td>Knowledge · Semantic · Analytics · Snowflake bridge</td><td>W6 second half</td><td>Weeks 40–44</td><td>G8 · G9</td><td>Knowledge/RAG · Parsing · Conversation · Recommendation · Analytics · <b>Lineage with cross-pool projection</b> · <b>Semantic Object Layer (6 types)</b> · <b>connector-snowflake</b> (query federation + Iceberg bridge)</td></tr>
+      <tr><td><b>P7</b></td><td>Field · Evidence · Hyperscale</td><td>W7</td><td>Weeks 44–50</td><td>G10 · G11</td><td>Storm · Dispatch · Assignment · Lead Scoring · Evidence · Diagnostic-Telemetry · HDK measure/watermark · <b>Pool federation runtime</b> · <b>Iceberg lakehouse read federation</b> · meter hard caps on</td></tr>
+      <tr><td><b>P8</b></td><td>Deployment Variants (parallel from P3)</td><td>parallel</td><td>Weeks 22+</td><td>—</td><td>BYOK / CMEK · Sovereign Cloud · On-Prem Air-Gapped · Active-Active Tier-G+</td></tr>
+    </tbody>
+  </table>
+
+  <h3>0A.2 · The 12 gaps that must be closed (and where)</h3>
+  <p>Derived from the convergence of both architectural reviews. Each gap is assigned to the earliest phase where it must be done — assigning it later means retrofitting downstream SDKs.</p>
+
+  <table>
+    <thead><tr><th>#</th><th>Gap</th><th>If unfixed</th><th>Fixed in</th></tr></thead>
+    <tbody>
+      <tr><td><b>G1</b></td><td>Opinionated Constraints + "Localize Complexity" doctrines</td><td>Every SDK pulls things into common — common becomes a product, verticals hollow out</td><td>P1 (doctrines)</td></tr>
+      <tr><td><b>G2</b></td><td>Polyglot Persistence doctrine</td><td>Teams misplace telemetry / vectors / lineage into Postgres pools and hit ceilings</td><td>P1 (doctrine + Pool Placement Matrix §8A enforcement)</td></tr>
+      <tr><td><b>G3</b></td><td>Event Type Registry enforced from week 1</td><td>Kafka cardinality explodes; consumer schemas drift; observability dies</td><td>P1 (sdk-audit)</td></tr>
+      <tr><td><b>G4</b></td><td>Identity Projection System (precomputed flattened read models)</td><td>Six-layer + ReBAC + consent resolution becomes the platform's hot-path bottleneck at PB scale</td><td>P2 (sdk-identity-resolver extension)</td></tr>
+      <tr><td><b>G5</b></td><td>person_pool_residency registry</td><td>DSAR fan-out misses pools — erasure becomes unverifiable, regulator exposure</td><td>P3 (sdk-data-rights)</td></tr>
+      <tr><td><b>G6</b></td><td>Conflict Resolution Model + hdk-sync execution</td><td>Field-ops verticals hit unresolvable offline conflicts in week 1 of production</td><td>P3 (hdk-sync + per-event-type policy in contracts)</td></tr>
+      <tr><td><b>G7</b></td><td>Agent Isolation Runtime (capability tokens + TTL + deterministic replay + sandboxed memory)</td><td>Prompt leakage between tenants = catastrophic compliance failure; agent runaway irreversible</td><td>P6A (sdk-agent-runtime extension)</td></tr>
+      <tr><td><b>G8</b></td><td>Cross-pool lineage projection worker</td><td>Lineage queries break across pool boundaries; AI auditability claim fails</td><td>P6B (sdk-lineage extension)</td></tr>
+      <tr><td><b>G9</b></td><td>SemanticIntent + SemanticPolicy added to sdk-semantic</td><td>Agents can't reason about goals (Intent) or authz semantics (Policy) — semantic layer half-built</td><td>P6B (sdk-semantic extension)</td></tr>
+      <tr><td><b>G10</b></td><td>Pool federation runtime (real one, not just hooks)</td><td>At pool count &gt; 200, routing chokes; cross-region queries impossible</td><td>P7 (sdk-pool-router extension)</td></tr>
+      <tr><td><b>G11</b></td><td>Read federation lakehouse (Iceberg / S3-tables)</td><td>Warehouse alone can't hold PB-scale analytics; cross-pool reports impossible</td><td>P7 (sdk-analytics extension)</td></tr>
+      <tr><td><b>G12</b></td><td>Cross-system trace viewer (one trace_id across identity + consent + routing + pool + key + policy + meter + lineage)</td><td>Debugging a failed read at six-layer scale is impossible; ops drowns</td><td>P6A (new sdk-trace)</td></tr>
+    </tbody>
+  </table>
+
+  <h3>0A.3 · Phase dependency graph</h3>
+  <p>Arrows mean "Phase N cannot start coding against this SDK family until Phase M's exit gate is green." Inter-SDK edges within a phase are in the §3 dependency graph.</p>
+
+  <div class="diagram-wrap">
+    <pre class="mermaid">
+flowchart LR
+  classDef p1 fill:#241622,stroke:#ff6b6b,color:#e6ecf5;
+  classDef p2 fill:#1d1830,stroke:#b88dff,color:#e6ecf5;
+  classDef p3 fill:#16241c,stroke:#2dd4bf,color:#e6ecf5;
+  classDef p4 fill:#0f1422,stroke:#6aa9ff,color:#e6ecf5;
+  classDef p5 fill:#162420,stroke:#5dd39e,color:#e6ecf5;
+  classDef p6a fill:#241f10,stroke:#f5c451,color:#e6ecf5;
+  classDef p6b fill:#241f10,stroke:#f5c451,color:#e6ecf5;
+  classDef p7 fill:#2a1c14,stroke:#ff8b6b,color:#e6ecf5;
+  classDef p8 fill:#1a2234,stroke:#c9a86a,color:#e6ecf5;
+
+  P1["<b>P1 · Foundation</b><br/>Contracts · Vault · Audit ·<br/>Pool Router · Meter · DOCTRINES<br/><i>Gates: G1 G2 G3</i>"]:::p1
+  P2["<b>P2 · Identity &amp; Access</b><br/>Tenant · Identity · Consent ·<br/>Policy · ReBAC · API-Keys ·<br/><b>Identity Projection</b><br/><i>Gates: G4</i>"]:::p2
+  P3["<b>P3 · Canonical + Privacy + HDK</b><br/>Profile · Persona · Geo · Device ·<br/>Resolver · Data-Rights · <b>hdk-sync</b> ·<br/>HDK idp/permissions/diagnostic<br/><i>Gates: G5 G6</i>"]:::p3
+  P4["<b>P4 · Operational + Billing</b><br/>Media · Notification · Payment ·<br/>Workflow · Search · Billing ·<br/>Webhook · Approval · Lifecycle ·<br/>HDK camera + map"]:::p4
+  P5["<b>P5 · Engagement</b><br/>Engagement · CRM · Content ·<br/>SR · Event · Campaign · Social ·<br/>HDK scanner / image / video"]:::p5
+  P6A["<b>P6A · AI + Agent Isolation</b><br/>AI Gateway · Taxonomy ·<br/>Agent Runtime (FULL ISOLATION) ·<br/><b>sdk-trace</b><br/><i>Gates: G7 G12</i>"]:::p6a
+  P6B["<b>P6B · Knowledge + Semantic</b><br/>RAG · Parsing · Conversation ·<br/>Recommendation · Analytics ·<br/>Lineage · <b>Semantic (6 types)</b><br/><i>Gates: G8 G9</i>"]:::p6b
+  P7["<b>P7 · Field + Hyperscale</b><br/>Storm · Dispatch · Assignment ·<br/>Lead Scoring · Evidence ·<br/>Diag-Telemetry · HDK measure/watermark ·<br/><b>Pool Federation runtime</b> ·<br/><b>Iceberg lakehouse</b><br/><i>Gates: G10 G11</i>"]:::p7
+  P8["<b>P8 · Deployment Variants (parallel)</b><br/>BYOK · Sovereign · On-Prem ·<br/>Active-Active Tier-G+"]:::p8
+
+  P1 --> P2
+  P2 --> P3
+  P3 --> P4
+  P4 --> P5
+  P5 --> P6A
+  P6A --> P6B
+  P6B --> P7
+  P3 -.->|parallel ok| P8
+  P4 -.-> P8
+  P7 -.-> P8
+    </pre>
+    <div class="caption">Solid arrows = strict ordering (next phase blocked until exit gate green). Dotted = parallel-allowed once prerequisites exist.</div>
+  </div>
+
+  <h3>0A.4 · Phase exit gates (the no-leak rule)</h3>
+  <p>Each phase is "done" when ALL of its exit conditions hold. CI enforces this — PRs in Phase N+1 that import unstable Phase N SDKs fail the build.</p>
+
+  <table>
+    <thead><tr><th>Phase</th><th>Exit gate (all must be true)</th></tr></thead>
+    <tbody>
+      <tr><td><b>P1</b></td><td>Vault chaos test passes (Person Key shred · Encounter Key shred · Pool KEK shred each tested). Audit hash-chain verify nightly. Pool Router p99 ≤ 5ms; cross-pool lint blocks unsanctioned reads. Meter 10k synthetic events zero-loss. <b>Opinionated Constraints + Polyglot Persistence doctrines published</b>; CI rules block doctrine violations. Event Type Registry rejects unregistered events at producer.</td></tr>
+      <tr><td><b>P2</b></td><td>End-to-end JWT with full six-layer claims minted. ABAC + ReBAC deny/allow paths logged to Audit with reason. ReBAC 10M-edge load test p99 ≤ 5ms with safeguards active. <b>Identity Projection refreshed within 1s of relationship change</b>; resolver reads projection first, falls back on miss. IQL parses canonical examples. SAML+SCIM round-trips with Okta sandbox.</td></tr>
+      <tr><td><b>P3</b></td><td>One person → 5+ App Identities → 10+ Memberships → 12+ Personas with independent persona shred. Geo resolves duplicates to one address_id. <b>DSAR completes in 30d with person_pool_residency reconciliation green</b>. <b>HDK offline edits round-trip through hdk-sync with the documented conflict policy applied per event type (CRDT vs LWW vs human-review verified)</b>.</td></tr>
+      <tr><td><b>P4</b></td><td>All operational SDKs run only via Pool Router. First invoice generated against pricing.catalog.v1; reprice-dry-run under v2 produces consistent delta; showback splits sum to total. Webhook delivers HMAC-signed events with retry + DLQ. Approval routes synthetic refund &gt; $10k through chain with SLA escalation. Tenant Lifecycle provisions + offboards cleanly. Meter soft caps emit WARN headers.</td></tr>
+      <tr><td><b>P5</b></td><td>Encounter open → in-progress → closed → sealed lifecycle round-trips; encounter key shreds at seal. Healthcare visit, eCommerce order, real-estate visit all round-trip end-to-end. CRM activities reference encounter_id (no parallel work-unit primitive invented). Each engagement SDK has end-to-end integration test.</td></tr>
+      <tr><td><b>P6A</b></td><td>LLM call through Gateway records consent, budget, redaction, Langfuse trace. <b>Agent isolation: cross-tenant prompt-leakage CI test fails closed; capability token enforcement verified; agent execution TTL terminates a runaway agent; deterministic replay reproduces last week's decision identically</b>. <b>sdk-trace renders an end-to-end request crossing identity + consent + routing + pool + key + policy + meter</b>.</td></tr>
+      <tr><td><b>P6B</b></td><td>Parsing extracts a sample document. Knowledge/RAG retrieves with policy-filtered hits. Analytics aggregates cross-pool via warehouse only. <b>Lineage cross-pool projection populated within 5min of source change; "show derivation chain" surfaces each transformation</b>. <b>Semantic: Healthcare + Realty + Seva ontologies v1 loaded; agent given a goal walks Intent → CapabilityGraph → Action without prompt-engineered exemplars; SemanticPolicy enforces ontology-aware authz</b>.</td></tr>
+      <tr><td><b>P7</b></td><td>Field capture from HDK → Evidence → Vault → Audit chain-of-custody (with encounter_id) verified. Dispatch + Assignment route end-to-end. Lead Scoring scores a CRM lead. <b>Pool federation runtime routes a query across 3 simulated regional federations</b>. <b>Iceberg lakehouse extracts queryable by analytics tools</b>. Meter hard caps DENY synthetic over-quota tenants.</td></tr>
+      <tr><td><b>P8</b></td><td>Per-variant: BYOK — customer CMK revoke renders tenant data undecryptable end-to-end. Sovereign — region operates with no data/control-plane leak. On-Prem — air-gapped install + signed-bundle update verified. Active-Active — RPO ≤ 5s · RTO ≤ 60s under monthly chaos drill.</td></tr>
+    </tbody>
+  </table>
+
+  <h3>0A.5 · The five no-leak rules</h3>
+  <div class="grid cols-2" style="margin-top:14px">
+    <div class="card"><div class="label">Rule 1</div><div class="title">Phase exit gate is binary</div><div class="body">A phase is either fully exited (all gate items true) or not. There's no "Phase 2 mostly done; start Phase 3" — every Phase 3 PR is blocked at CI by an unstable upstream.</div></div>
+    <div class="card"><div class="label">Rule 2</div><div class="title">Doctrines from P1 are CI-lint-enforced from week 1</div><div class="body">Opinionated Constraints + Polyglot Persistence + Pool Placement + Event Type Registry have no opt-out for later phases. They are the substrate, not a recommendation.</div></div>
+    <div class="card"><div class="label">Rule 3 · G4</div><div class="title">Identity Projection MUST land in P2</div><div class="body">If a P3 SDK starts calling resolver before projection exists, resolver becomes the bottleneck and you can't retrofit projection without re-instrumenting P3 SDKs. Single biggest dependency violation risk.</div></div>
+    <div class="card"><div class="label">Rule 4 · G6</div><div class="title">Conflict Resolution Model MUST land before HDK camera/map (P4)</div><div class="body">Every HDK module after foundations does offline-write. Without the model, conflicts accumulate in production. Cannot be retrofitted from collected bad data.</div></div>
+    <div class="card"><div class="label">Rule 5 · G7</div><div class="title">Agent Isolation Runtime MUST land in P6A before any P6B agent</div><div class="body">A single Phase 6B agent using P6A's runtime without isolation primitives leaks one tenant's prompt context into another's. The leak is catastrophic and irreversible.</div></div>
+  </div>
+
+  <div class="callout green">
+    <b>Bottom line.</b> The 8 phases, 8 exit gates, 12 gap closures, and 5 no-leak rules are the contract that makes the 56-SDK estate deliverable without collapse. Sections §1–§8 below are the per-SDK detail under this phase plan.
+  </div>
+</section>
+
+<!-- ============ OVERVIEW ============ -->
+<section id="overview">
+  <h2>1 · Overview</h2>
+  <p>The platform's SDK estate spans five classes: <b>(a)</b> foundation packages (contracts · telemetry · branding · design-system · config · i18n); <b>(b)</b> backend SDKs that wrap horizontal services (identity, vault, profile, payment, …); <b>(c)</b> the AIM SDKs introduced in v3 (pool-router · persona · engagement · rebac); <b>(d)</b> native HDK modules that bridge device capabilities into React Native; <span class="new-tag">v3.1</span> <b>(e)</b> the metering &amp; billing SDKs (<code>sdk-meter</code> · <code>sdk-billing</code>) that gate, meter, and invoice every API call against per-method pricing. They must be built in dependency order.</p>
+
+  <div class="grid cols-3" style="margin-top:16px">
+    <div class="card"><div class="label">Goal</div><div class="title">Ship in dependency order</div><div class="body">No SDK begins coding until the contracts it depends on are merged. Public APIs of upstream SDKs land in <code>@projexlight/contracts</code> first; the implementation follows.</div></div>
+    <div class="card"><div class="label">Constraint</div><div class="title">Compliance &amp; pool routing are structural</div><div class="body">Vault, Audit, Consent, Policy, and Pool Router land <i>before</i> any SDK that touches data. Retrofitting compliance or routing after data has spread is the largest avoidable cost.</div></div>
+    <div class="card"><div class="label">Mechanic</div><div class="title">Contract-first, then code</div><div class="body">Every wave begins with a contract PR registering the wave's new types/events. Implementations land afterward. CI runs cross-consumer contract tests on every change.</div></div>
+  </div>
+</section>
+
+<!-- ============ BUILD ORDER RULES ============ -->
+<section id="rules">
+  <h2>2 · Why This Exact Order — Build Rules</h2>
+  <p>The sequence is not aesthetic. Each rule below is a refactor we are choosing not to do, valued in weeks of avoided rework or in compliance liability avoided.</p>
+
+  <div class="grid cols-2">
+    <div class="card"><div class="label">Rule 1</div><div class="title"><code>contracts</code> first — always</div><div class="body">Without typed primitives (canonical IDs, scope hierarchy, envelope, six identity types, pool-routing types), every later SDK ships with its own copy. <b>Cost of skipping:</b> 6–10 weeks of cleanup per type drift.</div></div>
+    <div class="card"><div class="label">Rule 2</div><div class="title">Vault + KMS <b>before</b> any PII handler</div><div class="body">Multi-level encryption (root · pool · tenant · person · device · org · encounter). Ship Identity / Profile without per-person keys and you cannot retrofit cryptographic-shred erasure. <b>Cost:</b> non-recoverable compliance debt + multi-month re-encryption project.</div></div>
+    <div class="card"><div class="label">Rule 3</div><div class="title">Audit <b>before</b> MDM</div><div class="body">Every key shred, MDM merge, consent grant, ABAC/ReBAC decision must be immutably logged. Build MDM before Audit and pre-Audit history is non-attestable.</div></div>
+    <div class="card"><div class="label">Rule 4 <span class="new-tag">v3</span></div><div class="title">Pool Router <b>before</b> any data-touching SDK</div><div class="body">Every SDK from W2 onwards routes through Pool Router. Build later and every SDK ships with its own routing shim that must be ripped out. <b>Cost:</b> 6+ weeks of routing refactor across 30+ SDKs.</div></div>
+    <div class="card"><div class="label">Rule 5</div><div class="title">Tenant <b>before</b> Identity</div><div class="body">JWTs carry <code>app_id · bu_id · tenant_id · org_id</code> + (v3) pool indices. Mint tokens without the full scope and every later policy decision guesses tenancy.</div></div>
+    <div class="card"><div class="label">Rule 6</div><div class="title">Identity <b>before</b> Consent</div><div class="body">Consent receipts are keyed by <code>person_id</code>. Recording consent against a non-canonical subject orphans the receipts.</div></div>
+    <div class="card"><div class="label">Rule 7</div><div class="title">Consent + Policy + ReBAC <b>before</b> Profile/Persona</div><div class="body">Every read of personal data must clear ABAC + Consent + (when relationship-applicable) ReBAC. Build Profile/Persona first and every read is unauthorized-by-design.</div></div>
+    <div class="card"><div class="label">Rule 8 <span class="new-tag">v3</span></div><div class="title">Persona <b>before</b> Engagement / CRM</div><div class="body">Encounters and Relationships reference Personas. CRM contacts are keyed by Persona, not raw person_id. Building Engagement first means inventing a temporary identity model that must be replaced.</div></div>
+    <div class="card"><div class="label">Rule 9</div><div class="title">Profile/Persona <b>before</b> Notification &amp; Payment</div><div class="body">Notification reads the notification routing band of App Identity; Payment touches the Secure-Data band on Master Person. Build them first and you duplicate PII across services.</div></div>
+    <div class="card"><div class="label">Rule 10</div><div class="title">Geo (<code>address_id</code>) <b>before</b> Property / Asset / Encounter-location</div><div class="body">Without canonical address resolution, every vertical produces duplicates from every feed.</div></div>
+    <div class="card"><div class="label">Rule 11</div><div class="title">AI Gateway <b>before</b> Agent Runtime</div><div class="body">Agents call models. Without a gateway, N agents each hold their own provider keys, PII redaction, budget code.</div></div>
+    <div class="card"><div class="label">Rule 12</div><div class="title">Taxonomy <b>before</b> Parsing</div><div class="body">Parsing selects extraction schemas at runtime from Taxonomy. Without Taxonomy, schemas hard-code into the engine.</div></div>
+    <div class="card"><div class="label">Rule 13</div><div class="title">Vault + Audit <b>before</b> Evidence</div><div class="body">Evidence chain requires immutable storage and audit. Build Evidence first and evidence is mutable — defeating its legal purpose.</div></div>
+    <div class="card"><div class="label">Rule 14</div><div class="title">HDK runs <b>parallel from Wave 4</b> — never earlier</div><div class="body">HDK consumes backend SDKs (identity → idp, vault → idp, policy → permissions, geo → map). Starting earlier means writing native code against changing TS types.</div></div>
+    <div class="card"><div class="label">Rule 15 <span class="new-tag">v3</span></div><div class="title">Engagement <b>before</b> CRM / SR / Event</div><div class="body">CRM contacts have engagement-stage; SR tickets are engagement-of-kind ticket; Events are engagement-of-kind session. Building these first invents redundant primitives.</div></div>
+    <div class="card"><div class="label">Rule 16 <span class="new-tag">v3.1</span></div><div class="title">Meter <b>before</b> any billable SDK call</div><div class="body">Pay-as-you-use is structural. Without <code>sdk-meter</code> emitting from operation #1, usage history is unreconstructible, per-method pricing cannot be validated against real traffic, and customer bills cannot be audit-verified. Build later and every W2+ SDK ships without metering and must be re-instrumented. <b>Cost:</b> 8–12 weeks across 30+ SDKs + multi-month gap of unbillable production traffic.</div></div>
+  </div>
+
+  <div class="callout red">
+    <b>Anti-pattern radar.</b> If a wave's owner says "we can start now and figure out the dependency later" — the dependency they want to skip is almost always Vault, Consent, Pool Router, or Persona, and the result is non-recoverable.
+  </div>
+</section>
+
+<!-- ============ DEPENDENCY GRAPH ============ -->
+<section id="dep-graph">
+  <h2>3 · Dependency Graph</h2>
+  <p>Edges run from prerequisite to consumer. Grouped by wave. Every wave-N SDK depends on <code>@projexlight/contracts</code> — those edges are implicit. New v3 SDKs in purple.</p>
+
+  <div class="diagram-wrap">
+    <pre class="mermaid">
+flowchart TB
+  classDef w0 fill:#1a2234,stroke:#c9a86a,color:#e6ecf5;
+  classDef w1 fill:#241622,stroke:#ff6b6b,color:#e6ecf5;
+  classDef w2 fill:#1d1830,stroke:#b88dff,color:#e6ecf5;
+  classDef w3 fill:#16241c,stroke:#2dd4bf,color:#e6ecf5;
+  classDef w4 fill:#0f1422,stroke:#6aa9ff,color:#e6ecf5;
+  classDef w5 fill:#162420,stroke:#5dd39e,color:#e6ecf5;
+  classDef w6 fill:#241f10,stroke:#f5c451,color:#e6ecf5;
+  classDef w7 fill:#2a1c14,stroke:#ff8b6b,color:#e6ecf5;
+  classDef newSdk fill:#2a1840,stroke:#b88dff,color:#fff;
+
+  CTR["W0 · contracts"]:::w0
+  TEL["W0 · telemetry"]:::w0
+
+  SEC["W1 · sdk-secrets"]:::w1
+  VLT["W1 · sdk-vault"]:::w1
+  AUD["W1 · sdk-audit"]:::w1
+  POOL["W1 · sdk-pool-router NEW"]:::newSdk
+  MET["W1 · sdk-meter NEW v3.1"]:::newSdk
+
+  TNT["W2 · sdk-tenant"]:::w2
+  IDN["W2 · sdk-identity"]:::w2
+  CNS["W2 · sdk-consent"]:::w2
+  POL["W2 · sdk-policy"]:::w2
+  REB["W2 · sdk-rebac NEW"]:::newSdk
+  APK["W2 · sdk-api-keys NEW v3.1"]:::newSdk
+
+  PRF["W3 · sdk-profile"]:::w3
+  GEO["W3 · sdk-geo"]:::w3
+  DEV["W3 · sdk-device"]:::w3
+  FF["W3 · sdk-feature-flags"]:::w3
+  PSN["W3 · sdk-persona NEW"]:::newSdk
+  IDR["W3 · sdk-identity-resolver NEW v3.1"]:::newSdk
+  DRT["W3 · sdk-data-rights NEW v3.1"]:::newSdk
+
+  MED["W4 · sdk-media"]:::w4
+  NTF["W4 · sdk-notification"]:::w4
+  PAY["W4 · sdk-payment"]:::w4
+  WFL["W4 · sdk-workflow"]:::w4
+  SRC["W4 · sdk-search"]:::w4
+  BIL["W4 · sdk-billing NEW v3.1"]:::newSdk
+  WHK["W4 · sdk-webhook NEW v3.1"]:::newSdk
+  APP["W4 · sdk-approval NEW v3.1"]:::newSdk
+  TLC["W4 · sdk-tenant-lifecycle NEW v3.1"]:::newSdk
+  CON["W4 · sdk-connectors NEW v3.1"]:::newSdk
+
+  CRM["W5 · sdk-crm"]:::w5
+  CNT["W5 · sdk-content"]:::w5
+  SR["W5 · sdk-service-request"]:::w5
+  EVT["W5 · sdk-event"]:::w5
+  CMP["W5 · sdk-campaign"]:::w5
+  SOC["W5 · sdk-social"]:::w5
+  ENG["W5 · sdk-engagement NEW"]:::newSdk
+
+  AGW["W6 · sdk-ai-gateway"]:::w6
+  TAX["W6 · sdk-taxonomy"]:::w6
+  PRS["W6 · sdk-parsing"]:::w6
+  RAG["W6 · sdk-knowledge-rag"]:::w6
+  AGR["W6 · sdk-agent-runtime"]:::w6
+  CVS["W6 · sdk-conversation"]:::w6
+  REC["W6 · sdk-recommendation"]:::w6
+  ANL["W6 · sdk-analytics"]:::w6
+  LIN["W6 · sdk-lineage NEW v3.1"]:::newSdk
+  SEM["W6 · sdk-semantic NEW v3.1"]:::newSdk
+  TRC["W6 · sdk-trace NEW v3.1"]:::newSdk
+  MCP["W6 · sdk-mcp-bridge NEW v3.1"]:::newSdk
+
+  STM["W7 · sdk-storm"]:::w7
+  DSP["W7 · sdk-dispatch"]:::w7
+  ASN["W7 · sdk-assignment"]:::w7
+  LSC["W7 · sdk-lead-scoring"]:::w7
+  EVD["W7 · sdk-evidence"]:::w7
+  DIA["W7 · sdk-diagnostic-telemetry"]:::w7
+
+  CTR --> SEC
+  CTR --> VLT
+  CTR --> AUD
+  CTR --> POOL
+  CTR --> MET
+  SEC --> VLT
+  AUD --> VLT
+  AUD --> POOL
+  AUD --> MET
+  POOL --> MET
+  SEC --> MET
+
+  POOL --> TNT
+  AUD --> TNT
+  TNT --> IDN
+  VLT --> IDN
+  POOL --> IDN
+  IDN --> CNS
+  IDN --> POL
+  IDN --> REB
+  TNT --> POL
+  POL --> REB
+
+  IDN --> PRF
+  VLT --> PRF
+  CNS --> PRF
+  POL --> PRF
+  POOL --> PRF
+  IDN --> PSN
+  TNT --> PSN
+  POL --> PSN
+  REB --> PSN
+  POOL --> PSN
+  GEO --> PRF
+  AUD --> GEO
+  POOL --> GEO
+  IDN --> DEV
+  AUD --> DEV
+  TNT --> FF
+
+  POOL --> MED
+  VLT --> MED
+  POL --> MED
+  PRF --> MED
+  PRF --> NTF
+  PSN --> NTF
+  CNS --> NTF
+  PRF --> PAY
+  VLT --> PAY
+  AUD --> PAY
+  AUD --> WFL
+  POL --> SRC
+  POOL --> SRC
+
+  %% v3.1 · sdk-billing reads meter rollups + uses payment to invoice
+  MET --> BIL
+  PAY --> BIL
+  TNT --> BIL
+  AUD --> BIL
+
+  %% v3.1 · every W2+ data-touching SDK is gated by the meter
+  MET --> TNT
+  MET --> IDN
+  MET --> CNS
+  MET --> POL
+  MET --> REB
+  MET --> PRF
+  MET --> PSN
+  MET --> GEO
+  MET --> DEV
+  MET --> MED
+  MET --> NTF
+  MET --> PAY
+  MET --> WFL
+  MET --> SRC
+
+  PSN --> CRM
+  GEO --> CRM
+  PSN --> ENG
+  REB --> ENG
+  VLT --> ENG
+  WFL --> ENG
+  POOL --> ENG
+  AUD --> ENG
+  ENG --> SR
+  ENG --> EVT
+  ENG --> CRM
+  MED --> CNT
+  WFL --> SR
+  NTF --> SR
+  PAY --> EVT
+  NTF --> EVT
+  GEO --> EVT
+  NTF --> CMP
+  SRC --> CMP
+  CRM --> SOC
+  CNT --> SOC
+
+  TNT --> AGW
+  AUD --> AGW
+  SEC --> AGW
+  CNS --> AGW
+  MET --> AGW
+  AUD --> TAX
+  AGW --> RAG
+  VLT --> RAG
+  SRC --> RAG
+  VLT --> PRS
+  TAX --> PRS
+  AGW --> PRS
+  WFL --> PRS
+  AGW --> AGR
+  AUD --> AGR
+  POL --> AGR
+  REB --> AGR
+  WFL --> AGR
+  AGR --> CVS
+  AGW --> REC
+  ANL --> REC
+
+  GEO --> STM
+  ENG --> DSP
+  GEO --> DSP
+  NTF --> DSP
+  WFL --> DSP
+  DSP --> ASN
+  PRF --> ASN
+  CRM --> LSC
+  AGW --> LSC
+  VLT --> EVD
+  AUD --> EVD
+  GEO --> EVD
+  MED --> EVD
+  DEV --> EVD
+  ENG --> EVD
+  AUD --> DIA
+
+  %% v3.1 Tier-1/2 + Analyze.txt mandate edges
+  IDN --> APK
+  TNT --> APK
+  AUD --> APK
+  MET --> APK
+
+  IDN --> IDR
+  PSN --> IDR
+  TNT --> IDR
+  REB --> IDR
+  POOL --> IDR
+
+  IDN --> DRT
+  PSN --> DRT
+  CNS --> DRT
+  VLT --> DRT
+  AUD --> DRT
+  WFL --> DRT
+
+  TNT --> WHK
+  AUD --> WHK
+  WFL --> WHK
+  SEC --> WHK
+
+  WFL --> APP
+  NTF --> APP
+  PSN --> APP
+  AUD --> APP
+
+  TNT --> TLC
+  POOL --> TLC
+  DRT --> TLC
+  WFL --> TLC
+  VLT --> TLC
+  AUD --> TLC
+  BIL --> TLC
+
+  AUD --> LIN
+  PRS --> LIN
+  AGW --> LIN
+  RAG --> LIN
+
+  TAX --> SEM
+  RAG --> SEM
+  AGR --> SEM
+  POL --> SEM
+  LIN --> SEM
+
+  %% v3.1 · sdk-connectors framework + sdk-mcp-bridge
+  WFL --> CON
+  VLT --> CON
+  AUD --> CON
+  MET --> CON
+  WHK --> CON
+  TNT --> CON
+
+  AGR --> MCP
+  POL --> MCP
+  MET --> MCP
+  AUD --> MCP
+  TRC --> MCP
+  VLT --> MCP
+  SEM --> MCP
+
+  %% v3.1 · sdk-trace pulls from every layer
+  TEL --> TRC
+  AUD --> TRC
+  MET --> TRC
+  IDR --> TRC
+  POL --> TRC
+  REB --> TRC
+  POOL --> TRC
+  VLT --> TRC
+  CNS --> TRC
+  LIN --> TRC
+    </pre>
+  </div>
+</section>
+
+<!-- ============ SUMMARY ============ -->
+<section id="summary">
+  <h2>4 · Wave Summary — at a glance</h2>
+  <table>
+    <thead><tr><th>Wave</th><th>Theme</th><th>SDKs</th><th>Window</th><th>Headline output</th></tr></thead>
+    <tbody>
+      <tr><td><span class="pill gold">W0</span></td><td>Foundations</td><td>6</td><td>Weeks 1–3</td><td>Typed primitives, workspace tooling, design system; contracts include six identity types and pool-routing types</td></tr>
+      <tr><td><span class="pill red">W1</span></td><td>Compliance + Pool + Meter</td><td>5</td><td>Weeks 3–9</td><td>Vault hierarchy (+pool KEK +encounter key), Audit ledger, Secrets KMS, <b>Pool Router</b>, <b>Meter</b> (universal gate + usage emitter)</td></tr>
+      <tr><td><span class="pill purple">W2</span></td><td>Identity Triad + ReBAC + Hierarchies + API Keys</td><td>6</td><td>Weeks 9–15</td><td>Tenant (+reseller, sub-tenant, BU recursion, geo, role-templates, fiscal), six-layer JWT (+IdP federation), Consent, ABAC policy (+IQL), <b>ReBAC</b> (+safeguards), <b>API Keys</b></td></tr>
+      <tr><td><span class="pill teal">W3</span></td><td>Canonical Extensions + Persona + Resolver + Data Rights</td><td>7</td><td>Weeks 15–22</td><td>Profile bands re-homed, <code>address_id</code>, <code>device_uuid</code>, flags, <b>Persona</b> (L2/L3/L4), <b>Identity Resolver</b>, <b>Data Rights</b> (DSAR/erasure workflow)</td></tr>
+      <tr><td><span class="pill blue">W4</span></td><td>Operational + Billing + Webhook + Approval + Lifecycle + Connectors</td><td>10</td><td>Weeks 22–29</td><td>Media, Notification, Payment, Workflow, Search · <b>Billing</b> (invoices, showback, reprice) · <b>Webhook</b> (outbound delivery) · <b>Approval</b> (routing primitive) · <b>Tenant Lifecycle</b> (provision/sandbox/offboard) · <b>Connectors framework</b> + <b>connector-slack</b></td></tr>
+      <tr><td><span class="pill green">W5</span></td><td>Engagement (incl. Encounter)</td><td>7</td><td>Weeks 29–35</td><td>CRM, Content, SR, Event, Campaign, Social, <b>Engagement</b> (L5/L6)</td></tr>
+      <tr><td><span class="pill yellow">W6</span></td><td>AI · Semantic · Lineage · Trace · MCP Bridge</td><td>12</td><td>Weeks 35–44</td><td>Gateway, Taxonomy, Parsing, RAG, Agent Runtime (+ full isolation runtime — capability tokens · TTL · replay · sandbox), Conversation, Recommendation, Analytics (+ Iceberg lakehouse) · <b>Lineage</b> (+ cross-pool projection) · <b>Semantic</b> (6 types) · <b>Trace</b> (cross-system viewer) · <b>MCP Bridge</b> (bidirectional Model Context Protocol)</td></tr>
+      <tr><td><span class="pill" style="color:#ff8b6b;border-color:rgba(255,139,107,0.4)">W7</span></td><td>Geo · Field · Evidence</td><td>6</td><td>Weeks 44–50</td><td>Dispatch, Assignment, Lead Scoring, Storm, Evidence (+encounter_id), Diagnostic-Telemetry</td></tr>
+      <tr><td><span class="pill purple">HDK</span></td><td>Native (parallel from W4)</td><td>11</td><td>Weeks 22–48</td><td>idp · permissions · diagnostic · <b>sync (NEW v3.1)</b> · camera · map · scanner · image · video · measure · watermark</td></tr>
+    </tbody>
+  </table>
+
+  <div class="callout">
+    <b>Reading the wave window.</b> Windows are indicative for a small platform team (3–5 engineers) running waves serially with intra-wave parallelism. With 4–6 sub-teams running waves 4 / 5 / 6 in parallel after their respective gates open, the total compresses to ~28–32 weeks.
+  </div>
+</section>
+
+<!-- ============ WAVE 0 ============ -->
+<section id="wave-0">
+  <div class="wave-header">
+    <div class="badge">W0</div>
+    <div>
+      <h2>Wave 0 · Foundations</h2>
+      <div class="sub">No business logic. Just the workspace primitives every later wave depends on.</div>
+      <div class="timing">Weeks 1–3 · ~3 weeks · 6 packages · serial then parallel</div>
+    </div>
+  </div>
+
+  <div class="why">
+    <span class="why-label">Why this wave now</span>
+    These have zero dependencies on anything else. Cheap to write, expensive to retrofit. Every wave 1+ SDK consumes <code>contracts</code> and <code>telemetry</code>; building them on day one means later waves never backtrack. The workspace itself (pnpm + turbo + CI) must exist before any package can be linked.
+  </div>
+
+  <div class="sdk">
+    <div class="top"><span class="name">@projexlight/contracts</span> <span class="pkg">packages/contracts</span></div>
+    <div class="meta-row">Effort: <span class="effort-M">M · 3 weeks</span> · Owner: Platform Architect (Tanveer)</div>
+    <div class="row"><div class="k">Depends on</div><div class="v">— (nothing)</div></div>
+    <div class="row"><div class="k">Owns</div><div class="v">Scope-hierarchy types (<code>org_id · app_id · tenant_id · bu_id</code> + <span class="new-tag">v3.1</span> <code>parent_org_id · parent_tenant_id · parent_bu_id</code> for recursion); canonical-ID types (<code>person_id · address_id · device_uuid</code>); <span class="new-tag">v3</span> six identity types (<code>AppIdentity · TenantMembership · Persona · Encounter · Relationship · RelationshipGrant</code>); <span class="new-tag">v3</span> pool-routing types (<code>PoolIndex · PoolFamily · TenantPoolMap</code>); event envelope; HDK module interface stubs; <span class="new-tag">v3.1</span> metering types (<code>UsageEvent.v1 · MeterDimensions · PricingSKU · PricingMode · PricingCatalog.vN · QuotaPolicy</code>) and the <code>@meter(sku, unit, tier)</code> decorator metadata schema; <span class="new-tag">v3.1</span> <b>extended hierarchy types</b>: <code>Reseller</code> (first-class · with commission rules, white-label config, scoped admin), <code>GeographicNode</code> (<code>Region → Country → State → City → Locality</code> tree separate from pool_index), <code>RoleTemplate</code> (with inheritance: <code>Junior &lt; Senior &lt; Chief</code>), <code>FiscalPeriod</code> (per-tenant fiscal calendar with Year/Quarter/Month decomposition), <code>WebhookEndpoint</code>, <code>ApiKey</code> + <code>ApiKeyScope</code>, <code>DataRightsRequest</code> (DSAR/erasure lifecycle), <code>ApprovalRoute</code> + <code>ApprovalStep</code>, <code>LineageEdge</code> (field provenance graph), <code>TenantLifecycleState</code> (provisioning · trial · paid · sandbox · offboarded), <code>BYOKKeyRef</code>. <span class="new-tag">v3.1</span> <b>Analyze.txt mandates</b>: <code>IQLGrammar</code> (Identity Query Language AST for <code>subject.persona(role=...) · relationship(type=...) · encounter(active=true)</code>); <code>SemanticObject · SemanticRelation · CapabilityGraph · DomainOntology</code> (the "largest architectural gap" filled — semantic anchors AI agents reason against); <code>AgentIdentity</code> (<code>agent_id · agent_persona · agent_scope · agent_chain</code>) + <code>AgentMemoryNamespace</code> (per-tenant memory isolation to prevent prompt leakage / context bleed); <code>EventTypeRegistry</code> (canonical taxonomy of all <code>X.vN</code> event types with retention class + compaction policy + schema-lifecycle state); <code>ReBACTraversalBudget</code> (depth · TTL · cache hints); <code>PoolFederationManifest</code> (regional federation map for 1000+ pool world).</div></div>
+    <div class="row"><div class="k">Unlocks</div><div class="v">Every later SDK.</div></div>
+    <div class="row"><div class="k">Done when</div><div class="v">Zod-validated schemas; cross-package type imports compile; CI contract-diff job green; semver published to internal registry.</div></div>
+  </div>
+
+  <div class="sdk">
+    <div class="top"><span class="name">@projexlight/config</span> <span class="pkg">packages/config</span></div>
+    <div class="meta-row">Effort: <span class="effort-S">S · 1 week</span> · Owner: Platform</div>
+    <div class="row"><div class="k">Owns</div><div class="v">Typed env-config loader; tenant-scoped overrides; secrets references (resolved via vault SDK in W1).</div></div>
+  </div>
+
+  <div class="sdk">
+    <div class="top"><span class="name">@projexlight/telemetry</span> <span class="pkg">packages/telemetry</span></div>
+    <div class="meta-row">Effort: <span class="effort-S">S · 1.5 weeks</span> · Owner: Platform</div>
+    <div class="row"><div class="k">Owns</div><div class="v">OTel SDK wiring; Langfuse trace helpers; envelope-context propagation across services and HDK modules.</div></div>
+  </div>
+
+  <div class="sdk">
+    <div class="top"><span class="name">@projexlight/i18n</span> <span class="pkg">packages/i18n</span></div>
+    <div class="meta-row">Effort: <span class="effort-S">S · 1 week</span> · Owner: Frontend</div>
+    <div class="row"><div class="k">Owns</div><div class="v">Locale-bundle loader; ICU message format; per-tenant locale fallback.</div></div>
+  </div>
+
+  <div class="sdk">
+    <div class="top"><span class="name">@projexlight/design-system</span> <span class="pkg">packages/design-system</span></div>
+    <div class="meta-row">Effort: <span class="effort-M">M · 3 weeks</span> · Owner: Frontend Lead</div>
+    <div class="row"><div class="k">Owns</div><div class="v">Token system; React primitives (Button · Input · Card · Table · Modal · Form fields); RN compatibility layer via <code>react-native-web</code>.</div></div>
+  </div>
+
+  <div class="sdk">
+    <div class="top"><span class="name">@projexlight/branding</span> <span class="pkg">packages/branding</span></div>
+    <div class="meta-row">Effort: <span class="effort-S">S · 1 week</span> · Owner: Frontend</div>
+    <div class="row"><div class="k">Owns</div><div class="v">Per-tenant theming layer over design-system; domain → brand resolution.</div></div>
+  </div>
+
+  <div class="sdk">
+    <div class="top"><span class="name">Workspace tooling</span> <span class="pkg">root · pnpm + turbo + CI</span></div>
+    <div class="meta-row">Effort: <span class="effort-M">M · 2 weeks</span> · Owner: Platform Architect</div>
+    <div class="row"><div class="k">Owns</div><div class="v">pnpm workspaces; turbo pipeline; CI (PR contracts diff · cross-consumer contract test · semver release).</div></div>
+  </div>
+</section>
+
+<!-- ============ WAVE 1 ============ -->
+<section id="wave-1">
+  <div class="wave-header">
+    <div class="badge">W1</div>
+    <div>
+      <h2>Wave 1 · Compliance Gates + Pool Router + Meter</h2>
+      <div class="sub">Lock compliance, pool routing, and the universal billing meter before any byte of PII, tenant data, or billable API traffic enters the system.</div>
+      <div class="timing">Weeks 3–9 · ~6 weeks · 5 SDKs · 3 parallel tracks</div>
+    </div>
+  </div>
+
+  <div class="why">
+    <span class="why-label">Why this wave now</span>
+    The Analyze.txt foundation is explicit: compliance is structural. <b>Vault</b> establishes the multi-level key hierarchy — without it, Identity / Profile ship without per-person keys and cryptographic-shred erasure becomes impossible. <b>Audit</b> establishes the immutable ledger from operation #1 — landing it after MDM makes every pre-Audit operation non-attestable. <b>Secrets</b> wraps KMS behind a typed facade. <b>Pool Router</b> (v3) joins this wave because every SDK from W2 onwards routes through it; building it later means refactoring every later SDK. <span class="new-tag">v3.1</span> <b>Meter</b> joins for the same structural reason as Audit — every W2+ SDK call is gated and metered through it; without it, pay-as-you-use pricing cannot be validated, customer bills cannot be reconstructed, and 30+ SDKs would need re-instrumentation later.
+  </div>
+
+  <div class="sdk">
+    <div class="top"><span class="name">@projexlight/sdk-secrets</span> <span class="pkg">packages/sdk-secrets</span></div>
+    <div class="meta-row">Effort: <span class="effort-M">M · 2 weeks</span></div>
+    <div class="row"><div class="k">Depends on</div><div class="v">contracts</div></div>
+    <div class="row"><div class="k">Owns</div><div class="v">Typed KMS facade (AWS KMS · GCP KMS · HSM); secret references (<code>secret://app/&lt;id&gt;</code>); rotation helpers; envelope-encrypt / -decrypt primitives.</div></div>
+    <div class="row"><div class="k">Unlocks</div><div class="v">Vault · Pool Router · AI Gateway · Payment.</div></div>
+  </div>
+
+  <div class="sdk modified">
+    <div class="top"><span class="name">@projexlight/sdk-vault</span> <span class="pkg">packages/sdk-vault</span> <span class="tag mod">MODIFIED v3</span></div>
+    <div class="meta-row">Effort: <span class="effort-L">L · 6 weeks</span></div>
+    <div class="row"><div class="k">Depends on</div><div class="v">contracts · sdk-secrets · sdk-audit (key-op events to Audit)</div></div>
+    <div class="row"><div class="k">Owns</div><div class="v">Seven-level envelope-key hierarchy (root · app · <b>pool</b> · tenant · person · device · <b>encounter</b>); key issue / rotate / shred operations; per-tier KEK storage; cryptographic-shred = right-to-erasure primitive; <span class="new-tag">v3</span> open/close-encounter API issuing per-encounter keys.</div></div>
+    <div class="row"><div class="k">Unlocks</div><div class="v">Identity · Profile · Payment · Media · Evidence · Knowledge/RAG · Engagement.</div></div>
+    <div class="row"><div class="k">Done when</div><div class="v">Shred a person key → every record referencing the person becomes undecryptable. Shred an encounter key → only that encounter's payload becomes undecryptable. Shred a pool KEK → that pool's data becomes undecryptable. All ops logged to Audit.</div></div>
+  </div>
+
+  <div class="sdk modified">
+    <div class="top"><span class="name">@projexlight/sdk-audit</span> <span class="pkg">packages/sdk-audit</span></div>
+    <div class="meta-row">Effort: <span class="effort-M">M · 4 weeks</span></div>
+    <div class="row"><div class="k">Depends on</div><div class="v">contracts</div></div>
+    <div class="row"><div class="k">Owns</div><div class="v">Append-only ledger; tamper-evident hash chain; export API for regulators; per-tenant retention rules; <span class="new-tag">v3</span> per-pool audit chain + regional roll-up; <code>pool_index</code> on every audit envelope. <span class="new-tag">v3.1</span> <b>Customer-facing read API</b> (tenant pulls their own audit log for SOC2/HIPAA self-audits — replaces vertical teams each building their own export). <b>Event Type Registry</b> (Analyze.txt mandate #6): canonical taxonomy of every <code>X.vN</code> event type with retention class (transient · operational · regulated) + compaction policy (none · LWW · count) + schema-lifecycle state (active · deprecated · retired). Producers rejected at the gateway if event type isn't registered. <b>Retention enforcement</b>: per-class TTL with cryptographic-shred at expiry (composes with Vault). <b>Topic compaction</b>: high-cardinality topics (telemetry, encounters) auto-compact per policy to control Kafka growth.</div></div>
+    <div class="row"><div class="k">Unlocks</div><div class="v">Every state-changing operation in every later SDK; customer self-service compliance reports; Kafka cardinality bounded.</div></div>
+    <div class="row"><div class="k">Done when</div><div class="v">Hash-chain verification job runs nightly; any tampering surfaces a chain-break alert; <span class="new-tag">v3.1</span> unregistered event type rejected at producer; retention TTL shreds expired entries with audit trail of the shred; customer audit export round-trips signed PDF + JSONL.</div></div>
+  </div>
+
+  <div class="sdk new">
+    <div class="top"><span class="name">@projexlight/sdk-pool-router</span> <span class="pkg">packages/sdk-pool-router</span> <span class="tag new">NEW v3</span></div>
+    <div class="meta-row">Effort: <span class="effort-L">L · 5 weeks</span> · Owner: Platform</div>
+    <div class="row"><div class="k">Depends on</div><div class="v">contracts · sdk-audit · sdk-secrets</div></div>
+    <div class="row"><div class="k">Owns</div><div class="v">Pool Registry (Postgres + Redis cache); routing table <code>(tenant_id, app_id) → dsn</code>; per-pool connection-pool management; migration-state guard; routing latency telemetry; <code>withTenant(...)</code> helper consumed by every later SDK; pool allocation policy plug-ins (round-robin · capacity · region-affinity); pool lifecycle state machine. <span class="new-tag">v3.1</span> <b>Federation hooks shipped in P1</b> (Analyze.txt mandate #4): <code>PoolFederationManifest</code> records regional federation maps; routing table extended with <code>region_id → federation_root_dsn</code>; cross-pool OLAP queries dispatched to warehouse (never live cross-pool joins); global-query-gateway interface stub. <span class="new-tag">v3.1</span> <b>Full federation runtime delivered in P7</b> (closes G10): regional-federation router selects routes across federations when pool count crosses 200; manages per-region capacity; auto-failover to paired region for Tier-G; chaos-tested against simulated 3-region federations before production. Without the runtime (not just hooks), the 1000+ pool world collapses to manual routing — operational disaster.</div></div>
+    <div class="row"><div class="k">Unlocks</div><div class="v">Every W2+ SDK that touches data.</div></div>
+    <div class="row"><div class="k">Done when</div><div class="v">Test tenant pinned to <code>app-healthcare-007</code> resolves &lt; 5ms p99. Cache invalidation on pool state flip fans out &lt; 1s. Cross-pool query attempts fail at lint. Audit logs every state transition.</div></div>
+  </div>
+
+  <div class="sdk new">
+    <div class="top"><span class="name">@projexlight/sdk-meter</span> <span class="pkg">packages/sdk-meter</span> <span class="tag new">NEW v3.1</span></div>
+    <div class="meta-row">Effort: <span class="effort-L">L · 4 weeks</span> · Owner: Platform · Pairs with: sdk-billing (W4)</div>
+    <div class="row"><div class="k">Depends on</div><div class="v">contracts · sdk-audit · sdk-pool-router · sdk-secrets</div></div>
+    <div class="row"><div class="k">Owns</div><div class="v">The universal <b>two-phase metering gate</b> (GCP Service-Control pattern) wrapped around every typed SDK method via build-time codegen — <b>zero per-SDK code</b>. Phase 1 <code>check()</code>: sync admission (p99 ≤ 2ms) reading per-tenant quota + kill-switch state from Redis; returns ALLOW / WARN / DENY. Phase 2 <code>report()</code>: async emit of <code>usage.event.v1</code> to Kafka topic partitioned by <code>tenant_id</code>. Per-pool stream processor rolls up to ClickHouse hourly/daily/monthly tables. Hash-chained <code>(tenant, day)</code> ledger linking into Audit so customers can re-derive their bill. Live counter in Redis powers customer real-time meter (≤60s lag). Pricing catalog lookup helper. <span class="new-tag">v3.1</span> day-one mode is <b>emit-only</b>: events flow, gate does not deny — soft caps + hard caps enable in W4 once catalog stabilizes.</div></div>
+    <div class="row"><div class="k">Pricing surface</div><div class="v">N/A — emits usage events on behalf of other SDKs; itself is platform-internal.</div></div>
+    <div class="row"><div class="k">Unlocks</div><div class="v">Every W2+ SDK ships behind the meter. <b>sdk-billing</b> (W4) reads its rollups. <b>Cost &amp; Safety Steward</b> agent (v3.1 generalized) reads its method-level usage to recommend optimizations across all SDKs, not only AI.</div></div>
+    <div class="row"><div class="k">Done when</div><div class="v">10k synthetic SDK calls produce 10k <code>usage.event.v1</code> records with zero loss (at-least-once + idempotent <code>event_id</code>); admission gate p99 ≤ 2ms under load; daily rollup matches raw event count to byte-perfect parity; hash-chain verify-job catches injected tampering; customer-facing <code>/billing/live</code> endpoint shows accruing cost &lt; 60s after the originating call; six-layer attribution (org/app/tenant/bu/persona/encounter) propagates from JWT to event without code in any consuming SDK.</div></div>
+  </div>
+</section>
+
+<!-- ============ WAVE 2 ============ -->
+<section id="wave-2">
+  <div class="wave-header">
+    <div class="badge">W2</div>
+    <div>
+      <h2>Wave 2 · Identity Triad (MDM · ABAC · Consent) + ReBAC</h2>
+      <div class="sub">The four pillars: MDM · ABAC · Consent + Relationship-Based Access Control.</div>
+      <div class="timing">Weeks 9–15 · ~6 weeks · 5 SDKs · serial-then-parallel</div>
+    </div>
+  </div>
+
+  <div class="why">
+    <span class="why-label">Why this wave now</span>
+    With Vault, Audit, and Pool Router live, we can mint tokens, issue canonical identities, record consent, and decide policy — all with audit trails, key tiers, and pool routing already in place. <b>Tenant</b> precedes <b>Identity</b> because tokens carry the four-level scope claim + pool indices. <b>Identity</b> precedes <b>Consent</b> because receipts key by <code>person_id</code>. <b>Identity + Tenant</b> precede <b>Policy + ReBAC</b> because both read attributes from MDM. Skip any one and the rest break.
+  </div>
+
+  <div class="sdk modified">
+    <div class="top"><span class="name">@projexlight/sdk-tenant</span> <span class="pkg">packages/sdk-tenant</span> <span class="tag mod">MODIFIED v3</span></div>
+    <div class="meta-row">Effort: <span class="effort-L">L · 5 weeks</span></div>
+    <div class="row"><div class="k">Depends on</div><div class="v">contracts · sdk-audit · sdk-pool-router</div></div>
+    <div class="row"><div class="k">Owns</div><div class="v">Registry for <code>org_id · app_id · tenant_id · bu_id</code>; isolation tiers (S/P/G); region pin; module subscription matrix; brand/domain → tenant routing; <span class="new-tag">v3</span> writes <code>admin_pool_index</code> + <code>app_pool_index{}</code> at provisioning; pool allocation policy; emits <code>tenant.pool.assigned.v1</code>. <span class="new-tag">v3.1</span> <b>Reseller as first-class entity</b>: <code>reseller_id</code> + commission rules + white-label config (brand override, domain CNAME, support contact) + scoped reseller-admin access into customer tenants + consolidated reseller billing addressed to reseller or pass-through to end-tenant per contract clause; emits <code>reseller.tenant.attached.v1</code>. <b>Recursive sub-tenant</b>: <code>parent_tenant_id</code> for hospital networks, franchises, property management; audit rolls up through parent chain; quota inheritance with explicit override. <b>Pool placement policy: hybrid</b> — sub-tenants share parent's pool by default (cheap, simple routing, audit roll-up trivial); any sub-tenant can opt out to Tier-P/G and get its own pool, paying the price (preserves per-hospital data residency for HIEs, per-franchise isolation for premium franchisees). <b>Recursive BU</b>: <code>parent_bu_id</code> for enterprise org charts; ABAC policy inheritance cascades up the chain (matches Analyze.txt's Org→BU→Region→Property→Dept→User mandate). <b>Geographic hierarchy</b> as first-class: <code>GeographicNode</code> tree (Region→Country→State→City→Locality) separate from <code>pool_index</code>; tenants and encounters tag a <code>geo_node_id</code>; supports sub-regional residency (German data in DE within EU). <b>Role templates</b>: per-app role registry with inheritance (<code>junior_doctor &lt; senior_doctor &lt; chief_of_medicine</code>); persona references a template, not a flat string. <b>Fiscal periods</b>: per-tenant fiscal calendar (Year/Quarter/Month) for billing and reporting alignment when tenant operates on non-calendar fiscal year.</div></div>
+    <div class="row"><div class="k">Unlocks</div><div class="v">Identity token mint; every tenant-scoped query downstream; reseller GTM; healthcare HIE networks; enterprise org-chart inheritance; sub-regional data residency.</div></div>
+  </div>
+
+  <div class="sdk modified">
+    <div class="top"><span class="name">@projexlight/sdk-identity</span> <span class="pkg">packages/sdk-identity</span> <span class="tag mod">MODIFIED v3</span></div>
+    <div class="meta-row">Effort: <span class="effort-L">L · 6 weeks</span></div>
+    <div class="row"><div class="k">Depends on</div><div class="v">contracts · sdk-tenant · sdk-vault · sdk-audit · sdk-pool-router</div></div>
+    <div class="row"><div class="k">Owns</div><div class="v">OIDC server; credentials store (vaulted); MDM alias graph producing canonical <code>person_id</code>; <span class="new-tag">v3</span> JWT mint with full six-layer tuple claim set; on first per-app login mints App Identity (L2); encounter-aware token issuance; MFA; session. <span class="new-tag">v3.1</span> <b>Customer IdP federation</b>: SAML 2.0 SP + SCIM 2.0 provisioning so enterprise tenants can keep their own Okta / Azure AD / Ping / Google Workspace as the source of truth. Attribute mapping rules per tenant; JIT user provisioning; group → role-template mapping; deprovisioning on SCIM delete; per-tenant federation health dashboard. <b>Social IdP federation</b> (Google, Apple, Microsoft) for B2C verticals. <b>Tenant impersonation for support</b>: scoped, time-bounded, consent-required (per support contract), audit-loud — every action under impersonation tagged in audit and shown in tenant's read API.</div></div>
+    <div class="row"><div class="k">Unlocks</div><div class="v">Every authenticated call platform-wide; enterprise SSO deals; B2C onboarding via social login; sanctioned support debugging.</div></div>
+  </div>
+
+  <div class="sdk">
+    <div class="top"><span class="name">@projexlight/sdk-consent</span> <span class="pkg">packages/sdk-consent</span></div>
+    <div class="meta-row">Effort: <span class="effort-M">M · 4 weeks</span></div>
+    <div class="row"><div class="k">Depends on</div><div class="v">contracts · sdk-identity · sdk-audit · sdk-vault</div></div>
+    <div class="row"><div class="k">Owns</div><div class="v">Consent receipts keyed by <code>(person_id, purpose, processor, app_id, jurisdiction)</code>; revocation log; offline-grant replay queue (HDK); purpose registry; cross-border policy enforcement hook; <span class="new-tag">v3</span> cross-tenant consent receipts (source + target tenant memberships).</div></div>
+    <div class="row"><div class="k">Unlocks</div><div class="v">Every read of personal data downstream.</div></div>
+  </div>
+
+  <div class="sdk modified">
+    <div class="top"><span class="name">@projexlight/sdk-policy</span> <span class="pkg">packages/sdk-policy</span> <span class="tag mod">MODIFIED v3</span></div>
+    <div class="meta-row">Effort: <span class="effort-L">L · 5 weeks</span></div>
+    <div class="row"><div class="k">Depends on</div><div class="v">contracts · sdk-identity · sdk-tenant · sdk-audit</div></div>
+    <div class="row"><div class="k">Owns</div><div class="v">ABAC policy evaluator (Cedar / OPA-style); attribute fetchers backed by MDM; per-service guard middleware; decision log writing to Audit; policy versioning; <span class="new-tag">v3</span> six-layer attribute fetchers; pool-aware rule type ("actor and target must be in the same pool"); decision log includes the relevant identity layers used. <span class="new-tag">v3.1</span> <b>Identity Query Language (IQL)</b> (Analyze.txt mandate #2): typed DSL <code>subject.persona(role="doctor") · relationship(type="care-team") · encounter(active=true)</code> compiled to a Cedar policy term. Replaces the unreadable hand-written policies that six layers + ReBAC + encounters would otherwise produce. Parser, AST, evaluator, syntax-highlighter for the policy authoring UI all live here. Also adds <b>policy precomputation</b>: hot decisions cached against a versioned subject snapshot; cache invalidates on relationship change.</div></div>
+    <div class="row"><div class="k">Unlocks</div><div class="v">Every per-service authz check, every agent action gate, ReBAC pairing; readable policies at six-layer scale; sub-ms hot-path policy decisions.</div></div>
+  </div>
+
+  <div class="sdk new">
+    <div class="top"><span class="name">@projexlight/sdk-rebac</span> <span class="pkg">packages/sdk-rebac</span> <span class="tag new">NEW v3</span></div>
+    <div class="meta-row">Effort: <span class="effort-L">L · 5 weeks</span> · Owner: Identity</div>
+    <div class="row"><div class="k">Depends on</div><div class="v">contracts · sdk-identity · sdk-policy · sdk-audit · sdk-pool-router</div></div>
+    <div class="row"><div class="k">Owns</div><div class="v">Relationship graph store; ReBAC policy evaluator; cross-tenant relationship coordinator; relationship lifecycle (open · active · suspended · terminated); decision log → Audit; relationship re-attestation cadence. <span class="new-tag">v3.1</span> <b>Computational safeguards</b> (Analyze.txt mandate #3): <code>ReBACTraversalBudget</code> caps depth (default 4) and node-visit count per decision; <b>relationship TTLs</b> auto-expire long-dormant edges (healthcare PCP re-attests annually); <b>edge indexes</b> (kind + persona_a + persona_b) for sub-ms lookups; <b>graph caching</b> keyed by (subject, target, scope) with invalidation on relationship change; <b>async graph projection</b> precomputes "all personas reachable from X via care-team within 2 hops" off the hot path; chaos tests confirm authorization latency stays p99 ≤ 5ms even at 10M edges.</div></div>
+    <div class="row"><div class="k">Unlocks</div><div class="v">sdk-engagement (W5) — encounter participants backed by Relationship or Encounter Grant; predictable authorization latency at hyperscale.</div></div>
+    <div class="row"><div class="k">Done when</div><div class="v">PCP relationship in Hospital A allows chart read; revoking denies on next call; cross-tenant read without explicit cross-tenant relationship is denied with audited reason; <span class="new-tag">v3.1</span> 10M-edge synthetic graph: traversal-depth cap enforced; ReBAC decision p99 ≤ 5ms under load; relationship-revoke invalidates cache fan-out &lt; 1s.</div></div>
+  </div>
+
+  <div class="sdk new">
+    <div class="top"><span class="name">@projexlight/sdk-api-keys</span> <span class="pkg">packages/sdk-api-keys</span> <span class="tag new">NEW v3.1</span></div>
+    <div class="meta-row">Effort: <span class="effort-M">M · 3 weeks</span> · Owner: Identity</div>
+    <div class="row"><div class="k">Depends on</div><div class="v">contracts · sdk-identity · sdk-tenant · sdk-audit · sdk-meter · sdk-vault (key material hashed at rest)</div></div>
+    <div class="row"><div class="k">Owns</div><div class="v">End-customer programmatic-access keys (distinct from human OIDC sessions). Per-key typed scopes, per-key rate limits (composes with sdk-meter), rotation, revocation, last-used telemetry. Tenants generate keys for their integrations (Zapier, customer's backend, partner apps). Keys carry a synthetic persona so audit + ReBAC behave consistently. Supports prefix-style key visualization (<code>pk_live_...</code>) for safe display. Rotation grace windows; webhook on rotation; revoke-all on tenant offboarding.</div></div>
+    <div class="row"><div class="k">Unlocks</div><div class="v">Customer integrations without sharing human credentials; per-key billing line items via meter; safe partner-app authorization.</div></div>
+  </div>
+</section>
+
+<!-- ============ WAVE 3 ============ -->
+<section id="wave-3">
+  <div class="wave-header">
+    <div class="badge">W3</div>
+    <div>
+      <h2>Wave 3 · Canonical Entity Extensions + Persona</h2>
+      <div class="sub">Extensions that hang off canonical IDs minted in W2 + the L2/L3/L4 identity layers.</div>
+      <div class="timing">Weeks 15–22 · ~7 weeks · 5 SDKs · 4 parallel</div>
+    </div>
+  </div>
+
+  <div class="why">
+    <span class="why-label">Why this wave now</span>
+    Tenant, Identity, Consent, Policy, ReBAC now exist. Profile reads the bands and must clear Consent + ABAC. Persona owns L2/L3/L4 — every domain SDK navigates through it. Geo / Device / Feature-Flags are downstream of Identity + Tenant. These five SDKs share few inter-dependencies and ship 4-way parallel.
+  </div>
+
+  <div class="sdk modified">
+    <div class="top"><span class="name">@projexlight/sdk-profile</span> <span class="pkg">packages/sdk-profile</span> <span class="tag mod">MODIFIED v3</span></div>
+    <div class="meta-row">Effort: <span class="effort-L">L · 5 weeks</span></div>
+    <div class="row"><div class="k">Depends on</div><div class="v">contracts · sdk-identity · sdk-vault · sdk-consent · sdk-policy · sdk-audit · sdk-pool-router</div></div>
+    <div class="row"><div class="k">Owns</div><div class="v">Four bands: <span class="new-tag">v3</span> Profile/Preference/Notification-routing now live on App Identity (L2 — per-app); Secure Data (DL · PAN · Aadhaar · SSN · Passport · PCI) stays on Master Person (L1) with per-field envelope encryption.</div></div>
+    <div class="row"><div class="k">Unlocks</div><div class="v">Notification · Payment · CRM · personal-data reads.</div></div>
+  </div>
+
+  <div class="sdk new">
+    <div class="top"><span class="name">@projexlight/sdk-persona</span> <span class="pkg">packages/sdk-persona</span> <span class="tag new">NEW v3</span></div>
+    <div class="meta-row">Effort: <span class="effort-L">L · 6 weeks</span></div>
+    <div class="row"><div class="k">Depends on</div><div class="v">contracts · sdk-identity · sdk-tenant · sdk-policy · sdk-rebac · sdk-pool-router · sdk-vault · sdk-audit</div></div>
+    <div class="row"><div class="k">Owns</div><div class="v">App Identity (L2) CRUD; Tenant Membership (L3) CRUD; Persona (L4) CRUD; per-app role registry; multi-persona-per-membership; persona extension joins to app pools; persona shred independent of person shred; per-persona audit.</div></div>
+    <div class="row"><div class="k">Unlocks</div><div class="v">Every domain SDK that needs "which hat is this user wearing". CRM, Engagement, Recommendation, Payment, Notification consume.</div></div>
+    <div class="row"><div class="k">Done when</div><div class="v">One <code>person_id</code> holds 5+ App Identities, 10+ Memberships, 12+ Personas without cross-leakage; persona shred independent of person shred; CI verifies Hospital A's Patient persona cannot read Hospital B's.</div></div>
+  </div>
+
+  <div class="sdk">
+    <div class="top"><span class="name">@projexlight/sdk-geo</span> <span class="pkg">packages/sdk-geo</span></div>
+    <div class="meta-row">Effort: <span class="effort-L">L · 6 weeks</span> · Owner: Satyam</div>
+    <div class="row"><div class="k">Depends on</div><div class="v">contracts · sdk-audit · sdk-pool-router</div></div>
+    <div class="row"><div class="k">Owns</div><div class="v">Canonical <code>address_id</code> registry (Consolidation pattern); geocoding facade; bounding-box queries; provider abstraction (Mapbox · Google · OSM); PostGIS store.</div></div>
+    <div class="row"><div class="k">Unlocks</div><div class="v">Property / Asset / Encounter-location · Storm · Dispatch · Evidence · CRM addresses · Event venues.</div></div>
+  </div>
+
+  <div class="sdk">
+    <div class="top"><span class="name">@projexlight/sdk-device</span> <span class="pkg">packages/sdk-device</span></div>
+    <div class="meta-row">Effort: <span class="effort-M">M · 4 weeks</span></div>
+    <div class="row"><div class="k">Depends on</div><div class="v">contracts · sdk-identity · sdk-audit</div></div>
+    <div class="row"><div class="k">Owns</div><div class="v">Canonical <code>device_uuid</code> registry (Coexistence pattern with HDK); attestation; person ↔ device link; OS / app-version provenance.</div></div>
+    <div class="row"><div class="k">Unlocks</div><div class="v">HDK-idp · Evidence · Diagnostic-Telemetry · field-mobile workflows.</div></div>
+  </div>
+
+  <div class="sdk">
+    <div class="top"><span class="name">@projexlight/sdk-feature-flags</span> <span class="pkg">packages/sdk-feature-flags</span></div>
+    <div class="meta-row">Effort: <span class="effort-M">M · 3 weeks</span></div>
+    <div class="row"><div class="k">Depends on</div><div class="v">contracts · sdk-tenant</div></div>
+    <div class="row"><div class="k">Owns</div><div class="v">Per-tenant flag store; kill switches (especially per-agent); rollout cohorts; client-side evaluator.</div></div>
+  </div>
+
+  <div class="sdk new">
+    <div class="top"><span class="name">@projexlight/sdk-identity-resolver</span> <span class="pkg">packages/sdk-identity-resolver</span> <span class="tag new">NEW v3.1</span></div>
+    <div class="meta-row">Effort: <span class="effort-M">M · 3 weeks</span> · Owner: Identity · From Analyze.txt mandate #1</div>
+    <div class="row"><div class="k">Depends on</div><div class="v">contracts · sdk-identity · sdk-persona · sdk-tenant · sdk-rebac · sdk-pool-router</div></div>
+    <div class="row"><div class="k">Owns</div><div class="v">The single canonical <code>resolveIdentityContext(token)</code> entry point. Composes JWT claims + App Identity + Tenant Membership + Persona + active Encounter + Relationships into one frozen <code>IdentityContext</code> object that every downstream SDK consumes. Replaces ad-hoc layer traversal — services <b>must never</b> walk the six layers by hand (Analyze.txt: "Every service should NEVER manually resolve layers"). One-call resolution; memoized for the request lifecycle; debug surface explains exactly which layers contributed which attribute (critical for debugging the six-layer model). Snapshot version-id propagates so audit and policy decisions reference an immutable identity snapshot. <span class="new-tag">v3.1</span> <b>Identity Projection System</b> (closes G4 — Analyze2 mandate #1): bundled background-worker subpackage that subscribes to relationship/consent/policy/membership change events and materializes <b>flattened <code>subject_view</code> read models</b> per <code>(person, app, tenant)</code> into a fast read store (Redis + Postgres for durability). Resolver reads projection first (p99 ≤ 0.5ms warm); falls back to live six-layer resolve only on miss. Without this, runtime layer joins become the platform's hot-path bottleneck at PB scale.</div></div>
+    <div class="row"><div class="k">Unlocks</div><div class="v">Sub-ms identity resolution everywhere; readable debug output ("why did this call see persona X?"); policy precomputation (sdk-policy can cache against snapshot id); <b>hyperscale authz</b> — projection refresh latency replaces traversal latency as the bound.</div></div>
+    <div class="row"><div class="k">Done when</div><div class="v">Lint rule blocks any SDK that imports sdk-identity OR sdk-persona but not sdk-identity-resolver in the call path; resolve p99 ≤ 1ms (warm) / ≤ 5ms (cold); debug API explains attribute provenance per call. <span class="new-tag">v3.1</span> <b>Projection refreshed within 1s of any relationship/consent/policy change; 10M-subject projection store stays under 50GB; chaos test killing the projector falls back to live resolve without errors</b>.</div></div>
+  </div>
+
+  <div class="sdk new">
+    <div class="top"><span class="name">@projexlight/sdk-data-rights</span> <span class="pkg">packages/sdk-data-rights</span> <span class="tag new">NEW v3.1</span></div>
+    <div class="meta-row">Effort: <span class="effort-M">M · 4 weeks</span> · Owner: Privacy / Identity</div>
+    <div class="row"><div class="k">Depends on</div><div class="v">contracts · sdk-identity · sdk-persona · sdk-consent · sdk-vault · sdk-audit · sdk-workflow · sdk-pool-router</div></div>
+    <div class="row"><div class="k">Owns</div><div class="v">End-to-end <b>DSAR / right-to-erasure workflow</b>. The cryptographic-shred mechanism already exists in Vault; this SDK owns the regulated <b>process</b>: subject request → identity verification → tenant approval (or auto-approve per policy) → mandatory grace period → execute (shred Person Key OR scoped persona key OR encounter key per request type) → certificate of completion → audit trail. Composes erasure (GDPR Art 17, DPDP, CCPA), access (Art 15: "give me all my data" — composes portability export across pools), rectification (Art 16), restriction (Art 18), objection (Art 21). Per-jurisdiction regulator-clock SLA enforcement (30d for GDPR, etc.).</div></div>
+    <div class="row"><div class="k">Unlocks</div><div class="v">First regulated-vertical deployment (healthcare, EU eCommerce, finance); auditable proof of compliance ops; no per-vertical reinvention of the privacy workflow.</div></div>
+    <div class="row"><div class="k">Done when</div><div class="v">Synthetic person across 3 apps + 5 personas + 12 encounters issues DSAR → unified export within 30d; issues erasure → Person Key shred renders all 12 encounters undecryptable; certificate signed by Audit; regulator-clock SLA dashboard green.</div></div>
+  </div>
+</section>
+
+<!-- ============ WAVE 4 ============ -->
+<section id="wave-4">
+  <div class="wave-header">
+    <div class="badge">W4</div>
+    <div>
+      <h2>Wave 4 · Operational Core + Billing</h2>
+      <div class="sub">Table-stakes operational SDKs every vertical needs to ship its first feature — plus the invoicer that turns 20 weeks of accumulated meter events into customer bills.</div>
+      <div class="timing">Weeks 22–29 · ~7 weeks · 6 SDKs · partly parallel · HDK track starts</div>
+    </div>
+  </div>
+
+  <div class="why">
+    <span class="why-label">Why this wave now</span>
+    Notification reads the App Identity's notification band and must check Consent; Payment touches the Secure-Data band and must envelope-encrypt via Vault; Media stores blobs keyed by Vault tenant/encounter keys and ACL-checks via Policy. Each is a thin SDK if the prior waves exist — and a multi-month refactor if they don't. Workflow and Search round out the operational base. <span class="new-tag">v3.1</span> <b>Billing</b> joins this wave: it needs <code>sdk-payment</code> (W4) to push invoices, and by week 22 the meter has 20 weeks of W2/W3 traffic for catalog calibration before the first real invoice goes out.
+  </div>
+
+  <div class="sdk modified">
+    <div class="top"><span class="name">@projexlight/sdk-media</span> <span class="pkg">packages/sdk-media</span></div>
+    <div class="meta-row">Effort: <span class="effort-M">M · 4 weeks</span></div>
+    <div class="row"><div class="k">Depends on</div><div class="v">contracts · sdk-vault · sdk-policy · sdk-audit · sdk-pool-router</div></div>
+    <div class="row"><div class="k">Owns</div><div class="v">Signed upload / download URLs; S3 prefix per tenant; envelope-encrypted blobs; transcoding pipeline; signed playback URLs; <span class="new-tag">v3</span> per-encounter blob keying when applicable.</div></div>
+  </div>
+
+  <div class="sdk modified">
+    <div class="top"><span class="name">@projexlight/sdk-notification</span> <span class="pkg">packages/sdk-notification</span></div>
+    <div class="meta-row">Effort: <span class="effort-M">M · 4 weeks</span></div>
+    <div class="row"><div class="k">Depends on</div><div class="v">contracts · sdk-profile · sdk-persona · sdk-consent · sdk-audit</div></div>
+    <div class="row"><div class="k">Owns</div><div class="v">Channel routing (WhatsApp · SMS · email · push); template engine; provider abstraction (Twilio · SES · WhatsApp BSP); send pre-flight Consent check; quiet hours; <span class="new-tag">v3</span> resolves App Identity notification-routing band (per-app).</div></div>
+  </div>
+
+  <div class="sdk modified">
+    <div class="top"><span class="name">@projexlight/sdk-payment</span> <span class="pkg">packages/sdk-payment</span></div>
+    <div class="meta-row">Effort: <span class="effort-L">L · 5 weeks</span></div>
+    <div class="row"><div class="k">Depends on</div><div class="v">contracts · sdk-profile · sdk-vault · sdk-audit · sdk-pool-router</div></div>
+    <div class="row"><div class="k">Owns</div><div class="v">Provider abstraction (Stripe · Razorpay · Plaid · ACH); PCI-tokenized refs in Secure Data; refund / chargeback workflow; immutable distribution ledger for Fund use cases; <span class="new-tag">v3</span> respects encounter retention when invoicing belongs to a sealed encounter.</div></div>
+  </div>
+
+  <div class="sdk">
+    <div class="top"><span class="name">@projexlight/sdk-workflow</span> <span class="pkg">packages/sdk-workflow</span></div>
+    <div class="meta-row">Effort: <span class="effort-M">M · 4 weeks</span></div>
+    <div class="row"><div class="k">Depends on</div><div class="v">contracts · sdk-audit</div></div>
+    <div class="row"><div class="k">Owns</div><div class="v">Typed Temporal facade; durable workflow registry; compensable steps; envelope-context propagation through workers.</div></div>
+  </div>
+
+  <div class="sdk modified">
+    <div class="top"><span class="name">@projexlight/sdk-search</span> <span class="pkg">packages/sdk-search</span></div>
+    <div class="meta-row">Effort: <span class="effort-M">M · 3 weeks</span></div>
+    <div class="row"><div class="k">Depends on</div><div class="v">contracts · sdk-policy · sdk-pool-router</div></div>
+    <div class="row"><div class="k">Owns</div><div class="v">OpenSearch indexes per tenant; per-tenant aliases; ABAC-filtered queries; index-builder helpers; saved query primitives; <span class="new-tag">v3</span> per-pool index sharding.</div></div>
+  </div>
+
+  <div class="sdk new">
+    <div class="top"><span class="name">@projexlight/sdk-billing</span> <span class="pkg">packages/sdk-billing</span> <span class="tag new">NEW v3.1</span></div>
+    <div class="meta-row">Effort: <span class="effort-L">L · 5 weeks</span> · Owner: Platform / Finance Engineering</div>
+    <div class="row"><div class="k">Depends on</div><div class="v">contracts · sdk-meter · sdk-payment · sdk-tenant · sdk-audit · sdk-analytics</div></div>
+    <div class="row"><div class="k">Owns</div><div class="v">Reads daily rollups from sdk-meter; applies a versioned <code>pricing.catalog.vN</code> (the schema lives in <code>contracts</code>, the rates live in a Postgres table editable by Finance — schema typed, rates live). Monthly invoice generation (PDF + per-SKU line items, per app, per BU, per persona). Free-tier engine, committed-use discounts, soft/hard cap policy issuance to sdk-meter, dunning workflows via sdk-workflow. <b>Showback / chargeback API</b> per <code>(app_id, bu_id, persona_kind, encounter_id)</code> — the wedge vs hyperscalers, which only do flat per-account. Reprice-dry-run job recomputes any past month against a new catalog so finance can preview impact before applying. Customer-facing real-time meter at <code>/billing/live</code> (powered by sdk-meter's Redis live counter). Pushes invoices to Stripe/Razorpay via sdk-payment.</div></div>
+    <div class="row"><div class="k">Pricing modes supported</div><div class="v"><code>flat_per_call</code> · <code>tiered_per_call</code> · <code>passthrough_plus_margin</code> (AI, SMS) · <code>per_unit</code> (bytes, docs, tokens) · <code>bundled_subscription + overage</code> · <code>free_internal</code> (agent-issued calls comped or rolled to "AI action" line item).</div></div>
+    <div class="row"><div class="k">Unlocks</div><div class="v">First customer invoice; per-tenant kill switch on overdue accounts; cost-driven UX flags (e.g., a tenant approaching its hard cap sees a banner).</div></div>
+    <div class="row"><div class="k">Done when</div><div class="v">Synthetic tenant runs 30 days of traffic across W2/W3 SDKs → invoice generated T+24h; line items per SDK per method per app match the rollup; reprice-dry-run of the same month under <code>pricing.catalog.v2</code> produces a consistent delta report; showback API returns per-BU split that sums to total; integration with sdk-payment pushes a test invoice to Stripe successfully.</div></div>
+  </div>
+
+  <div class="sdk new">
+    <div class="top"><span class="name">@projexlight/sdk-webhook</span> <span class="pkg">packages/sdk-webhook</span> <span class="tag new">NEW v3.1</span></div>
+    <div class="meta-row">Effort: <span class="effort-M">M · 3 weeks</span> · Owner: Platform</div>
+    <div class="row"><div class="k">Depends on</div><div class="v">contracts · sdk-tenant · sdk-audit · sdk-workflow · sdk-secrets (HMAC signing keys vaulted)</div></div>
+    <div class="row"><div class="k">Owns</div><div class="v">Outbound event delivery from platform → tenant's external systems (Slack, Zapier, customer backends, partner apps). Per-tenant endpoint registry with event-type subscriptions; HMAC-signed payloads; exponential-backoff retries with dead-letter; replay UI for last 30d; circuit-breaker per endpoint; mTLS for high-trust endpoints. Composes with Event Type Registry — only registered events can be subscribed.</div></div>
+    <div class="row"><div class="k">Unlocks</div><div class="v">Customer-side integrations without polling; partner-driven workflows; Zapier-style automations.</div></div>
+  </div>
+
+  <div class="sdk new">
+    <div class="top"><span class="name">@projexlight/sdk-approval</span> <span class="pkg">packages/sdk-approval</span> <span class="tag new">NEW v3.1</span></div>
+    <div class="meta-row">Effort: <span class="effort-M">M · 4 weeks</span> · Owner: Workflow / Platform</div>
+    <div class="row"><div class="k">Depends on</div><div class="v">contracts · sdk-workflow · sdk-notification · sdk-persona · sdk-audit</div></div>
+    <div class="row"><div class="k">Owns</div><div class="v">Generic approval-routing primitive — "this action needs N approvers from role X, in order Y, within SLA Z." Composable into any vertical workflow (refunds &gt; $10k, mass-delete, cross-tenant data share, agent acting beyond scope). Hierarchical chains (Manager → Director → VP); parallel approvals; auto-escalate on timeout; delegation rules; full audit per step. <span class="new-tag">v3.1</span> Specifically powers <b>agent delegated-authority</b> (Analyze.txt mandate #5): an agent requesting outside its scope routes through here for human sign-off; the approval grant is bounded in time and scope.</div></div>
+    <div class="row"><div class="k">Unlocks</div><div class="v">Sensitive-op safety net for every vertical; agent containment with human-in-the-loop; no per-vertical reinvention of approvals.</div></div>
+  </div>
+
+  <div class="sdk new">
+    <div class="top"><span class="name">@projexlight/sdk-connectors</span> <span class="pkg">packages/sdk-connectors</span> <span class="tag new">NEW v3.1</span></div>
+    <div class="meta-row">Effort: <span class="effort-L">L · 5 weeks</span> · Owner: Integrations · Phase: P4</div>
+    <div class="row"><div class="k">Depends on</div><div class="v">contracts · sdk-workflow · sdk-vault · sdk-audit · sdk-meter · sdk-webhook · sdk-tenant</div></div>
+    <div class="row"><div class="k">Owns</div><div class="v">The <b>common framework</b> every per-target connector follows. Provides: OAuth/credential management (vaulted per tenant, refresh tokens, scope tracking); typed schema mapping primitives (source→canonical with conflict resolution per §6A); bidirectional sync engine (CDC from source + delta push back, replay-safe, conflict policy per event type); rate-limit handling (backoff, jitter, per-tenant quota respect); webhook ingestion adapter (inbound from external systems via sdk-webhook); polling fallback for systems without webhooks; cursor/checkpoint state durable in connector's schema; health monitoring (per-connection status, error budgets, alerting). Each <code>connector-{target}</code> package depends on this framework. See <code>./AgenticIntegration-v3.1.html §5</code>.</div></div>
+    <div class="row"><div class="k">Pool placement</div><div class="v">Connector framework in Admin Pool. Per-target connectors get their own schema (<code>connector_salesforce · connector_snowflake · …</code>) for credential state and sync checkpoints.</div></div>
+    <div class="row"><div class="k">Connectors that ship in P4</div><div class="v"><code>connector-slack</code> (bidirectional · M · 3w) — sdk-notification already handles outbound; this adds the inbound + interactive side (read threads, slash commands, app shortcuts).</div></div>
+    <div class="row"><div class="k">Unlocks</div><div class="v">Per-target connector roster across P5–P7 (Salesforce, M365, GWorkspace, Jira, Linear, Zendesk, HubSpot, Zoom, Snowflake, SAP/NetSuite/Workday).</div></div>
+    <div class="row"><div class="k">Done when</div><div class="v">Framework + connector-slack ship; round-trip test: Slack thread message ingests as <code>slack.thread.message.v1</code> event; agent can post via connector-slack with capability token; OAuth refresh + revocation verified.</div></div>
+  </div>
+
+  <div class="sdk new">
+    <div class="top"><span class="name">@projexlight/sdk-tenant-lifecycle</span> <span class="pkg">packages/sdk-tenant-lifecycle</span> <span class="tag new">NEW v3.1</span></div>
+    <div class="meta-row">Effort: <span class="effort-M">M · 4 weeks</span> · Owner: Platform</div>
+    <div class="row"><div class="k">Depends on</div><div class="v">contracts · sdk-tenant · sdk-pool-router · sdk-data-rights · sdk-workflow · sdk-vault · sdk-audit · sdk-billing</div></div>
+    <div class="row"><div class="k">Owns</div><div class="v">Full tenant lifecycle state machine: <code>provisioned → trial → active → suspended → offboarding → offboarded</code>. Owns: provisioning workflow (pool allocation, default policies, sample data, welcome notifications), <b>sandbox/staging environments per tenant</b> (a separate sub-pool for safe testing with masked PII; refresh-from-prod operation with consent), trial→paid conversion (composes with sdk-billing), suspension (read-only mode for non-payment), offboarding (export-all-then-shred via sdk-data-rights, billing wind-down, certificate of destruction).</div></div>
+    <div class="row"><div class="k">Unlocks</div><div class="v">Self-serve tenant onboarding; per-tenant sandbox UAT; clean offboarding with audited destruction; trial GTM motions.</div></div>
+  </div>
+</section>
+
+<!-- ============ WAVE 5 ============ -->
+<section id="wave-5">
+  <div class="wave-header">
+    <div class="badge">W5</div>
+    <div>
+      <h2>Wave 5 · Engagement (incl. Encounter / Relationship)</h2>
+      <div class="sub">CRM and engagement SDKs — verticals build customer features on this layer. Plus the new Engagement SDK owning L5/L6.</div>
+      <div class="timing">Weeks 29–35 · ~6 weeks · 7 SDKs · all parallel after Engagement v1</div>
+    </div>
+  </div>
+
+  <div class="why">
+    <span class="why-label">Why this wave now</span>
+    With Persona (W3), Operational core (W4), and ReBAC (W2) in place, engagement SDKs become thin facades. CRM/SR/Event in v3 build on Engagement — they reference encounter_id for their work units instead of inventing visit/order/session primitives.
+  </div>
+
+  <div class="sdk new">
+    <div class="top"><span class="name">@projexlight/sdk-engagement</span> <span class="pkg">packages/sdk-engagement</span> <span class="tag new">NEW v3</span></div>
+    <div class="meta-row">Effort: <span class="effort-L">L · 6 weeks</span></div>
+    <div class="row"><div class="k">Depends on</div><div class="v">contracts · sdk-persona · sdk-rebac · sdk-vault · sdk-workflow · sdk-pool-router · sdk-audit</div></div>
+    <div class="row"><div class="k">Owns</div><div class="v">Encounter (L5) CRUD (open · in-progress · closed · sealed); Encounter participants (persona references); per-encounter Vault key open/close; Relationship (L6) CRUD + lifecycle; Encounter Grants (time/scope-bounded tokens); Encounter-to-extension hooks (chart, order, visit notes).</div></div>
+    <div class="row"><div class="k">Unlocks</div><div class="v">CRM activities reference encounter_id; SR tickets are engagement-of-kind; Event sessions reference encounter; healthcare and eCommerce verticals consume.</div></div>
+    <div class="row"><div class="k">Done when</div><div class="v">Hospital visit lifecycle round-trips; encounter key shreds at seal; eCommerce order lifecycle round-trips; ER nurse encounter grant expires automatically at shift end.</div></div>
+  </div>
+
+  <div class="grid cols-2">
+    <div class="sdk modified">
+      <div class="top"><span class="name">@projexlight/sdk-crm</span> <span class="pkg">packages/sdk-crm</span> <span class="tag mod">MODIFIED v3</span></div>
+      <div class="meta-row">Effort: <span class="effort-L">L · 5 weeks</span> · Owner: Mayur</div>
+      <div class="row"><div class="k">Depends on</div><div class="v">contracts · sdk-persona · sdk-engagement · sdk-geo · sdk-audit · sdk-policy</div></div>
+      <div class="row"><div class="k">Owns</div><div class="v">Contacts/Leads keyed by Persona; deal cycle = Engagement; CRM activities are sub-units of Engagement; per-vertical custom_fields JSONB.</div></div>
+    </div>
+    <div class="sdk">
+      <div class="top"><span class="name">@projexlight/sdk-content</span> <span class="pkg">packages/sdk-content</span></div>
+      <div class="meta-row">Effort: <span class="effort-M">M · 3 weeks</span></div>
+      <div class="row"><div class="k">Depends on</div><div class="v">contracts · sdk-media · sdk-audit · sdk-search</div></div>
+      <div class="row"><div class="k">Owns</div><div class="v">Generic typed-content with tenant-defined taxonomies; publishing workflow; signed playback hooks.</div></div>
+    </div>
+    <div class="sdk modified">
+      <div class="top"><span class="name">@projexlight/sdk-service-request</span> <span class="pkg">packages/sdk-service-request</span></div>
+      <div class="meta-row">Effort: <span class="effort-M">M · 3 weeks</span></div>
+      <div class="row"><div class="k">Depends on</div><div class="v">contracts · sdk-engagement · sdk-workflow · sdk-notification</div></div>
+      <div class="row"><div class="k">Owns</div><div class="v">Tickets as engagement-of-kind 'support'; routing rules; SLA timers; escalation workflows.</div></div>
+    </div>
+    <div class="sdk modified">
+      <div class="top"><span class="name">@projexlight/sdk-event</span> <span class="pkg">packages/sdk-event</span></div>
+      <div class="meta-row">Effort: <span class="effort-M">M · 3 weeks</span></div>
+      <div class="row"><div class="k">Depends on</div><div class="v">contracts · sdk-engagement · sdk-payment · sdk-notification · sdk-geo</div></div>
+      <div class="row"><div class="k">Owns</div><div class="v">Event sessions as engagement-of-kind 'session'; ticketing; QR check-in; venue (<code>address_id</code>); capacity rules.</div></div>
+    </div>
+    <div class="sdk">
+      <div class="top"><span class="name">@projexlight/sdk-campaign</span> <span class="pkg">packages/sdk-campaign</span></div>
+      <div class="meta-row">Effort: <span class="effort-M">M · 4 weeks</span></div>
+      <div class="row"><div class="k">Depends on</div><div class="v">contracts · sdk-notification · sdk-search · sdk-audit</div></div>
+      <div class="row"><div class="k">Owns</div><div class="v">Segment DSL over event stream; drip journeys; A/B variants.</div></div>
+    </div>
+    <div class="sdk">
+      <div class="top"><span class="name">@projexlight/sdk-social</span> <span class="pkg">packages/sdk-social</span></div>
+      <div class="meta-row">Effort: <span class="effort-M">M · 3 weeks</span></div>
+      <div class="row"><div class="k">Depends on</div><div class="v">contracts · sdk-crm · sdk-content</div></div>
+      <div class="row"><div class="k">Owns</div><div class="v">Pluggable channel connectors; DM / comment ingestion; <code>social.lead.captured</code> events feeding CRM.</div></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ WAVE 6 ============ -->
+<section id="wave-6">
+  <div class="wave-header">
+    <div class="badge">W6</div>
+    <div>
+      <h2>Wave 6 · AI &amp; Semantic</h2>
+      <div class="sub">The intelligence layer. AI Gateway first — no SDK calls a model directly.</div>
+      <div class="timing">Weeks 35–44 · ~9 weeks · 8 SDKs · serial-then-parallel</div>
+    </div>
+  </div>
+
+  <div class="why">
+    <span class="why-label">Why this wave now</span>
+    AI is the largest and most cross-cutting addition; earlier means model calls without consent enforcement, tenant budgets, or audit. Gateway must land first — every other AI SDK calls through it. Taxonomy before Parsing. RAG needs Vault and Search. Agent Runtime needs Gateway, Audit, Policy, ReBAC, and Workflow. Conversation sits on Agent Runtime. Recommendation on Gateway + Analytics.
+  </div>
+
+  <div class="sdk">
+    <div class="top"><span class="name">@projexlight/sdk-ai-gateway</span> <span class="pkg">packages/sdk-ai-gateway</span></div>
+    <div class="meta-row">Effort: <span class="effort-L">L · 6 weeks</span></div>
+    <div class="row"><div class="k">Depends on</div><div class="v">contracts · sdk-tenant · sdk-audit · sdk-secrets · sdk-consent · <span class="new-tag">v3.1</span> sdk-meter (budget caps + kill-switch routed through universal gate)</div></div>
+    <div class="row"><div class="k">Owns</div><div class="v">Provider abstraction (Anthropic · OpenAI · Gemini · Bedrock); routing rules; PII redaction; Langfuse trace on every call; provider-cost capture per call (tokens in/out, model). <span class="new-tag">v3.1</span> <b>No longer owns its own budget code</b> — per-tenant budget caps and per-agent kill-switch are delegated to <code>sdk-meter</code> via the universal <code>@meter</code> gate. AI Gateway just emits provider cost as <code>units</code>, sdk-meter applies <code>passthrough_plus_margin</code> pricing from the catalog. Removes duplicated quota logic.</div></div>
+    <div class="row"><div class="k">Unlocks</div><div class="v">Parsing · RAG · Agent Runtime · Recommendation · every model call.</div></div>
+  </div>
+
+  <div class="sdk">
+    <div class="top"><span class="name">@projexlight/sdk-taxonomy</span> <span class="pkg">packages/sdk-taxonomy</span></div>
+    <div class="meta-row">Effort: <span class="effort-M">M · 4 weeks</span></div>
+    <div class="row"><div class="k">Depends on</div><div class="v">contracts · sdk-audit</div></div>
+    <div class="row"><div class="k">Owns</div><div class="v">Versioned artifact taxonomies; extraction schemas; prompt templates; per-tenant profile overrides; migration plans.</div></div>
+  </div>
+
+  <div class="sdk new">
+    <div class="top"><span class="name">@projexlight/sdk-trace</span> <span class="pkg">packages/sdk-trace</span> <span class="tag new">NEW v3.1</span></div>
+    <div class="meta-row">Effort: <span class="effort-M">M · 4 weeks</span> · Owner: Platform / Observability · Phase: P6A · <b>Closes G12</b></div>
+    <div class="row"><div class="k">Depends on</div><div class="v">contracts · sdk-telemetry · sdk-audit · sdk-meter · sdk-identity-resolver · sdk-policy · sdk-rebac · sdk-pool-router · sdk-vault · sdk-consent · sdk-lineage</div></div>
+    <div class="row"><div class="k">Owns</div><div class="v">The <b>cross-system trace viewer</b>. One <code>trace_id</code> propagated end-to-end resolves into a single timeline UI showing every layer touched: <i>identity resolution</i> (which projection version, which layers contributed which attribute) → <i>consent evaluation</i> (which receipt, which purpose) → <i>pool routing</i> (which pool, which dsn, cache hit/miss) → <i>key tier</i> (which Vault key wrapped the read, latency) → <i>policy decision</i> (ABAC + ReBAC + IQL evaluation tree, allow/deny with reason) → <i>meter gate</i> (admission decision, SKU, units emitted) → <i>SDK body execution</i> (which methods, which sub-calls) → <i>lineage edges</i> (what this read derived, what derived from it). Pulls from sdk-telemetry's OTel spans + sdk-audit's append entries + sdk-meter's emissions + sdk-lineage's edges into a unified causal graph. Without this, debugging a six-layer failure at PB scale requires correlating 6+ tools manually — operations drowns.</div></div>
+    <div class="row"><div class="k">Unlocks</div><div class="v">Sub-15-minute mean-time-to-diagnose for production incidents; customer self-serve debugging via the audit-read API (the same trace can be exposed to the tenant); regression tests can assert the trace structure matches the expected layer composition.</div></div>
+    <div class="row"><div class="k">Done when</div><div class="v">A synthetic failed read crossing 8+ layers renders as a single, navigable timeline in the trace UI within 5 seconds of the request completing; trace export to PDF/JSON for support handoffs; per-layer latency budget violations highlight automatically; integration with sdk-billing's /billing/verify shows the trace behind each usage event for customer self-audit.</div></div>
+  </div>
+
+  <div class="sdk new">
+    <div class="top"><span class="name">@projexlight/sdk-mcp-bridge</span> <span class="pkg">packages/sdk-mcp-bridge</span> <span class="tag new">NEW v3.1</span></div>
+    <div class="meta-row">Effort: <span class="effort-M">M · 4 weeks</span> · Owner: AI Platform · Phase: P6A · <b>Strategic primitive for agentic interop</b></div>
+    <div class="row"><div class="k">Depends on</div><div class="v">contracts · sdk-agent-runtime · sdk-policy · sdk-meter · sdk-audit · sdk-trace · sdk-vault · sdk-semantic (CapabilityGraph registration)</div></div>
+    <div class="row"><div class="k">Owns</div><div class="v">Bidirectional <b>Model Context Protocol</b> support — the open standard Anthropic introduced for LLM tool invocation. <b>(consume side)</b> Register external MCP servers per tenant; auto-register their tools in the agent's CapabilityGraph; mint capability tokens on use; invoke external MCP server via stdio/SSE/HTTP; record request+response in audit + lineage + trace exactly like a native SDK call. <b>(expose side)</b> Expose selected ProjexCloud SDKs as MCP servers so external AI systems (Claude Desktop · custom OpenAI assistants · customer's own LLM stacks) can call into ProjexCloud as a tool source, scoped per tenant via sdk-api-keys. <b>Same gated/metered/audited contract as internal tools — no special-case bypass.</b></div></div>
+    <div class="row"><div class="k">Why strategic</div><div class="v">Other integration approaches require per-target connector code (high cost, slow growth). MCP delegates connector maintenance to the standard's ecosystem — one bridge inherits access to every public MCP server (Slack · GitHub · Postgres · Snowflake · Notion · Linear · ... and growing monthly).</div></div>
+    <div class="row"><div class="k">Tenant config</div><div class="v">Tenant admin registers MCP servers in Tenant Admin Portal → AI → MCP Registry: transport (stdio · SSE · HTTP) · vaulted credentials · allowed agents · allowed tools (opt-out per tool).</div></div>
+    <div class="row"><div class="k">Done when</div><div class="v">An agent plan that includes "post to Slack" + "query Snowflake" + "create Jira issue" executes through three different MCP servers with one trace_id, full audit trail, meter billing per tool invocation. ProjexCloud's sdk-crm exposed as MCP, callable from Claude Desktop with a tenant token.</div></div>
+  </div>
+
+  <div class="sdk">
+    <div class="top"><span class="name">@projexlight/sdk-knowledge-rag</span> <span class="pkg">packages/sdk-knowledge-rag</span></div>
+    <div class="meta-row">Effort: <span class="effort-L">L · 5 weeks</span></div>
+    <div class="row"><div class="k">Depends on</div><div class="v">contracts · sdk-ai-gateway · sdk-vault · sdk-search</div></div>
+    <div class="row"><div class="k">Owns</div><div class="v">Per-tenant corpora; pgvector / Pinecone store; embedding worker; retrieval API with policy-filtered hits.</div></div>
+  </div>
+
+  <div class="sdk">
+    <div class="top"><span class="name">@projexlight/sdk-parsing</span> <span class="pkg">packages/sdk-parsing</span></div>
+    <div class="meta-row">Effort: <span class="effort-L">L · 7 weeks</span></div>
+    <div class="row"><div class="k">Depends on</div><div class="v">contracts · sdk-vault · sdk-taxonomy · sdk-ai-gateway · sdk-workflow · sdk-audit</div></div>
+    <div class="row"><div class="k">Owns</div><div class="v">8-stage pipeline (Ingestion · OCR · Classification · Schema Resolve · Extraction · Validation · Human Review · Routing); confidence scoring; re-parse modes; Needs-Review queue.</div></div>
+  </div>
+
+  <div class="sdk modified">
+    <div class="top"><span class="name">@projexlight/sdk-agent-runtime</span> <span class="pkg">packages/sdk-agent-runtime</span> <span class="tag mod">MODIFIED v3</span></div>
+    <div class="meta-row">Effort: <span class="effort-L">L · 6 weeks</span></div>
+    <div class="row"><div class="k">Depends on</div><div class="v">contracts · sdk-ai-gateway · sdk-audit · sdk-policy · sdk-rebac · sdk-workflow</div></div>
+    <div class="row"><div class="k">Owns</div><div class="v">Agent definitions; execution loops; memory snapshots; tool dispatch; retry state; kill-switch state; idempotence helpers; <span class="new-tag">v3</span> ReBAC evaluator as a first-class tool — agents acting on behalf of a persona respect relationships and encounter grants. <span class="new-tag">v3.1</span> <b>Agent identity as first-class</b> (Analyze.txt mandate #5): every agent has <code>agent_id · agent_persona</code> (the persona the agent is acting on behalf of) <code>· agent_scope</code> (typed capability allow-list) <code>· agent_chain</code> (provenance from human → meta-agent → executing agent). Audited on every action; meter records actor.kind='agent' with the chain. <b>Memory isolation</b>: per-tenant memory namespaces with hard partitions — prompt context, vector store, conversation buffers never cross tenants; prompt-leakage CI test runs synthetic tenant collisions every PR. <b>Delegated authority</b>: agents requesting beyond their scope route through sdk-approval for human sign-off; reversible-action journaling so any agent decision can be rolled back within retention window. <span class="new-tag">v3.1</span> <b>Full Agent Isolation Runtime</b> (closes G7 — Analyze2 mandate #5): <b>(1) Capability Tokens</b> — every tool invocation requires a signed, scope-limited, single-use token issued by the runtime; tool refuses without; meter records token id; revoke kills the action mid-flight. <b>(2) Execution TTL</b> — every agent run has a hard deadline; runtime terminates and refunds on expiry; no "runaway agent" possible. <b>(3) Deterministic Replay</b> — agent execution log is content-addressed; replaying the same inputs against the same model snapshot produces bit-identical outputs; required to roll back agent decisions and to reproduce production bugs. <b>(4) Tool Permission Boundaries</b> — every tool declares the SKUs it calls in a manifest; meter enforces the manifest at gate time; an agent calling a tool that exceeds its scope is denied at admission, not after the fact. Without these four, agents are not safely deployable at scale — single prompt-engineering mistake leaks Tenant A into Tenant B.</div></div>
+  </div>
+
+  <div class="sdk">
+    <div class="top"><span class="name">@projexlight/sdk-conversation</span> <span class="pkg">packages/sdk-conversation</span></div>
+    <div class="meta-row">Effort: <span class="effort-M">M · 4 weeks</span></div>
+    <div class="row"><div class="k">Depends on</div><div class="v">contracts · sdk-agent-runtime · sdk-knowledge-rag</div></div>
+    <div class="row"><div class="k">Owns</div><div class="v">Chat sessions; handoff; transcripts; multi-turn memory.</div></div>
+  </div>
+
+  <div class="sdk">
+    <div class="top"><span class="name">@projexlight/sdk-recommendation</span> <span class="pkg">packages/sdk-recommendation</span></div>
+    <div class="meta-row">Effort: <span class="effort-M">M · 4 weeks</span></div>
+    <div class="row"><div class="k">Depends on</div><div class="v">contracts · sdk-ai-gateway · sdk-analytics</div></div>
+    <div class="row"><div class="k">Owns</div><div class="v">Similar-X; next-best-action; per-tenant model artifacts.</div></div>
+  </div>
+
+  <div class="sdk modified">
+    <div class="top"><span class="name">@projexlight/sdk-analytics</span> <span class="pkg">packages/sdk-analytics</span></div>
+    <div class="meta-row">Effort: <span class="effort-M">M · 4 weeks</span></div>
+    <div class="row"><div class="k">Depends on</div><div class="v">contracts · sdk-audit</div></div>
+    <div class="row"><div class="k">Owns</div><div class="v">ClickHouse OLAP wiring; cohort / funnel / KPI primitives; per-tenant rollups; <span class="new-tag">v3</span> cross-pool aggregation via warehouse only — no live cross-pool joins. <span class="new-tag">v3.1</span> <b>Iceberg / S3-tables read-federation lakehouse layer</b> (closes G11 — Analyze2 mandate #3): PB-scale analytics that warehouse alone cannot hold spill into Iceberg tables on S3, queryable from Trino/Athena. The lakehouse is the only sanctioned home for cross-pool aggregations at petabyte scale. Per-pool ClickHouse remains for hot rollups (≤ 90 days); lakehouse holds cold + cross-pool. Schema evolution via Iceberg's native versioning; partition pruning by (region · tenant · time).</div></div>
+  </div>
+
+  <div class="sdk new">
+    <div class="top"><span class="name">@projexlight/sdk-lineage</span> <span class="pkg">packages/sdk-lineage</span> <span class="tag new">NEW v3.1</span></div>
+    <div class="meta-row">Effort: <span class="effort-M">M · 4 weeks</span> · Owner: Data Platform · From Analyze.txt MDM requirement (line 23)</div>
+    <div class="row"><div class="k">Depends on</div><div class="v">contracts · sdk-audit · sdk-parsing · sdk-ai-gateway · sdk-knowledge-rag</div></div>
+    <div class="row"><div class="k">Owns</div><div class="v">Field-level provenance graph: where did this value come from, what transformations applied, which model/agent/parser produced it, against which source schema. Edge types: <code>extracted_from</code> · <code>derived_from</code> · <code>merged_from</code> · <code>scored_by</code> · <code>translated_by</code>. Powers <b>AI auditability</b> ("an agent recommended X — show me the chain that led there"), <b>compliance</b> (regulator wants to see how a derived field was computed), and <b>data quality triage</b> (a bad upstream contaminates which downstream fields). Backfills lineage from existing audit events; new state-changes emit lineage edges alongside audit envelopes. <span class="new-tag">v3.1</span> <b>Cross-pool projection worker</b> (closes G8): in-pool lineage edges (record A in App Pool X derived from record B in same pool) stay in the pool's lineage subgraph for synchronous queries; cross-pool edges (a parsed doc in Evidence Pool → a derived record in App Pool → an AI score from sdk-ai-gateway) are projected asynchronously into the <b>Iceberg lakehouse cross_pool_lineage table</b> (see sdk-analytics). "Show me the full derivation chain for record X" resolves in-pool synchronously, then queries the lakehouse for cross-pool hops. Hot path stays in-pool; cross-pool reasoning is async-acceptable. Matches the v3.1 "no live cross-pool joins" rule (§8A).</div></div>
+    <div class="row"><div class="k">Unlocks</div><div class="v">Explainable AI; regulator-grade derivation proofs; root-cause analysis for data-quality issues.</div></div>
+  </div>
+
+  <div class="sdk new">
+    <div class="top"><span class="name">@projexlight/sdk-semantic</span> <span class="pkg">packages/sdk-semantic</span> <span class="tag new">NEW v3.1</span></div>
+    <div class="meta-row">Effort: <span class="effort-XL">XL · 6 weeks</span> · Owner: Platform Architect · <b>Analyze.txt mandate #7 — "the largest architectural gap"</b></div>
+    <div class="row"><div class="k">Depends on</div><div class="v">contracts · sdk-taxonomy · sdk-knowledge-rag · sdk-agent-runtime · sdk-policy · sdk-lineage</div></div>
+    <div class="row"><div class="k">Owns</div><div class="v">The <b>Enterprise Semantic Model Layer</b>. <span class="new-tag">v3.1</span> Six primitive types (Analyze2 mandate #6, expanded — closes G9): <b>SemanticObject</b> (typed instance of a domain concept — Patient, Property, Donation, Order — with attributes drawn from MDM and persona extensions); <b>SemanticRelation</b> (typed relationships between SemanticObjects beyond ReBAC: <code>treats · owns · funds · refers · derives_from</code>); <b>CapabilityGraph</b> (which SDK methods are valid operations on which SemanticObject types — agents traverse this to plan multi-step actions); <b>DomainOntology</b> (per-vertical ontology bundles registered to the platform — Healthcare ontology, Realty ontology, Seva ontology). <span class="new-tag">v3.1</span> Plus two added in v3.1: <b>SemanticIntent</b> (a typed goal — "schedule a follow-up visit for this patient within 2 weeks"; agents take an Intent and walk the CapabilityGraph to produce a plan); <b>SemanticPolicy</b> (ontology-aware authz rules expressed in IQL over SemanticObjects/Relations — "a Doctor with an active care-team Relation to a Patient may write Rx for that Patient" — compiles to ABAC + ReBAC under the hood). AI agents reason against this layer instead of raw entities. Cross-domain inference becomes tractable (a Patient in Healthcare maps to a Person in Realty for housing-stability indicators, governed by ontology bridges). Persona-extension data registers as SemanticObjects so verticals plug in without rebuilding the ontology.</div></div>
+    <div class="row"><div class="k">Unlocks</div><div class="v">Agentic orchestration that actually understands what it's doing; cross-domain reasoning ("this patient also has overdue rent — flag for social worker outreach"); reduces brittle prompt engineering — agents query the ontology, not a 10k-token prompt; the platform stops being "infrastructure + SDKs" and becomes <b>"infrastructure + SDKs + a domain brain"</b>.</div></div>
+    <div class="row"><div class="k">Done when</div><div class="v">Healthcare ontology v1 + Realty ontology v1 + Seva ontology v1 registered; an agent given a SemanticObject + a goal walks the CapabilityGraph to produce a valid plan without prompt-engineered exemplars; cross-vertical inference test ("patient at Hospital A + property at OneEstate → flag care-coordination need") succeeds; ontology changes ship as versioned bundles with migration plans.</div></div>
+  </div>
+</section>
+
+<!-- ============ WAVE 7 ============ -->
+<section id="wave-7">
+  <div class="wave-header">
+    <div class="badge">W7</div>
+    <div>
+      <h2>Wave 7 · Geo · Field · Evidence</h2>
+      <div class="sub">Field-grade SDKs that drive FieldOps, OneEstate Sentinel, Realty visits, and Healthcare imaging.</div>
+      <div class="timing">Weeks 44–50 · ~6 weeks · 6 SDKs · parallel after Dispatch</div>
+    </div>
+  </div>
+
+  <div class="why">
+    <span class="why-label">Why this wave now</span>
+    Every SDK here references canonical <code>address_id</code> from W3 and consumes the operational core from W4. Evidence depends on Vault + Audit + Geo + Media + Device + Engagement — building earlier means evidence is mutable, which defeats its legal purpose. Dispatch + Assignment build on Workflow + Notification + Geo + Engagement.
+  </div>
+
+  <div class="grid cols-2">
+    <div class="sdk">
+      <div class="top"><span class="name">@projexlight/sdk-storm</span> <span class="pkg">packages/sdk-storm</span></div>
+      <div class="meta-row">Effort: <span class="effort-M">M · 3 weeks</span></div>
+      <div class="row"><div class="k">Depends on</div><div class="v">contracts · sdk-geo · sdk-audit</div></div>
+      <div class="row"><div class="k">Owns</div><div class="v">Storm overlays (pre/post); intensity grids; ingested from weather APIs to internal store.</div></div>
+    </div>
+    <div class="sdk modified">
+      <div class="top"><span class="name">@projexlight/sdk-dispatch</span> <span class="pkg">packages/sdk-dispatch</span></div>
+      <div class="meta-row">Effort: <span class="effort-M">M · 4 weeks</span></div>
+      <div class="row"><div class="k">Depends on</div><div class="v">contracts · sdk-engagement · sdk-geo · sdk-notification · sdk-workflow</div></div>
+      <div class="row"><div class="k">Owns</div><div class="v">Unified queue (engagement-aware); live WS updates; route optimization.</div></div>
+    </div>
+    <div class="sdk">
+      <div class="top"><span class="name">@projexlight/sdk-assignment</span> <span class="pkg">packages/sdk-assignment</span></div>
+      <div class="meta-row">Effort: <span class="effort-M">M · 3 weeks</span></div>
+      <div class="row"><div class="k">Depends on</div><div class="v">contracts · sdk-dispatch · sdk-profile · sdk-persona</div></div>
+      <div class="row"><div class="k">Owns</div><div class="v">Auto-assign by radius / skill / availability; territory rules.</div></div>
+    </div>
+    <div class="sdk">
+      <div class="top"><span class="name">@projexlight/sdk-lead-scoring</span> <span class="pkg">packages/sdk-lead-scoring</span></div>
+      <div class="meta-row">Effort: <span class="effort-M">M · 4 weeks</span> · Owner: Prashant</div>
+      <div class="row"><div class="k">Depends on</div><div class="v">contracts · sdk-crm · sdk-ai-gateway · sdk-analytics</div></div>
+      <div class="row"><div class="k">Owns</div><div class="v">Proximity · expertise · intent · storm-impact scoring; next-best-action.</div></div>
+    </div>
+    <div class="sdk modified">
+      <div class="top"><span class="name">@projexlight/sdk-evidence</span> <span class="pkg">packages/sdk-evidence</span> <span class="tag mod">MODIFIED v3</span></div>
+      <div class="meta-row">Effort: <span class="effort-L">L · 5 weeks</span></div>
+      <div class="row"><div class="k">Depends on</div><div class="v">contracts · sdk-vault · sdk-audit · sdk-geo · sdk-media · sdk-device · sdk-engagement</div></div>
+      <div class="row"><div class="k">Owns</div><div class="v">Provenance-stamped captures (GPS · IMU · device · consent_ref); raw + edited retention; chain-of-custody hash; legal-export API; <span class="new-tag">v3</span> stamps <code>encounter_id</code> on every capture; sealing an encounter prevents new evidence captures referencing it; per-encounter retention shreds the right blobs.</div></div>
+    </div>
+    <div class="sdk">
+      <div class="top"><span class="name">@projexlight/sdk-diagnostic-telemetry</span> <span class="pkg">packages/sdk-diagnostic-telemetry</span></div>
+      <div class="meta-row">Effort: <span class="effort-M">M · 3 weeks</span> · Owner: Kunal</div>
+      <div class="row"><div class="k">Depends on</div><div class="v">contracts · sdk-audit · sdk-device</div></div>
+      <div class="row"><div class="k">Owns</div><div class="v">Crash snapshots tied to <code>device_uuid</code>; permissions / Wi-Fi / battery / sensor health; session replay events.</div></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ HDK ============ -->
+<section id="wave-hdk">
+  <div class="wave-header" style="background: linear-gradient(135deg, rgba(184,141,255,0.10), rgba(106,169,255,0.08)); border-color: rgba(184,141,255,0.35);">
+    <div class="badge" style="background: linear-gradient(135deg, #b88dff, #6e4ed1); color: #190b3a;">HDK</div>
+    <div>
+      <h2>HDK Native Track · parallel from Wave 4</h2>
+      <div class="sub">Native Kotlin / Swift modules bridged into RN. TS facades depend on prior SDKs; native implementations parallel once contracts are stable.</div>
+      <div class="timing">Weeks 22–48 · ~26 weeks parallel · 10 modules · staged install order</div>
+    </div>
+  </div>
+
+  <div class="why">
+    <span class="why-label">Why parallel — and why not earlier</span>
+    HDK modules consume backend SDKs (identity → idp, vault → idp, policy → permissions, geo → map, device → diagnostic, engagement → camera/evidence). Starting earlier means writing Kotlin + Swift against TypeScript types that will change. Once W3 finishes (Week 22) the relevant backend contracts are stable. Install order: <code>idp → permissions → diagnostic → camera → map → scanner → image → video → measure → watermark</code>.
+  </div>
+
+  <table>
+    <thead><tr><th>Step</th><th>Module</th><th>TS-facade depends on</th><th>Effort</th><th>Owner</th><th>Start</th></tr></thead>
+    <tbody>
+      <tr><td>1</td><td><code>hdk-idp</code></td><td>sdk-identity · sdk-vault · sdk-device · sdk-persona</td><td><span class="effort-M">M · 4w</span></td><td>Shoaib · Krunal</td><td>Week 22</td></tr>
+      <tr><td>2</td><td><code>hdk-permissions</code></td><td>sdk-policy · sdk-rebac · sdk-tenant · sdk-consent</td><td><span class="effort-M">M · 4w</span></td><td>Mayur</td><td>Week 24</td></tr>
+      <tr><td>3</td><td><code>hdk-diagnostic</code></td><td>sdk-diagnostic-telemetry stubs</td><td><span class="effort-M">M · 3w</span></td><td>Kunal</td><td>Week 24</td></tr>
+      <tr><td>3.5 <span class="new-tag">v3.1</span></td><td><code>hdk-sync</code></td><td>contracts (ConflictResolutionPolicy types) · sdk-workflow · sdk-audit</td><td><span class="effort-L">L · 5w</span></td><td>Mobile · TBD</td><td>Week 26</td></tr>
+      <tr><td>4</td><td><code>hdk-camera</code></td><td>hdk-permissions · hdk-diagnostic · <b>hdk-sync</b> · sdk-evidence stubs · sdk-engagement</td><td><span class="effort-L">L · 5w</span></td><td>Kunal</td><td>Week 28</td></tr>
+      <tr><td>5</td><td><code>hdk-map</code></td><td>hdk-permissions · sdk-geo</td><td><span class="effort-L">L · 5w</span></td><td>Satyam</td><td>Week 28</td></tr>
+      <tr><td>6</td><td><code>hdk-scanner</code></td><td>hdk-camera</td><td><span class="effort-M">M · 3w</span></td><td>TBD</td><td>Week 33</td></tr>
+      <tr><td>7</td><td><code>hdk-image-editor</code></td><td>hdk-camera</td><td><span class="effort-L">L · 5w</span></td><td>Shoheb</td><td>Week 33</td></tr>
+      <tr><td>8</td><td><code>hdk-video-editor</code></td><td>hdk-camera · sdk-media</td><td><span class="effort-L">L · 5w</span></td><td>Shoheb</td><td>Week 36</td></tr>
+      <tr><td>9</td><td><code>hdk-measure</code></td><td>hdk-camera + ARCore / ARKit</td><td><span class="effort-L">L · 5w</span></td><td>TBD</td><td>Week 38</td></tr>
+      <tr><td>10</td><td><code>hdk-watermark</code></td><td>hdk-image-editor</td><td><span class="effort-M">M · 3w</span></td><td>TBD</td><td>Week 38</td></tr>
+    </tbody>
+  </table>
+
+  <div class="callout purple">
+    <b>Parity rule.</b> An HDK module ships only when iOS and Android both reach parity. The TS facade refuses to load (clean "unsupported platform" error) until both natives are present — no silent no-ops. This is enforced in CI.
+  </div>
+
+  <div class="sdk new">
+    <div class="top"><span class="name">hdk-sync</span> <span class="pkg">native/hdk-sync</span> <span class="tag new">NEW v3.1</span></div>
+    <div class="meta-row">Effort: <span class="effort-L">L · 5 weeks</span> · Owner: Mobile · Phase: P3 (week 26) · <b>Closes G6</b></div>
+    <div class="row"><div class="k">Depends on</div><div class="v">contracts (ConflictResolutionPolicy types per event type) · sdk-workflow · sdk-audit</div></div>
+    <div class="row"><div class="k">Owns</div><div class="v">The <b>offline write queue, replay engine, and Conflict Resolution Model execution</b> for every HDK module that does offline-write (camera, map, scanner, image-editor, video-editor, measure, watermark). Each event type registers its conflict-resolution strategy in contracts: <code>CRDT</code> for collaborative documents · <code>LWW</code> (last-write-wins) for telemetry and ephemeral state · <code>merge_policy</code> for structured documents · <code>event_sourcing</code> for audit and ledger-style data · <code>human_reconciliation</code> for sensitive data (PII edits, financial corrections, clinical notes). Without hdk-sync as a centralized owner, every later HDK module reinvents conflict handling and field-ops verticals hit unresolvable collisions in production.</div></div>
+    <div class="row"><div class="k">Unlocks</div><div class="v">Camera/map/scanner/etc. can safely offline-write without producing unresolvable conflicts; field-ops verticals (FieldOps, OneEstate Sentinel, healthcare home visits) shippable.</div></div>
+    <div class="row"><div class="k">Done when</div><div class="v">Synthetic test: 5 devices generate concurrent edits on the same encounter offline → after reconnect, hdk-sync resolves per the per-event-type policy (CRDT merge for note edits, LWW for telemetry, human-review queue for sensitive corrections); audit chain records resolution decision for each conflict; no silent data loss.</div></div>
+  </div>
+</section>
+
+<!-- ============ TIMELINE ============ -->
+<section id="timeline">
+  <h2>5 · Timeline (Gantt — 50 weeks)</h2>
+  <p>Indicative timeline assuming a 3–5 engineer platform team with intra-wave parallelism. HDK runs parallel from W4 (Week 22).</p>
+
+  <div class="diagram-wrap">
+    <pre class="mermaid">
+gantt
+  title v3.1 SDK Build Plan (50 weeks · indicative)
+  dateFormat  YYYY-MM-DD
+  axisFormat  %b %Y
+
+  section W0 Foundations
+  contracts                       :a1, 2026-01-05, 3w
+  config telemetry DS brand       :a2, 2026-01-05, 3w
+
+  section W1 Compliance + Pool + Meter
+  sdk-secrets                     :b1, 2026-01-19, 2w
+  sdk-vault                       :b2, 2026-01-19, 6w
+  sdk-audit                       :b3, 2026-02-02, 4w
+  sdk-pool-router NEW             :b4, 2026-01-26, 5w
+  sdk-meter NEW v3.1              :b5, 2026-02-09, 4w
+
+  section W2 Identity + ReBAC + Hierarchies
+  sdk-tenant (+hierarchies)       :c1, 2026-03-02, 5w
+  sdk-identity (+federation)      :c2, 2026-03-09, 5w
+  sdk-consent                     :c3, 2026-03-16, 4w
+  sdk-policy (+IQL)               :c4, 2026-03-16, 4w
+  sdk-rebac NEW (+safeguards)     :c5, 2026-03-16, 4w
+  sdk-api-keys NEW v3.1           :c6, 2026-03-23, 3w
+
+  section W3 Persona + Extensions + Resolver + Data Rights
+  sdk-profile                     :d1, 2026-04-13, 5w
+  sdk-geo                         :d2, 2026-04-13, 6w
+  sdk-device                      :d3, 2026-04-13, 4w
+  sdk-feature-flags               :d4, 2026-04-13, 3w
+  sdk-persona NEW                 :d5, 2026-04-20, 6w
+  sdk-identity-resolver NEW v3.1  :d6, 2026-05-04, 3w
+  sdk-data-rights NEW v3.1        :d7, 2026-05-04, 4w
+
+  section W4 Operational + Billing + Lifecycle
+  sdk-media                       :e1, 2026-06-01, 4w
+  sdk-notification                :e2, 2026-06-01, 4w
+  sdk-payment                     :e3, 2026-06-01, 5w
+  sdk-workflow                    :e4, 2026-06-01, 4w
+  sdk-search                      :e5, 2026-06-01, 3w
+  sdk-billing NEW v3.1            :e6, 2026-06-15, 5w
+  sdk-webhook NEW v3.1            :e7, 2026-06-08, 3w
+  sdk-approval NEW v3.1           :e8, 2026-06-15, 4w
+  sdk-tenant-lifecycle NEW v3.1   :e9, 2026-06-22, 4w
+  sdk-connectors NEW v3.1         :e10, 2026-06-15, 5w
+  connector-slack NEW v3.1        :e11, 2026-06-29, 3w
+
+  section W5 Engagement
+  sdk-engagement NEW              :f1, 2026-07-20, 6w
+  sdk-crm                         :f2, 2026-07-27, 5w
+  sdk-content                     :f3, 2026-07-20, 3w
+  sdk-service-request             :f4, 2026-07-20, 3w
+  sdk-event                       :f5, 2026-07-27, 3w
+  sdk-campaign                    :f6, 2026-08-03, 4w
+  sdk-social                      :f7, 2026-08-10, 3w
+
+  section W6 AI · Semantic · Lineage · Trace
+  sdk-ai-gateway                  :g1, 2026-08-31, 6w
+  sdk-taxonomy                    :g2, 2026-08-31, 4w
+  sdk-knowledge-rag               :g3, 2026-09-21, 5w
+  sdk-parsing                     :g4, 2026-09-21, 7w
+  sdk-agent-runtime (+isolation)  :g5, 2026-09-28, 6w
+  sdk-conversation                :g6, 2026-10-12, 4w
+  sdk-recommendation              :g7, 2026-10-05, 4w
+  sdk-analytics (+Iceberg)        :g8, 2026-09-07, 4w
+  sdk-lineage NEW v3.1            :g9, 2026-09-14, 4w
+  sdk-semantic NEW v3.1 (6 types) :g10, 2026-10-05, 6w
+  sdk-trace NEW v3.1              :g11, 2026-09-28, 4w
+  sdk-mcp-bridge NEW v3.1         :g12, 2026-10-12, 4w
+  connector-snowflake NEW v3.1    :g13, 2026-10-19, 5w
+
+  section W7 Field
+  sdk-storm                       :h1, 2026-11-02, 3w
+  sdk-dispatch                    :h2, 2026-11-02, 4w
+  sdk-assignment                  :h3, 2026-11-16, 3w
+  sdk-lead-scoring                :h4, 2026-11-09, 4w
+  sdk-evidence                    :h5, 2026-11-02, 5w
+  sdk-diagnostic-telemetry        :h6, 2026-11-16, 3w
+
+  section HDK
+  hdk-idp                         :hk1, 2026-06-01, 4w
+  hdk-permissions                 :hk2, 2026-06-15, 4w
+  hdk-diagnostic                  :hk3, 2026-06-15, 3w
+  hdk-sync NEW v3.1               :hk3b, 2026-06-29, 5w
+  hdk-camera                      :hk4, 2026-07-13, 5w
+  hdk-map                         :hk5, 2026-07-13, 5w
+  hdk-scanner                     :hk6, 2026-08-17, 3w
+  hdk-image-editor                :hk7, 2026-08-17, 5w
+  hdk-video-editor                :hk8, 2026-09-07, 5w
+  hdk-measure                     :hk9, 2026-09-21, 5w
+  hdk-watermark                   :hk10, 2026-09-21, 3w
+    </pre>
+  </div>
+</section>
+
+<!-- ============ PARALLELIZATION ============ -->
+<section id="parallel">
+  <h2>6 · Parallelization Map</h2>
+  <p>Two compression mechanisms: (1) more parallel SDKs within a wave, (2) starting downstream wave design while upstream finishes the last SDK.</p>
+
+  <table>
+    <thead><tr><th>Wave</th><th>Max useful teams</th><th>Constraint that limits parallelism</th><th>Compression opportunity</th></tr></thead>
+    <tbody>
+      <tr><td>W0</td><td>3</td><td>contracts must be defined first.</td><td>Run telemetry + design-system + branding in parallel.</td></tr>
+      <tr><td>W1</td><td>3</td><td>Vault depends on Secrets; Audit, Pool Router, Meter all run parallel after Audit's first 2 weeks.</td><td>Three tracks: (a) Secrets→Vault, (b) Audit + Pool Router, (c) Meter (starts after Audit week 2, depends on Audit + Pool Router APIs being frozen).</td></tr>
+      <tr><td>W2</td><td>3 → 5</td><td>Tenant first, then Identity; Consent + Policy(+IQL) + ReBAC(+safeguards) + API Keys parallel after Identity API freeze.</td><td>5 teams after week 10. Tenant expanded (+reseller, hierarchies); API Keys is a new team but short (3w).</td></tr>
+      <tr><td>W3</td><td>7</td><td>Identity Resolver needs Persona's APIs to be stable; Data Rights needs Persona + Consent + Vault stable. Otherwise the other 5 are independent.</td><td>7 teams; total wave = max(L) ≈ 6 weeks (still Persona is the long pole).</td></tr>
+      <tr><td>W4</td><td>9</td><td>Billing waits on sdk-payment (week 24); Tenant Lifecycle waits on Billing API stable (week 26); Webhook and Approval are independent.</td><td>5 operational + Billing + Webhook + Approval + Lifecycle in parallel; total wave = 6 weeks (Lifecycle is the long pole).</td></tr>
+      <tr><td>W5</td><td>2 → 7</td><td>Engagement must land first; 6 engagement SDKs parallel after.</td><td>Engagement 6 weeks; then 6 SDKs in parallel = 5 weeks more.</td></tr>
+      <tr><td>W6</td><td>3 → 10</td><td>P6A first: AI Gateway + Taxonomy + Analytics + sdk-trace parallel; Agent Runtime with full isolation must close before any P6B SDK starts. P6B: RAG · Parsing · Conversation · Recommendation · Lineage · Semantic in parallel.</td><td>P6A ~6 weeks (Gateway + Agent isolation long pole); P6B 4–6 weeks more. Total wave ~10 weeks.</td></tr>
+      <tr><td>W7</td><td>6</td><td>Dispatch before Assignment; rest independent.</td><td>6 teams; total wave = 5 weeks.</td></tr>
+      <tr><td>HDK</td><td>4</td><td>idp + permissions + diagnostic first; <b>hdk-sync (NEW v3.1) MUST land before camera/map</b> so offline-write modules have a conflict-resolution owner; then camera + map; then editors / scanner / measure.</td><td>4 mobile-native teams; total ~22 weeks; hdk-sync slots in at week 26 ahead of camera (week 28).</td></tr>
+    </tbody>
+  </table>
+
+  <div class="callout green">
+    <b>Headline.</b> With a maximum-parallel staffing model (≈ 18–22 engineers across platform and HDK), the 50-week serial plan compresses to <b>~32 weeks</b> end-to-end — limited by the W1 → W2 → W3 critical path, the W5 Engagement long pole, and the AI Gateway in W6.
+  </div>
+</section>
+
+<!-- ============ GATES ============ -->
+<section id="gates">
+  <h2>7 · Wave Exit Gates</h2>
+  <p>Each wave has a hard exit gate. A wave is not "done" because its branches merged; it is done when downstream waves can build against it without further changes to its public API.</p>
+
+  <table>
+    <thead><tr><th>Wave</th><th>Exit gate (all must be true)</th></tr></thead>
+    <tbody>
+      <tr><td><b>W0</b></td><td>contracts v1 published with envelope, canonical IDs, scope hierarchy, six identity types, pool-routing types. Workspace CI green. Sample app boots with design-system + branding.</td></tr>
+      <tr><td><b>W1</b></td><td>Vault chaos test: shred a <code>person_key</code> → every referencing record undecryptable. Shred an <code>encounter_key</code> → only that encounter's payload undecryptable. Shred a <code>pool_kek</code> → that pool's data undecryptable. Audit hash chain survives tampering-injection. Pool Router resolves &lt; 5ms p99; MIGRATING state blocks live queries; cross-pool attempt fails lint. <span class="new-tag">v3.1</span> Meter admission gate p99 ≤ 2ms; 10k synthetic SDK calls produce 10k usage events with zero loss; daily rollup matches raw events to byte-perfect parity; usage hash-chain verify-job catches injected tampering; <code>@meter</code> codegen wraps every annotated method in W0/W1 SDKs with no per-SDK boilerplate.</td></tr>
+      <tr><td><b>W2 = P2</b></td><td>End-to-end: create org → app → tenant → bu; auto-assign pools; register person; issue JWT with full six-layer claim set; deny/allow paths through Policy + ReBAC logged to Audit; consent grant + revoke + offline replay verified. <span class="new-tag">v3.1</span> Reseller → sub-tenant chain works (audit rolls through parent); recursive BU inheritance verified; geographic-node sub-regional residency enforced (DE-only data stays in DE pool even within EU region); role-template inheritance respected by ABAC; IQL parses and evaluates the canonical examples; ReBAC 10M-edge load test passes p99 ≤ 5ms; API key with limited scope can call only its scoped methods; SAML+SCIM JIT-provisioning round-trips with Okta sandbox. <b>Identity Projection System (G4): subject_view projections written on subscription to relationship/consent/policy/membership change events; projection store reflects new relationship within 1s; resolver hits projection on warm path (p99 ≤ 0.5ms); fallback to live resolve verified by chaos-killing the projector</b>.</td></tr>
+      <tr><td><b>W3 = P3</b></td><td>One person → 5+ App Identities → 10+ Memberships → 12+ Personas; persona shred independent of person shred; Notification reads only App Identity routing band; Geo resolves duplicates to one <code>address_id</code>; Device row joins on biometric. <span class="new-tag">v3.1</span> <code>resolveIdentityContext()</code> is the only path to layer attributes (lint forbids direct sdk-identity/sdk-persona imports in non-resolver SDKs); resolver p99 ≤ 1ms warm reading from <b>Identity Projection store</b>; <b>projection refreshed within 1s of relationship change</b>; DSAR test produces unified export across 3 apps within 30d with <b>person_pool_residency reconciliation green</b>; erasure shreds Person Key and verifies 12 encounters become undecryptable; certificate of destruction signed by Audit. <b>hdk-sync: 5-device offline-edit collision test resolves per Conflict Resolution Model (CRDT for notes, LWW for telemetry, human-review queue for sensitive); zero silent data loss; resolution decisions audited per conflict</b>.</td></tr>
+      <tr><td><b>W4</b></td><td>All five operational SDKs run only via Pool Router; Notification + Consent + Profile happy-path; Payment + Vault PCI happy-path; Media envelope-encrypted upload; Temporal workflow with envelope propagation; Search with ABAC filtering. <span class="new-tag">v3.1</span> Billing turns on: synthetic tenant runs 30 days of W2/W3 traffic → T+24h invoice generated against <code>pricing.catalog.v1</code>; line items reconcile against meter rollups; reprice-dry-run under <code>catalog.v2</code> produces a consistent delta; showback API splits per-app/BU/persona and the splits sum to total; soft caps emit WARN headers; hard caps DENY via meter; first invoice pushed to Stripe in sandbox. <span class="new-tag">v3.1</span> Webhook delivers HMAC-signed events to a test endpoint with retry + dead-letter verified; Approval routes a synthetic refund &gt; $10k through Manager → Director chain with SLA escalation; Tenant Lifecycle provisions a new tenant end-to-end (pool alloc, sample data, welcome notifications) and offboards another tenant (export → grace → shred → certificate) cleanly.</td></tr>
+      <tr><td><b>W5</b></td><td>Encounter open → in-progress → closed → sealed lifecycle; encounter key shreds at seal; encounter grant for nurse expires automatically; CRM activities reference encounter_id; SR ticket as engagement-of-kind 'support'; six engagement SDKs each have end-to-end integration test.</td></tr>
+      <tr><td><b>W6 = P6A then P6B</b></td><td><b>P6A exit gate (must close before any P6B SDK starts):</b> LLM call through Gateway records consent, budget, redaction, Langfuse trace. <b>Agent Isolation Runtime fully enforced</b> — capability tokens required per tool invocation; execution TTL terminates a runaway agent within deadline; deterministic replay reproduces last week's decision bit-identical; sandboxed memory partitions verified by cross-tenant prompt-leakage CI test (fails closed). sdk-trace renders an end-to-end request crossing identity + consent + routing + pool + key + policy + meter + lineage in one timeline within 5s. <br><br><b>P6B exit gate:</b> Parsing extracts a sample document. RAG retrieves with policy-filtered hits. Analytics aggregates cross-pool via warehouse — Iceberg lakehouse extracts queryable. <b>Lineage cross-pool projection populated within 5min of source change</b>; "show derivation chain" surfaces every transformation across pools. <b>Semantic: Healthcare + Realty + Seva ontologies v1 loaded; agent given an Intent walks Intent → CapabilityGraph → Action to produce a valid multi-step plan without prompt-engineered exemplars; SemanticPolicy enforces ontology-aware authz</b>.</td></tr>
+      <tr><td><b>W7</b></td><td>Field capture from HDK → Evidence → Vault → Audit chain-of-custody (with encounter_id) verified. Dispatch + Assignment route end-to-end. Lead Scoring scores a CRM lead.</td></tr>
+      <tr><td><b>HDK</b></td><td>Each module ships only when iOS + Android parity is verified by the cross-platform CI matrix.</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ============ RISKS ============ -->
+<section id="risk">
+  <h2>8 · Risks &amp; Anti-patterns</h2>
+
+  <div class="grid cols-2">
+    <div class="card"><div class="label">Risk · High</div><div class="title">"Just stub it" on Vault or Pool Router</div><div class="body">Pressure to ship Identity before Vault is real, or to ship W2+ SDKs without going through Pool Router. Stubbing means real PII flows into unencrypted columns "temporarily" and SDKs accumulate their own routing shims. <b>Mitigation:</b> CI fails any PR that imports <code>sdk-profile</code> while <code>sdk-vault</code> is not at v1.0; CI fails any SDK that opens a Postgres connection without <code>withTenant(...)</code>.</div></div>
+
+    <div class="card"><div class="label">Risk · High</div><div class="title">Skipping Audit while "compliance reviews schemas"</div><div class="body">Audit deprioritized because it doesn't have a user-visible surface. But it is the proof every wave's gate depends on. <b>Mitigation:</b> Audit exit gate (chain-tamper alert) non-negotiable.</div></div>
+
+    <div class="card"><div class="label">Risk · High</div><div class="title">Persona collapsed back into a single profile row</div><div class="body">A vertical insists "we only need one profile per user". Works for that vertical, breaks for healthcare/eCommerce. <b>Mitigation:</b> Persona is mandatory; Profile SDK no longer exposes a per-user row API — only per-App-Identity.</div></div>
+
+    <div class="card"><div class="label">Risk · Medium</div><div class="title">Vertical teams forking the canonical entities</div><div class="body">Verticals may try to create <code>property_owner_name</code> columns "for now". Breaks erasure and consent. <b>Mitigation:</b> lint rule forbids personal-name / address-string / device-serial columns on any non-MDM table. Also bans visit/order/session tables outside <code>sdk-engagement</code>.</div></div>
+
+    <div class="card"><div class="label">Risk · Medium</div><div class="title">HDK starts too early</div><div class="body">Mobile engineers idle waiting for backend — temptation to start HDK in week 4. Result: TypeScript types churn, native code rewritten. <b>Mitigation:</b> HDK teams work on tooling (RN bridge generator, parity-CI matrix, native module skeletons) until Week 22.</div></div>
+
+    <div class="card"><div class="label">Risk · Medium</div><div class="title">AI Gateway long-pole compresses W6</div><div class="body">6-week Gateway build blocks 6 downstream AI SDKs. <b>Mitigation:</b> Gateway gets the strongest team and starts the moment W5 ships; Taxonomy runs in parallel since it doesn't depend on Gateway.</div></div>
+
+    <div class="card"><div class="label">Risk · Medium</div><div class="title">Pool capacity surprise</div><div class="body">High-growth tenant fills a shared pool quickly, slowing co-tenants. <b>Mitigation:</b> Pool Capacity Steward dashboard; auto-quarantine + migration when utilization &gt; 90%.</div></div>
+
+    <div class="card"><div class="label">Risk · Medium</div><div class="title">ReBAC graph grows unbounded</div><div class="body">10-year-old patient-doctor relationship clutters the graph. <b>Mitigation:</b> Relationship lifecycle includes auto-expiry; healthcare PCP relationships re-attest annually.</div></div>
+
+    <div class="card"><div class="label">Risk · Medium</div><div class="title">Encounter scope creep</div><div class="body">Verticals invent their own "Session" / "Visit" / "Order" entity instead of using Encounter. <b>Mitigation:</b> lint ban + Engagement is the only sanctioned home.</div></div>
+
+    <div class="card"><div class="label">Risk · Low</div><div class="title">Contract drift across SDKs</div><div class="body">Independent SDK teams may add fields outside contracts. <b>Mitigation:</b> service-side schema validators reject events whose <code>event_type</code> is not registered in <code>@projexlight/contracts</code>; CI runs cross-consumer tests.</div></div>
+
+    <div class="card"><div class="label">Risk · Low</div><div class="title">Promotion pressure before Rule of Three</div><div class="body">A vertical pushes to promote a domain SDK to Common too early. <b>Mitigation:</b> Common-Platform Working Group enforces Rule of Three as a hard gate.</div></div>
+
+    <div class="card"><div class="label">Risk · Low</div><div class="title">Documentation lag</div><div class="body">SDK docs trail code by 3+ weeks; verticals integrate against the wrong contract. <b>Mitigation:</b> docs ship in the same PR as the SDK; release-cadence enforces a docs check.</div></div>
+
+    <div class="card"><div class="label">Risk · High <span class="new-tag">v3.1</span></div><div class="title">Meter gate adds latency to every call</div><div class="body">A 2ms gate on hot paths can dominate response time. <b>Mitigation:</b> admission check is a single in-process LRU lookup over a Redis-warmed quota state; CI fails any SDK whose p99 latency regresses &gt; 3ms with meter enabled vs. disabled; emission is fire-and-forget to a local ring buffer flushed off the request path.</div></div>
+
+    <div class="card"><div class="label">Risk · High <span class="new-tag">v3.1</span></div><div class="title">Pricing catalog drift breaks invoices</div><div class="body">Sales/finance edits rates; a rate gets removed while an SDK method still references the SKU; that month's invoice has unpriced line items. <b>Mitigation:</b> SKU schema lives in <code>contracts</code> (typed; CI catches dangling refs); rates live in Postgres with a constraint that every active SKU has a rate row; orphan-SKU lint runs on every catalog edit; reprice-dry-run is mandatory before applying a catalog version to active tenants.</div></div>
+
+    <div class="card"><div class="label">Risk · Medium <span class="new-tag">v3.1</span></div><div class="title">Hard cap denies legitimate traffic on day one</div><div class="body">Enforcing caps before catalog is calibrated against real traffic causes outages. <b>Mitigation:</b> W1 ships <b>emit-only</b> mode (gate never denies; events flow). Soft caps (WARN headers) turn on in W4. Hard caps (DENY) only after one billing cycle of real data and tenant opt-in.</div></div>
+
+    <div class="card"><div class="label">Risk · Medium <span class="new-tag">v3.1</span></div><div class="title">Usage event loss = revenue loss</div><div class="body">Dropping events under Kafka backpressure means undercounting customers — direct revenue impact. <b>Mitigation:</b> at-least-once delivery with idempotent <code>event_id</code> dedup at the rollup worker; per-SDK ring-buffer with disk overflow if Kafka unavailable; reconciliation job compares raw event count to rollup totals nightly; chain-break alerts on missing days.</div></div>
+
+    <div class="card"><div class="label">Risk · Low <span class="new-tag">v3.1</span></div><div class="title">Customer dispute without verifiable trail</div><div class="body">"Why did my bill jump 5×?" — without a transparent trail, customers churn. <b>Mitigation:</b> hash-chained usage ledger per <code>(tenant, day)</code> linked into Audit; customer can hit <code>/billing/verify?day=...</code> and re-derive the day's total; <code>/billing/live</code> dashboard shows accruing cost &lt; 60s after each call so surprises don't compound silently for weeks.</div></div>
+
+    <div class="card"><div class="label">Risk · High <span class="new-tag">v3.1</span></div><div class="title">Identity resolver becomes a bottleneck</div><div class="body">Every authenticated call routes through <code>resolveIdentityContext()</code> — if it's slow or fails, the whole platform stalls. <b>Mitigation:</b> p99 ≤ 1ms warm enforced in CI; warm-cache hit rate &gt; 99%; cold-path fallback returns minimal context (L1+L2+L3) within 5ms; circuit breaker bypasses resolver and rejects request rather than hanging. Lint forbids any non-resolver SDK from reading layer attributes directly.</div></div>
+
+    <div class="card"><div class="label">Risk · High <span class="new-tag">v3.1</span></div><div class="title">Semantic Domain Layer over-fits to vertical 1</div><div class="body">The first ontology built (likely Healthcare) bakes in assumptions that fight every subsequent vertical. Same risk as building "common" abstractions from one example. <b>Mitigation:</b> Rule of Three applies to ontology promotion — a SemanticObject type lands in <code>contracts</code> only when a third vertical needs it. Vertical-specific concepts stay in vertical ontologies. Cross-vertical concepts (Person, Address, Money, Document) are introduced first as the universal core.</div></div>
+
+    <div class="card"><div class="label">Risk · Medium <span class="new-tag">v3.1</span></div><div class="title">Agent memory leakage across tenants</div><div class="body">A single prompt-engineering mistake or vector-store misconfiguration leaks Tenant A's data into Tenant B's agent context. Catastrophic compliance failure. <b>Mitigation:</b> hard memory partitions per tenant in the vector store layer (not just logical filters — physical namespaces); CI runs cross-tenant prompt-leakage tests on every agent change; any leakage halts release.</div></div>
+
+    <div class="card"><div class="label">Risk · Medium <span class="new-tag">v3.1</span></div><div class="title">DSAR fan-out misses data</div><div class="body">Right-to-erasure must touch every pool holding a person's data. If the inventory is wrong, "erased" data persists somewhere and the certificate of destruction is false — regulator-grade exposure. <b>Mitigation:</b> <code>person_pool_residency</code> registry written on every first-touch by any data-bearing SDK; weekly reconciliation job compares registry against actual data presence across pools; DSAR completion requires reconciliation green.</div></div>
+  </div>
+</section>
+
+<section>
+  <h2>Appendix · Cross-references</h2>
+  <table>
+    <thead><tr><th>You're looking for</th><th>Document</th></tr></thead>
+    <tbody>
+      <tr><td>v3.1 architecture (complete)</td><td><code>./Architecture-v3.1.html</code></td></tr>
+      <tr><td>v3.1 identity model deep dive</td><td><code>./AIM-Identity-Model-v3.1.html</code></td></tr>
+      <tr><td>v3 AIM-only architecture</td><td><code>../v3/Architecture-v3.html</code></td></tr>
+      <tr><td>v2 architecture &amp; identity foundation</td><td><code>../Architecture-v2.html §5A</code></td></tr>
+      <tr><td>v2 SDK build plan</td><td><code>../SDK-Build-Plan.html</code></td></tr>
+      <tr><td>Per-service contracts</td><td><code>../Common-Services-and-Agents.md</code></td></tr>
+      <tr><td>Source analysis</td><td><code>../../Analyze.txt</code></td></tr>
+    </tbody>
+  </table>
+</section>
+
+</div>
+
+<script>
+  mermaid.initialize({
+    startOnLoad: true,
+    theme: 'dark',
+    themeVariables: {
+      background: '#0b0f17',
+      primaryColor: '#1a2234',
+      primaryTextColor: '#e6ecf5',
+      primaryBorderColor: '#c9a86a',
+      lineColor: '#8a98b3',
+      secondaryColor: '#16241c',
+      tertiaryColor: '#241622'
+    },
+    flowchart: { curve: 'basis', useMaxWidth: true },
+    sequence: { useMaxWidth: true },
+    gantt: { useMaxWidth: true }
+  });
+</script>
+</body>
+</html>

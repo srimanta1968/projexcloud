@@ -1,0 +1,554 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>ProjexCloud Agentic Substrate &amp; Integration v3.1</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<style>
+  :root {
+    --bg: #0b0f17; --panel: #121826; --panel-2: #1a2234; --line: #243049;
+    --text: #e6ecf5; --muted: #8a98b3; --accent: #c9a86a; --accent-2: #6aa9ff;
+    --teal: #2dd4bf; --green: #5dd39e; --red: #ff6b6b; --yellow: #f5c451; --purple: #b88dff;
+    --code-bg: #0f1422;
+  }
+  * { box-sizing: border-box; }
+  html, body { background: var(--bg); color: var(--text); font-family: ui-sans-serif, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", sans-serif; margin: 0; padding: 0; line-height: 1.55; }
+  .page { max-width: 1260px; margin: 0 auto; padding: 56px 32px 96px; }
+  header.cover { border-bottom: 1px solid var(--line); padding-bottom: 36px; margin-bottom: 48px; }
+  header.cover .eyebrow { color: var(--accent); letter-spacing: 0.18em; text-transform: uppercase; font-size: 12px; font-weight: 700; }
+  header.cover h1 { font-size: 42px; line-height: 1.15; margin: 12px 0 8px; letter-spacing: -0.02em; }
+  header.cover .sub { color: var(--muted); font-size: 17px; max-width: 900px; }
+  header.cover .meta { display: flex; gap: 24px; flex-wrap: wrap; margin-top: 24px; color: var(--muted); font-size: 13px; }
+  header.cover .meta b { color: var(--text); font-weight: 600; }
+  header.cover .changelog { margin-top: 22px; background: var(--panel-2); border-left: 3px solid var(--accent-2); border-radius: 0 10px 10px 0; padding: 14px 18px; font-size: 13.5px; color: #d6deef; }
+  header.cover .changelog b { color: var(--accent-2); }
+  h2 { font-size: 26px; letter-spacing: -0.01em; margin: 56px 0 18px; padding-bottom: 8px; border-bottom: 1px solid var(--line); }
+  h3 { font-size: 18px; margin: 28px 0 10px; color: var(--text); }
+  h4 { font-size: 13px; margin: 18px 0 8px; color: var(--accent); text-transform: uppercase; letter-spacing: 0.12em; }
+  p { color: #c8d1e3; }
+  small, .muted { color: var(--muted); }
+  .grid { display: grid; gap: 16px; }
+  .grid.cols-2 { grid-template-columns: repeat(2, minmax(0,1fr)); }
+  .grid.cols-3 { grid-template-columns: repeat(3, minmax(0,1fr)); }
+  @media (max-width: 900px) { .grid.cols-2, .grid.cols-3 { grid-template-columns: 1fr; } header.cover h1 { font-size: 30px; } }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 18px 18px 16px; }
+  .card .label { color: var(--accent); font-size: 11px; text-transform: uppercase; letter-spacing: 0.14em; font-weight: 700; }
+  .card .title { font-weight: 600; margin: 6px 0 6px; font-size: 15px; }
+  .card .body { color: var(--muted); font-size: 13.5px; }
+  .pill { display: inline-block; padding: 3px 10px; border-radius: 999px; font-size: 11px; border: 1px solid var(--line); color: var(--muted); margin-right: 6px; }
+  .pill.purple { color: var(--purple); border-color: rgba(184,141,255,0.4); }
+  .pill.green { color: var(--green); border-color: rgba(93,211,158,0.4); }
+  .pill.yellow { color: var(--yellow); border-color: rgba(245,196,81,0.4); }
+  table { width: 100%; border-collapse: collapse; margin-top: 12px; font-size: 13.5px; }
+  th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { color: var(--muted); font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; }
+  pre, code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+  pre { background: var(--code-bg); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; overflow-x: auto; font-size: 12.5px; line-height: 1.5; }
+  code { background: var(--code-bg); padding: 1px 6px; border-radius: 4px; font-size: 12.5px; }
+  .diagram-wrap { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 22px; overflow-x: auto; }
+  .caption { color: var(--muted); font-size: 12.5px; margin-top: 10px; text-align: center; }
+  .mermaid { background: transparent; }
+  nav.toc { position: sticky; top: 0; background: rgba(11,15,23,0.92); backdrop-filter: blur(10px); border-bottom: 1px solid var(--line); padding: 10px 32px; z-index: 10; }
+  nav.toc .row { max-width: 1260px; margin: 0 auto; display: flex; flex-wrap: wrap; gap: 10px; font-size: 12px; }
+  nav.toc a { color: var(--muted); text-decoration: none; border-bottom: 1px solid transparent; }
+  nav.toc a:hover { color: var(--accent); border-color: var(--accent); }
+  .callout { border-left: 3px solid var(--accent); background: var(--panel-2); padding: 14px 18px; border-radius: 0 10px 10px 0; margin: 18px 0; color: #d6deef; font-size: 14px; }
+  .callout.green { border-color: var(--green); }
+  .callout.red { border-color: var(--red); }
+  .callout.purple { border-color: var(--purple); }
+  ul.tight li { margin: 4px 0; color: #c8d1e3; font-size: 14px; }
+  .new-tag { display: inline-block; font-size: 10px; padding: 1px 6px; border-radius: 4px; background: rgba(184,141,255,0.18); color: var(--purple); margin-left: 8px; vertical-align: middle; letter-spacing: 0.08em; }
+
+  .sdk { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 16px 18px 14px; margin-bottom: 12px; }
+  .sdk.new { border-color: rgba(184,141,255,0.45); }
+  .sdk .top { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+  .sdk .top .name { font-weight: 700; font-size: 16px; color: var(--text); }
+  .sdk .top .pkg { font-family: ui-monospace, Consolas, monospace; color: var(--accent); font-size: 12.5px; }
+  .sdk .top .tag { font-size: 10px; padding: 2px 8px; border-radius: 4px; font-weight: 700; letter-spacing: 0.08em; }
+  .sdk .top .tag.new { background: rgba(184,141,255,0.18); color: var(--purple); }
+  .sdk .meta-row { font-size: 12px; color: var(--muted); margin-top: 4px; }
+  .sdk .row { display: grid; grid-template-columns: 110px 1fr; gap: 10px; font-size: 13px; margin-top: 6px; }
+  .sdk .row .k { color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; font-size: 10.5px; padding-top: 2px; font-weight: 600; }
+  .sdk .row .v { color: #c8d1e3; }
+</style>
+</head>
+<body>
+
+<nav class="toc">
+  <div class="row">
+    <a href="#overview">1 · Overview</a>
+    <a href="#agentic-substrate">2 · Agentic Substrate</a>
+    <a href="#integration-categories">3 · Three Integration Categories</a>
+    <a href="#mcp-bridge">4 · sdk-mcp-bridge</a>
+    <a href="#connectors-framework">5 · sdk-connectors Framework</a>
+    <a href="#connector-roster">6 · Per-Target Connector Roster</a>
+    <a href="#agent-flow">7 · How Agents Use Connectors</a>
+    <a href="#tenant-dev">8 · Tenant Developer Experience</a>
+    <a href="#phase-mapping">9 · Phase Mapping</a>
+  </div>
+</nav>
+
+<div class="page">
+
+<header class="cover">
+  <div class="eyebrow">ProjexCloud · Agentic Substrate &amp; External Integration · v3.1</div>
+  <h1>Agentic Applications + Third-Party Integration — How They Compose</h1>
+  <p class="sub">This document answers two questions: <b>(1) What in v3.1 makes the platform agentic-ready out of the box?</b> and <b>(2) What third-party integrations does the platform need — and which ones it deliberately doesn't?</b> The answer is structured around <b>three categories</b> (replace · integrate · connect) plus two new primitives: <code>sdk-mcp-bridge</code> for the emerging Model Context Protocol standard and <code>sdk-connectors</code> as the framework for typed external-system connectors.</p>
+  <div class="meta">
+    <div><b>Companion docs</b> · <code>./Architecture-v3.1.html</code> · <code>./SDK-Build-Plan-v3.1.html</code> · <code>./AIM-Identity-Model-v3.1.html</code> · <code>./ProjectStructure-v3.1.html</code></div>
+    <div><b>Status</b> · v3.1 commitment</div>
+  </div>
+  <div class="changelog">
+    <b>What this doc commits to.</b> (1) v3.1's agentic substrate is <b>complete and competitive</b> — agent identity types, isolation runtime (capability tokens + TTL + replay + sandboxed memory), semantic reasoning, lineage, and observability already exist; the platform is more rigorous than what Salesforce/ServiceNow/Snowflake currently expose for agents. (2) Third-party integration splits into three categories: we <b>replace</b> the competitive platforms with our own SDKs; we <b>integrate</b> with provider-style backends (LLMs, payment processors, IdPs, KMS, channels) via pluggable abstractions; we <b>connect</b> to customer's existing enterprise tools (Salesforce, Snowflake, Slack, M365, …) via two new primitives. (3) The strategic addition is <b>sdk-mcp-bridge</b> — implementing the Model Context Protocol both ways (consume external MCP servers; expose our SDKs as MCP servers) makes ProjexCloud agents interoperable with any MCP-compatible system, present or future. (4) Per-target <code>connector-*</code> packages ship for high-value enterprise targets phased across P4–P6.
+  </div>
+</header>
+
+<!-- ============ OVERVIEW ============ -->
+<section id="overview">
+  <h2>1 · Overview</h2>
+  <p>The previous v3.1 docs ship the platform substrate. This document answers the harder question: <b>can agents do real work on this substrate, and can they reach the customer's existing systems?</b> The answer to both is yes — with one strategic addition (MCP bridge) and one framework + roster (connectors).</p>
+
+  <div class="grid cols-3" style="margin-top:16px">
+    <div class="card"><div class="label">Where we win</div><div class="title">Agentic substrate is built in, not bolted on</div><div class="body">Agents have first-class identity, runtime isolation, semantic reasoning, lineage, observability. Reviewer-grade compliance from day one.</div></div>
+    <div class="card"><div class="label">Where we win</div><div class="title">Pluggable backends, not lock-in</div><div class="body">LLMs · payment · IdPs · KMS · notification channels · storage — every infra dependency is configured per-tenant behind a typed SDK. Customer picks providers.</div></div>
+    <div class="card"><div class="label">Where we add</div><div class="title">MCP bridge + connector framework</div><div class="body">Agents reach OUT to customer's Salesforce / Snowflake / Slack / M365 via MCP servers and typed connector packages. Agents reach IN from external systems via MCP-exposed SDKs.</div></div>
+  </div>
+</section>
+
+<!-- ============ AGENTIC SUBSTRATE ============ -->
+<section id="agentic-substrate">
+  <h2>2 · The Agentic Substrate (what already exists)</h2>
+  <p>ProjexCloud v3.1 is AI-native by design. Every primitive an agentic application needs is in the SDK estate — and is gated, audited, and metered like the rest of the platform.</p>
+
+  <h3>2.1 · The eleven agentic primitives</h3>
+  <table>
+    <thead><tr><th>Capability</th><th>SDK / Component</th><th>Why it matters</th></tr></thead>
+    <tbody>
+      <tr><td>Multi-provider LLM access</td><td><code>sdk-ai-gateway</code></td><td>Anthropic · OpenAI · Gemini · Bedrock behind one typed interface; PII redaction; Langfuse traces; per-tenant routing rules</td></tr>
+      <tr><td>Agent identity as first-class</td><td><code>contracts</code> + <code>sdk-agent-runtime</code></td><td><code>agent_id · agent_persona · agent_scope · agent_chain</code> — agents are identities, not bypasses</td></tr>
+      <tr><td>Capability tokens</td><td><code>sdk-agent-runtime</code></td><td>Every tool invocation requires a signed scope-limited single-use token; tool refuses without; meter validates at gate</td></tr>
+      <tr><td>Execution TTL</td><td><code>sdk-agent-runtime</code></td><td>Hard deadline at agent run start; runtime terminates on expiry; runaway agents impossible by construction</td></tr>
+      <tr><td>Deterministic replay</td><td><code>sdk-agent-runtime</code></td><td>Content-addressed execution log; replaying produces bit-identical outputs; enables rollback, bug reproduction, model-upgrade regression testing</td></tr>
+      <tr><td>Sandboxed memory</td><td><code>sdk-agent-runtime</code> + Vector store partitions</td><td>Hard physical partitions per tenant in the vector store; cross-tenant prompt-leakage CI test fails closed</td></tr>
+      <tr><td>Knowledge retrieval (RAG)</td><td><code>sdk-knowledge-rag</code></td><td>Per-tenant corpora; policy-filtered hits; embeddings via the gateway</td></tr>
+      <tr><td>Conversation surface</td><td><code>sdk-conversation</code></td><td>Multi-turn chat with handoff, transcripts, memory</td></tr>
+      <tr><td>Semantic reasoning</td><td><code>sdk-semantic</code> (6 types)</td><td>SemanticObject · Relation · CapabilityGraph · Ontology · <b>Intent</b> · <b>Policy</b> — agents reason against typed domain concepts</td></tr>
+      <tr><td>Approval routing</td><td><code>sdk-approval</code></td><td>Agents acting beyond scope route to human sign-off; reversible-action journaling</td></tr>
+      <tr><td>Lineage &amp; observability</td><td><code>sdk-lineage</code> + <code>sdk-trace</code></td><td>"An agent recommended X — show me the derivation chain"; full trace across identity + consent + routing + meter + execution</td></tr>
+    </tbody>
+  </table>
+
+  <h3>2.2 · The twelve platform agents already designed</h3>
+  <p>Architecture §18 defines 12 horizontal agents that ship as part of the platform — they exemplify the agentic patterns and become the first consumers of every primitive above.</p>
+  <ul class="tight">
+    <li><b>Engagement Agent</b> — personalized nudges per persona</li>
+    <li><b>CRM Intelligence Agent</b> — lead scoring, next-best-action</li>
+    <li><b>Campaign Optimizer Agent</b> — send-time tuning, segment refinement</li>
+    <li><b>Support Resolution Agent</b> — summarization, suggested replies, auto-escalation</li>
+    <li><b>Content Intelligence Agent</b> — auto-tagging, summaries, embeddings</li>
+    <li><b>Commerce Recommender Agent</b></li>
+    <li><b>Event Engagement Agent</b></li>
+    <li><b>Operations Monitor Agent</b> — SLA breach + anomaly detection</li>
+    <li><b>Executive Intelligence Agent</b> — KPI digests, cohort trends</li>
+    <li><b>Knowledge Curator Agent</b> — quality scoring, dedup, refresh</li>
+    <li><b>Onboarding Agent</b> — new tenant configuration walk-through</li>
+    <li><b>Cost &amp; Safety Steward Agent</b> — usage-driven recommendations, kill-switch suggestions</li>
+  </ul>
+
+  <h3>2.3 · How a tenant developer's agentic app composes</h3>
+<pre>// A custom app's agent loop (using only platform SDKs)
+
+import { resolveIdentityContext } from '@projexlight/sdk-identity-resolver/client';
+import { AgentRuntime } from '@projexlight/sdk-agent-runtime/client';
+import { Intent } from '@projexlight/sdk-semantic/client';
+import { conversation } from '@projexlight/sdk-conversation/client';
+
+const ctx = await resolveIdentityContext(token);
+const agent = AgentRuntime.create({
+  agent_id: 'patient-care-coordinator',
+  acting_for: ctx.primary_persona_id,
+  scope: ['crm.read', 'engagement.encounter.create', 'notification.send'],
+  ttl_seconds: 300,
+});
+
+// Express the goal as a SemanticIntent — not a prompt
+const intent: Intent = {
+  goal: 'schedule_follow_up_visit',
+  subject: { type: 'Patient', id: 'pers_ravi_hA_patient' },
+  parameters: { within_days: 14, prefer_morning: true },
+};
+
+// Agent walks the CapabilityGraph to produce a plan
+const plan = await agent.plan(intent);   // returns a typed multi-step plan
+const result = await agent.execute(plan); // each step gates through @meter + capability tokens
+
+// Everything audited, traced, billed, and replay-able
+console.log(result.trace_id);            // open in sdk-trace UI</pre>
+</section>
+
+<!-- ============ INTEGRATION CATEGORIES ============ -->
+<section id="integration-categories">
+  <h2>3 · The Three Integration Categories</h2>
+  <p>Every third-party system fits exactly one of three categories. Knowing which one prevents wasted effort.</p>
+
+  <h3>3.1 · Category A — We REPLACE (we have our own primitive)</h3>
+  <p>Tools where ProjexCloud is the answer. Customer migrates off these.</p>
+  <table>
+    <thead><tr><th>Third-party</th><th>Our equivalent</th><th>Notes</th></tr></thead>
+    <tbody>
+      <tr><td>Salesforce / HubSpot CRM</td><td><code>sdk-crm</code></td><td>We're the CRM (with Persona-keyed contacts + encounter-based deals)</td></tr>
+      <tr><td>Auth0 / Okta (as IdP product)</td><td><code>sdk-identity</code></td><td>We're the IdP; we federate WITH customer's existing Okta as a SAML source</td></tr>
+      <tr><td>Temporal (as a product)</td><td><code>sdk-workflow</code></td><td>We wrap Temporal as our backend; tenants never see it directly</td></tr>
+      <tr><td>Datadog (as a product)</td><td><code>sdk-trace</code> + <code>sdk-telemetry</code></td><td>Cross-system trace viewer + OTel; export to Datadog optional</td></tr>
+      <tr><td>Algolia / Elasticsearch (as a product)</td><td><code>sdk-search</code></td><td>OpenSearch under the hood</td></tr>
+      <tr><td>Stripe Billing (the billing product, not payment processing)</td><td><code>sdk-billing</code> + <code>sdk-meter</code></td><td>Method-level metering + invoicing; we just use Stripe as a payment processor</td></tr>
+      <tr><td>ServiceNow / Zendesk (ticketing)</td><td><code>sdk-service-request</code></td><td>Tickets are engagement-of-kind 'support'</td></tr>
+      <tr><td>Box / SharePoint (as a DMS)</td><td><code>sdk-content</code> + <code>sdk-media</code></td><td>For documents authored ON our platform</td></tr>
+      <tr><td>Mixpanel / Amplitude</td><td><code>sdk-analytics</code></td><td>ClickHouse + Iceberg lakehouse</td></tr>
+      <tr><td>Snowflake (as the platform's analytics warehouse)</td><td>Iceberg lakehouse in P7</td><td>For PLATFORM analytics; customer's Snowflake = Category C</td></tr>
+      <tr><td>Pinecone / Weaviate (as a product)</td><td>pgvector → dedicated vector DB at hyperscale</td><td>Tenants don't see the underlying vector store</td></tr>
+    </tbody>
+  </table>
+
+  <h3>3.2 · Category B — We INTEGRATE (third-party is a pluggable backend)</h3>
+  <p>Provider-style backends behind our typed SDK abstractions. Tenants pick the provider; SDK handles the interface. No lock-in.</p>
+  <table>
+    <thead><tr><th>Domain</th><th>Configured providers (per tenant)</th><th>SDK</th></tr></thead>
+    <tbody>
+      <tr><td>LLM inference</td><td>Anthropic · OpenAI · Gemini · Bedrock · local models (Llama/Mistral)</td><td><code>sdk-ai-gateway</code></td></tr>
+      <tr><td>Payment processing</td><td>Stripe · Razorpay · Plaid · ACH</td><td><code>sdk-payment</code></td></tr>
+      <tr><td>Notification channels (outbound)</td><td>Twilio (SMS) · SES (email) · WhatsApp BSP · Slack · Teams · Push</td><td><code>sdk-notification</code></td></tr>
+      <tr><td>KMS</td><td>AWS KMS · GCP KMS · HSM · customer's CMK (BYOK)</td><td><code>sdk-vault</code> + <code>sdk-secrets</code></td></tr>
+      <tr><td>Identity (customer's IdP)</td><td>Okta · Azure AD · Ping · Google Workspace · Auth0</td><td><code>sdk-identity</code> (SAML + SCIM federation)</td></tr>
+      <tr><td>Maps / Geo</td><td>Mapbox · Google Maps · OSM</td><td><code>sdk-geo</code></td></tr>
+      <tr><td>Blob storage</td><td>AWS S3 · GCS · Azure Blob</td><td><code>sdk-media</code></td></tr>
+    </tbody>
+  </table>
+  <div class="callout">
+    <b>This category is a feature, not a gap.</b> Tenants get provider choice; we get pluggability for sovereign cloud and on-prem deployments.
+  </div>
+
+  <h3>3.3 · Category C — We CONNECT (reach into customer's existing tools)</h3>
+  <p>The real gap. Enterprises already use Salesforce, Snowflake, Slack, M365, Jira — ProjexCloud agents need to read/write these to do useful work. Two new primitives close the gap: <b>sdk-mcp-bridge</b> (§4) and <b>sdk-connectors framework + per-target packages</b> (§5–6).</p>
+
+  <table>
+    <thead><tr><th>Target system</th><th>What the platform needs to do</th><th>Primitive</th></tr></thead>
+    <tbody>
+      <tr><td><b>Salesforce</b> (existing customer data)</td><td>Read accounts/contacts/opportunities; bidirectional sync to <code>sdk-crm</code></td><td>connector-salesforce + MCP</td></tr>
+      <tr><td><b>Snowflake / BigQuery / Databricks</b></td><td>Bidirectional sync with Iceberg; query federation; agents query customer's data</td><td>connector-snowflake + MCP</td></tr>
+      <tr><td><b>Slack</b> (bidirectional)</td><td>Read threads, post messages, slash commands, app shortcuts</td><td>connector-slack + MCP</td></tr>
+      <tr><td><b>Microsoft 365</b></td><td>SharePoint docs, Outlook email, Teams posts, Graph API</td><td>connector-microsoft365 + MCP</td></tr>
+      <tr><td><b>Google Workspace</b></td><td>Drive, Gmail, Meet, Calendar</td><td>connector-gworkspace + MCP</td></tr>
+      <tr><td><b>Jira · Linear · Asana · Monday</b></td><td>Issue/task sync</td><td>connector-jira, connector-linear (+ MCP via public servers)</td></tr>
+      <tr><td><b>Zendesk · Freshdesk · Intercom</b></td><td>Ticket sync with <code>sdk-service-request</code> when customer keeps their existing tool</td><td>connector-zendesk + MCP</td></tr>
+      <tr><td><b>SAP · NetSuite · Workday</b></td><td>ERP/HR data sync</td><td>Custom connectors via framework + MCP</td></tr>
+      <tr><td><b>Industry verticals</b> (Epic, Cerner, MLS, Bloomberg)</td><td>Vertical-specific reads</td><td>Built per-vertical using framework</td></tr>
+      <tr><td><b>Zoom · Google Meet · Teams</b> (video)</td><td>Meeting create, recording fetch</td><td>Smaller connectors + MCP</td></tr>
+      <tr><td><b>GitHub · GitLab</b></td><td>Repo/issue/PR access</td><td>Public MCP server (Anthropic publishes one)</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ============ MCP BRIDGE ============ -->
+<section id="mcp-bridge">
+  <h2>4 · <code>sdk-mcp-bridge</code> — The Strategic Primitive</h2>
+  <p><b>Model Context Protocol (MCP)</b> is an open standard for letting LLMs invoke tools across systems. Public MCP servers already exist for Slack, GitHub, Snowflake, Postgres, file systems, and dozens more — and the list grows monthly. By implementing MCP <i>both ways</i>, ProjexCloud agents become interoperable with any MCP-compatible system, present or future.</p>
+
+  <div class="callout purple">
+    <b>Why MCP is the highest-leverage single addition.</b> Other integration approaches require us to maintain a connector per target (high cost, slow growth). MCP delegates connector maintenance to the standard's ecosystem — we ship one bridge and inherit access to every MCP server anyone publishes.
+  </div>
+
+  <div class="sdk new">
+    <div class="top"><span class="name">@projexlight/sdk-mcp-bridge</span> <span class="pkg">packages/sdk-mcp-bridge</span> <span class="tag new">NEW v3.1</span></div>
+    <div class="meta-row">Effort: M · 4 weeks · Phase: P6A · Owner: AI Platform</div>
+    <div class="row"><div class="k">Depends on</div><div class="v">contracts · sdk-agent-runtime · sdk-policy · sdk-meter · sdk-audit · sdk-trace · sdk-vault (for credentials)</div></div>
+    <div class="row"><div class="k">Owns (consume side)</div><div class="v">
+      Register external MCP servers per tenant (with vaulted credentials). Each MCP server's tools auto-register in the agent's <b>CapabilityGraph</b> (sdk-semantic). When an agent's plan references an MCP tool, the bridge mints a capability token, invokes the MCP server, receives the response, and records it in audit + lineage + trace exactly like a native SDK call. <b>Same gated/metered/audited contract as internal tools — no special-case bypass.</b>
+    </div></div>
+    <div class="row"><div class="k">Owns (expose side)</div><div class="v">
+      Expose selected ProjexCloud SDKs as MCP servers so external AI systems (Claude Desktop, OpenAI custom GPTs, customer's own LLM stacks) can call into ProjexCloud as a tool source. Scoped per tenant via API keys (sdk-api-keys); gated through sdk-meter; full audit trail.
+    </div></div>
+    <div class="row"><div class="k">Tenant configuration</div><div class="v">Tenant admin registers MCP servers in Tenant Admin Portal → AI → MCP Registry. Per-server: name, transport (stdio · SSE · HTTP), credentials (vaulted), allowed agents, allowed tools (default = all advertised, opt-out per tool).</div></div>
+    <div class="row"><div class="k">Done when</div><div class="v">An agent plan that includes "post to Slack" + "query Snowflake" + "create Jira issue" executes end-to-end through three different MCP servers, with one trace_id, full audit trail, and meter billing per tool invocation. ProjexCloud's sdk-crm exposed as MCP, callable from Claude Desktop with a tenant token.</div></div>
+  </div>
+
+  <h3>4.1 · How MCP fits the existing gate model</h3>
+  <div class="diagram-wrap">
+    <pre class="mermaid">
+sequenceDiagram
+  participant A as Agent<br/>(sdk-agent-runtime)
+  participant CG as CapabilityGraph<br/>(sdk-semantic)
+  participant MCP as sdk-mcp-bridge
+  participant META as sdk-meter
+  participant EXT as External MCP server<br/>(Slack / Snowflake / GitHub)
+  participant AUD as sdk-audit
+  participant TRC as sdk-trace
+
+  A->>CG: plan(intent)
+  CG-->>A: plan: [internal-tool-1, MCP-tool-2, internal-tool-3]
+  loop For each step
+    A->>META: gate.check(sku, token)
+    META-->>A: ALLOW (capability token minted)
+    alt Internal tool
+      A->>A: invoke directly
+    else MCP tool
+      A->>MCP: invoke(mcp-server, tool, args, token)
+      MCP->>MCP: fetch credentials from sdk-vault
+      MCP->>EXT: MCP request (stdio/SSE/HTTP)
+      EXT-->>MCP: tool response
+      MCP-->>A: typed result
+    end
+    A->>AUD: record step (with mcp_server_id if MCP)
+    A->>TRC: trace span
+  end
+    </pre>
+    <div class="caption">External MCP tools follow the exact same gate flow as internal SDK tools — capability tokens, meter, audit, trace.</div>
+  </div>
+
+  <h3>4.2 · What customers can do once this ships</h3>
+  <ul class="tight">
+    <li>Plug their own internal MCP servers (custom proprietary systems) into ProjexCloud agents — no per-system connector required.</li>
+    <li>Use any public MCP server (Slack, GitHub, Postgres, Snowflake, Notion, Linear, …) without us building it.</li>
+    <li>Expose ProjexCloud as a tool source to their other AI systems (Claude Desktop · custom OpenAI assistants · agentic apps in other platforms).</li>
+    <li>Replay any agent decision deterministically including MCP tool calls (the bridge captures request/response in the execution log).</li>
+  </ul>
+</section>
+
+<!-- ============ CONNECTORS FRAMEWORK ============ -->
+<section id="connectors-framework">
+  <h2>5 · <code>sdk-connectors</code> — The Framework</h2>
+  <p>For high-value targets where MCP isn't yet sufficient (deep schema-aware sync, large-volume bulk APIs, vendor-specific authz models, bidirectional state reconciliation), we ship typed <b>connector packages</b>. They all share one framework.</p>
+
+  <div class="sdk new">
+    <div class="top"><span class="name">@projexlight/sdk-connectors</span> <span class="pkg">packages/sdk-connectors</span> <span class="tag new">NEW v3.1</span></div>
+    <div class="meta-row">Effort: L · 5 weeks · Phase: P4 · Owner: Integrations</div>
+    <div class="row"><div class="k">Depends on</div><div class="v">contracts · sdk-workflow · sdk-vault (credentials) · sdk-audit · sdk-meter · sdk-webhook · sdk-tenant</div></div>
+    <div class="row"><div class="k">Owns</div><div class="v">
+      The <b>common framework</b> every per-target connector follows:
+      <ul class="tight" style="margin-top:6px">
+        <li><b>OAuth/credential management</b> — vaulted per-tenant, refresh tokens, scope tracking</li>
+        <li><b>Schema mapping primitives</b> — typed source→canonical mapping with conflict resolution per the §6A doctrine</li>
+        <li><b>Bidirectional sync engine</b> — change-data-capture from source + delta push back; replay-safe; conflict-resolution per event-type policy</li>
+        <li><b>Rate-limit handling</b> — backoff, jitter, per-tenant quota respect</li>
+        <li><b>Webhook ingestion</b> — receive callbacks from external systems via sdk-webhook (inbound side)</li>
+        <li><b>Polling fallback</b> — for systems without webhooks</li>
+        <li><b>Cursor/checkpoint state</b> — durable in connector's schema; survives restarts</li>
+        <li><b>Health monitoring</b> — per-connection status, error budgets, alerting</li>
+      </ul>
+    </div></div>
+    <div class="row"><div class="k">Pattern</div><div class="v">Each <code>connector-{target}</code> package depends on <code>sdk-connectors</code> and implements: (1) credential schema, (2) source schema → canonical mapping, (3) sync handlers (read + write + delta), (4) tool manifests (for agent invocation via CapabilityGraph). Pool placement: per-target schema (<code>connector_salesforce</code>, <code>connector_snowflake</code>, …) in Admin Pool.</div></div>
+    <div class="row"><div class="k">Done when</div><div class="v">First connector (Salesforce, P5) ships: customer connects their Salesforce org via OAuth, sees accounts mapped to Persona kind 'salesforce_account', bidirectional sync round-trips an update without conflict, agent CapabilityGraph includes "salesforce.account.update" tool, meter records per-record sync cost.</div></div>
+  </div>
+</section>
+
+<!-- ============ CONNECTOR ROSTER ============ -->
+<section id="connector-roster">
+  <h2>6 · Per-Target Connector Roster</h2>
+  <p>The phased roster. Each connector follows the same template, phased by enterprise impact.</p>
+
+  <table>
+    <thead><tr><th>Connector</th><th>Phase</th><th>Effort</th><th>What it does</th></tr></thead>
+    <tbody>
+      <tr><td><code>connector-salesforce</code></td><td>P5</td><td>L · 5w</td><td>Read/write Accounts, Contacts, Leads, Opportunities; bidirectional sync to sdk-crm; SOQL query for agents; webhook + Bulk API support</td></tr>
+      <tr><td><code>connector-snowflake</code></td><td>P6B</td><td>L · 5w</td><td>Query federation; Iceberg bridge for bidirectional data; agent tool: "query the customer's warehouse"</td></tr>
+      <tr><td><code>connector-slack</code></td><td>P4</td><td>M · 3w</td><td>Bidirectional: read channels/threads, post messages, slash commands, app shortcuts, interactive components (sdk-notification has outbound; this adds the inbound + interactive side)</td></tr>
+      <tr><td><code>connector-microsoft365</code></td><td>P5</td><td>L · 6w</td><td>Graph API: SharePoint files, Outlook (mail/calendar), Teams chat + meetings, OneDrive</td></tr>
+      <tr><td><code>connector-gworkspace</code></td><td>P5</td><td>L · 5w</td><td>Drive, Gmail, Meet, Calendar, Docs/Sheets/Slides API</td></tr>
+      <tr><td><code>connector-jira</code></td><td>P5</td><td>M · 3w</td><td>Issues, sprints, boards; webhook ingestion; sdk-service-request bidirectional sync</td></tr>
+      <tr><td><code>connector-linear</code></td><td>P5</td><td>M · 2w</td><td>Issues, projects; GraphQL API; webhook ingestion</td></tr>
+      <tr><td><code>connector-zendesk</code></td><td>P5</td><td>M · 3w</td><td>Tickets bidirectional with sdk-service-request; macros, automations</td></tr>
+      <tr><td><code>connector-hubspot</code></td><td>P5</td><td>M · 4w</td><td>For customers staying on HubSpot CRM but wanting ProjexCloud orchestration</td></tr>
+      <tr><td><code>connector-zoom</code></td><td>P5</td><td>S · 2w</td><td>Meeting create, recording fetch, webhook ingestion</td></tr>
+      <tr><td><code>connector-github</code></td><td>P6A</td><td>S · 2w</td><td>(Could be MCP-only since Anthropic ships an MCP server; connector adds bulk operations)</td></tr>
+      <tr><td><code>connector-sap</code> · <code>connector-netsuite</code> · <code>connector-workday</code></td><td>P7+</td><td>XL · 8w each</td><td>ERP/HR — large, vendor-specific; built when customers ask</td></tr>
+      <tr><td><code>connector-epic</code> · <code>connector-cerner</code></td><td>Vertical-driven</td><td>XL</td><td>Healthcare-vertical-owned; lives in projex-vertical-healthcare</td></tr>
+      <tr><td><code>connector-mls-*</code></td><td>Vertical-driven</td><td>L</td><td>Realty-vertical-owned</td></tr>
+      <tr><td><code>connector-bloomberg</code></td><td>Vertical-driven</td><td>L</td><td>Finance-vertical-owned</td></tr>
+    </tbody>
+  </table>
+
+  <div class="callout green">
+    <b>The build / buy / MCP triangulation.</b> Before building a new connector, the team checks: (1) Is there a public MCP server? Use it via sdk-mcp-bridge — zero connector code. (2) Is the target a high-frequency enterprise system (Salesforce, M365, Snowflake)? Build the typed connector — worth the effort for bulk operations and schema-aware sync. (3) Is the target long-tail? Customer integrates via Zapier/Mulesoft/n8n through our webhook + API-key surface — no connector code from us.
+  </div>
+</section>
+
+<!-- ============ AGENT FLOW ============ -->
+<section id="agent-flow">
+  <h2>7 · How Agents Use Connectors</h2>
+  <p>Connectors integrate with agents through the <b>CapabilityGraph</b> in sdk-semantic. Every connector's operations register as tools the agent can plan against.</p>
+
+  <h3>7.1 · The end-to-end flow</h3>
+  <div class="diagram-wrap">
+    <pre class="mermaid">
+flowchart TB
+  classDef intent fill:#241f10,stroke:#f5c451,color:#fff;
+  classDef sem fill:#16241c,stroke:#2dd4bf,color:#fff;
+  classDef agt fill:#1d1830,stroke:#b88dff,color:#fff;
+  classDef tool fill:#0f1422,stroke:#6aa9ff,color:#fff;
+  classDef ext fill:#162420,stroke:#5dd39e,color:#e6ecf5;
+
+  USER["Tenant employee enters intent in<br/>Tenant Workspace conversation"]:::intent
+  INTENT["<b>SemanticIntent</b><br/>'Schedule a follow-up with this<br/>patient · log it in Salesforce ·<br/>notify the care team in Slack'"]:::sem
+  CG["<b>CapabilityGraph</b><br/>(sdk-semantic)<br/>Lists ALL tools available:<br/>internal SDKs + MCP tools + connectors"]:::sem
+  PLAN["Agent planner produces plan:<br/>1. engagement.encounter.create<br/>2. connector-salesforce.activity.log<br/>3. connector-slack.post-message"]:::agt
+  STEP1["Step 1: internal sdk-engagement"]:::tool
+  STEP2["Step 2: connector-salesforce"]:::tool
+  STEP3["Step 3: connector-slack"]:::tool
+  SF["Customer's Salesforce instance"]:::ext
+  SL["Customer's Slack workspace"]:::ext
+
+  USER --> INTENT
+  INTENT --> CG
+  CG --> PLAN
+  PLAN --> STEP1
+  PLAN --> STEP2
+  PLAN --> STEP3
+  STEP2 -.->|OAuth · vaulted| SF
+  STEP3 -.->|OAuth · vaulted| SL
+    </pre>
+    <div class="caption">Connectors register their tools in the CapabilityGraph just like internal SDKs. The agent doesn't distinguish — both go through capability tokens + meter + audit + trace.</div>
+  </div>
+
+  <h3>7.2 · Why this is safe</h3>
+  <ul class="tight">
+    <li><b>Capability tokens enforce scope</b> — agent can only call connector tools its scope permits, mid-execution revocation works.</li>
+    <li><b>Connector credentials are vaulted</b> per tenant; never in agent prompts; sdk-vault tier hierarchy applies.</li>
+    <li><b>External tool responses pass through the same audit + lineage trail</b> — "this Salesforce field updated because Agent X executed Plan Y at time Z" is one query in sdk-trace.</li>
+    <li><b>Deterministic replay includes connector calls</b> — the execution log captures request + response; replay reproduces exactly (allowing for external state changes between then and now, surfaced as a diff).</li>
+    <li><b>Cross-tenant leakage impossible</b> — connector instances are per-tenant; tokens are per-tenant; even if Tenant A's agent and Tenant B's agent both use connector-salesforce, they use different OAuth tokens against different Salesforce orgs.</li>
+  </ul>
+</section>
+
+<!-- ============ TENANT DEV ============ -->
+<section id="tenant-dev">
+  <h2>8 · Tenant Developer Experience</h2>
+
+  <h3>8.1 · Building an agentic custom app that uses external systems</h3>
+<pre>// In tenant's custom app — wire up an agent that crosses systems
+
+import { resolveIdentityContext } from '@projexlight/sdk-identity-resolver/client';
+import { AgentRuntime } from '@projexlight/sdk-agent-runtime/client';
+import { conversation } from '@projexlight/sdk-conversation/client';
+
+const ctx = await resolveIdentityContext(token);
+
+// Tenant admin has already:
+//   - Connected Salesforce in Tenant Admin → Connectors
+//   - Connected Slack in Tenant Admin → Connectors
+//   - Optionally registered a custom MCP server for their proprietary tool
+// Those tools auto-appear in this agent's CapabilityGraph
+
+const agent = AgentRuntime.create({
+  agent_id: 'cross-system-orchestrator',
+  acting_for: ctx.primary_persona_id,
+  scope: [
+    'engagement.encounter.create',
+    'connector.salesforce.activity.log',
+    'connector.slack.post-message',
+    'mcp.custom-proprietary-tool.read',
+  ],
+  ttl_seconds: 120,
+});
+
+const intent = {
+  goal: 'follow_up_workflow',
+  subject: { type: 'Customer', id: ctx.subject_id },
+  parameters: { meeting_type: 'discovery', urgency: 'high' },
+};
+
+const plan = await agent.plan(intent);
+// plan = [
+//   { tool: 'engagement.encounter.create', args: {...} },
+//   { tool: 'connector.salesforce.activity.log', args: {...} },
+//   { tool: 'connector.slack.post-message', args: { channel: '#sales-followups', ... } },
+//   { tool: 'mcp.custom-proprietary-tool.read', args: {...} },
+// ]
+
+const result = await agent.execute(plan);
+// Each step audited; bill shows the per-tool cost split (internal vs. connector vs. MCP)
+// Open result.trace_id in sdk-trace UI to see the full timeline</pre>
+
+  <h3>8.2 · Registering a custom MCP server</h3>
+<pre>// Tenant admin in Tenant Admin Portal → AI → MCP Registry
+
+POST /v1/mcp-bridge/servers
+  {
+    name: 'internal-pricing-tool',
+    transport: 'http',
+    endpoint: 'https://pricing-tool.internal.tenantco.com/mcp',
+    credentials_ref: 'secret://tenant/12345/mcp-pricing-token',
+    allowed_agents: ['cross-system-orchestrator', 'pricing-agent'],
+    allowed_tools: ['price.lookup', 'price.calculate'],  // null = all advertised
+  }
+
+// Tools immediately appear in the CapabilityGraph for those agents
+// Every invocation is gated, metered, audited, traced — same as any other tool</pre>
+</section>
+
+<!-- ============ PHASE MAPPING ============ -->
+<section id="phase-mapping">
+  <h2>9 · Phase Mapping (where these land)</h2>
+  <table>
+    <thead><tr><th>Phase</th><th>Adds for integration</th></tr></thead>
+    <tbody>
+      <tr><td><b>P4</b> Operational + Billing</td><td><code>sdk-connectors</code> framework · <code>connector-slack</code> (bidirectional)</td></tr>
+      <tr><td><b>P5</b> Engagement</td><td><code>connector-salesforce · connector-microsoft365 · connector-gworkspace · connector-jira · connector-linear · connector-zendesk · connector-hubspot · connector-zoom</code></td></tr>
+      <tr><td><b>P6A</b> AI + Agent Isolation</td><td><b><code>sdk-mcp-bridge</code></b> (the strategic primitive) · <code>connector-github</code> (small, complements public MCP)</td></tr>
+      <tr><td><b>P6B</b> Knowledge + Semantic</td><td><code>connector-snowflake</code> (lakehouse bridge + agent query tool)</td></tr>
+      <tr><td><b>P7</b>+</td><td>Heavy enterprise: <code>connector-sap · connector-netsuite · connector-workday</code> as customers demand</td></tr>
+      <tr><td><b>Vertical-driven</b></td><td>Industry connectors (<code>connector-epic · connector-cerner · connector-mls-* · connector-bloomberg</code>) ship in vertical repos, not the platform</td></tr>
+    </tbody>
+  </table>
+
+  <h3>9.1 · SDK count impact</h3>
+  <ul class="tight">
+    <li>v3.1 platform was at 55 SDKs after the prior phase plan work.</li>
+    <li>This document adds: <code>sdk-connectors</code> + <code>sdk-mcp-bridge</code> + 8 to 10 <code>connector-*</code> packages in the platform monorepo (P4–P6B).</li>
+    <li>Industry-vertical connectors (Epic, Cerner, MLS, Bloomberg) live in the corresponding vertical repos — they're not platform SDKs.</li>
+    <li><b>New platform SDK count: ~67</b> (55 + 2 framework + ~10 high-priority connectors).</li>
+  </ul>
+
+  <div class="callout green">
+    <b>Bottom line.</b> The platform's agentic substrate is already complete; what this document adds is <b>reach</b>. With sdk-mcp-bridge (interop standard) + sdk-connectors framework + a phased connector roster, ProjexCloud agents can do real work that spans the customer's existing enterprise stack — without compromising the gated/metered/audited contract that protects the platform from prompt injection, leakage, and runaway behavior.
+  </div>
+</section>
+
+<!-- ============ APPENDIX ============ -->
+<section>
+  <h2>Appendix · Cross-references</h2>
+  <table>
+    <thead><tr><th>You're looking for</th><th>Document</th></tr></thead>
+    <tbody>
+      <tr><td>Architecture (all sections)</td><td><code>./Architecture-v3.1.html</code></td></tr>
+      <tr><td>Agent Isolation Runtime detail (capability tokens, TTL, replay, sandbox)</td><td><code>./Architecture-v3.1.html §18A</code></td></tr>
+      <tr><td>Phase plan + dependency graph + exit gates</td><td><code>./SDK-Build-Plan-v3.1.html §0A</code></td></tr>
+      <tr><td>sdk-agent-runtime, sdk-semantic, sdk-ai-gateway, sdk-conversation, sdk-knowledge-rag detail</td><td><code>./SDK-Build-Plan-v3.1.html</code> Wave 6</td></tr>
+      <tr><td>Pool placement for connectors</td><td><code>./Architecture-v3.1.html §8A</code> (to be updated)</td></tr>
+      <tr><td>Project structure (where connector packages live)</td><td><code>./ProjectStructure-v3.1.html</code></td></tr>
+      <tr><td>This document</td><td><code>./AgenticIntegration-v3.1.html</code></td></tr>
+    </tbody>
+  </table>
+</section>
+
+</div>
+
+<script>
+  mermaid.initialize({
+    startOnLoad: true,
+    theme: 'dark',
+    themeVariables: {
+      background: '#0b0f17',
+      primaryColor: '#1a2234',
+      primaryTextColor: '#e6ecf5',
+      primaryBorderColor: '#c9a86a',
+      lineColor: '#8a98b3',
+      secondaryColor: '#16241c',
+      tertiaryColor: '#241622'
+    },
+    flowchart: { curve: 'basis', useMaxWidth: true },
+    sequence: { useMaxWidth: true }
+  });
+</script>
+</body>
+</html>

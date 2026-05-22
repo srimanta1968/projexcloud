@@ -1,0 +1,561 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>ProjexCloud v3.1 · P6A Data Model — AI Infrastructure · Agent Isolation · MCP Bridge</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<style>
+  :root { --bg:#0b0f17; --panel:#121826; --panel-2:#1a2234; --line:#243049; --text:#e6ecf5; --muted:#8a98b3; --accent:#c9a86a; --accent-2:#6aa9ff; --teal:#2dd4bf; --green:#5dd39e; --red:#ff6b6b; --yellow:#f5c451; --purple:#b88dff; --code-bg:#0f1422; }
+  *{box-sizing:border-box;} html,body{background:var(--bg);color:var(--text);font-family:ui-sans-serif,-apple-system,"Segoe UI",Roboto,sans-serif;margin:0;padding:0;line-height:1.55;}
+  .page{max-width:1260px;margin:0 auto;padding:56px 32px 96px;}
+  header.cover{border-bottom:1px solid var(--line);padding-bottom:36px;margin-bottom:48px;}
+  header.cover .eyebrow{color:var(--accent);letter-spacing:0.18em;text-transform:uppercase;font-size:12px;font-weight:700;}
+  header.cover h1{font-size:40px;line-height:1.15;margin:12px 0 8px;letter-spacing:-0.02em;}
+  header.cover .sub{color:var(--muted);font-size:16px;max-width:900px;}
+  header.cover .meta{display:flex;gap:24px;flex-wrap:wrap;margin-top:24px;color:var(--muted);font-size:13px;}
+  header.cover .meta b{color:var(--text);font-weight:600;}
+  h2{font-size:26px;margin:56px 0 18px;padding-bottom:8px;border-bottom:1px solid var(--line);}
+  h3{font-size:19px;margin:28px 0 10px;color:var(--text);}
+  h4{font-size:13px;margin:18px 0 8px;color:var(--accent);text-transform:uppercase;letter-spacing:0.12em;}
+  p{color:#c8d1e3;}
+  .grid{display:grid;gap:16px;} .grid.cols-2{grid-template-columns:repeat(2,minmax(0,1fr));} .grid.cols-3{grid-template-columns:repeat(3,minmax(0,1fr));}
+  @media(max-width:900px){.grid.cols-2,.grid.cols-3{grid-template-columns:1fr;} header.cover h1{font-size:30px;}}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px 18px;} .card .label{color:var(--accent);font-size:11px;text-transform:uppercase;letter-spacing:0.14em;font-weight:700;} .card .title{font-weight:600;margin:6px 0;} .card .body{color:var(--muted);font-size:13.5px;}
+  .pill{display:inline-block;padding:3px 10px;border-radius:999px;font-size:11px;border:1px solid var(--line);color:var(--muted);margin-right:6px;}
+  .pill.blue{color:var(--accent-2);border-color:rgba(106,169,255,0.4);} .pill.purple{color:var(--purple);border-color:rgba(184,141,255,0.4);} .pill.green{color:var(--green);border-color:rgba(93,211,158,0.4);} .pill.yellow{color:var(--yellow);border-color:rgba(245,196,81,0.4);} .pill.teal{color:var(--teal);border-color:rgba(45,212,191,0.4);} .pill.red{color:var(--red);border-color:rgba(255,107,107,0.4);}
+  table{width:100%;border-collapse:collapse;margin-top:12px;font-size:13.5px;} th,td{text-align:left;padding:9px 11px;border-bottom:1px solid var(--line);vertical-align:top;} th{color:var(--muted);font-weight:600;font-size:11.5px;text-transform:uppercase;letter-spacing:0.08em;} td code{font-size:12px;}
+  pre,code{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;} pre{background:var(--code-bg);border:1px solid var(--line);border-radius:10px;padding:14px 16px;overflow-x:auto;font-size:12.5px;} code{background:var(--code-bg);padding:1px 6px;border-radius:4px;font-size:12px;}
+  .diagram-wrap{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:22px;overflow-x:auto;} .caption{color:var(--muted);font-size:12.5px;margin-top:10px;text-align:center;} .mermaid{background:transparent;}
+  nav.toc{position:sticky;top:0;background:rgba(11,15,23,0.92);backdrop-filter:blur(10px);border-bottom:1px solid var(--line);padding:10px 32px;z-index:10;} nav.toc .row{max-width:1260px;margin:0 auto;display:flex;flex-wrap:wrap;gap:10px;font-size:12px;} nav.toc a{color:var(--muted);text-decoration:none;border-bottom:1px solid transparent;} nav.toc a:hover{color:var(--accent);border-color:var(--accent);}
+  .callout{border-left:3px solid var(--accent);background:var(--panel-2);padding:14px 18px;border-radius:0 10px 10px 0;margin:18px 0;color:#d6deef;font-size:14px;} .callout.blue{border-color:var(--accent-2);} .callout.green{border-color:var(--green);} .callout.purple{border-color:var(--purple);} .callout.red{border-color:var(--red);}
+  .sdk-block{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:22px 24px;margin:22px 0 28px;} .sdk-block .sdk-header{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;margin-bottom:6px;} .sdk-block .sdk-header h3{margin:0;font-size:22px;color:var(--accent);} .sdk-block .purpose{color:#c8d1e3;font-size:14.5px;margin:4px 0 14px;}
+  .meta-strip{display:flex;flex-wrap:wrap;gap:18px;font-size:12.5px;color:var(--muted);margin:6px 0 18px;padding:10px 14px;background:var(--panel-2);border-radius:8px;} .meta-strip b{color:var(--text);}
+</style>
+</head>
+<body>
+
+<nav class="toc">
+  <div class="row">
+    <a href="#overview">1 · Overview</a>
+    <a href="#phase-erd">2 · Phase ERD</a>
+    <a href="#pool-map">3 · Pool placement</a>
+    <a href="#sdk-ai-gateway">4 · sdk-ai-gateway</a>
+    <a href="#sdk-taxonomy">5 · sdk-taxonomy</a>
+    <a href="#sdk-agent-runtime">6 · sdk-agent-runtime (G7)</a>
+    <a href="#sdk-trace">7 · sdk-trace (G12)</a>
+    <a href="#sdk-mcp-bridge">8 · sdk-mcp-bridge</a>
+    <a href="#connector-github">9 · connector-github</a>
+  </div>
+</nav>
+
+<div class="page">
+
+<header class="cover">
+  <div class="eyebrow">Data Model · Phase 6A · Wave W6 (first half)</div>
+  <h1>P6A — AI Infrastructure · Agent Isolation · MCP Bridge</h1>
+  <div class="sub">AI Gateway (multi-provider), Taxonomy (schemas + prompts), Agent Runtime with the four isolation primitives (capability tokens · execution TTL · deterministic replay · sandboxed memory), sdk-trace cross-system viewer (G12), and the bidirectional Model Context Protocol bridge.</div>
+  <div class="meta">
+    <div><b>Phase:</b> P6A (Weeks 35–40)</div>
+    <div><b>Maps to wave:</b> W6 first half</div>
+    <div><b>Gates closed:</b> G7 (Agent Isolation Runtime) · G12 (sdk-trace)</div>
+    <div><b>PRD:</b> <code>prd/P6A-AI-Isolation-MCP.md</code></div>
+    <div><b>Anchor docs:</b> Architecture §18A · AgenticIntegration §2 · §4</div>
+  </div>
+</header>
+
+<section id="overview">
+  <h2>1 · Overview</h2>
+  <div class="grid cols-3">
+    <div class="card"><div class="label">G7 closer</div><div class="title">Four isolation primitives</div><div class="body">Capability tokens (signed, scope-limited, single-use) · Execution TTL (hard deadlines) · Deterministic replay (content-addressed execution log) · Sandboxed memory (hard physical partitions per tenant).</div></div>
+    <div class="card"><div class="label">G12 closer</div><div class="title">sdk-trace cross-system view</div><div class="box body">One <code>trace_id</code> resolves into a unified timeline crossing identity + consent + routing + Vault + policy + meter + SDK body + tool calls + lineage. Renders &lt;5s after request completion.</div></div>
+    <div class="card"><div class="label">Strategic primitive</div><div class="title">sdk-mcp-bridge (consume + expose)</div><div class="body">Register external MCP servers (Slack · Snowflake · Salesforce · GitHub · …) and expose selected ProjexCloud SDKs as MCP servers (callable from Claude Desktop, custom OpenAI assistants).</div></div>
+  </div>
+
+  <div class="callout red">
+    <b>Why isolation MUST close before P6B.</b> P6B introduces Conversation, Knowledge-RAG, Recommendation — all consume the agent runtime. One Phase-6B agent using a non-isolated runtime leaks Tenant A's prompt context into Tenant B's. The leak is catastrophic and irreversible. Hence G7 is a hard exit gate.
+  </div>
+</section>
+
+<section id="phase-erd">
+  <h2>2 · Phase ERD</h2>
+  <div class="diagram-wrap">
+    <pre class="mermaid">
+erDiagram
+  TENANT ||--o{ AGENT_DEFINITION : ""
+  AGENT_DEFINITION ||--o{ AGENT_RUN : ""
+  AGENT_RUN ||--o{ AGENT_TOOL_INVOCATION : ""
+  AGENT_RUN ||--|| EXECUTION_LOG : "replay artifact"
+  AGENT_RUN ||--o{ CAPABILITY_TOKEN : ""
+  CAPABILITY_TOKEN }o--|| AGENT_TOOL_INVOCATION : ""
+  AGENT_DEFINITION ||--|| VECTOR_NAMESPACE : "isolated"
+  AGENT_RUN }o--o| APPROVAL_REQUEST : "beyond-scope"
+
+  PROVIDER_ROUTE_RULE ||--o{ AI_COMPLETION : ""
+  AI_COMPLETION ||--o| LANGFUSE_TRACE_REF : ""
+
+  TAXONOMY_VERSION ||--o{ EXTRACTION_SCHEMA : ""
+  TAXONOMY_VERSION ||--o{ PROMPT_TEMPLATE : ""
+
+  TRACE ||--o{ TRACE_SPAN : ""
+  TRACE_SPAN }o--|| AUDIT_ENTRY : ""
+  TRACE_SPAN }o--|| USAGE_EVENT : ""
+  TRACE_SPAN }o--o| AGENT_RUN : ""
+
+  MCP_SERVER_REGISTRATION ||--o{ MCP_TOOL : ""
+  MCP_TOOL_INVOCATION }o--|| MCP_TOOL : ""
+  MCP_TOOL_INVOCATION }o--|| CAPABILITY_TOKEN : ""
+    </pre>
+  </div>
+  <div class="caption">Figure 2.1 — Agent runtime + isolation primitives + trace + MCP bridge in P6A.</div>
+</section>
+
+<section id="pool-map">
+  <h2>3 · Pool placement matrix</h2>
+  <table>
+    <thead><tr><th>SDK</th><th>Schema</th><th>Pool</th><th>Non-OLTP</th></tr></thead>
+    <tbody>
+      <tr><td><code>sdk-ai-gateway</code></td><td><code>ai_gateway</code></td><td>Admin (routing rules) · stateless gateway</td><td>Langfuse (traces) · Kafka (cost events)</td></tr>
+      <tr><td><code>sdk-taxonomy</code></td><td><code>taxonomy</code></td><td>Admin (per tenant)</td><td>—</td></tr>
+      <tr><td><code>sdk-agent-runtime</code></td><td><code>agents</code></td><td>Admin (defs, runs, logs)</td><td>Vector store namespace per tenant (HARD-isolated)</td></tr>
+      <tr><td><code>sdk-trace</code></td><td>stateless reader</td><td>—</td><td>Reads telemetry + audit + meter + lineage stores</td></tr>
+      <tr><td><code>sdk-mcp-bridge</code></td><td><code>mcp</code></td><td>Admin (registry, vaulted creds)</td><td>—</td></tr>
+      <tr><td><code>connector-github</code></td><td><code>connector_github</code></td><td>Admin</td><td>—</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- sdk-ai-gateway -->
+<section id="sdk-ai-gateway">
+  <h2>4 · <code>sdk-ai-gateway</code> — Multi-Provider LLM Access</h2>
+  <div class="sdk-block">
+    <div class="sdk-header"><h3>sdk-ai-gateway</h3><span class="pill blue">SDK</span></div>
+    <div class="purpose">Provider abstraction (Anthropic · OpenAI · Gemini · Bedrock · local), per-tenant routing rules, PII redaction, Langfuse trace integration, budget enforcement delegated to sdk-meter, per-agent kill switches.</div>
+    <div class="meta-strip"><span><b>PRD §:</b> 5.1</span><span><b>FRs:</b> FR-AGW-1 … FR-AGW-9</span><span><b>Pool:</b> Admin · stateless gateway</span><span><b>Schema:</b> <code>ai_gateway</code></span></div>
+
+    <h4>4.1 · Tables</h4>
+
+    <p><b>ai_gateway.provider</b></p>
+    <table><thead><tr><th>Column</th><th>Type</th><th>Purpose</th></tr></thead><tbody>
+      <tr><td><code>provider_id</code></td><td>text PK</td><td><code>anthropic · openai · gemini · bedrock · local-llama</code></td></tr>
+      <tr><td><code>display_name · base_url</code></td><td>text · text</td><td>—</td></tr>
+      <tr><td><code>credential_envelope</code></td><td>bytea</td><td>API key vaulted.</td></tr>
+      <tr><td><code>status</code></td><td>enum</td><td><code>active · degraded · disabled</code></td></tr>
+      <tr><td><code>circuit_state</code></td><td>enum</td><td><code>closed · half-open · open</code></td></tr>
+      <tr><td><code>failure_streak · last_failure_at</code></td><td>int · timestamptz</td><td>Breaker bookkeeping.</td></tr>
+    </tbody></table>
+
+    <p><b>ai_gateway.route_rule</b> — per-tenant routing.</p>
+    <table><thead><tr><th>Column</th><th>Type</th><th>Purpose</th></tr></thead><tbody>
+      <tr><td><code>rule_id</code></td><td>ULID PK</td><td>Surrogate.</td></tr>
+      <tr><td><code>tenant_id</code></td><td>FK</td><td>Scope.</td></tr>
+      <tr><td><code>predicate</code></td><td>jsonb</td><td>Match by task tag, agent_id, model size, latency tier.</td></tr>
+      <tr><td><code>provider_id · model</code></td><td>FK · text</td><td>Destination.</td></tr>
+      <tr><td><code>priority · active</code></td><td>int · bool</td><td>Resolution.</td></tr>
+    </tbody></table>
+
+    <p><b>ai_gateway.completion</b> — per-call record (sampled fully retained for trace cross-ref).</p>
+    <table><thead><tr><th>Column</th><th>Type</th><th>Purpose</th></tr></thead><tbody>
+      <tr><td><code>completion_id</code></td><td>ULID PK</td><td>Surrogate.</td></tr>
+      <tr><td><code>tenant_id · persona_id · agent_run_id</code></td><td>FK · FK · FK</td><td>Envelope context.</td></tr>
+      <tr><td><code>provider_id · model</code></td><td>text · text</td><td>What was hit.</td></tr>
+      <tr><td><code>tokens_in · tokens_out</code></td><td>int · int</td><td>Token counts.</td></tr>
+      <tr><td><code>provider_cost</code></td><td>numeric(18,8)</td><td>Vendor cost.</td></tr>
+      <tr><td><code>billed_cost</code></td><td>numeric(18,8)</td><td>Provider cost + margin.</td></tr>
+      <tr><td><code>pii_redaction_applied</code></td><td>bool</td><td>—</td></tr>
+      <tr><td><code>latency_ms · started_at</code></td><td>int · timestamptz</td><td>Telemetry.</td></tr>
+      <tr><td><code>langfuse_trace_id</code></td><td>text</td><td>External link.</td></tr>
+      <tr><td><code>trace_id</code></td><td>text</td><td>OTel cross-system trace.</td></tr>
+    </tbody></table>
+
+    <p><b>ai_gateway.pii_redaction_rule</b></p>
+    <table><thead><tr><th>Column</th><th>Type</th><th>Purpose</th></tr></thead><tbody>
+      <tr><td><code>rule_id</code></td><td>ULID PK</td><td>Surrogate.</td></tr>
+      <tr><td><code>tenant_id</code></td><td>FK, null</td><td>Null = platform default.</td></tr>
+      <tr><td><code>pattern</code></td><td>text</td><td>Regex or detector ID.</td></tr>
+      <tr><td><code>replacement</code></td><td>text</td><td>e.g., <code>[REDACTED-PAN]</code>.</td></tr>
+      <tr><td><code>active</code></td><td>bool</td><td>—</td></tr>
+    </tbody></table>
+
+    <p><b>SKUs:</b> <code>ai-gateway.complete · ai-gateway.stream</code> — <code>passthrough_plus_margin</code>.</p>
+  </div>
+</section>
+
+<!-- sdk-taxonomy -->
+<section id="sdk-taxonomy">
+  <h2>5 · <code>sdk-taxonomy</code> — Schemas &amp; Prompt Templates</h2>
+  <div class="sdk-block">
+    <div class="sdk-header"><h3>sdk-taxonomy</h3><span class="pill blue">NEW</span></div>
+    <div class="purpose">Versioned artifact taxonomies, extraction schemas (for sdk-parsing in P6B), prompt templates, per-tenant overrides, migration plans.</div>
+    <div class="meta-strip"><span><b>PRD §:</b> 5.2</span><span><b>Pool:</b> Admin (per tenant)</span><span><b>Schema:</b> <code>taxonomy</code></span></div>
+
+    <h4>5.1 · Tables</h4>
+
+    <p><b>taxonomy.version</b></p>
+    <table><thead><tr><th>Column</th><th>Type</th><th>Purpose</th></tr></thead><tbody>
+      <tr><td><code>taxonomy_version_id</code></td><td>ULID PK</td><td>Surrogate.</td></tr>
+      <tr><td><code>tenant_id</code></td><td>FK, null</td><td>Null = platform.</td></tr>
+      <tr><td><code>name · version</code></td><td>text · semver</td><td>Identification.</td></tr>
+      <tr><td><code>status</code></td><td>enum</td><td><code>draft · active · deprecated · retired</code></td></tr>
+      <tr><td><code>parent_version_id</code></td><td>FK, null</td><td>For migration chains.</td></tr>
+      <tr><td><code>created_at · activated_at</code></td><td>timestamptz</td><td>Lifecycle.</td></tr>
+    </tbody></table>
+
+    <p><b>taxonomy.extraction_schema</b></p>
+    <table><thead><tr><th>Column</th><th>Type</th><th>Purpose</th></tr></thead><tbody>
+      <tr><td><code>schema_id</code></td><td>ULID PK</td><td>Surrogate.</td></tr>
+      <tr><td><code>taxonomy_version_id</code></td><td>FK</td><td>Owning version.</td></tr>
+      <tr><td><code>document_kind</code></td><td>text</td><td><code>invoice · prescription · lease · contract · …</code></td></tr>
+      <tr><td><code>field_definitions</code></td><td>jsonb</td><td>Typed field list with confidence thresholds.</td></tr>
+      <tr><td><code>example_documents</code></td><td>jsonb</td><td>For few-shot.</td></tr>
+    </tbody></table>
+
+    <p><b>taxonomy.prompt_template</b></p>
+    <table><thead><tr><th>Column</th><th>Type</th><th>Purpose</th></tr></thead><tbody>
+      <tr><td><code>template_id</code></td><td>ULID PK</td><td>Surrogate.</td></tr>
+      <tr><td><code>taxonomy_version_id</code></td><td>FK</td><td>Owning version.</td></tr>
+      <tr><td><code>name · purpose_tag</code></td><td>text · text</td><td>UX + classification.</td></tr>
+      <tr><td><code>template_body</code></td><td>text</td><td>Templated prompt with placeholders.</td></tr>
+      <tr><td><code>variables</code></td><td>jsonb</td><td>Required variable schema.</td></tr>
+      <tr><td><code>model_hint</code></td><td>text, null</td><td>Preferred provider/model.</td></tr>
+    </tbody></table>
+
+    <p><b>taxonomy.migration_plan</b> — how to migrate from version N to N+1 (transformations for stored schemas).</p>
+
+    <p><b>SKUs:</b> <code>taxonomy.schema.lookup · taxonomy.template.lookup</code> — <code>flat_per_call</code> (cheap; bundled).</p>
+  </div>
+</section>
+
+<!-- sdk-agent-runtime -->
+<section id="sdk-agent-runtime">
+  <h2>6 · <code>sdk-agent-runtime</code> — The Heart of P6A (G7)</h2>
+  <div class="sdk-block">
+    <div class="sdk-header"><h3>sdk-agent-runtime</h3><span class="pill purple">G7 closer · Four isolation primitives</span></div>
+    <div class="purpose">Agent definitions, execution loops, memory snapshots, tool dispatch, retry state, kill-switch state. Owns capability tokens, execution TTL, deterministic replay, sandboxed memory.</div>
+    <div class="meta-strip"><span><b>PRD §:</b> 5.2</span><span><b>FRs:</b> FR-ART-1 … FR-ART-23</span><span><b>Pool:</b> Admin (defs, runs, logs) + Vector store (namespaced)</span><span><b>Schema:</b> <code>agents</code></span></div>
+
+    <h4>6.1 · Tables</h4>
+
+    <p><b>agents.agent_definition</b></p>
+    <table><thead><tr><th>Column</th><th>Type</th><th>Purpose</th></tr></thead><tbody>
+      <tr><td><code>agent_id</code></td><td>ULID PK</td><td>Surrogate.</td></tr>
+      <tr><td><code>tenant_id</code></td><td>FK, null</td><td>Null = platform agent (Cost Steward, Safety Officer, …).</td></tr>
+      <tr><td><code>name · description</code></td><td>text</td><td>UX.</td></tr>
+      <tr><td><code>acting_persona_id</code></td><td>FK</td><td>Persona the agent acts on behalf of.</td></tr>
+      <tr><td><code>agent_scope</code></td><td>jsonb</td><td>Capability allow-list (SKUs + tool names).</td></tr>
+      <tr><td><code>default_ttl_seconds</code></td><td>int</td><td>30 sync / 300 orchestration / 3600 batch defaults.</td></tr>
+      <tr><td><code>tier</code></td><td>enum</td><td><code>sync · orchestration · batch</code></td></tr>
+      <tr><td><code>kill_switch_flag_id</code></td><td>FK → feature_flag</td><td>Operator kill switch (P3).</td></tr>
+      <tr><td><code>vector_namespace</code></td><td>text</td><td>HARD-isolated per-tenant namespace.</td></tr>
+      <tr><td><code>tool_manifest</code></td><td>jsonb</td><td>Declared SKUs the agent may call.</td></tr>
+      <tr><td><code>created_by · created_at</code></td><td>text · timestamptz</td><td>Provenance.</td></tr>
+    </tbody></table>
+
+    <p><b>agents.agent_run</b> — one execution.</p>
+    <table><thead><tr><th>Column</th><th>Type</th><th>Purpose</th></tr></thead><tbody>
+      <tr><td><code>run_id</code></td><td>ULID PK</td><td>Surrogate.</td></tr>
+      <tr><td><code>agent_id</code></td><td>FK</td><td>Definition.</td></tr>
+      <tr><td><code>tenant_id · persona_id</code></td><td>FK · FK</td><td>Envelope context.</td></tr>
+      <tr><td><code>trace_id</code></td><td>text</td><td>OTel cross-system link.</td></tr>
+      <tr><td><code>parent_run_id</code></td><td>FK, null</td><td>For agent chains (provenance).</td></tr>
+      <tr><td><code>agent_chain</code></td><td>text[]</td><td>Materialized chain (human → meta-agent → executing agent).</td></tr>
+      <tr><td><code>status</code></td><td>enum</td><td><code>running · completed · failed · terminated_ttl_expired · terminated_kill_switch · terminated_quota</code></td></tr>
+      <tr><td><code>ttl_deadline</code></td><td>timestamptz</td><td>Hard deadline.</td></tr>
+      <tr><td><code>started_at · ended_at</code></td><td>timestamptz</td><td>Lifecycle.</td></tr>
+      <tr><td><code>tokens_total · cost_total</code></td><td>int · numeric</td><td>Aggregated.</td></tr>
+      <tr><td><code>execution_log_ref</code></td><td>text</td><td>S3 pointer to deterministic-replay log.</td></tr>
+      <tr><td><code>final_output_envelope</code></td><td>bytea, null</td><td>Vault-wrapped output.</td></tr>
+    </tbody></table>
+
+    <p><b>agents.capability_token</b> — short-lived, scope-limited, single-use.</p>
+    <table><thead><tr><th>Column</th><th>Type</th><th>Purpose</th></tr></thead><tbody>
+      <tr><td><code>token_id</code></td><td>ULID PK</td><td>Surrogate.</td></tr>
+      <tr><td><code>run_id</code></td><td>FK</td><td>Agent run.</td></tr>
+      <tr><td><code>agent_id · acting_persona_id</code></td><td>FK · FK</td><td>Provenance.</td></tr>
+      <tr><td><code>tool_sku</code></td><td>text</td><td>Bound SKU.</td></tr>
+      <tr><td><code>args_hash</code></td><td>bytea</td><td>Hash of bound args (prevents reuse with different args).</td></tr>
+      <tr><td><code>tenant_scope</code></td><td>text</td><td>Tenant the token is valid in.</td></tr>
+      <tr><td><code>issued_at · expires_at</code></td><td>timestamptz</td><td>Lifecycle.</td></tr>
+      <tr><td><code>used_at · used_by_invocation_id</code></td><td>timestamptz · FK</td><td>Single-use enforcement.</td></tr>
+      <tr><td><code>revoked_at · revoked_reason</code></td><td>timestamptz · text</td><td>Mid-flight revoke.</td></tr>
+      <tr><td><code>signature_envelope</code></td><td>bytea</td><td>Signed by capability issuer (vaulted signing key).</td></tr>
+    </tbody></table>
+
+    <p><b>agents.tool_invocation</b></p>
+    <table><thead><tr><th>Column</th><th>Type</th><th>Purpose</th></tr></thead><tbody>
+      <tr><td><code>invocation_id</code></td><td>ULID PK</td><td>Surrogate.</td></tr>
+      <tr><td><code>run_id</code></td><td>FK</td><td>Parent run.</td></tr>
+      <tr><td><code>tool_sku</code></td><td>text</td><td>What was called.</td></tr>
+      <tr><td><code>capability_token_id</code></td><td>FK</td><td>Required.</td></tr>
+      <tr><td><code>args_envelope · result_envelope</code></td><td>bytea · bytea</td><td>Vault-wrapped.</td></tr>
+      <tr><td><code>compensation_step_id</code></td><td>FK → workflow.compensation, null</td><td>For rollback.</td></tr>
+      <tr><td><code>occurred_at · latency_ms</code></td><td>timestamptz · int</td><td>Telemetry.</td></tr>
+      <tr><td><code>outcome</code></td><td>enum</td><td><code>succeeded · failed · cancelled · denied</code></td></tr>
+    </tbody></table>
+
+    <p><b>agents.execution_log_entry</b> — content-addressed replay artifacts. Logs are NOT telemetry; separate retention budget.</p>
+    <table><thead><tr><th>Column</th><th>Type</th><th>Purpose</th></tr></thead><tbody>
+      <tr><td><code>entry_id</code></td><td>ULID PK</td><td>Surrogate.</td></tr>
+      <tr><td><code>run_id</code></td><td>FK</td><td>Parent.</td></tr>
+      <tr><td><code>seq</code></td><td>int</td><td>Sequence.</td></tr>
+      <tr><td><code>kind</code></td><td>enum</td><td><code>prompt-template · context-retrieval · model-invocation · tool-call · tool-response · final-action · ttl-event · kill-event</code></td></tr>
+      <tr><td><code>content_hash</code></td><td>bytea</td><td>SHA-256 of canonical payload.</td></tr>
+      <tr><td><code>payload_envelope</code></td><td>bytea</td><td>Vault-wrapped body (includes model snapshot ID for replay).</td></tr>
+      <tr><td><code>recorded_at</code></td><td>timestamptz</td><td>Time.</td></tr>
+    </tbody></table>
+
+    <p><b>agents.vector_namespace_registry</b> — enforces hard physical partitions per tenant.</p>
+    <table><thead><tr><th>Column</th><th>Type</th><th>Purpose</th></tr></thead><tbody>
+      <tr><td><code>namespace</code></td><td>text PK</td><td>e.g., <code>ten_acme_health</code></td></tr>
+      <tr><td><code>tenant_id</code></td><td>FK</td><td>Owner. UNIQUE per namespace.</td></tr>
+      <tr><td><code>backend</code></td><td>enum</td><td><code>pgvector · pinecone · qdrant · weaviate</code></td></tr>
+      <tr><td><code>connection_envelope</code></td><td>bytea</td><td>Vault-wrapped connection details.</td></tr>
+      <tr><td><code>verified_at</code></td><td>timestamptz</td><td>Last isolation verification (CI check).</td></tr>
+    </tbody></table>
+
+    <p><b>agents.scope_exception</b> — when agents request beyond-scope actions.</p>
+    <table><thead><tr><th>Column</th><th>Type</th><th>Purpose</th></tr></thead><tbody>
+      <tr><td><code>exception_id</code></td><td>ULID PK</td><td>Surrogate.</td></tr>
+      <tr><td><code>run_id</code></td><td>FK</td><td>Parent.</td></tr>
+      <tr><td><code>requested_sku</code></td><td>text</td><td>The SKU outside scope.</td></tr>
+      <tr><td><code>approval_request_id</code></td><td>FK → approval.request</td><td>Routed through sdk-approval (P4).</td></tr>
+      <tr><td><code>outcome</code></td><td>enum</td><td><code>approved · denied · timed-out</code></td></tr>
+    </tbody></table>
+
+    <h4>6.2 · ERD</h4>
+    <div class="diagram-wrap"><pre class="mermaid">
+erDiagram
+  AGENT_DEFINITION ||--o{ AGENT_RUN : ""
+  AGENT_DEFINITION ||--|| VECTOR_NAMESPACE_REGISTRY : "isolated"
+  AGENT_RUN ||--o{ CAPABILITY_TOKEN : ""
+  AGENT_RUN ||--o{ TOOL_INVOCATION : ""
+  AGENT_RUN ||--o{ EXECUTION_LOG_ENTRY : "replay artifact"
+  AGENT_RUN ||--o{ SCOPE_EXCEPTION : ""
+  TOOL_INVOCATION }o--|| CAPABILITY_TOKEN : "single-use"
+  AGENT_DEFINITION {
+    string agent_id PK
+    string tenant_id
+    string acting_persona_id FK
+    jsonb  agent_scope
+    int    default_ttl_seconds
+    string kill_switch_flag_id FK
+    string vector_namespace
+  }
+  AGENT_RUN {
+    string run_id PK
+    string agent_id FK
+    string trace_id
+    string status
+    timestamp ttl_deadline
+    timestamp started_at
+    string execution_log_ref
+  }
+  CAPABILITY_TOKEN {
+    string token_id PK
+    string run_id FK
+    string tool_sku
+    bytes  args_hash
+    timestamp expires_at
+    timestamp used_at
+    timestamp revoked_at
+  }
+  TOOL_INVOCATION {
+    string invocation_id PK
+    string run_id FK
+    string tool_sku
+    string capability_token_id FK
+    string outcome
+  }
+  EXECUTION_LOG_ENTRY {
+    string entry_id PK
+    string run_id FK
+    int    seq
+    string kind
+    bytes  content_hash
+  }
+    </pre></div>
+
+    <h4>6.3 · Events &amp; SKUs</h4>
+    <table><thead><tr><th>Event</th><th>Retention</th></tr></thead><tbody>
+      <tr><td><code>agent.run.started.v1 · agent.run.completed.v1 · agent.run.terminated.v1</code></td><td>regulated</td></tr>
+      <tr><td><code>agent.tool.invoked.v1</code> (sampled)</td><td>operational</td></tr>
+      <tr><td><code>agent.scope.exceeded.v1</code></td><td>regulated</td></tr>
+      <tr><td><code>agent.capability-token.minted.v1 · agent.capability-token.revoked.v1</code></td><td>regulated</td></tr>
+      <tr><td><code>agent.run.replayed.v1</code></td><td>regulated</td></tr>
+    </tbody></table>
+    <p><b>SKUs:</b> <code>agent-runtime.run.start · agent-runtime.tool.invoke · agent-runtime.replay · agent-runtime.capability-token.mint</code> — <code>tiered_per_call</code>.</p>
+  </div>
+</section>
+
+<!-- sdk-trace -->
+<section id="sdk-trace">
+  <h2>7 · <code>sdk-trace</code> — Cross-System Trace Viewer (G12)</h2>
+  <div class="sdk-block">
+    <div class="sdk-header"><h3>sdk-trace</h3><span class="pill purple">G12 closer · NEW v3.1</span></div>
+    <div class="purpose">Aggregates spans from telemetry + audit + meter + lineage (when present in P6B) into one timeline keyed by <code>trace_id</code>. Sub-15-min MTTD; renders &lt; 5s.</div>
+    <div class="meta-strip"><span><b>PRD §:</b> 5.3</span><span><b>FRs:</b> FR-TRC-1 … FR-TRC-8</span><span><b>Pool:</b> Stateless reader</span><span><b>Schema:</b> <code>trace</code> (collector store)</span></div>
+
+    <h4>7.1 · Tables (in trace-collector store)</h4>
+
+    <p><b>trace.trace</b> — one row per <code>trace_id</code> (metadata; spans live in a separate store).</p>
+    <table><thead><tr><th>Column</th><th>Type</th><th>Purpose</th></tr></thead><tbody>
+      <tr><td><code>trace_id</code></td><td>text PK</td><td>OTel trace ID.</td></tr>
+      <tr><td><code>tenant_id · persona_id</code></td><td>FK · FK</td><td>Envelope context.</td></tr>
+      <tr><td><code>started_at · completed_at</code></td><td>timestamptz</td><td>Lifecycle.</td></tr>
+      <tr><td><code>root_span_id</code></td><td>text</td><td>Top-level span.</td></tr>
+      <tr><td><code>total_latency_ms</code></td><td>int</td><td>Wall time.</td></tr>
+      <tr><td><code>error_count</code></td><td>int</td><td>For triage.</td></tr>
+      <tr><td><code>budget_violations</code></td><td>jsonb</td><td>Per-layer SLO breaches.</td></tr>
+    </tbody></table>
+
+    <p><b>trace.span</b> — one row per span (typically in ClickHouse for OLAP queries; logical schema below).</p>
+    <table><thead><tr><th>Column</th><th>Type</th><th>Purpose</th></tr></thead><tbody>
+      <tr><td><code>span_id</code></td><td>text PK</td><td>OTel span ID.</td></tr>
+      <tr><td><code>trace_id</code></td><td>FK</td><td>Parent trace.</td></tr>
+      <tr><td><code>parent_span_id</code></td><td>FK, null</td><td>Tree edge.</td></tr>
+      <tr><td><code>layer</code></td><td>enum</td><td><code>gateway · identity · consent · pool-router · vault · policy · rebac · meter · sdk-body · tool · agent · lineage</code></td></tr>
+      <tr><td><code>operation</code></td><td>text</td><td>Free-form op name.</td></tr>
+      <tr><td><code>started_at · ended_at · latency_ms</code></td><td>timestamptz · timestamptz · int</td><td>Timing.</td></tr>
+      <tr><td><code>status</code></td><td>enum</td><td><code>ok · error · cancelled</code></td></tr>
+      <tr><td><code>attributes</code></td><td>jsonb</td><td>OTel attributes + envelope-context refs.</td></tr>
+      <tr><td><code>audit_entry_id</code></td><td>FK, null</td><td>If span emitted an audit entry.</td></tr>
+      <tr><td><code>usage_event_id</code></td><td>FK, null</td><td>If span emitted a usage event.</td></tr>
+      <tr><td><code>agent_run_id</code></td><td>FK, null</td><td>If span belongs to an agent run.</td></tr>
+    </tbody></table>
+
+    <p><b>trace.export</b> — customer self-serve trace exports.</p>
+    <table><thead><tr><th>Column</th><th>Type</th><th>Purpose</th></tr></thead><tbody>
+      <tr><td><code>export_id</code></td><td>ULID PK</td><td>Surrogate.</td></tr>
+      <tr><td><code>tenant_id · requestor_persona_id</code></td><td>FK · FK</td><td>Provenance.</td></tr>
+      <tr><td><code>trace_id</code></td><td>FK</td><td>Subject.</td></tr>
+      <tr><td><code>format</code></td><td>enum</td><td><code>pdf · json</code></td></tr>
+      <tr><td><code>artifact_s3_key · signature</code></td><td>text · bytea</td><td>Signed bundle.</td></tr>
+      <tr><td><code>requested_at · ready_at</code></td><td>timestamptz</td><td>Lifecycle.</td></tr>
+    </tbody></table>
+
+    <p><b>SKUs:</b> <code>trace.query · trace.export.pdf · trace.export.json</code> — <code>flat_per_call</code>.</p>
+  </div>
+</section>
+
+<!-- sdk-mcp-bridge -->
+<section id="sdk-mcp-bridge">
+  <h2>8 · <code>sdk-mcp-bridge</code> — Consume + Expose MCP</h2>
+  <div class="sdk-block">
+    <div class="sdk-header"><h3>sdk-mcp-bridge</h3><span class="pill purple">NEW v3.1 · Strategic primitive</span></div>
+    <div class="purpose">Bidirectional Model Context Protocol. Consume external MCP servers (Slack · Snowflake · GitHub · custom); expose selected ProjexCloud SDKs as MCP servers (callable from Claude Desktop, custom OpenAI assistants).</div>
+    <div class="meta-strip"><span><b>PRD §:</b> 5.4</span><span><b>FRs:</b> FR-MCP-1 … FR-MCP-8</span><span><b>Pool:</b> Admin · creds in Vault</span><span><b>Schema:</b> <code>mcp</code></span></div>
+
+    <h4>8.1 · Tables (consume side)</h4>
+
+    <p><b>mcp.server_registration</b></p>
+    <table><thead><tr><th>Column</th><th>Type</th><th>Purpose</th></tr></thead><tbody>
+      <tr><td><code>registration_id</code></td><td>ULID PK</td><td>Surrogate.</td></tr>
+      <tr><td><code>tenant_id</code></td><td>FK</td><td>Owner.</td></tr>
+      <tr><td><code>display_name</code></td><td>text</td><td>UX.</td></tr>
+      <tr><td><code>transport</code></td><td>enum</td><td><code>http · sse · stdio</code></td></tr>
+      <tr><td><code>endpoint_url</code></td><td>text</td><td>Or stdio command.</td></tr>
+      <tr><td><code>credential_envelope</code></td><td>bytea</td><td>Vaulted bearer/OAuth token.</td></tr>
+      <tr><td><code>status</code></td><td>enum</td><td><code>active · disabled · degraded</code></td></tr>
+      <tr><td><code>allowed_agent_ids</code></td><td>text[]</td><td>Agents permitted to use.</td></tr>
+    </tbody></table>
+
+    <p><b>mcp.tool</b> — auto-registered tools from each external server.</p>
+    <table><thead><tr><th>Column</th><th>Type</th><th>Purpose</th></tr></thead><tbody>
+      <tr><td><code>tool_id</code></td><td>ULID PK</td><td>Surrogate.</td></tr>
+      <tr><td><code>registration_id</code></td><td>FK</td><td>Owning server.</td></tr>
+      <tr><td><code>tool_name</code></td><td>text</td><td>e.g., <code>slack.post-message</code></td></tr>
+      <tr><td><code>args_schema</code></td><td>jsonb</td><td>JSON Schema.</td></tr>
+      <tr><td><code>opt_out</code></td><td>bool</td><td>Tenant-admin can disable specific tools.</td></tr>
+      <tr><td><code>registered_at</code></td><td>timestamptz</td><td>Lifecycle.</td></tr>
+    </tbody></table>
+
+    <p><b>mcp.tool_invocation</b> — every external tool call.</p>
+    <table><thead><tr><th>Column</th><th>Type</th><th>Purpose</th></tr></thead><tbody>
+      <tr><td><code>invocation_id</code></td><td>ULID PK</td><td>Surrogate.</td></tr>
+      <tr><td><code>tool_id</code></td><td>FK</td><td>Target tool.</td></tr>
+      <tr><td><code>agent_run_id</code></td><td>FK</td><td>Caller.</td></tr>
+      <tr><td><code>capability_token_id</code></td><td>FK</td><td>Required gating.</td></tr>
+      <tr><td><code>args_envelope · response_envelope</code></td><td>bytea · bytea</td><td>Vault-wrapped.</td></tr>
+      <tr><td><code>external_cost</code></td><td>numeric, null</td><td>If passthrough billing applies.</td></tr>
+      <tr><td><code>outcome</code></td><td>enum</td><td><code>succeeded · failed · timeout · denied</code></td></tr>
+      <tr><td><code>occurred_at · latency_ms</code></td><td>timestamptz · int</td><td>Telemetry.</td></tr>
+    </tbody></table>
+
+    <h4>8.2 · Tables (expose side)</h4>
+
+    <p><b>mcp.exposed_server</b> — a ProjexCloud SDK exposed as an MCP server.</p>
+    <table><thead><tr><th>Column</th><th>Type</th><th>Purpose</th></tr></thead><tbody>
+      <tr><td><code>exposed_server_id</code></td><td>ULID PK</td><td>Surrogate.</td></tr>
+      <tr><td><code>tenant_id</code></td><td>FK</td><td>Owner.</td></tr>
+      <tr><td><code>sdk_kind</code></td><td>text</td><td><code>sdk-crm · sdk-engagement · sdk-content</code></td></tr>
+      <tr><td><code>exposed_tool_skus</code></td><td>text[]</td><td>Which SKUs to surface.</td></tr>
+      <tr><td><code>api_key_id</code></td><td>FK → api_keys.key</td><td>Auth surface for external clients.</td></tr>
+      <tr><td><code>endpoint_path</code></td><td>text</td><td>Server-side URL path.</td></tr>
+      <tr><td><code>status</code></td><td>enum</td><td><code>active · paused</code></td></tr>
+    </tbody></table>
+
+    <h4>8.3 · ERD</h4>
+    <div class="diagram-wrap"><pre class="mermaid">
+erDiagram
+  MCP_SERVER_REGISTRATION ||--o{ MCP_TOOL : ""
+  MCP_TOOL ||--o{ MCP_TOOL_INVOCATION : ""
+  MCP_TOOL_INVOCATION }o--|| CAPABILITY_TOKEN : ""
+  MCP_TOOL_INVOCATION }o--|| AGENT_RUN : ""
+  MCP_EXPOSED_SERVER ||--o{ MCP_TOOL : "exposes via SKUs"
+  MCP_EXPOSED_SERVER }o--|| API_KEY : ""
+  MCP_SERVER_REGISTRATION {
+    string registration_id PK
+    string tenant_id
+    string transport
+    string endpoint_url
+    string status
+  }
+  MCP_TOOL {
+    string tool_id PK
+    string registration_id FK
+    string tool_name
+    jsonb  args_schema
+    bool   opt_out
+  }
+  MCP_TOOL_INVOCATION {
+    string invocation_id PK
+    string tool_id FK
+    string agent_run_id FK
+    string capability_token_id FK
+    string outcome
+  }
+  MCP_EXPOSED_SERVER {
+    string exposed_server_id PK
+    string tenant_id
+    string sdk_kind
+    text[] exposed_tool_skus
+    string api_key_id FK
+  }
+    </pre></div>
+
+    <p><b>SKUs:</b> <code>mcp.tool.invoke</code> — <code>passthrough_plus_margin</code>. <code>mcp.server.register</code> — <code>flat_per_call</code>.</p>
+  </div>
+</section>
+
+<!-- connector-github -->
+<section id="connector-github">
+  <h2>9 · <code>connector-github</code></h2>
+  <div class="sdk-block">
+    <div class="sdk-header"><h3>connector-github</h3><span class="pill purple">NEW v3.1</span></div>
+    <div class="purpose">Bulk operations + webhook ingestion of repo events. Complements public GitHub MCP server (which most agents will reach via mcp-bridge first).</div>
+    <div class="meta-strip"><span><b>PRD §:</b> 5.5</span><span><b>Pool:</b> Admin</span><span><b>Schema:</b> <code>connector_github</code></span></div>
+
+    <p><b>connector_github.repo · connector_github.issue · connector_github.pr · connector_github.workflow_run</b> — mirror tables for repos, issues, PRs, and Actions runs. Same shape as the framework <code>external_object_mirror</code> with vendor-specific extension fields.</p>
+
+    <p><b>SKUs:</b> <code>connector.github.sync.record · connector.github.api.call</code> — per-unit + flat.</p>
+  </div>
+</section>
+
+</div>
+
+<script>
+  mermaid.initialize({ startOnLoad: true, theme: 'dark', themeVariables: { background: '#0b0f17', primaryColor: '#1a2234', primaryBorderColor: '#c9a86a', primaryTextColor: '#e6ecf5', lineColor: '#6aa9ff', secondaryColor: '#1d1830', tertiaryColor: '#16241c' } });
+</script>
+
+</body>
+</html>

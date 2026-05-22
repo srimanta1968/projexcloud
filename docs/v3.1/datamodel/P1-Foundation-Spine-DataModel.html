@@ -1,0 +1,1158 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>ProjexCloud v3.1 · P1 Data Model — Foundation Spine</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<style>
+  :root {
+    --bg: #0b0f17;
+    --panel: #121826;
+    --panel-2: #1a2234;
+    --line: #243049;
+    --text: #e6ecf5;
+    --muted: #8a98b3;
+    --accent: #c9a86a;
+    --accent-2: #6aa9ff;
+    --teal: #2dd4bf;
+    --green: #5dd39e;
+    --red: #ff6b6b;
+    --yellow: #f5c451;
+    --purple: #b88dff;
+    --code-bg: #0f1422;
+  }
+  * { box-sizing: border-box; }
+  html, body { background: var(--bg); color: var(--text); font-family: ui-sans-serif, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", sans-serif; margin: 0; padding: 0; line-height: 1.55; }
+  .page { max-width: 1260px; margin: 0 auto; padding: 56px 32px 96px; }
+  header.cover { border-bottom: 1px solid var(--line); padding-bottom: 36px; margin-bottom: 48px; }
+  header.cover .eyebrow { color: var(--accent); letter-spacing: 0.18em; text-transform: uppercase; font-size: 12px; font-weight: 700; }
+  header.cover h1 { font-size: 40px; line-height: 1.15; margin: 12px 0 8px; letter-spacing: -0.02em; }
+  header.cover .sub { color: var(--muted); font-size: 16px; max-width: 900px; }
+  header.cover .meta { display: flex; gap: 24px; flex-wrap: wrap; margin-top: 24px; color: var(--muted); font-size: 13px; }
+  header.cover .meta b { color: var(--text); font-weight: 600; }
+
+  h2 { font-size: 26px; letter-spacing: -0.01em; margin: 56px 0 18px; padding-bottom: 8px; border-bottom: 1px solid var(--line); }
+  h3 { font-size: 19px; margin: 28px 0 10px; color: var(--text); }
+  h4 { font-size: 13px; margin: 18px 0 8px; color: var(--accent); text-transform: uppercase; letter-spacing: 0.12em; }
+  p { color: #c8d1e3; }
+  small, .muted { color: var(--muted); }
+
+  .grid { display: grid; gap: 16px; }
+  .grid.cols-2 { grid-template-columns: repeat(2, minmax(0,1fr)); }
+  .grid.cols-3 { grid-template-columns: repeat(3, minmax(0,1fr)); }
+  @media (max-width: 900px) {
+    .grid.cols-2, .grid.cols-3 { grid-template-columns: 1fr; }
+    header.cover h1 { font-size: 30px; }
+  }
+
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 16px 18px; }
+  .card .label { color: var(--accent); font-size: 11px; text-transform: uppercase; letter-spacing: 0.14em; font-weight: 700; }
+  .card .title { font-weight: 600; margin: 6px 0 6px; }
+  .card .body { color: var(--muted); font-size: 13.5px; }
+
+  .pill { display: inline-block; padding: 3px 10px; border-radius: 999px; font-size: 11px; border: 1px solid var(--line); color: var(--muted); margin-right: 6px; }
+  .pill.gold { color: var(--accent); border-color: rgba(201,168,106,0.4); }
+  .pill.blue { color: var(--accent-2); border-color: rgba(106,169,255,0.4); }
+  .pill.teal { color: var(--teal); border-color: rgba(45,212,191,0.4); }
+  .pill.green { color: var(--green); border-color: rgba(93,211,158,0.4); }
+  .pill.red { color: var(--red); border-color: rgba(255,107,107,0.4); }
+  .pill.yellow { color: var(--yellow); border-color: rgba(245,196,81,0.4); }
+  .pill.purple { color: var(--purple); border-color: rgba(184,141,255,0.4); }
+
+  table { width: 100%; border-collapse: collapse; margin-top: 12px; font-size: 13.5px; }
+  th, td { text-align: left; padding: 9px 11px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { color: var(--muted); font-weight: 600; font-size: 11.5px; text-transform: uppercase; letter-spacing: 0.08em; }
+  td code { font-size: 12px; }
+
+  pre, code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+  pre { background: var(--code-bg); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; overflow-x: auto; font-size: 12.5px; }
+  code { background: var(--code-bg); padding: 1px 6px; border-radius: 4px; font-size: 12px; }
+
+  .diagram-wrap { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 22px; overflow-x: auto; }
+  .caption { color: var(--muted); font-size: 12.5px; margin-top: 10px; text-align: center; }
+  .mermaid { background: transparent; }
+
+  nav.toc { position: sticky; top: 0; background: rgba(11,15,23,0.92); backdrop-filter: blur(10px); border-bottom: 1px solid var(--line); padding: 10px 32px; z-index: 10; }
+  nav.toc .row { max-width: 1260px; margin: 0 auto; display: flex; flex-wrap: wrap; gap: 10px; font-size: 12px; }
+  nav.toc a { color: var(--muted); text-decoration: none; border-bottom: 1px solid transparent; }
+  nav.toc a:hover { color: var(--accent); border-color: var(--accent); }
+
+  .callout { border-left: 3px solid var(--accent); background: var(--panel-2); padding: 14px 18px; border-radius: 0 10px 10px 0; margin: 18px 0; color: #d6deef; font-size: 14px; }
+  .callout.blue { border-color: var(--accent-2); }
+  .callout.green { border-color: var(--green); }
+  .callout.red { border-color: var(--red); }
+  .callout.purple { border-color: var(--purple); }
+  .callout.teal { border-color: var(--teal); }
+
+  .sdk-block { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 22px 24px; margin: 22px 0 28px; }
+  .sdk-block .sdk-header { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; margin-bottom: 6px; }
+  .sdk-block .sdk-header h3 { margin: 0; font-size: 22px; color: var(--accent); }
+  .sdk-block .purpose { color: #c8d1e3; font-size: 14.5px; margin: 4px 0 14px; }
+
+  .meta-strip { display: flex; flex-wrap: wrap; gap: 18px; font-size: 12.5px; color: var(--muted); margin: 6px 0 18px; padding: 10px 14px; background: var(--panel-2); border-radius: 8px; }
+  .meta-strip b { color: var(--text); }
+</style>
+</head>
+<body>
+
+<nav class="toc">
+  <div class="row">
+    <a href="#overview">1 · Overview</a>
+    <a href="#phase-erd">2 · Phase ERD</a>
+    <a href="#pool-map">3 · Pool placement</a>
+    <a href="#sdk-contracts">4 · contracts</a>
+    <a href="#sdk-secrets">5 · sdk-secrets</a>
+    <a href="#sdk-vault">6 · sdk-vault</a>
+    <a href="#sdk-audit">7 · sdk-audit</a>
+    <a href="#sdk-pool-router">8 · sdk-pool-router</a>
+    <a href="#sdk-meter">9 · sdk-meter</a>
+    <a href="#events">10 · Event registry</a>
+    <a href="#refs">11 · Cross-references</a>
+  </div>
+</nav>
+
+<div class="page">
+
+<header class="cover">
+  <div class="eyebrow">Data Model · Phase 1 · Waves W0 + W1</div>
+  <h1>P1 — Foundation Spine Data Model</h1>
+  <div class="sub">Per-SDK entity model, columnar tables, ERDs, events, and pool placement for the foundation spine (Contracts · Vault · Audit · Pool Router · Meter). This is the substrate every later phase routes through.</div>
+  <div class="meta">
+    <div><b>Phase:</b> P1 (Weeks 1–9)</div>
+    <div><b>Maps to waves:</b> W0 (Foundations) + W1 (Compliance + Pool + Meter)</div>
+    <div><b>Gates closed:</b> G1 · G2 · G3</div>
+    <div><b>PRD:</b> <code>prd/P1-Foundation-Spine.md</code></div>
+    <div><b>Anchor doctrine:</b> Architecture §3A · §3B · §8B</div>
+  </div>
+</header>
+
+<!-- ============ 1 · OVERVIEW ============ -->
+<section id="overview">
+  <h2>1 · Overview</h2>
+  <p>P1 ships the platform <b>substrate</b>: typed contracts, a 7-tier vault with cryptographic-shred, an append-only audit chain, the pool router resolving <code>(tenant_id, app_id) → dsn</code>, and a universal meter gate in emit-only mode. Everything in this phase is read or written by code in every later phase — so the data model here is load-bearing.</p>
+
+  <div class="grid cols-3">
+    <div class="card"><div class="label">Doctrine #1 · G1</div><div class="title">Opinionated Constraints</div><div class="body">10 lint-enforced rules. Data model implication: no raw <code>pg.Client</code> outside <code>withTenant</code>; cross-pool joins require <code>@cross_pool_sanctioned</code>.</div></div>
+    <div class="card"><div class="label">Doctrine #2 · G2</div><div class="title">Polyglot Persistence</div><div class="body">Postgres pools = OLTP + PII only. ClickHouse = telemetry rollups. Kafka = events. Redis = cache + quota state. S3 = audit archival + blobs. KMS = key material.</div></div>
+    <div class="card"><div class="label">Doctrine #3 · G3</div><div class="title">Event Type Registry</div><div class="body">Every event type registered with retention class (<code>transient</code> · <code>operational</code> · <code>regulated</code>) and conflict policy. Producers reject unregistered types at runtime.</div></div>
+  </div>
+
+  <div class="callout blue">
+    <b>How to read this document.</b> Each SDK section below contains: purpose · pool placement · entity tables with columns · per-SDK ERD · events emitted/subscribed · pricing surface · cross-references. Tables list logical columns, not full DDL — the source of truth for DDL is the migration files that ship with each SDK package.
+  </div>
+</section>
+
+<!-- ============ 2 · PHASE ERD ============ -->
+<section id="phase-erd">
+  <h2>2 · Phase ERD — How P1 entities relate</h2>
+  <p>This is the cross-SDK view of P1. Identity entities (Person, Tenant, Encounter) are referenced as foreign keys but only land as physical tables in P2/P3 — they appear here as <i>logical referents</i> the Vault, Audit, and Meter schemas already encode.</p>
+
+  <div class="diagram-wrap">
+    <pre class="mermaid">
+erDiagram
+  POOL ||--o{ TENANT_POOL_MAP : "hosts"
+  POOL ||--o{ POOL_LIFECYCLE_EVENT : "transitions"
+  POOL ||--o{ AUDIT_ENTRY : "owns chain"
+  POOL ||--o{ VAULT_KEY : "wraps under pool_kek"
+
+  TENANT_POOL_MAP }o--|| POOL : "admin_pool"
+  TENANT_POOL_MAP }o--|| POOL : "evidence_pool"
+  TENANT_POOL_MAP }o--|| POOL : "app_pool[app_id]"
+
+  VAULT_KEY ||--o{ VAULT_KEY_OPERATION : "operations"
+  VAULT_KEY ||--o{ AUDIT_ENTRY : "audited"
+  VAULT_KEY }o--o| VAULT_KEY : "wraps"
+
+  EVENT_TYPE_REGISTRY ||--o{ AUDIT_ENTRY : "validates"
+  EVENT_TYPE_REGISTRY ||--o{ USAGE_EVENT : "validates"
+
+  AUDIT_ENTRY ||--|| AUDIT_CHAIN_HEAD : "extends"
+
+  USAGE_EVENT ||--|| USAGE_LEDGER_DAY : "rolls up"
+  USAGE_EVENT }o--|| METER_QUOTA_STATE : "checked against"
+  USAGE_LEDGER_DAY ||--|| AUDIT_ENTRY : "hash-chained into"
+
+  PRICING_SKU ||--o{ PRICING_RATE : "priced by"
+  PRICING_CATALOG ||--o{ PRICING_SKU : "contains"
+
+  EVENT_TYPE_REGISTRY {
+    string event_type PK
+    string retention_class
+    string conflict_policy
+    string schema_state
+    int    version
+  }
+  POOL {
+    string pool_index PK
+    string pool_family
+    string app_id
+    string region
+    string status
+    string kek_arn
+  }
+  TENANT_POOL_MAP {
+    string tenant_id PK
+    string admin_pool_index FK
+    string evidence_pool_index FK
+    jsonb  app_pool_index
+    string region
+    string status
+  }
+  VAULT_KEY {
+    string key_id PK
+    string tier
+    string scope_id
+    string parent_key_id FK
+    string kms_ref
+    string state
+  }
+  AUDIT_ENTRY {
+    string entry_id PK
+    string pool_index FK
+    string event_type FK
+    string prev_hash
+    string entry_hash
+    string actor_id
+  }
+  USAGE_EVENT {
+    string event_id PK
+    string sku FK
+    string tenant_id
+    string pool_index
+    int    units
+    timestamp occurred_at
+  }
+  USAGE_LEDGER_DAY {
+    string tenant_id PK
+    date   day PK
+    string prev_hash
+    string entry_hash
+    bigint total_units
+  }
+  PRICING_CATALOG {
+    string catalog_id PK
+    int    version
+    string status
+  }
+  PRICING_SKU {
+    string sku PK
+    string unit
+    string mode
+    string tier
+  }
+    </pre>
+  </div>
+  <div class="caption">Figure 2.1 — Cross-SDK entity relationships in P1. Logical FKs into identity entities (Person, Encounter) materialize in P2/P3.</div>
+</section>
+
+<!-- ============ 3 · POOL PLACEMENT ============ -->
+<section id="pool-map">
+  <h2>3 · Pool placement matrix</h2>
+  <p>Where each P1 SDK's data lives, per Architecture §8A.2 and §8B.1.</p>
+  <table>
+    <thead>
+      <tr><th>SDK</th><th>Postgres schema</th><th>Pool family</th><th>Non-OLTP storage</th><th>Notes</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><code>@projexlight/contracts</code></td>
+        <td>—</td>
+        <td>N/A</td>
+        <td>Compile-time only</td>
+        <td>Typed const for <code>EventTypeRegistry</code> and <code>PricingCatalog</code> schema; no runtime storage.</td>
+      </tr>
+      <tr>
+        <td><code>sdk-secrets</code></td>
+        <td>—</td>
+        <td>N/A (KMS-backed)</td>
+        <td>AWS KMS / GCP KMS / HSM</td>
+        <td>Pure facade — no Postgres rows. <b>Never</b> store key material in any DB.</td>
+      </tr>
+      <tr>
+        <td><code>sdk-vault</code></td>
+        <td><code>vault</code></td>
+        <td>Admin pool (per region) + each pool holds its own pool KEK descriptors</td>
+        <td>KMS for key material</td>
+        <td>Tables hold metadata only — <code>kms_ref</code> points to KMS-resident bytes.</td>
+      </tr>
+      <tr>
+        <td><code>sdk-audit</code></td>
+        <td><code>audit</code></td>
+        <td>Every pool (per-pool chain) + Admin pool (regional rollup)</td>
+        <td>S3 (long-term archival, ≥ 90 days)</td>
+        <td>Hot rows in Postgres; archived JSONL in S3 with manifest hash linking back to chain.</td>
+      </tr>
+      <tr>
+        <td><code>sdk-pool-router</code></td>
+        <td><code>routing</code></td>
+        <td>Admin pool of each region</td>
+        <td>Redis (per region) for resolve cache</td>
+        <td>The Pool Registry itself is the source of truth; Redis is the hot path.</td>
+      </tr>
+      <tr>
+        <td><code>sdk-meter</code></td>
+        <td><code>meter</code></td>
+        <td>Admin pool (quota state, ledger heads, catalog rates)</td>
+        <td>Kafka <code>usage.events.v1</code> · ClickHouse rollups (shared cluster partitioned by <code>pool_index</code>) · Redis (live counter, quota cache)</td>
+        <td>Rollups <b>not per-pool</b> — shared Warehouse ClickHouse, partitioned by pool.</td>
+      </tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ============ 4 · CONTRACTS ============ -->
+<section id="sdk-contracts">
+  <h2>4 · <code>@projexlight/contracts</code> — Typed Source of Truth</h2>
+
+  <div class="sdk-block">
+    <div class="sdk-header"><h3>@projexlight/contracts</h3><span class="pill blue">Foundation Package</span><span class="pill gold">No runtime storage</span></div>
+    <div class="purpose">Typed source of truth for every shared primitive: scope hierarchy, canonical IDs, six identity types, pool routing, event envelope, metering, and the Event Type Registry. Consumed by every SDK; no DB rows.</div>
+
+    <div class="meta-strip">
+      <span><b>PRD §:</b> 5.1</span>
+      <span><b>FRs:</b> FR-CTR-1 … FR-CTR-9</span>
+      <span><b>Pool:</b> N/A</span>
+      <span><b>SKUs:</b> none (internal)</span>
+    </div>
+
+    <h4>4.1 · Typed entities (compile-time const)</h4>
+
+    <p><b>Scope hierarchy IDs</b> — the four-level scope spine plus parent-pointers for recursion.</p>
+    <table>
+      <thead><tr><th>Type</th><th>Shape</th><th>Used by</th></tr></thead>
+      <tbody>
+        <tr><td><code>OrgId</code></td><td><code>org_<ulid></code></td><td>Reseller / parent org rooting</td></tr>
+        <tr><td><code>AppId</code></td><td><code>healthcare</code> · <code>realty</code> · …</td><td>Pool family resolution</td></tr>
+        <tr><td><code>TenantId</code></td><td><code>ten_<ulid></code></td><td>Every routed call; RLS predicate</td></tr>
+        <tr><td><code>BuId</code></td><td><code>bu_<ulid></code></td><td>Showback dimension</td></tr>
+        <tr><td><code>ParentOrgId · ParentTenantId · ParentBuId</code></td><td>Same shape, optional</td><td>Reseller chains; BU hierarchies</td></tr>
+      </tbody>
+    </table>
+
+    <p><b>Canonical entity IDs</b> — surfaced for type-safety; physical tables land in P2/P3.</p>
+    <table>
+      <thead><tr><th>Type</th><th>Physical table lands in</th></tr></thead>
+      <tbody>
+        <tr><td><code>PersonId</code></td><td>P2 · <code>identity.person</code></td></tr>
+        <tr><td><code>AddressId</code></td><td>P3 · <code>profile.address</code></td></tr>
+        <tr><td><code>DeviceUuid</code></td><td>P3 · <code>device.device</code></td></tr>
+        <tr><td><code>ResellerId</code></td><td>P2 · <code>tenant.reseller</code></td></tr>
+        <tr><td><code>GeoNodeId</code></td><td>P3 · <code>geo.node</code></td></tr>
+        <tr><td><code>RoleTemplateId</code></td><td>P2 · <code>policy.role_template</code></td></tr>
+        <tr><td><code>FiscalPeriodId</code></td><td>P4 · <code>billing.fiscal_period</code></td></tr>
+      </tbody>
+    </table>
+
+    <p><b>Six identity types</b> (FR-CTR-3) — concrete tables land in P2 (AppIdentity, TenantMembership, Persona) and P5 (Encounter, Relationship, RelationshipGrant).</p>
+
+    <p><b>Pool routing types</b> (FR-CTR-4) — projected onto the physical <code>pool</code> / <code>tenant_pool_map</code> tables owned by <code>sdk-pool-router</code> (§8).</p>
+
+    <h4>4.2 · Event envelope (the canonical wrapper)</h4>
+    <table>
+      <thead><tr><th>Field</th><th>Type</th><th>Purpose</th></tr></thead>
+      <tbody>
+        <tr><td><code>event_id</code></td><td>ULID</td><td>Idempotency key for at-least-once delivery.</td></tr>
+        <tr><td><code>event_type</code></td><td><code>{namespace}.{action}.v{n}</code></td><td>Must be in <code>EventTypeRegistry</code> or producer throws.</td></tr>
+        <tr><td><code>occurred_at</code></td><td>timestamptz</td><td>When the producing event happened (not when emitted).</td></tr>
+        <tr><td><code>org_id · app_id · tenant_id · bu_id</code></td><td>scope IDs</td><td>Six-layer showback / RLS attribution.</td></tr>
+        <tr><td><code>persona_id · encounter_id</code></td><td>identity IDs (nullable)</td><td>Carried when known; null for pre-P2 events.</td></tr>
+        <tr><td><code>actor.kind · actor.id</code></td><td><code>'human' \| 'service' \| 'agent'</code></td><td>Required for agent-vs-human cost split.</td></tr>
+        <tr><td><code>pool_index</code></td><td>text</td><td>Always populated by the producing SDK; partitioning key downstream.</td></tr>
+        <tr><td><code>region</code></td><td>text</td><td>Geographic origin.</td></tr>
+        <tr><td><code>trace_id · span_id</code></td><td>OTel IDs</td><td>Required for <code>sdk-trace</code> (P6A).</td></tr>
+        <tr><td><code>payload</code></td><td>jsonb</td><td>Type-specific; validated against the registry's schema.</td></tr>
+      </tbody>
+    </table>
+
+    <h4>4.3 · Event Type Registry — typed const, validated at producer + consumer</h4>
+    <table>
+      <thead><tr><th>Field</th><th>Type</th><th>Values</th></tr></thead>
+      <tbody>
+        <tr><td><code>event_type</code></td><td>PK</td><td><code>vault.key.shredded.v1</code>, <code>usage.event.v1</code>, …</td></tr>
+        <tr><td><code>retention_class</code></td><td>enum</td><td><code>transient</code> (7d) · <code>operational</code> (90d) · <code>regulated</code> (7y)</td></tr>
+        <tr><td><code>conflict_policy</code></td><td>enum</td><td><code>crdt</code> · <code>lww</code> · <code>merge</code> · <code>event-sourcing</code> · <code>human-review</code></td></tr>
+        <tr><td><code>schema_state</code></td><td>enum</td><td><code>active</code> · <code>deprecated</code> · <code>retired</code></td></tr>
+        <tr><td><code>compaction_policy</code></td><td>enum</td><td><code>none</code> · <code>lww</code> · <code>count</code></td></tr>
+        <tr><td><code>schema_version</code></td><td>int</td><td>Bumped via additive PR; never modified in place.</td></tr>
+        <tr><td><code>zod_schema_ref</code></td><td>typed ref</td><td>Compile-time link to the Zod validator.</td></tr>
+      </tbody>
+    </table>
+
+    <h4>4.4 · Pricing types (catalog schema lives here; rates land in <code>sdk-meter</code>)</h4>
+    <table>
+      <thead><tr><th>Type</th><th>Fields</th></tr></thead>
+      <tbody>
+        <tr><td><code>PricingSKU</code></td><td><code>sku</code> · <code>unit</code> (call, byte, doc, token, mo) · <code>tier</code> (core, premium) · <code>mode</code></td></tr>
+        <tr><td><code>PricingMode</code></td><td><code>flat_per_call</code> · <code>tiered_per_call</code> · <code>passthrough_plus_margin</code> · <code>per_unit</code> · <code>bundled_subscription + overage</code> · <code>free_internal</code></td></tr>
+        <tr><td><code>PricingCatalog.vN</code></td><td><code>catalog_id</code> · <code>version</code> · <code>status</code> · <code>skus</code>[]</td></tr>
+        <tr><td><code>QuotaPolicy</code></td><td><code>sku</code> · <code>tenant_id</code> · <code>soft_cap</code> · <code>hard_cap</code> · <code>window</code></td></tr>
+        <tr><td><code>UsageEvent.v1</code></td><td>(see §9 sdk-meter)</td></tr>
+        <tr><td><code>MeterDimensions</code></td><td>six-layer IDs + <code>actor</code> + <code>pool_index</code> + <code>region</code> + telemetry fields</td></tr>
+      </tbody>
+    </table>
+
+    <h4>4.5 · Forward-looking stubs (concrete types land later)</h4>
+    <p>Namespaces are reserved here so consumers can import without a circular-dependency rewrite later. None of these carry runtime data in P1.</p>
+    <table>
+      <thead><tr><th>Stub</th><th>Lands in</th></tr></thead>
+      <tbody>
+        <tr><td><code>IQLGrammar</code></td><td>P2</td></tr>
+        <tr><td><code>ReBACTraversalBudget</code></td><td>P2</td></tr>
+        <tr><td><code>AgentIdentity</code></td><td>P6A</td></tr>
+        <tr><td><code>ConflictPolicy</code></td><td>P3</td></tr>
+        <tr><td><code>SemanticObject · SemanticRelation · CapabilityGraph · Ontology · SemanticIntent · SemanticPolicy</code></td><td>P6B</td></tr>
+        <tr><td><code>PoolFederationManifest</code></td><td>P7 (hooks land in P1)</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ============ 5 · SDK-SECRETS ============ -->
+<section id="sdk-secrets">
+  <h2>5 · <code>@projexlight/sdk-secrets</code> — KMS Facade</h2>
+
+  <div class="sdk-block">
+    <div class="sdk-header"><h3>sdk-secrets</h3><span class="pill blue">SDK</span><span class="pill gold">No Postgres rows</span></div>
+    <div class="purpose">Typed facade over AWS KMS / GCP KMS / HSM. No other SDK calls KMS directly. Resolves <code>secret://app/{id}</code> refs and provides envelope encryption helpers. The only logical data is a <i>secret reference catalog</i> consulted at runtime — held in config, not in a DB.</div>
+
+    <div class="meta-strip">
+      <span><b>PRD §:</b> 5.2</span>
+      <span><b>FRs:</b> FR-SEC-1 … FR-SEC-5</span>
+      <span><b>Pool:</b> N/A (KMS-backed)</span>
+      <span><b>SKUs:</b> none (internal)</span>
+    </div>
+
+    <h4>5.1 · Logical entity — <code>SecretRef</code></h4>
+    <p>Held in app config / vault sidecar; resolved at process start. Not persisted in any tenant pool.</p>
+    <table>
+      <thead><tr><th>Field</th><th>Type</th><th>Purpose</th></tr></thead>
+      <tbody>
+        <tr><td><code>ref</code></td><td><code>secret://{scope}/{id}</code></td><td>Stable, type-checked reference string.</td></tr>
+        <tr><td><code>scope</code></td><td><code>app</code> · <code>pool</code> · <code>tenant</code></td><td>Resolution scope.</td></tr>
+        <tr><td><code>provider</code></td><td><code>aws-kms</code> · <code>gcp-kms</code> · <code>hsm-pkcs11</code></td><td>Provider chosen at deploy time.</td></tr>
+        <tr><td><code>kms_key_id</code></td><td>text</td><td>Provider-side identifier (never leaves config).</td></tr>
+        <tr><td><code>created_at · rotated_at</code></td><td>timestamptz</td><td>Lifecycle markers (also audited).</td></tr>
+      </tbody>
+    </table>
+
+    <h4>5.2 · ERD</h4>
+    <div class="diagram-wrap">
+      <pre class="mermaid">
+erDiagram
+  SECRET_REF ||--o{ KMS_OPERATION_LOG : "audited via sdk-audit"
+  SECRET_REF }o--|| KMS_PROVIDER : "provider"
+  KMS_PROVIDER {
+    string id PK
+    string kind
+    string region
+  }
+  SECRET_REF {
+    string ref PK
+    string scope
+    string provider FK
+    string kms_key_id
+    timestamp created_at
+    timestamp rotated_at
+  }
+      </pre>
+    </div>
+
+    <h4>5.3 · Events</h4>
+    <table>
+      <thead><tr><th>Event</th><th>When</th><th>Retention</th><th>Conflict</th></tr></thead>
+      <tbody>
+        <tr><td><code>secrets.ref.resolved.v1</code></td><td>First resolve per process</td><td>operational</td><td>lww</td></tr>
+        <tr><td><code>secrets.key.rotated.v1</code></td><td>Rotation completed</td><td>regulated</td><td>event-sourcing</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ============ 6 · SDK-VAULT ============ -->
+<section id="sdk-vault">
+  <h2>6 · <code>@projexlight/sdk-vault</code> — 7-Tier Envelope Keys</h2>
+
+  <div class="sdk-block">
+    <div class="sdk-header"><h3>sdk-vault</h3><span class="pill blue">SDK</span><span class="pill purple">Cryptographic-shred = right-to-erasure</span></div>
+    <div class="purpose">Implements the seven envelope key tiers — <code>root · app · pool · tenant · person · device · encounter</code> — with issue / rotate / shred operations. Key material lives in KMS; this SDK owns the <b>metadata graph</b> linking tiers, scopes, and lifecycle states.</div>
+
+    <div class="meta-strip">
+      <span><b>PRD §:</b> 5.3</span>
+      <span><b>FRs:</b> FR-VLT-1 … FR-VLT-6</span>
+      <span><b>Pool:</b> Admin (per-pool tier metadata lives in the pool that owns it)</span>
+      <span><b>Schema:</b> <code>vault</code></span>
+    </div>
+
+    <h4>6.1 · Tables</h4>
+
+    <p><b>vault.key</b> — one row per envelope key across all seven tiers. <code>kms_ref</code> is the only pointer to key bytes.</p>
+    <table>
+      <thead><tr><th>Column</th><th>Type</th><th>Purpose</th><th>RLS / scope</th></tr></thead>
+      <tbody>
+        <tr><td><code>key_id</code></td><td>ULID PK</td><td>Surrogate ID.</td><td>—</td></tr>
+        <tr><td><code>tier</code></td><td>enum</td><td><code>root · app · pool · tenant · person · device · encounter</code></td><td>—</td></tr>
+        <tr><td><code>scope_id</code></td><td>text</td><td>The subject the key wraps (e.g., <code>tenant_id</code>, <code>person_id</code>, <code>encounter_id</code>).</td><td>tenant_id when applicable</td></tr>
+        <tr><td><code>parent_key_id</code></td><td>FK → vault.key</td><td>Wrapping key (null only for <code>root</code>).</td><td>—</td></tr>
+        <tr><td><code>kms_ref</code></td><td>text</td><td>Provider-side opaque pointer. Never the key bytes.</td><td>—</td></tr>
+        <tr><td><code>state</code></td><td>enum</td><td><code>issued</code> · <code>active</code> · <code>rotated</code> · <code>shredded</code></td><td>—</td></tr>
+        <tr><td><code>algorithm</code></td><td>enum</td><td><code>AES-256-GCM</code> · <code>ChaCha20-Poly1305</code> (config)</td><td>—</td></tr>
+        <tr><td><code>issued_at</code></td><td>timestamptz</td><td>Creation time.</td><td>—</td></tr>
+        <tr><td><code>rotated_at</code></td><td>timestamptz, null</td><td>Last rotation.</td><td>—</td></tr>
+        <tr><td><code>shredded_at</code></td><td>timestamptz, null</td><td>When shredded; <b>set ⇒ kms_ref must be deleted</b>.</td><td>—</td></tr>
+        <tr><td><code>tenant_id</code></td><td>text, null</td><td>Set for tenant/person/encounter tiers; null for root/app/pool.</td><td>RLS predicate</td></tr>
+        <tr><td><code>region</code></td><td>text</td><td>Home region (residency invariant).</td><td>—</td></tr>
+      </tbody>
+    </table>
+
+    <p><b>vault.key_operation</b> — every issue / rotate / shred, append-only.</p>
+    <table>
+      <thead><tr><th>Column</th><th>Type</th><th>Purpose</th></tr></thead>
+      <tbody>
+        <tr><td><code>op_id</code></td><td>ULID PK</td><td>Surrogate ID.</td></tr>
+        <tr><td><code>key_id</code></td><td>FK → vault.key</td><td>Subject key.</td></tr>
+        <tr><td><code>op</code></td><td>enum</td><td><code>issue · rotate · shred · decrypt · encrypt</code></td></tr>
+        <tr><td><code>operator_kind</code></td><td>enum</td><td><code>human · service · agent</code></td></tr>
+        <tr><td><code>operator_id</code></td><td>text</td><td>JWT subject of the caller.</td></tr>
+        <tr><td><code>occurred_at</code></td><td>timestamptz</td><td>When.</td></tr>
+        <tr><td><code>audit_entry_id</code></td><td>FK → audit.entry</td><td>Hash chain anchor (cross-schema FK, logical).</td></tr>
+        <tr><td><code>reason</code></td><td>text, null</td><td>e.g., <code>retention-expiry · GDPR-erasure · routine-rotation</code>.</td></tr>
+      </tbody>
+    </table>
+
+    <p><b>vault.encounter_key_seal</b> — per-encounter sealing record (closing an encounter shreds the key).</p>
+    <table>
+      <thead><tr><th>Column</th><th>Type</th><th>Purpose</th></tr></thead>
+      <tbody>
+        <tr><td><code>encounter_id</code></td><td>text PK</td><td>The encounter (table lands in P5).</td></tr>
+        <tr><td><code>encounter_key_id</code></td><td>FK → vault.key</td><td>The per-encounter key.</td></tr>
+        <tr><td><code>opened_at</code></td><td>timestamptz</td><td>Open time.</td></tr>
+        <tr><td><code>sealed_at</code></td><td>timestamptz, null</td><td>Seal time (key shreds here).</td></tr>
+        <tr><td><code>retention_policy</code></td><td>text</td><td>e.g., <code>HIPAA-25y</code> · <code>RBI-8y</code>.</td></tr>
+        <tr><td><code>tenant_id</code></td><td>text</td><td>RLS scope.</td></tr>
+      </tbody>
+    </table>
+
+    <h4>6.2 · ERD</h4>
+    <div class="diagram-wrap">
+      <pre class="mermaid">
+erDiagram
+  VAULT_KEY ||--o{ VAULT_KEY_OPERATION : "history"
+  VAULT_KEY }o--o| VAULT_KEY : "parent_key_id"
+  VAULT_KEY ||--o| VAULT_ENCOUNTER_KEY_SEAL : "seals"
+  VAULT_KEY_OPERATION }o--|| AUDIT_ENTRY : "audited"
+  VAULT_KEY {
+    string  key_id PK
+    string  tier
+    string  scope_id
+    string  parent_key_id FK
+    string  kms_ref
+    string  state
+    timestamp issued_at
+    timestamp shredded_at
+    string  tenant_id
+  }
+  VAULT_KEY_OPERATION {
+    string  op_id PK
+    string  key_id FK
+    string  op
+    string  operator_kind
+    string  operator_id
+    timestamp occurred_at
+    string  audit_entry_id FK
+  }
+  VAULT_ENCOUNTER_KEY_SEAL {
+    string  encounter_id PK
+    string  encounter_key_id FK
+    timestamp opened_at
+    timestamp sealed_at
+    string  retention_policy
+    string  tenant_id
+  }
+      </pre>
+    </div>
+
+    <h4>6.3 · The seven tiers — what wraps what</h4>
+    <table>
+      <thead><tr><th>Tier</th><th>Scope</th><th>Wraps</th><th>Shred effect</th></tr></thead>
+      <tbody>
+        <tr><td><code>root</code></td><td>Platform</td><td>App KEKs</td><td>Catastrophic — platform-wide; never shredded.</td></tr>
+        <tr><td><code>app</code></td><td>App family (healthcare, realty, …)</td><td>Pool KEKs in that app</td><td>App-family wipe; not normally used.</td></tr>
+        <tr><td><code>pool</code></td><td>One pool</td><td>Tenant keys in that pool</td><td>Pool's data undecryptable; other pools unaffected.</td></tr>
+        <tr><td><code>tenant</code></td><td>One tenant</td><td>Persona, encounter, membership for that tenant</td><td>Tenant offboarding — all that tenant's data undecryptable.</td></tr>
+        <tr><td><code>person</code></td><td>Master person</td><td>App identities, persona identity facet, tenant memberships, encounters referencing this person</td><td>Global right-to-erasure across all pools/regions.</td></tr>
+        <tr><td><code>device</code></td><td>One device</td><td>On-device captures, biometric templates</td><td>Stolen-device case — only that device's local payloads.</td></tr>
+        <tr><td><code>encounter</code></td><td>One encounter</td><td>Encounter payload, tied evidence blobs</td><td>Single-encounter purge / retention expiry.</td></tr>
+      </tbody>
+    </table>
+
+    <h4>6.4 · Events published</h4>
+    <table>
+      <thead><tr><th>Event</th><th>When</th><th>Retention</th><th>Conflict</th></tr></thead>
+      <tbody>
+        <tr><td><code>vault.key.issued.v1</code></td><td>New key minted at any tier</td><td>regulated</td><td>event-sourcing</td></tr>
+        <tr><td><code>vault.key.rotated.v1</code></td><td>Key rotation</td><td>regulated</td><td>event-sourcing</td></tr>
+        <tr><td><code>vault.key.shredded.v1</code></td><td>Key shredded</td><td>regulated</td><td>event-sourcing</td></tr>
+        <tr><td><code>vault.encounter.opened.v1</code></td><td>Encounter open</td><td>regulated</td><td>event-sourcing</td></tr>
+        <tr><td><code>vault.encounter.sealed.v1</code></td><td>Encounter seal</td><td>regulated</td><td>event-sourcing</td></tr>
+      </tbody>
+    </table>
+
+    <h4>6.5 · Pricing surface</h4>
+    <table>
+      <thead><tr><th>SKU</th><th>Unit</th><th>Mode</th></tr></thead>
+      <tbody>
+        <tr><td><code>vault.key.issue</code></td><td>call</td><td>flat_per_call</td></tr>
+        <tr><td><code>vault.key.rotate</code></td><td>call</td><td>flat_per_call</td></tr>
+        <tr><td><code>vault.key.shred</code></td><td>call</td><td>flat_per_call</td></tr>
+        <tr><td><code>vault.encrypt</code></td><td>call</td><td>flat_per_call</td></tr>
+        <tr><td><code>vault.decrypt</code></td><td>call</td><td>flat_per_call</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ============ 7 · SDK-AUDIT ============ -->
+<section id="sdk-audit">
+  <h2>7 · <code>@projexlight/sdk-audit</code> — Append-Only Hash Chain</h2>
+
+  <div class="sdk-block">
+    <div class="sdk-header"><h3>sdk-audit</h3><span class="pill blue">SDK</span><span class="pill green">Per-pool hash chain</span></div>
+    <div class="purpose">Tamper-evident, append-only ledger. Every state-changing operation in every P1+ SDK writes one entry. Per-pool chain with a regional rollup; nightly verifier; customer-facing read API.</div>
+
+    <div class="meta-strip">
+      <span><b>PRD §:</b> 5.4</span>
+      <span><b>FRs:</b> FR-AUD-1 … FR-AUD-8</span>
+      <span><b>Pool:</b> Every pool (per-pool chain) + Admin pool (regional rollup)</span>
+      <span><b>Schema:</b> <code>audit</code></span>
+    </div>
+
+    <h4>7.1 · Tables</h4>
+
+    <p><b>audit.entry</b> — the append-only chain entry. One row per state-changing operation.</p>
+    <table>
+      <thead><tr><th>Column</th><th>Type</th><th>Purpose</th></tr></thead>
+      <tbody>
+        <tr><td><code>entry_id</code></td><td>ULID PK</td><td>Surrogate ID; monotonic per pool.</td></tr>
+        <tr><td><code>pool_index</code></td><td>text</td><td>Owning pool (chain partition).</td></tr>
+        <tr><td><code>seq</code></td><td>bigint</td><td>Sequence number within pool; gap-detection.</td></tr>
+        <tr><td><code>event_type</code></td><td>text</td><td>FK to <code>EventTypeRegistry</code>; rejected if unknown.</td></tr>
+        <tr><td><code>occurred_at</code></td><td>timestamptz</td><td>When the event happened.</td></tr>
+        <tr><td><code>recorded_at</code></td><td>timestamptz</td><td>When the audit row was written.</td></tr>
+        <tr><td><code>actor_kind · actor_id</code></td><td>enum · text</td><td><code>human · service · agent</code> + JWT subject.</td></tr>
+        <tr><td><code>tenant_id · org_id · app_id · bu_id</code></td><td>text</td><td>Scope dimensions (RLS predicate on tenant_id).</td></tr>
+        <tr><td><code>subject_kind · subject_id</code></td><td>enum · text</td><td>What was operated on (person, encounter, key, …).</td></tr>
+        <tr><td><code>payload</code></td><td>jsonb</td><td>Type-specific; validated against registry schema.</td></tr>
+        <tr><td><code>prev_hash</code></td><td>bytea</td><td>Hash of previous entry in this pool's chain.</td></tr>
+        <tr><td><code>entry_hash</code></td><td>bytea</td><td>SHA-256 over canonicalized entry (excluding entry_hash itself).</td></tr>
+        <tr><td><code>retention_class</code></td><td>enum</td><td>Mirrored from registry; drives expiry.</td></tr>
+        <tr><td><code>expires_at</code></td><td>timestamptz</td><td>Computed from retention class.</td></tr>
+        <tr><td><code>archived_to_s3</code></td><td>bool</td><td>Set when row is copied to S3 manifest.</td></tr>
+      </tbody>
+    </table>
+
+    <p><b>audit.chain_head</b> — current head per pool; verify job walks back from here.</p>
+    <table>
+      <thead><tr><th>Column</th><th>Type</th><th>Purpose</th></tr></thead>
+      <tbody>
+        <tr><td><code>pool_index</code></td><td>text PK</td><td>Pool identifier.</td></tr>
+        <tr><td><code>head_entry_id</code></td><td>FK → audit.entry</td><td>Latest entry.</td></tr>
+        <tr><td><code>head_seq</code></td><td>bigint</td><td>Latest sequence.</td></tr>
+        <tr><td><code>head_hash</code></td><td>bytea</td><td>Latest entry_hash.</td></tr>
+        <tr><td><code>last_verified_at</code></td><td>timestamptz</td><td>Last nightly verify pass.</td></tr>
+      </tbody>
+    </table>
+
+    <p><b>audit.regional_rollup</b> — Admin Pool rolls up per-pool heads for cross-region attestation.</p>
+    <table>
+      <thead><tr><th>Column</th><th>Type</th><th>Purpose</th></tr></thead>
+      <tbody>
+        <tr><td><code>region</code></td><td>text PK</td><td>Region.</td></tr>
+        <tr><td><code>day</code></td><td>date PK</td><td>Rollup day.</td></tr>
+        <tr><td><code>pool_heads</code></td><td>jsonb</td><td>Map <code>pool_index → head_hash</code> at end of day.</td></tr>
+        <tr><td><code>rollup_hash</code></td><td>bytea</td><td>Hash over canonical(pool_heads) + prev region rollup.</td></tr>
+        <tr><td><code>prev_rollup_hash</code></td><td>bytea</td><td>Yesterday's <code>rollup_hash</code>.</td></tr>
+      </tbody>
+    </table>
+
+    <p><b>audit.export_request</b> — customer-facing read API state (SOC2/HIPAA self-audit downloads).</p>
+    <table>
+      <thead><tr><th>Column</th><th>Type</th><th>Purpose</th></tr></thead>
+      <tbody>
+        <tr><td><code>request_id</code></td><td>ULID PK</td><td>Surrogate ID.</td></tr>
+        <tr><td><code>tenant_id</code></td><td>text</td><td>Requesting tenant.</td></tr>
+        <tr><td><code>format</code></td><td>enum</td><td><code>pdf · jsonl</code></td></tr>
+        <tr><td><code>range_start · range_end</code></td><td>timestamptz</td><td>Time range to export.</td></tr>
+        <tr><td><code>status</code></td><td>enum</td><td><code>pending · running · ready · failed</code></td></tr>
+        <tr><td><code>artifact_s3_key</code></td><td>text, null</td><td>Where the signed bundle landed.</td></tr>
+        <tr><td><code>signature</code></td><td>bytea</td><td>Detached signature over artifact + chain heads.</td></tr>
+      </tbody>
+    </table>
+
+    <h4>7.2 · ERD</h4>
+    <div class="diagram-wrap">
+      <pre class="mermaid">
+erDiagram
+  AUDIT_ENTRY }o--|| EVENT_TYPE_REGISTRY : "event_type"
+  AUDIT_ENTRY ||--o| AUDIT_CHAIN_HEAD : "head_of"
+  AUDIT_CHAIN_HEAD }o--|| POOL : "pool_index"
+  AUDIT_REGIONAL_ROLLUP }o--|| AUDIT_CHAIN_HEAD : "snapshots"
+  AUDIT_EXPORT_REQUEST }o--|| AUDIT_ENTRY : "range over"
+  AUDIT_ENTRY {
+    string entry_id PK
+    string pool_index FK
+    bigint seq
+    string event_type FK
+    timestamp occurred_at
+    string  actor_id
+    string  tenant_id
+    bytes   prev_hash
+    bytes   entry_hash
+    string  retention_class
+  }
+  AUDIT_CHAIN_HEAD {
+    string pool_index PK
+    string head_entry_id FK
+    bigint head_seq
+    bytes  head_hash
+    timestamp last_verified_at
+  }
+  AUDIT_REGIONAL_ROLLUP {
+    string region PK
+    date   day PK
+    jsonb  pool_heads
+    bytes  rollup_hash
+    bytes  prev_rollup_hash
+  }
+  AUDIT_EXPORT_REQUEST {
+    string request_id PK
+    string tenant_id
+    string format
+    timestamp range_start
+    timestamp range_end
+    string status
+    string artifact_s3_key
+    bytes  signature
+  }
+      </pre>
+    </div>
+
+    <h4>7.3 · Retention classes (enforced from <code>EventTypeRegistry</code>)</h4>
+    <table>
+      <thead><tr><th>Class</th><th>Default retention</th><th>Compaction</th><th>Examples</th></tr></thead>
+      <tbody>
+        <tr><td><code>transient</code></td><td>7 days</td><td>LWW or count</td><td>cache invalidation, routing telemetry</td></tr>
+        <tr><td><code>operational</code></td><td>90 days</td><td>none</td><td>routine SDK calls, non-state-changing</td></tr>
+        <tr><td><code>regulated</code></td><td>7 years</td><td>none (cryptographic-shred at expiry)</td><td>vault key ops, consent, payments, identity changes</td></tr>
+      </tbody>
+    </table>
+
+    <h4>7.4 · Pricing surface</h4>
+    <table>
+      <thead><tr><th>SKU</th><th>Unit</th><th>Mode</th></tr></thead>
+      <tbody>
+        <tr><td><code>audit.write</code></td><td>event</td><td>flat_per_call (usually bundled in writer SDK)</td></tr>
+        <tr><td><code>audit.export.pdf</code></td><td>export</td><td>flat_per_call</td></tr>
+        <tr><td><code>audit.export.jsonl</code></td><td>export</td><td>flat_per_call</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ============ 8 · SDK-POOL-ROUTER ============ -->
+<section id="sdk-pool-router">
+  <h2>8 · <code>@projexlight/sdk-pool-router</code> — Pool Registry &amp; Resolver</h2>
+
+  <div class="sdk-block">
+    <div class="sdk-header"><h3>sdk-pool-router</h3><span class="pill blue">SDK</span><span class="pill teal">p99 ≤ 5 ms warm</span></div>
+    <div class="purpose">Resolves <code>(tenant_id, app_id) → pool_index → dsn</code>. Sources of truth live in the Admin Pool of each region; Redis is the hot cache. The <code>withTenant(...)</code> helper is the only sanctioned way for any later SDK to obtain a Postgres handle.</div>
+
+    <div class="meta-strip">
+      <span><b>PRD §:</b> 5.5</span>
+      <span><b>FRs:</b> FR-PR-1 … FR-PR-7</span>
+      <span><b>Pool:</b> Admin pool of each region</span>
+      <span><b>Schema:</b> <code>routing</code></span>
+    </div>
+
+    <h4>8.1 · Tables (per Architecture §9.1)</h4>
+
+    <p><b>routing.pool</b> — the Pool Registry. One row per physical pool.</p>
+    <table>
+      <thead><tr><th>Column</th><th>Type</th><th>Purpose</th></tr></thead>
+      <tbody>
+        <tr><td><code>pool_index</code></td><td>text PK</td><td>Stable identifier (e.g., <code>app-healthcare-007</code>).</td></tr>
+        <tr><td><code>pool_family</code></td><td>enum</td><td><code>admin · app · evidence</code> (+ extensions in §8A: warehouse, vector).</td></tr>
+        <tr><td><code>app_id</code></td><td>text, null</td><td>Set only when <code>pool_family = app</code>.</td></tr>
+        <tr><td><code>region</code></td><td>text</td><td>Geographic placement.</td></tr>
+        <tr><td><code>status</code></td><td>enum</td><td><code>ACTIVE · MIGRATING · DRAINING · MAINTENANCE · RETIRED · QUARANTINE</code></td></tr>
+        <tr><td><code>capacity_tenants</code></td><td>int</td><td>Configured capacity.</td></tr>
+        <tr><td><code>current_tenants</code></td><td>int</td><td>Counter maintained by lifecycle.</td></tr>
+        <tr><td><code>capacity_bytes · current_bytes</code></td><td>bigint</td><td>Storage capacity / use.</td></tr>
+        <tr><td><code>primary_endpoint</code></td><td>text</td><td>DSN-ready URI.</td></tr>
+        <tr><td><code>replica_endpoints</code></td><td>text[]</td><td>Read replicas.</td></tr>
+        <tr><td><code>kek_arn</code></td><td>text</td><td>This pool's KEK in KMS (links to <code>vault.key</code> via <code>kms_ref</code>).</td></tr>
+        <tr><td><code>isolation_class</code></td><td>enum</td><td><code>shared · dedicated</code></td></tr>
+      </tbody>
+    </table>
+
+    <p><b>routing.tenant_pool_map</b> — per-tenant pool assignment.</p>
+    <table>
+      <thead><tr><th>Column</th><th>Type</th><th>Purpose</th></tr></thead>
+      <tbody>
+        <tr><td><code>tenant_id</code></td><td>text PK</td><td>Tenant.</td></tr>
+        <tr><td><code>admin_pool_index</code></td><td>FK → routing.pool</td><td>Tenant's Admin pool.</td></tr>
+        <tr><td><code>evidence_pool_index</code></td><td>FK → routing.pool</td><td>Tenant's Evidence pool.</td></tr>
+        <tr><td><code>app_pool_index</code></td><td>jsonb</td><td>Map <code>app_id → pool_index</code> for that tenant.</td></tr>
+        <tr><td><code>region</code></td><td>text</td><td>Home region.</td></tr>
+        <tr><td><code>status</code></td><td>enum</td><td><code>ACTIVE · MIGRATING · QUARANTINED</code></td></tr>
+        <tr><td><code>created_at · migrated_at</code></td><td>timestamptz</td><td>Lifecycle markers.</td></tr>
+      </tbody>
+    </table>
+
+    <p><b>routing.pool_lifecycle_event</b> — append-only history of pool state changes (independent of audit chain; replayed for cache invalidation).</p>
+    <table>
+      <thead><tr><th>Column</th><th>Type</th><th>Purpose</th></tr></thead>
+      <tbody>
+        <tr><td><code>event_id</code></td><td>ULID PK</td><td>Surrogate.</td></tr>
+        <tr><td><code>pool_index</code></td><td>FK</td><td>Subject pool.</td></tr>
+        <tr><td><code>from_status · to_status</code></td><td>enum</td><td>Transition.</td></tr>
+        <tr><td><code>reason</code></td><td>text</td><td>Operator-supplied.</td></tr>
+        <tr><td><code>occurred_at</code></td><td>timestamptz</td><td>When.</td></tr>
+        <tr><td><code>operator_id</code></td><td>text</td><td>Who issued the transition.</td></tr>
+      </tbody>
+    </table>
+
+    <p><b>routing.pool_federation_manifest</b> — hooks only in P1; runtime delivered P7.</p>
+    <table>
+      <thead><tr><th>Column</th><th>Type</th><th>Purpose</th></tr></thead>
+      <tbody>
+        <tr><td><code>manifest_id</code></td><td>ULID PK</td><td>Surrogate.</td></tr>
+        <tr><td><code>tenant_id</code></td><td>text</td><td>Subject tenant.</td></tr>
+        <tr><td><code>pool_indexes</code></td><td>text[]</td><td>Pools to federate over.</td></tr>
+        <tr><td><code>query_class</code></td><td>enum</td><td><code>resolver · dsar · analytics · lineage</code> (the four sanctioned cross-pool exceptions).</td></tr>
+        <tr><td><code>created_at</code></td><td>timestamptz</td><td>When.</td></tr>
+      </tbody>
+    </table>
+
+    <h4>8.2 · Redis-side schema (cache, not DB)</h4>
+    <table>
+      <thead><tr><th>Key</th><th>Value</th><th>TTL</th></tr></thead>
+      <tbody>
+        <tr><td><code>tenant:{tenant_id}:pool:{app_id}</code></td><td><code>pool_index</code></td><td>300s</td></tr>
+        <tr><td><code>pool:{pool_index}:meta</code></td><td>DSN + status + endpoints (JSON)</td><td>60s</td></tr>
+        <tr><td><code>pool:status-flip</code></td><td>Pub/Sub channel; invalidation broadcast</td><td>—</td></tr>
+      </tbody>
+    </table>
+
+    <h4>8.3 · ERD</h4>
+    <div class="diagram-wrap">
+      <pre class="mermaid">
+erDiagram
+  POOL ||--o{ TENANT_POOL_MAP : "admin_pool"
+  POOL ||--o{ TENANT_POOL_MAP : "evidence_pool"
+  POOL ||--o{ POOL_LIFECYCLE_EVENT : "transitions"
+  POOL_FEDERATION_MANIFEST }o--o{ POOL : "spans"
+  POOL {
+    string pool_index PK
+    string pool_family
+    string app_id
+    string region
+    string status
+    string primary_endpoint
+    string kek_arn
+  }
+  TENANT_POOL_MAP {
+    string tenant_id PK
+    string admin_pool_index FK
+    string evidence_pool_index FK
+    jsonb  app_pool_index
+    string region
+    string status
+  }
+  POOL_LIFECYCLE_EVENT {
+    string event_id PK
+    string pool_index FK
+    string from_status
+    string to_status
+    timestamp occurred_at
+    string operator_id
+  }
+  POOL_FEDERATION_MANIFEST {
+    string manifest_id PK
+    string tenant_id
+    string query_class
+    timestamp created_at
+  }
+      </pre>
+    </div>
+
+    <h4>8.4 · Events published</h4>
+    <table>
+      <thead><tr><th>Event</th><th>When</th><th>Retention</th><th>Conflict</th></tr></thead>
+      <tbody>
+        <tr><td><code>tenant.pool.assigned.v1</code></td><td>New tenant onboarded to a pool</td><td>regulated</td><td>event-sourcing</td></tr>
+        <tr><td><code>pool.lifecycle.changed.v1</code></td><td>Pool status transition</td><td>operational</td><td>event-sourcing</td></tr>
+      </tbody>
+    </table>
+
+    <h4>8.5 · Pricing surface</h4>
+    <p>N/A — infrastructure; cost rolls up implicitly to the SDK that calls <code>withTenant(...)</code>.</p>
+  </div>
+</section>
+
+<!-- ============ 9 · SDK-METER ============ -->
+<section id="sdk-meter">
+  <h2>9 · <code>@projexlight/sdk-meter</code> — Two-Phase Gate &amp; Usage Ledger</h2>
+
+  <div class="sdk-block">
+    <div class="sdk-header"><h3>sdk-meter</h3><span class="pill blue">SDK</span><span class="pill yellow">P1 = emit-only</span></div>
+    <div class="purpose">The universal two-phase gate every typed SDK call passes through. Phase 1 <code>check()</code> is sync (≤ 2 ms p99); Phase 2 <code>report()</code> emits <code>usage.event.v1</code> async. Day-one mode is emit-only — gate always ALLOWs; soft caps in P4; hard caps in P7.</div>
+
+    <div class="meta-strip">
+      <span><b>PRD §:</b> 5.6</span>
+      <span><b>FRs:</b> FR-MET-1 … FR-MET-8</span>
+      <span><b>Pool:</b> Admin pool (quota + ledger heads) · shared ClickHouse · Kafka · Redis</span>
+      <span><b>Schema:</b> <code>meter</code></span>
+    </div>
+
+    <h4>9.1 · Postgres tables (Admin pool)</h4>
+
+    <p><b>meter.pricing_catalog</b> — versioned catalogs (schema in <code>contracts</code>; rates editable here).</p>
+    <table>
+      <thead><tr><th>Column</th><th>Type</th><th>Purpose</th></tr></thead>
+      <tbody>
+        <tr><td><code>catalog_id</code></td><td>text PK</td><td>e.g., <code>pricing.catalog.v1</code>.</td></tr>
+        <tr><td><code>version</code></td><td>int</td><td>Monotonic per family.</td></tr>
+        <tr><td><code>status</code></td><td>enum</td><td><code>draft · active · retired</code></td></tr>
+        <tr><td><code>effective_from · effective_to</code></td><td>timestamptz</td><td>Validity window.</td></tr>
+        <tr><td><code>created_by</code></td><td>text</td><td>Finance operator.</td></tr>
+      </tbody>
+    </table>
+
+    <p><b>meter.pricing_rate</b> — concrete rate row per SKU per catalog.</p>
+    <table>
+      <thead><tr><th>Column</th><th>Type</th><th>Purpose</th></tr></thead>
+      <tbody>
+        <tr><td><code>rate_id</code></td><td>ULID PK</td><td>Surrogate.</td></tr>
+        <tr><td><code>catalog_id</code></td><td>FK</td><td>Owning catalog.</td></tr>
+        <tr><td><code>sku</code></td><td>text</td><td>e.g., <code>identity.jwt.mint</code>.</td></tr>
+        <tr><td><code>unit</code></td><td>enum</td><td><code>call · byte · doc · token · GB-mo</code></td></tr>
+        <tr><td><code>mode</code></td><td>enum</td><td><code>flat_per_call · tiered_per_call · passthrough_plus_margin · per_unit · bundled_subscription · free_internal</code></td></tr>
+        <tr><td><code>tiers</code></td><td>jsonb</td><td>For <code>tiered_per_call</code>: <code>[{up_to, price}]</code>.</td></tr>
+        <tr><td><code>price</code></td><td>numeric(18,8)</td><td>For flat / per_unit modes.</td></tr>
+        <tr><td><code>margin_pct</code></td><td>numeric(5,2)</td><td>For passthrough modes.</td></tr>
+        <tr><td><code>currency</code></td><td>char(3)</td><td>ISO-4217.</td></tr>
+      </tbody>
+    </table>
+
+    <p><b>meter.quota_policy</b> — per-tenant caps (soft caps active P4; hard caps active P7).</p>
+    <table>
+      <thead><tr><th>Column</th><th>Type</th><th>Purpose</th></tr></thead>
+      <tbody>
+        <tr><td><code>policy_id</code></td><td>ULID PK</td><td>Surrogate.</td></tr>
+        <tr><td><code>tenant_id</code></td><td>text</td><td>Subject tenant (or null for global default).</td></tr>
+        <tr><td><code>sku</code></td><td>text</td><td>Target SKU.</td></tr>
+        <tr><td><code>soft_cap · hard_cap</code></td><td>bigint</td><td>Thresholds.</td></tr>
+        <tr><td><code>window</code></td><td>enum</td><td><code>minute · hour · day · month</code></td></tr>
+        <tr><td><code>action_on_soft</code></td><td>enum</td><td><code>warn · downgrade · throttle</code> (default <code>warn</code>).</td></tr>
+        <tr><td><code>active_from</code></td><td>timestamptz</td><td>Activation time.</td></tr>
+      </tbody>
+    </table>
+
+    <p><b>meter.usage_ledger_day</b> — hash-chained <code>(tenant, day)</code> rollup head; links into audit for <code>/billing/verify</code>.</p>
+    <table>
+      <thead><tr><th>Column</th><th>Type</th><th>Purpose</th></tr></thead>
+      <tbody>
+        <tr><td><code>tenant_id</code></td><td>text PK</td><td>Tenant.</td></tr>
+        <tr><td><code>day</code></td><td>date PK</td><td>Calendar day (UTC).</td></tr>
+        <tr><td><code>total_units</code></td><td>jsonb</td><td>Map <code>sku → units</code> for the day.</td></tr>
+        <tr><td><code>event_count</code></td><td>bigint</td><td>Number of <code>usage.event.v1</code> rows in this day.</td></tr>
+        <tr><td><code>prev_hash</code></td><td>bytea</td><td>Yesterday's <code>entry_hash</code> for this tenant.</td></tr>
+        <tr><td><code>entry_hash</code></td><td>bytea</td><td>SHA-256 of canonicalized row.</td></tr>
+        <tr><td><code>audit_entry_id</code></td><td>FK → audit.entry</td><td>Anchor entry in the per-pool audit chain.</td></tr>
+        <tr><td><code>finalized_at</code></td><td>timestamptz</td><td>When daily rollup sealed.</td></tr>
+      </tbody>
+    </table>
+
+    <h4>9.2 · Kafka — <code>usage.events.v1</code> (partitioned by <code>tenant_id</code>)</h4>
+    <p>Carries the canonical <code>UsageEvent.v1</code> shape. The Kafka topic is the source of truth; ClickHouse holds rollups, never the raw long-term record.</p>
+    <table>
+      <thead><tr><th>Field</th><th>Type</th><th>Purpose</th></tr></thead>
+      <tbody>
+        <tr><td><code>event_id</code></td><td>ULID</td><td>Idempotency key.</td></tr>
+        <tr><td><code>sku</code></td><td>text</td><td>The metered SKU.</td></tr>
+        <tr><td><code>units</code></td><td>numeric(18,6)</td><td>Measured units (calls, bytes, tokens).</td></tr>
+        <tr><td><code>dimensions.org_id · app_id · tenant_id · bu_id · persona_id · encounter_id</code></td><td>text</td><td>Six-layer attribution.</td></tr>
+        <tr><td><code>dimensions.pool_index</code></td><td>text</td><td>Partition / shard.</td></tr>
+        <tr><td><code>dimensions.actor_kind · actor_id</code></td><td>enum · text</td><td>Agent-vs-human cost split.</td></tr>
+        <tr><td><code>dimensions.region</code></td><td>text</td><td>Region.</td></tr>
+        <tr><td><code>dimensions.latency_ms · bytes_in · bytes_out</code></td><td>int · int</td><td>Telemetry.</td></tr>
+        <tr><td><code>occurred_at</code></td><td>timestamptz</td><td>Source-time.</td></tr>
+        <tr><td><code>trace_id</code></td><td>OTel</td><td>Cross-system trace link.</td></tr>
+      </tbody>
+    </table>
+
+    <h4>9.3 · ClickHouse rollups (shared Warehouse, partitioned by <code>pool_index</code>)</h4>
+    <table>
+      <thead><tr><th>Table</th><th>Granularity</th><th>Retention</th></tr></thead>
+      <tbody>
+        <tr><td><code>meter.usage_event</code></td><td>Raw events (≤ 90 days)</td><td>operational</td></tr>
+        <tr><td><code>meter.usage_hourly</code></td><td><code>(tenant_id, sku, hour)</code></td><td>1 year</td></tr>
+        <tr><td><code>meter.usage_daily</code></td><td><code>(tenant_id, sku, day, bu_id, persona_kind, encounter_id?)</code></td><td>3 years</td></tr>
+        <tr><td><code>meter.usage_monthly</code></td><td><code>(tenant_id, sku, month, dims…)</code></td><td>7 years (regulated billing trail)</td></tr>
+      </tbody>
+    </table>
+
+    <h4>9.4 · Redis (quota state + live counter)</h4>
+    <table>
+      <thead><tr><th>Key</th><th>Value</th><th>TTL</th></tr></thead>
+      <tbody>
+        <tr><td><code>quota:{tenant_id}:{sku}:{window}</code></td><td>counter + soft/hard caps</td><td>= window</td></tr>
+        <tr><td><code>live:{tenant_id}:{sku}:today</code></td><td>running total for ≤ 60s lag display</td><td>1 day</td></tr>
+        <tr><td><code>catalog:active:{app_id}</code></td><td>Compiled rate map for hot lookups</td><td>5 min</td></tr>
+      </tbody>
+    </table>
+
+    <h4>9.5 · ERD</h4>
+    <div class="diagram-wrap">
+      <pre class="mermaid">
+erDiagram
+  PRICING_CATALOG ||--o{ PRICING_RATE : "contains"
+  PRICING_RATE }o--|| PRICING_SKU : "prices"
+  QUOTA_POLICY }o--|| PRICING_SKU : "limits"
+  USAGE_EVENT }o--|| PRICING_SKU : "billable by"
+  USAGE_EVENT }o--|| QUOTA_POLICY : "checked against"
+  USAGE_EVENT ||--o{ USAGE_LEDGER_DAY : "aggregates into"
+  USAGE_LEDGER_DAY }o--|| AUDIT_ENTRY : "anchored"
+
+  PRICING_CATALOG {
+    string catalog_id PK
+    int    version
+    string status
+    timestamp effective_from
+  }
+  PRICING_RATE {
+    string rate_id PK
+    string catalog_id FK
+    string sku
+    string unit
+    string mode
+    numeric price
+  }
+  QUOTA_POLICY {
+    string policy_id PK
+    string tenant_id
+    string sku
+    bigint soft_cap
+    bigint hard_cap
+    string window
+  }
+  USAGE_EVENT {
+    string event_id PK
+    string sku
+    numeric units
+    string tenant_id
+    string pool_index
+    string actor_kind
+    string actor_id
+    timestamp occurred_at
+  }
+  USAGE_LEDGER_DAY {
+    string tenant_id PK
+    date   day PK
+    jsonb  total_units
+    bigint event_count
+    bytes  entry_hash
+    string audit_entry_id FK
+  }
+      </pre>
+    </div>
+
+    <h4>9.6 · Events published</h4>
+    <table>
+      <thead><tr><th>Event</th><th>When</th><th>Retention</th><th>Conflict</th></tr></thead>
+      <tbody>
+        <tr><td><code>usage.event.v1</code></td><td>Every metered SDK call</td><td>operational (raw) · regulated (rollup)</td><td>event-sourcing</td></tr>
+        <tr><td><code>usage.softcap.warn.v1</code></td><td>Soft cap crossed (P4+)</td><td>operational</td><td>lww</td></tr>
+        <tr><td><code>usage.hardcap.exceeded.v1</code></td><td>Hard cap reached (P7+)</td><td>regulated</td><td>event-sourcing</td></tr>
+      </tbody>
+    </table>
+
+    <h4>9.7 · Pricing surface</h4>
+    <p>N/A — <code>sdk-meter</code> is the gate itself. Its own infrastructure cost rolls up implicitly.</p>
+  </div>
+</section>
+
+<!-- ============ 10 · EVENT REGISTRY ============ -->
+<section id="events">
+  <h2>10 · Event Type Registry — initial P1 entries</h2>
+  <p>The registry is a typed const in <code>@projexlight/contracts</code>. Producers (and <code>sdk-audit</code>) reject any <code>event_type</code> not present here.</p>
+
+  <table>
+    <thead>
+      <tr>
+        <th>Event type</th><th>Producer</th><th>Retention</th><th>Conflict</th><th>Schema state</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr><td><code>vault.key.issued.v1</code></td><td>sdk-vault</td><td>regulated</td><td>event-sourcing</td><td>active</td></tr>
+      <tr><td><code>vault.key.rotated.v1</code></td><td>sdk-vault</td><td>regulated</td><td>event-sourcing</td><td>active</td></tr>
+      <tr><td><code>vault.key.shredded.v1</code></td><td>sdk-vault</td><td>regulated</td><td>event-sourcing</td><td>active</td></tr>
+      <tr><td><code>vault.encounter.opened.v1</code></td><td>sdk-vault</td><td>regulated</td><td>event-sourcing</td><td>active</td></tr>
+      <tr><td><code>vault.encounter.sealed.v1</code></td><td>sdk-vault</td><td>regulated</td><td>event-sourcing</td><td>active</td></tr>
+      <tr><td><code>secrets.ref.resolved.v1</code></td><td>sdk-secrets</td><td>operational</td><td>lww</td><td>active</td></tr>
+      <tr><td><code>secrets.key.rotated.v1</code></td><td>sdk-secrets</td><td>regulated</td><td>event-sourcing</td><td>active</td></tr>
+      <tr><td><code>tenant.pool.assigned.v1</code></td><td>sdk-pool-router</td><td>regulated</td><td>event-sourcing</td><td>active</td></tr>
+      <tr><td><code>pool.lifecycle.changed.v1</code></td><td>sdk-pool-router</td><td>operational</td><td>event-sourcing</td><td>active</td></tr>
+      <tr><td><code>usage.event.v1</code></td><td>sdk-meter</td><td>operational</td><td>event-sourcing</td><td>active</td></tr>
+      <tr><td><code>audit.chain.verified.v1</code></td><td>sdk-audit (verifier)</td><td>operational</td><td>lww</td><td>active</td></tr>
+      <tr><td><code>audit.chain.break.v1</code></td><td>sdk-audit (verifier)</td><td>regulated</td><td>event-sourcing</td><td>active</td></tr>
+      <tr><td><code>audit.export.requested.v1</code></td><td>sdk-audit</td><td>operational</td><td>event-sourcing</td><td>active</td></tr>
+      <tr><td><code>audit.export.ready.v1</code></td><td>sdk-audit</td><td>operational</td><td>event-sourcing</td><td>active</td></tr>
+    </tbody>
+  </table>
+
+  <div class="callout green">
+    <b>Why this list ships in P1.</b> Every later phase adds rows to this registry but cannot delete or modify in place — schema state moves <code>active → deprecated → retired</code>. CI enforces additive-only changes; the doctrine that "the event taxonomy is a contract" only works if it ships before consumers.
+  </div>
+</section>
+
+<!-- ============ 11 · REFS ============ -->
+<section id="refs">
+  <h2>11 · Cross-references</h2>
+  <table>
+    <thead><tr><th>Topic</th><th>Source</th></tr></thead>
+    <tbody>
+      <tr><td>PRD — phase scope, acceptance criteria, FRs</td><td><code>prd/P1-Foundation-Spine.md</code></td></tr>
+      <tr><td>Doctrine — Opinionated Constraints</td><td>Architecture §3A</td></tr>
+      <tr><td>Doctrine — Localize Complexity</td><td>Architecture §3B</td></tr>
+      <tr><td>Doctrine — Polyglot Persistence</td><td>Architecture §8B</td></tr>
+      <tr><td>Identity foundation (referent IDs become physical tables in P2)</td><td>Architecture §7 · AIM-Identity-Model-v3.1.html</td></tr>
+      <tr><td>Pool architecture &amp; routing data model</td><td>Architecture §8 · §9 · §8A</td></tr>
+      <tr><td>Encryption tiers + right-to-erasure mechanics</td><td>Architecture §10</td></tr>
+      <tr><td>Metering data flow + pricing modes + SLAs</td><td>Architecture §10A</td></tr>
+      <tr><td>SDK Build Plan — wave-by-wave dependencies</td><td>SDK-Build-Plan-v3.1.html §W0 · §W1</td></tr>
+    </tbody>
+  </table>
+</section>
+
+</div>
+
+<script>
+  mermaid.initialize({
+    startOnLoad: true,
+    theme: 'dark',
+    themeVariables: {
+      background: '#0b0f17',
+      primaryColor: '#1a2234',
+      primaryBorderColor: '#c9a86a',
+      primaryTextColor: '#e6ecf5',
+      lineColor: '#6aa9ff',
+      secondaryColor: '#1d1830',
+      tertiaryColor: '#16241c'
+    }
+  });
+</script>
+
+</body>
+</html>

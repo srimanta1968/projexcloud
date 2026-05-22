@@ -1,0 +1,563 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>ProjexCloud v3.1 · P6B Data Model — Knowledge · Semantic · Analytics · Snowflake</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<style>
+  :root { --bg:#0b0f17; --panel:#121826; --panel-2:#1a2234; --line:#243049; --text:#e6ecf5; --muted:#8a98b3; --accent:#c9a86a; --accent-2:#6aa9ff; --teal:#2dd4bf; --green:#5dd39e; --red:#ff6b6b; --yellow:#f5c451; --purple:#b88dff; --code-bg:#0f1422; }
+  *{box-sizing:border-box;} html,body{background:var(--bg);color:var(--text);font-family:ui-sans-serif,-apple-system,"Segoe UI",Roboto,sans-serif;margin:0;padding:0;line-height:1.55;}
+  .page{max-width:1260px;margin:0 auto;padding:56px 32px 96px;}
+  header.cover{border-bottom:1px solid var(--line);padding-bottom:36px;margin-bottom:48px;}
+  header.cover .eyebrow{color:var(--accent);letter-spacing:0.18em;text-transform:uppercase;font-size:12px;font-weight:700;}
+  header.cover h1{font-size:40px;line-height:1.15;margin:12px 0 8px;letter-spacing:-0.02em;}
+  header.cover .sub{color:var(--muted);font-size:16px;max-width:900px;}
+  header.cover .meta{display:flex;gap:24px;flex-wrap:wrap;margin-top:24px;color:var(--muted);font-size:13px;}
+  header.cover .meta b{color:var(--text);font-weight:600;}
+  h2{font-size:26px;margin:56px 0 18px;padding-bottom:8px;border-bottom:1px solid var(--line);}
+  h3{font-size:19px;margin:28px 0 10px;color:var(--text);}
+  h4{font-size:13px;margin:18px 0 8px;color:var(--accent);text-transform:uppercase;letter-spacing:0.12em;}
+  p{color:#c8d1e3;}
+  .grid{display:grid;gap:16px;} .grid.cols-2{grid-template-columns:repeat(2,minmax(0,1fr));} .grid.cols-3{grid-template-columns:repeat(3,minmax(0,1fr));}
+  @media(max-width:900px){.grid.cols-2,.grid.cols-3{grid-template-columns:1fr;} header.cover h1{font-size:30px;}}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px 18px;} .card .label{color:var(--accent);font-size:11px;text-transform:uppercase;letter-spacing:0.14em;font-weight:700;} .card .title{font-weight:600;margin:6px 0;} .card .body{color:var(--muted);font-size:13.5px;}
+  .pill{display:inline-block;padding:3px 10px;border-radius:999px;font-size:11px;border:1px solid var(--line);color:var(--muted);margin-right:6px;}
+  .pill.blue{color:var(--accent-2);border-color:rgba(106,169,255,0.4);} .pill.purple{color:var(--purple);border-color:rgba(184,141,255,0.4);} .pill.green{color:var(--green);border-color:rgba(93,211,158,0.4);} .pill.yellow{color:var(--yellow);border-color:rgba(245,196,81,0.4);} .pill.teal{color:var(--teal);border-color:rgba(45,212,191,0.4);} .pill.red{color:var(--red);border-color:rgba(255,107,107,0.4);}
+  table{width:100%;border-collapse:collapse;margin-top:12px;font-size:13.5px;} th,td{text-align:left;padding:9px 11px;border-bottom:1px solid var(--line);vertical-align:top;} th{color:var(--muted);font-weight:600;font-size:11.5px;text-transform:uppercase;letter-spacing:0.08em;} td code{font-size:12px;}
+  pre,code{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;} pre{background:var(--code-bg);border:1px solid var(--line);border-radius:10px;padding:14px 16px;overflow-x:auto;font-size:12.5px;} code{background:var(--code-bg);padding:1px 6px;border-radius:4px;font-size:12px;}
+  .diagram-wrap{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:22px;overflow-x:auto;} .caption{color:var(--muted);font-size:12.5px;margin-top:10px;text-align:center;} .mermaid{background:transparent;}
+  nav.toc{position:sticky;top:0;background:rgba(11,15,23,0.92);backdrop-filter:blur(10px);border-bottom:1px solid var(--line);padding:10px 32px;z-index:10;} nav.toc .row{max-width:1260px;margin:0 auto;display:flex;flex-wrap:wrap;gap:10px;font-size:12px;} nav.toc a{color:var(--muted);text-decoration:none;border-bottom:1px solid transparent;} nav.toc a:hover{color:var(--accent);border-color:var(--accent);}
+  .callout{border-left:3px solid var(--accent);background:var(--panel-2);padding:14px 18px;border-radius:0 10px 10px 0;margin:18px 0;color:#d6deef;font-size:14px;} .callout.blue{border-color:var(--accent-2);} .callout.green{border-color:var(--green);} .callout.purple{border-color:var(--purple);} .callout.red{border-color:var(--red);}
+  .sdk-block{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:22px 24px;margin:22px 0 28px;} .sdk-block .sdk-header{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;margin-bottom:6px;} .sdk-block .sdk-header h3{margin:0;font-size:22px;color:var(--accent);} .sdk-block .purpose{color:#c8d1e3;font-size:14.5px;margin:4px 0 14px;}
+  .meta-strip{display:flex;flex-wrap:wrap;gap:18px;font-size:12.5px;color:var(--muted);margin:6px 0 18px;padding:10px 14px;background:var(--panel-2);border-radius:8px;} .meta-strip b{color:var(--text);}
+</style>
+</head>
+<body>
+
+<nav class="toc">
+  <div class="row">
+    <a href="#overview">1 · Overview</a>
+    <a href="#phase-erd">2 · Phase ERD</a>
+    <a href="#pool-map">3 · Pool placement</a>
+    <a href="#sdk-rag">4 · sdk-knowledge-rag</a>
+    <a href="#sdk-parsing">5 · sdk-parsing</a>
+    <a href="#sdk-conversation">6 · sdk-conversation</a>
+    <a href="#sdk-recommendation">7 · sdk-recommendation</a>
+    <a href="#sdk-analytics">8 · sdk-analytics (Iceberg)</a>
+    <a href="#sdk-lineage">9 · sdk-lineage (G8)</a>
+    <a href="#sdk-semantic">10 · sdk-semantic (G9)</a>
+    <a href="#connector-snowflake">11 · connector-snowflake</a>
+  </div>
+</nav>
+
+<div class="page">
+
+<header class="cover">
+  <div class="eyebrow">Data Model · Phase 6B · Wave W6 (second half)</div>
+  <h1>P6B — Knowledge · Semantic · Analytics · Snowflake</h1>
+  <div class="sub">RAG · Parsing · Conversation · Recommendation · Analytics (with Iceberg lakehouse) · Lineage with <b>cross-pool projection</b> (G8) · the <b>Enterprise Semantic Model Layer</b> with all six types — Object · Relation · CapabilityGraph · Ontology · Intent · Policy (G9) · connector-snowflake.</div>
+  <div class="meta">
+    <div><b>Phase:</b> P6B (Weeks 40–44)</div>
+    <div><b>Maps to wave:</b> W6 second half</div>
+    <div><b>Gates closed:</b> G8 (cross-pool lineage) · G9 (Semantic Intent + Policy)</div>
+    <div><b>PRD:</b> <code>prd/P6B-Knowledge-Semantic.md</code></div>
+    <div><b>Anchor docs:</b> AgenticIntegration · Architecture §10A · §8B</div>
+  </div>
+</header>
+
+<section id="overview">
+  <h2>1 · Overview</h2>
+  <div class="grid cols-3">
+    <div class="card"><div class="label">G8 closer</div><div class="title">Cross-pool lineage projection</div><div class="body">In-pool subgraphs answer sync queries in ≤50ms; cross-pool edges projected asynchronously into Iceberg <code>warehouse.cross_pool_lineage</code> within 5min.</div></div>
+    <div class="card"><div class="label">G9 closer</div><div class="title">Semantic Object Layer · 6 types</div><div class="body">Object · Relation · CapabilityGraph · Ontology · SemanticIntent · SemanticPolicy. Agents plan from Intents; SemanticPolicy is ontology-aware authz compiling to ABAC + ReBAC.</div></div>
+    <div class="card"><div class="label">Lakehouse</div><div class="title">Iceberg / S3-tables</div><div class="body">Cross-pool analytics at PB scale; partition <code>(region, tenant, time)</code> + Z-order on common predicates. Trino/Athena queryable.</div></div>
+  </div>
+</section>
+
+<section id="phase-erd">
+  <h2>2 · Phase ERD</h2>
+  <div class="diagram-wrap">
+    <pre class="mermaid">
+erDiagram
+  TENANT ||--o{ RAG_CORPUS : ""
+  RAG_CORPUS ||--o{ RAG_DOCUMENT : ""
+  RAG_DOCUMENT ||--o{ RAG_CHUNK : ""
+  RAG_CHUNK ||--|| EMBEDDING_VECTOR : "isolated namespace"
+
+  PARSE_JOB ||--o{ PARSE_STAGE_RESULT : ""
+  PARSE_JOB ||--o{ EXTRACTED_FIELD : ""
+  PARSE_JOB ||--o| NEEDS_REVIEW_TASK : ""
+
+  CONVERSATION ||--o{ CONVERSATION_TURN : ""
+  CONVERSATION ||--o| CONVERSATION_HANDOFF : ""
+
+  RECOMMENDATION_MODEL ||--o{ RECOMMENDATION_SUGGESTION : ""
+
+  ANALYTICS_ROLLUP }o--|| ICEBERG_TABLE : "extracts to"
+  ICEBERG_TABLE ||--o{ CROSS_POOL_LINEAGE_EDGE : ""
+
+  LINEAGE_EDGE_IN_POOL ||--o{ LINEAGE_NODE : "from"
+  LINEAGE_EDGE_IN_POOL ||--o{ LINEAGE_NODE : "to"
+  LINEAGE_CROSS_POOL_PROJECTION ||--o{ LINEAGE_NODE : ""
+
+  ONTOLOGY ||--o{ SEMANTIC_OBJECT_TYPE : ""
+  SEMANTIC_OBJECT_TYPE ||--o{ SEMANTIC_RELATION_TYPE : ""
+  SEMANTIC_OBJECT_TYPE ||--o{ CAPABILITY_GRAPH_EDGE : ""
+  SEMANTIC_INTENT ||--o{ INTENT_PLAN : ""
+  SEMANTIC_POLICY }o--|| SEMANTIC_OBJECT_TYPE : "over"
+
+  SNOWFLAKE_INSTALL ||--o{ SNOWFLAKE_TABLE_BINDING : ""
+    </pre>
+  </div>
+  <div class="caption">Figure 2.1 — Knowledge · semantic · analytics · lineage entities across hot pools and the Iceberg lakehouse.</div>
+</section>
+
+<section id="pool-map">
+  <h2>3 · Pool placement matrix</h2>
+  <table>
+    <thead><tr><th>SDK</th><th>Schema</th><th>Pool</th><th>Non-OLTP</th></tr></thead>
+    <tbody>
+      <tr><td><code>sdk-knowledge-rag</code></td><td><code>rag</code></td><td>App Pool (metadata)</td><td>Vector store namespace per tenant (pgvector → Pinecone for Tier-G)</td></tr>
+      <tr><td><code>sdk-parsing</code></td><td><code>parsing</code></td><td>App Pool</td><td>S3 (input documents)</td></tr>
+      <tr><td><code>sdk-conversation</code></td><td><code>conversation</code></td><td>App Pool</td><td>Vector store (memory; sandboxed per P6A)</td></tr>
+      <tr><td><code>sdk-recommendation</code></td><td><code>recommendation</code></td><td>App Pool (per tenant)</td><td>Vector store (model artifacts)</td></tr>
+      <tr><td><code>sdk-analytics</code></td><td><code>analytics</code></td><td>Admin (specs)</td><td>ClickHouse (hot ≤90d) + <b>Iceberg lakehouse</b></td></tr>
+      <tr><td><code>sdk-lineage</code></td><td><code>lineage</code></td><td>Per pool (subgraph)</td><td>Iceberg <code>warehouse.cross_pool_lineage</code></td></tr>
+      <tr><td><code>sdk-semantic</code></td><td><code>semantic</code></td><td>Admin (ontology) + App Pool (instances)</td><td>Global Catalog (large ontology bundles)</td></tr>
+      <tr><td><code>connector-snowflake</code></td><td><code>connector_snowflake</code></td><td>Admin</td><td>Iceberg bridge</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- sdk-knowledge-rag -->
+<section id="sdk-rag">
+  <h2>4 · <code>sdk-knowledge-rag</code> — Per-Tenant Corpora &amp; Retrieval</h2>
+  <div class="sdk-block">
+    <div class="sdk-header"><h3>sdk-knowledge-rag</h3><span class="pill blue">NEW</span></div>
+    <div class="purpose">Per-tenant corpora with pgvector (Tier-G: dedicated vector cluster); embedding worker via sdk-ai-gateway; retrieval API applies sdk-policy per hit (only docs the calling persona may read); HARD-isolated namespaces (P6A FR-ART-13).</div>
+    <div class="meta-strip"><span><b>PRD §:</b> 5.1</span><span><b>Pool:</b> App Pool + vector namespace</span><span><b>Schema:</b> <code>rag</code></span></div>
+
+    <h4>4.1 · Tables</h4>
+
+    <p><b>rag.corpus</b></p>
+    <table><thead><tr><th>Column</th><th>Type</th><th>Purpose</th></tr></thead><tbody>
+      <tr><td><code>corpus_id</code></td><td>ULID PK</td><td>Surrogate.</td></tr>
+      <tr><td><code>tenant_id</code></td><td>FK</td><td>RLS.</td></tr>
+      <tr><td><code>name · description</code></td><td>text · text</td><td>UX.</td></tr>
+      <tr><td><code>vector_namespace</code></td><td>text</td><td>FK → agents.vector_namespace_registry — HARD-isolated.</td></tr>
+      <tr><td><code>embedding_model · embedding_dim</code></td><td>text · int</td><td>Indexing config.</td></tr>
+      <tr><td><code>policy_id</code></td><td>FK → policy.policy</td><td>Read policy applied at retrieval.</td></tr>
+      <tr><td><code>created_at</code></td><td>timestamptz</td><td>Lifecycle.</td></tr>
+    </tbody></table>
+
+    <p><b>rag.document</b></p>
+    <table><thead><tr><th>Column</th><th>Type</th><th>Purpose</th></tr></thead><tbody>
+      <tr><td><code>document_id</code></td><td>ULID PK</td><td>Surrogate.</td></tr>
+      <tr><td><code>corpus_id</code></td><td>FK</td><td>Parent.</td></tr>
+      <tr><td><code>source_kind</code></td><td>enum</td><td><code>uploaded · connector · parsed</code></td></tr>
+      <tr><td><code>source_ref</code></td><td>text</td><td>e.g., <code>media.blob:{blob_id}</code> or external URL.</td></tr>
+      <tr><td><code>title · author</code></td><td>text · text</td><td>Metadata.</td></tr>
+      <tr><td><code>language</code></td><td>text</td><td>ISO code.</td></tr>
+      <tr><td><code>indexed_at · reindexed_at</code></td><td>timestamptz</td><td>Lifecycle.</td></tr>
+      <tr><td><code>policy_overrides</code></td><td>jsonb</td><td>Per-document ACL refinement.</td></tr>
+    </tbody></table>
+
+    <p><b>rag.chunk</b> — embedded chunk metadata (vector lives in vector store).</p>
+    <table><thead><tr><th>Column</th><th>Type</th><th>Purpose</th></tr></thead><tbody>
+      <tr><td><code>chunk_id</code></td><td>ULID PK</td><td>Surrogate; matches vector ID in store.</td></tr>
+      <tr><td><code>document_id</code></td><td>FK</td><td>Parent.</td></tr>
+      <tr><td><code>chunk_index</code></td><td>int</td><td>Order.</td></tr>
+      <tr><td><code>text_preview</code></td><td>text</td><td>First 256 chars for explainability.</td></tr>
+      <tr><td><code>token_count</code></td><td>int</td><td>For billing.</td></tr>
+      <tr><td><code>span_start · span_end</code></td><td>int · int</td><td>Source position.</td></tr>
+    </tbody></table>
+
+    <p><b>rag.retrieval</b> — sampled retrieval log.</p>
+    <table><thead><tr><th>Column</th><th>Type</th><th>Purpose</th></tr></thead><tbody>
+      <tr><td><code>retrieval_id</code></td><td>ULID PK</td><td>Surrogate.</td></tr>
+      <tr><td><code>corpus_id</code></td><td>FK</td><td>Source.</td></tr>
+      <tr><td><code>requestor_persona_id · agent_run_id</code></td><td>FK · FK</td><td>Caller.</td></tr>
+      <tr><td><code>query_text</code></td><td>text</td><td>Body.</td></tr>
+      <tr><td><code>top_k</code></td><td>int</td><td>Requested results.</td></tr>
+      <tr><td><code>hits_returned</code></td><td>int</td><td>After policy filtering.</td></tr>
+      <tr><td><code>hits_filtered_out</code></td><td>int</td><td>Denied by policy.</td></tr>
+      <tr><td><code>occurred_at · latency_ms</code></td><td>timestamptz · int</td><td>Telemetry.</td></tr>
+    </tbody></table>
+
+    <p><b>SKUs:</b> <code>rag.index.document</code> (per-MB) · <code>rag.embed</code> (per-token, passthrough+margin) · <code>rag.retrieve</code> (per-call).</p>
+  </div>
+</section>
+
+<!-- sdk-parsing -->
+<section id="sdk-parsing">
+  <h2>5 · <code>sdk-parsing</code> — 8-Stage Document Pipeline</h2>
+  <div class="sdk-block">
+    <div class="sdk-header"><h3>sdk-parsing</h3><span class="pill blue">NEW</span></div>
+    <div class="purpose">8-stage pipeline (Ingestion · OCR · Classification · Schema Resolve · Extraction · Validation · Human Review · Routing); confidence scoring per field; re-parse modes; emits lineage edges.</div>
+    <div class="meta-strip"><span><b>PRD §:</b> 5.2</span><span><b>Pool:</b> App Pool</span><span><b>Schema:</b> <code>parsing</code></span></div>
+
+    <h4>5.1 · Tables</h4>
+
+    <p><b>parsing.job</b></p>
+    <table><thead><tr><th>Column</th><th>Type</th><th>Purpose</th></tr></thead><tbody>
+      <tr><td><code>job_id</code></td><td>ULID PK</td><td>Surrogate.</td></tr>
+      <tr><td><code>tenant_id</code></td><td>FK</td><td>RLS.</td></tr>
+      <tr><td><code>source_blob_id</code></td><td>FK → media.blob</td><td>Input doc.</td></tr>
+      <tr><td><code>document_kind</code></td><td>text</td><td>From sdk-taxonomy.</td></tr>
+      <tr><td><code>taxonomy_version_id</code></td><td>FK → taxonomy.version</td><td>Active version.</td></tr>
+      <tr><td><code>state</code></td><td>enum</td><td><code>queued · running · needs-review · completed · failed</code></td></tr>
+      <tr><td><code>requested_mode</code></td><td>enum</td><td><code>full-parse · re-extract · re-validate</code></td></tr>
+      <tr><td><code>requested_at · completed_at</code></td><td>timestamptz</td><td>Lifecycle.</td></tr>
+      <tr><td><code>billed_units</code></td><td>numeric</td><td>For per-doc billing.</td></tr>
+    </tbody></table>
+
+    <p><b>parsing.stage_result</b> — one row per pipeline stage execution.</p>
+    <table><thead><tr><th>Column</th><th>Type</th><th>Purpose</th></tr></thead><tbody>
+      <tr><td><code>result_id</code></td><td>ULID PK</td><td>Surrogate.</td></tr>
+      <tr><td><code>job_id</code></td><td>FK</td><td>Parent job.</td></tr>
+      <tr><td><code>stage</code></td><td>enum</td><td><code>ingest · ocr · classify · schema-resolve · extract · validate · review · route</code></td></tr>
+      <tr><td><code>status</code></td><td>enum</td><td><code>succeeded · failed · skipped</code></td></tr>
+      <tr><td><code>payload_envelope</code></td><td>bytea</td><td>Vault-wrapped stage output.</td></tr>
+      <tr><td><code>latency_ms</code></td><td>int</td><td>Telemetry.</td></tr>
+      <tr><td><code>occurred_at</code></td><td>timestamptz</td><td>Time.</td></tr>
+    </tbody></table>
+
+    <p><b>parsing.extracted_field</b></p>
+    <table><thead><tr><th>Column</th><th>Type</th><th>Purpose</th></tr></thead><tbody>
+      <tr><td><code>field_id</code></td><td>ULID PK</td><td>Surrogate.</td></tr>
+      <tr><td><code>job_id</code></td><td>FK</td><td>Parent.</td></tr>
+      <tr><td><code>field_name</code></td><td>text</td><td>From schema.</td></tr>
+      <tr><td><code>value_envelope</code></td><td>bytea</td><td>Extracted value (vaulted if sensitive).</td></tr>
+      <tr><td><code>confidence</code></td><td>numeric(5,4)</td><td>0..1.</td></tr>
+      <tr><td><code>needs_review</code></td><td>bool</td><td>If below threshold.</td></tr>
+      <tr><td><code>provenance_span</code></td><td>jsonb</td><td>OCR coordinates / page / span pointing into source.</td></tr>
+      <tr><td><code>lineage_node_id</code></td><td>FK → lineage.node</td><td>Anchor for derivation chain.</td></tr>
+    </tbody></table>
+
+    <p><b>parsing.review_task</b> — items routed to humans (composes sdk-approval).</p>
+    <table><thead><tr><th>Column</th><th>Type</th><th>Purpose</th></tr></thead><tbody>
+      <tr><td><code>task_id</code></td><td>ULID PK</td><td>Surrogate.</td></tr>
+      <tr><td><code>job_id</code></td><td>FK</td><td>Parent.</td></tr>
+      <tr><td><code>field_id</code></td><td>FK</td><td>Field needing review.</td></tr>
+      <tr><td><code>assignee_persona_id</code></td><td>FK, null</td><td>Reviewer.</td></tr>
+      <tr><td><code>status</code></td><td>enum</td><td><code>open · in-review · resolved · rejected</code></td></tr>
+      <tr><td><code>resolved_value_envelope</code></td><td>bytea, null</td><td>Final value.</td></tr>
+      <tr><td><code>resolved_at</code></td><td>timestamptz, null</td><td>Time.</td></tr>
+    </tbody></table>
+
+    <p><b>SKUs:</b> <code>parsing.document.parse · parsing.re-extract</code> — <code>per_unit</code> (per-doc, complexity-tiered).</p>
+  </div>
+</section>
+
+<!-- sdk-conversation -->
+<section id="sdk-conversation">
+  <h2>6 · <code>sdk-conversation</code> — Chat Sessions &amp; Handoff</h2>
+  <div class="sdk-block">
+    <div class="sdk-header"><h3>sdk-conversation</h3><span class="pill blue">NEW</span></div>
+    <div class="purpose">Chat session lifecycle, multi-turn memory (sandboxed per P6A), AI ↔ human handoff, transcripts, streaming responses, RAG integration.</div>
+    <div class="meta-strip"><span><b>PRD §:</b> 5.3</span><span><b>Pool:</b> App Pool · Vector store (memory)</span><span><b>Schema:</b> <code>conversation</code></span></div>
+
+    <p><b>conversation.session · conversation.turn · conversation.handoff</b></p>
+    <table><thead><tr><th>Table</th><th>Key columns</th></tr></thead><tbody>
+      <tr><td><code>conversation.session</code></td><td><code>session_id PK · tenant_id · subject_persona_id · agent_id FK · status (started · active · handed-off · closed) · started_at · last_active_at · vector_namespace</code></td></tr>
+      <tr><td><code>conversation.turn</code></td><td><code>turn_id PK · session_id FK · seq · author_kind (user · agent · human-agent · system) · author_id · message_envelope bytea · tokens · model_used · rag_retrieval_id FK · occurred_at</code></td></tr>
+      <tr><td><code>conversation.handoff</code></td><td><code>handoff_id PK · session_id FK · from_kind (ai · human) · to_persona_id · reason · transferred_at · resumed_at</code></td></tr>
+    </tbody></table>
+
+    <p><b>SKUs:</b> <code>conversation.message.send · conversation.handoff</code> — <code>tiered_per_call</code>.</p>
+  </div>
+</section>
+
+<!-- sdk-recommendation -->
+<section id="sdk-recommendation">
+  <h2>7 · <code>sdk-recommendation</code> — Suggestions &amp; Next-Best-Action</h2>
+  <div class="sdk-block">
+    <div class="sdk-header"><h3>sdk-recommendation</h3><span class="pill blue">NEW</span></div>
+    <div class="purpose">Similar-X · next-best-action · per-tenant model artifacts (vector-isolated) · A/B variants via feature flags.</div>
+    <div class="meta-strip"><span><b>PRD §:</b> 5.4</span><span><b>Pool:</b> App Pool · Vector store (artifacts)</span><span><b>Schema:</b> <code>recommendation</code></span></div>
+
+    <p><b>recommendation.model · recommendation.suggestion · recommendation.feedback</b></p>
+    <table><thead><tr><th>Table</th><th>Key columns</th></tr></thead><tbody>
+      <tr><td><code>recommendation.model</code></td><td><code>model_id PK · tenant_id · purpose (similar-x · next-best-action · churn-risk · …) · algorithm · vector_namespace · trained_at · feature_flag_id FK · status (training · active · retired)</code></td></tr>
+      <tr><td><code>recommendation.suggestion</code></td><td><code>suggestion_id PK · model_id FK · subject_persona_id · suggestion_kind · payload jsonb · score numeric · trace_id · generated_at</code></td></tr>
+      <tr><td><code>recommendation.feedback</code></td><td><code>feedback_id PK · suggestion_id FK · outcome (accepted · dismissed · ignored) · captured_at</code></td></tr>
+    </tbody></table>
+
+    <p><b>SKUs:</b> <code>recommendation.suggest · recommendation.train</code> — tiered + per_unit.</p>
+  </div>
+</section>
+
+<!-- sdk-analytics -->
+<section id="sdk-analytics">
+  <h2>8 · <code>sdk-analytics</code> — ClickHouse + Iceberg Lakehouse</h2>
+  <div class="sdk-block">
+    <div class="sdk-header"><h3>sdk-analytics</h3><span class="pill purple">MODIFIED v3.1 · Iceberg ramp</span></div>
+    <div class="purpose">ClickHouse OLAP for hot rollups (≤90d) + Iceberg/S3-tables lakehouse for cold + cross-pool. Cohort / funnel / KPI primitives. Per-tenant rollups; cross-pool aggregation via warehouse only.</div>
+    <div class="meta-strip"><span><b>PRD §:</b> 5.5</span><span><b>Pool:</b> Admin (specs) · ClickHouse · Iceberg</span><span><b>Schema:</b> <code>analytics</code></span></div>
+
+    <h4>8.1 · Postgres-side tables (specs &amp; jobs)</h4>
+
+    <p><b>analytics.rollup_spec</b></p>
+    <table><thead><tr><th>Column</th><th>Type</th><th>Purpose</th></tr></thead><tbody>
+      <tr><td><code>spec_id</code></td><td>ULID PK</td><td>Surrogate.</td></tr>
+      <tr><td><code>tenant_id</code></td><td>FK, null</td><td>Null = platform-default.</td></tr>
+      <tr><td><code>name</code></td><td>text</td><td>UX.</td></tr>
+      <tr><td><code>grain</code></td><td>enum</td><td><code>hourly · daily · weekly · monthly</code></td></tr>
+      <tr><td><code>dimensions</code></td><td>text[]</td><td>e.g., <code>[app_id, bu_id, persona_kind]</code></td></tr>
+      <tr><td><code>source_event_types</code></td><td>text[]</td><td>Inputs from Kafka.</td></tr>
+      <tr><td><code>target_kind</code></td><td>enum</td><td><code>clickhouse · iceberg</code></td></tr>
+      <tr><td><code>active</code></td><td>bool</td><td>—</td></tr>
+    </tbody></table>
+
+    <p><b>analytics.cohort · analytics.funnel · analytics.kpi</b> — primitives stored as JSON definitions; results executed against ClickHouse or Iceberg per spec.</p>
+
+    <p><b>analytics.extract_to_lakehouse</b></p>
+    <table><thead><tr><th>Column</th><th>Type</th><th>Purpose</th></tr></thead><tbody>
+      <tr><td><code>extract_id</code></td><td>ULID PK</td><td>Surrogate.</td></tr>
+      <tr><td><code>tenant_id</code></td><td>FK, null</td><td>—</td></tr>
+      <tr><td><code>iceberg_table_ref</code></td><td>text</td><td>Catalog.namespace.table.</td></tr>
+      <tr><td><code>partition_strategy</code></td><td>jsonb</td><td><code>{region, tenant, time}</code> + Z-order.</td></tr>
+      <tr><td><code>consent_gate_purpose</code></td><td>text, null</td><td>For PII-bearing extracts.</td></tr>
+      <tr><td><code>last_extracted_at</code></td><td>timestamptz</td><td>Cadence.</td></tr>
+    </tbody></table>
+
+    <h4>8.2 · Iceberg tables (logical schema)</h4>
+    <table><thead><tr><th>Table</th><th>Purpose</th></tr></thead><tbody>
+      <tr><td><code>warehouse.usage_daily</code></td><td>Cross-tenant cost rollup; partitioned by <code>(region, tenant, day)</code>.</td></tr>
+      <tr><td><code>warehouse.encounter_facts</code></td><td>Encounter counts &amp; durations per vertical for analytics.</td></tr>
+      <tr><td><code>warehouse.cross_pool_lineage</code></td><td>Filled by lineage projection worker (G8).</td></tr>
+      <tr><td><code>warehouse.persona_cohorts</code></td><td>Per-tenant cohort definitions materialized.</td></tr>
+    </tbody></table>
+
+    <p><b>SKUs:</b> <code>analytics.rollup.query</code> (per-call) · <code>analytics.lakehouse.query</code> (per-GB scanned).</p>
+  </div>
+</section>
+
+<!-- sdk-lineage -->
+<section id="sdk-lineage">
+  <h2>9 · <code>sdk-lineage</code> — In-Pool Subgraph + Cross-Pool Projection (G8)</h2>
+  <div class="sdk-block">
+    <div class="sdk-header"><h3>sdk-lineage</h3><span class="pill purple">G8 closer · NEW v3.1</span></div>
+    <div class="purpose">Field-level provenance graph. Edges: <code>extracted_from · derived_from · merged_from · scored_by · translated_by</code>. In-pool subgraph for sync queries ≤50ms; cross-pool worker projects asynchronously into Iceberg within 5min.</div>
+    <div class="meta-strip"><span><b>PRD §:</b> 5.6</span><span><b>Pool:</b> Per pool (subgraph) + Iceberg (cross-pool)</span><span><b>Schema:</b> <code>lineage</code></span></div>
+
+    <h4>9.1 · Per-pool tables</h4>
+
+    <p><b>lineage.node</b></p>
+    <table><thead><tr><th>Column</th><th>Type</th><th>Purpose</th></tr></thead><tbody>
+      <tr><td><code>node_id</code></td><td>ULID PK</td><td>Surrogate.</td></tr>
+      <tr><td><code>pool_index</code></td><td>text</td><td>Owning pool.</td></tr>
+      <tr><td><code>kind</code></td><td>enum</td><td><code>field · record · blob · agent-output · recommendation · model</code></td></tr>
+      <tr><td><code>ref_kind · ref_id</code></td><td>text · text</td><td>What the node represents (e.g., <code>parsing.extracted_field:{field_id}</code>).</td></tr>
+      <tr><td><code>tenant_id</code></td><td>text</td><td>RLS.</td></tr>
+      <tr><td><code>created_at</code></td><td>timestamptz</td><td>Lifecycle.</td></tr>
+    </tbody></table>
+
+    <p><b>lineage.edge</b> — in-pool edges.</p>
+    <table><thead><tr><th>Column</th><th>Type</th><th>Purpose</th></tr></thead><tbody>
+      <tr><td><code>edge_id</code></td><td>ULID PK</td><td>Surrogate.</td></tr>
+      <tr><td><code>from_node_id · to_node_id</code></td><td>FK · FK</td><td>Direction.</td></tr>
+      <tr><td><code>edge_kind</code></td><td>enum</td><td><code>extracted_from · derived_from · merged_from · scored_by · translated_by</code></td></tr>
+      <tr><td><code>producer_sdk</code></td><td>text</td><td>Origin SDK.</td></tr>
+      <tr><td><code>producer_event_id</code></td><td>text, null</td><td>Originating event.</td></tr>
+      <tr><td><code>trace_id</code></td><td>text</td><td>Cross-system link.</td></tr>
+      <tr><td><code>occurred_at</code></td><td>timestamptz</td><td>Time.</td></tr>
+    </tbody></table>
+
+    <p><b>lineage.cross_pool_projection_queue</b> — items the worker emits to Iceberg.</p>
+    <table><thead><tr><th>Column</th><th>Type</th><th>Purpose</th></tr></thead><tbody>
+      <tr><td><code>queue_id</code></td><td>ULID PK</td><td>Surrogate.</td></tr>
+      <tr><td><code>edge_id</code></td><td>FK</td><td>Source edge.</td></tr>
+      <tr><td><code>source_pool · target_pool</code></td><td>text · text</td><td>For cross-pool edges.</td></tr>
+      <tr><td><code>state</code></td><td>enum</td><td><code>pending · projected · failed</code></td></tr>
+      <tr><td><code>projected_at</code></td><td>timestamptz, null</td><td>Time.</td></tr>
+    </tbody></table>
+
+    <h4>9.2 · Iceberg-side table (G8 closer)</h4>
+
+    <p><b>warehouse.cross_pool_lineage</b></p>
+    <table><thead><tr><th>Column</th><th>Type</th><th>Purpose</th></tr></thead><tbody>
+      <tr><td><code>edge_id</code></td><td>string</td><td>Mirrors per-pool edge ID.</td></tr>
+      <tr><td><code>source_pool · target_pool</code></td><td>string · string</td><td>Partition keys.</td></tr>
+      <tr><td><code>from_ref · to_ref</code></td><td>string · string</td><td>Pool-qualified references.</td></tr>
+      <tr><td><code>edge_kind · producer_sdk · trace_id</code></td><td>string · string · string</td><td>Metadata.</td></tr>
+      <tr><td><code>tenant_id · region · occurred_at</code></td><td>string · string · timestamp</td><td>Partition / filter cols.</td></tr>
+    </tbody></table>
+
+    <p><b>SKUs:</b> <code>lineage.edge.write</code> (cheap) · <code>lineage.chain.query · lineage.cross-pool.query</code>.</p>
+  </div>
+</section>
+
+<!-- sdk-semantic -->
+<section id="sdk-semantic">
+  <h2>10 · <code>sdk-semantic</code> — Six Types (G9)</h2>
+  <div class="sdk-block">
+    <div class="sdk-header"><h3>sdk-semantic</h3><span class="pill purple">G9 closer · NEW v3.1 · The Enterprise Semantic Model Layer</span></div>
+    <div class="purpose">Six typed primitives: Object · Relation · CapabilityGraph · Ontology · SemanticIntent · SemanticPolicy. Agents plan from Intents; policies are ontology-aware authz rules in IQL that compile to ABAC + ReBAC.</div>
+    <div class="meta-strip"><span><b>PRD §:</b> 5.7</span><span><b>FRs:</b> FR-SEM-1 … FR-SEM-10</span><span><b>Pool:</b> Admin + Global Catalog (large ontology bundles)</span><span><b>Schema:</b> <code>semantic</code></span></div>
+
+    <h4>10.1 · Tables</h4>
+
+    <p><b>semantic.ontology</b> — per-vertical bundles.</p>
+    <table><thead><tr><th>Column</th><th>Type</th><th>Purpose</th></tr></thead><tbody>
+      <tr><td><code>ontology_id</code></td><td>ULID PK</td><td>Surrogate.</td></tr>
+      <tr><td><code>name</code></td><td>text</td><td>e.g., <code>healthcare-v1 · realty-v1 · seva-v1</code></td></tr>
+      <tr><td><code>version</code></td><td>semver</td><td>Versioning.</td></tr>
+      <tr><td><code>status</code></td><td>enum</td><td><code>draft · active · deprecated · retired</code></td></tr>
+      <tr><td><code>parent_ontology_id</code></td><td>FK, null</td><td>For derived ontologies.</td></tr>
+      <tr><td><code>bundle_ref</code></td><td>text</td><td>Pointer to contracts version or Global Catalog.</td></tr>
+    </tbody></table>
+
+    <p><b>semantic.object_type</b> — typed instance class of a domain concept (Patient, Property, Donation, Order).</p>
+    <table><thead><tr><th>Column</th><th>Type</th><th>Purpose</th></tr></thead><tbody>
+      <tr><td><code>object_type_id</code></td><td>ULID PK</td><td>Surrogate.</td></tr>
+      <tr><td><code>ontology_id</code></td><td>FK</td><td>Owning ontology.</td></tr>
+      <tr><td><code>name</code></td><td>text</td><td>e.g., <code>Patient · Property · Donation</code></td></tr>
+      <tr><td><code>attribute_schema</code></td><td>jsonb</td><td>Typed attribute definitions (drawn from MDM + persona extensions).</td></tr>
+      <tr><td><code>backed_by</code></td><td>text</td><td>Source SDK + table (e.g., <code>persona.persona_ext:patient_chart</code>).</td></tr>
+    </tbody></table>
+
+    <p><b>semantic.relation_type</b> — typed relationships beyond ReBAC (<code>treats · owns · funds · refers · derives_from</code>).</p>
+    <table><thead><tr><th>Column</th><th>Type</th><th>Purpose</th></tr></thead><tbody>
+      <tr><td><code>relation_type_id</code></td><td>ULID PK</td><td>Surrogate.</td></tr>
+      <tr><td><code>ontology_id</code></td><td>FK</td><td>Owning ontology.</td></tr>
+      <tr><td><code>name</code></td><td>text</td><td>e.g., <code>treats</code>.</td></tr>
+      <tr><td><code>from_object_type_id · to_object_type_id</code></td><td>FK · FK</td><td>Endpoints.</td></tr>
+      <tr><td><code>cardinality</code></td><td>enum</td><td><code>1:1 · 1:N · N:N</code></td></tr>
+      <tr><td><code>rebac_kind_mapping</code></td><td>text, null</td><td>If implemented via sdk-rebac edge kind.</td></tr>
+    </tbody></table>
+
+    <p><b>semantic.capability_graph_edge</b> — which SDK methods are valid operations on which object types.</p>
+    <table><thead><tr><th>Column</th><th>Type</th><th>Purpose</th></tr></thead><tbody>
+      <tr><td><code>edge_id</code></td><td>ULID PK</td><td>Surrogate.</td></tr>
+      <tr><td><code>object_type_id</code></td><td>FK</td><td>Subject.</td></tr>
+      <tr><td><code>tool_sku</code></td><td>text</td><td>Valid operation (SKU).</td></tr>
+      <tr><td><code>requires_relation</code></td><td>FK → semantic.relation_type, null</td><td>Required relation (e.g., must have <code>treats</code>).</td></tr>
+      <tr><td><code>pre_conditions</code></td><td>jsonb</td><td>State predicate.</td></tr>
+      <tr><td><code>post_conditions</code></td><td>jsonb</td><td>Effect description (used by planner).</td></tr>
+    </tbody></table>
+
+    <p><b>semantic.intent</b> — typed goal.</p>
+    <table><thead><tr><th>Column</th><th>Type</th><th>Purpose</th></tr></thead><tbody>
+      <tr><td><code>intent_id</code></td><td>ULID PK</td><td>Surrogate.</td></tr>
+      <tr><td><code>tenant_id</code></td><td>FK</td><td>RLS.</td></tr>
+      <tr><td><code>ontology_id</code></td><td>FK</td><td>Vocabulary.</td></tr>
+      <tr><td><code>goal</code></td><td>text</td><td>e.g., <code>schedule_follow_up_visit</code></td></tr>
+      <tr><td><code>subject_object_type_id</code></td><td>FK</td><td>Type of subject.</td></tr>
+      <tr><td><code>parameters_schema</code></td><td>jsonb</td><td>Typed parameters.</td></tr>
+    </tbody></table>
+
+    <p><b>semantic.intent_plan</b> — planner output per (intent, context).</p>
+    <table><thead><tr><th>Column</th><th>Type</th><th>Purpose</th></tr></thead><tbody>
+      <tr><td><code>plan_id</code></td><td>ULID PK</td><td>Surrogate.</td></tr>
+      <tr><td><code>intent_id</code></td><td>FK</td><td>Source intent.</td></tr>
+      <tr><td><code>subject_id</code></td><td>text</td><td>Specific instance.</td></tr>
+      <tr><td><code>steps</code></td><td>jsonb</td><td>Ordered list of <code>(tool_sku, args)</code>.</td></tr>
+      <tr><td><code>generated_by_agent_run_id</code></td><td>FK</td><td>Origin.</td></tr>
+      <tr><td><code>generated_at</code></td><td>timestamptz</td><td>Time.</td></tr>
+      <tr><td><code>status</code></td><td>enum</td><td><code>proposed · approved · executing · completed · abandoned</code></td></tr>
+    </tbody></table>
+
+    <p><b>semantic.policy</b> — ontology-aware authz.</p>
+    <table><thead><tr><th>Column</th><th>Type</th><th>Purpose</th></tr></thead><tbody>
+      <tr><td><code>policy_id</code></td><td>ULID PK</td><td>Surrogate.</td></tr>
+      <tr><td><code>tenant_id</code></td><td>FK, null</td><td>—</td></tr>
+      <tr><td><code>ontology_id</code></td><td>FK</td><td>Active ontology.</td></tr>
+      <tr><td><code>name · description</code></td><td>text</td><td>UX.</td></tr>
+      <tr><td><code>iql_source</code></td><td>text</td><td>Authored DSL.</td></tr>
+      <tr><td><code>compiled_abac</code></td><td>bytea</td><td>Compiled ABAC term.</td></tr>
+      <tr><td><code>compiled_rebac</code></td><td>jsonb</td><td>ReBAC edge requirements.</td></tr>
+      <tr><td><code>status</code></td><td>enum</td><td><code>draft · active · deprecated</code></td></tr>
+    </tbody></table>
+
+    <p><b>semantic.cross_domain_bridge</b> — explicit ontology→ontology bridges.</p>
+    <table><thead><tr><th>Column</th><th>Type</th><th>Purpose</th></tr></thead><tbody>
+      <tr><td><code>bridge_id</code></td><td>ULID PK</td><td>Surrogate.</td></tr>
+      <tr><td><code>from_object_type_id · to_object_type_id</code></td><td>FK · FK</td><td>e.g., Patient↔Person.</td></tr>
+      <tr><td><code>access_mode</code></td><td>enum</td><td><code>read-only · read-write</code></td></tr>
+      <tr><td><code>requires_cross_tenant_consent</code></td><td>bool</td><td>Privacy gate.</td></tr>
+    </tbody></table>
+
+    <h4>10.2 · ERD</h4>
+    <div class="diagram-wrap"><pre class="mermaid">
+erDiagram
+  ONTOLOGY ||--o{ OBJECT_TYPE : ""
+  OBJECT_TYPE ||--o{ RELATION_TYPE : "from"
+  OBJECT_TYPE ||--o{ RELATION_TYPE : "to"
+  OBJECT_TYPE ||--o{ CAPABILITY_GRAPH_EDGE : ""
+  ONTOLOGY ||--o{ INTENT : ""
+  INTENT ||--o{ INTENT_PLAN : ""
+  ONTOLOGY ||--o{ POLICY : ""
+  POLICY }o--|| OBJECT_TYPE : "over"
+  CROSS_DOMAIN_BRIDGE }o--|| OBJECT_TYPE : "from"
+  CROSS_DOMAIN_BRIDGE }o--|| OBJECT_TYPE : "to"
+  ONTOLOGY {
+    string ontology_id PK
+    string name
+    string version
+    string status
+  }
+  OBJECT_TYPE {
+    string object_type_id PK
+    string ontology_id FK
+    string name
+    jsonb  attribute_schema
+    string backed_by
+  }
+  CAPABILITY_GRAPH_EDGE {
+    string edge_id PK
+    string object_type_id FK
+    string tool_sku
+    string requires_relation FK
+    jsonb  pre_conditions
+    jsonb  post_conditions
+  }
+  INTENT {
+    string intent_id PK
+    string ontology_id FK
+    string goal
+    string subject_object_type_id FK
+    jsonb  parameters_schema
+  }
+  POLICY {
+    string policy_id PK
+    string ontology_id FK
+    text   iql_source
+    bytes  compiled_abac
+    jsonb  compiled_rebac
+  }
+    </pre></div>
+
+    <p><b>SKUs:</b> <code>semantic.intent.plan · semantic.policy.evaluate · semantic.ontology.register</code> — <code>tiered_per_call</code>.</p>
+  </div>
+</section>
+
+<!-- connector-snowflake -->
+<section id="connector-snowflake">
+  <h2>11 · <code>connector-snowflake</code> — Federation + Iceberg Bridge</h2>
+  <div class="sdk-block">
+    <div class="sdk-header"><h3>connector-snowflake</h3><span class="pill purple">NEW v3.1</span></div>
+    <div class="purpose">Bidirectional bridge between ProjexCloud Iceberg lakehouse and customer Snowflake; query federation; tool manifest for the agent CapabilityGraph.</div>
+    <div class="meta-strip"><span><b>PRD §:</b> 5.8</span><span><b>Pool:</b> Admin · Iceberg bridge</span><span><b>Schema:</b> <code>connector_snowflake</code></span></div>
+
+    <p><b>connector_snowflake.install · connector_snowflake.table_binding · connector_snowflake.sync_run · connector_snowflake.query_log</b></p>
+    <table><thead><tr><th>Table</th><th>Key columns</th></tr></thead><tbody>
+      <tr><td><code>install</code></td><td><code>install_id PK · tenant_id · account_url · oauth_token_envelope · status · last_refreshed_at</code></td></tr>
+      <tr><td><code>table_binding</code></td><td><code>binding_id PK · install_id FK · snowflake_table · iceberg_table_ref · direction (snow→ice · ice→snow · bidir) · conflict_policy · last_synced_at</code></td></tr>
+      <tr><td><code>sync_run</code></td><td><code>run_id PK · binding_id FK · started_at · completed_at · rows_pushed · rows_pulled · status</code></td></tr>
+      <tr><td><code>query_log</code></td><td><code>query_id PK · install_id FK · agent_run_id FK · capability_token_id FK · soql_or_sql · bytes_scanned · provider_cost · billed_cost · occurred_at</code></td></tr>
+    </tbody></table>
+
+    <p><b>SKUs:</b> <code>snowflake.query</code> (per-byte, passthrough+margin) · <code>snowflake.sync.row</code> (per-row).</p>
+  </div>
+</section>
+
+</div>
+
+<script>
+  mermaid.initialize({ startOnLoad: true, theme: 'dark', themeVariables: { background: '#0b0f17', primaryColor: '#1a2234', primaryBorderColor: '#c9a86a', primaryTextColor: '#e6ecf5', lineColor: '#6aa9ff', secondaryColor: '#1d1830', tertiaryColor: '#16241c' } });
+</script>
+
+</body>
+</html>
