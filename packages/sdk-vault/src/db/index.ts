@@ -1,8 +1,15 @@
+import fs from 'fs';
 import path from 'path';
 
 /**
- * Absolute path to this SDK's migrations folder. The platform migration runner
- * discovers SDKs by importing `migrationsDir` from each `@projexlight/sdk-*`
- * package. Per ProjectStructure-v3.1 §6.3.
+ * Resolves this SDK's migrations directory. Works whether loaded from TS
+ * source (`src/db/migrations`) or compiled dist (`dist/db/`) — TS only
+ * compiles `.ts` files so dist/ has no `migrations/` folder. We fall back
+ * to the source path so production deploys still find the SQL.
  */
-export const migrationsDir: string = path.join(__dirname, 'migrations');
+const candidates = [
+  path.join(__dirname, 'migrations'),                                      // src layout
+  path.resolve(__dirname, '..', '..', 'src', 'db', 'migrations'),          // dist layout
+];
+
+export const migrationsDir: string = candidates.find((d) => fs.existsSync(d)) ?? candidates[0];

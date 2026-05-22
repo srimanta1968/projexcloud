@@ -54,6 +54,10 @@ async function applyMigrationsFor(absDir: string): Promise<void> {
 }
 
 async function createDatabase(name: string): Promise<void> {
+  // OC-3 sanctioned exception: chaos test infra needs the maintenance DB to
+  // CREATE/DROP per-suite ephemeral databases. withTenant() cannot help here
+  // because no tenant exists yet.
+  // eslint-disable-next-line @projexlight/oc-3-no-raw-pg-client
   const admin = new Client({
     host: CONFIG.host,
     port: CONFIG.port,
@@ -70,6 +74,9 @@ async function createDatabase(name: string): Promise<void> {
 }
 
 async function dropDatabase(name: string): Promise<void> {
+  // OC-3 sanctioned exception: maintenance DB connection for DROP, same
+  // rationale as createDatabase above.
+  // eslint-disable-next-line @projexlight/oc-3-no-raw-pg-client
   const admin = new Client({
     host: CONFIG.host,
     port: CONFIG.port,

@@ -27,6 +27,7 @@ import {
   migrationsDir as meterMigrations,
   server as meterServer,
   setEmitter,
+  startMeterVerifierScheduler,
 } from '@projexlight/sdk-meter';
 import { server as secretsServer } from '@projexlight/sdk-secrets';
 import { migrationsDir as tenantMigrations, server as tenantServer } from '@projexlight/sdk-tenant';
@@ -142,10 +143,16 @@ const start = async () => {
       batchSize: parseInt(process.env.AUDIT_RETENTION_BATCH_SIZE || '1000', 10),
     });
 
+    const meterVerifier = startMeterVerifierScheduler({
+      enabled: process.env.METER_VERIFIER_ENABLED !== 'false',
+      intervalMs: parseInt(process.env.METER_VERIFIER_INTERVAL_MS || '86400000', 10),
+    });
+
     app.addHook('onClose', async () => {
       rotationScheduler.stop();
       auditVerifier.stop();
       retentionShredder.stop();
+      meterVerifier.stop();
       await closeRedis();
       await closeKafka();
     });

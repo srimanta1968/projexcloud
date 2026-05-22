@@ -9,3 +9,7 @@ export { lookupRate, listActiveRates } from './services/pricingCatalog';
 export type { PricingRate, PricingUnit, PricingMode } from './services/pricingCatalog';
 export { meter, registerMeterMetadata, getMeterMetadata, listMeterMetadata } from './decorators';
 export type { MeterMetadata } from './decorators';
+export { verifyMeterChain, verifyAllMeterChains } from './services/chainVerifier';
+export type { MeterChainProof, MeterChainBreak } from './services/chainVerifier';
+export { startMeterVerifierScheduler, setMeterBreakHandler } from './services/verifierScheduler';
+export type { MeterVerifierConfig, MeterVerifierHandle } from './services/verifierScheduler';
