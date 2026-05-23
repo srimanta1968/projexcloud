@@ -1,0 +1,39 @@
+{
+  "name": "POST /api/billing/invoices/generate - Trigger month-close invoice generation",
+  "endpoint": "/api/billing/invoices/generate",
+  "method": "POST",
+  "requiresAuth": true,
+  "expectedStatus": 201,
+  "taskId": "f8589102-1711-4791-b17e-7fc636a49be0",
+  "sprintId": "8ef1d09e-dd8e-4daf-8d03-54dcd9f812f8",
+  "featureId": "27e7a551-ff73-49df-977a-1c1f56126bbb",
+  "epicId": "d83f7b6e-821c-4fe1-96e6-910eca8fbbfc",
+  "priority": 30,
+  "testability": "manual",
+  "skipReason": "Requires a published meter.pricing_catalog + at least one usage_event row for the tenant; covered by integration test.",
+  "dependsOn": ["POST /api/auth/register"],
+  "testCases": [
+    {
+      "name": "Generate Jan 2026 invoice",
+      "headers": { "Authorization": "Bearer {{cache:auth.register.response.data.token}}" },
+      "payload": {
+        "tenant_id": "{{static:00000000-0000-0000-0000-000000000001}}",
+        "catalog_id": "{{static:default-2026-01}}",
+        "period_start": "{{static:2026-01-01}}",
+        "period_end": "{{static:2026-01-31}}",
+        "currency": "{{static:USD}}",
+        "tax_rate": 0,
+        "usage": [
+          { "sku": "{{static:api.call}}", "app_id": "{{static:admin}}", "bu_id": null, "persona_kind": "human", "encounter_id": null, "actor_kind": "human", "units": 12000 }
+        ]
+      },
+      "expectedStatus": 201
+    }
+  ],
+  "expectedResponse": {
+    "data": { "invoice": { "invoice_id": "string", "status": "string", "total": "string" }, "line_items": "array" }
+  },
+  "captureResponse": {
+    "billing.invoices.generate.response.data.invoice.invoice_id": "data.invoice.invoice_id"
+  }
+}

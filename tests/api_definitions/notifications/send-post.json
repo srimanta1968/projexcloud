@@ -1,0 +1,41 @@
+{
+  "name": "POST /api/notifications/send - Dispatch notification with consent + quiet-hours + render",
+  "endpoint": "/api/notifications/send",
+  "method": "POST",
+  "requiresAuth": true,
+  "expectedStatus": 201,
+  "taskId": "0240664d-92bd-49c3-916d-165ccb77bde7",
+  "sprintId": "8ef1d09e-dd8e-4daf-8d03-54dcd9f812f8",
+  "featureId": "01ca8316-09cf-462d-bf9d-7eeac8745bff",
+  "epicId": "d83f7b6e-821c-4fe1-96e6-910eca8fbbfc",
+  "priority": 40,
+  "testability": "manual",
+  "skipReason": "Requires a seeded notification.template + consent.purpose + sdk-consent grant; covered by integration test.",
+  "dependsOn": ["POST /api/auth/register"],
+  "testCases": [
+    {
+      "name": "Send email notification with rendered body",
+      "headers": { "Authorization": "Bearer {{cache:auth.register.response.data.token}}" },
+      "payload": {
+        "tenant_id": "{{static:00000000-0000-0000-0000-000000000001}}",
+        "template_code": "welcome-email",
+        "person_id": "{{cache:auth.register.response.data.userId}}",
+        "channel": "email",
+        "destination": "{{dynamic:email}}",
+        "payload": { "name": "Alice" },
+        "locale": "en-US"
+      },
+      "expectedStatus": 201
+    }
+  ],
+  "expectedResponse": {
+    "data": {
+      "message": { "message_id": "string", "status": "string" },
+      "status": "string",
+      "rendered_body": "string"
+    }
+  },
+  "captureResponse": {
+    "notifications.send.response.data.message.message_id": "data.message.message_id"
+  }
+}

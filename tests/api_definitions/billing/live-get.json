@@ -1,0 +1,26 @@
+{
+  "name": "GET /api/billing/live - Real-time current-period accrual",
+  "endpoint": "/api/billing/live",
+  "method": "GET",
+  "requiresAuth": true,
+  "expectedStatus": 200,
+  "taskId": "75106752-7e10-4203-a5ed-dc966257524a",
+  "sprintId": "8ef1d09e-dd8e-4daf-8d03-54dcd9f812f8",
+  "featureId": "27e7a551-ff73-49df-977a-1c1f56126bbb",
+  "epicId": "d83f7b6e-821c-4fe1-96e6-910eca8fbbfc",
+  "priority": 40,
+  "testability": "manual",
+  "skipReason": "Reads live meter rollup; covered by integration test with a seeded tenant + catalog.",
+  "dependsOn": ["POST /api/auth/register"],
+  "testCases": [
+    {
+      "name": "Read live meter for tenant",
+      "headers": { "Authorization": "Bearer {{cache:auth.register.response.data.token}}" },
+      "queryParams": { "tenant_id": "{{static:00000000-0000-0000-0000-000000000001}}" },
+      "expectedStatus": 200
+    }
+  ],
+  "expectedResponse": {
+    "data": { "tenant_id": "string", "subtotal": "number", "lag_ms": "number", "by_sku": "object" }
+  }
+}

@@ -1,0 +1,26 @@
+{
+  "name": "POST /api/api-keys/:key_id/rotate - Rotate API key with grace window",
+  "endpoint": "/api/api-keys/:key_id/rotate",
+  "method": "POST",
+  "requiresAuth": true,
+  "expectedStatus": 201,
+  "taskId": "5d5d1458-1136-41d2-a813-629578ff999a",
+  "sprintId": "8ef1d09e-dd8e-4daf-8d03-54dcd9f812f8",
+  "featureId": "7a33ef6c-2dad-4c40-a8a2-f414c13e6c48",
+  "epicId": "00996d23-f667-4a82-9285-7728ba357e7b",
+  "priority": 50,
+  "testability": "manual",
+  "skipReason": "Depends on a previously-issued key_id; integration test covers full lifecycle.",
+  "dependsOn": ["POST /api/auth/register", "POST /api/api-keys"],
+  "testCases": [
+    {
+      "name": "Rotate the freshly-issued key",
+      "headers": { "Authorization": "Bearer {{cache:auth.register.response.data.token}}" },
+      "pathParams": { "key_id": "{{cache:api-keys.create.response.data.key.key_id}}" },
+      "expectedStatus": 201
+    }
+  ],
+  "expectedResponse": {
+    "data": { "key": { "key_id": "string" }, "plaintext": "string" }
+  }
+}

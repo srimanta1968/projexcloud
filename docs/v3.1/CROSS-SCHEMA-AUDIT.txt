@@ -1,0 +1,90 @@
+Found cross-schema references in 12 SDK(s).
+
+── connector-slack (own schema: none)
+   4 hard FK reference(s) — split blocker (replace with TEXT + app-layer validate):
+     packages\connector-slack\src\db\migrations\001_init_connector_slack.sql:29  → connector_slack.workspace
+     packages\connector-slack\src\db\migrations\001_init_connector_slack.sql:42  → connector_slack.workspace
+     packages\connector-slack\src\db\migrations\001_init_connector_slack.sql:43  → connector_slack.channel
+     packages\connector-slack\src\db\migrations\001_init_connector_slack.sql:57  → connector_slack.workspace
+
+── sdk-billing (own schema: billing)
+   4 hard FK reference(s) — split blocker (replace with TEXT + app-layer validate):
+     packages\sdk-billing\src\db\migrations\001_init_billing.sql:18  → meter.pricing_catalog
+     packages\sdk-billing\src\db\migrations\001_init_billing.sql:19  → tenant.fiscal_period
+     packages\sdk-billing\src\db\migrations\001_init_billing.sql:90  → meter.pricing_catalog
+     packages\sdk-billing\src\db\migrations\001_init_billing.sql:91  → meter.pricing_catalog
+   7 JOIN/FROM reference(s) — split blocker (replace with service call):
+     packages\sdk-billing\src\services\freeTierEngine.ts:36  → tenant.free_tier_allowance
+     packages\sdk-billing\src\services\liveMeter.ts:23  → meter.pricing_catalog
+     packages\sdk-billing\src\services\liveMeter.ts:63  → meter.usage_event
+     packages\sdk-billing\src\services\rateEngine.ts:5  → meter.pricing_rate
+     packages\sdk-billing\src\services\rateEngine.ts:35  → meter.pricing_rate
+     packages\sdk-billing\src\services\usageReader.ts:37  → meter.usage_rollup
+     packages\sdk-billing\src\services\usageReader.ts:55  → meter.usage_event
+
+── sdk-campaign (own schema: campaign)
+   1 JOIN/FROM reference(s) — split blocker (replace with service call):
+     packages\sdk-campaign\src\services\campaignService.ts:87  → projection.subject_view
+
+── sdk-connectors (own schema: connector)
+   2 hard FK reference(s) — split blocker (replace with TEXT + app-layer validate):
+     packages\sdk-connectors\src\db\migrations\001_init_connectors.sql:30  → connectors.install
+     packages\sdk-connectors\src\db\migrations\001_init_connectors.sql:42  → connectors.install
+   5 JOIN/FROM reference(s) — split blocker (replace with service call):
+     packages\sdk-connectors\src\services\connectorsService.ts:137  → connectors.install
+     packages\sdk-connectors\src\services\connectorsService.ts:146  → connectors.install
+     packages\sdk-connectors\src\services\connectorsService.ts:174  → connectors.tool_manifest
+     packages\sdk-connectors\src\services\connectorsService.ts:193  → connectors.sync_cursor
+     packages\sdk-connectors\src\services\connectorsService.ts:244  → connectors.tool_manifest
+
+── sdk-consent (own schema: consent)
+   1 JOIN/FROM reference(s) — split blocker (replace with service call):
+     packages\sdk-consent\src\services\consentService.ts:88  → identity.person
+
+── sdk-crm (own schema: crm)
+   1 JOIN/FROM reference(s) — split blocker (replace with service call):
+     packages\sdk-crm\src\services\crmService.ts:214  → engagement.encounter
+
+── sdk-data-rights (own schema: data_rights)
+   4 JOIN/FROM reference(s) — split blocker (replace with service call):
+     packages\sdk-data-rights\src\services\dataRightsService.ts:393  → vault.key
+     packages\sdk-data-rights\src\services\dataRightsService.ts:409  → persona.persona
+     packages\sdk-data-rights\src\services\dataRightsService.ts:410  → persona.membership
+     packages\sdk-data-rights\src\services\dataRightsService.ts:411  → persona.app_identity
+
+── sdk-identity (own schema: identity)
+   1 JOIN/FROM reference(s) — split blocker (replace with service call):
+     packages\sdk-identity\src\utils\jwt.ts:105  → projection.subject_view
+
+── sdk-identity-resolver (own schema: none)
+   10 JOIN/FROM reference(s) — split blocker (replace with service call):
+     packages\sdk-identity-resolver\src\services\resolverService.ts:58  → tenant.bu
+     packages\sdk-identity-resolver\src\services\resolverService.ts:61  → tenant.bu
+     packages\sdk-identity-resolver\src\services\resolverService.ts:156  → tenant.tenant
+     packages\sdk-identity-resolver\src\services\resolverService.ts:165  → tenant.tenant
+     packages\sdk-identity-resolver\src\services\resolverService.ts:210  → identity.tenant_membership
+     packages\sdk-identity-resolver\src\services\resolverService.ts:220  → tenant.tenant
+     packages\sdk-identity-resolver\src\services\resolverService.ts:226  → persona.persona
+     packages\sdk-identity-resolver\src\services\resolverService.ts:227  → persona.membership
+     packages\sdk-identity-resolver\src\services\resolverService.ts:228  → persona.app_identity
+     packages\sdk-identity-resolver\src\services\resolverService.ts:235  → consent.receipt
+
+── sdk-media (own schema: media)
+   3 JOIN/FROM reference(s) — split blocker (replace with service call):
+     packages\sdk-media\src\services\blobService.ts:117  → vault.key
+     packages\sdk-media\src\services\blobService.ts:125  → vault.key
+     packages\sdk-media\src\services\blobService.ts:143  → vault.encounter_key_seal
+
+── sdk-projection (own schema: projection)
+   4 JOIN/FROM reference(s) — split blocker (replace with service call):
+     packages\sdk-projection\src\services\inboxEnqueue.ts:39  → identity.tenant_membership
+     packages\sdk-projection\src\services\inboxEnqueue.ts:40  → tenant.tenant
+     packages\sdk-projection\src\services\inboxEnqueue.ts:62  → identity.tenant_membership
+     packages\sdk-projection\src\services\inboxEnqueue.ts:63  → tenant.tenant
+
+── sdk-search (own schema: search)
+   1 JOIN/FROM reference(s) — split blocker (replace with service call):
+     packages\sdk-search\src\validators\searchValidator.ts:86  → req.auth
+
+Summary: 10 hard-FK and 38 JOIN/FROM references across 12 SDK(s).
+Each is a blocker for moving the owning SDK to a separate Postgres cluster.

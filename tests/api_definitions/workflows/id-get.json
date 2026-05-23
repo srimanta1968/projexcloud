@@ -1,0 +1,26 @@
+{
+  "name": "GET /api/workflows/:run_id - Query run state + steps + compensations",
+  "endpoint": "/api/workflows/:run_id",
+  "method": "GET",
+  "requiresAuth": true,
+  "expectedStatus": 200,
+  "taskId": "37e8f14e-2c81-415f-9fa9-e2ff755d74f8",
+  "sprintId": "8ef1d09e-dd8e-4daf-8d03-54dcd9f812f8",
+  "featureId": "c8c3cd6c-f966-406e-b761-7d6fa53d786a",
+  "epicId": "d83f7b6e-821c-4fe1-96e6-910eca8fbbfc",
+  "priority": 50,
+  "testability": "manual",
+  "skipReason": "Depends on an existing run_id; covered by integration test once start endpoint seeds a run.",
+  "dependsOn": ["POST /api/auth/register", "POST /api/workflows/start"],
+  "testCases": [
+    {
+      "name": "Query run state",
+      "headers": { "Authorization": "Bearer {{cache:auth.register.response.data.token}}" },
+      "pathParams": { "run_id": "{{cache:workflows.start.response.data.run_id}}" },
+      "expectedStatus": 200
+    }
+  ],
+  "expectedResponse": {
+    "data": { "run": "object", "steps": "array", "compensations": "array" }
+  }
+}

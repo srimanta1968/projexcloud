@@ -1,0 +1,31 @@
+{
+  "name": "POST /api/search/saved-queries - Persist a named DSL query",
+  "endpoint": "/api/search/saved-queries",
+  "method": "POST",
+  "requiresAuth": true,
+  "expectedStatus": 201,
+  "taskId": "172643e9-507b-48df-b52b-1cad6f74db4f",
+  "sprintId": "8ef1d09e-dd8e-4daf-8d03-54dcd9f812f8",
+  "featureId": "02447110-6a41-4546-8d10-2107aa023f3a",
+  "epicId": "d83f7b6e-821c-4fe1-96e6-910eca8fbbfc",
+  "priority": 40,
+  "testability": "manual",
+  "skipReason": "Requires authenticated persona context; runs cleanly under integration test with a registered tenant.",
+  "dependsOn": ["POST /api/auth/register"],
+  "testCases": [
+    {
+      "name": "Save my-open-encounters query",
+      "headers": { "Authorization": "Bearer {{cache:auth.register.response.data.token}}" },
+      "payload": {
+        "tenant_id": "{{static:00000000-0000-0000-0000-000000000001}}",
+        "persona_id": "{{cache:auth.register.response.data.userId}}",
+        "name": "{{static:my-open-encounters}}",
+        "dsl": { "query": { "term": { "status": "open" } }, "size": 50 }
+      },
+      "expectedStatus": 201
+    }
+  ],
+  "expectedResponse": {
+    "data": { "saved_query": { "query_id": "string", "name": "string" } }
+  }
+}

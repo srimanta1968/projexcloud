@@ -1,0 +1,37 @@
+{
+  "name": "POST /api/workflows/definitions - Register/upsert workflow definition",
+  "endpoint": "/api/workflows/definitions",
+  "method": "POST",
+  "requiresAuth": true,
+  "expectedStatus": 201,
+  "taskId": "a23465f8-71aa-4fa5-8a01-3439359a2ead",
+  "sprintId": "8ef1d09e-dd8e-4daf-8d03-54dcd9f812f8",
+  "featureId": "c8c3cd6c-f966-406e-b761-7d6fa53d786a",
+  "epicId": "d83f7b6e-821c-4fe1-96e6-910eca8fbbfc",
+  "priority": 20,
+  "testability": "manual",
+  "skipReason": "Requires in-process registerStep() handlers to be installed for every step name in step_specs before the def can be registered — covered by integration test where the workflow module is loaded at boot.",
+  "dependsOn": ["POST /api/auth/register"],
+  "testCases": [
+    {
+      "name": "Register a 2-step workflow with compensation",
+      "headers": { "Authorization": "Bearer {{cache:auth.register.response.data.token}}" },
+      "payload": {
+        "name": "{{static:demo-payment-flow}}",
+        "version": "{{static:1.0.0}}",
+        "namespace": "{{static:admin}}",
+        "step_specs": [
+          { "name": "{{static:charge-card}}", "compensate": "{{static:void-charge}}" },
+          { "name": "{{static:emit-receipt}}" }
+        ]
+      },
+      "expectedStatus": 201
+    }
+  ],
+  "expectedResponse": {
+    "data": { "definition": { "workflow_def_id": "string", "name": "string", "status": "string" } }
+  },
+  "captureResponse": {
+    "workflows.definitions.create.response.data.definition.workflow_def_id": "data.definition.workflow_def_id"
+  }
+}

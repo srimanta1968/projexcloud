@@ -1,0 +1,31 @@
+{
+  "name": "GET /api/billing/showback - Per-(app, BU, persona-kind, encounter) splits — THE wedge",
+  "endpoint": "/api/billing/showback",
+  "method": "GET",
+  "requiresAuth": true,
+  "expectedStatus": 200,
+  "taskId": "12c03a30-b9f7-4c46-8ad6-12584dad6739",
+  "sprintId": "8ef1d09e-dd8e-4daf-8d03-54dcd9f812f8",
+  "featureId": "27e7a551-ff73-49df-977a-1c1f56126bbb",
+  "epicId": "d83f7b6e-821c-4fe1-96e6-910eca8fbbfc",
+  "priority": 60,
+  "testability": "manual",
+  "skipReason": "Aggregates billing.line_item; requires a finalized invoice in period; covered by integration test.",
+  "dependsOn": ["POST /api/auth/register", "POST /api/billing/invoices/generate"],
+  "testCases": [
+    {
+      "name": "Split by app_id + bu_id for Jan 2026",
+      "headers": { "Authorization": "Bearer {{cache:auth.register.response.data.token}}" },
+      "queryParams": {
+        "tenant_id": "{{static:00000000-0000-0000-0000-000000000001}}",
+        "period_start": "{{static:2026-01-01}}",
+        "period_end": "{{static:2026-01-31}}",
+        "group_by": "{{static:app_id,bu_id}}"
+      },
+      "expectedStatus": 200
+    }
+  ],
+  "expectedResponse": {
+    "data": { "rows": "array", "total_amount": "number" }
+  }
+}

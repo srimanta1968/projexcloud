@@ -1,0 +1,38 @@
+{
+  "name": "POST /api/approvals/routes - Create approval route definition",
+  "endpoint": "/api/approvals/routes",
+  "method": "POST",
+  "requiresAuth": true,
+  "expectedStatus": 201,
+  "taskId": "096441a3-9cf9-40e1-90ee-d0e0019da684",
+  "sprintId": "8ef1d09e-dd8e-4daf-8d03-54dcd9f812f8",
+  "featureId": "b273628f-6bee-4ad4-b5c0-9a9cb38da247",
+  "epicId": "d83f7b6e-821c-4fe1-96e6-910eca8fbbfc",
+  "priority": 20,
+  "testability": "manual",
+  "skipReason": "Steps reference persona UUIDs that must exist; integration test seeds a manager + finance persona first.",
+  "dependsOn": ["POST /api/auth/register"],
+  "testCases": [
+    {
+      "name": "Create 2-step approval route (manager → finance m-of-n)",
+      "headers": { "Authorization": "Bearer {{cache:auth.register.response.data.token}}" },
+      "payload": {
+        "tenant_id": "{{static:00000000-0000-0000-0000-000000000001}}",
+        "name": "{{static:high-value-refund}}",
+        "description": "{{static:Refunds above $10k}}",
+        "kind_pattern": "{{static:payment.refund > 10000 USD}}",
+        "steps": [
+          { "name": "{{static:manager}}", "kind": "{{static:single}}", "approver_persona_id": "{{cache:auth.register.response.data.userId}}", "sla_minutes": 60 },
+          { "name": "{{static:finance}}", "kind": "{{static:m-of-n}}", "m": 1, "approvers": ["{{cache:auth.register.response.data.userId}}"], "sla_minutes": 120 }
+        ]
+      },
+      "expectedStatus": 201
+    }
+  ],
+  "expectedResponse": {
+    "data": { "route": { "route_id": "string", "status": "string" } }
+  },
+  "captureResponse": {
+    "approvals.routes.create.response.data.route.route_id": "data.route.route_id"
+  }
+}

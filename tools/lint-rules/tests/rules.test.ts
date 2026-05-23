@@ -48,4 +48,33 @@ describe('AC-13 · OC lint rules fire on known-bad fixtures', () => {
     const out = lintFixture('oc-9-bad.ts');
     expect(out).toMatch(/@projexlight\/oc-9-no-direct-kms/);
   });
+
+  // -------------------------------------------------------------------
+  // P3 audit additions
+  // -------------------------------------------------------------------
+
+  it('AC-6 · OC-4 blocks sdk-persona import from a non-resolver SDK', () => {
+    const out = lintFixture('packages/sdk-fake-consumer/oc-4-bad-persona-import.ts');
+    expect(out).toMatch(/@projexlight\/oc-4-no-cross-sdk-import/);
+    expect(out).toMatch(/sdk-persona/);
+    expect(out).toMatch(/sdk-fake-consumer/);
+  });
+
+  it('AC-6 · OC-4 permits sdk-persona import from sdk-identity-resolver (resolver-only allowlist)', () => {
+    const out = lintFixture('packages/sdk-identity-resolver/oc-4-good-persona-import.ts');
+    // Either empty (clean lint) OR contains warnings only — the OC-4 error
+    // must not be present.
+    expect(out).not.toMatch(/@projexlight\/oc-4-no-cross-sdk-import/);
+  });
+
+  it('AC-13 · OC-2 accepts all P3 event types (registry mirror in sync)', () => {
+    const out = lintFixture('oc-2-p3-good.ts');
+    expect(out).not.toMatch(/@projexlight\/oc-2-registered-event-type/);
+  });
+
+  it('AC-13 · OC-2 catches a typo in a P3-shaped event_type', () => {
+    const out = lintFixture('oc-2-bad-p3-shape.ts');
+    expect(out).toMatch(/@projexlight\/oc-2-registered-event-type/);
+    expect(out).toMatch(/profile\.field\.shred\.v1/);
+  });
 });

@@ -7,6 +7,7 @@ export interface LoginInput {
   email: string;
   password: string;
   tenant_id?: string;
+  app_id?: string;
 }
 
 export interface ValidationFailure {
@@ -58,10 +59,11 @@ export function validateLoginInput(body: unknown): ValidationSuccess<LoginInput>
   const email = typeof b.email === 'string' ? b.email.trim() : '';
   const password = typeof b.password === 'string' ? b.password : '';
   const tenant_id = typeof b.tenant_id === 'string' ? b.tenant_id.trim() : undefined;
+  const app_id = typeof b.app_id === 'string' ? b.app_id.trim() : undefined;
 
   if (!email) errors.push('email is required');
   if (!password) errors.push('password is required');
 
   if (errors.length > 0) return { ok: false, errors };
-  return { ok: true, value: { email, password, tenant_id } };
+  return { ok: true, value: { email, password, tenant_id, app_id } };
 }

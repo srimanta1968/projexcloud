@@ -1,0 +1,34 @@
+{
+  "name": "POST /api/webhooks/endpoints - Register webhook endpoint",
+  "endpoint": "/api/webhooks/endpoints",
+  "method": "POST",
+  "requiresAuth": true,
+  "expectedStatus": 201,
+  "taskId": "c9735690-fae6-4db6-8dda-cfadae86876a",
+  "sprintId": "8ef1d09e-dd8e-4daf-8d03-54dcd9f812f8",
+  "featureId": "edce9080-4593-4e84-a4c6-54309b62e01e",
+  "epicId": "d83f7b6e-821c-4fe1-96e6-910eca8fbbfc",
+  "priority": 20,
+  "testability": "manual",
+  "skipReason": "Requires a vault key_id (signing_key_ref) to exist; covered by integration test that issues a vault key first.",
+  "dependsOn": ["POST /api/auth/register"],
+  "testCases": [
+    {
+      "name": "Register HTTPS endpoint",
+      "headers": { "Authorization": "Bearer {{cache:auth.register.response.data.token}}" },
+      "payload": {
+        "tenant_id": "{{static:00000000-0000-0000-0000-000000000001}}",
+        "url": "{{static:https://webhook.example.com/projex}}",
+        "signing_key_ref": "{{static:vault-key-webhook-001}}",
+        "signing_algo": "{{static:hmac-sha256}}"
+      },
+      "expectedStatus": 201
+    }
+  ],
+  "expectedResponse": {
+    "data": { "endpoint": { "endpoint_id": "string", "status": "string" } }
+  },
+  "captureResponse": {
+    "webhooks.endpoints.create.response.data.endpoint.endpoint_id": "data.endpoint.endpoint_id"
+  }
+}

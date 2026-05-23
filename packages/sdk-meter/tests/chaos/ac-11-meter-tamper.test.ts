@@ -65,13 +65,19 @@ describe('AC-11 · Meter chain verifier catches tampering', () => {
     expect(clean.ok).toBe(true);
     expect(clean.days_checked).toBe(3);
 
-    // Tamper: bump day 2's total_units without re-hashing.
-    await ctx.query(
-      `UPDATE meter.usage_ledger_day
-          SET total_units = '{"identity.jwt.mint": 9999999}'::jsonb
-        WHERE tenant_id = $1 AND day = $2::date`,
-      [TENANT, d2],
-    );
+    // Tamper: bump day 2's total_units without re-hashing. try/catch guards
+    // the tamper UPDATE so a SQL failure doesn't leak through and obscure
+    // the verifier-break assertion below.
+    try {
+      await ctx.query(
+        `UPDATE meter.usage_ledger_day
+            SET total_units = '{"identity.jwt.mint": 9999999}'::jsonb
+          WHERE tenant_id = $1 AND day = $2::date`,
+        [TENANT, d2],
+      );
+    } catch (err) {
+      throw new Error(`tamper UPDATE failed: ${(err as Error).message}`);
+    }
 
     const broken = await verifyMeterChain(TENANT);
     expect(broken.ok).toBe(false);

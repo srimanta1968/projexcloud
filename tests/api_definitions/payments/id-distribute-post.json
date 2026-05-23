@@ -1,0 +1,30 @@
+{
+  "name": "POST /api/payments/:charge_id/distribute - Append immutable distribution ledger entries",
+  "endpoint": "/api/payments/:charge_id/distribute",
+  "method": "POST",
+  "requiresAuth": true,
+  "expectedStatus": 201,
+  "taskId": "21db10b8-b400-4672-a4b2-9227032d12c0",
+  "sprintId": "8ef1d09e-dd8e-4daf-8d03-54dcd9f812f8",
+  "featureId": "33deeb13-adc2-4198-b1e1-1315ca492994",
+  "epicId": "d83f7b6e-821c-4fe1-96e6-910eca8fbbfc",
+  "priority": 60,
+  "testability": "manual",
+  "skipReason": "Depends on a captured charge + real persona party ids; covered by integration test (escrow/marketplace flow).",
+  "dependsOn": ["POST /api/auth/register", "POST /api/payments/charge"],
+  "testCases": [
+    {
+      "name": "Split charge between two parties",
+      "headers": { "Authorization": "Bearer {{cache:auth.register.response.data.token}}" },
+      "pathParams": { "charge_id": "{{cache:payments.charge.response.data.charge.charge_id}}" },
+      "payload": {
+        "currency": "USD",
+        "splits": [
+          { "party_persona_id": "{{cache:auth.register.response.data.userId}}", "share": 20.00 },
+          { "party_persona_id": "{{static:00000000-0000-0000-0000-000000000099}}", "share": 5.00 }
+        ]
+      },
+      "expectedStatus": 201
+    }
+  ]
+}

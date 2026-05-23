@@ -1,0 +1,27 @@
+{
+  "name": "POST /api/media/:blob_id/transcode - Enqueue transcode job",
+  "endpoint": "/api/media/:blob_id/transcode",
+  "method": "POST",
+  "requiresAuth": true,
+  "expectedStatus": 201,
+  "taskId": "a961df12-c333-4db5-b389-31438b10d6b9",
+  "sprintId": "8ef1d09e-dd8e-4daf-8d03-54dcd9f812f8",
+  "featureId": "9396ba53-a104-415c-ba3c-4e2a1b8d2c8a",
+  "epicId": "d83f7b6e-821c-4fe1-96e6-910eca8fbbfc",
+  "priority": 50,
+  "testability": "manual",
+  "skipReason": "Requires a ready blob; covered by integration test.",
+  "dependsOn": ["POST /api/auth/register", "POST /api/media/upload-url"],
+  "testCases": [
+    {
+      "name": "Enqueue image-optimize pipeline",
+      "headers": { "Authorization": "Bearer {{cache:auth.register.response.data.token}}" },
+      "pathParams": { "blob_id": "{{cache:media.upload-url.create.response.data.blob_id}}" },
+      "payload": { "pipeline": "image-optimize" },
+      "expectedStatus": 201
+    }
+  ],
+  "expectedResponse": {
+    "data": { "job": { "job_id": "string", "pipeline": "string", "status": "string" } }
+  }
+}

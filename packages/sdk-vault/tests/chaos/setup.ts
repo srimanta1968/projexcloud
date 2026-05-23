@@ -26,6 +26,13 @@ const SDK_MIGRATION_DIRS = [
   '../../../sdk-audit/src/db/migrations',
   '../../../sdk-meter/src/db/migrations',
   '../../../sdk-tenant/src/db/migrations',
+  // P3 additions — chaos suites that exercise data-rights / persona need
+  // these schemas applied to the ephemeral DB.
+  '../../../sdk-data-rights/src/db/migrations',
+  '../../../sdk-persona/src/db/migrations',
+  // P5 additions — engagement keystone (encounter / participant / grant)
+  // is the surface chaos drills AC-2 + AC-3 exercise end-to-end.
+  '../../../sdk-engagement/src/db/migrations',
 ];
 
 export interface ChaosCtx {
@@ -44,6 +51,11 @@ const CONFIG = {
   adminDb: process.env.CHAOS_PG_ADMIN_DB || 'postgres',
 };
 
+/**
+ * Apply every `.sql` migration in `absDir` (lexicographic order) against the
+ * currently-initialized pool. Silently no-ops if the directory is absent —
+ * useful when a chaos suite only needs a subset of SDK schemas.
+ */
 async function applyMigrationsFor(absDir: string): Promise<void> {
   if (!fs.existsSync(absDir)) return;
   const files = fs.readdirSync(absDir).filter((f) => f.endsWith('.sql')).sort();
@@ -53,6 +65,10 @@ async function applyMigrationsFor(absDir: string): Promise<void> {
   }
 }
 
+/**
+ * Create the ephemeral per-suite database via a maintenance-DB connection.
+ * Caller is responsible for invoking `dropDatabase(name)` during teardown.
+ */
 async function createDatabase(name: string): Promise<void> {
   // OC-3 sanctioned exception: chaos test infra needs the maintenance DB to
   // CREATE/DROP per-suite ephemeral databases. withTenant() cannot help here
@@ -73,6 +89,11 @@ async function createDatabase(name: string): Promise<void> {
   }
 }
 
+/**
+ * Drop the ephemeral per-suite database. Terminates any lingering
+ * connections first so PostgreSQL's "database is being accessed by other
+ * users" error can't strand the chaos run.
+ */
 async function dropDatabase(name: string): Promise<void> {
   // OC-3 sanctioned exception: maintenance DB connection for DROP, same
   // rationale as createDatabase above.
@@ -98,6 +119,13 @@ async function dropDatabase(name: string): Promise<void> {
   }
 }
 
+/**
+ * Boot a chaos-test context: provision an ephemeral database inside the
+ * shared `projexcloud_postgres` container, initialize the runtime pool
+ * against it, apply every SDK migration in dependency order, and return a
+ * `ChaosCtx` whose `stop()` tears the whole thing back down. Concurrent
+ * suites get isolated databases — no collision with dev's main DB.
+ */
 export async function startChaosCtx(): Promise<ChaosCtx> {
   const dbName = `chaos_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
   await createDatabase(dbName);

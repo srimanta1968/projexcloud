@@ -1,4 +1,5 @@
 import jwt, { SignOptions } from 'jsonwebtoken';
+import { dataService } from '@projexlight/db-runtime';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'change-me-in-prod';
 const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '7d';
@@ -67,6 +68,7 @@ export interface BuildJwtInput {
   app_id?: string | null;
   admin_pool_index?: string | null;
   app_pool_index?: Record<string, string>;
+  projection_version?: number;
   actor_kind?: ActorKind;
   mfa_methods?: string[];
 }
@@ -80,7 +82,32 @@ export function buildSixLayerClaims(input: BuildJwtInput): SixLayerJwtClaims {
     app_id: input.app_id ?? null,
     admin_pool_index: input.admin_pool_index ?? null,
     app_pool_index: input.app_pool_index ?? {},
+    projection_version: input.projection_version ?? 0,
     actor: { kind: input.actor_kind ?? 'human' },
     amr: input.mfa_methods ?? ['pwd'],
   };
+}
+
+/**
+ * FR-IDN-4: best-effort lookup of the current projection_version for the
+ * subject+app+tenant tuple. Returns 0 when no projection row exists yet
+ * (P2 first-login case) — the policy precomp cache treats version=0 as a
+ * forced cache miss so DOWN is safe.
+ */
+export async function readProjectionVersion(
+  person_id: string,
+  app_id: string | null | undefined,
+  tenant_id: string | null | undefined,
+): Promise<number> {
+  if (!app_id || !tenant_id) return 0;
+  try {
+    const row = await dataService.one<{ projection_version: number }>(
+      `SELECT projection_version FROM projection.subject_view
+        WHERE person_id = $1 AND app_id = $2 AND tenant_id = $3`,
+      [person_id, app_id, tenant_id],
+    );
+    return Number(row?.projection_version ?? 0);
+  } catch {
+    return 0;
+  }
 }

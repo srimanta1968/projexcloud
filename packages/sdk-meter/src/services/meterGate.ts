@@ -1,4 +1,5 @@
 import crypto from 'crypto';
+import { getUsageCounter } from './usageCounter';
 
 export type GateDecision = 'ALLOW' | 'WARN' | 'DENY';
 
@@ -46,16 +47,69 @@ export interface ReportInput {
 }
 
 /**
- * In P1 the gate is emit-only — always ALLOW. Soft caps land in P4, hard caps in
- * P7. We still expose check() so consumers wire the call sites now and a future
- * upgrade is mechanical.
+ * Soft-cap resolver per FR-MET-* / sdk-billing FR-BIL-4 wiring.
+ * Returns the configured cap for (tenant, sku) or null when unset.
  */
-export async function check(_input: GateCheckInput): Promise<GateCheckResult> {
-  try {
-    return { decision: 'ALLOW', reason: null };
-  } catch (err) {
-    throw err;
+export type SoftCapResolver = (tenant_id: string, sku: string) => Promise<number | null>;
+
+/**
+ * Current-usage resolver — returns accrued units for (tenant, sku) within
+ * the current cap window (typically calendar month). Production swaps for
+ * a Redis counter; in-process default returns 0 so unconfigured deploys
+ * stay ALLOW.
+ */
+export type CurrentUsageResolver = (tenant_id: string, sku: string) => Promise<number>;
+
+let _softCapResolver: SoftCapResolver = async () => null;
+let _currentUsageResolver: CurrentUsageResolver = async () => 0;
+
+/**
+ * Gateway boot wires this with sdk-billing.getSoftCap() so the gate honors
+ * Finance-managed cap policy without sdk-meter importing sdk-billing.
+ */
+export function registerSoftCapResolver(resolver: SoftCapResolver): void {
+  _softCapResolver = resolver;
+}
+
+/**
+ * Gateway boot wires this with a Redis counter (production) or a
+ * meter.usage_event aggregate (dev). Defaults to 0 = always ALLOW.
+ */
+export function registerCurrentUsageResolver(resolver: CurrentUsageResolver): void {
+  _currentUsageResolver = resolver;
+}
+
+/**
+ * Two-phase gate, soft-cap mode (P4).
+ *
+ * Decisions:
+ *   - DENY: only when a hard-cap resolver returns true (P7+; not enabled here).
+ *   - WARN: soft cap exists AND current_usage >= cap.
+ *   - ALLOW: otherwise (no cap configured, or under cap).
+ *
+ * The middleware below stamps WARN onto X-ProjexCloud-Soft-Cap response
+ * header so clients can surface upgrade prompts without parsing bodies.
+ */
+export async function check(input: GateCheckInput): Promise<GateCheckResult> {
+  if (!input.tenant_id) return { decision: 'ALLOW', reason: null };
+
+  const cap = await _softCapResolver(input.tenant_id, input.sku);
+  if (cap === null || cap <= 0) return { decision: 'ALLOW', reason: null };
+
+  // Hot-path optimization: prefer the in-memory/Redis counter if installed.
+  // Falls through to the registered (potentially Postgres-backed) resolver
+  // when no counter is available.
+  const counter = getUsageCounter();
+  const used = counter
+    ? await counter.get(input.tenant_id, input.sku)
+    : await _currentUsageResolver(input.tenant_id, input.sku);
+  if (used >= cap) {
+    return {
+      decision: 'WARN',
+      reason: `soft cap exceeded for sku '${input.sku}': used ${used} of ${cap}`,
+    };
   }
+  return { decision: 'ALLOW', reason: null };
 }
 
 type Emitter = (event: UsageEventV1) => Promise<void> | void;
@@ -88,6 +142,15 @@ export async function report(input: ReportInput): Promise<UsageEventV1> {
       trace_id: input.trace_id ?? null,
     };
     await _emitter(event);
+
+    // Keep the soft-cap counter warm so check() stays O(1) on the gate path.
+    // Best-effort: a Redis blip never blocks the request.
+    const counter = getUsageCounter();
+    if (counter && input.dimensions.tenant_id) {
+      counter.incr(input.dimensions.tenant_id, input.sku, input.units).catch((err) => {
+        console.warn('[sdk-meter] usage counter incr failed:', (err as Error).message);
+      });
+    }
     return event;
   } catch (err) {
     throw err;

@@ -1,0 +1,30 @@
+{
+  "name": "POST /api/notifications/templates - Register template (platform default or tenant override)",
+  "endpoint": "/api/notifications/templates",
+  "method": "POST",
+  "requiresAuth": true,
+  "expectedStatus": 201,
+  "taskId": "0240664d-92bd-49c3-916d-165ccb77bde7",
+  "sprintId": "8ef1d09e-dd8e-4daf-8d03-54dcd9f812f8",
+  "featureId": "01ca8316-09cf-462d-bf9d-7eeac8745bff",
+  "epicId": "d83f7b6e-821c-4fe1-96e6-910eca8fbbfc",
+  "priority": 20,
+  "dependsOn": ["POST /api/auth/register"],
+  "testCases": [
+    {
+      "name": "Register platform-default email template",
+      "headers": { "Authorization": "Bearer {{cache:auth.register.response.data.token}}" },
+      "payload": {
+        "code": "{{dynamic:slug}}",
+        "channel": "email",
+        "locale_bundles": {
+          "en-US": { "body": "Hi {name}, welcome!" }
+        }
+      },
+      "expectedStatus": 201
+    }
+  ],
+  "expectedResponse": {
+    "data": { "template": { "template_id": "string", "code": "string", "channel": "string" } }
+  }
+}

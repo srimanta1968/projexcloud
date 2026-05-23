@@ -3,10 +3,11 @@ import {
   registerPerson,
   verifyEmailPassword,
   listMemberships,
+  mintAppIdentity,
   PersonExistsError,
   InvalidCredentialsError,
 } from '../../services/identityService';
-import { buildSixLayerClaims, signJwt } from '../../utils/jwt';
+import { buildSixLayerClaims, readProjectionVersion, signJwt } from '../../utils/jwt';
 import {
   validateLoginInput,
   validateRegisterInput,
@@ -65,6 +66,7 @@ export async function loginHandler(req: FastifyRequest, reply: FastifyReply): Pr
     let activeTenantId: string | null = null;
     let activeBuId: string | null = null;
 
+    let activeAppId: string | null = null;
     if (validation.value.tenant_id) {
       const memberships = await listMemberships(verified.person.person_id);
       const match = memberships.find((m) => m.tenant_id === validation.value.tenant_id);
@@ -77,13 +79,30 @@ export async function loginHandler(req: FastifyRequest, reply: FastifyReply): Pr
       }
       activeTenantId = match.tenant_id;
       activeBuId = match.bu_id;
+      // FR-IDN-5: first per-app login auto-mints an AppIdentity (L2).
+      // Best-effort: app_id derives from the optional login payload field;
+      // when absent we skip the auto-mint and rely on lazy mint at first use.
+      activeAppId = validation.value.app_id ?? null;
+      if (activeAppId) {
+        await mintAppIdentity(verified.person.person_id, activeAppId);
+      }
     }
+
+    // FR-IDN-4: include projection_version so policy precomp cache can
+    // invalidate decisions atomically across the entire JWT lifetime.
+    const projection_version = await readProjectionVersion(
+      verified.person.person_id,
+      activeAppId,
+      activeTenantId,
+    );
 
     const token = signJwt(buildSixLayerClaims({
       person_id: verified.person.person_id,
       email: verified.email,
       tenant_id: activeTenantId,
       bu_id: activeBuId,
+      app_id: activeAppId,
+      projection_version,
       actor_kind: 'human',
       mfa_methods: ['pwd'],
     }));

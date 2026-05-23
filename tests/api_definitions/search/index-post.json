@@ -1,0 +1,39 @@
+{
+  "name": "POST /api/search/index - Register/ensure per-tenant index",
+  "endpoint": "/api/search/index",
+  "method": "POST",
+  "requiresAuth": true,
+  "expectedStatus": 201,
+  "taskId": "ea41f08e-5b41-4dc6-825b-d74579a76b5f",
+  "sprintId": "8ef1d09e-dd8e-4daf-8d03-54dcd9f812f8",
+  "featureId": "02447110-6a41-4546-8d10-2107aa023f3a",
+  "epicId": "d83f7b6e-821c-4fe1-96e6-910eca8fbbfc",
+  "priority": 20,
+  "testability": "manual",
+  "skipReason": "Requires a real OpenSearch cluster (or a registered synthetic client in-process); validated by integration test.",
+  "dependsOn": ["POST /api/auth/register"],
+  "testCases": [
+    {
+      "name": "Register encounter entity index",
+      "headers": { "Authorization": "Bearer {{cache:auth.register.response.data.token}}" },
+      "payload": {
+        "tenant_id": "{{static:00000000-0000-0000-0000-000000000001}}",
+        "entity_kind": "{{static:encounter}}",
+        "field_mappings": {
+          "properties": {
+            "tenant_id": { "type": "keyword" },
+            "_scope_tags": { "type": "keyword" },
+            "status": { "type": "keyword" }
+          }
+        }
+      },
+      "expectedStatus": 201
+    }
+  ],
+  "expectedResponse": {
+    "data": { "definition": { "index_def_id": "string", "opensearch_alias": "string" } }
+  },
+  "captureResponse": {
+    "search.index.create.response.data.definition.index_def_id": "data.definition.index_def_id"
+  }
+}

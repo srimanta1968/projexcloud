@@ -1,0 +1,37 @@
+{
+  "name": "POST /api/approvals/requests - Submit approval request against a route",
+  "endpoint": "/api/approvals/requests",
+  "method": "POST",
+  "requiresAuth": true,
+  "expectedStatus": 201,
+  "taskId": "096441a3-9cf9-40e1-90ee-d0e0019da684",
+  "sprintId": "8ef1d09e-dd8e-4daf-8d03-54dcd9f812f8",
+  "featureId": "b273628f-6bee-4ad4-b5c0-9a9cb38da247",
+  "epicId": "d83f7b6e-821c-4fe1-96e6-910eca8fbbfc",
+  "priority": 30,
+  "testability": "manual",
+  "skipReason": "Depends on a registered route + persona; covered by integration test.",
+  "dependsOn": ["POST /api/auth/register", "POST /api/approvals/routes"],
+  "testCases": [
+    {
+      "name": "Submit refund approval request",
+      "headers": { "Authorization": "Bearer {{cache:auth.register.response.data.token}}" },
+      "payload": {
+        "tenant_id": "{{static:00000000-0000-0000-0000-000000000001}}",
+        "route_id": "{{cache:approvals.routes.create.response.data.route.route_id}}",
+        "subject_kind": "{{static:payment.refund}}",
+        "subject_id": "{{dynamic:slug}}",
+        "initiator_persona_id": "{{cache:auth.register.response.data.userId}}",
+        "reason": "{{static:Customer dispute - high value refund}}"
+      },
+      "expectedStatus": 201
+    }
+  ],
+  "expectedResponse": {
+    "data": { "request": { "request_id": "string", "status": "string" }, "pending_steps": "array" }
+  },
+  "captureResponse": {
+    "approvals.requests.create.response.data.request.request_id": "data.request.request_id",
+    "approvals.requests.create.response.data.pending_steps.0.step_id": "data.pending_steps.0.step_id"
+  }
+}

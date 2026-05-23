@@ -1,10 +1,28 @@
+/**
+ * @projexlight/sdk-meter — public barrel.
+ *
+ * Re-exports the two-phase metering gate (check + report), the pricing-catalog
+ * lookup helpers, the `@meter()` decorator metadata registry, the per-tenant
+ * chain verifier, and the verifier-scheduler background worker. Every public
+ * surface ships a typed export — types come from the modules below and are
+ * surfaced here for downstream consumers.
+ */
 export * as client from './client';
 export * as server from './server';
 export * as types from './services/meterGate';
 export * as events from './events';
 export { migrationsDir } from './db';
-export { check, report, setEmitter } from './services/meterGate';
-export type { UsageEventV1, MeterDimensions, GateDecision, ReportInput, GateCheckResult } from './services/meterGate';
+export { check, report, setEmitter, registerSoftCapResolver, registerCurrentUsageResolver } from './services/meterGate';
+export type { UsageEventV1, MeterDimensions, GateDecision, ReportInput, GateCheckResult, SoftCapResolver, CurrentUsageResolver } from './services/meterGate';
+export { installSoftCapHook } from './services/softCapMiddleware';
+export type { InstallSoftCapsOptions } from './services/softCapMiddleware';
+export {
+  installRedisUsageCounter,
+  registerUsageCounter,
+  getUsageCounter,
+  InMemoryUsageCounter,
+} from './services/usageCounter';
+export type { UsageCounter } from './services/usageCounter';
 export { lookupRate, listActiveRates } from './services/pricingCatalog';
 export type { PricingRate, PricingUnit, PricingMode } from './services/pricingCatalog';
 export { meter, registerMeterMetadata, getMeterMetadata, listMeterMetadata } from './decorators';

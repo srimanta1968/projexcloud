@@ -13,9 +13,9 @@ describe('AC-4 · Audit chain verifier catches tampering', () => {
   beforeAll(async () => { ctx = await startChaosCtx(); }, 180_000);
   afterAll(async () => { if (ctx) await ctx.stop(); });
 
-  it('detects entry_hash mismatch after row tamper', async () => {
+  it('detects entry_hash mismatch after row tamper', async (): Promise<void> => {
     // Append 3 entries to one pool's chain.
-    const POOL = 'app-healthcare-test';
+    const POOL: string = 'app-healthcare-test';
     for (let i = 0; i < 3; i++) {
       await appendAuditEntry({
         pool_index: POOL,
@@ -33,13 +33,18 @@ describe('AC-4 · Audit chain verifier catches tampering', () => {
 
     // Tamper: mutate the middle entry's payload directly in Postgres. Append-
     // only triggers will block this in production; we bypass for the drill
-    // by temporarily disabling them.
-    await ctx.query(`ALTER TABLE audit.entry DISABLE TRIGGER USER`);
-    await ctx.query(
-      `UPDATE audit.entry SET payload = '{"tampered":true}'::jsonb WHERE pool_index = $1 AND seq = 2`,
-      [POOL],
-    );
-    await ctx.query(`ALTER TABLE audit.entry ENABLE TRIGGER USER`);
+    // by temporarily disabling them. try/finally guarantees the trigger is
+    // re-enabled even if the UPDATE throws — without it a failed tamper
+    // would leave the suite database in a broken state for any later test.
+    try {
+      await ctx.query(`ALTER TABLE audit.entry DISABLE TRIGGER USER`);
+      await ctx.query(
+        `UPDATE audit.entry SET payload = '{"tampered":true}'::jsonb WHERE pool_index = $1 AND seq = 2`,
+        [POOL],
+      );
+    } finally {
+      await ctx.query(`ALTER TABLE audit.entry ENABLE TRIGGER USER`);
+    }
 
     // Verify now detects break.
     const broken = await verifyChain({ pool_index: POOL });

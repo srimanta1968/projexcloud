@@ -1,0 +1,33 @@
+{
+  "name": "PUT /api/hdk-sync/event-type-policies - Register event_type conflict policy (AC-13)",
+  "endpoint": "/api/hdk-sync/event-type-policies",
+  "method": "PUT",
+  "requiresAuth": true,
+  "expectedStatus": 200,
+  "taskId": "07a04c67-09aa-4656-9ec7-84301089abeb",
+  "sprintId": "8ef1d09e-dd8e-4daf-8d03-54dcd9f812f8",
+  "featureId": "83a11862-0f2a-43be-b8bf-c2bec019500d",
+  "epicId": "93a549d6-9a93-4d82-86bb-bac5167fa960",
+  "priority": 20,
+  "dependsOn": [
+    "POST /api/auth/register"
+  ],
+  "testCases": [
+    {
+      "name": "Register RGA-text policy for clinical notes",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.register.response.data.token}}"
+      },
+      "payload": {
+        "event_type": "{{static:clinical.note.edit.v1}}",
+        "conflict_policy": "{{static:crdt}}",
+        "strategy_detail": "{{static:crdt:rga-text}}",
+        "retention_class": "{{static:regulated}}"
+      },
+      "expectedStatus": 200
+    }
+  ],
+  "captureResponse": {
+    "hdk-sync.event-type-policies.create.response.data.policy.event_type": "data.policy.event_type"
+  }
+}

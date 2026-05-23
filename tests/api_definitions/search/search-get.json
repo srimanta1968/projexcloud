@@ -1,0 +1,30 @@
+{
+  "name": "GET /api/search?q= - ABAC-filtered free-text search",
+  "endpoint": "/api/search",
+  "method": "GET",
+  "requiresAuth": true,
+  "expectedStatus": 200,
+  "taskId": "f4b9d1f9-96d2-4b94-a180-50656f5ff9e2",
+  "sprintId": "8ef1d09e-dd8e-4daf-8d03-54dcd9f812f8",
+  "featureId": "02447110-6a41-4546-8d10-2107aa023f3a",
+  "epicId": "d83f7b6e-821c-4fe1-96e6-910eca8fbbfc",
+  "priority": 30,
+  "testability": "manual",
+  "skipReason": "Requires a registered tenant index with seeded documents; validated by integration test.",
+  "dependsOn": ["POST /api/auth/register", "POST /api/search/index"],
+  "testCases": [
+    {
+      "name": "Query encounters with free text",
+      "headers": { "Authorization": "Bearer {{cache:auth.register.response.data.token}}" },
+      "queryParams": {
+        "tenant_id": "{{static:00000000-0000-0000-0000-000000000001}}",
+        "entity_kind": "{{static:encounter}}",
+        "q": "{{static:open}}"
+      },
+      "expectedStatus": 200
+    }
+  ],
+  "expectedResponse": {
+    "data": { "hits": "array", "total": "number", "index_used": "string" }
+  }
+}

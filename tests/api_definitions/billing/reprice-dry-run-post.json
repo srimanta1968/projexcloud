@@ -1,0 +1,35 @@
+{
+  "name": "POST /api/billing/reprice-dry-run - What-if catalog comparison",
+  "endpoint": "/api/billing/reprice-dry-run",
+  "method": "POST",
+  "requiresAuth": true,
+  "expectedStatus": 201,
+  "taskId": "12c03a30-b9f7-4c46-8ad6-12584dad6739",
+  "sprintId": "8ef1d09e-dd8e-4daf-8d03-54dcd9f812f8",
+  "featureId": "27e7a551-ff73-49df-977a-1c1f56126bbb",
+  "epicId": "d83f7b6e-821c-4fe1-96e6-910eca8fbbfc",
+  "priority": 50,
+  "testability": "manual",
+  "skipReason": "Requires two published catalogs (baseline + target) plus usage rows; covered by integration test.",
+  "dependsOn": ["POST /api/auth/register"],
+  "testCases": [
+    {
+      "name": "Compare default-2026-01 vs proposed-2026-02",
+      "headers": { "Authorization": "Bearer {{cache:auth.register.response.data.token}}" },
+      "payload": {
+        "tenant_id": "{{static:00000000-0000-0000-0000-000000000001}}",
+        "period_start": "{{static:2026-01-01}}",
+        "period_end": "{{static:2026-01-31}}",
+        "baseline_catalog_id": "{{static:default-2026-01}}",
+        "target_catalog_id": "{{static:proposed-2026-02}}",
+        "usage": [
+          { "sku": "{{static:api.call}}", "app_id": "admin", "bu_id": null, "persona_kind": null, "encounter_id": null, "actor_kind": "service", "units": 50000 }
+        ]
+      },
+      "expectedStatus": 201
+    }
+  ],
+  "expectedResponse": {
+    "data": { "dry_run": { "dry_run_id": "string", "delta_amount": "string" }, "baseline_total": "number", "target_total": "number" }
+  }
+}

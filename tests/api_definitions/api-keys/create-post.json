@@ -1,0 +1,40 @@
+{
+  "name": "POST /api/api-keys - Issue new API key",
+  "endpoint": "/api/api-keys",
+  "method": "POST",
+  "requiresAuth": true,
+  "expectedStatus": 201,
+  "taskId": "28eb95e9-75eb-4ea9-bba6-dad10acf0ad8",
+  "sprintId": "8ef1d09e-dd8e-4daf-8d03-54dcd9f812f8",
+  "featureId": "7a33ef6c-2dad-4c40-a8a2-f414c13e6c48",
+  "epicId": "00996d23-f667-4a82-9285-7728ba357e7b",
+  "priority": 30,
+  "testability": "manual",
+  "skipReason": "Requires a real tenant_id from POST /api/tenants; covered by integration test.",
+  "dependsOn": ["POST /api/auth/register"],
+  "testCases": [
+    {
+      "name": "Issue a key with crm + engagement scopes",
+      "headers": { "Authorization": "Bearer {{cache:auth.register.response.data.token}}" },
+      "payload": {
+        "tenant_id": "{{static:00000000-0000-0000-0000-000000000001}}",
+        "scopes": ["crm.contact.read", "engagement.encounter.create"],
+        "rate_limit_rpm": 600
+      },
+      "expectedStatus": 201
+    }
+  ],
+  "expectedResponse": {
+    "data": {
+      "key": {
+        "key_id": "string",
+        "prefix": "string",
+        "scopes": "array"
+      },
+      "plaintext": "string"
+    }
+  },
+  "captureResponse": {
+    "api-keys.create.response.data.key.key_id": "data.key.key_id"
+  }
+}

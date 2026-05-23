@@ -1,0 +1,29 @@
+{
+  "name": "POST /api/webhooks/endpoints/:endpoint_id/subscribe - Subscribe to event_type",
+  "endpoint": "/api/webhooks/endpoints/:endpoint_id/subscribe",
+  "method": "POST",
+  "requiresAuth": true,
+  "expectedStatus": 201,
+  "taskId": "c9735690-fae6-4db6-8dda-cfadae86876a",
+  "sprintId": "8ef1d09e-dd8e-4daf-8d03-54dcd9f812f8",
+  "featureId": "edce9080-4593-4e84-a4c6-54309b62e01e",
+  "epicId": "d83f7b6e-821c-4fe1-96e6-910eca8fbbfc",
+  "priority": 30,
+  "testability": "manual",
+  "skipReason": "Depends on a registered endpoint; covered by integration test.",
+  "dependsOn": ["POST /api/auth/register", "POST /api/webhooks/endpoints"],
+  "testCases": [
+    {
+      "name": "Subscribe to billing.invoice.finalized.v1",
+      "headers": { "Authorization": "Bearer {{cache:auth.register.response.data.token}}" },
+      "pathParams": { "endpoint_id": "{{cache:webhooks.endpoints.create.response.data.endpoint.endpoint_id}}" },
+      "payload": {
+        "event_type": "{{static:billing.invoice.finalized.v1}}"
+      },
+      "expectedStatus": 201
+    }
+  ],
+  "expectedResponse": {
+    "data": { "subscription": { "subscription_id": "string", "event_type": "string" } }
+  }
+}
