@@ -1,0 +1,29 @@
+{
+  "endpoint": "/api/agent-runtime/runs/:run_id/replay",
+  "method": "POST",
+  "taskId": "6e257875-c807-4eda-ac0e-d8b9615ea1af",
+  "description": "Replay an agent run against the recorded model snapshot. Returns {kind:'matched'|'snapshot-drift'|'diverged', ...}. AC-5.",
+  "requiresAuth": true,
+  "priority": 200,
+  "dependsOn": ["POST /api/auth/register"],
+  "testability": "manual",
+  "skipReason": "Replay requires a populated agent_run + execution_log_entry fixture; round-trip exercised by AC-5 chaos drill, not the auto API runner.",
+  "testCases": [
+    {
+      "name": "Manual: replay returns matched verdict for a clean run",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.register.response.data.token}}"
+      },
+      "pathParams": {
+        "run_id": "{{static:fixture-run-id}}"
+      },
+      "payload": {
+        "dryRun": true
+      },
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "success": true
+      }
+    }
+  ]
+}

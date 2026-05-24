@@ -1,0 +1,95 @@
+name: Perf
+
+# P6A perf gates (PRD §6 budgets):
+#   N-1 sdk-ai-gateway latency overhead ≤ 10ms p99
+#   N-2 capability-token mint ≤ 5ms p99
+#   N-3 MCP invoke proxy overhead ≤ 50ms p99
+#
+# Runs on PRs into main and on a nightly cron so we catch silent
+# regressions even between releases. Each bench is a vitest file
+# under tests/perf/ that fails the job on budget breach.
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'packages/sdk-ai-gateway/**'
+      - 'packages/sdk-agent-runtime/**'
+      - 'packages/sdk-mcp-bridge/**'
+      - 'packages/contracts/**'
+      - 'tests/perf/**'
+      - '.github/workflows/perf.yml'
+  schedule:
+    - cron: '0 7 * * *'
+  workflow_dispatch:
+
+jobs:
+  perf:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: projexcloud_db
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7-alpine
+        ports: ['6379:6379']
+
+    env:
+      DB_HOST: localhost
+      DB_PORT: '5432'
+      DB_USER: postgres
+      DB_PASSWORD: postgres
+      DB_NAME: projexcloud_db
+      REDIS_HOST: localhost
+      REDIS_ENABLED: 'true'
+      KAFKA_ENABLED: 'false'
+      CLICKHOUSE_ENABLED: 'false'
+      # CI-only signing key — never reused in any deployed env
+      CAPABILITY_TOKEN_SIGNING_KEY: 0000000000000000000000000000000000000000000000000000000000000000
+      AI_GATEWAY_REQUIRED_PROVIDERS: openai
+      OPENAI_API_KEY: sk-ci-placeholder
+      NODE_ENV: test
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v3
+        with: { version: 9.0.0 }
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'pnpm'
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Build
+        run: pnpm build
+
+      - name: N-1 · AI Gateway overhead (≤10ms p99)
+        run: pnpm exec vitest run tests/perf/n1-ai-gateway-overhead.bench.ts
+        env:
+          N1_ITERATIONS: '10000'
+          N1_BUDGET_P99_MS: '10'
+
+      - name: N-2 · Capability-token mint (≤5ms p99)
+        run: pnpm exec vitest run tests/perf/n2-cap-token-mint.bench.ts
+        env:
+          N2_ITERATIONS: '10000'
+          N2_BUDGET_P99_MS: '5'
+
+      - name: N-3 · MCP invoke overhead (≤50ms p99)
+        run: pnpm exec vitest run tests/perf/n3-mcp-invoke.bench.ts
+        env:
+          N3_ITERATIONS: '2000'
+          N3_BUDGET_P99_MS: '50'

@@ -1,0 +1,39 @@
+{
+  "endpoint": "/api/ai-gateway/complete",
+  "method": "POST",
+  "taskId": "33b1ff5b-534c-4fd3-bc2b-b2ac3e0e7d33",
+  "description": "Non-streaming LLM completion. Pipeline: route resolution → PII redaction → credential unwrap → retry-wrapped provider call → ai_gateway.completion insert + ai-gateway.complete.v1 audit. Closes AC-1.",
+  "requiresAuth": true,
+  "priority": 300,
+  "dependsOn": ["POST /api/auth/register"],
+  "testability": "manual",
+  "skipReason": "Requires a registered provider adapter + seeded ai_gateway.provider + route_rule fixtures; exercised by AC-1 integration test, not the API runner.",
+  "testCases": [
+    {
+      "name": "Manual: completion records consent + budget + redaction + trace",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.register.response.data.token}}"
+      },
+      "payload": {
+        "request": {
+          "model": "{{static:claude-opus-4-7}}",
+          "prompt": "{{static:Hello}}",
+          "max_tokens": 100,
+          "task_tag": "{{static:test}}",
+          "provider_hint": "{{static:anthropic}}"
+        },
+        "context": {
+          "agent_id": "{{dynamic:uuid}}",
+          "run_id": "{{dynamic:uuid}}",
+          "acting_persona_id": "{{dynamic:uuid}}",
+          "tenant_id": null,
+          "trace_id": "{{dynamic:uuid}}",
+          "ttl_deadline": "{{dynamic:futuredatetime}}",
+          "agent_chain": []
+        }
+      },
+      "expectedStatus": 200,
+      "expectedResponse": { "success": true }
+    }
+  ]
+}

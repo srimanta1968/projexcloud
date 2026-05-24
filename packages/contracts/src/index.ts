@@ -7,6 +7,9 @@ export * from './events';
 export * from './audit';
 export * from './identity';
 export * from './stubs';
+export * from './p6a-agent';
+export * from './tool-manifest';
+export * from './trace-context';
 
 /**
  * `@cross_pool_sanctioned(reason)` - marker decorator recognized by the OC-5

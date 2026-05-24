@@ -1,0 +1,32 @@
+{
+  "endpoint": "/api/agent-runtime/agents",
+  "method": "POST",
+  "taskId": "d9609d02-6991-45a5-94dd-9c10e02e6448",
+  "description": "Create an agent_definition. Required: name, acting_persona_id, tier, vector_namespace, created_by. Returns the row including server-generated agent_id + timestamps.",
+  "requiresAuth": true,
+  "priority": 50,
+  "dependsOn": ["POST /api/auth/register"],
+  "captureResponse": {
+    "agent-runtime-agents.create.response.data.agent_id": "data.agent_id"
+  },
+  "testCases": [
+    {
+      "name": "Create agent definition",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.register.response.data.token}}"
+      },
+      "payload": {
+        "tenant_id": null,
+        "name": "{{dynamic:name}}",
+        "acting_persona_id": "{{dynamic:uuid}}",
+        "tier": "{{static:sync}}",
+        "default_ttl_seconds": 30,
+        "vector_namespace": "{{static:test_namespace_default}}",
+        "tool_manifest": ["crm.contact.create"],
+        "created_by": "{{static:test-user}}"
+      },
+      "expectedStatus": 201,
+      "expectedResponse": { "success": true }
+    }
+  ]
+}

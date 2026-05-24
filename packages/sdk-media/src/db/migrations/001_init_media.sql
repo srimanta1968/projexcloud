@@ -43,7 +43,7 @@ CREATE TABLE IF NOT EXISTS media.signed_url (
 );
 
 CREATE INDEX IF NOT EXISTS signed_url_blob_idx    ON media.signed_url (blob_id, kind);
-CREATE INDEX IF NOT EXISTS signed_url_active_idx  ON media.signed_url (expires_at) WHERE expires_at > now();
+CREATE INDEX IF NOT EXISTS signed_url_active_idx  ON media.signed_url (expires_at);
 
 -- media.transcode_job — per §4.1
 -- output_blob_ids stores the resulting variant blob_ids (text[] of UUIDs).
