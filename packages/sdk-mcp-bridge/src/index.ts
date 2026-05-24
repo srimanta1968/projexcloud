@@ -27,9 +27,18 @@ export type {
 export { invokeMcpTool } from './services/mcpInvocation';
 export type { InvokeMcpToolInput, InvokeMcpToolResult } from './services/mcpInvocation';
 
-// sdk-semantic stub (S-3) — TK-3322.
-export { registerCapability, _resetSemanticStubWarning } from './services/semanticStub';
-export type { CapabilityDescriptor, RegisterCapabilityResult } from './services/semanticStub';
+// sdk-semantic CapabilityGraph wiring (FR-SEM-9 / TK-3381). Each MCP tool
+// is registered into semantic.capability_graph_edge on server-register and
+// soft-deprecated on server-disable. Re-exported here for callers that
+// want to register tools manually (e.g. bypassing transport probe).
+export {
+  registerMcpCapability,
+  deprecateMcpCapabilities,
+} from '@projexlight/sdk-semantic';
+export type {
+  RegisterMcpCapabilityInput,
+  RegisterMcpCapabilityResult,
+} from '@projexlight/sdk-semantic';
 
 // Transport abstraction (FR-MCP-4) — TK-3294.
 export { openTransport } from './services/mcpTransport';

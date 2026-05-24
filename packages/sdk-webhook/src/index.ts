@@ -8,7 +8,17 @@ export {
   listEndpointsForTenant,
   EndpointNotFoundError,
   UnregisteredEventTypeError,
+  WebhookUrlRejectedError,
 } from './services/endpointRegistry';
+
+// P8 Variant C — webhook URL validator hook. sdk-onprem registers a
+// validator at boot that refuses external URLs in air-gap-strict mode.
+export {
+  setExternalUrlValidator,
+  validateExternalUrl,
+  _resetExternalUrlValidator,
+} from './services/urlValidator';
+export type { ExternalUrlValidator, UrlValidationResult } from './services/urlValidator';
 export { publishEvent } from './services/outboxWriter';
 export {
   startDeliveryWorker,

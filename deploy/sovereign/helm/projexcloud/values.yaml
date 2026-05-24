@@ -1,0 +1,74 @@
+# ProjexCloud Sovereign Region — Helm values (P8 Variant B starter).
+#
+# Operators override per-region in their own values.{region}.yaml. The
+# defaults below assume the strictest posture (no internet egress, no
+# cross-region routes, terminal federation, in-cluster registry).
+#
+# Required overrides: region_id, regime, operator_partner, image.registry,
+# *PoolDsn (from terraform outputs), kmsProvider.
+
+# Sovereign region identity — written to sovereign.region_config on first boot.
+region_id: ""               # e.g. "us-gov-east-1"
+regime: ""                  # fedramp-high | il5 | pipl | eu-sovereign | uae-trd
+operator_partner: ""        # "msp-name"
+terminalFederation: true    # FR-SOV-2 — Pool Router treats this as terminal.
+
+# Postgres pool DSNs — supplied by terraform outputs.
+adminPoolDsn: ""
+appPoolDsn: ""
+evidencePoolDsn: ""
+
+# KMS — must be a region-resident provider.
+kmsProvider: ""             # e.g. "aws-kms-govcloud", "tencent-kms", "ovh-kms"
+
+# Container image — operator points at their in-region OCI registry.
+image:
+  registry: "in-region-registry.local"
+  repository: "projexcloud/api-gateway"
+  tag: "1.0.0"
+  pullPolicy: IfNotPresent
+
+# Replica count.
+replicaCount: 3
+
+# Resource requests.
+resources:
+  requests:
+    cpu: "1"
+    memory: "2Gi"
+  limits:
+    cpu: "4"
+    memory: "8Gi"
+
+# Sovereign network policies — enforce no egress beyond the region.
+networkPolicies:
+  enabled: true
+  allowEgressInternet: false      # phone-home blocked at L3 (FR-SOV-2)
+  allowCrossRegion: false         # cross-region routes blocked (FR-SOV-2)
+  allowDns:
+    - "kube-dns.kube-system.svc.cluster.local"
+
+# Service account + RBAC — operator-managed.
+serviceAccount:
+  create: true
+  annotations: {}
+
+# Audit + leak monitor.
+audit:
+  retentionDays: 2555             # 7y for FedRAMP / IL5 / PIPL.
+leakMonitor:
+  enabled: true                    # Y-P8-6 detector consumes Cilium events.
+  ciliumIntegration: true
+
+# Disable phone-home telemetry (Y-P8-9).
+telemetry:
+  phoneHome: false
+
+# AI Gateway local models (typical sovereign workloads use local-only).
+aiGateway:
+  localModelsOnly: true
+  models:
+    - id: llama-3.1-70b-instruct
+      backend: ollama
+      endpoint: "http://ollama.projexcloud.svc.cluster.local:11434"
+      quantization: int8

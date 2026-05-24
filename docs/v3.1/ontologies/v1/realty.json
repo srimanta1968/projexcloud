@@ -1,0 +1,102 @@
+{
+  "name": "realty-v1",
+  "version": "1.0.0",
+  "object_types": [
+    {
+      "name": "Person",
+      "attribute_schema": {
+        "type": "object",
+        "properties": {
+          "person_id":  { "type": "string" },
+          "household_size": { "type": "number" },
+          "mobility_status": { "type": "string", "enum": ["full","limited","wheelchair"] }
+        },
+        "required": ["person_id"]
+      },
+      "backed_by": "persona.persona_ext:realty_person"
+    },
+    {
+      "name": "Property",
+      "attribute_schema": {
+        "type": "object",
+        "properties": {
+          "property_id": { "type": "string" },
+          "address_id":  { "type": "string" },
+          "elevator":    { "type": "boolean" },
+          "stairs_only": { "type": "boolean" }
+        },
+        "required": ["property_id","address_id"]
+      },
+      "backed_by": "persona.persona_ext:property"
+    },
+    {
+      "name": "Lease",
+      "attribute_schema": {
+        "type": "object",
+        "properties": {
+          "lease_id":    { "type": "string" },
+          "property_id": { "type": "string" },
+          "person_id":   { "type": "string" },
+          "term_months": { "type": "number" }
+        },
+        "required": ["lease_id","property_id","person_id"]
+      },
+      "backed_by": "persona.persona_ext:lease"
+    },
+    {
+      "name": "Visit",
+      "attribute_schema": {
+        "type": "object",
+        "properties": {
+          "visit_id":    { "type": "string" },
+          "property_id": { "type": "string" },
+          "person_id":   { "type": "string" },
+          "scheduled_at":{ "type": "string", "format": "date-time" }
+        },
+        "required": ["visit_id","property_id","person_id"]
+      },
+      "backed_by": "engagement.encounter"
+    }
+  ],
+  "relation_types": [
+    {
+      "name": "owns",
+      "from_object_type_name": "Person",
+      "to_object_type_name": "Property",
+      "cardinality": "N:N"
+    },
+    {
+      "name": "leased-to",
+      "from_object_type_name": "Property",
+      "to_object_type_name": "Person",
+      "cardinality": "N:N"
+    },
+    {
+      "name": "viewed",
+      "from_object_type_name": "Person",
+      "to_object_type_name": "Property",
+      "cardinality": "N:N"
+    }
+  ],
+  "capability_graph": [
+    {
+      "tool_sku": "realty.property.assess-accessibility",
+      "object_type_name": "Property",
+      "pre_conditions": {},
+      "post_conditions": { "produces": "accessibility_report" }
+    },
+    {
+      "tool_sku": "realty.visit.schedule",
+      "object_type_name": "Property",
+      "pre_conditions": { "requires": ["scheduled_at"] },
+      "post_conditions": { "produces": "visit_id" }
+    },
+    {
+      "tool_sku": "realty.lease.draft",
+      "object_type_name": "Person",
+      "requires_relation_name": "viewed",
+      "pre_conditions": { "requires": ["term_months"] },
+      "post_conditions": { "produces": "lease_id" }
+    }
+  ]
+}

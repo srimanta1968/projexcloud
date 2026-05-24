@@ -7,9 +7,8 @@
  *   P2  · IQLGrammar, ReBACTraversalBudget
  *   P3  · ConflictPolicy
  *   P6A · AgentIdentity
- *   P6B · SemanticObject, SemanticRelation, CapabilityGraph, Ontology,
- *         SemanticIntent, SemanticPolicy
- *   P7  · PoolFederationManifest (full runtime; hooks already in routing schema)
+ *   P6B · concrete types now live in p6b-knowledge.ts — stubs retired
+ *   P7  · concrete types now live in p7-field.ts — stubs retired
  */
 
 // ---- P2 stubs ------------------------------------------------------------
@@ -45,37 +44,8 @@ export interface AgentIdentity {
   __reserved_for: 'P6A.sdk-agent-runtime';
 }
 
-// ---- P6B stubs -----------------------------------------------------------
+// ---- P6B types now live in p6b-knowledge.ts (landed) ---------------------
 
-export interface SemanticObject {
-  __reserved_for: 'P6B.sdk-semantic';
-}
-export interface SemanticRelation {
-  __reserved_for: 'P6B.sdk-semantic';
-}
-export interface CapabilityGraph {
-  __reserved_for: 'P6B.sdk-semantic';
-}
-export interface Ontology {
-  __reserved_for: 'P6B.sdk-semantic';
-}
-export interface SemanticIntent {
-  __reserved_for: 'P6B.sdk-semantic';
-}
-export interface SemanticPolicy {
-  __reserved_for: 'P6B.sdk-semantic';
-}
-
-// ---- P7 stubs ------------------------------------------------------------
-
-/**
- * Pool federation manifest reserved for P7. Hooks are already in the routing
- * schema (`routing.pool_federation_manifest`); the runtime client lands in P7.
- */
-export interface PoolFederationManifest {
-  __reserved_for: 'P7.sdk-pool-router';
-  manifest_id: string;
-  tenant_id: string;
-  pool_indexes: string[];
-  query_class: 'resolver' | 'dsar' | 'analytics' | 'lineage';
-}
+// ---- P7 types now live in p7-field.ts (landed) --------------------------
+// PoolFederationManifest moved to p7-field.ts as the concrete type backing
+// routing.pool_federation_manifest.

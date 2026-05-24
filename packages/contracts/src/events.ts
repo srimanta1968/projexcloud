@@ -320,6 +320,141 @@ export const EVENT_TYPE_REGISTRY: Record<string, EventTypeMetadata> = {
   /* --- connector-github (§5.5) --- */
   'connector.github.webhook.received.v1':     { event_type: 'connector.github.webhook.received.v1',     retention_class: 'operational', conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
   'connector.github.pr.upserted.v1':          { event_type: 'connector.github.pr.upserted.v1',          retention_class: 'operational', conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+
+  /* ============================================================
+   * P6B additions per docs/v3.1/prd/P6B-Knowledge-Semantic.md §5.x.
+   * Closes Gates G8 (cross-pool lineage projection) + G9 (Semantic
+   * Intent + Policy). Additive-only — never remove or mutate rows.
+   * ============================================================ */
+
+  /* --- sdk-knowledge-rag (§5.1) --- */
+  'rag.corpus.created.v1':                    { event_type: 'rag.corpus.created.v1',                    retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+  'rag.document.indexed.v1':                  { event_type: 'rag.document.indexed.v1',                  retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+  'rag.document.reindexed.v1':                { event_type: 'rag.document.reindexed.v1',                retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+  'rag.retrieval.completed.v1':               { event_type: 'rag.retrieval.completed.v1',               retention_class: 'operational', conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+
+  /* --- sdk-parsing (§5.2) — 8-stage pipeline --- */
+  'parsing.job.queued.v1':                    { event_type: 'parsing.job.queued.v1',                    retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+  'parsing.stage.completed.v1':               { event_type: 'parsing.stage.completed.v1',               retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+  'parsing.field.extracted.v1':               { event_type: 'parsing.field.extracted.v1',               retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+  'parsing.review.routed.v1':                 { event_type: 'parsing.review.routed.v1',                 retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+  'parsing.job.completed.v1':                 { event_type: 'parsing.job.completed.v1',                 retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+
+  /* --- sdk-conversation (§5.3) --- */
+  'conversation.session.opened.v1':           { event_type: 'conversation.session.opened.v1',           retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+  'conversation.turn.recorded.v1':            { event_type: 'conversation.turn.recorded.v1',            retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+  'conversation.handoff.v1':                  { event_type: 'conversation.handoff.v1',                  retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+  'conversation.session.closed.v1':           { event_type: 'conversation.session.closed.v1',           retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+
+  /* --- sdk-recommendation (§5.4) --- */
+  'recommendation.model.trained.v1':          { event_type: 'recommendation.model.trained.v1',          retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+  'recommendation.suggestion.generated.v1':   { event_type: 'recommendation.suggestion.generated.v1',   retention_class: 'operational', conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+  'recommendation.feedback.captured.v1':      { event_type: 'recommendation.feedback.captured.v1',      retention_class: 'operational', conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+
+  /* --- sdk-analytics (§5.5) — Iceberg lakehouse ramp --- */
+  'analytics.rollup.executed.v1':             { event_type: 'analytics.rollup.executed.v1',             retention_class: 'operational', conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+  'analytics.extract.published.v1':           { event_type: 'analytics.extract.published.v1',           retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+
+  /* --- sdk-lineage (§5.6 · G8 closer) --- */
+  'lineage.edge.emitted.v1':                  { event_type: 'lineage.edge.emitted.v1',                  retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+  'lineage.projection.queued.v1':             { event_type: 'lineage.projection.queued.v1',             retention_class: 'operational', conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+  'lineage.projection.completed.v1':          { event_type: 'lineage.projection.completed.v1',          retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+  'lineage.projection.failed.v1':             { event_type: 'lineage.projection.failed.v1',             retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+
+  /* --- sdk-semantic (§5.7 · G9 closer) --- */
+  'semantic.ontology.registered.v1':          { event_type: 'semantic.ontology.registered.v1',          retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+  'semantic.ontology.deprecated.v1':          { event_type: 'semantic.ontology.deprecated.v1',          retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+  'semantic.intent.planned.v1':               { event_type: 'semantic.intent.planned.v1',               retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+  'semantic.plan.executed.v1':                { event_type: 'semantic.plan.executed.v1',                retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+  'semantic.policy.evaluated.v1':             { event_type: 'semantic.policy.evaluated.v1',             retention_class: 'operational', conflict_policy: 'lww',            schema_state: 'active', compaction_policy: 'lww',  schema_version: 1 },
+  'semantic.bridge.created.v1':               { event_type: 'semantic.bridge.created.v1',               retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+
+  /* --- connector-snowflake (§5.8) --- */
+  'snowflake.installed.v1':                   { event_type: 'snowflake.installed.v1',                   retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+  'snowflake.binding.created.v1':             { event_type: 'snowflake.binding.created.v1',             retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+  'snowflake.sync.completed.v1':              { event_type: 'snowflake.sync.completed.v1',              retention_class: 'operational', conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+  'snowflake.query.executed.v1':              { event_type: 'snowflake.query.executed.v1',              retention_class: 'operational', conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+
+  /* ============================================================
+   * P7 additions per docs/v3.1/prd/P7-Field-Hyperscale.md §5.x.
+   * Closes G10 (federation runtime) + G11 (Iceberg lakehouse) +
+   * meter hard-cap (DENY). Additive-only — never remove or mutate.
+   * ============================================================ */
+
+  /* --- sdk-storm (§5.1) --- */
+  'storm.event.ingested.v1':                  { event_type: 'storm.event.ingested.v1',                  retention_class: 'operational', conflict_policy: 'lww',            schema_state: 'active', compaction_policy: 'lww',  schema_version: 1 },
+  'storm.intensity.updated.v1':               { event_type: 'storm.intensity.updated.v1',               retention_class: 'operational', conflict_policy: 'lww',            schema_state: 'active', compaction_policy: 'lww',  schema_version: 1 },
+
+  /* --- sdk-dispatch (§5.2) --- */
+  'dispatch.task.enqueued.v1':                { event_type: 'dispatch.task.enqueued.v1',                retention_class: 'operational', conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+  'dispatch.task.assigned.v1':                { event_type: 'dispatch.task.assigned.v1',                retention_class: 'operational', conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+  'dispatch.task.completed.v1':               { event_type: 'dispatch.task.completed.v1',               retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+  'dispatch.route.optimized.v1':              { event_type: 'dispatch.route.optimized.v1',              retention_class: 'operational', conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+
+  /* --- sdk-assignment (§5.3) --- */
+  'assignment.assigned.v1':                   { event_type: 'assignment.assigned.v1',                   retention_class: 'operational', conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+  'assignment.accepted.v1':                   { event_type: 'assignment.accepted.v1',                   retention_class: 'operational', conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+  'assignment.rejected.v1':                   { event_type: 'assignment.rejected.v1',                   retention_class: 'operational', conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+
+  /* --- sdk-lead-scoring (§5.4) --- */
+  'lead-scoring.scored.v1':                   { event_type: 'lead-scoring.scored.v1',                   retention_class: 'operational', conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+  'lead-scoring.model.trained.v1':            { event_type: 'lead-scoring.model.trained.v1',            retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+
+  /* --- sdk-evidence (§5.5) --- Chain-of-custody linchpin. */
+  'evidence.captured.v1':                     { event_type: 'evidence.captured.v1',                     retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+  'evidence.variant.created.v1':              { event_type: 'evidence.variant.created.v1',              retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+  'evidence.chain.appended.v1':               { event_type: 'evidence.chain.appended.v1',               retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+  'evidence.legal-export.generated.v1':       { event_type: 'evidence.legal-export.generated.v1',       retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+  'evidence.shredded.v1':                     { event_type: 'evidence.shredded.v1',                     retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+  'evidence.sealed.v1':                       { event_type: 'evidence.sealed.v1',                       retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+
+  /* --- sdk-diagnostic-telemetry (§5.6) --- */
+  'diagnostic.crash.reported.v1':             { event_type: 'diagnostic.crash.reported.v1',             retention_class: 'operational', conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+  'diagnostic.health.captured.v1':            { event_type: 'diagnostic.health.captured.v1',            retention_class: 'operational', conflict_policy: 'lww',            schema_state: 'active', compaction_policy: 'lww',  schema_version: 1 },
+  'diagnostic.session-replay.event.v1':       { event_type: 'diagnostic.session-replay.event.v1',       retention_class: 'operational', conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+
+  /* --- Pool federation runtime (§5.7 · G10) --- */
+  'federation.route.resolved.v1':             { event_type: 'federation.route.resolved.v1',             retention_class: 'operational', conflict_policy: 'lww',            schema_state: 'active', compaction_policy: 'lww',  schema_version: 1 },
+  'federation.failover.executed.v1':          { event_type: 'federation.failover.executed.v1',          retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+
+  /* --- Iceberg lakehouse federation (§5.8 · G11) --- */
+  'iceberg.table.compacted.v1':               { event_type: 'iceberg.table.compacted.v1',               retention_class: 'operational', conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+  'iceberg.query.executed.v1':                { event_type: 'iceberg.query.executed.v1',                retention_class: 'operational', conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+
+  /* --- sdk-meter hard-cap mode (§12) --- Was reserved in P1; activates in P7. */
+  'usage.hardcap.exceeded.v1':                { event_type: 'usage.hardcap.exceeded.v1',                retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+  'usage.hardcap.override.applied.v1':        { event_type: 'usage.hardcap.override.applied.v1',        retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+
+  /* --- HDK measure + watermark (§5.9) --- */
+  'hdk-measure.captured.v1':                  { event_type: 'hdk-measure.captured.v1',                  retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+  'hdk-watermark.applied.v1':                 { event_type: 'hdk-watermark.applied.v1',                 retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+
+  /* ============================================================
+   * P8 additions per docs/v3.1/prd/P8-Deployment-Variants.md §5.A-5.D.
+   * Four variants run in parallel; no platform-wide gate. Additive-only.
+   * ============================================================ */
+
+  /* --- Variant A: BYOK / CMEK (§5.A) --- */
+  'byok.binding.created.v1':                  { event_type: 'byok.binding.created.v1',                  retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+  'byok.cmk.used.v1':                         { event_type: 'byok.cmk.used.v1',                         retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+  'byok.cmk.rotated.v1':                      { event_type: 'byok.cmk.rotated.v1',                      retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+  'byok.binding.revoked.v1':                  { event_type: 'byok.binding.revoked.v1',                  retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+
+  /* --- Variant B: Sovereign Cloud (§5.B) --- */
+  'sovereign.bundle.shipped.v1':              { event_type: 'sovereign.bundle.shipped.v1',              retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+  'sovereign.bundle.applied.v1':              { event_type: 'sovereign.bundle.applied.v1',              retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+  'sovereign.attestation.issued.v1':          { event_type: 'sovereign.attestation.issued.v1',          retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+  'sovereign.leak.alert.v1':                  { event_type: 'sovereign.leak.alert.v1',                  retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+
+  /* --- Variant C: On-Prem / Air-Gapped (§5.C) --- */
+  'onprem.bundle.applied.v1':                 { event_type: 'onprem.bundle.applied.v1',                 retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+  'onprem.bundle.rolled-back.v1':             { event_type: 'onprem.bundle.rolled-back.v1',             retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+  'onprem.local-llm.loaded.v1':               { event_type: 'onprem.local-llm.loaded.v1',               retention_class: 'operational', conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+
+  /* --- Variant D: Active-Active Tier-G+ (§5.D) --- */
+  'active-active.profile.activated.v1':       { event_type: 'active-active.profile.activated.v1',       retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+  'active-active.failover.drill.v1':          { event_type: 'active-active.failover.drill.v1',          retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+  'active-active.tier.downgraded.v1':         { event_type: 'active-active.tier.downgraded.v1',         retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
 };
 
 export type RegisteredEventType = keyof typeof EVENT_TYPE_REGISTRY;

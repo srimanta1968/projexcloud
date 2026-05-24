@@ -38,3 +38,15 @@ export type { RedactResult } from './services/piiRedactor';
 
 // Completion service (FR-AGW-1..9 / AC-1) — TK-3289 service body + TK-3290 REST.
 export { complete, stream } from './services/completionService';
+
+// P8 Variant C — local provider preference hook for on-prem deployments.
+// sdk-onprem registers a resolver at boot; selectRoute() consults it first.
+export {
+  setLocalProviderResolver,
+  resolveLocalProvider,
+  _resetLocalProviderResolver,
+} from './services/localProviderResolver';
+export type {
+  LocalProviderResolver,
+  LocalProviderHit,
+} from './services/localProviderResolver';

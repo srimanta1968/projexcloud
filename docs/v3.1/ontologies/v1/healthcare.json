@@ -1,0 +1,157 @@
+{
+  "name": "healthcare-v1",
+  "version": "1.0.0",
+  "object_types": [
+    {
+      "name": "Patient",
+      "attribute_schema": {
+        "type": "object",
+        "properties": {
+          "patient_id": { "type": "string" },
+          "person_id":  { "type": "string" },
+          "primary_language": { "type": "string" },
+          "preferred_visit_time": { "type": "string", "enum": ["morning","afternoon","evening"] }
+        },
+        "required": ["patient_id", "person_id"]
+      },
+      "backed_by": "persona.persona_ext:patient_chart"
+    },
+    {
+      "name": "Encounter",
+      "attribute_schema": {
+        "type": "object",
+        "properties": {
+          "encounter_id": { "type": "string" },
+          "patient_id":   { "type": "string" },
+          "doctor_id":    { "type": "string" },
+          "scheduled_at": { "type": "string", "format": "date-time" },
+          "kind": { "type": "string", "enum": ["initial","follow-up","emergency"] }
+        },
+        "required": ["encounter_id","patient_id","scheduled_at"]
+      },
+      "backed_by": "engagement.encounter"
+    },
+    {
+      "name": "Prescription",
+      "attribute_schema": {
+        "type": "object",
+        "properties": {
+          "prescription_id": { "type": "string" },
+          "patient_id":      { "type": "string" },
+          "doctor_id":       { "type": "string" },
+          "medication":      { "type": "string" },
+          "dosage":          { "type": "string" }
+        },
+        "required": ["prescription_id","patient_id","doctor_id","medication"]
+      },
+      "backed_by": "persona.persona_ext:prescription"
+    },
+    {
+      "name": "LabResult",
+      "attribute_schema": {
+        "type": "object",
+        "properties": {
+          "lab_result_id": { "type": "string" },
+          "patient_id":    { "type": "string" },
+          "panel":         { "type": "string" },
+          "abnormal":      { "type": "boolean" }
+        },
+        "required": ["lab_result_id","patient_id","panel"]
+      },
+      "backed_by": "persona.persona_ext:lab_result"
+    },
+    {
+      "name": "Diagnosis",
+      "attribute_schema": {
+        "type": "object",
+        "properties": {
+          "diagnosis_id": { "type": "string" },
+          "patient_id":   { "type": "string" },
+          "icd10":        { "type": "string" }
+        },
+        "required": ["diagnosis_id","patient_id","icd10"]
+      },
+      "backed_by": "persona.persona_ext:diagnosis"
+    },
+    {
+      "name": "Doctor",
+      "attribute_schema": {
+        "type": "object",
+        "properties": {
+          "doctor_id":   { "type": "string" },
+          "specialties": { "type": "array", "items": { "type": "string" } }
+        },
+        "required": ["doctor_id"]
+      },
+      "backed_by": "persona.persona_ext:doctor"
+    }
+  ],
+  "relation_types": [
+    {
+      "name": "care-team",
+      "from_object_type_name": "Doctor",
+      "to_object_type_name": "Patient",
+      "cardinality": "N:N",
+      "rebac_kind_mapping": "care_team"
+    },
+    {
+      "name": "treats",
+      "from_object_type_name": "Doctor",
+      "to_object_type_name": "Encounter",
+      "cardinality": "1:N"
+    },
+    {
+      "name": "refers",
+      "from_object_type_name": "Doctor",
+      "to_object_type_name": "Doctor",
+      "cardinality": "N:N"
+    },
+    {
+      "name": "has-encounter",
+      "from_object_type_name": "Patient",
+      "to_object_type_name": "Encounter",
+      "cardinality": "1:N"
+    },
+    {
+      "name": "prescribed",
+      "from_object_type_name": "Encounter",
+      "to_object_type_name": "Prescription",
+      "cardinality": "1:N"
+    }
+  ],
+  "capability_graph": [
+    {
+      "tool_sku": "healthcare.calendar.check",
+      "object_type_name": "Patient",
+      "pre_conditions": { "requires": ["within_days"] },
+      "post_conditions": { "produces": "available_slots", "advances": "schedule_follow_up_visit" }
+    },
+    {
+      "tool_sku": "healthcare.encounter.create",
+      "object_type_name": "Patient",
+      "requires_relation_name": "care-team",
+      "pre_conditions": { "requires": ["available_slots"], "available_slots": { "min": 1 } },
+      "post_conditions": { "produces": "encounter_id", "advances": "schedule_follow_up_visit" }
+    },
+    {
+      "tool_sku": "healthcare.patient.notify",
+      "object_type_name": "Patient",
+      "pre_conditions": { "requires": ["encounter_id"] },
+      "post_conditions": { "produces": "notification_sent", "advances": "schedule_follow_up_visit" }
+    },
+    {
+      "tool_sku": "healthcare.prescription.write",
+      "object_type_name": "Patient",
+      "requires_relation_name": "care-team",
+      "pre_conditions": { "requires": ["medication","dosage"] },
+      "post_conditions": { "produces": "prescription_id" }
+    },
+    {
+      "tool_sku": "healthcare.lab.order",
+      "object_type_name": "Patient",
+      "requires_relation_name": "care-team",
+      "pre_conditions": { "requires": ["panel"] },
+      "post_conditions": { "produces": "lab_result_id" }
+    }
+  ]
+}

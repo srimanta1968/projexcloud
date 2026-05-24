@@ -17,6 +17,8 @@ import {
   resolveRoute,
   withRetry,
 } from './routingEngine';
+import { assertKillSwitchDisengaged } from './killSwitch';
+import { resolveLocalProvider } from './localProviderResolver';
 
 /**
  * AI Gateway completion service (FR-AGW-1..9 / AC-1).
@@ -61,6 +63,13 @@ async function selectRoute(
   ctx: AgentContext,
   request: CompletionRequest,
 ): Promise<SelectedRoute> {
+  // P8 Variant C (on-prem) preempts every other route. If sdk-onprem has
+  // registered a local-provider resolver and that resolver returns a hit,
+  // we use it — guarantees no cloud provider call on an air-gapped install.
+  const localHit = await resolveLocalProvider(ctx, request);
+  if (localHit) {
+    return { rule_id: null, provider_id: localHit.provider_id, model: localHit.model };
+  }
   const decision = await resolveRoute(ctx.tenant_id, request);
   if (decision) {
     return { rule_id: decision.rule_id, provider_id: decision.provider_id, model: decision.model };
@@ -73,6 +82,29 @@ async function selectRoute(
 
 function computeBilled(provider_cost: number): number {
   return Number((provider_cost * (1 + PROVIDER_MARGIN_PCT / 100)).toFixed(8));
+}
+
+/**
+ * Resolve the kill-switch flag id for the run's agent and assert the flag
+ * is NOT engaged before any provider work happens (FR-AGW-7 / G-9).
+ *
+ * Returns silently when (a) no agent_id is on the ctx (platform-internal
+ * call without an agent), (b) the agent has no kill_switch_flag_id wired,
+ * or (c) the flag is disengaged. Throws KillSwitchError otherwise — the
+ * caller bubbles that up so no provider cost is incurred.
+ */
+async function ensureKillSwitchClear(ctx: AgentContext): Promise<void> {
+  if (!ctx.agent_id) return;
+  const row = await dataService.one<{ kill_switch_flag_id: string | null }>(
+    `SELECT kill_switch_flag_id FROM agents.agent_definition WHERE agent_id = $1`,
+    [ctx.agent_id],
+  );
+  if (!row || !row.kill_switch_flag_id) return;
+  await assertKillSwitchDisengaged({
+    agent_id: ctx.agent_id,
+    flag_id: row.kill_switch_flag_id,
+    ctx,
+  });
 }
 
 async function unwrapCredential(envelope: Buffer): Promise<Buffer> {
@@ -178,6 +210,9 @@ export async function complete(
   request: CompletionRequest,
   ctx: AgentContext,
 ): Promise<CompletionResponse> {
+  // FR-AGW-7 / G-9 — short-circuit before any provider cost is incurred.
+  await ensureKillSwitchClear(ctx);
+
   const selected = await selectRoute(ctx, request);
   const providerRow = await loadProviderRow(selected.provider_id);
   if (!providerRow || providerRow.status === 'disabled') {
@@ -249,6 +284,9 @@ export async function* stream(
   request: CompletionRequest,
   ctx: AgentContext,
 ): AsyncIterable<StreamChunk> {
+  // FR-AGW-7 / G-9 — refuse before opening a provider stream.
+  await ensureKillSwitchClear(ctx);
+
   const selected = await selectRoute(ctx, request);
   const providerRow = await loadProviderRow(selected.provider_id);
   if (!providerRow || providerRow.status === 'disabled') {
