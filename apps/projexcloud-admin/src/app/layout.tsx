@@ -10,9 +10,13 @@ export default function RootLayout({ children }: { children: ReactNode }): JSX.E
   return (
     <html lang="en">
       <body style={{ fontFamily: 'system-ui, sans-serif', margin: 0 }}>
-        <header style={{ background: '#0b1220', color: '#e9eef7', padding: '12px 20px' }}>
+        <header style={{ background: '#0b1220', color: '#e9eef7', padding: '12px 20px', display: 'flex', alignItems: 'center', gap: 24 }}>
           <strong>ProjexCloud Admin</strong>
-          <span style={{ marginLeft: 12, opacity: 0.6 }}>Platform operator console</span>
+          <span style={{ opacity: 0.6 }}>Platform operator console</span>
+          <nav style={{ marginLeft: 'auto', display: 'flex', gap: 16, fontSize: 14 }}>
+            <a href="/tenants" style={{ color: '#e9eef7', textDecoration: 'none' }}>Tenants</a>
+            <a href="/pricing-catalogs" style={{ color: '#e9eef7', textDecoration: 'none' }}>Pricing</a>
+          </nav>
         </header>
         <main style={{ padding: 24 }}>{children}</main>
       </body>

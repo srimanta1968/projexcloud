@@ -12,8 +12,44 @@ export * as server from './server';
 export * as types from './services/meterGate';
 export * as events from './events';
 export { migrationsDir } from './db';
-export { check, report, setEmitter, registerSoftCapResolver, registerCurrentUsageResolver } from './services/meterGate';
-export type { UsageEventV1, MeterDimensions, GateDecision, ReportInput, GateCheckResult, SoftCapResolver, CurrentUsageResolver } from './services/meterGate';
+export {
+  check,
+  report,
+  setEmitter,
+  registerSoftCapResolver,
+  registerHardCapResolver,
+  registerCurrentUsageResolver,
+  getMeterMode,
+} from './services/meterGate';
+export type {
+  UsageEventV1,
+  MeterDimensions,
+  GateDecision,
+  ReportInput,
+  GateCheckResult,
+  SoftCapResolver,
+  HardCapResolver,
+  CurrentUsageResolver,
+  MeterMode,
+} from './services/meterGate';
+export { recordQuotaDenial } from './services/quotaDenial';
+export type { RecordDenialInput, DenialRow } from './services/quotaDenial';
+export { applyHardCapOverride } from './services/hardCapOverride';
+export type { ApplyHardCapOverrideInput, HardCapOverrideResult } from './services/hardCapOverride';
+export {
+  listPricingCatalogs,
+  getPricingCatalog,
+  upsertPricingRate,
+  createCatalogVersion,
+  setCatalogStatus,
+} from './services/catalogAdmin';
+export type {
+  CatalogRow,
+  RateRow,
+  CatalogStatus,
+  UpsertRateInput,
+  CreateCatalogVersionInput,
+} from './services/catalogAdmin';
 export { installSoftCapHook } from './services/softCapMiddleware';
 export type { InstallSoftCapsOptions } from './services/softCapMiddleware';
 export {

@@ -1,0 +1,87 @@
+{
+  "name": "seva-v1",
+  "version": "1.0.0",
+  "object_types": [
+    {
+      "name": "Donor",
+      "attribute_schema": {
+        "type": "object",
+        "properties": {
+          "donor_id":   { "type": "string" },
+          "person_id":  { "type": "string" },
+          "tier":       { "type": "string", "enum": ["regular","major","institutional"] }
+        },
+        "required": ["donor_id","person_id"]
+      },
+      "backed_by": "persona.persona_ext:donor"
+    },
+    {
+      "name": "Donation",
+      "attribute_schema": {
+        "type": "object",
+        "properties": {
+          "donation_id": { "type": "string" },
+          "donor_id":    { "type": "string" },
+          "amount":      { "type": "number" },
+          "currency":    { "type": "string" },
+          "purpose":     { "type": "string" }
+        },
+        "required": ["donation_id","donor_id","amount","currency"]
+      },
+      "backed_by": "donation.donation"
+    },
+    {
+      "name": "Acharya",
+      "attribute_schema": {
+        "type": "object",
+        "properties": {
+          "acharya_id":  { "type": "string" },
+          "person_id":   { "type": "string" }
+        },
+        "required": ["acharya_id"]
+      },
+      "backed_by": "persona.persona_ext:acharya"
+    },
+    {
+      "name": "Event",
+      "attribute_schema": {
+        "type": "object",
+        "properties": {
+          "event_id":    { "type": "string" },
+          "kind":        { "type": "string" },
+          "scheduled_at":{ "type": "string", "format": "date-time" }
+        },
+        "required": ["event_id","scheduled_at"]
+      },
+      "backed_by": "engagement.encounter"
+    }
+  ],
+  "relation_types": [
+    {
+      "name": "funds",
+      "from_object_type_name": "Donor",
+      "to_object_type_name": "Event",
+      "cardinality": "N:N"
+    },
+    {
+      "name": "led-by",
+      "from_object_type_name": "Event",
+      "to_object_type_name": "Acharya",
+      "cardinality": "N:N"
+    }
+  ],
+  "capability_graph": [
+    {
+      "tool_sku": "seva.donor.acknowledge",
+      "object_type_name": "Donor",
+      "pre_conditions": { "requires": ["donation_id"] },
+      "post_conditions": { "produces": "acknowledgement_sent" }
+    },
+    {
+      "tool_sku": "seva.event.schedule",
+      "object_type_name": "Event",
+      "pre_conditions": { "requires": ["scheduled_at"] },
+      "post_conditions": { "produces": "event_id" }
+    }
+  ]
+}

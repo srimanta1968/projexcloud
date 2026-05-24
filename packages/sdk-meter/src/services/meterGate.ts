@@ -53,6 +53,13 @@ export interface ReportInput {
 export type SoftCapResolver = (tenant_id: string, sku: string) => Promise<number | null>;
 
 /**
+ * Hard-cap resolver (P7). Returns the configured hard_cap from
+ * meter.quota_policy or null when unset. Distinct from the soft cap because
+ * a tenant typically has both — soft for WARN, hard for DENY.
+ */
+export type HardCapResolver = (tenant_id: string, sku: string) => Promise<number | null>;
+
+/**
  * Current-usage resolver — returns accrued units for (tenant, sku) within
  * the current cap window (typically calendar month). Production swaps for
  * a Redis counter; in-process default returns 0 so unconfigured deploys
@@ -61,6 +68,7 @@ export type SoftCapResolver = (tenant_id: string, sku: string) => Promise<number
 export type CurrentUsageResolver = (tenant_id: string, sku: string) => Promise<number>;
 
 let _softCapResolver: SoftCapResolver = async () => null;
+let _hardCapResolver: HardCapResolver = async () => null;
 let _currentUsageResolver: CurrentUsageResolver = async () => 0;
 
 /**
@@ -72,6 +80,15 @@ export function registerSoftCapResolver(resolver: SoftCapResolver): void {
 }
 
 /**
+ * Gateway boot wires this with sdk-billing.getHardCap() (or equivalent
+ * reader of meter.quota_policy.hard_cap). Only consulted when
+ * METER_MODE=hard-cap; soft-only deploys skip the lookup.
+ */
+export function registerHardCapResolver(resolver: HardCapResolver): void {
+  _hardCapResolver = resolver;
+}
+
+/**
  * Gateway boot wires this with a Redis counter (production) or a
  * meter.usage_event aggregate (dev). Defaults to 0 = always ALLOW.
  */
@@ -80,33 +97,63 @@ export function registerCurrentUsageResolver(resolver: CurrentUsageResolver): vo
 }
 
 /**
- * Two-phase gate, soft-cap mode (P4).
+ * The three meter modes per Architecture v3.1 §10A:
+ *   - emit-only (P1): record usage, never block.
+ *   - soft-cap  (P4): record usage, stamp WARN header at soft cap.
+ *   - hard-cap  (P7): record usage, return 429 DENY at hard cap.
+ *
+ * Default is 'soft-cap' for safety — flipping to 'hard-cap' is an operator
+ * action gated by 30+ weeks of soft-cap calibration data (PRD R-1).
+ */
+export type MeterMode = 'emit-only' | 'soft-cap' | 'hard-cap';
+
+export function getMeterMode(): MeterMode {
+  const raw = process.env.METER_MODE;
+  if (raw === 'emit-only' || raw === 'soft-cap' || raw === 'hard-cap') return raw;
+  return 'soft-cap';
+}
+
+/**
+ * Two-phase gate.
  *
  * Decisions:
- *   - DENY: only when a hard-cap resolver returns true (P7+; not enabled here).
- *   - WARN: soft cap exists AND current_usage >= cap.
- *   - ALLOW: otherwise (no cap configured, or under cap).
+ *   - DENY: METER_MODE=hard-cap AND hard cap exists AND used >= hard cap.
+ *   - WARN: METER_MODE in {soft-cap, hard-cap} AND soft cap exists AND used >= soft cap.
+ *   - ALLOW: otherwise (emit-only mode, or no cap configured, or under cap).
  *
- * The middleware below stamps WARN onto X-ProjexCloud-Soft-Cap response
- * header so clients can surface upgrade prompts without parsing bodies.
+ * The middleware below stamps WARN onto the X-ProjexCloud-Soft-Cap response
+ * header and converts DENY to a 429 QuotaExceeded response (P7).
  */
 export async function check(input: GateCheckInput): Promise<GateCheckResult> {
   if (!input.tenant_id) return { decision: 'ALLOW', reason: null };
+  const mode = getMeterMode();
+  if (mode === 'emit-only') return { decision: 'ALLOW', reason: null };
 
-  const cap = await _softCapResolver(input.tenant_id, input.sku);
-  if (cap === null || cap <= 0) return { decision: 'ALLOW', reason: null };
-
-  // Hot-path optimization: prefer the in-memory/Redis counter if installed.
-  // Falls through to the registered (potentially Postgres-backed) resolver
-  // when no counter is available.
+  // Resolve current usage once for both hard and soft checks.
   const counter = getUsageCounter();
   const used = counter
     ? await counter.get(input.tenant_id, input.sku)
     : await _currentUsageResolver(input.tenant_id, input.sku);
-  if (used >= cap) {
+
+  // Hard cap check first — only in hard-cap mode (P7 mode flip).
+  if (mode === 'hard-cap') {
+    const hardCap = await _hardCapResolver(input.tenant_id, input.sku);
+    if (hardCap !== null && hardCap > 0 && used >= hardCap) {
+      return {
+        decision: 'DENY',
+        reason: `hard cap exceeded for sku '${input.sku}': used ${used} of ${hardCap}`,
+      };
+    }
+  }
+
+  // Soft cap check (applies to both soft-cap and hard-cap modes).
+  const softCap = await _softCapResolver(input.tenant_id, input.sku);
+  if (softCap === null || softCap <= 0) return { decision: 'ALLOW', reason: null };
+
+  if (used >= softCap) {
     return {
       decision: 'WARN',
-      reason: `soft cap exceeded for sku '${input.sku}': used ${used} of ${cap}`,
+      reason: `soft cap exceeded for sku '${input.sku}': used ${used} of ${softCap}`,
     };
   }
   return { decision: 'ALLOW', reason: null };

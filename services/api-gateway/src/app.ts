@@ -1,6 +1,7 @@
 import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import helmet from '@fastify/helmet';
+import websocket from '@fastify/websocket';
 import { initPool } from '@projexlight/db-runtime';
 import { closeRedis, initRedis } from '@projexlight/redis-runtime';
 import { closeKafka, initKafka, publishMessage } from '@projexlight/kafka-runtime';
@@ -15,7 +16,7 @@ import {
   migrationsDir as auditMigrations,
   server as auditServer,
   startAuditVerifierScheduler,
-  startRetentionShredder,
+  startRetentionShredder as startAuditRetentionShredder,
 } from '@projexlight/sdk-audit';
 import { migrationsDir as identityMigrations, server as identityServer } from '@projexlight/sdk-identity';
 import {
@@ -33,6 +34,12 @@ import {
   registerCurrentUsageResolver,
   installSoftCapHook,
   installRedisUsageCounter,
+  applyHardCapOverride,
+  listPricingCatalogs,
+  getPricingCatalog,
+  upsertPricingRate,
+  createCatalogVersion,
+  setCatalogStatus,
 } from '@projexlight/sdk-meter';
 import { server as secretsServer } from '@projexlight/sdk-secrets';
 import { migrationsDir as tenantMigrations, server as tenantServer } from '@projexlight/sdk-tenant';
@@ -196,6 +203,49 @@ import {
   server as mcpBridgeServer,
 } from '@projexlight/sdk-mcp-bridge';
 import { migrationsDir as connectorGithubMigrations } from '@projexlight/connector-github';
+
+// P6B / Wave 6 second half — Knowledge + Semantic + Analytics + Snowflake.
+// G8 closer: sdk-lineage (in-pool subgraph + cross-pool projection queue);
+// G9 closer: sdk-semantic (6 typed primitives). The other 5 P6B SDKs land
+// migrations + scaffolds in this drop; full executors follow per the
+// projexlight per-task workflow (TK-3331 onward).
+import { migrationsDir as ragMigrations }              from '@projexlight/sdk-knowledge-rag';
+import { migrationsDir as parsingMigrations }          from '@projexlight/sdk-parsing';
+import { migrationsDir as conversationMigrations }     from '@projexlight/sdk-conversation';
+import { migrationsDir as recommendationMigrations }   from '@projexlight/sdk-recommendation';
+import { migrationsDir as analyticsMigrations }        from '@projexlight/sdk-analytics';
+import {
+  migrationsDir as lineageMigrations,
+  runLineageBackfill,
+} from '@projexlight/sdk-lineage';
+import { migrationsDir as semanticMigrations }         from '@projexlight/sdk-semantic';
+import { migrationsDir as connectorSnowflakeMigrations } from '@projexlight/connector-snowflake';
+
+// P7 / Wave 7 — Field + Evidence + Hyperscale. Closes G10 (federation
+// runtime) + G11 (Iceberg lakehouse). 8 new SDKs + 1 new service.
+// Per feedback_auto_migrate_on_deploy: every migrationsDir below is
+// appended to runMigrations([...]) so tables land on first boot.
+import { migrationsDir as stormMigrations }               from '@projexlight/sdk-storm';
+import {
+  migrationsDir as dispatchMigrations,
+  optimizeRoute,
+  getDispatchBroker,
+} from '@projexlight/sdk-dispatch';
+import { migrationsDir as assignmentMigrations }          from '@projexlight/sdk-assignment';
+import { migrationsDir as leadScoringMigrations }         from '@projexlight/sdk-lead-scoring';
+import {
+  migrationsDir as evidenceMigrations,
+  startRetentionShredder as startEvidenceRetentionShredder,
+} from '@projexlight/sdk-evidence';
+import {
+  migrationsDir as diagnosticTelemetryMigrations,
+  bootstrapDiagnosticClickHouseSchema,
+} from '@projexlight/sdk-diagnostic-telemetry';
+import { migrationsDir as hdkMeasureMigrations }          from '@projexlight/hdk-measure';
+import { migrationsDir as hdkWatermarkMigrations }        from '@projexlight/hdk-watermark';
+// pool-federation-runtime ships as its own service binary but its migrations
+// also auto-apply via api-gateway's runner during MVP (shared admin DB).
+import { migrationsDir as poolFederationRuntimeMigrations } from '@projexlight/service-pool-federation-runtime';
 import {
   migrationsDir as hdkFoundationMigrations,
   server as hdkFoundationServer,
@@ -223,6 +273,8 @@ app.register(cors, {
   origin: config.corsOrigin,
   credentials: true,
 });
+// P7 FR-DSP-2 — WebSocket plugin for dispatch live updates.
+app.register(websocket);
 
 app.get('/health', async (): Promise<{ status: string; service: string; timestamp: string }> => {
   return { status: 'ok', service: config.appName, timestamp: new Date().toISOString() };
@@ -306,6 +358,54 @@ app.register(traceServer.registerRoutes);
 app.register(taxonomyServer.registerRoutes);
 
 app.register(eventRegistryRoutes);
+
+// P7 FR-DSP-3 — route optimization HTTP endpoint.
+app.post<{
+  Body: { persona_id?: string; task_ids?: string[]; start_task_id?: string };
+}>('/api/dispatch/routes/optimize', async (req, reply) => {
+  const body = req.body ?? {};
+  if (!body.persona_id || !Array.isArray(body.task_ids) || body.task_ids.length === 0) {
+    return reply.code(400).send({ error: 'persona_id and task_ids[] are required' });
+  }
+  try {
+    const route = await optimizeRoute({
+      persona_id: body.persona_id,
+      task_ids: body.task_ids,
+      start_task_id: body.start_task_id,
+    });
+    return route;
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    return reply.code(500).send({ error: msg });
+  }
+});
+
+// P7 FR-DSP-2 — WebSocket live-updates gateway. /api/dispatch/ws/:persona_id
+// subscribes the connection to the dispatch broker for that dispatcher; the
+// broker filters server-side so this connection only receives this
+// persona's events. Authentication via short-lived token in the
+// `Sec-WebSocket-Protocol` header is the production-correct path; for the
+// MVP scaffold we accept the persona_id from the path. Hardening tracked
+// as a follow-up task.
+app.register(async (instance) => {
+  instance.get<{
+    Params: { persona_id: string };
+  }>('/api/dispatch/ws/:persona_id', { websocket: true }, (connection, req) => {
+    const personaId = req.params.persona_id;
+    const broker = getDispatchBroker();
+    const unsubscribe = broker.subscribe(personaId, (event) => {
+      try {
+        connection.socket.send(JSON.stringify(event));
+      } catch {
+        // Socket closed mid-send; cleanup happens via close handler.
+      }
+    });
+    connection.socket.on('close', () => unsubscribe());
+    connection.socket.send(
+      JSON.stringify({ kind: 'hello', persona_id: personaId, emitted_at: new Date().toISOString() }),
+    );
+  });
+});
 
 const start = async (): Promise<void> => {
   try {
@@ -435,6 +535,48 @@ const start = async (): Promise<void> => {
       { sdk: 'sdk-mcp-bridge',         dir: mcpBridgeMigrations },
       { sdk: 'sdk-trace',              dir: traceMigrations },
       { sdk: 'connector-github',       dir: connectorGithubMigrations },
+      // P6B — Knowledge + Semantic + Analytics + Snowflake. Closes G8 + G9.
+      // Order: lineage first (other SDKs reference lineage.node via lineage_node_id);
+      // semantic next (capability_graph_edge references object_type within the same
+      // migration so internal FKs resolve); rag/parsing/conversation/recommendation
+      // are self-contained; analytics specs are admin-only; connector-snowflake
+      // references vault-wrapped credentials (sdk-vault landed in W1).
+      { sdk: 'sdk-lineage',            dir: lineageMigrations },
+      { sdk: 'sdk-semantic',           dir: semanticMigrations },
+      { sdk: 'sdk-knowledge-rag',      dir: ragMigrations },
+      { sdk: 'sdk-parsing',            dir: parsingMigrations },
+      { sdk: 'sdk-conversation',       dir: conversationMigrations },
+      { sdk: 'sdk-recommendation',     dir: recommendationMigrations },
+      { sdk: 'sdk-analytics',          dir: analyticsMigrations },
+      { sdk: 'connector-snowflake',    dir: connectorSnowflakeMigrations },
+      // P7 — Field + Evidence + Hyperscale. Ordering matters:
+      //   1. pool-federation-runtime owns the `federation` schema and
+      //      lands first; sdk-analytics 002 then extends it with the
+      //      iceberg_* tables (CREATE SCHEMA IF NOT EXISTS keeps the
+      //      ordering optional but explicit is safer).
+      //   2. sdk-storm before sdk-lead-scoring (storm-impact subscore).
+      //   3. sdk-dispatch before sdk-assignment (assignment.task_id is a
+      //      logical FK to dispatch.task).
+      //   4. sdk-evidence is the LINCHPIN — depends on vault/audit/media/
+      //      device/consent/engagement all being in place upstream.
+      //   5. hdk-measure + hdk-watermark land after sdk-evidence
+      //      (capture_id + variant_id are their logical FK targets).
+      //   6. sdk-meter 004 (quota_denial) re-runs the meter SDK to pick
+      //      up the new migration file — runner is idempotent + sha-tracked.
+      { sdk: 'pool-federation-runtime', dir: poolFederationRuntimeMigrations },
+      // NB: sdk-analytics 002_iceberg_federation.sql is applied by the
+      // existing sdk-analytics entry above — the runner is sha-tracked and
+      // scans every .sql in the dir on each boot. No re-registration needed.
+      { sdk: 'sdk-storm',               dir: stormMigrations },
+      { sdk: 'sdk-dispatch',            dir: dispatchMigrations },
+      { sdk: 'sdk-assignment',          dir: assignmentMigrations },
+      { sdk: 'sdk-lead-scoring',        dir: leadScoringMigrations },
+      { sdk: 'sdk-evidence',            dir: evidenceMigrations },
+      { sdk: 'sdk-diagnostic-telemetry', dir: diagnosticTelemetryMigrations },
+      { sdk: 'hdk-measure',             dir: hdkMeasureMigrations },
+      { sdk: 'hdk-watermark',           dir: hdkWatermarkMigrations },
+      // sdk-meter 004_quota_denial.sql lands via the existing sdk-meter
+      // entry at the top of this list (runner is forward-only + sha-tracked).
     ]);
 
     // P6A — AC-6 hard gate: probe vector namespace isolation before agents
@@ -499,6 +641,219 @@ const start = async (): Promise<void> => {
     });
     app.addHook('onClose', async () => signingKeyRotationHandle.stop());
 
+    // P7 FR-EVD-6 / AC-12 — per-encounter retention shredder. Drains
+    // evidence.capture rows whose retention_expires_at has passed,
+    // marks them 'shredded', emits evidence.shredded.v1. sdk-media
+    // (via the emitter hook) handles the actual S3 blob deletion.
+    // Disabled with EVIDENCE_RETENTION_SHREDDER_ENABLED=false.
+    const evidenceRetentionShredderHandle = startEvidenceRetentionShredder({
+      enabled: process.env.EVIDENCE_RETENTION_SHREDDER_ENABLED !== 'false',
+      intervalMs: parseInt(process.env.EVIDENCE_RETENTION_INTERVAL_MS || '300000', 10),
+      batchSize: parseInt(process.env.EVIDENCE_RETENTION_BATCH_SIZE || '100', 10),
+    });
+    app.addHook('onClose', async () => evidenceRetentionShredderHandle.stop());
+
+    // P6B — lineage backfill admin endpoint (FR-LIN-5 / TK-3380). Resumable
+    // via per-(pool, event_type) checkpoint; dry-run reports counts without
+    // writing. Header-auth via ADMIN_OPS_TOKEN.
+    app.post<{
+      Body: {
+        pool_index?: string;
+        event_type?: string;
+        batch_size?: number;
+        dry_run?: boolean;
+        from?: string;
+        to?: string;
+      };
+    }>('/admin/lineage/backfill', async (req, reply) => {
+      const adminToken = process.env.ADMIN_OPS_TOKEN;
+      const presented = req.headers['x-admin-ops-token'];
+      if (!adminToken || !presented || presented !== adminToken) {
+        return reply.code(401).send({ success: false, error: 'admin token required' });
+      }
+      try {
+        const result = await runLineageBackfill({
+          pool_index: req.body?.pool_index,
+          event_type: req.body?.event_type,
+          batch_size: req.body?.batch_size,
+          dry_run: req.body?.dry_run ?? false,
+          from: req.body?.from ? new Date(req.body.from) : undefined,
+          to: req.body?.to ? new Date(req.body.to) : undefined,
+        });
+        return { success: true, data: result };
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        return reply.code(500).send({ success: false, error: msg });
+      }
+    });
+
+    // P7 Y-11 — pricing-catalog admin endpoints backing the Admin UI.
+    // All gated by ADMIN_OPS_TOKEN; read endpoints are GET, mutating are POST/PATCH.
+    const requireAdmin = (req: { headers: Record<string, unknown> }): string | null => {
+      const adminToken = process.env.ADMIN_OPS_TOKEN;
+      const presented = req.headers['x-admin-ops-token'];
+      if (!adminToken || !presented || presented !== adminToken) return 'admin token required';
+      return null;
+    };
+
+    app.get('/admin/meter/pricing-catalogs', async (req, reply) => {
+      const err = requireAdmin(req as unknown as { headers: Record<string, unknown> });
+      if (err) return reply.code(401).send({ success: false, error: err });
+      const catalogs = await listPricingCatalogs();
+      return { success: true, data: catalogs };
+    });
+
+    app.get<{ Params: { catalog_id: string } }>(
+      '/admin/meter/pricing-catalogs/:catalog_id',
+      async (req, reply) => {
+        const err = requireAdmin(req as unknown as { headers: Record<string, unknown> });
+        if (err) return reply.code(401).send({ success: false, error: err });
+        const result = await getPricingCatalog(req.params.catalog_id);
+        if (!result.catalog) return reply.code(404).send({ success: false, error: 'catalog not found' });
+        return { success: true, data: result };
+      },
+    );
+
+    app.post<{
+      Body: {
+        catalog_id?: string;
+        version?: number;
+        operator_id?: string;
+      };
+    }>('/admin/meter/pricing-catalogs', async (req, reply) => {
+      const err = requireAdmin(req as unknown as { headers: Record<string, unknown> });
+      if (err) return reply.code(401).send({ success: false, error: err });
+      const { catalog_id, version, operator_id } = req.body ?? {};
+      if (!catalog_id || !version || !operator_id) {
+        return reply.code(400).send({ success: false, error: 'catalog_id, version, operator_id required' });
+      }
+      try {
+        const created = await createCatalogVersion({ catalog_id, version, created_by: operator_id });
+        return { success: true, data: created };
+      } catch (e) {
+        return reply.code(500).send({ success: false, error: (e as Error).message });
+      }
+    });
+
+    app.put<{
+      Params: { catalog_id: string; sku: string };
+      Body: {
+        unit?: string;
+        mode?: string;
+        price?: number | null;
+        margin_pct?: number | null;
+        tiers?: unknown;
+        operator_id?: string;
+      };
+    }>('/admin/meter/pricing-catalogs/:catalog_id/rates/:sku', async (req, reply) => {
+      const err = requireAdmin(req as unknown as { headers: Record<string, unknown> });
+      if (err) return reply.code(401).send({ success: false, error: err });
+      const body = req.body ?? {};
+      if (!body.unit || !body.mode || !body.operator_id) {
+        return reply.code(400).send({ success: false, error: 'unit, mode, operator_id required' });
+      }
+      try {
+        const upserted = await upsertPricingRate({
+          catalog_id: req.params.catalog_id,
+          sku: req.params.sku,
+          unit: body.unit,
+          mode: body.mode,
+          price: body.price ?? null,
+          margin_pct: body.margin_pct ?? null,
+          tiers: body.tiers ?? null,
+          operator_id: body.operator_id,
+        });
+        return { success: true, data: upserted };
+      } catch (e) {
+        return reply.code(500).send({ success: false, error: (e as Error).message });
+      }
+    });
+
+    app.patch<{
+      Params: { catalog_id: string };
+      Body: { status?: 'draft' | 'active' | 'retired'; operator_id?: string };
+    }>('/admin/meter/pricing-catalogs/:catalog_id/status', async (req, reply) => {
+      const err = requireAdmin(req as unknown as { headers: Record<string, unknown> });
+      if (err) return reply.code(401).send({ success: false, error: err });
+      const { status, operator_id } = req.body ?? {};
+      if (!status || !operator_id) {
+        return reply.code(400).send({ success: false, error: 'status + operator_id required' });
+      }
+      try {
+        await setCatalogStatus(req.params.catalog_id, status);
+        return { success: true };
+      } catch (e) {
+        return reply.code(500).send({ success: false, error: (e as Error).message });
+      }
+    });
+
+    // P7 §12 — admin override for a denied hard-cap. ADMIN_OPS_TOKEN gated.
+    // Body: { tenant_id, sku, until (ISO-8601), operator_id, reason }.
+    // Emits usage.hardcap.override.applied.v1.
+    app.post<{
+      Body: {
+        tenant_id?: string;
+        sku?: string;
+        until?: string;
+        operator_id?: string;
+        reason?: string;
+      };
+    }>('/admin/meter/hardcap/override', async (req, reply) => {
+      const adminToken = process.env.ADMIN_OPS_TOKEN;
+      const presented = req.headers['x-admin-ops-token'];
+      if (!adminToken || !presented || presented !== adminToken) {
+        return reply.code(401).send({ success: false, error: 'admin token required' });
+      }
+      const body = req.body ?? {};
+      if (!body.tenant_id || !body.sku || !body.until || !body.operator_id || !body.reason) {
+        return reply.code(400).send({
+          success: false,
+          error: 'tenant_id, sku, until, operator_id, reason are all required',
+        });
+      }
+      try {
+        const traceId = (req.headers['x-trace-id'] as string | undefined) ?? null;
+        const result = await applyHardCapOverride({
+          tenant_id: body.tenant_id,
+          sku: body.sku,
+          until: body.until,
+          operator_id: body.operator_id,
+          reason: body.reason,
+          trace_id: traceId,
+        });
+        return { success: true, data: result };
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        return reply.code(500).send({ success: false, error: msg });
+      }
+    });
+
+    // P6A — emergency rotation endpoint. Header-auth gated by the
+    // ADMIN_OPS_TOKEN shared secret; the receiving operator records the
+    // reason in the audit chain via the rotation event.
+    app.post<{
+      Body: { reason?: string; actor_id?: string };
+    }>('/admin/security/rotate-signing-key', async (req, reply) => {
+      const adminToken = process.env.ADMIN_OPS_TOKEN;
+      const presented = req.headers['x-admin-ops-token'];
+      if (!adminToken || !presented || presented !== adminToken) {
+        return reply.code(401).send({ success: false, error: 'admin token required' });
+      }
+      const reason = req.body?.reason?.trim() || 'manual emergency rotation';
+      const actor_id = req.body?.actor_id?.trim() || 'ops-emergency';
+      try {
+        const result = await signingKeyRotationHandle.rotateNow({
+          reason,
+          actor_id,
+          emergency: true,
+        });
+        return { success: true, data: result };
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        return reply.code(500).send({ success: false, error: msg });
+      }
+    });
+
     // Optional ClickHouse: when enabled, init the client + apply sdk-trace
     // ClickHouse migrations (trace.span OLAP table). Mirrors the Postgres
     // migration-runner contract — sha256-tracked, forward-only. When
@@ -513,6 +868,17 @@ const start = async (): Promise<void> => {
         });
         await bootstrapClickHouseSchema();
         console.log('[api-gateway] ClickHouse schema bootstrapped (sdk-trace OLAP layer active)');
+
+        // P7 FR-DIA-4 — diagnostic-telemetry rollups (crash_daily + health_hourly).
+        try {
+          await bootstrapDiagnosticClickHouseSchema();
+          console.log('[api-gateway] ClickHouse schema bootstrapped (sdk-diagnostic-telemetry rollups active)');
+        } catch (err) {
+          console.warn(
+            '[api-gateway] sdk-diagnostic-telemetry ClickHouse bootstrap failed:',
+            (err as Error).message,
+          );
+        }
       } catch (err) {
         console.warn(
           '[api-gateway] ClickHouse unavailable, falling back to Postgres trace.span mirror:',
@@ -596,7 +962,7 @@ const start = async (): Promise<void> => {
       intervalMs: parseInt(process.env.AUDIT_VERIFIER_INTERVAL_MS || '86400000', 10),
     });
 
-    const retentionShredder = startRetentionShredder({
+    const retentionShredder = startAuditRetentionShredder({
       enabled: process.env.AUDIT_RETENTION_ENABLED !== 'false',
       intervalMs: parseInt(process.env.AUDIT_RETENTION_INTERVAL_MS || '3600000', 10),
       batchSize: parseInt(process.env.AUDIT_RETENTION_BATCH_SIZE || '1000', 10),

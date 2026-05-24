@@ -1,6 +1,10 @@
 import { dataService } from '@projexlight/db-runtime';
 import { appendAuditEntry } from '@projexlight/sdk-audit';
 import { envelopeDecrypt } from '@projexlight/sdk-secrets';
+import {
+  registerMcpCapability,
+  deprecateMcpCapabilities,
+} from '@projexlight/sdk-semantic';
 import { openTransport, type McpTransport } from './mcpTransport';
 
 /**
@@ -42,6 +46,14 @@ interface RegisteredToolRow {
   tool_id: string;
   registration_id: string;
   tool_name: string;
+}
+
+/** Map an mcp.tool row to the SKU used in capability_graph_edge + meter. */
+function mcpToolSku(displayName: string, toolName: string): string {
+  // e.g. "Slack" + "post-message" → mcp.slack.post-message
+  const serverSlug = displayName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+  const toolSlug = toolName.toLowerCase().replace(/[^a-z0-9.-]+/g, '-');
+  return `mcp.${serverSlug}.${toolSlug}`;
 }
 
 async function unwrapCredential(envelope: Buffer): Promise<string> {
@@ -113,7 +125,27 @@ export async function registerMcpServer(input: RegisterMcpServerInput): Promise<
            RETURNING tool_id, registration_id, tool_name`,
           [serverRow.registration_id, tool.name, JSON.stringify(tool.inputSchema)],
         );
-        if (t) toolRows.push(t);
+        if (t) {
+          toolRows.push(t);
+          // FR-SEM-9 / TK-3381: surface every MCP tool to the
+          // sdk-semantic CapabilityGraph so semantic.plan() can include
+          // mcp.* tool_sku steps. Best-effort — capability-registration
+          // failure must not roll back the MCP registration itself.
+          try {
+            await registerMcpCapability({
+              tool_sku: mcpToolSku(serverRow.display_name, t.tool_name),
+              mcp_tool_id: t.tool_id,
+              args_schema: (tool.inputSchema as Record<string, unknown>) ?? {},
+              response_schema: (tool as { outputSchema?: Record<string, unknown> }).outputSchema,
+            });
+          } catch (semErr) {
+            console.warn(
+              '[mcp-registration] sdk-semantic capability register failed (non-fatal):',
+              t.tool_name,
+              (semErr as Error).message,
+            );
+          }
+        }
       }
     } finally {
       await client.close();
@@ -175,12 +207,30 @@ export async function listMcpServers(tenant_id: string): Promise<RegisteredServe
 }
 
 export async function disableMcpServer(input: { registration_id: string; actor_id: string; reason: string }): Promise<void> {
-  const row = await dataService.one<{ tenant_id: string }>(
+  const row = await dataService.one<{ tenant_id: string; display_name: string }>(
     `UPDATE mcp.server_registration SET status = 'disabled'
-      WHERE registration_id = $1 RETURNING tenant_id::text`,
+      WHERE registration_id = $1 RETURNING tenant_id::text, display_name`,
     [input.registration_id],
   );
   if (!row) throw new Error(`[mcp-registration] server ${input.registration_id} not found`);
+
+  // FR-SEM-9 / TK-3381: deprecate the capability_graph_edge rows for every
+  // tool of this server so semantic.plan() stops returning plans that use
+  // disabled tools. Soft-delete preserves audit history.
+  try {
+    const tools = await dataService.rows<{ tool_name: string }>(
+      `SELECT tool_name FROM mcp.tool WHERE registration_id = $1`,
+      [input.registration_id],
+    );
+    const skus = tools.map((t) => mcpToolSku(row.display_name, t.tool_name));
+    if (skus.length > 0) await deprecateMcpCapabilities(skus);
+  } catch (semErr) {
+    console.warn(
+      '[mcp-registration] sdk-semantic capability deprecate failed (non-fatal):',
+      (semErr as Error).message,
+    );
+  }
+
   try {
     await appendAuditEntry({
       pool_index: MCP_AUDIT_POOL,
