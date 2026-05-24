@@ -10,6 +10,7 @@ export * from './stubs';
 export * from './p6a-agent';
 export * from './p6b-knowledge';
 export * from './p7-field';
+export * from './p8-deployment';
 export * from './tool-manifest';
 export * from './trace-context';
 

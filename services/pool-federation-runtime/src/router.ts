@@ -32,6 +32,58 @@ export interface ResolveRouteOptions {
   cache?: RouteCache;
   /** When true, bypass cache (read-through). Useful after a manifest change. */
   bypassCache?: boolean;
+  /** Caller's region — used by the sovereign isolation check (G-P8-7). */
+  request_region?: string;
+}
+
+/**
+ * SovereignIsolationError — thrown when a cross-region route would touch a
+ * sovereign region with terminal_federation=true (FR-SOV-2). The federation
+ * runtime refuses these by design; the route exists in the DB but the
+ * sovereign policy preempts the routing decision.
+ */
+export class SovereignIsolationError extends Error {
+  readonly code = 'sovereign_isolation';
+  readonly status_code = 451; // Unavailable For Legal Reasons
+  constructor(
+    public readonly federation_id: string,
+    public readonly request_region: string,
+    public readonly blocked_regions: string[],
+  ) {
+    super(
+      `route from ${request_region} blocked by sovereign isolation in regions: ${blocked_regions.join(', ')}`,
+    );
+    this.name = 'SovereignIsolationError';
+  }
+}
+
+/**
+ * Check whether any of the target pool indexes resolve to a sovereign region
+ * marked terminal. Returns the list of blocking regions (empty when clear).
+ *
+ * Logical join via routing.pool.region → sovereign.region_config; both are
+ * guarded against missing schemas (sovereign may not be installed in a
+ * cloud-only deploy).
+ */
+async function blockingSovereignRegions(targetPoolIndexes: string[], requestRegion: string): Promise<string[]> {
+  if (targetPoolIndexes.length === 0) return [];
+  try {
+    const pool = getPool();
+    const { rows } = await pool.query<{ region: string }>(
+      `SELECT DISTINCT p.region
+         FROM routing.pool p
+         JOIN sovereign.region_config s
+           ON s.region_id = p.region
+        WHERE p.pool_index = ANY($1::text[])
+          AND s.terminal_federation = TRUE
+          AND p.region <> $2`,
+      [targetPoolIndexes, requestRegion],
+    );
+    return rows.map((r) => r.region);
+  } catch {
+    // sovereign schema not installed → no sovereign blocking (cloud-only deploy).
+    return [];
+  }
 }
 
 function routeKey(federationId: string, queryClass: FederationQueryClass): string {
@@ -82,6 +134,18 @@ export async function resolveRoute(
   if (rows.length === 0) return null;
 
   const row = rows[0];
+
+  // P8 FR-SOV-2 / G-P8-7: refuse cross-region routes that touch a sovereign
+  // region with terminal_federation=true. The route row exists in the DB
+  // (a P7 federation could have planned it), but the sovereign policy
+  // preempts; this is the "treat as terminal" enforcement.
+  if (opts.request_region) {
+    const blocked = await blockingSovereignRegions(row.target_pool_indexes, opts.request_region);
+    if (blocked.length > 0) {
+      throw new SovereignIsolationError(federationId, opts.request_region, blocked);
+    }
+  }
+
   const ref: FederationRouteRef = {
     route_id: row.route_id,
     federation_id: row.federation_id,

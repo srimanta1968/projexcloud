@@ -16,6 +16,9 @@ export default function RootLayout({ children }: { children: ReactNode }): JSX.E
           <nav style={{ marginLeft: 'auto', display: 'flex', gap: 16, fontSize: 14 }}>
             <a href="/tenants" style={{ color: '#e9eef7', textDecoration: 'none' }}>Tenants</a>
             <a href="/pricing-catalogs" style={{ color: '#e9eef7', textDecoration: 'none' }}>Pricing</a>
+            <a href="/sovereign-regions" style={{ color: '#e9eef7', textDecoration: 'none' }}>Sovereign</a>
+            <a href="/onprem-installs" style={{ color: '#e9eef7', textDecoration: 'none' }}>On-Prem</a>
+            <a href="/active-active" style={{ color: '#e9eef7', textDecoration: 'none' }}>Active-Active</a>
           </nav>
         </header>
         <main style={{ padding: 24 }}>{children}</main>

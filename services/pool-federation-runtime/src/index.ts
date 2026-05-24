@@ -6,7 +6,7 @@ main().catch((err) => {
 });
 
 export { buildApp } from './app';
-export { resolveRoute, recordFailover } from './router';
+export { resolveRoute, recordFailover, SovereignIsolationError } from './router';
 export type { RouteCache } from './router';
 export { migrationsDir } from './db';
 

@@ -67,3 +67,19 @@ export { verifyMeterChain, verifyAllMeterChains } from './services/chainVerifier
 export type { MeterChainProof, MeterChainBreak } from './services/chainVerifier';
 export { startMeterVerifierScheduler, setMeterBreakHandler } from './services/verifierScheduler';
 export type { MeterVerifierConfig, MeterVerifierHandle } from './services/verifierScheduler';
+
+// Y-P8-15 — P8 NFR SLO alarms.
+export {
+  startSloAlarms,
+  runSloEvaluation,
+  setSloAlarmEmitter,
+  SLO_RULES,
+} from './services/sloAlarms';
+export type {
+  SloRuleId,
+  SloRule,
+  SloAlarmEmitter,
+  SloEvaluation,
+  SloAlarmsConfig,
+  SloAlarmsHandle,
+} from './services/sloAlarms';

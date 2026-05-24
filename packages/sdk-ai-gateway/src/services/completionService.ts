@@ -18,6 +18,7 @@ import {
   withRetry,
 } from './routingEngine';
 import { assertKillSwitchDisengaged } from './killSwitch';
+import { resolveLocalProvider } from './localProviderResolver';
 
 /**
  * AI Gateway completion service (FR-AGW-1..9 / AC-1).
@@ -62,6 +63,13 @@ async function selectRoute(
   ctx: AgentContext,
   request: CompletionRequest,
 ): Promise<SelectedRoute> {
+  // P8 Variant C (on-prem) preempts every other route. If sdk-onprem has
+  // registered a local-provider resolver and that resolver returns a hit,
+  // we use it — guarantees no cloud provider call on an air-gapped install.
+  const localHit = await resolveLocalProvider(ctx, request);
+  if (localHit) {
+    return { rule_id: null, provider_id: localHit.provider_id, model: localHit.model };
+  }
   const decision = await resolveRoute(ctx.tenant_id, request);
   if (decision) {
     return { rule_id: decision.rule_id, provider_id: decision.provider_id, model: decision.model };

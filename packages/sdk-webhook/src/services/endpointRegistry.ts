@@ -6,10 +6,19 @@ import type {
   SubscribeInput,
   SubscriptionRecord,
 } from '../models/webhook.model';
+import { validateExternalUrl } from './urlValidator';
 
 export class EndpointNotFoundError extends Error {
   readonly code = 'EndpointNotFound';
   constructor(id: string) { super(`Endpoint ${id} not found`); }
+}
+
+export class WebhookUrlRejectedError extends Error {
+  readonly code = 'WebhookUrlRejected';
+  readonly status_code = 400;
+  constructor(public readonly url: string, public readonly reason: string) {
+    super(`webhook URL rejected: ${reason} (url=${url})`);
+  }
 }
 
 export class UnregisteredEventTypeError extends Error {
@@ -26,6 +35,13 @@ export class UnregisteredEventTypeError extends Error {
 export async function registerEndpoint(input: RegisterEndpointInput): Promise<EndpointRecord> {
   if (!input.url.startsWith('https://')) {
     throw new Error('endpoint url must be https://');
+  }
+  // P8 Variant C hook — sdk-onprem registers a validator that refuses
+  // external URLs when the install is in air-gap-strict mode (FR-ONP-6).
+  // Default validator is permissive so cloud deployments are unaffected.
+  const v = await validateExternalUrl({ tenant_id: input.tenant_id, url: input.url });
+  if (!v.allowed) {
+    throw new WebhookUrlRejectedError(input.url, v.reason ?? 'rejected by external validator');
   }
   const rows = await dataService.rows<EndpointRecord>(
     `INSERT INTO webhook.endpoint (

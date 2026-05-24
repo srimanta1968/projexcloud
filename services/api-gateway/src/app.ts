@@ -11,6 +11,16 @@ import {
   migrationsDir as vaultMigrations,
   server as vaultServer,
   startRotationScheduler,
+  bindCmk,
+  rotateCmk,
+  revokeCmk,
+  getByokBinding,
+  getByokBindingForTenant,
+  registerSyntheticProvidersForDev,
+  registerRealKmsProvidersFromEnv,
+  installByokInvalidator,
+  installAutoSiemForwarder,
+  setSiemForwarder,
 } from '@projexlight/sdk-vault';
 import {
   migrationsDir as auditMigrations,
@@ -24,6 +34,12 @@ import {
   server as poolRouterServer,
   RedisRouteCache,
   setCache,
+  activateActiveActiveProfile,
+  getActiveActiveProfile,
+  listReplicationStreams,
+  runFailoverDrill,
+  startMonthlyDrillScheduler,
+  startReplicaProbe,
 } from '@projexlight/sdk-pool-router';
 import {
   migrationsDir as meterMigrations,
@@ -40,6 +56,7 @@ import {
   upsertPricingRate,
   createCatalogVersion,
   setCatalogStatus,
+  startSloAlarms,
 } from '@projexlight/sdk-meter';
 import { server as secretsServer } from '@projexlight/sdk-secrets';
 import { migrationsDir as tenantMigrations, server as tenantServer } from '@projexlight/sdk-tenant';
@@ -225,7 +242,12 @@ import { migrationsDir as connectorSnowflakeMigrations } from '@projexlight/conn
 // runtime) + G11 (Iceberg lakehouse). 8 new SDKs + 1 new service.
 // Per feedback_auto_migrate_on_deploy: every migrationsDir below is
 // appended to runMigrations([...]) so tables land on first boot.
-import { migrationsDir as stormMigrations }               from '@projexlight/sdk-storm';
+import {
+  migrationsDir as stormMigrations,
+  queryByBbox as queryStormByBbox,
+  ingestOnce as ingestStormOnce,
+  startStormIngestor,
+} from '@projexlight/sdk-storm';
 import {
   migrationsDir as dispatchMigrations,
   optimizeRoute,
@@ -236,16 +258,67 @@ import { migrationsDir as leadScoringMigrations }         from '@projexlight/sdk
 import {
   migrationsDir as evidenceMigrations,
   startRetentionShredder as startEvidenceRetentionShredder,
+  server as evidenceServer,
 } from '@projexlight/sdk-evidence';
 import {
   migrationsDir as diagnosticTelemetryMigrations,
   bootstrapDiagnosticClickHouseSchema,
+  server as diagnosticTelemetryServer,
 } from '@projexlight/sdk-diagnostic-telemetry';
-import { migrationsDir as hdkMeasureMigrations }          from '@projexlight/hdk-measure';
-import { migrationsDir as hdkWatermarkMigrations }        from '@projexlight/hdk-watermark';
+import { server as leadScoringServer } from '@projexlight/sdk-lead-scoring';
+import {
+  migrationsDir as hdkMeasureMigrations,
+  server as hdkMeasureServer,
+} from '@projexlight/hdk-measure';
+import {
+  migrationsDir as hdkWatermarkMigrations,
+  server as hdkWatermarkServer,
+} from '@projexlight/hdk-watermark';
 // pool-federation-runtime ships as its own service binary but its migrations
 // also auto-apply via api-gateway's runner during MVP (shared admin DB).
-import { migrationsDir as poolFederationRuntimeMigrations } from '@projexlight/service-pool-federation-runtime';
+import {
+  migrationsDir as poolFederationRuntimeMigrations,
+  startFailoverOrchestrator,
+  type OrchestratorHandle,
+} from '@projexlight/service-pool-federation-runtime';
+import {
+  bootstrapIcebergBackend,
+  type BootstrapBackendInput,
+} from '@projexlight/service-lineage-projector';
+
+// P8 / Deployment Variants — runs in parallel with P3-P7 once Vault + Pool
+// Router exist. Variant A (BYOK) extends sdk-vault. Variant B (Sovereign)
+// is a new sdk-sovereign package. Variant C (On-Prem) is a new sdk-onprem
+// package. Variant D (Active-Active) extends sdk-pool-router. Every
+// migrationsDir is appended to runMigrations per feedback_auto_migrate_on_deploy.
+import {
+  migrationsDir as sovereignMigrations,
+  registerRegion as registerSovereignRegion,
+  listRegions as listSovereignRegions,
+  shipBundle as shipSovereignBundle,
+  markBundleApplied as markSovereignBundleApplied,
+  recordAttestation as recordSovereignAttestation,
+  ingestLeakAlert as ingestSovereignLeakAlert,
+  startAttestationExpiryWatcher,
+  setLeakDetector,
+  startLeakDetector,
+  SyntheticLeakDetector,
+} from '@projexlight/sdk-sovereign';
+import {
+  migrationsDir as onpremMigrations,
+  registerInstall as registerOnpremInstall,
+  getInstall as getOnpremInstall,
+  applyBundle as applyOnpremBundle,
+  rollbackBundle as rollbackOnpremBundle,
+  registerLocalLlm as registerOnpremLocalLlm,
+  generateBillingReport as generateOnpremBillingReport,
+  isWebhookUrlAllowed,
+  setOnPremEmitter,
+  installOnPremCrossSdkHooks,
+  installPhoneHomeBlocker,
+  startLocalLlmProbe,
+} from '@projexlight/sdk-onprem';
+
 import {
   migrationsDir as hdkFoundationMigrations,
   server as hdkFoundationServer,
@@ -359,6 +432,19 @@ app.register(taxonomyServer.registerRoutes);
 
 app.register(eventRegistryRoutes);
 
+// P7 §5.5 / AC-1 — evidence capture intake endpoint.
+app.register(evidenceServer.registerRoutes);
+
+// P7 §5.9 / AC-10 — HDK measure + watermark intake endpoints.
+app.register(hdkMeasureServer.registerRoutes);
+app.register(hdkWatermarkServer.registerRoutes);
+
+// P7 §5.6 / AC-5 — diagnostic crash + health + session replay intake.
+app.register(diagnosticTelemetryServer.registerRoutes);
+
+// P7 §5.4 / AC-3 — lead scoring + next-best-action surface.
+app.register(leadScoringServer.registerRoutes);
+
 // P7 FR-DSP-3 — route optimization HTTP endpoint.
 app.post<{
   Body: { persona_id?: string; task_ids?: string[]; start_task_id?: string };
@@ -387,6 +473,73 @@ app.post<{
 // `Sec-WebSocket-Protocol` header is the production-correct path; for the
 // MVP scaffold we accept the persona_id from the path. Hardening tracked
 // as a follow-up task.
+// P7 FR-STM-1..4 / AC-4 — storm overlay query + ingestor admin endpoints.
+//
+//   GET  /api/storm/overlay?min_lat=&min_lng=&max_lat=&max_lng=&since=
+//     Public query — agents + verticals call this to fetch storm events
+//     and their intensity cell counts overlapping a bbox.
+//
+//   POST /admin/storm/ingest-now
+//     Header-auth gated (ADMIN_OPS_TOKEN). Runs one ingestor pass against
+//     the provider chain (NOAA → DTN → Weather Underground → synthetic)
+//     and returns the run result. Used by ops to trigger an immediate
+//     pull when a major weather event lands outside the periodic worker
+//     cadence (default 1h).
+app.get<{
+  Querystring: {
+    min_lat?: string;
+    min_lng?: string;
+    max_lat?: string;
+    max_lng?: string;
+    since?: string;
+  };
+}>('/api/storm/overlay', async (req, reply) => {
+  const q = req.query ?? {};
+  const min_lat = parseFloat(q.min_lat ?? '');
+  const min_lng = parseFloat(q.min_lng ?? '');
+  const max_lat = parseFloat(q.max_lat ?? '');
+  const max_lng = parseFloat(q.max_lng ?? '');
+  if (
+    !Number.isFinite(min_lat) || !Number.isFinite(min_lng) ||
+    !Number.isFinite(max_lat) || !Number.isFinite(max_lng)
+  ) {
+    return reply.code(400).send({ error: 'min_lat, min_lng, max_lat, max_lng are required floats' });
+  }
+  if (min_lat > max_lat || min_lng > max_lng) {
+    return reply.code(400).send({ error: 'min must be less than max for both lat and lng' });
+  }
+  try {
+    const out = await queryStormByBbox({ min_lat, min_lng, max_lat, max_lng, since: q.since });
+    return out;
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    return reply.code(500).send({ error: msg });
+  }
+});
+
+app.post<{
+  Body: { lookback_hours?: number };
+}>('/admin/storm/ingest-now', async (req, reply) => {
+  const adminToken = process.env.ADMIN_OPS_TOKEN;
+  const presented = req.headers['x-admin-ops-token'];
+  if (!adminToken || !presented || presented !== adminToken) {
+    return reply.code(401).send({ success: false, error: 'admin token required' });
+  }
+  const lookbackHours = req.body?.lookback_hours ?? 24;
+  const until = new Date();
+  const since = new Date(until.getTime() - lookbackHours * 60 * 60 * 1000);
+  try {
+    const result = await ingestStormOnce({
+      since: since.toISOString(),
+      until: until.toISOString(),
+    });
+    return { success: true, data: result };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    return reply.code(500).send({ success: false, error: msg });
+  }
+});
+
 app.register(async (instance) => {
   instance.get<{
     Params: { persona_id: string };
@@ -577,6 +730,15 @@ const start = async (): Promise<void> => {
       { sdk: 'hdk-watermark',           dir: hdkWatermarkMigrations },
       // sdk-meter 004_quota_denial.sql lands via the existing sdk-meter
       // entry at the top of this list (runner is forward-only + sha-tracked).
+      // P8 — Deployment Variants. Ordering matters:
+      //   1. sdk-vault 002_byok.sql lands via the existing sdk-vault
+      //      entry at the top (sha-tracked + auto-picked).
+      //   2. sdk-pool-router 002_active_active.sql lands via the existing
+      //      sdk-pool-router entry; depends on routing.* (001) + the
+      //      federation.* schema (P7 runtime, guarded by DO block).
+      //   3. sdk-sovereign + sdk-onprem are net-new packages.
+      { sdk: 'sdk-sovereign',           dir: sovereignMigrations },
+      { sdk: 'sdk-onprem',              dir: onpremMigrations },
     ]);
 
     // P6A — AC-6 hard gate: probe vector namespace isolation before agents
@@ -640,6 +802,320 @@ const start = async (): Promise<void> => {
       enabled: process.env.AGENT_SIGNING_KEY_ROTATION_ENABLED !== 'false',
     });
     app.addHook('onClose', async () => signingKeyRotationHandle.stop());
+
+    // P7 G11 — Iceberg backend wiring. Env-driven: ICEBERG_BACKEND_DRIVER ∈
+    // {nessie, glue, none}, ICEBERG_BACKEND_BASE_URL, ICEBERG_BACKEND_TOKEN.
+    // When driver=none, the lineage-projector worker falls back to the local
+    // NDJSON writer — fine for dev, blocked in prod via the warning below.
+    try {
+      bootstrapIcebergBackend();
+      const driver = process.env.ICEBERG_BACKEND_DRIVER ?? 'none';
+      console.log(`[api-gateway] Iceberg backend wired: driver=${driver}`);
+      if (process.env.NODE_ENV === 'production' && driver === 'none') {
+        console.warn(
+          '[api-gateway] WARNING: NODE_ENV=production but ICEBERG_BACKEND_DRIVER=none — lineage projection falls back to local NDJSON',
+        );
+      }
+    } catch (err) {
+      console.warn('[api-gateway] Iceberg backend wiring failed:', (err as Error).message);
+    }
+
+    // POST /admin/federation/iceberg-catalogs
+    //   { catalog_id, region, backend, root_url, capacity_tier?, status? }
+    // Registers a federation.iceberg_catalog row so the lineage-projector
+    // worker can resolve a target table_ref. Ops uses this instead of raw
+    // SQL — keeps the auto-migrate doctrine intact for shape changes.
+    app.post<{
+      Body: {
+        catalog_id?: string;
+        region?: string;
+        backend?: 'glue' | 'nessie' | 'hive';
+        root_url?: string;
+        capacity_tier?: string;
+        status?: 'active' | 'degraded' | 'retired';
+      };
+    }>('/admin/federation/iceberg-catalogs', async (req, reply) => {
+      const adminToken = process.env.ADMIN_OPS_TOKEN;
+      const presented = req.headers['x-admin-ops-token'];
+      if (!adminToken || !presented || presented !== adminToken) {
+        return reply.code(401).send({ success: false, error: 'admin token required' });
+      }
+      const b = req.body ?? {};
+      if (!b.catalog_id || !b.region || !b.backend || !b.root_url) {
+        return reply.code(400).send({
+          success: false,
+          error: 'catalog_id, region, backend, root_url are required',
+        });
+      }
+      if (!['glue', 'nessie', 'hive'].includes(b.backend)) {
+        return reply.code(400).send({ success: false, error: "backend must be one of: glue, nessie, hive" });
+      }
+      try {
+        const row = await dataService.one<{
+          catalog_id: string; region: string; backend: string;
+          root_url: string; capacity_tier: string; status: string; created_at: Date;
+        }>(
+          `INSERT INTO federation.iceberg_catalog
+             (catalog_id, region, backend, root_url, capacity_tier, status)
+           VALUES ($1, $2, $3, $4, $5, $6)
+           ON CONFLICT (catalog_id) DO UPDATE
+             SET region = EXCLUDED.region,
+                 backend = EXCLUDED.backend,
+                 root_url = EXCLUDED.root_url,
+                 capacity_tier = EXCLUDED.capacity_tier,
+                 status = EXCLUDED.status
+           RETURNING catalog_id, region, backend, root_url, capacity_tier, status, created_at`,
+          [
+            b.catalog_id,
+            b.region,
+            b.backend,
+            b.root_url,
+            b.capacity_tier ?? 'standard',
+            b.status ?? 'active',
+          ],
+        );
+        return reply.code(201).send({ success: true, data: row });
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        return reply.code(500).send({ success: false, error: msg });
+      }
+    });
+
+    // GET /admin/federation/iceberg-catalogs
+    app.get('/admin/federation/iceberg-catalogs', async (req, reply) => {
+      const adminToken = process.env.ADMIN_OPS_TOKEN;
+      const presented = req.headers['x-admin-ops-token'];
+      if (!adminToken || !presented || presented !== adminToken) {
+        return reply.code(401).send({ success: false, error: 'admin token required' });
+      }
+      const rows = await dataService.rows(
+        `SELECT catalog_id, region, backend, root_url, capacity_tier, status, created_at
+           FROM federation.iceberg_catalog
+          ORDER BY created_at DESC`,
+      );
+      return { success: true, data: rows };
+    });
+
+    // POST /admin/federation/iceberg-bindings
+    //   { binding_id, catalog_id, table_ref, source_clickhouse_table?, partition_strategy?, z_order_cols? }
+    app.post<{
+      Body: {
+        binding_id?: string;
+        catalog_id?: string;
+        table_ref?: string;
+        source_clickhouse_table?: string;
+        partition_strategy?: Record<string, unknown>;
+        z_order_cols?: string[];
+      };
+    }>('/admin/federation/iceberg-bindings', async (req, reply) => {
+      const adminToken = process.env.ADMIN_OPS_TOKEN;
+      const presented = req.headers['x-admin-ops-token'];
+      if (!adminToken || !presented || presented !== adminToken) {
+        return reply.code(401).send({ success: false, error: 'admin token required' });
+      }
+      const b = req.body ?? {};
+      if (!b.binding_id || !b.catalog_id || !b.table_ref) {
+        return reply.code(400).send({
+          success: false,
+          error: 'binding_id, catalog_id, table_ref are required',
+        });
+      }
+      try {
+        const row = await dataService.one(
+          `INSERT INTO federation.iceberg_table_binding
+             (binding_id, catalog_id, table_ref, source_clickhouse_table,
+              partition_strategy, z_order_cols)
+           VALUES ($1, $2, $3, $4, $5::jsonb, $6)
+           ON CONFLICT (binding_id) DO UPDATE
+             SET catalog_id = EXCLUDED.catalog_id,
+                 table_ref = EXCLUDED.table_ref,
+                 source_clickhouse_table = EXCLUDED.source_clickhouse_table,
+                 partition_strategy = EXCLUDED.partition_strategy,
+                 z_order_cols = EXCLUDED.z_order_cols
+           RETURNING binding_id, catalog_id, table_ref, source_clickhouse_table,
+                     partition_strategy, z_order_cols, last_compacted_at`,
+          [
+            b.binding_id,
+            b.catalog_id,
+            b.table_ref,
+            b.source_clickhouse_table ?? null,
+            JSON.stringify(b.partition_strategy ?? {}),
+            b.z_order_cols ?? [],
+          ],
+        );
+        return reply.code(201).send({ success: true, data: row });
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        return reply.code(500).send({ success: false, error: msg });
+      }
+    });
+
+    // POST /admin/federation/iceberg-backend — hot-reload the backend
+    // without restarting the gateway. Useful when ops needs to flip drivers
+    // (nessie ↔ glue) or update credentials. Returns the active driver.
+    app.post<{ Body: BootstrapBackendInput }>(
+      '/admin/federation/iceberg-backend',
+      async (req, reply) => {
+        const adminToken = process.env.ADMIN_OPS_TOKEN;
+        const presented = req.headers['x-admin-ops-token'];
+        if (!adminToken || !presented || presented !== adminToken) {
+          return reply.code(401).send({ success: false, error: 'admin token required' });
+        }
+        const b = req.body ?? ({} as BootstrapBackendInput);
+        if (!b.driver) {
+          return reply.code(400).send({ success: false, error: 'driver is required' });
+        }
+        try {
+          bootstrapIcebergBackend(b);
+          return { success: true, data: { driver: b.driver } };
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          return reply.code(400).send({ success: false, error: msg });
+        }
+      },
+    );
+
+    // P7 FR-FED-3 / AC-6 — federation failover orchestrator + chaos-drill harness.
+    // Periodic Tier-G probes; recordFailover on threshold breach; runChaosDrill
+    // exposed on POST /admin/federation/chaos-drill for monthly RPO/RTO drills.
+    const federationOrchestrator: OrchestratorHandle = startFailoverOrchestrator({
+      enabled: process.env.FEDERATION_ORCHESTRATOR_ENABLED !== 'false',
+      intervalMs: parseInt(process.env.FEDERATION_ORCHESTRATOR_INTERVAL_MS || '10000', 10),
+      failureThreshold: parseInt(process.env.FEDERATION_ORCHESTRATOR_FAILURE_THRESHOLD || '3', 10),
+    });
+    app.addHook('onClose', async () => federationOrchestrator.stop());
+
+    // POST /admin/federation/chaos-drill
+    //   { federation_id, from_region, to_region }
+    // Records a failover_event with trigger='chaos-drill' so RPO/RTO drills
+    // are measured in production-like conditions.
+    app.post<{
+      Body: { federation_id?: string; from_region?: string; to_region?: string };
+    }>('/admin/federation/chaos-drill', async (req, reply) => {
+      const adminToken = process.env.ADMIN_OPS_TOKEN;
+      const presented = req.headers['x-admin-ops-token'];
+      if (!adminToken || !presented || presented !== adminToken) {
+        return reply.code(401).send({ success: false, error: 'admin token required' });
+      }
+      const b = req.body ?? {};
+      if (!b.federation_id || !b.from_region || !b.to_region) {
+        return reply.code(400).send({
+          success: false,
+          error: 'federation_id, from_region, to_region are required',
+        });
+      }
+      try {
+        const event = await federationOrchestrator.runChaosDrill({
+          federation_id: b.federation_id,
+          from_region: b.from_region,
+          to_region: b.to_region,
+        });
+        return { success: true, data: event };
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        return reply.code(500).send({ success: false, error: msg });
+      }
+    });
+
+    // GET /admin/federation/orchestrator-stats — read-only probe counter.
+    app.get('/admin/federation/orchestrator-stats', async (req, reply) => {
+      const adminToken = process.env.ADMIN_OPS_TOKEN;
+      const presented = req.headers['x-admin-ops-token'];
+      if (!adminToken || !presented || presented !== adminToken) {
+        return reply.code(401).send({ success: false, error: 'admin token required' });
+      }
+      return { success: true, data: federationOrchestrator.stats() };
+    });
+
+    // P7 FR-STM-1..4 / AC-4 — periodic storm-overlay ingestor. Walks the
+    // provider fallback chain (NOAA → DTN → Weather Underground →
+    // synthetic) on a cadence and upserts storm.event / storm.intensity_cell
+    // rows. Ops can force an immediate pull via POST /admin/storm/ingest-now.
+    const stormIngestorHandle = startStormIngestor({
+      enabled: process.env.STORM_INGESTOR_ENABLED !== 'false',
+      intervalMs: parseInt(process.env.STORM_INGESTOR_INTERVAL_MS || String(60 * 60 * 1000), 10),
+      lookbackMs: parseInt(process.env.STORM_INGESTOR_LOOKBACK_MS || String(24 * 60 * 60 * 1000), 10),
+    });
+    app.addHook('onClose', async () => stormIngestorHandle.stop());
+
+    // P8 — wire deployment-variant cross-SDK hooks at boot.
+
+    // Variant A (BYOK):
+    //   1. Real KMS adapters when SDKs + creds present; synthetic fallback otherwise.
+    //   2. SIEM auto-forwarder (Splunk/Elastic/Sumo).
+    //   3. Cross-replica cache invalidator (Redis pub/sub).
+    if (process.env.NODE_ENV !== 'production' || process.env.ALLOW_SYNTHETIC_BYOK === 'true') {
+      registerSyntheticProvidersForDev();
+      console.log('[api-gateway] BYOK synthetic KMS providers registered (dev mode)');
+    }
+    try {
+      const real = registerRealKmsProvidersFromEnv();
+      if (real.length > 0) {
+        console.log(`[api-gateway] BYOK real KMS adapters registered: ${real.join(', ')}`);
+      }
+    } catch (err) {
+      console.warn('[api-gateway] BYOK real KMS adapter wiring failed:', (err as Error).message);
+    }
+    setSiemForwarder(installAutoSiemForwarder());
+    if (config.redis.enabled) {
+      void installByokInvalidator().catch((err) =>
+        console.warn('[api-gateway] BYOK invalidator subscribe failed:', (err as Error).message),
+      );
+    }
+
+    // Variant B (Sovereign): attestation expiry watcher + leak detector.
+    // Leak detector defaults to synthetic when SOVEREIGN_LEAK_DETECTOR=synthetic
+    // (matches the adapter pattern used elsewhere). Real Cilium/Falco
+    // subscriber is wired by the partner-supplied detector package.
+    const sovereignExpiryHandle = startAttestationExpiryWatcher({
+      enabled: process.env.SOVEREIGN_EXPIRY_WATCHER_ENABLED !== 'false',
+    });
+    app.addHook('onClose', async () => sovereignExpiryHandle.stop());
+    if (process.env.SOVEREIGN_LEAK_DETECTOR === 'synthetic' || process.env.NODE_ENV !== 'production') {
+      setLeakDetector(new SyntheticLeakDetector());
+    }
+    void startLeakDetector();
+    app.addHook('onClose', async () => {
+      const { stopLeakDetector } = await import('@projexlight/sdk-sovereign');
+      await stopLeakDetector();
+    });
+
+    // Variant C (On-Prem):
+    //   1. Local-provider + webhook hooks (G-P8-5/6, already wired).
+    //   2. Phone-home blocker — only when explicitly opted into strict mode.
+    //   3. Local LLM latency probe (Y-P8-10).
+    installOnPremCrossSdkHooks({ default_install_id: process.env.ONPREM_INSTALL_ID });
+    if (process.env.ONPREM_INSTALL_ID) {
+      console.log(`[api-gateway] on-prem cross-SDK hooks active (install=${process.env.ONPREM_INSTALL_ID})`);
+    }
+    if (process.env.ONPREM_AIR_GAP_MODE === 'strict') {
+      installPhoneHomeBlocker({
+        extraAllowList: (process.env.ONPREM_PHONE_HOME_ALLOWLIST ?? '').split(',').filter(Boolean),
+      });
+      console.log('[api-gateway] phone-home blocker active (strict air-gap)');
+    }
+    const localLlmProbeHandle = startLocalLlmProbe({
+      enabled: process.env.ONPREM_LLM_PROBE_ENABLED !== 'false',
+    });
+    app.addHook('onClose', async () => localLlmProbeHandle.stop());
+
+    // Variant D (Active-Active):
+    //   1. Monthly chaos drill scheduler (FR-AA-6).
+    //   2. Replica probe loop (Y-P8-11).
+    const activeActiveDrillHandle = startMonthlyDrillScheduler({
+      enabled: process.env.ACTIVE_ACTIVE_DRILL_ENABLED !== 'false',
+    });
+    app.addHook('onClose', async () => activeActiveDrillHandle.stop());
+    const replicaProbeHandle = startReplicaProbe({
+      enabled: process.env.ACTIVE_ACTIVE_REPLICA_PROBE_ENABLED !== 'false',
+    });
+    app.addHook('onClose', async () => replicaProbeHandle.stop());
+
+    // P8 NFR alarms (Y-P8-15) — periodic SLO evaluation across all four variants.
+    const sloAlarmsHandle = startSloAlarms({
+      enabled: process.env.SLO_ALARMS_ENABLED !== 'false',
+    });
+    app.addHook('onClose', async () => sloAlarmsHandle.stop());
 
     // P7 FR-EVD-6 / AC-12 — per-encounter retention shredder. Drains
     // evidence.capture rows whose retention_expires_at has passed,
@@ -782,6 +1258,459 @@ const start = async (): Promise<void> => {
       try {
         await setCatalogStatus(req.params.catalog_id, status);
         return { success: true };
+      } catch (e) {
+        return reply.code(500).send({ success: false, error: (e as Error).message });
+      }
+    });
+
+    /* ============================================================
+     * P8 admin endpoints (G-P8-1). All ADMIN_OPS_TOKEN gated via
+     * the requireAdmin helper. BYOK is per-tenant; the other three
+     * are operator surfaces.
+     * ============================================================ */
+
+    // --- Variant A · BYOK ---
+    app.post<{
+      Body: {
+        tenant_id?: string;
+        provider?: 'aws-kms' | 'gcp-kms' | 'hsm-pkcs11';
+        customer_kms_key_arn?: string;
+        tenant_key_id?: string;
+        sla_revoke_propagation_seconds?: number;
+        siem_forwarder_endpoint?: string | null;
+        operator_id?: string;
+      };
+    }>('/admin/byok/bindings', async (req, reply) => {
+      const err = requireAdmin(req as unknown as { headers: Record<string, unknown> });
+      if (err) return reply.code(401).send({ success: false, error: err });
+      const b = req.body ?? {};
+      if (!b.tenant_id || !b.provider || !b.customer_kms_key_arn || !b.tenant_key_id || !b.operator_id) {
+        return reply.code(400).send({
+          success: false,
+          error: 'tenant_id, provider, customer_kms_key_arn, tenant_key_id, operator_id all required',
+        });
+      }
+      try {
+        const binding = await bindCmk({
+          tenant_id: b.tenant_id,
+          provider: b.provider,
+          customer_kms_key_arn: b.customer_kms_key_arn,
+          tenant_key_id: b.tenant_key_id,
+          sla_revoke_propagation_seconds: b.sla_revoke_propagation_seconds,
+          siem_forwarder_endpoint: b.siem_forwarder_endpoint,
+          operator_id: b.operator_id,
+        });
+        return { success: true, data: binding };
+      } catch (e) {
+        return reply.code(500).send({ success: false, error: (e as Error).message });
+      }
+    });
+
+    app.get<{ Params: { tenant_id: string } }>(
+      '/admin/byok/bindings/tenant/:tenant_id',
+      async (req, reply) => {
+        const err = requireAdmin(req as unknown as { headers: Record<string, unknown> });
+        if (err) return reply.code(401).send({ success: false, error: err });
+        const b = await getByokBindingForTenant(req.params.tenant_id);
+        if (!b) return reply.code(404).send({ success: false, error: 'no binding for tenant' });
+        return { success: true, data: b };
+      },
+    );
+
+    app.post<{
+      Params: { binding_id: string };
+      Body: { previous_tenant_key_id?: string; new_tenant_key_id?: string; operator_id?: string };
+    }>('/admin/byok/bindings/:binding_id/rotate', async (req, reply) => {
+      const err = requireAdmin(req as unknown as { headers: Record<string, unknown> });
+      if (err) return reply.code(401).send({ success: false, error: err });
+      const b = req.body ?? {};
+      if (!b.previous_tenant_key_id || !b.new_tenant_key_id || !b.operator_id) {
+        return reply.code(400).send({
+          success: false,
+          error: 'previous_tenant_key_id, new_tenant_key_id, operator_id required',
+        });
+      }
+      try {
+        const rot = await rotateCmk({
+          binding_id: req.params.binding_id,
+          previous_tenant_key_id: b.previous_tenant_key_id,
+          new_tenant_key_id: b.new_tenant_key_id,
+          operator_id: b.operator_id,
+        });
+        return { success: true, data: rot };
+      } catch (e) {
+        return reply.code(500).send({ success: false, error: (e as Error).message });
+      }
+    });
+
+    app.post<{
+      Params: { binding_id: string };
+      Body: { reason?: string; operator_id?: string };
+    }>('/admin/byok/bindings/:binding_id/revoke', async (req, reply) => {
+      const err = requireAdmin(req as unknown as { headers: Record<string, unknown> });
+      if (err) return reply.code(401).send({ success: false, error: err });
+      const b = req.body ?? {};
+      if (!b.reason || !b.operator_id) {
+        return reply.code(400).send({ success: false, error: 'reason + operator_id required' });
+      }
+      try {
+        const binding = await revokeCmk({
+          binding_id: req.params.binding_id,
+          reason: b.reason,
+          operator_id: b.operator_id,
+        });
+        if (!binding) return reply.code(404).send({ success: false, error: 'binding not found' });
+        return { success: true, data: binding };
+      } catch (e) {
+        return reply.code(500).send({ success: false, error: (e as Error).message });
+      }
+    });
+
+    // --- Variant B · Sovereign Cloud ---
+    app.get('/admin/sovereign/regions', async (req, reply) => {
+      const err = requireAdmin(req as unknown as { headers: Record<string, unknown> });
+      if (err) return reply.code(401).send({ success: false, error: err });
+      return { success: true, data: await listSovereignRegions() };
+    });
+
+    app.post<{
+      Body: {
+        region_id?: string;
+        regime?: 'fedramp-high' | 'il5' | 'pipl' | 'eu-sovereign' | 'uae-trd';
+        operator_partner?: string;
+        terminal_federation?: boolean;
+        kms_provider?: string;
+        operator_id?: string;
+      };
+    }>('/admin/sovereign/regions', async (req, reply) => {
+      const err = requireAdmin(req as unknown as { headers: Record<string, unknown> });
+      if (err) return reply.code(401).send({ success: false, error: err });
+      const b = req.body ?? {};
+      if (!b.region_id || !b.regime || !b.operator_partner || !b.kms_provider || !b.operator_id) {
+        return reply.code(400).send({
+          success: false,
+          error: 'region_id, regime, operator_partner, kms_provider, operator_id required',
+        });
+      }
+      try {
+        const region = await registerSovereignRegion({
+          region_id: b.region_id,
+          regime: b.regime,
+          operator_partner: b.operator_partner,
+          terminal_federation: b.terminal_federation,
+          kms_provider: b.kms_provider,
+          operator_id: b.operator_id,
+        });
+        return { success: true, data: region };
+      } catch (e) {
+        return reply.code(500).send({ success: false, error: (e as Error).message });
+      }
+    });
+
+    app.post<{
+      Params: { region_id: string };
+      Body: { version?: string; bundle_artifact_ref?: string; signature_hex?: string };
+    }>('/admin/sovereign/regions/:region_id/bundles', async (req, reply) => {
+      const err = requireAdmin(req as unknown as { headers: Record<string, unknown> });
+      if (err) return reply.code(401).send({ success: false, error: err });
+      const b = req.body ?? {};
+      if (!b.version || !b.bundle_artifact_ref || !b.signature_hex) {
+        return reply.code(400).send({
+          success: false,
+          error: 'version, bundle_artifact_ref, signature_hex required',
+        });
+      }
+      try {
+        const r = await shipSovereignBundle({
+          region_id: req.params.region_id,
+          version: b.version,
+          bundle_artifact_ref: b.bundle_artifact_ref,
+          signature: Buffer.from(b.signature_hex, 'hex'),
+        });
+        return reply.code(201).send({ success: true, data: r });
+      } catch (e) {
+        return reply.code(500).send({ success: false, error: (e as Error).message });
+      }
+    });
+
+    app.post<{ Params: { release_id: string } }>(
+      '/admin/sovereign/bundles/:release_id/applied',
+      async (req, reply) => {
+        const err = requireAdmin(req as unknown as { headers: Record<string, unknown> });
+        if (err) return reply.code(401).send({ success: false, error: err });
+        try {
+          const r = await markSovereignBundleApplied(req.params.release_id);
+          if (!r) return reply.code(404).send({ success: false, error: 'release not found' });
+          return { success: true, data: r };
+        } catch (e) {
+          return reply.code(500).send({ success: false, error: (e as Error).message });
+        }
+      },
+    );
+
+    app.post<{
+      Params: { region_id: string };
+      Body: {
+        regime?: 'fedramp-high' | 'il5' | 'pipl' | 'eu-sovereign' | 'uae-trd';
+        auditor_id?: string;
+        issued_at?: string;
+        expires_at?: string;
+        artifact_ref?: string;
+      };
+    }>('/admin/sovereign/regions/:region_id/attestations', async (req, reply) => {
+      const err = requireAdmin(req as unknown as { headers: Record<string, unknown> });
+      if (err) return reply.code(401).send({ success: false, error: err });
+      const b = req.body ?? {};
+      if (!b.regime || !b.auditor_id || !b.issued_at || !b.expires_at || !b.artifact_ref) {
+        return reply.code(400).send({
+          success: false,
+          error: 'regime, auditor_id, issued_at, expires_at, artifact_ref required',
+        });
+      }
+      try {
+        const r = await recordSovereignAttestation({
+          region_id: req.params.region_id,
+          regime: b.regime,
+          auditor_id: b.auditor_id,
+          issued_at: b.issued_at,
+          expires_at: b.expires_at,
+          artifact_ref: b.artifact_ref,
+        });
+        return reply.code(201).send({ success: true, data: r });
+      } catch (e) {
+        return reply.code(500).send({ success: false, error: (e as Error).message });
+      }
+    });
+
+    app.post<{
+      Params: { region_id: string };
+      Body: {
+        kind?: 'egress-attempt' | 'cross-region-route' | 'policy-violation';
+        severity?: 'info' | 'warn' | 'critical';
+        incident_ref?: string | null;
+      };
+    }>('/admin/sovereign/regions/:region_id/leaks', async (req, reply) => {
+      const err = requireAdmin(req as unknown as { headers: Record<string, unknown> });
+      if (err) return reply.code(401).send({ success: false, error: err });
+      const b = req.body ?? {};
+      if (!b.kind || !b.severity) {
+        return reply.code(400).send({ success: false, error: 'kind + severity required' });
+      }
+      try {
+        const a = await ingestSovereignLeakAlert({
+          region_id: req.params.region_id,
+          kind: b.kind,
+          severity: b.severity,
+          incident_ref: b.incident_ref,
+        });
+        return reply.code(201).send({ success: true, data: a });
+      } catch (e) {
+        return reply.code(500).send({ success: false, error: (e as Error).message });
+      }
+    });
+
+    // --- Variant C · On-Prem ---
+    app.post<{
+      Body: {
+        customer_id?: string;
+        cluster_name?: string;
+        k8s_distribution?: 'vanilla' | 'openshift' | 'rancher' | 'tanzu';
+        installed_version?: string;
+        air_gap_mode?: 'strict' | 'diode-in' | 'diode-bidi';
+        billing_mode?: 'internal-report-only' | 'flat-fee' | 'per-incident';
+      };
+    }>('/admin/onprem/installs', async (req, reply) => {
+      const err = requireAdmin(req as unknown as { headers: Record<string, unknown> });
+      if (err) return reply.code(401).send({ success: false, error: err });
+      const b = req.body ?? {};
+      if (!b.customer_id || !b.cluster_name || !b.k8s_distribution || !b.installed_version) {
+        return reply.code(400).send({
+          success: false,
+          error: 'customer_id, cluster_name, k8s_distribution, installed_version required',
+        });
+      }
+      try {
+        const i = await registerOnpremInstall({
+          customer_id: b.customer_id,
+          cluster_name: b.cluster_name,
+          k8s_distribution: b.k8s_distribution,
+          installed_version: b.installed_version,
+          air_gap_mode: b.air_gap_mode,
+          billing_mode: b.billing_mode,
+        });
+        return reply.code(201).send({ success: true, data: i });
+      } catch (e) {
+        return reply.code(500).send({ success: false, error: (e as Error).message });
+      }
+    });
+
+    app.get<{ Params: { install_id: string } }>(
+      '/admin/onprem/installs/:install_id',
+      async (req, reply) => {
+        const err = requireAdmin(req as unknown as { headers: Record<string, unknown> });
+        if (err) return reply.code(401).send({ success: false, error: err });
+        const i = await getOnpremInstall(req.params.install_id);
+        if (!i) return reply.code(404).send({ success: false, error: 'install not found' });
+        return { success: true, data: i };
+      },
+    );
+
+    app.post<{
+      Params: { install_id: string };
+      Body: {
+        bundle_version?: string;
+        signature_verified?: boolean;
+        migrations_applied?: Array<{ sdk: string; filename: string }>;
+      };
+    }>('/admin/onprem/installs/:install_id/bundles', async (req, reply) => {
+      const err = requireAdmin(req as unknown as { headers: Record<string, unknown> });
+      if (err) return reply.code(401).send({ success: false, error: err });
+      const b = req.body ?? {};
+      if (!b.bundle_version || typeof b.signature_verified !== 'boolean') {
+        return reply.code(400).send({
+          success: false,
+          error: 'bundle_version + signature_verified required',
+        });
+      }
+      try {
+        const a = await applyOnpremBundle({
+          install_id: req.params.install_id,
+          bundle_version: b.bundle_version,
+          signature_verified: b.signature_verified,
+          migrations_applied: b.migrations_applied,
+        });
+        return reply.code(201).send({ success: true, data: a });
+      } catch (e) {
+        return reply.code(500).send({ success: false, error: (e as Error).message });
+      }
+    });
+
+    app.post<{
+      Params: { install_id: string };
+      Body: {
+        model_id?: string;
+        backend?: 'ollama' | 'vllm' | 'text-generation-inference';
+        endpoint_url?: string;
+        quantization?: 'fp16' | 'int8' | 'int4' | 'awq';
+        status?: 'ready' | 'loading' | 'disabled';
+      };
+    }>('/admin/onprem/installs/:install_id/local-llms', async (req, reply) => {
+      const err = requireAdmin(req as unknown as { headers: Record<string, unknown> });
+      if (err) return reply.code(401).send({ success: false, error: err });
+      const b = req.body ?? {};
+      if (!b.model_id || !b.backend || !b.endpoint_url || !b.quantization) {
+        return reply.code(400).send({
+          success: false,
+          error: 'model_id, backend, endpoint_url, quantization required',
+        });
+      }
+      try {
+        const m = await registerOnpremLocalLlm({
+          install_id: req.params.install_id,
+          model_id: b.model_id,
+          backend: b.backend,
+          endpoint_url: b.endpoint_url,
+          quantization: b.quantization,
+          status: b.status,
+        });
+        return reply.code(201).send({ success: true, data: m });
+      } catch (e) {
+        return reply.code(500).send({ success: false, error: (e as Error).message });
+      }
+    });
+
+    app.post<{
+      Params: { install_id: string };
+      Body: { period_start?: string; period_end?: string; artifact_local_path?: string };
+    }>('/admin/onprem/installs/:install_id/billing-reports', async (req, reply) => {
+      const err = requireAdmin(req as unknown as { headers: Record<string, unknown> });
+      if (err) return reply.code(401).send({ success: false, error: err });
+      const b = req.body ?? {};
+      if (!b.period_start || !b.period_end || !b.artifact_local_path) {
+        return reply.code(400).send({
+          success: false,
+          error: 'period_start, period_end, artifact_local_path required',
+        });
+      }
+      try {
+        const r = await generateOnpremBillingReport({
+          install_id: req.params.install_id,
+          period_start: b.period_start,
+          period_end: b.period_end,
+          artifact_local_path: b.artifact_local_path,
+        });
+        return reply.code(201).send({ success: true, data: r });
+      } catch (e) {
+        return reply.code(500).send({ success: false, error: (e as Error).message });
+      }
+    });
+
+    // --- Variant D · Active-Active ---
+    app.post<{
+      Body: {
+        tenant_id?: string;
+        home_region?: string;
+        paired_regions?: string[];
+        contract_addendum_ref?: string;
+        rpo_target_seconds?: number;
+        rto_target_seconds?: number;
+        replication_overrides?: Record<string, 'sync' | 'async' | 'single-region'>;
+      };
+    }>('/admin/active-active/profiles', async (req, reply) => {
+      const err = requireAdmin(req as unknown as { headers: Record<string, unknown> });
+      if (err) return reply.code(401).send({ success: false, error: err });
+      const b = req.body ?? {};
+      if (!b.tenant_id || !b.home_region || !Array.isArray(b.paired_regions) || !b.contract_addendum_ref) {
+        return reply.code(400).send({
+          success: false,
+          error: 'tenant_id, home_region, paired_regions[], contract_addendum_ref required',
+        });
+      }
+      try {
+        const p = await activateActiveActiveProfile({
+          tenant_id: b.tenant_id,
+          home_region: b.home_region,
+          paired_regions: b.paired_regions,
+          contract_addendum_ref: b.contract_addendum_ref,
+          rpo_target_seconds: b.rpo_target_seconds,
+          rto_target_seconds: b.rto_target_seconds,
+          replication_overrides: b.replication_overrides,
+        });
+        return reply.code(201).send({ success: true, data: p });
+      } catch (e) {
+        return reply.code(500).send({ success: false, error: (e as Error).message });
+      }
+    });
+
+    app.get<{ Params: { tenant_id: string } }>(
+      '/admin/active-active/profiles/:tenant_id',
+      async (req, reply) => {
+        const err = requireAdmin(req as unknown as { headers: Record<string, unknown> });
+        if (err) return reply.code(401).send({ success: false, error: err });
+        const p = await getActiveActiveProfile(req.params.tenant_id);
+        if (!p) return reply.code(404).send({ success: false, error: 'no profile for tenant' });
+        const streams = await listReplicationStreams(p.profile_id);
+        return { success: true, data: { profile: p, replication_streams: streams } };
+      },
+    );
+
+    app.post<{
+      Params: { profile_id: string };
+      Body: { to_region?: string; from_region?: string };
+    }>('/admin/active-active/profiles/:profile_id/drills', async (req, reply) => {
+      const err = requireAdmin(req as unknown as { headers: Record<string, unknown> });
+      if (err) return reply.code(401).send({ success: false, error: err });
+      const b = req.body ?? {};
+      if (!b.to_region) {
+        return reply.code(400).send({ success: false, error: 'to_region required' });
+      }
+      try {
+        const d = await runFailoverDrill({
+          profile_id: req.params.profile_id,
+          to_region: b.to_region,
+          from_region: b.from_region,
+        });
+        return reply.code(201).send({ success: true, data: d });
       } catch (e) {
         return reply.code(500).send({ success: false, error: (e as Error).message });
       }

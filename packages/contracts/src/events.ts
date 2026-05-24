@@ -428,6 +428,33 @@ export const EVENT_TYPE_REGISTRY: Record<string, EventTypeMetadata> = {
   /* --- HDK measure + watermark (§5.9) --- */
   'hdk-measure.captured.v1':                  { event_type: 'hdk-measure.captured.v1',                  retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
   'hdk-watermark.applied.v1':                 { event_type: 'hdk-watermark.applied.v1',                 retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+
+  /* ============================================================
+   * P8 additions per docs/v3.1/prd/P8-Deployment-Variants.md §5.A-5.D.
+   * Four variants run in parallel; no platform-wide gate. Additive-only.
+   * ============================================================ */
+
+  /* --- Variant A: BYOK / CMEK (§5.A) --- */
+  'byok.binding.created.v1':                  { event_type: 'byok.binding.created.v1',                  retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+  'byok.cmk.used.v1':                         { event_type: 'byok.cmk.used.v1',                         retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+  'byok.cmk.rotated.v1':                      { event_type: 'byok.cmk.rotated.v1',                      retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+  'byok.binding.revoked.v1':                  { event_type: 'byok.binding.revoked.v1',                  retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+
+  /* --- Variant B: Sovereign Cloud (§5.B) --- */
+  'sovereign.bundle.shipped.v1':              { event_type: 'sovereign.bundle.shipped.v1',              retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+  'sovereign.bundle.applied.v1':              { event_type: 'sovereign.bundle.applied.v1',              retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+  'sovereign.attestation.issued.v1':          { event_type: 'sovereign.attestation.issued.v1',          retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+  'sovereign.leak.alert.v1':                  { event_type: 'sovereign.leak.alert.v1',                  retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+
+  /* --- Variant C: On-Prem / Air-Gapped (§5.C) --- */
+  'onprem.bundle.applied.v1':                 { event_type: 'onprem.bundle.applied.v1',                 retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+  'onprem.bundle.rolled-back.v1':             { event_type: 'onprem.bundle.rolled-back.v1',             retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+  'onprem.local-llm.loaded.v1':               { event_type: 'onprem.local-llm.loaded.v1',               retention_class: 'operational', conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+
+  /* --- Variant D: Active-Active Tier-G+ (§5.D) --- */
+  'active-active.profile.activated.v1':       { event_type: 'active-active.profile.activated.v1',       retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+  'active-active.failover.drill.v1':          { event_type: 'active-active.failover.drill.v1',          retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+  'active-active.tier.downgraded.v1':         { event_type: 'active-active.tier.downgraded.v1',         retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
 };
 
 export type RegisteredEventType = keyof typeof EVENT_TYPE_REGISTRY;
