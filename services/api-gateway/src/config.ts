@@ -1,5 +1,9 @@
 import dotenv from 'dotenv';
-dotenv.config();
+import path from 'path';
+// Load .env from the monorepo root, not from services/api-gateway's cwd.
+// ts-node-dev resolves cwd to the package dir, so a bare dotenv.config()
+// would miss the root .env where DB/Redis/Kafka/LLM credentials live.
+dotenv.config({ path: path.resolve(__dirname, '../../../.env') });
 
 /**
  * Hosting-service configuration. Per ProjectStructure-v3.1, services hold
@@ -39,5 +43,13 @@ export const config = {
     brokers: (process.env.KAFKA_BROKERS || 'localhost:9092').split(','),
     clientId: process.env.KAFKA_CLIENT_ID || 'projex-api-gateway',
     usageTopic: process.env.USAGE_EVENTS_TOPIC || 'usage.events.v1',
+  },
+
+  clickhouse: {
+    enabled: process.env.CLICKHOUSE_ENABLED === 'true',
+    url: process.env.CLICKHOUSE_URL || 'http://localhost:8123',
+    username: process.env.CLICKHOUSE_USERNAME || 'default',
+    password: process.env.CLICKHOUSE_PASSWORD || '',
+    database: process.env.CLICKHOUSE_DATABASE || 'meter',
   },
 };

@@ -4,6 +4,7 @@ import helmet from '@fastify/helmet';
 import { initPool } from '@projexlight/db-runtime';
 import { closeRedis, initRedis } from '@projexlight/redis-runtime';
 import { closeKafka, initKafka, publishMessage } from '@projexlight/kafka-runtime';
+import { closeClickHouse, initClickHouse } from '@projexlight/clickhouse-runtime';
 import { runMigrations } from '@projexlight/migration-runner';
 import {
   migrationsDir as vaultMigrations,
@@ -163,6 +164,38 @@ import {
   server as featureFlagsServer,
 } from '@projexlight/sdk-feature-flags';
 import { migrationsDir as hdkSyncMigrations, server as hdkSyncServer } from '@projexlight/hdk-sync';
+// P6A / Wave 6 first half — AI Infrastructure + Agent Isolation Runtime (G7)
+// + Cross-System Trace Viewer (G12) + MCP Bridge + Taxonomy + GitHub connector.
+// v0: migrations-only (schemas land at boot). Server surfaces follow in
+// subsequent TK tasks. Every package ships a migrationsDir today so future
+// .sql files drop in and auto-apply on the next boot without wiring changes.
+import {
+  migrationsDir as agentRuntimeMigrations,
+  server as agentRuntimeServer,
+  startTtlEnforcer,
+  startLogRetentionWorker,
+  startSigningKeyRotation,
+  assertVectorNamespaceIsolation,
+} from '@projexlight/sdk-agent-runtime';
+import {
+  migrationsDir as aiGatewayMigrations,
+  server as aiGatewayServer,
+  bootstrapLLMCredentials,
+} from '@projexlight/sdk-ai-gateway';
+import {
+  migrationsDir as taxonomyMigrations,
+  server as taxonomyServer,
+} from '@projexlight/sdk-taxonomy';
+import {
+  migrationsDir as traceMigrations,
+  bootstrapClickHouseSchema,
+  server as traceServer,
+} from '@projexlight/sdk-trace';
+import {
+  migrationsDir as mcpBridgeMigrations,
+  server as mcpBridgeServer,
+} from '@projexlight/sdk-mcp-bridge';
+import { migrationsDir as connectorGithubMigrations } from '@projexlight/connector-github';
 import {
   migrationsDir as hdkFoundationMigrations,
   server as hdkFoundationServer,
@@ -263,6 +296,14 @@ app.register(hdkImageEditorServer.registerRoutes);
 app.register(hdkVideoEditorServer.registerRoutes);
 app.register(hdkCameraServer.registerRoutes);
 app.register(hdkMapServer.registerRoutes);
+
+// P6A — agent runtime capability-token surface (TK-3275). Other P6A
+// routes (runs lifecycle, replay, scope, AI gateway, MCP) follow.
+app.register(agentRuntimeServer.registerRoutes);
+app.register(aiGatewayServer.registerRoutes);
+app.register(mcpBridgeServer.registerRoutes);
+app.register(traceServer.registerRoutes);
+app.register(taxonomyServer.registerRoutes);
 
 app.register(eventRegistryRoutes);
 
@@ -378,7 +419,107 @@ const start = async (): Promise<void> => {
       { sdk: 'connector-gworkspace',   dir: connectorGworkspaceMigrations },
       { sdk: 'connector-microsoft365', dir: connectorMicrosoft365Migrations },
       { sdk: 'connector-slack',        dir: connectorSlackMigrations },
+      // P6A — AI Infrastructure + Agent Isolation Runtime (G7) + Trace (G12)
+      // + Taxonomy + MCP Bridge + GitHub connector. Migration order matters:
+      //   1. ai-gateway + taxonomy ship first (no intra-P6A deps).
+      //   2. agent-runtime depends on ai-gateway (model calls go via gateway).
+      //   3. mcp-bridge depends on agent-runtime (capability tokens, run ids).
+      //   4. trace pulls from agent-runtime + ai-gateway spans, lands after.
+      //   5. connector-github is a leaf; orders last in the P6A block.
+      // All cross-package references inside agent-runtime/mcp/trace are
+      // logical (no hard FKs) so this ordering is sufficient. Future ALTER
+      // migrations drop into each SDK's src/db/migrations/ and auto-apply.
+      { sdk: 'sdk-ai-gateway',         dir: aiGatewayMigrations },
+      { sdk: 'sdk-taxonomy',           dir: taxonomyMigrations },
+      { sdk: 'sdk-agent-runtime',      dir: agentRuntimeMigrations },
+      { sdk: 'sdk-mcp-bridge',         dir: mcpBridgeMigrations },
+      { sdk: 'sdk-trace',              dir: traceMigrations },
+      { sdk: 'connector-github',       dir: connectorGithubMigrations },
     ]);
+
+    // P6A — AC-6 hard gate: probe vector namespace isolation before agents
+    // can mint tokens. If any namespace has cross-tenant rows, throw and
+    // refuse boot. Unverified namespaces (probe-unsupported) are logged but
+    // don't block boot unless AGENT_NAMESPACE_CHECK_STRICT=true.
+    try {
+      const report = await assertVectorNamespaceIsolation({
+        strict: process.env.AGENT_NAMESPACE_CHECK_STRICT === 'true',
+      });
+      console.log(
+        `[api-gateway] vector namespace check passed: ${report.verified} verified, ${report.unverified} unverified, 0 leaks`,
+      );
+    } catch (err) {
+      console.error('[api-gateway] FATAL: vector namespace isolation broken — refusing to start');
+      console.error((err as Error).message);
+      throw err;
+    }
+
+    // P6A — bootstrap LLM provider credentials from env into ai_gateway.provider.
+    // Production refuses to start when a required provider is missing.
+    try {
+      const credResult = await bootstrapLLMCredentials();
+      if (
+        process.env.NODE_ENV === 'production' &&
+        credResult.missing_required.length > 0
+      ) {
+        throw new Error(
+          `[api-gateway] FATAL: required LLM providers missing credentials: ${credResult.missing_required.join(', ')}`,
+        );
+      }
+      console.log(
+        `[api-gateway] LLM credentials bootstrapped: ${credResult.upserted.length} upserted, ${credResult.skipped.length} skipped, ${credResult.missing_required.length} missing-required`,
+      );
+    } catch (err) {
+      console.error('[api-gateway] LLM credential bootstrap failed:', (err as Error).message);
+      if (process.env.NODE_ENV === 'production') throw err;
+    }
+
+    // P6A — start the agent-runtime TTL enforcer (FR-ART-5..7 / AC-4).
+    // Polls agents.agent_run every second for expired runs, terminates them,
+    // cancels in-flight tools, revokes unused capability tokens, audits the
+    // termination, and fires the refund hook (when wired by sdk-meter).
+    const ttlEnforcerHandle = startTtlEnforcer({
+      intervalMs: parseInt(process.env.AGENT_TTL_POLL_MS || '1000', 10),
+      enabled: process.env.AGENT_TTL_ENFORCER_ENABLED !== 'false',
+    });
+    app.addHook('onClose', async () => ttlEnforcerHandle.stop());
+
+    // P6A — execution-log retention worker (G-10 / FR-ART-11). Nightly
+    // prune of agents.execution_log_entry rows whose owning run ended
+    // more than retention_days ago.
+    const logRetentionHandle = startLogRetentionWorker({
+      enabled: process.env.AGENT_LOG_RETENTION_ENABLED !== 'false',
+    });
+    app.addHook('onClose', async () => logRetentionHandle.stop());
+
+    // P6A — capability-token signing key rotation (G-11 / R-2). Quarterly
+    // by default; rotateNow() exposed for emergency rotation on compromise.
+    const signingKeyRotationHandle = startSigningKeyRotation({
+      enabled: process.env.AGENT_SIGNING_KEY_ROTATION_ENABLED !== 'false',
+    });
+    app.addHook('onClose', async () => signingKeyRotationHandle.stop());
+
+    // Optional ClickHouse: when enabled, init the client + apply sdk-trace
+    // ClickHouse migrations (trace.span OLAP table). Mirrors the Postgres
+    // migration-runner contract — sha256-tracked, forward-only. When
+    // disabled, sdk-trace serves the Postgres-only span mirror instead.
+    if (config.clickhouse.enabled) {
+      try {
+        initClickHouse({
+          url: config.clickhouse.url,
+          username: config.clickhouse.username,
+          password: config.clickhouse.password,
+          database: config.clickhouse.database,
+        });
+        await bootstrapClickHouseSchema();
+        console.log('[api-gateway] ClickHouse schema bootstrapped (sdk-trace OLAP layer active)');
+      } catch (err) {
+        console.warn(
+          '[api-gateway] ClickHouse unavailable, falling back to Postgres trace.span mirror:',
+          (err as Error).message,
+        );
+      }
+    }
 
     // Register dunning workflow definition + step handlers so sdk-billing
     // can drive overdue invoices through sdk-workflow without a manual seed.

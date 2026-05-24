@@ -1,0 +1,41 @@
+# I-1 / TK-3318 — Langfuse provisioning.
+# Adds Langfuse to the dev docker-compose so sdk-ai-gateway can emit
+# provider traces during local development + CI integration tests.
+# Production deployments swap this for the managed Langfuse cloud or a
+# self-hosted cluster via Terraform under infra/terraform/langfuse/.
+
+services:
+  langfuse-postgres:
+    image: postgres:16-alpine
+    container_name: langfuse-postgres
+    environment:
+      POSTGRES_DB: langfuse
+      POSTGRES_USER: langfuse
+      POSTGRES_PASSWORD: langfuse_dev_pw
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U langfuse']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    volumes:
+      - langfuse_pgdata:/var/lib/postgresql/data
+    ports:
+      - '5435:5432'
+
+  langfuse:
+    image: langfuse/langfuse:2
+    container_name: langfuse
+    depends_on:
+      langfuse-postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://langfuse:langfuse_dev_pw@langfuse-postgres:5432/langfuse
+      NEXTAUTH_SECRET: dev-langfuse-secret-rotate-in-prod
+      SALT: dev-langfuse-salt-rotate-in-prod
+      NEXTAUTH_URL: http://localhost:3010
+      TELEMETRY_ENABLED: 'false'
+    ports:
+      - '3010:3000'
+
+volumes:
+  langfuse_pgdata:

@@ -1,0 +1,27 @@
+{
+  "endpoint": "/api/agent-runtime/tokens/:token_id/validate",
+  "method": "POST",
+  "taskId": "f83bc787-e516-4ee9-9a86-3a3aa9c2bad9",
+  "description": "Validate a capability token against the args the caller intends to invoke. Checks expiry, single-use, revocation, args binding, signature. Returns valid:true|false with reason.",
+  "requiresAuth": true,
+  "priority": 110,
+  "dependsOn": ["POST /api/auth/register", "POST /api/agent-runtime/tokens"],
+  "testCases": [
+    {
+      "name": "Validate freshly-minted token",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.register.response.data.token}}"
+      },
+      "pathParams": {
+        "token_id": "{{cache:agent-runtime-tokens.mint.response.data.token_id}}"
+      },
+      "payload": {
+        "args": {"first_name": "{{dynamic:name}}"}
+      },
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "success": true
+      }
+    }
+  ]
+}

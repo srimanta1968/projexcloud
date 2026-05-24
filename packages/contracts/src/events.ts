@@ -278,6 +278,48 @@ export const EVENT_TYPE_REGISTRY: Record<string, EventTypeMetadata> = {
   /* --- Webhook DLQ observability (audit-flagged optional) --- */
   'webhook.delivery.failed.v1':               { event_type: 'webhook.delivery.failed.v1',               retention_class: 'operational', conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
   'webhook.delivery.dlq.v1':                  { event_type: 'webhook.delivery.dlq.v1',                  retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+
+  /* ============================================================
+   * P6A additions per docs/v3.1/prd/P6A-AI-Isolation-MCP.md §5.x.
+   * Closes Gates G7 (Agent Isolation Runtime) + G12 (sdk-trace).
+   * Additive-only — never remove or mutate existing rows.
+   * ============================================================ */
+
+  /* --- sdk-agent-runtime (§5.2) — run lifecycle + capability tokens + replay --- */
+  'agent.run.started.v1':                     { event_type: 'agent.run.started.v1',                     retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+  'agent.run.completed.v1':                   { event_type: 'agent.run.completed.v1',                   retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+  'agent.run.terminated.v1':                  { event_type: 'agent.run.terminated.v1',                  retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+  'agent.run.replayed.v1':                    { event_type: 'agent.run.replayed.v1',                    retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+  'agent.run.rolled-back.v1':                 { event_type: 'agent.run.rolled-back.v1',                 retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+  'agent.tool.invoked.v1':                    { event_type: 'agent.tool.invoked.v1',                    retention_class: 'operational', conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+  'agent.scope.exceeded.v1':                  { event_type: 'agent.scope.exceeded.v1',                  retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+  'agent.capability-token.minted.v1':         { event_type: 'agent.capability-token.minted.v1',         retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+  'agent.capability-token.revoked.v1':        { event_type: 'agent.capability-token.revoked.v1',        retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+  'agent.log.purged.v1':                      { event_type: 'agent.log.purged.v1',                      retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+  'agent.kill-switch.triggered.v1':           { event_type: 'agent.kill-switch.triggered.v1',           retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+
+  /* --- sdk-ai-gateway (§5.1) — per-call provider records --- */
+  'ai-gateway.complete.v1':                   { event_type: 'ai-gateway.complete.v1',                   retention_class: 'operational', conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+  'ai-gateway.stream.v1':                     { event_type: 'ai-gateway.stream.v1',                     retention_class: 'operational', conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+  'ai-gateway.provider.circuit-state.changed.v1': { event_type: 'ai-gateway.provider.circuit-state.changed.v1', retention_class: 'operational', conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+
+  /* --- sdk-trace (§5.3, G12) — export lifecycle --- */
+  'trace.export.requested.v1':                { event_type: 'trace.export.requested.v1',                retention_class: 'operational', conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+  'trace.export.ready.v1':                    { event_type: 'trace.export.ready.v1',                    retention_class: 'operational', conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+
+  /* --- sdk-mcp-bridge (§5.4) — consume + expose lifecycle --- */
+  'mcp.server.registered.v1':                 { event_type: 'mcp.server.registered.v1',                 retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+  'mcp.server.disabled.v1':                   { event_type: 'mcp.server.disabled.v1',                   retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+  'mcp.tool.invoked.v1':                      { event_type: 'mcp.tool.invoked.v1',                      retention_class: 'operational', conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+  'mcp.exposed-server.activated.v1':          { event_type: 'mcp.exposed-server.activated.v1',          retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+
+  /* --- sdk-taxonomy (§5.2 taxonomy block) --- */
+  'taxonomy.version.activated.v1':            { event_type: 'taxonomy.version.activated.v1',            retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+  'taxonomy.version.deprecated.v1':           { event_type: 'taxonomy.version.deprecated.v1',           retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+
+  /* --- connector-github (§5.5) --- */
+  'connector.github.webhook.received.v1':     { event_type: 'connector.github.webhook.received.v1',     retention_class: 'operational', conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+  'connector.github.pr.upserted.v1':          { event_type: 'connector.github.pr.upserted.v1',          retention_class: 'operational', conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
 };
 
 export type RegisteredEventType = keyof typeof EVENT_TYPE_REGISTRY;
