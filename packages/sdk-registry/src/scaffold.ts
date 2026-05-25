@@ -1,0 +1,363 @@
+/**
+ * P9 / E2 Phase 3 — getScaffold tree generator (FR-REG-6).
+ *
+ * Given a list of SDK names + an app_name, returns a ScaffoldTree of files
+ * the consumer can write to disk to bootstrap a new vertical app that
+ * composes the requested SDKs. Used by:
+ *   - CLI `projex install` and `projex blueprint apply` (E5)
+ *   - Cloud builder agent (E6) for scaffolding into the tenant sandbox
+ *
+ * Output files (all paths relative to the new app root):
+ *   - package.json         — workspace skeleton with the picked SDKs as deps
+ *   - tsconfig.json        — strict TS, ESM-friendly
+ *   - src/index.ts         — main entry that re-exports each integration
+ *   - src/integrations/<sdk-bare-name>.ts  — one per requested SDK; pulls in
+ *       the first scenario's example_code as a runnable starter
+ *   - db/migrations/.gitkeep
+ *   - tests/smoke.test.ts  — vitest skeleton calling each integration
+ *   - README.md            — what was scaffolded + how to run it
+ *   - CLAUDE.md            — AI coding rules ported from ai-appgen lessons
+ *       (per FR-AAG-1) so any AI tool the customer uses on this repo
+ *       starts with sensible guardrails
+ *
+ * Unknown SDK names are filtered out and surfaced in result.warnings.
+ */
+
+import { ScaffoldTree } from './types';
+import { Registry } from './registry';
+import { SdkCapabilityManifest } from '@projexlight/sdk-capability';
+
+export interface ScaffoldResult extends ScaffoldTree {
+  warnings: string[];
+  resolved_sdks: string[];
+}
+
+export function getScaffold(
+  registry: Registry,
+  sdk_names: string[],
+  app_name: string,
+): ScaffoldResult {
+  const warnings: string[] = [];
+  const resolved: Array<{ name: string; manifest: SdkCapabilityManifest }> = [];
+
+  for (const name of sdk_names) {
+    const entry = registry.get(name);
+    if (!entry) {
+      warnings.push(`unknown sdk: ${name} (skipped)`);
+      continue;
+    }
+    resolved.push({ name, manifest: entry.manifest });
+  }
+
+  const files: ScaffoldTree['files'] = [];
+
+  files.push({ path: 'package.json', contents: renderPackageJson(app_name, resolved) });
+  files.push({ path: 'tsconfig.json', contents: renderTsconfig() });
+  files.push({ path: 'src/index.ts', contents: renderIndex(resolved) });
+  for (const r of resolved) {
+    files.push({
+      path: `src/integrations/${bareName(r.name)}.ts`,
+      contents: renderIntegration(r.manifest),
+    });
+  }
+  files.push({ path: 'db/migrations/.gitkeep', contents: '' });
+  files.push({ path: 'tests/smoke.test.ts', contents: renderSmokeTest(resolved) });
+  files.push({ path: 'tests/vitest.config.ts', contents: renderVitestConfig() });
+  files.push({ path: 'README.md', contents: renderReadme(app_name, resolved) });
+  files.push({ path: 'CLAUDE.md', contents: renderClaudeMd(app_name, resolved) });
+  files.push({ path: '.gitignore', contents: renderGitignore() });
+
+  return {
+    app_name,
+    files,
+    warnings,
+    resolved_sdks: resolved.map((r) => r.name),
+  };
+}
+
+/* ---------------------------------------------------------------- helpers */
+
+function bareName(sdkName: string): string {
+  // "@projexlight/sdk-vault" → "sdk-vault"
+  return sdkName.split('/').pop() || sdkName;
+}
+
+function camelName(sdkName: string): string {
+  // "sdk-vault" → "sdkVault"
+  return bareName(sdkName)
+    .split('-')
+    .map((part, i) =>
+      i === 0 ? part : part.charAt(0).toUpperCase() + part.slice(1),
+    )
+    .join('');
+}
+
+/* -------------------------------------------------------- file renderers */
+
+function renderPackageJson(
+  app_name: string,
+  resolved: Array<{ name: string; manifest: SdkCapabilityManifest }>,
+): string {
+  const deps: Record<string, string> = {};
+  for (const r of resolved) deps[r.name] = '^' + r.manifest.version;
+  const pkg = {
+    name: app_name,
+    version: '0.1.0',
+    private: true,
+    type: 'module',
+    scripts: {
+      build: 'tsc',
+      test: 'vitest run --config tests/vitest.config.ts',
+      start: 'node dist/index.js',
+    },
+    dependencies: deps,
+    devDependencies: {
+      typescript: '^5.3.0',
+      vitest: '^1.6.0',
+      '@types/node': '^20.10.0',
+    },
+  };
+  return JSON.stringify(pkg, null, 2) + '\n';
+}
+
+function renderTsconfig(): string {
+  return (
+    JSON.stringify(
+      {
+        compilerOptions: {
+          target: 'ES2022',
+          module: 'NodeNext',
+          moduleResolution: 'NodeNext',
+          strict: true,
+          esModuleInterop: true,
+          skipLibCheck: true,
+          outDir: 'dist',
+          rootDir: 'src',
+          declaration: true,
+          sourceMap: true,
+        },
+        include: ['src/**/*'],
+      },
+      null,
+      2,
+    ) + '\n'
+  );
+}
+
+function renderIndex(
+  resolved: Array<{ name: string; manifest: SdkCapabilityManifest }>,
+): string {
+  const lines: string[] = [
+    '/**',
+    ' * App entry point.',
+    ' * Re-exports each SDK integration so callers can `import { initSdkX } from "<app>"`.',
+    ' * Generated by @projexlight/sdk-registry getScaffold(). Safe to edit.',
+    ' */',
+    '',
+  ];
+  for (const r of resolved) {
+    const bare = bareName(r.name);
+    const camel = camelName(r.name);
+    lines.push(`export * as ${camel} from './integrations/${bare}';`);
+  }
+  lines.push('');
+  return lines.join('\n');
+}
+
+function renderIntegration(m: SdkCapabilityManifest): string {
+  const bare = bareName(m.name);
+  const firstScenario = m.scenarios[0];
+  const consumes = m.consumes.events.map((e) => e.name).join(', ');
+
+  return `/**
+ * Integration with ${m.name} v${m.version}
+ *
+ * Pool placement: ${m.pool_placement}
+ * Compliance:     ${m.compliance_posture.regimes.join(', ')}
+ * Tags:           ${m.tags.join(', ') || '(none)'}
+ * Consumes:       ${consumes || '(none)'}
+ *
+ * ${m.summary}
+ */
+
+// import * as ${bare.replace(/-/g, '_')} from '${m.name}';
+
+/**
+ * Demo entry point. Replace with your own initialization logic.
+ *
+ * Example scenario (from the SDK's capability manifest):
+ *   ${firstScenario?.title ?? '(no scenarios authored)'}
+ *
+ * When to use:
+ *   ${firstScenario?.when_to_use ?? '(none documented)'}
+ *
+ * Expected outcome:
+ *   ${firstScenario?.expected_outcome ?? '(none documented)'}
+ */
+export async function init(): Promise<void> {
+${firstScenario ? `  // Auto-generated from scenario id "${firstScenario.id}":\n${firstScenario.example_code.split('\n').map((l) => '  // ' + l).join('\n')}` : '  // No scenarios in the manifest — write your own initialization here.'}
+}
+`;
+}
+
+function renderSmokeTest(
+  resolved: Array<{ name: string; manifest: SdkCapabilityManifest }>,
+): string {
+  const lines: string[] = [
+    "import { describe, it, expect } from 'vitest';",
+    '',
+    "describe('smoke', () => {",
+  ];
+  for (const r of resolved) {
+    const camel = camelName(r.name);
+    lines.push(`  it('${r.name} integration loads', async () => {`);
+    lines.push(`    const mod = await import('../src/integrations/${bareName(r.name)}');`);
+    lines.push(`    expect(typeof mod.init).toBe('function');`);
+    lines.push(`  });`);
+    void camel; // referenced for clarity in the comment block above
+  }
+  lines.push('});');
+  lines.push('');
+  return lines.join('\n');
+}
+
+function renderVitestConfig(): string {
+  return `import { defineConfig } from 'vitest/config';
+
+export default defineConfig({
+  test: {
+    include: ['**/*.test.ts'],
+    environment: 'node',
+    globals: false,
+  },
+});
+`;
+}
+
+function renderReadme(
+  app_name: string,
+  resolved: Array<{ name: string; manifest: SdkCapabilityManifest }>,
+): string {
+  const sdkRows = resolved
+    .map((r) => `| ${r.name} | ${r.manifest.version} | ${r.manifest.pool_placement} | ${r.manifest.summary.slice(0, 80)}… |`)
+    .join('\n');
+  return `# ${app_name}
+
+Scaffolded by \`@projexlight/sdk-registry\` from the SDK catalog. This project
+composes the SDKs below.
+
+## SDKs
+
+| Name | Version | Pool | Summary |
+|---|---|---|---|
+${sdkRows || '| _none_ | | | |'}
+
+## Getting started
+
+\`\`\`sh
+pnpm install
+pnpm test
+pnpm build
+\`\`\`
+
+## What's where
+
+- \`src/integrations/\` — one file per SDK, with a starter \`init()\` derived
+  from the SDK's first scenario.
+- \`src/index.ts\` — re-exports each integration.
+- \`tests/smoke.test.ts\` — confirms each integration module loads.
+- \`db/migrations/\` — your custom migrations (each SDK's own migrations
+  are auto-applied when its service starts; this folder is for app-level
+  schema you own).
+- \`CLAUDE.md\` — AI coding rules for this repo. Read it before letting
+  any AI agent modify code here.
+
+## Next steps
+
+1. Replace the auto-generated \`init()\` snippets with real wiring.
+2. Add your domain logic.
+3. \`projex deploy\` to ship to your tenant pool.
+
+## Updating SDKs
+
+\`\`\`sh
+projex install <sdk-name>
+\`\`\`
+
+Or update versions via your package manager. SDKs are versioned per
+their own semver tier policy (see Doctrine §D).
+`;
+}
+
+function renderClaudeMd(
+  app_name: string,
+  resolved: Array<{ name: string; manifest: SdkCapabilityManifest }>,
+): string {
+  const sdkList = resolved.map((r) => `- ${r.name}`).join('\n');
+  return `# CLAUDE.md — AI coding rules for ${app_name}
+
+This project was scaffolded by \`@projexlight/sdk-registry\`. The rules below
+guide any AI tool (Claude Code, Cursor, Windsurf, Cline) modifying this repo.
+
+## Mandatory first steps before ANY code change
+
+1. **Search before creating.** Use the \`projex_registry_*\` MCP tools to
+   check whether a ProjexCloud SDK already provides the capability you're
+   about to hand-roll. Composition > duplication.
+2. **Read the manifest.** Before calling an SDK, \`projex_registry_get_manifest\`
+   for the SDK and verify the endpoint/event shape you intend to use.
+3. **Honor the pool placement.** Each SDK declares which pool it lives on
+   (admin / app / evidence / global-catalog / warehouse / vector / olap).
+   Don't write to a database that crosses pool boundaries — route through
+   the SDK's API.
+
+## SDKs in this app
+
+${sdkList || '_none_'}
+
+## Architectural rules (ported from ai-appgen lessons per FR-AAG-1)
+
+- **No upward dependencies.** \`src/integrations/\` may import the SDK
+  packages; the SDK packages MUST NOT import anything from this app.
+- **No direct database access.** Every persistent operation goes through
+  an SDK's exposed service function. Direct \`pg.query\` in app code is
+  forbidden — it bypasses audit, tenant scoping, and pool routing.
+- **Validate at boundaries only.** Don't re-validate data that already
+  passed an SDK's validator. Trust internal types.
+- **Never silently catch SDK errors.** Surface them; SDK errors are the
+  signal for retry / rollback / human-review per the conflict-resolution
+  model.
+
+## Commands
+
+- \`pnpm test\` — run smoke tests.
+- \`pnpm build\` — type-check + emit \`dist/\`.
+- \`projex deploy\` — ship to your tenant pool (requires \`projex login\` first).
+- \`projex logs --tail\` — stream logs from the deployed app.
+
+## Asking the AI for help
+
+Good prompts:
+
+> "Find a ProjexCloud SDK that handles webhook delivery + DLQ replay"
+> → uses \`projex_registry_search_sdks\`
+
+> "Show me how sdk-vault encrypts a PII field"
+> → uses \`projex_registry_get_example\` with scenario id
+
+Bad prompts:
+
+> "Write a function that encrypts a string"
+> → don't roll your own; ask the registry first.
+`;
+}
+
+function renderGitignore(): string {
+  return `node_modules/
+dist/
+*.log
+.env
+.env.local
+.DS_Store
+`;
+}

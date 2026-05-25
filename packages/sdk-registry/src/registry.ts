@@ -167,7 +167,12 @@ export function registryFromCatalog(catalog: Catalog, opts: RegistryOptions = {}
   };
 }
 
-/** Stub kept so consumers can already import the symbol; full impl in E2.F6. */
+/**
+ * Backward-compat wrapper. The full implementation lives in ./scaffold.ts
+ * (E2 Phase 3). Re-exported here so callers that imported getScaffoldStub
+ * during Phase 1 still resolve; new callers should use getScaffold from
+ * the package root.
+ */
 export function getScaffoldStub(
   registry: Registry,
   sdk_names: string[],
@@ -176,7 +181,7 @@ export function getScaffoldStub(
   return {
     app_name,
     sdk_names: sdk_names.filter((n) => registry.get(n) !== null),
-    notes: 'E2.F6 getScaffold pending — currently a no-op stub; tree generation lands in next phase.',
+    notes: 'Use getScaffold() from @projexlight/sdk-registry; this stub is kept for back-compat.',
   };
 }
 

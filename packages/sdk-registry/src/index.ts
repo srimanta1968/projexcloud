@@ -22,6 +22,7 @@ export {
   catalogContentHash,
   type BuildCatalogOptions,
 } from './catalog';
+export { getScaffold, type ScaffoldResult } from './scaffold';
 export {
   loadRegistry,
   registryFromCatalog,

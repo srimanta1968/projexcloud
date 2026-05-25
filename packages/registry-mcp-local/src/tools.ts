@@ -10,7 +10,7 @@
  * a later phase that proxies them to the hosted MCP via the tenant API key.
  */
 
-import { Registry, RegistryHit } from '@projexlight/sdk-registry';
+import { Registry, RegistryHit, getScaffold } from '@projexlight/sdk-registry';
 
 export interface ToolDefinition {
   name: string;
@@ -105,6 +105,26 @@ export const READ_TOOLS: ToolDefinition[] = [
       required: ['blueprint_id'],
     },
   },
+  {
+    name: 'projex_registry_scaffold',
+    description:
+      'Generate a starter app scaffold (package.json, tsconfig, src/integrations/* per SDK, tests, README, CLAUDE.md) that composes the given SDKs. Returns a tree of { path, contents } — caller writes the files. Unknown SDKs are filtered with warnings.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        sdk_names: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Fully-qualified SDK names to compose into the new app.',
+        },
+        app_name: {
+          type: 'string',
+          description: 'Name of the new app (becomes the npm package name).',
+        },
+      },
+      required: ['sdk_names', 'app_name'],
+    },
+  },
 ];
 
 /** MCP CallToolResult shape — content array with one or more text items. */
@@ -190,6 +210,21 @@ export async function dispatchTool(
         return err(
           `Blueprint "${blueprint_id}" not found. The blueprint library (E4) is not yet wired.`,
         );
+      }
+
+      case 'projex_registry_scaffold': {
+        const sdk_names = Array.isArray(args.sdk_names) ? (args.sdk_names as string[]) : [];
+        const app_name = String(args.app_name ?? '');
+        if (sdk_names.length === 0) return err('sdk_names must be a non-empty array');
+        if (!app_name) return err('app_name is required');
+        const tree = getScaffold(registry, sdk_names, app_name);
+        return ok({
+          app_name: tree.app_name,
+          resolved_sdks: tree.resolved_sdks,
+          warnings: tree.warnings,
+          file_count: tree.files.length,
+          files: tree.files,
+        });
       }
 
       default:
