@@ -29,6 +29,16 @@ export type {
   LegalExportJurisdiction,
 } from '@projexlight/contracts';
 
+// P7 FR-EVD-1 / AC-1 — provenance-stamped capture intake.
+export {
+  captureEvidence,
+  getCapture,
+  listCapturesForEncounter,
+} from './services/captureIntake';
+export type { CaptureEvidenceInput, CaptureEvidenceResult } from './services/captureIntake';
+
+export * as server from './server';
+
 // P7 FR-EVD-5 / AC-11 — encounter seal guard.
 export {
   getEncounterSealStatus,

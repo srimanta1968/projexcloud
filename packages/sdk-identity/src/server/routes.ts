@@ -1,5 +1,5 @@
 import { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
-import { loginHandler, registerHandler } from './handlers/authController';
+import { loginHandler, registerHandler, signupTenantHandler } from './handlers/authController';
 import {
   aliasMergeHandler,
   impersonationApproveHandler,
@@ -29,6 +29,11 @@ import { scimBearerAuth } from '../middleware/scimAuthMiddleware';
 export async function registerRoutes(app: FastifyInstance): Promise<void> {
   app.post('/api/auth/register', async (req: FastifyRequest, reply: FastifyReply) => {
     try { await registerHandler(req, reply); }
+    catch (err) { req.log.error(err); if (!reply.sent) reply.code(500).send({ error: 'InternalError' }); }
+  });
+
+  app.post('/api/auth/signup-tenant', async (req: FastifyRequest, reply: FastifyReply) => {
+    try { await signupTenantHandler(req, reply); }
     catch (err) { req.log.error(err); if (!reply.sent) reply.code(500).send({ error: 'InternalError' }); }
   });
 

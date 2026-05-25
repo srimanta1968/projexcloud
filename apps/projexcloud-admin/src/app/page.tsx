@@ -3,7 +3,7 @@ import Link from 'next/link';
 const SECTIONS = [
   { href: '/tenants',      label: 'Tenants',        desc: 'Provision, suspend, offboard' },
   { href: '/pools',        label: 'Pools',          desc: 'Pool routing + status flips' },
-  { href: '/catalogs',     label: 'Pricing catalogs', desc: 'Catalog versioning + soft caps' },
+  { href: '/pricing-catalogs', label: 'Pricing catalogs', desc: 'Catalog versioning + soft caps' },
   { href: '/invoices',     label: 'Invoices',       desc: 'Per-tenant invoice search' },
   { href: '/webhooks',     label: 'Webhooks',       desc: 'Tenant webhooks + DLQ replay' },
   { href: '/approvals',    label: 'Approvals',      desc: 'Routes + pending requests' },

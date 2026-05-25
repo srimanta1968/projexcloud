@@ -1,6 +1,7 @@
 import { FastifyReply, FastifyRequest } from 'fastify';
 import {
   registerPerson,
+  signupTenant,
   verifyEmailPassword,
   listMemberships,
   mintAppIdentity,
@@ -11,6 +12,7 @@ import { buildSixLayerClaims, readProjectionVersion, signJwt } from '../../utils
 import {
   validateLoginInput,
   validateRegisterInput,
+  validateSignupTenantInput,
 } from '../../validators/authValidator';
 
 /**
@@ -38,6 +40,50 @@ export async function registerHandler(req: FastifyRequest, reply: FastifyReply):
       data: {
         userId: result.person.person_id,
         email: validation.value.email,
+        token,
+      },
+    });
+  } catch (err) {
+    if (err instanceof PersonExistsError) {
+      reply.code(409).send({ error: 'UserExists', details: [err.message] });
+      return;
+    }
+    req.log.error(err);
+    reply.code(500).send({ error: 'InternalError' });
+  }
+}
+
+/**
+ * POST /api/auth/signup-tenant — self-serve flow that creates the person,
+ * their org + default app + trial tenant + admin membership in one transaction,
+ * then returns a JWT already scoped to the new tenant so the caller can land
+ * straight on the in-product onboarding flow.
+ */
+export async function signupTenantHandler(req: FastifyRequest, reply: FastifyReply): Promise<void> {
+  const validation = validateSignupTenantInput(req.body);
+  if (!validation.ok) {
+    reply.code(400).send({ error: 'ValidationError', details: validation.errors });
+    return;
+  }
+  try {
+    const result = await signupTenant(validation.value);
+    const token = signJwt(buildSixLayerClaims({
+      person_id: result.person_id,
+      email: validation.value.email,
+      tenant_id: result.tenant_id,
+      app_id: result.app_id,
+      actor_kind: 'human',
+      mfa_methods: ['pwd'],
+    }));
+    reply.code(201).send({
+      data: {
+        userId: result.person_id,
+        email: validation.value.email,
+        tenant_id: result.tenant_id,
+        app_id: result.app_id,
+        org_id: result.org_id,
+        display_name: result.display_name,
+        region: result.region,
         token,
       },
     });

@@ -89,6 +89,19 @@ export async function createTenant(input: CreateTenantInput): Promise<TenantReco
   return tenant;
 }
 
+export async function listTenants(limit = 200): Promise<TenantRecord[]> {
+  return dataService.rows<TenantRecord>(
+    `SELECT tenant_id, app_id, parent_tenant_id, root_tenant_id, reseller_id,
+            isolation_tier, region, geo_node_id, brand_domain,
+            admin_pool_index, app_pool_index, module_subscriptions,
+            status, display_name, created_at, updated_at
+       FROM tenant.tenant
+       ORDER BY created_at DESC
+       LIMIT $1`,
+    [limit],
+  );
+}
+
 export async function getTenant(tenant_id: string): Promise<TenantRecord | null> {
   return dataService.one<TenantRecord>(
     `SELECT tenant_id, app_id, parent_tenant_id, root_tenant_id, reseller_id,

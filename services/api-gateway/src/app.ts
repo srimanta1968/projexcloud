@@ -1,4 +1,4 @@
-import Fastify from 'fastify';
+import Fastify, { FastifyRequest, FastifyReply } from 'fastify';
 import cors from '@fastify/cors';
 import helmet from '@fastify/helmet';
 import websocket from '@fastify/websocket';
@@ -59,7 +59,7 @@ import {
   startSloAlarms,
 } from '@projexlight/sdk-meter';
 import { server as secretsServer } from '@projexlight/sdk-secrets';
-import { migrationsDir as tenantMigrations, server as tenantServer } from '@projexlight/sdk-tenant';
+import { migrationsDir as tenantMigrations, server as tenantServer, createTenant as tenantCreate, listTenants as tenantList } from '@projexlight/sdk-tenant';
 import { migrationsDir as consentMigrations, server as consentServer } from '@projexlight/sdk-consent';
 import { migrationsDir as policyMigrations, server as policyServer } from '@projexlight/sdk-policy';
 import { migrationsDir as rebacMigrations, server as rebacServer } from '@projexlight/sdk-rebac';
@@ -513,6 +513,66 @@ app.get<{
     return out;
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
+    return reply.code(500).send({ error: msg });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────
+// Admin-token-guarded tenant provisioning (used by projexcloud-admin
+// portal). Wraps sdk-tenant service functions so operators don't need
+// a tenant-scoped JWT.
+// ─────────────────────────────────────────────────────────────────────
+function checkAdminToken(req: FastifyRequest, reply: FastifyReply): boolean {
+  const adminToken = process.env.ADMIN_OPS_TOKEN;
+  const presented = req.headers['x-admin-ops-token'];
+  if (!adminToken || !presented || presented !== adminToken) {
+    reply.code(401).send({ success: false, error: 'admin token required' });
+    return false;
+  }
+  return true;
+}
+
+app.get('/admin/tenants', async (req, reply) => {
+  if (!checkAdminToken(req, reply)) return;
+  try {
+    const tenants = await tenantList(200);
+    return reply.code(200).send({ data: { tenants } });
+  } catch (err) {
+    return reply.code(500).send({ error: (err as Error).message });
+  }
+});
+
+app.post<{ Body: {
+  app_id: string;
+  display_name: string;
+  region: string;
+  isolation_tier?: 'S' | 'P' | 'G';
+  brand_domain?: string;
+  module_subscriptions?: string[];
+} }>('/admin/tenants', async (req, reply) => {
+  if (!checkAdminToken(req, reply)) return;
+  const b = req.body ?? ({} as Record<string, never>);
+  if (!b.app_id || !b.display_name || !b.region) {
+    return reply.code(400).send({
+      error: 'ValidationError',
+      details: ['app_id, display_name, region are required'],
+    });
+  }
+  try {
+    const tenant = await tenantCreate({
+      app_id: b.app_id,
+      display_name: b.display_name,
+      region: b.region,
+      isolation_tier: b.isolation_tier ?? 'S',
+      brand_domain: b.brand_domain,
+      module_subscriptions: b.module_subscriptions ?? [],
+    });
+    return reply.code(201).send({ data: { tenant } });
+  } catch (err) {
+    const msg = (err as Error).message;
+    if (msg.includes('foreign key')) {
+      return reply.code(400).send({ error: 'ValidationError', details: [msg] });
+    }
     return reply.code(500).send({ error: msg });
   }
 });

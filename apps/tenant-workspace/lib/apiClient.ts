@@ -3,7 +3,7 @@
  * localStorage so the workspace shell can attach it to subsequent requests.
  */
 
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:3000';
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:3500';
 const TOKEN_KEY = 'projexlight.auth.token';
 
 export function getToken(): string | null {

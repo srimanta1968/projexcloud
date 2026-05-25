@@ -1,0 +1,445 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Tenant Admin — Tenant Operator Guide</title>
+  <style>
+    :root {
+      --bg: #ffffff;
+      --fg: #1a1f2e;
+      --muted: #5a6573;
+      --accent: #1b2a44;
+      --border: #d3dbe8;
+      --soft: #f1f5fb;
+      --code-bg: #eef2f8;
+      --link: #1a4fc4;
+    }
+    * { box-sizing: border-box; }
+    body {
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      max-width: 880px;
+      margin: 0 auto;
+      padding: 32px 24px 80px;
+      background: var(--bg);
+      color: var(--fg);
+      line-height: 1.55;
+    }
+    header.page {
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 16px;
+      margin-bottom: 24px;
+    }
+    header.page h1 { margin: 0 0 8px; font-size: 28px; }
+    header.page .meta {
+      color: var(--muted);
+      font-size: 14px;
+    }
+    header.page .meta code {
+      background: var(--code-bg);
+      padding: 1px 6px;
+      border-radius: 4px;
+      font-size: 13px;
+    }
+    .toolbar {
+      display: flex;
+      gap: 8px;
+      margin: 16px 0 28px;
+    }
+    .toolbar button {
+      background: var(--soft);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 6px 12px;
+      font-size: 13px;
+      cursor: pointer;
+      color: var(--accent);
+    }
+    .toolbar button:hover { background: #e3ebf6; }
+    details {
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      margin-bottom: 12px;
+      background: var(--bg);
+      overflow: hidden;
+    }
+    details[open] {
+      border-color: #b9c3d6;
+      box-shadow: 0 1px 3px rgba(27, 42, 68, 0.05);
+    }
+    summary {
+      list-style: none;
+      cursor: pointer;
+      padding: 14px 18px;
+      font-weight: 600;
+      font-size: 16px;
+      background: var(--soft);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      user-select: none;
+    }
+    summary::-webkit-details-marker { display: none; }
+    summary::before {
+      content: "▸";
+      color: var(--muted);
+      font-size: 12px;
+      transition: transform 0.15s ease;
+      display: inline-block;
+    }
+    details[open] > summary::before { transform: rotate(90deg); }
+    summary .num {
+      color: var(--muted);
+      font-weight: 500;
+      margin-right: 4px;
+      font-variant-numeric: tabular-nums;
+    }
+    .body {
+      padding: 16px 22px 22px;
+      border-top: 1px solid var(--border);
+    }
+    .body h3 {
+      margin: 18px 0 8px;
+      font-size: 15px;
+      color: var(--accent);
+    }
+    .body h3:first-child { margin-top: 0; }
+    .body p { margin: 8px 0; }
+    .body code {
+      background: var(--code-bg);
+      padding: 1px 5px;
+      border-radius: 3px;
+      font-size: 13px;
+      font-family: "SF Mono", Consolas, Menlo, monospace;
+    }
+    .body ul, .body ol { padding-left: 22px; margin: 8px 0; }
+    .body li { margin: 4px 0; }
+    table { width: 100%; border-collapse: collapse; margin: 12px 0; font-size: 14px; }
+    th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
+    th { background: var(--soft); font-weight: 600; }
+    .callout {
+      border-left: 3px solid #c79100;
+      background: #fdf6e3;
+      padding: 10px 14px;
+      margin: 12px 0;
+      border-radius: 4px;
+      font-size: 14px;
+    }
+    .callout.danger { border-left-color: #c12f1c; background: #fdecea; }
+    .callout.info { border-left-color: #1a4fc4; background: #ecf2fc; }
+    a { color: var(--link); }
+  </style>
+</head>
+<body>
+
+<header class="page">
+  <h1>Tenant Admin — Tenant Operator Guide</h1>
+  <div class="meta">
+    <strong>Audience:</strong> a customer's tenant administrator (IT lead, RevOps lead, or delegated admin persona).<br />
+    <strong>URL (dev):</strong> <code>http://localhost:3200</code><br />
+    <strong>Backed by:</strong> api-gateway on <code>http://localhost:3500</code> via <code>/api/*</code> routes,
+    authenticated with the admin's tenant-scoped JWT.
+  </div>
+  <p style="margin-top:14px;color:var(--muted);font-size:14px;">
+    This console is <strong>scoped to your tenant only</strong>. You cannot see or affect other
+    tenants. Everything you do here writes to your tenant's audit ledger, which ProjexCloud
+    platform staff (and your own auditors) can verify.
+  </p>
+</header>
+
+<div class="toolbar">
+  <button onclick="document.querySelectorAll('details').forEach(d=>d.open=true)">Expand all</button>
+  <button onclick="document.querySelectorAll('details').forEach(d=>d.open=false)">Collapse all</button>
+</div>
+
+<details open>
+  <summary><span class="num">1.</span> Billing</summary>
+  <div class="body">
+    <p><strong>Why:</strong> Show your finance team what the tenant is spending in near real-time,
+    plus a historical invoice archive.</p>
+    <h3>Sections on this page</h3>
+    <ul>
+      <li><strong>Live meter</strong> — current period's accrued usage by SKU. Refreshes every ~60 s from <code>sdk-meter</code>.</li>
+      <li><strong>Invoices</strong> — finalized invoices, newest first. Each links to a PDF + CSV export.</li>
+      <li><strong>Showback</strong> — per-BU (business unit) breakdown of usage; useful for internal chargeback.</li>
+    </ul>
+    <h3>Common workflows</h3>
+    <ul>
+      <li><em>Monthly close:</em> download the latest invoice PDF and reconcile against your AP system.</li>
+      <li><em>Overage investigation:</em> if the live meter is climbing faster than expected, click the SKU → see which API keys / personas drove the traffic.</li>
+      <li><em>Cap warning:</em> if a SKU shows a yellow "soft-cap exceeded" badge, you've passed a
+      Finance-defined threshold. Requests still succeed, but a <code>WARN</code> header is being
+      stamped on responses. Talk to your ProjexCloud rep about raising the cap or moving to a higher plan.</li>
+    </ul>
+  </div>
+</details>
+
+<details>
+  <summary><span class="num">2.</span> Members — personas, roles, BUs</summary>
+  <div class="body">
+    <p><strong>Why:</strong> Add and manage humans (and service accounts) inside your tenant.
+    A <em>persona</em> is the assignable identity; a <em>role</em> maps the persona to a set of
+    permissions; a <em>BU</em> (business unit) lets you group personas for billing and approvals.</p>
+
+    <h3>Steps to add a teammate</h3>
+    <ol>
+      <li><strong>Members</strong> → <strong>Add persona</strong>.</li>
+      <li>Pick <em>kind</em>:
+        <ul>
+          <li><code>human</code> — invite by email; they'll receive a sign-in link.</li>
+          <li><code>service</code> — generates a service-account persona; pair with an API key.</li>
+        </ul>
+      </li>
+      <li>Assign one or more roles. Roles are templated from your App's role-template catalogue
+      (set up by ProjexCloud during onboarding).</li>
+      <li>(Optional) Pick a BU.</li>
+      <li>Save. The persona is created with no active sessions; the human flow needs them to click the invite.</li>
+    </ol>
+
+    <h3>Steps to revoke access</h3>
+    <ol>
+      <li>Find the persona in the table.</li>
+      <li>Click <strong>Revoke</strong>. All sessions invalidate immediately; any open websocket connections close.</li>
+    </ol>
+
+    <h3>Steps to add a BU</h3>
+    <ol>
+      <li><strong>Members</strong> → <strong>Business units</strong> tab → <strong>+ New BU</strong>.</li>
+      <li>Pick a parent BU (or leave blank for top-level) + name + kind (e.g. <code>cost-center</code>, <code>region</code>).</li>
+      <li>Save. Existing personas can be moved into the BU; new ones can be assigned on creation.</li>
+    </ol>
+  </div>
+</details>
+
+<details>
+  <summary><span class="num">3.</span> API keys</summary>
+  <div class="body">
+    <p><strong>Why:</strong> Long-lived credentials for machine-to-machine integrations
+    (your CI pipeline, a custom integration, an analytics ETL).</p>
+
+    <h3>Steps to issue a key</h3>
+    <ol>
+      <li><strong>API keys</strong> → <strong>Issue key</strong>.</li>
+      <li>Pick the persona to associate (typically a <code>service</code> persona).</li>
+      <li>Pick scopes — minimum-privilege is the rule. A key that only reads metrics should not have <code>tenant.admin</code> scope.</li>
+      <li>(Optional) set an expiry. Anything without an expiry will be flagged in compliance reviews.</li>
+      <li>Copy the key <strong>once</strong> — it's shown only at creation. ProjexCloud stores only a hash.</li>
+    </ol>
+
+    <h3>Rotate / revoke</h3>
+    <ul>
+      <li><strong>Rotate</strong> — new secret generated; old one stays valid for 10 minutes (grace window) so you can swap config without downtime.</li>
+      <li><strong>Revoke</strong> — instant; no grace window.</li>
+    </ul>
+  </div>
+</details>
+
+<details>
+  <summary><span class="num">4.</span> Webhooks</summary>
+  <div class="body">
+    <p><strong>Why:</strong> ProjexCloud pushes events (invoice finalized, persona created, ticket
+    status changed, etc.) to URLs you control.</p>
+
+    <h3>Steps to add a webhook</h3>
+    <ol>
+      <li><strong>Webhooks</strong> → <strong>+ Add endpoint</strong>.</li>
+      <li>Paste the URL (must be HTTPS in production).</li>
+      <li>Pick event types — start narrow; you can always add more.</li>
+      <li>Save. ProjexCloud issues a signing secret; copy and store it in your handler's config. Every delivery includes an HMAC signature header.</li>
+    </ol>
+
+    <h3>DLQ replay</h3>
+    <p>If your endpoint goes down, failed deliveries land in your DLQ.</p>
+    <ul>
+      <li><strong>Webhooks → DLQ</strong> → see failures.</li>
+      <li>Click <strong>Replay</strong> to re-send. Use this <em>after</em> your handler is fixed.</li>
+      <li>Old deliveries past 7 days are pruned automatically.</li>
+    </ul>
+
+    <div class="callout">
+      <strong>Common pitfalls:</strong>
+      <ul style="margin:6px 0 0;">
+        <li>Returning a 2xx with an empty body is fine; we only look at status codes.</li>
+        <li>Return 200 from an async queue (before processing). Don't make ProjexCloud wait for your downstream system.</li>
+        <li>Rotate the signing secret regularly via <strong>Rotate secret</strong> — old one stays valid for 60 s.</li>
+      </ul>
+    </div>
+  </div>
+</details>
+
+<details>
+  <summary><span class="num">5.</span> Approvals</summary>
+  <div class="body">
+    <p><strong>Why:</strong> Some actions in your tenant (export-all, BYOK rotation, deleting an
+    audit-relevant record) need a second pair of eyes. The Approvals page is your queue + history.</p>
+
+    <h3>Sections</h3>
+    <ul>
+      <li><strong>My pending decisions</strong> — requests waiting for <em>you</em> personally to decide.</li>
+      <li><strong>My open requests</strong> — requests <em>you</em> raised that are still pending.</li>
+      <li><strong>Routes</strong> — the rules that determine who needs to approve what. Configure these once, then they apply automatically.</li>
+    </ul>
+
+    <h3>Steps to decide a request</h3>
+    <ol>
+      <li><strong>Approvals</strong> → click a request in "My pending decisions".</li>
+      <li>Read the action description and any attached evidence.</li>
+      <li>Approve or Reject + comment (comments are part of the audit chain).</li>
+    </ol>
+
+    <h3>Steps to add an approval route</h3>
+    <ol>
+      <li><strong>Approvals → Routes</strong> → <strong>+ Add route</strong>.</li>
+      <li>Specify the trigger (e.g., "any data export over 1 GB").</li>
+      <li>Specify approvers (by persona or role).</li>
+      <li>Set the SLA (default 24 h). Breached SLAs page your designated escalation persona.</li>
+    </ol>
+  </div>
+</details>
+
+<details>
+  <summary><span class="num">6.</span> Connectors</summary>
+  <div class="body">
+    <p><strong>Why:</strong> Wire your tenant into Slack, Salesforce, Microsoft 365, Google Workspace,
+    Jira, Linear, Zendesk, Zoom, HubSpot, GitHub, Snowflake — whichever ones are part of your plan.</p>
+
+    <h3>Steps to connect Slack (example)</h3>
+    <ol>
+      <li><strong>Connectors</strong> → <strong>Slack</strong> → <strong>Connect</strong>.</li>
+      <li>You're redirected to Slack's OAuth flow; pick the workspace and approve scopes.</li>
+      <li>On return, pick which Slack channels ProjexCloud may post to.</li>
+      <li>(Optional) map ProjexCloud events to channels (e.g., "post invoice-finalized to #finance").</li>
+    </ol>
+
+    <h3>Disconnect / health</h3>
+    <ul>
+      <li><strong>Disconnect</strong> — revokes the stored OAuth token and stops new events; historical data already ingested stays.</li>
+      <li>Health dot red → the token expired or was revoked upstream. Click <strong>Reconnect</strong>.</li>
+    </ul>
+  </div>
+</details>
+
+<details>
+  <summary><span class="num">7.</span> Consent</summary>
+  <div class="body">
+    <p><strong>Why:</strong> GDPR/CCPA-style receipts. Every data-processing purpose for which
+    ProjexCloud holds personal data on a subject must have an explicit, dated consent receipt;
+    subjects (your end users) can revoke at any time.</p>
+
+    <h3>Sections</h3>
+    <ul>
+      <li><strong>Receipts</strong> — every consent record, filterable by subject + purpose.</li>
+      <li><strong>Purposes</strong> — the list of processing purposes your tenant uses. New purposes must be defined here before they can be referenced in a receipt.</li>
+    </ul>
+
+    <h3>Common workflows</h3>
+    <ul>
+      <li><em>DSAR (data subject access request):</em> filter Receipts by subject email → export. Pair with the data-rights SDK's "subject export" job for the actual data payload.</li>
+      <li><em>Right to be forgotten:</em> mark the subject's receipts as revoked; the data-rights SDK fans out deletion to every store keyed by that subject.</li>
+    </ul>
+  </div>
+</details>
+
+<details>
+  <summary><span class="num">8.</span> AI — MCP servers</summary>
+  <div class="body">
+    <p><strong>Why:</strong> ProjexCloud's AI gateway routes LLM calls through approved providers.
+    This page is where you register your tenant's MCP (Model Context Protocol) servers — typically
+    your own data sources you want the AI to be able to read.</p>
+
+    <h3>Steps to register an MCP server</h3>
+    <ol>
+      <li><strong>AI</strong> → <strong>+ Add MCP server</strong>.</li>
+      <li>Paste the server URL + auth credentials (stored encrypted via <code>sdk-vault</code>).</li>
+      <li>Select which agent personas may use it. Minimum-privilege rule applies: most agents should not have access to most servers.</li>
+      <li>Save. The AI gateway runs a probe to verify the server responds within SLA; a green status means agents can now bind to it.</li>
+    </ol>
+
+    <div class="callout">
+      <strong>Common pitfalls:</strong>
+      <ul style="margin:6px 0 0;">
+        <li>Hosting the MCP server on <code>localhost</code> from your laptop won't work — agents run in ProjexCloud's network and need a reachable URL.</li>
+        <li>Giving every agent access to every server defeats AC-2 (cross-tenant leakage) tests — keep scopes tight.</li>
+      </ul>
+    </div>
+  </div>
+</details>
+
+<details>
+  <summary><span class="num">9.</span> BYOK — Bring Your Own Key</summary>
+  <div class="body">
+    <p><strong>Why:</strong> Customers with strict crypto controls insist on holding their own KMS
+    keys; ProjexCloud encrypts your tenant's data with envelope keys wrapped by <em>your</em> KMS,
+    so we can never read it without you.</p>
+
+    <h3>Steps to enable BYOK</h3>
+    <ol>
+      <li><strong>BYOK</strong> → pick provider (AWS KMS, GCP KMS, Azure Key Vault).</li>
+      <li>Paste the KMS key ARN/URI.</li>
+      <li>Grant ProjexCloud's service principal the <code>Encrypt</code> + <code>Decrypt</code> + <code>GenerateDataKey</code> permissions on that key (provider-specific console steps shown inline).</li>
+      <li>Click <strong>Verify</strong>. The gateway runs a test encrypt/decrypt; green means you're live.</li>
+    </ol>
+
+    <h3>Rotate / revoke</h3>
+    <ul>
+      <li><strong>Rotate key</strong> — new writes use the new key; old data is re-encrypted lazily.</li>
+      <li><strong>Revoke</strong> — removing ProjexCloud's KMS grant from your side breaks our ability to read your data.</li>
+    </ul>
+
+    <div class="callout danger">
+      Don't revoke casually — coordinate with platform support, otherwise your tenant goes dark.
+    </div>
+  </div>
+</details>
+
+<details>
+  <summary><span class="num">10.</span> Day-1 onboarding checklist</summary>
+  <div class="body">
+    <p>When your tenant is freshly provisioned, do these in order:</p>
+    <ol>
+      <li><strong>Members</strong> — invite your first 1–2 admins, then your team.</li>
+      <li><strong>API keys</strong> — issue one service key for your CI; rotate the one you were given at provisioning.</li>
+      <li><strong>Webhooks</strong> — register endpoints so your downstream systems get events.</li>
+      <li><strong>Approvals</strong> — set up at least one approval route for destructive actions.</li>
+      <li><strong>Connectors</strong> — wire Slack/SF/M365 so events flow into the tools your team already uses.</li>
+      <li><strong>Consent</strong> — declare your processing purposes; required before you start collecting personal data.</li>
+      <li><strong>BYOK</strong> (optional but recommended for regulated industries).</li>
+      <li><strong>Billing</strong> — bookmark this; check it weekly during the first month so surprises don't compound.</li>
+    </ol>
+  </div>
+</details>
+
+<details>
+  <summary><span class="num">11.</span> Troubleshooting</summary>
+  <div class="body">
+    <h3>Billing page shows no data.</h3>
+    <p>The gateway can't reach your tenant's pool, or your JWT's tenant_id doesn't match what the
+    URL expects. Check the URL has your tenant_id. If you've been issued the wrong tenant_id,
+    contact your ProjexCloud rep.</p>
+
+    <h3>Webhook deliveries all failing.</h3>
+    <ul>
+      <li>Confirm your endpoint is reachable from the public internet.</li>
+      <li>Confirm you're returning a 2xx within 10 s.</li>
+      <li>Check the signing-secret rotation didn't leave your handler with a stale secret.</li>
+    </ul>
+
+    <h3>API key issued but my integration says 401.</h3>
+    <ul>
+      <li>The key is shown <strong>once</strong> at creation; if you missed it, revoke + reissue.</li>
+      <li>Scopes too narrow — check what your integration actually calls and grant matching scopes.</li>
+    </ul>
+
+    <h3>Connector status red.</h3>
+    <p>Token expired or was revoked upstream. Click <strong>Reconnect</strong>.</p>
+
+    <div class="callout info">
+      <strong>Need to escalate to platform staff:</strong> your tenant_id + the relevant timestamp
+      range is the most useful first message. Don't paste API keys or webhook secrets in the
+      support thread.
+    </div>
+  </div>
+</details>
+
+</body>
+</html>

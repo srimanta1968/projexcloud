@@ -27,6 +27,7 @@ This folder contains the **phase-aligned PRDs** that turn the v3.1 design (docs 
 | [P6B-Knowledge-Semantic.md](./P6B-Knowledge-Semantic.md) | P6B | 40–44 | Knowledge + Semantic + Analytics + Snowflake (RAG · Parsing · Conversation · Recommendation · Analytics+Iceberg · Lineage+cross-pool · Semantic 6 types · connector-snowflake) | G8 · G9 |
 | [P7-Field-Hyperscale.md](./P7-Field-Hyperscale.md) | P7 | 44–50 | Field + Evidence + Hyperscale (Storm · Dispatch · Assignment · Lead Scoring · Evidence · Diagnostic-Telemetry · HDK measure/watermark · Pool federation runtime · hard caps on) | G10 · G11 |
 | [P8-Deployment-Variants.md](./P8-Deployment-Variants.md) | P8 | parallel from 22 | Deployment Variants (BYOK/CMEK · Sovereign Cloud · On-Prem/Air-Gapped · Active-Active Tier-G+) | — |
+| [P9-SDK-Discoverability-AI-Builder.md](./P9-SDK-Discoverability-AI-Builder.md) | P9 | 50–62 | SDK Discoverability & AI-Driven Vertical App Builder (Capability manifest · Registry+MCP · Vertical blueprints · CLI + Cloud builder · Pilot RevOps CRM) | G13 · G14 |
 
 ---
 
@@ -72,3 +73,5 @@ These are the architectural gaps identified in `SDK-Build-Plan-v3.1.html §0A.2`
 | G10 | Pool federation runtime | P7 |
 | G11 | Read federation lakehouse (Iceberg) | P7 |
 | G12 | Cross-system trace viewer (sdk-trace) | P6A |
+| G13 | SDK Composability — every SDK ships a machine-readable capability manifest; registry exposes them via MCP | P9 |
+| G14 | AI-Native App Builder — vertical blueprints + cloud agent + local CLI so customers compose vertical apps without monorepo knowledge | P9 |

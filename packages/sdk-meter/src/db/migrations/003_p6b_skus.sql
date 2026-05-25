@@ -9,6 +9,33 @@
 -- billing (soft mode) — either way the customer invoice is wrong.
 
 -- ---------------------------------------------------------------------------
+-- Step 0: widen the pricing_rate.unit CHECK to include P6B + P7 units.
+-- ---------------------------------------------------------------------------
+-- Original 001_init_meter.sql limited unit ∈ ('call','byte','doc','token','GB-mo').
+-- P6B introduces 'MB','GB','document','run','row'; P7 adds 'export','blob'.
+-- Widening here (vs. a separate migration) keeps this seed self-sufficient
+-- on a fresh database — without it the very first INSERT below would trip
+-- the constraint. We DO NOT drop the CHECK (a free-text unit would let a
+-- fat-finger 'GiB' typo make it into an invoice line).
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM pg_constraint
+     WHERE conname = 'pricing_rate_unit_check'
+       AND conrelid = 'meter.pricing_rate'::regclass
+  ) THEN
+    ALTER TABLE meter.pricing_rate DROP CONSTRAINT pricing_rate_unit_check;
+  END IF;
+
+  ALTER TABLE meter.pricing_rate ADD CONSTRAINT pricing_rate_unit_check
+    CHECK (unit IN (
+      'call', 'byte', 'doc', 'token', 'GB-mo',
+      'MB', 'GB', 'document', 'run', 'row',
+      'export', 'blob'
+    ));
+END $$;
+
+-- ---------------------------------------------------------------------------
 -- Step 1: ensure the platform P6B catalog exists.
 -- ---------------------------------------------------------------------------
 -- A single 'platform-p6b-2026q2' catalog holds every P6B rate. Future

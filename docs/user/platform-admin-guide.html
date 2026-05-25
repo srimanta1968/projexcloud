@@ -1,0 +1,446 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>ProjexCloud Admin — Platform Operator Guide</title>
+  <style>
+    :root {
+      --bg: #ffffff;
+      --fg: #1a1f2e;
+      --muted: #5a6573;
+      --accent: #0b1220;
+      --border: #d7dce4;
+      --soft: #f3f5f8;
+      --code-bg: #eef1f6;
+      --link: #1a4fc4;
+    }
+    * { box-sizing: border-box; }
+    body {
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      max-width: 880px;
+      margin: 0 auto;
+      padding: 32px 24px 80px;
+      background: var(--bg);
+      color: var(--fg);
+      line-height: 1.55;
+    }
+    header.page {
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 16px;
+      margin-bottom: 24px;
+    }
+    header.page h1 { margin: 0 0 8px; font-size: 28px; }
+    header.page .meta {
+      color: var(--muted);
+      font-size: 14px;
+    }
+    header.page .meta code {
+      background: var(--code-bg);
+      padding: 1px 6px;
+      border-radius: 4px;
+      font-size: 13px;
+    }
+    .toolbar {
+      display: flex;
+      gap: 8px;
+      margin: 16px 0 28px;
+    }
+    .toolbar button {
+      background: var(--soft);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 6px 12px;
+      font-size: 13px;
+      cursor: pointer;
+      color: var(--accent);
+    }
+    .toolbar button:hover { background: #e9eef7; }
+    details {
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      margin-bottom: 12px;
+      background: var(--bg);
+      overflow: hidden;
+    }
+    details[open] {
+      border-color: #b9c2d2;
+      box-shadow: 0 1px 3px rgba(11, 18, 32, 0.04);
+    }
+    summary {
+      list-style: none;
+      cursor: pointer;
+      padding: 14px 18px;
+      font-weight: 600;
+      font-size: 16px;
+      background: var(--soft);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      user-select: none;
+    }
+    summary::-webkit-details-marker { display: none; }
+    summary::before {
+      content: "▸";
+      color: var(--muted);
+      font-size: 12px;
+      transition: transform 0.15s ease;
+      display: inline-block;
+    }
+    details[open] > summary::before { transform: rotate(90deg); }
+    summary .num {
+      color: var(--muted);
+      font-weight: 500;
+      margin-right: 4px;
+      font-variant-numeric: tabular-nums;
+    }
+    .body {
+      padding: 16px 22px 22px;
+      border-top: 1px solid var(--border);
+    }
+    .body h3 {
+      margin: 18px 0 8px;
+      font-size: 15px;
+      color: var(--accent);
+    }
+    .body h3:first-child { margin-top: 0; }
+    .body p { margin: 8px 0; }
+    .body code {
+      background: var(--code-bg);
+      padding: 1px 5px;
+      border-radius: 3px;
+      font-size: 13px;
+      font-family: "SF Mono", Consolas, Menlo, monospace;
+    }
+    .body ul, .body ol { padding-left: 22px; margin: 8px 0; }
+    .body li { margin: 4px 0; }
+    table { width: 100%; border-collapse: collapse; margin: 12px 0; font-size: 14px; }
+    th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
+    th { background: var(--soft); font-weight: 600; }
+    .pill {
+      display: inline-block;
+      padding: 2px 8px;
+      background: var(--code-bg);
+      border-radius: 10px;
+      font-size: 11px;
+      color: var(--muted);
+      margin-left: 6px;
+      vertical-align: middle;
+    }
+    .callout {
+      border-left: 3px solid #c79100;
+      background: #fdf6e3;
+      padding: 10px 14px;
+      margin: 12px 0;
+      border-radius: 4px;
+      font-size: 14px;
+    }
+    .callout.danger { border-left-color: #c12f1c; background: #fdecea; }
+    a { color: var(--link); }
+  </style>
+</head>
+<body>
+
+<header class="page">
+  <h1>ProjexCloud Admin — Platform Operator Guide</h1>
+  <div class="meta">
+    <strong>Audience:</strong> ProjexCloud platform staff (SRE, support, finance, compliance).<br />
+    <strong>URL (dev):</strong> <code>http://localhost:3100</code><br />
+    <strong>Backed by:</strong> api-gateway on <code>http://localhost:3500</code> via <code>/admin/*</code> routes,
+    guarded by the <code>ADMIN_OPS_TOKEN</code> header.
+  </div>
+  <p style="margin-top:14px;color:var(--muted);font-size:14px;">
+    This console is <strong>cross-tenant</strong>. Every action you take here is recorded in
+    the platform's hash-chained audit ledger; the tenant whose data you touched will be able
+    to see the entry in their Tenant Admin console.
+  </p>
+</header>
+
+<div class="toolbar">
+  <button onclick="document.querySelectorAll('details').forEach(d=>d.open=true)">Expand all</button>
+  <button onclick="document.querySelectorAll('details').forEach(d=>d.open=false)">Collapse all</button>
+</div>
+
+<details open>
+  <summary><span class="num">1.</span> Tenants — provision, browse, lifecycle</summary>
+  <div class="body">
+    <h3>1.1 Provision a new tenant</h3>
+    <p><strong>Why:</strong> A new customer signed a contract, or you need a sandbox/demo tenant.</p>
+    <p><strong>When:</strong> As soon as the App and (optionally) Reseller records exist. You
+    cannot provision a tenant without an <code>app_id</code> — the App is the parent product surface.</p>
+    <p><strong>Steps:</strong></p>
+    <ol>
+      <li>Click <strong>Tenants</strong> → <strong>+ New tenant</strong>.</li>
+      <li>Fill the form:
+        <ul>
+          <li><strong>App ID</strong> — UUID of the parent App (<code>tenant.app</code> row). Required.</li>
+          <li><strong>Display name</strong> — what the customer sees in their workspace.</li>
+          <li><strong>Region</strong> — cloud region (<code>us-east-1</code>, <code>eu-west-1</code>, etc.). Must align with any sovereign residency policy you'll attach later.</li>
+          <li><strong>Isolation tier:</strong>
+            <ul>
+              <li><code>S</code> (shared) — default. Tenant shares admin + app pools with others.</li>
+              <li><code>P</code> (premium) — dedicated app pool.</li>
+              <li><code>G</code> (gov / sovereign) — fully isolated. Pair with a Sovereign Region.</li>
+            </ul>
+          </li>
+          <li><strong>Brand domain</strong> (optional) — vanity hostname.</li>
+        </ul>
+      </li>
+      <li>Submit. You'll land back on the Tenants list and see the new row in status <code>provisioned</code>.</li>
+    </ol>
+    <p><strong>Post-check:</strong></p>
+    <ul>
+      <li>Open the <strong>Audit</strong> page, filter by the new <code>tenant_id</code> — you should see
+        <code>tenant.created.v1</code> and <code>tenant.pool.assigned.v1</code> entries.</li>
+      <li>The tenant is now reachable in Tenant Admin (<code>localhost:3200</code>) with that
+        tenant_id, but no members exist yet. Onboard the first admin separately via the members
+        API or hand off the tenant_id to the customer's IT lead.</li>
+    </ul>
+
+    <h3>1.2 Suspend / reinstate / offboard</h3>
+    <p>The Tenants table is read-only for browsing. State changes go through the Tenant
+    Lifecycle SDK endpoints:</p>
+    <table>
+      <thead><tr><th>Action</th><th>Endpoint</th><th>When</th></tr></thead>
+      <tbody>
+        <tr><td>Suspend</td><td><code>POST /api/tenant-lifecycle/:tenant_id/suspend</code></td><td>Non-payment, abuse, breach hold. Requires a <code>reason</code>.</td></tr>
+        <tr><td>Reinstate</td><td><code>POST /api/tenant-lifecycle/:tenant_id/reinstate</code></td><td>After suspend is resolved. Only valid from <code>suspended</code>.</td></tr>
+        <tr><td>Offboard</td><td><code>POST /api/tenant-lifecycle/:tenant_id/offboard</code></td><td>Customer leaves. Triggers a 30-day grace clock by default; data is shredded at <code>deadline_at</code>.</td></tr>
+        <tr><td>State check</td><td><code>GET /api/tenant-lifecycle/:tenant_id/state</code></td><td>Read-only.</td></tr>
+      </tbody>
+    </table>
+    <p>These currently need a tenant-scoped JWT; the UI buttons for them are on the roadmap.</p>
+  </div>
+</details>
+
+<details>
+  <summary><span class="num">2.</span> Pools — capacity and routing</summary>
+  <div class="body">
+    <p><strong>Why:</strong> Every tenant request is routed to a numbered admin pool and an app pool
+    keyed by module. Pools are how we isolate noisy neighbours, run sovereign deployments,
+    and roll capacity.</p>
+    <p><strong>When to look here:</strong></p>
+    <ul>
+      <li>A tenant is being throttled — check the pool's status (<code>active</code> / <code>degraded</code> / <code>drain</code>).</li>
+      <li>You're rolling capacity — <code>drain</code> a pool, wait for tenants to redirect, then recycle.</li>
+      <li>A pool's Postgres replica is lagging — flip status to <code>degraded</code> so the route cache reroutes new traffic; existing connections finish.</li>
+    </ul>
+    <p><strong>Steps to flip a pool:</strong></p>
+    <ol>
+      <li><strong>Pools</strong> → click the pool index.</li>
+      <li>Confirm the current status and tenant count.</li>
+      <li>Submit the status change. The pool router pushes the flip onto Redis
+      <code>pool:status-flip</code>; every gateway instance updates its in-memory route
+      cache within the TTL window (<code>ROUTE_CACHE_TTL_MS</code>, default 5 min).</li>
+    </ol>
+    <p><strong>Post-check:</strong> the Audit chain shows <code>pool.status.flipped.v1</code>, and
+    Pools on this page reflects the new state.</p>
+  </div>
+</details>
+
+<details>
+  <summary><span class="num">3.</span> Pricing catalogs — SKUs + soft caps</summary>
+  <div class="body">
+    <p><strong>Why:</strong> Every metered unit (API call, MB processed, AI token) is priced through
+    a catalog. Catalogs version-bump on every published change; old invoices keep pointing at
+    the version they were finalized against.</p>
+    <h3>Sections</h3>
+    <ul>
+      <li><strong>Pricing catalogs</strong> — the list page; one row per catalog.</li>
+      <li>Click a catalog → per-SKU rate table + a status flip (<code>draft</code> → <code>published</code> → <code>archived</code>).</li>
+      <li><strong>Soft caps</strong> — within a catalog, a SKU can have a per-tenant ceiling.
+      Hitting the soft cap stamps a <code>WARN</code> header on the response and surfaces in
+      the tenant's billing page; it doesn't block.</li>
+    </ul>
+    <h3>Common workflows</h3>
+    <ul>
+      <li><em>Quarterly price bump:</em> clone the current catalog, edit rates, publish.
+      Existing tenants stay on the old version until you migrate them.</li>
+      <li><em>Add a new SKU:</em> publish a new catalog version with the SKU + rate.</li>
+      <li><em>Investigate a soft-cap alarm:</em> on the tenant's row, check the
+      <code>current_usage</code> resolver and the cap level.</li>
+    </ul>
+  </div>
+</details>
+
+<details>
+  <summary><span class="num">4.</span> Invoices</summary>
+  <div class="body">
+    <p><strong>Why:</strong> Read-only viewer for the platform's invoice ledger. Use this to:</p>
+    <ul>
+      <li>Answer a customer's "where did this charge come from?" ticket.</li>
+      <li>Reconcile against the upstream payment provider (Stripe today).</li>
+      <li>Spot anomalies (sudden 10× usage on a tenant).</li>
+    </ul>
+    <p><strong>Steps:</strong></p>
+    <ol>
+      <li><strong>Invoices</strong> → enter <code>tenant_id</code> to filter.</li>
+      <li>Click an invoice → line-item breakdown by SKU + the catalog version that priced it.</li>
+    </ol>
+    <div class="callout">
+      There are no destructive actions here — refunds and credits go through the payment
+      provider, not this UI.
+    </div>
+  </div>
+</details>
+
+<details>
+  <summary><span class="num">5.</span> Webhooks — DLQ replay</summary>
+  <div class="body">
+    <p><strong>Why:</strong> When a tenant's webhook endpoint times out or returns 5xx, the delivery
+    lands in the Dead Letter Queue. Operators replay individual deliveries (e.g. after the
+    tenant tells you they fixed their handler).</p>
+    <h3>Sections</h3>
+    <ul>
+      <li><strong>Webhooks</strong> — list of every configured webhook subscription across all tenants.</li>
+      <li><strong>Webhooks → DLQ</strong> — failed deliveries, newest first.</li>
+    </ul>
+    <h3>Steps to replay</h3>
+    <ol>
+      <li><strong>Webhooks → DLQ</strong> → find the delivery (search by tenant or event type).</li>
+      <li>Click <strong>Replay</strong>. The gateway re-posts the original payload to the
+      subscription URL with the same signature. Outcome lands back in the DLQ if it fails again.</li>
+    </ol>
+    <div class="callout">
+      <strong>When NOT to replay:</strong> if the tenant has rotated their endpoint secret since
+      the original delivery, the signature won't validate. Ask them to either accept the old
+      signature briefly or treat the events as lost.
+    </div>
+  </div>
+</details>
+
+<details>
+  <summary><span class="num">6.</span> Approvals — routes + pending requests</summary>
+  <div class="body">
+    <p><strong>Why:</strong> Some destructive or high-risk actions (e.g., bulk data export, BYOK key
+    rotation, sovereign region creation) require an explicit operator approval before they
+    execute. This page is the operator's queue.</p>
+    <h3>Sections</h3>
+    <ul>
+      <li><strong>Approvals</strong> — pending requests across all tenants.</li>
+      <li><strong>Approvals → Breaches</strong> — requests that exceeded their SLA without a decision (paged so on-call can chase).</li>
+    </ul>
+    <h3>Steps</h3>
+    <ol>
+      <li><strong>Approvals</strong> → click a request.</li>
+      <li>Review the requestor, the action, and the linked artifacts.</li>
+      <li>Approve or Reject — both write to the audit chain and notify the requestor.</li>
+    </ol>
+  </div>
+</details>
+
+<details>
+  <summary><span class="num">7.</span> Audit — hash-chain browser</summary>
+  <div class="body">
+    <p><strong>Why:</strong> Every state change in the platform writes a row to the per-tenant audit
+    ledger, chained by SHA-256 hash. This page is the operator's forensic / compliance lens.</p>
+    <h3>Workflows</h3>
+    <ul>
+      <li><em>Customer asks "who changed X on date Y?":</em> filter by <code>tenant_id</code> + date range, optionally narrow by <code>actor_id</code>.</li>
+      <li><em>Compliance attestation:</em> enter a <code>tenant_id</code> and click <strong>Verify</strong>. The
+      gateway walks every chain block since the last attested checkpoint and confirms hashes
+      match. A green result is what auditors want to see.</li>
+      <li><em>Incident post-mortem:</em> paste an <code>actor_id</code> (a service or persona) and review every action it took in the window.</li>
+    </ul>
+    <div class="callout danger">
+      <strong>Never edit audit rows.</strong> If a row is wrong, write a compensating event — never UPDATE.
+    </div>
+  </div>
+</details>
+
+<details>
+  <summary><span class="num">8.</span> Sovereign regions</summary>
+  <div class="body">
+    <p><strong>Why:</strong> Some tenants (gov, EU/EEA, healthcare) must run inside a sovereign region
+    with hard data-residency guarantees. This page enumerates the regions, their jurisdictional
+    rules, and which tenants are attached.</p>
+    <h3>Steps to add a region</h3>
+    <ol>
+      <li><strong>Sovereign</strong> → fill the form (region code, jurisdiction, residency class, key-management profile).</li>
+      <li>Submit. The region becomes selectable when provisioning a <code>G</code>-tier tenant.</li>
+    </ol>
+    <p><strong>Post-check:</strong> new tenants in that region should emit
+    <code>sovereign.region.attached.v1</code>. The watcher worker
+    (<code>SOVEREIGN_EXPIRY_WATCHER_ENABLED</code>) will alert if a tenant later drifts out of residency.</p>
+  </div>
+</details>
+
+<details>
+  <summary><span class="num">9.</span> On-Prem installs</summary>
+  <div class="body">
+    <p><strong>Why:</strong> Customers running ProjexCloud inside their own data centre register their
+    install fingerprint here so the SaaS control plane can ship them updates, fetch heartbeats,
+    and prove their LLM probe is green.</p>
+    <h3>Common workflows</h3>
+    <ul>
+      <li><em>Register an install:</em> customer runs the bootstrap, then you confirm the
+      <code>install_id</code> + license here.</li>
+      <li><em>Heartbeat investigation:</em> if an install's heartbeat goes silent, this page
+      flags it red. Cross-check with <code>ONPREM_LLM_PROBE_ENABLED</code> alerts.</li>
+    </ul>
+  </div>
+</details>
+
+<details>
+  <summary><span class="num">10.</span> Active-Active</summary>
+  <div class="body">
+    <p><strong>Why:</strong> Multi-region active-active deployments require a periodic drill to
+    prove failover works. This page is where you launch the drill, watch replica lag, and
+    review the last drill report.</p>
+    <h3>Steps</h3>
+    <ol>
+      <li><strong>Active-Active</strong> → confirm both replicas are healthy.</li>
+      <li>Click <strong>Run drill</strong>. Reads start hitting both, writes are forced through
+      the secondary briefly, replica lag is measured.</li>
+      <li>Review the report. Any lag &gt; 5 s during the drill is a yellow flag; a replica
+      refusing writes is a red flag.</li>
+    </ol>
+    <div class="callout">
+      <strong>When NOT to run:</strong> during a known incident, when one replica is already
+      behind. Wait for green.
+    </div>
+  </div>
+</details>
+
+<details>
+  <summary><span class="num">11.</span> Operational reference</summary>
+  <div class="body">
+    <table>
+      <thead><tr><th>Concept</th><th>Where it lives</th></tr></thead>
+      <tbody>
+        <tr><td>Audit chain</td><td><code>sdk-audit</code> — per-tenant Postgres tables</td></tr>
+        <tr><td>Pricing catalogs</td><td><code>sdk-meter</code> — <code>meter.pricing_catalog*</code></td></tr>
+        <tr><td>Pools</td><td><code>sdk-pool-router</code> — <code>pool.pool</code> + Redis <code>pool:status-flip</code></td></tr>
+        <tr><td>Webhooks DLQ</td><td><code>sdk-webhook</code> — <code>webhook.dlq</code></td></tr>
+        <tr><td>Tenant lifecycle</td><td><code>sdk-tenant-lifecycle</code> — state machine <code>provisioned → trial → active → suspended/offboarding → offboarded</code></td></tr>
+        <tr><td>Sovereign</td><td><code>sdk-sovereign</code> — <code>sovereign.region</code>, <code>sovereign.tenant_attachment</code></td></tr>
+      </tbody>
+    </table>
+  </div>
+</details>
+
+<details>
+  <summary><span class="num">12.</span> Troubleshooting</summary>
+  <div class="body">
+    <h3>The page shows "No tenants" but I know there are some.</h3>
+    <p>The portal can't reach the gateway. Check:</p>
+    <ul>
+      <li><code>apps/projexcloud-admin/.env.local</code> → <code>NEXT_PUBLIC_GATEWAY_URL</code> matches the gateway's <code>PORT</code>.</li>
+      <li><code>ADMIN_OPS_TOKEN</code> is set identically in both <code>.env.local</code> and the gateway's <code>.env</code>.</li>
+      <li>Gateway logs show no 401s for <code>x-admin-ops-token</code>.</li>
+    </ul>
+
+    <h3>Provisioning a tenant fails with <code>foreign key</code>.</h3>
+    <p>The <code>app_id</code> you entered does not exist in <code>tenant.app</code>. Create the App first.</p>
+
+    <h3>Audit verify shows a broken chain.</h3>
+    <div class="callout danger">
+      Stop everything and page the platform lead. A broken hash chain means either a write went
+      around <code>sdk-audit</code> (forbidden) or the table was edited directly (forbidden).
+      Never "fix" the chain by re-hashing — investigate the root cause.
+    </div>
+  </div>
+</details>
+
+</body>
+</html>
