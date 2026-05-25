@@ -1,0 +1,43 @@
+name: registry-validate
+
+# P9 / E1.F4 — CI gate enforcing Doctrine §C (every SDK ships sdk-capability.json).
+# Triggers on every PR touching packages/, services/, or the sdk-capability
+# package itself. Fails the PR on MANIFEST_MISSING, MANIFEST_INVALID_JSON, or
+# MANIFEST_INVALID.
+
+on:
+  pull_request:
+    paths:
+      - 'packages/**'
+      - 'services/**'
+      - 'scripts/registry-validate.mjs'
+      - '.github/workflows/registry-validate.yml'
+  push:
+    branches: [main, 'release/**']
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v3
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install workspace deps
+        run: pnpm install --frozen-lockfile
+
+      - name: Validate every SDK's capability manifest
+        run: pnpm registry:validate
+
+      - name: Annotate failures on the PR
+        if: failure() && github.event_name == 'pull_request'
+        run: |
+          echo "::error::registry-validate failed. Doctrine §C: every @projexlight/* SDK must ship a valid sdk-capability.json. Run 'pnpm --filter <your-sdk> exec sdk-capability scaffold' and fill in the TBD: placeholders. See packages/sdk-capability/README.md."
