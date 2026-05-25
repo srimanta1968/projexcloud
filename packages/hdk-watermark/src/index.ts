@@ -16,3 +16,13 @@
  */
 export { migrationsDir } from './db';
 export type { WatermarkApplicationRef, WatermarkScheme } from '@projexlight/contracts';
+
+// Intake service (FR-WMK / AC-10).
+export {
+  recordWatermarkApplication,
+  getWatermarkApplication,
+  listWatermarkApplicationsForVariant,
+} from './services/watermarkService';
+export type { RecordWatermarkApplicationInput } from './services/watermarkService';
+
+export * as server from './server';

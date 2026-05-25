@@ -13,3 +13,13 @@
  */
 export { migrationsDir } from './db';
 export type { MeasurementRef, MeasurementKind, MeasurementAccuracyClass } from '@projexlight/contracts';
+
+// Intake service (FR-MEA / AC-10).
+export {
+  recordMeasurement,
+  getMeasurement,
+  listMeasurementsForCapture,
+} from './services/measurementService';
+export type { RecordMeasurementInput } from './services/measurementService';
+
+export * as server from './server';

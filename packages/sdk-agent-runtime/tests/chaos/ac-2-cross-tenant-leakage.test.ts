@@ -126,7 +126,9 @@ describe('AC-2 · cross-tenant prompt-leakage CI suite', () => {
       console.warn('[ac-2] skipping — DB_HOST not set (run via docker-compose.test.yml)');
       return;
     }
-    const rng = seedPrng(0xac2_seed);
+    // Deterministic seed for AC-2; previously written as 0xac2_seed which is
+    // invalid syntax (numeric separator can't precede letters).
+    const rng = seedPrng(0xac2_0000);
     let leakCount = 0;
     let firstLeakIteration = -1;
     const leakSample: unknown[] = [];
