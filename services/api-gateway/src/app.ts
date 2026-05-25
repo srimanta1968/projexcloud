@@ -1716,6 +1716,619 @@ const start = async (): Promise<void> => {
       }
     });
 
+    /* ============================================================
+     * Admin-portal completion endpoints (epic_portals).
+     * All ADMIN_OPS_TOKEN-gated via requireAdmin.
+     * ============================================================ */
+
+    // --- /admin/pools (projexcloud-admin /pools page) ---
+    app.get('/admin/pools', async (req, reply) => {
+      const err = requireAdmin(req as unknown as { headers: Record<string, unknown> });
+      if (err) return reply.code(401).send({ success: false, error: err });
+      try {
+        const { rows } = await dataService.query(
+          `SELECT pool_index, region, isolation_class, status, replication_role,
+                  replicates_from_pool_index, created_at, updated_at
+             FROM routing.pool ORDER BY region, pool_index`,
+        );
+        return { success: true, data: rows };
+      } catch (e) {
+        return reply.code(500).send({ success: false, error: (e as Error).message });
+      }
+    });
+
+    app.get<{ Params: { pool_index: string } }>('/admin/pools/:pool_index', async (req, reply) => {
+      const err = requireAdmin(req as unknown as { headers: Record<string, unknown> });
+      if (err) return reply.code(401).send({ success: false, error: err });
+      try {
+        const { rows } = await dataService.query(
+          `SELECT pool_index, region, isolation_class, status, replication_role,
+                  replicates_from_pool_index, created_at, updated_at
+             FROM routing.pool WHERE pool_index = $1`,
+          [req.params.pool_index],
+        );
+        if (rows.length === 0) return reply.code(404).send({ success: false, error: 'pool not found' });
+        const tenantCount = await dataService.query(
+          `SELECT COUNT(*)::text AS n FROM routing.tenant_pool_map
+            WHERE admin_pool_index = $1 OR evidence_pool_index = $1
+               OR app_pool_index::text LIKE '%' || $1 || '%'`,
+          [req.params.pool_index],
+        );
+        const lifecycle = await dataService.query(
+          `SELECT to_status, reason, occurred_at, operator_id
+             FROM routing.pool_lifecycle_event
+            WHERE pool_index = $1
+            ORDER BY occurred_at DESC LIMIT 25`,
+          [req.params.pool_index],
+        );
+        return {
+          success: true,
+          data: {
+            pool: rows[0],
+            tenant_count: parseInt((tenantCount.rows[0] as { n: string }).n, 10),
+            lifecycle_history: lifecycle.rows,
+          },
+        };
+      } catch (e) {
+        return reply.code(500).send({ success: false, error: (e as Error).message });
+      }
+    });
+
+    app.patch<{
+      Params: { pool_index: string };
+      Body: { to_status?: string; reason?: string; operator_id?: string };
+    }>('/admin/pools/:pool_index/status', async (req, reply) => {
+      const err = requireAdmin(req as unknown as { headers: Record<string, unknown> });
+      if (err) return reply.code(401).send({ success: false, error: err });
+      const b = req.body ?? {};
+      if (!b.to_status || !b.reason || !b.operator_id) {
+        return reply.code(400).send({ success: false, error: 'to_status + reason + operator_id required' });
+      }
+      try {
+        const { recordPoolTransition } = await import('@projexlight/sdk-pool-router');
+        type PS = 'ACTIVE' | 'MIGRATING' | 'DRAINING' | 'MAINTENANCE' | 'RETIRED' | 'QUARANTINE';
+        const upper = b.to_status.toUpperCase() as PS;
+        const cur = await dataService.query<{ status: string }>(
+          `SELECT status FROM routing.pool WHERE pool_index = $1`,
+          [req.params.pool_index],
+        );
+        if (cur.rows.length === 0) return reply.code(404).send({ success: false, error: 'pool not found' });
+        await recordPoolTransition({
+          pool_index: req.params.pool_index,
+          from_status: cur.rows[0].status as PS,
+          to_status: upper,
+          reason: b.reason,
+          operator_id: b.operator_id,
+        });
+        return { success: true };
+      } catch (e) {
+        return reply.code(500).send({ success: false, error: (e as Error).message });
+      }
+    });
+
+    // --- /admin/invoices ---
+    app.get<{
+      Querystring: { tenant_id?: string; from?: string; to?: string };
+    }>('/admin/invoices', async (req, reply) => {
+      const err = requireAdmin(req as unknown as { headers: Record<string, unknown> });
+      if (err) return reply.code(401).send({ success: false, error: err });
+      const { tenant_id, from, to } = req.query;
+      try {
+        const params: unknown[] = [];
+        const where: string[] = [];
+        if (tenant_id) { params.push(tenant_id); where.push(`tenant_id = $${params.length}::uuid`); }
+        if (from)      { params.push(from);      where.push(`period_end >= $${params.length}::date`); }
+        if (to)        { params.push(to);        where.push(`period_start <= $${params.length}::date`); }
+        const { rows } = await dataService.query(
+          `SELECT invoice_id, tenant_id::text AS tenant_id, period_start, period_end,
+                  total_cents, currency, status, finalized_at, created_at
+             FROM billing.invoice
+            ${where.length ? 'WHERE ' + where.join(' AND ') : ''}
+            ORDER BY created_at DESC LIMIT 200`,
+          params,
+        );
+        return { success: true, data: rows };
+      } catch (e) {
+        return reply.code(500).send({ success: false, error: (e as Error).message });
+      }
+    });
+
+    app.get<{ Params: { invoice_id: string } }>('/admin/invoices/:invoice_id', async (req, reply) => {
+      const err = requireAdmin(req as unknown as { headers: Record<string, unknown> });
+      if (err) return reply.code(401).send({ success: false, error: err });
+      try {
+        const inv = await dataService.query(
+          `SELECT * FROM billing.invoice WHERE invoice_id = $1`,
+          [req.params.invoice_id],
+        );
+        if (inv.rows.length === 0) return reply.code(404).send({ success: false, error: 'invoice not found' });
+        const items = await dataService.query(
+          `SELECT * FROM billing.invoice_line WHERE invoice_id = $1 ORDER BY sku`,
+          [req.params.invoice_id],
+        );
+        return { success: true, data: { invoice: inv.rows[0], line_items: items.rows } };
+      } catch (e) {
+        return reply.code(500).send({ success: false, error: (e as Error).message });
+      }
+    });
+
+    // --- /admin/webhooks (operator cross-tenant view + DLQ) ---
+    app.get<{ Querystring: { tenant_id?: string } }>('/admin/webhooks', async (req, reply) => {
+      const err = requireAdmin(req as unknown as { headers: Record<string, unknown> });
+      if (err) return reply.code(401).send({ success: false, error: err });
+      try {
+        const params: unknown[] = [];
+        const where = req.query.tenant_id ? (params.push(req.query.tenant_id), 'WHERE tenant_id = $1::uuid') : '';
+        const { rows } = await dataService.query(
+          `SELECT endpoint_id, tenant_id::text AS tenant_id, url, status,
+                  failure_streak, last_success_at, last_failure_at, created_at
+             FROM webhook.endpoint ${where}
+            ORDER BY created_at DESC LIMIT 200`,
+          params,
+        );
+        return { success: true, data: rows };
+      } catch (e) {
+        return reply.code(500).send({ success: false, error: (e as Error).message });
+      }
+    });
+
+    // Operator cross-tenant DLQ — direct query so we can drop the tenant_id filter.
+    app.get('/admin/webhooks/dlq', async (req, reply) => {
+      const err = requireAdmin(req as unknown as { headers: Record<string, unknown> });
+      if (err) return reply.code(401).send({ success: false, error: err });
+      try {
+        const { rows } = await dataService.query(
+          `SELECT d.delivery_id, e.endpoint_id, s.event_type,
+                  d.attempts, d.last_attempt_at AS failed_at,
+                  e.tenant_id::text AS tenant_id
+             FROM webhook.delivery d
+             JOIN webhook.subscription s ON s.subscription_id = d.subscription_id
+             JOIN webhook.endpoint e ON e.endpoint_id = s.endpoint_id
+            WHERE d.status = 'dlq'
+              AND (d.dlq_until IS NULL OR d.dlq_until > now())
+            ORDER BY d.last_attempt_at DESC NULLS LAST LIMIT 100`,
+        );
+        return { success: true, data: rows };
+      } catch (e) {
+        return reply.code(500).send({ success: false, error: (e as Error).message });
+      }
+    });
+
+    app.post<{ Params: { delivery_id: string } }>('/admin/webhooks/dlq/:delivery_id/replay', async (req, reply) => {
+      const err = requireAdmin(req as unknown as { headers: Record<string, unknown> });
+      if (err) return reply.code(401).send({ success: false, error: err });
+      try {
+        const { replayDelivery } = await import('@projexlight/sdk-webhook');
+        const r = await replayDelivery(req.params.delivery_id);
+        return { success: true, data: r };
+      } catch (e) {
+        return reply.code(500).send({ success: false, error: (e as Error).message });
+      }
+    });
+
+    // --- /admin/approvals (operator view) ---
+    app.get('/admin/approvals/routes', async (req, reply) => {
+      const err = requireAdmin(req as unknown as { headers: Record<string, unknown> });
+      if (err) return reply.code(401).send({ success: false, error: err });
+      try {
+        const { rows } = await dataService.query(
+          `SELECT route_id, tenant_id::text AS tenant_id, name, sla_minutes, created_at
+             FROM approval.route ORDER BY created_at DESC LIMIT 200`,
+        );
+        return { success: true, data: rows };
+      } catch (e) {
+        return reply.code(500).send({ success: false, error: (e as Error).message });
+      }
+    });
+
+    app.get('/admin/approvals/breaches', async (req, reply) => {
+      const err = requireAdmin(req as unknown as { headers: Record<string, unknown> });
+      if (err) return reply.code(401).send({ success: false, error: err });
+      try {
+        const { rows } = await dataService.query(
+          `SELECT r.request_id, r.tenant_id::text AS tenant_id, r.route_id, r.subject_ref,
+                  r.created_at, r.status,
+                  EXTRACT(epoch FROM (now() - r.created_at))/60 AS elapsed_minutes,
+                  rt.sla_minutes
+             FROM approval.request r
+             JOIN approval.route rt USING (route_id)
+            WHERE r.status = 'pending'
+              AND (now() - r.created_at) > (rt.sla_minutes || ' minutes')::interval
+            ORDER BY elapsed_minutes DESC LIMIT 100`,
+        );
+        return { success: true, data: rows };
+      } catch (e) {
+        return reply.code(500).send({ success: false, error: (e as Error).message });
+      }
+    });
+
+    app.post<{
+      Params: { request_id: string };
+      Body: { decision?: 'approved' | 'rejected'; reason?: string; operator_id?: string };
+    }>('/admin/approvals/requests/:request_id/operator-override', async (req, reply) => {
+      const err = requireAdmin(req as unknown as { headers: Record<string, unknown> });
+      if (err) return reply.code(401).send({ success: false, error: err });
+      const b = req.body ?? {};
+      if (!b.decision || !b.reason || !b.operator_id) {
+        return reply.code(400).send({ success: false, error: 'decision + reason + operator_id required' });
+      }
+      try {
+        await dataService.query(
+          `UPDATE approval.request
+              SET status = $2,
+                  resolved_at = now(),
+                  resolution_reason = $3
+            WHERE request_id = $1 AND status = 'pending'`,
+          [req.params.request_id, b.decision, `[operator-override by ${b.operator_id}] ${b.reason}`],
+        );
+        return { success: true };
+      } catch (e) {
+        return reply.code(500).send({ success: false, error: (e as Error).message });
+      }
+    });
+
+    // --- /admin/audit (browse + verify) ---
+    app.get<{
+      Querystring: { tenant_id?: string; actor_id?: string; from?: string; to?: string; limit?: string };
+    }>('/admin/audit/entries', async (req, reply) => {
+      const err = requireAdmin(req as unknown as { headers: Record<string, unknown> });
+      if (err) return reply.code(401).send({ success: false, error: err });
+      const { tenant_id, actor_id, from, to } = req.query;
+      const limit = Math.min(parseInt(req.query.limit ?? '100', 10), 500);
+      try {
+        const params: unknown[] = [];
+        const where: string[] = [];
+        if (tenant_id) { params.push(tenant_id); where.push(`tenant_id = $${params.length}::uuid`); }
+        if (actor_id)  { params.push(actor_id);  where.push(`actor_id = $${params.length}`); }
+        if (from)      { params.push(from);      where.push(`occurred_at >= $${params.length}::timestamptz`); }
+        if (to)        { params.push(to);        where.push(`occurred_at <= $${params.length}::timestamptz`); }
+        params.push(limit);
+        const { rows } = await dataService.query(
+          `SELECT entry_id, tenant_id::text AS tenant_id, actor_kind, actor_id,
+                  action, occurred_at, seq
+             FROM audit.entry
+            ${where.length ? 'WHERE ' + where.join(' AND ') : ''}
+            ORDER BY occurred_at DESC LIMIT $${params.length}`,
+          params,
+        );
+        return { success: true, data: rows };
+      } catch (e) {
+        return reply.code(500).send({ success: false, error: (e as Error).message });
+      }
+    });
+
+    app.get<{ Params: { entry_id: string } }>('/admin/audit/entries/:entry_id', async (req, reply) => {
+      const err = requireAdmin(req as unknown as { headers: Record<string, unknown> });
+      if (err) return reply.code(401).send({ success: false, error: err });
+      try {
+        const { rows } = await dataService.query(
+          `SELECT * FROM audit.entry WHERE entry_id = $1`,
+          [req.params.entry_id],
+        );
+        if (rows.length === 0) return reply.code(404).send({ success: false, error: 'entry not found' });
+        return { success: true, data: rows[0] };
+      } catch (e) {
+        return reply.code(500).send({ success: false, error: (e as Error).message });
+      }
+    });
+
+    app.post<{ Querystring: { tenant_id?: string } }>('/admin/audit/verify', async (req, reply) => {
+      const err = requireAdmin(req as unknown as { headers: Record<string, unknown> });
+      if (err) return reply.code(401).send({ success: false, error: err });
+      const tenant_id = req.query.tenant_id;
+      if (!tenant_id) return reply.code(400).send({ success: false, error: 'tenant_id query param required' });
+      try {
+        const { rows } = await dataService.query(
+          `SELECT entry_id, seq, prev_hash, entry_hash
+             FROM audit.entry WHERE tenant_id = $1::uuid
+            ORDER BY seq ASC`,
+          [tenant_id],
+        );
+        // Lightweight chain check — verify seq is contiguous + prev_hash links match.
+        let lastHash: Buffer = Buffer.alloc(32);
+        for (let i = 0; i < rows.length; i++) {
+          const r = rows[i] as { entry_id: string; seq: number; prev_hash: Buffer; entry_hash: Buffer };
+          if (r.seq !== i) {
+            return { success: true, data: { verified: false, failed_seq: r.seq, reason: 'gap' } };
+          }
+          if (!r.prev_hash.equals(lastHash)) {
+            return { success: true, data: { verified: false, failed_seq: r.seq, reason: 'wrong-prev' } };
+          }
+          lastHash = r.entry_hash;
+        }
+        return { success: true, data: { verified: true, entry_count: rows.length } };
+      } catch (e) {
+        return reply.code(500).send({ success: false, error: (e as Error).message });
+      }
+    });
+
+    // --- Tenant-scoped endpoints for tenant-admin pages ---
+    // Members (/api/personas)
+    app.get<{ Querystring: { tenant_id?: string } }>('/api/personas', async (req, reply) => {
+      const tenant_id = req.query.tenant_id;
+      if (!tenant_id) return reply.code(400).send({ success: false, error: 'tenant_id required' });
+      try {
+        const { rows } = await dataService.query(
+          `SELECT persona_id, tenant_id::text AS tenant_id, display_name, role,
+                  bu_id, status, created_at
+             FROM persona.persona WHERE tenant_id = $1::uuid
+            ORDER BY display_name LIMIT 500`,
+          [tenant_id],
+        );
+        return { success: true, data: rows };
+      } catch (e) {
+        return reply.code(500).send({ success: false, error: (e as Error).message });
+      }
+    });
+
+    app.post<{
+      Params: { persona_id: string };
+      Body: { role?: string };
+    }>('/api/personas/:persona_id/role', async (req, reply) => {
+      if (!req.body?.role) return reply.code(400).send({ success: false, error: 'role required' });
+      try {
+        await dataService.query(
+          `UPDATE persona.persona SET role = $2 WHERE persona_id = $1`,
+          [req.params.persona_id, req.body.role],
+        );
+        return { success: true };
+      } catch (e) {
+        return reply.code(500).send({ success: false, error: (e as Error).message });
+      }
+    });
+
+    app.post<{
+      Params: { persona_id: string };
+      Body: { bu_id?: string | null };
+    }>('/api/personas/:persona_id/bu', async (req, reply) => {
+      try {
+        await dataService.query(
+          `UPDATE persona.persona SET bu_id = $2 WHERE persona_id = $1`,
+          [req.params.persona_id, req.body?.bu_id ?? null],
+        );
+        return { success: true };
+      } catch (e) {
+        return reply.code(500).send({ success: false, error: (e as Error).message });
+      }
+    });
+
+    app.post<{ Params: { persona_id: string } }>('/api/personas/:persona_id/deactivate', async (req, reply) => {
+      try {
+        await dataService.query(
+          `UPDATE persona.persona SET status = 'inactive' WHERE persona_id = $1`,
+          [req.params.persona_id],
+        );
+        return { success: true };
+      } catch (e) {
+        return reply.code(500).send({ success: false, error: (e as Error).message });
+      }
+    });
+
+    // API keys (/api/keys)
+    app.get<{ Querystring: { tenant_id?: string } }>('/api/keys', async (req, reply) => {
+      const tenant_id = req.query.tenant_id;
+      if (!tenant_id) return reply.code(400).send({ success: false, error: 'tenant_id required' });
+      try {
+        const { rows } = await dataService.query(
+          `SELECT key_id, tenant_id::text AS tenant_id, name, scope,
+                  status, issued_at, last_used_at, expires_at
+             FROM api_keys.key WHERE tenant_id = $1::uuid
+            ORDER BY issued_at DESC LIMIT 200`,
+          [tenant_id],
+        );
+        return { success: true, data: rows };
+      } catch (e) {
+        return reply.code(500).send({ success: false, error: (e as Error).message });
+      }
+    });
+
+    app.post<{
+      Body: { tenant_id?: string; name?: string; scope?: string };
+    }>('/api/keys', async (req, reply) => {
+      const b = req.body ?? {};
+      if (!b.tenant_id || !b.name || !b.scope) {
+        return reply.code(400).send({ success: false, error: 'tenant_id + name + scope required' });
+      }
+      try {
+        const crypto = await import('crypto');
+        const keyId = `ak_${crypto.randomBytes(10).toString('hex')}`;
+        const plaintext = `pk_${crypto.randomBytes(24).toString('hex')}`;
+        const hash = crypto.createHash('sha256').update(plaintext).digest('hex');
+        await dataService.query(
+          `INSERT INTO api_keys.key (key_id, tenant_id, name, scope, secret_hash, status)
+           VALUES ($1, $2::uuid, $3, $4, $5, 'active')`,
+          [keyId, b.tenant_id, b.name, b.scope, hash],
+        );
+        // Plaintext returned exactly once — caller must capture.
+        return { success: true, data: { key_id: keyId, plaintext } };
+      } catch (e) {
+        return reply.code(500).send({ success: false, error: (e as Error).message });
+      }
+    });
+
+    app.post<{ Params: { key_id: string }; Body: { reason?: string } }>('/api/keys/:key_id/revoke', async (req, reply) => {
+      const reason = req.body?.reason?.trim();
+      if (!reason) return reply.code(400).send({ success: false, error: 'reason required' });
+      try {
+        await dataService.query(
+          `UPDATE api_keys.key SET status = 'revoked', revoked_at = now() WHERE key_id = $1`,
+          [req.params.key_id],
+        );
+        return { success: true };
+      } catch (e) {
+        return reply.code(500).send({ success: false, error: (e as Error).message });
+      }
+    });
+
+    // Webhooks (tenant-scoped)
+    app.get<{ Querystring: { tenant_id?: string } }>('/api/webhooks/endpoints', async (req, reply) => {
+      const tenant_id = req.query.tenant_id;
+      if (!tenant_id) return reply.code(400).send({ success: false, error: 'tenant_id required' });
+      try {
+        const { listEndpointsForTenant } = await import('@projexlight/sdk-webhook');
+        return { success: true, data: await listEndpointsForTenant(tenant_id) };
+      } catch (e) {
+        return reply.code(500).send({ success: false, error: (e as Error).message });
+      }
+    });
+
+    // NOTE: POST /api/webhooks/endpoints is mounted by sdk-webhook's own
+    // server.registerRoutes — don't redeclare it here. The tenant-admin
+    // page posts to that same path; auth is the SDK's requireAuth middleware.
+
+
+    app.get<{ Querystring: { tenant_id?: string } }>('/api/webhooks/dlq', async (req, reply) => {
+      const tenant_id = req.query.tenant_id;
+      if (!tenant_id) return reply.code(400).send({ success: false, error: 'tenant_id required' });
+      try {
+        const { listDlq } = await import('@projexlight/sdk-webhook');
+        return { success: true, data: await listDlq({ tenant_id, limit: 100 }) };
+      } catch (e) {
+        return reply.code(500).send({ success: false, error: (e as Error).message });
+      }
+    });
+
+    // Approvals (tenant-scoped)
+    app.get<{ Querystring: { tenant_id?: string } }>('/api/approvals/routes', async (req, reply) => {
+      const tenant_id = req.query.tenant_id;
+      if (!tenant_id) return reply.code(400).send({ success: false, error: 'tenant_id required' });
+      try {
+        const { rows } = await dataService.query(
+          `SELECT route_id, name, sla_minutes, created_at
+             FROM approval.route WHERE tenant_id = $1::uuid
+            ORDER BY created_at DESC LIMIT 100`,
+          [tenant_id],
+        );
+        return { success: true, data: rows };
+      } catch (e) {
+        return reply.code(500).send({ success: false, error: (e as Error).message });
+      }
+    });
+
+    app.get<{
+      Querystring: { tenant_id?: string; assignee_persona_id?: string };
+    }>('/api/approvals/requests', async (req, reply) => {
+      const tenant_id = req.query.tenant_id;
+      if (!tenant_id) return reply.code(400).send({ success: false, error: 'tenant_id required' });
+      try {
+        const params: unknown[] = [tenant_id];
+        let assigneeFilter = '';
+        if (req.query.assignee_persona_id) {
+          params.push(req.query.assignee_persona_id);
+          assigneeFilter = `AND assignee_persona_id = $${params.length}`;
+        }
+        const { rows } = await dataService.query(
+          `SELECT request_id, route_id, subject_ref, status, created_at,
+                  assignee_persona_id::text AS assignee_persona_id
+             FROM approval.request
+            WHERE tenant_id = $1::uuid AND status = 'pending' ${assigneeFilter}
+            ORDER BY created_at ASC LIMIT 100`,
+          params,
+        );
+        return { success: true, data: rows };
+      } catch (e) {
+        return reply.code(500).send({ success: false, error: (e as Error).message });
+      }
+    });
+
+    app.post<{
+      Params: { request_id: string };
+      Body: { decision?: 'approved' | 'rejected'; comment?: string; decider_persona_id?: string };
+    }>('/api/approvals/requests/:request_id/decide', async (req, reply) => {
+      const b = req.body ?? {};
+      if (!b.decision || !b.comment || !b.decider_persona_id) {
+        return reply.code(400).send({ success: false, error: 'decision + comment + decider_persona_id required' });
+      }
+      try {
+        await dataService.query(
+          `UPDATE approval.request
+              SET status = $2, resolved_at = now(),
+                  resolution_reason = $3, resolved_by_persona_id = $4::uuid
+            WHERE request_id = $1 AND status = 'pending'`,
+          [req.params.request_id, b.decision, b.comment, b.decider_persona_id],
+        );
+        return { success: true };
+      } catch (e) {
+        return reply.code(500).send({ success: false, error: (e as Error).message });
+      }
+    });
+
+    // Connectors (tenant-scoped)
+    app.get<{ Querystring: { tenant_id?: string } }>('/api/connectors', async (req, reply) => {
+      const tenant_id = req.query.tenant_id;
+      if (!tenant_id) return reply.code(400).send({ success: false, error: 'tenant_id required' });
+      try {
+        const { rows } = await dataService.query(
+          `SELECT vendor, install_id, status, last_synced_at, last_error, installed_at
+             FROM connectors.install WHERE tenant_id = $1::uuid
+            ORDER BY vendor`,
+          [tenant_id],
+        );
+        return { success: true, data: rows };
+      } catch (e) {
+        // Table may not exist in some deploys — return empty list gracefully.
+        return { success: true, data: [] };
+      }
+    });
+
+    // Consent (tenant-scoped)
+    app.get<{ Querystring: { tenant_id?: string } }>('/api/consent/purposes', async (req, reply) => {
+      const tenant_id = req.query.tenant_id;
+      if (!tenant_id) return reply.code(400).send({ success: false, error: 'tenant_id required' });
+      try {
+        const { rows } = await dataService.query(
+          `SELECT purpose_id, name, description, retention_class, jurisdictions, created_at
+             FROM consent.purpose WHERE tenant_id = $1::uuid
+            ORDER BY name LIMIT 200`,
+          [tenant_id],
+        );
+        return { success: true, data: rows };
+      } catch (e) {
+        return reply.code(500).send({ success: false, error: (e as Error).message });
+      }
+    });
+
+    app.get<{
+      Querystring: { tenant_id?: string; subject_persona_id?: string; purpose_id?: string };
+    }>('/api/consent/receipts', async (req, reply) => {
+      const tenant_id = req.query.tenant_id;
+      if (!tenant_id) return reply.code(400).send({ success: false, error: 'tenant_id required' });
+      try {
+        const params: unknown[] = [tenant_id];
+        const where: string[] = [`tenant_id = $1::uuid`];
+        if (req.query.subject_persona_id) {
+          params.push(req.query.subject_persona_id);
+          where.push(`subject_persona_id = $${params.length}::uuid`);
+        }
+        if (req.query.purpose_id) {
+          params.push(req.query.purpose_id);
+          where.push(`purpose_id = $${params.length}`);
+        }
+        const { rows } = await dataService.query(
+          `SELECT receipt_id, subject_persona_id::text AS subject_persona_id,
+                  purpose_id, status, granted_at, revoked_at
+             FROM consent.receipt WHERE ${where.join(' AND ')}
+            ORDER BY granted_at DESC LIMIT 200`,
+          params,
+        );
+        return { success: true, data: rows };
+      } catch (e) {
+        return reply.code(500).send({ success: false, error: (e as Error).message });
+      }
+    });
+
+    app.post<{ Params: { receipt_id: string }; Body: { reason?: string } }>('/api/consent/receipts/:receipt_id/revoke', async (req, reply) => {
+      try {
+        await dataService.query(
+          `UPDATE consent.receipt SET status = 'revoked', revoked_at = now() WHERE receipt_id = $1`,
+          [req.params.receipt_id],
+        );
+        return { success: true };
+      } catch (e) {
+        return reply.code(500).send({ success: false, error: (e as Error).message });
+      }
+    });
+
     // P7 §12 — admin override for a denied hard-cap. ADMIN_OPS_TOKEN gated.
     // Body: { tenant_id, sku, until (ISO-8601), operator_id, reason }.
     // Emits usage.hardcap.override.applied.v1.
