@@ -1,9 +1,14 @@
 import { main } from './app';
 
-main().catch((err) => {
-  console.error('[pool-federation-runtime] fatal startup error:', err);
-  process.exit(1);
-});
+// Only run main() when invoked as the binary entrypoint, not when imported
+// as a library (api-gateway imports migrationsDir + factories from here to
+// register migrations without spinning up a second HTTP server).
+if (require.main === module) {
+  main().catch((err) => {
+    console.error('[pool-federation-runtime] fatal startup error:', err);
+    process.exit(1);
+  });
+}
 
 export { buildApp } from './app';
 export { resolveRoute, recordFailover, SovereignIsolationError } from './router';

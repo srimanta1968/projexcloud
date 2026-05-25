@@ -34,7 +34,7 @@ BEGIN
   EXCEPTION
     WHEN undefined_table THEN
       RETURN NEW;
-    WHEN undefined_schema THEN
+    WHEN invalid_schema_name THEN
       RETURN NEW;
   END;
 
