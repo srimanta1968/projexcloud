@@ -16,12 +16,22 @@
  *   --out-dir <path>   Where to write the catalog (default: <repo>/dist)
  *   --strict           Exit non-zero if any manifest MISSING/INVALID
  *                      (default: skip them but still produce a catalog)
+ *   --no-embed         Skip the bge-small embedding index build
+ *                      (default: embed and write registry.embeddings.{bin,meta.json})
+ *   --built-at <iso>   Pin built_at for deterministic CI rebuilds
  */
 
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { resolve, join } from 'node:path';
 import { scanWorkspace } from './scanner';
 import { buildCatalog, serializeCatalog, catalogContentHash } from './catalog';
+import {
+  buildEmbeddingIndex,
+  createEmbedder,
+  embeddingsContentHash,
+  writeEmbeddingIndex,
+  planEmbeddings,
+} from './embeddings';
 
 function parseArgs() {
   const args = process.argv.slice(2);
@@ -42,11 +52,12 @@ function parseArgs() {
   return flags;
 }
 
-function main() {
+async function main() {
   const flags = parseArgs();
   const repo = resolve(String(flags.repo ?? process.cwd()));
   const outDir = resolve(String(flags['out-dir'] ?? join(repo, 'dist')));
   const strict = flags.strict === true;
+  const skipEmbed = flags['no-embed'] === true;
   const built_at = typeof flags['built-at'] === 'string' ? String(flags['built-at']) : undefined;
 
   process.stdout.write(`Scanning ${repo} ...\n`);
@@ -85,6 +96,34 @@ function main() {
       `  (warn: ${catalog.counts.events_consumed_unmatched} consumed event(s) have no producer in the catalog — may be external or unauthored upstream)\n`,
     );
   }
+
+  if (skipEmbed) {
+    process.stdout.write(`Skipping embedding build (--no-embed).\n`);
+    return;
+  }
+
+  const planned = planEmbeddings(catalog);
+  if (planned.length === 0) {
+    process.stdout.write(`No records to embed (catalog is empty). Skipping embedding build.\n`);
+    return;
+  }
+
+  process.stdout.write(`\nBuilding embedding index (model=bge-small-en-v1.5 q8, dim=384) ...\n`);
+  process.stdout.write(`  ${planned.length} records to embed (${catalog.counts.sdks} summaries + ${catalog.counts.scenarios} scenarios)\n`);
+  const startMs = Date.now();
+  const embedder = await createEmbedder();
+  const idx = await buildEmbeddingIndex(catalog, embedder);
+  const elapsedMs = Date.now() - startMs;
+
+  const binPath = join(outDir, 'registry.embeddings.bin');
+  const metaPath = join(outDir, 'registry.embeddings.meta.json');
+  writeEmbeddingIndex(idx, binPath, metaPath);
+  process.stdout.write(`Wrote ${binPath} + ${metaPath}\n`);
+  process.stdout.write(`  embeddings_hash=${embeddingsContentHash(idx)}\n`);
+  process.stdout.write(`  elapsed=${elapsedMs}ms (~${Math.round(elapsedMs / planned.length)}ms/record)\n`);
 }
 
-main();
+main().catch((err) => {
+  process.stderr.write(`registry-build failed: ${(err && err.stack) || err}\n`);
+  process.exit(2);
+});

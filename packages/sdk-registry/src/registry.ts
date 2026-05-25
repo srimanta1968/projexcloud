@@ -11,6 +11,12 @@
 import { readFileSync } from 'node:fs';
 import { Catalog, CatalogEntry, RegistryHit } from './types';
 import { SdkCapabilityManifest } from '@projexlight/sdk-capability';
+import {
+  EmbedderHandle,
+  EmbeddingIndex,
+  loadEmbeddingIndex,
+  searchEmbeddings,
+} from './embeddings';
 
 export interface Registry {
   /** All catalog entries in deterministic order. */
@@ -32,15 +38,32 @@ export interface Registry {
   findCompatibleSdks(name: string): string[];
 }
 
-/** Load a catalog from disk and return a Registry over it. */
-export function loadRegistry(catalogPath: string): Registry {
+export interface RegistryOptions {
+  /** Optional embedding index for ANN-based searchByIntent (E2.F3). */
+  embeddingIndex?: EmbeddingIndex;
+  /** Optional embedder for query-time embedding. Required when embeddingIndex is set. */
+  embedder?: EmbedderHandle;
+}
+
+export interface LoadRegistryOptions {
+  /** Paths to a pre-built embedding index produced by sdk-registry-build. */
+  embeddingPaths?: { bin: string; meta: string };
+  /** Optional embedder for query-time embedding. */
+  embedder?: EmbedderHandle;
+}
+
+/** Load a catalog (+ optional embedding index) and return a Registry. */
+export function loadRegistry(catalogPath: string, opts: LoadRegistryOptions = {}): Registry {
   const raw = readFileSync(catalogPath, 'utf-8');
   const catalog = JSON.parse(raw) as Catalog;
-  return registryFromCatalog(catalog);
+  const embeddingIndex = opts.embeddingPaths
+    ? loadEmbeddingIndex(opts.embeddingPaths.bin, opts.embeddingPaths.meta)
+    : undefined;
+  return registryFromCatalog(catalog, { embeddingIndex, embedder: opts.embedder });
 }
 
 /** Construct a Registry over an in-memory catalog (useful for tests). */
-export function registryFromCatalog(catalog: Catalog): Registry {
+export function registryFromCatalog(catalog: Catalog, opts: RegistryOptions = {}): Registry {
   const byName = new Map<string, CatalogEntry>();
   for (const e of catalog.entries) byName.set(e.manifest.name, e);
 
@@ -49,7 +72,44 @@ export function registryFromCatalog(catalog: Catalog): Registry {
 
     get: (name) => byName.get(name) ?? null,
 
-    async searchByIntent(query, top_k = 5) {
+    async searchByIntent(query, top_k = 5): Promise<RegistryHit[]> {
+      // Embedding path: ANN cosine over bge-small vectors when both
+      // embedder + index are available. Aggregates per-SDK by taking the
+      // best-scoring record (summary or scenario) per SDK.
+      if (opts.embeddingIndex && opts.embedder) {
+        const q = await opts.embedder.embed(query);
+        const hits = searchEmbeddings(opts.embeddingIndex, q, top_k * 4);
+        const bestBySdk = new Map<string, { score: number; scenarioIds: Set<string> }>();
+        for (const h of hits) {
+          const existing = bestBySdk.get(h.record.sdk_name);
+          if (!existing || h.score > existing.score) {
+            bestBySdk.set(h.record.sdk_name, {
+              score: h.score,
+              scenarioIds: new Set(existing?.scenarioIds ?? []),
+            });
+          }
+          if (h.record.scenario_id) {
+            bestBySdk.get(h.record.sdk_name)!.scenarioIds.add(h.record.scenario_id);
+          }
+        }
+        const out: RegistryHit[] = [];
+        for (const [name, info] of bestBySdk) {
+          const entry = byName.get(name);
+          if (!entry) continue;
+          out.push({
+            name,
+            summary: entry.manifest.summary,
+            score: info.score,
+            scenarios: entry.manifest.scenarios
+              .filter((s) => info.scenarioIds.has(s.id))
+              .map((s) => ({ id: s.id, title: s.title })),
+          });
+        }
+        return out.sort((a, b) => b.score - a.score).slice(0, top_k);
+      }
+
+      // Substring fallback when no embeddings are available.
+      {
       const q = query.toLowerCase().trim();
       const tokens = q.split(/\s+/).filter(Boolean);
       if (tokens.length === 0) return [];
@@ -80,6 +140,7 @@ export function registryFromCatalog(catalog: Catalog): Registry {
         .filter((h) => h.score > 0)
         .sort((a, b) => b.score - a.score)
         .slice(0, top_k);
+      }
     },
 
     findCompatibleSdks(name) {
