@@ -1,0 +1,92 @@
+{
+  "name": "@projexlight/sdk-onprem",
+  "version": "1.0.0",
+  "schema_version": "1.0",
+  "summary": "On-premises deployment variant for ProjexCloud: install registry, signed bundle application, optional local-LLM model registry, air-gapped billing report uploads. Lets a regulated tenant run the entire ProjexCloud stack inside their own data center with periodic billing/health uploads to the SaaS control plane. P8 deployment-variant artifact.",
+  "tags": ["onprem", "deployment", "air-gapped", "bundle", "p8"],
+  "provides": {
+    "endpoints": [],
+    "events": [
+      { "name": "onprem.install.registered.v1",    "retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "New on-prem install registered with the SaaS control plane." },
+      { "name": "onprem.bundle.applied.v1",         "retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "A signed bundle was applied to an on-prem install." },
+      { "name": "onprem.local_llm.registered.v1",   "retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "Local LLM model registered (vLLM / llama.cpp endpoint)." },
+      { "name": "onprem.billing.uploaded.v1",       "retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "Periodic billing snapshot uploaded back to the SaaS billing pipeline." },
+      { "name": "onprem.heartbeat.received.v1",     "retention_class": "operational","conflict_policy": "lww",            "description": "Health heartbeat from the on-prem install." }
+    ],
+    "models": [
+      { "schema": "onprem", "table": "install",           "description": "Per-install row: customer, region, deployed_version, public_key (for signed bundles)." },
+      { "schema": "onprem", "table": "bundle_apply",      "description": "Per-bundle-apply row: install_id, bundle_id, signature_verified, applied_at." },
+      { "schema": "onprem", "table": "local_llm_model",   "description": "Per-(install, model) row: provider (vllm/llama.cpp/ollama), endpoint, allowed_uses." },
+      { "schema": "onprem", "table": "billing_report",    "description": "Per-report row: install_id, period, usage_event_count, snapshot_hash." }
+    ],
+    "hooks": [
+      { "name": "registerInstall",     "description": "Register a new on-prem install with the SaaS control plane (manual customer-led ceremony)." },
+      { "name": "applyBundle",         "description": "Apply a signed bundle to an install; refuses unverified signatures." },
+      { "name": "registerLocalLlm",   "description": "Register a local LLM endpoint so sdk-ai-gateway routes through it." },
+      { "name": "uploadBillingReport", "description": "Periodic upload — on-prem install sends a usage snapshot to the SaaS billing pipeline (out-of-band; usually weekly)." },
+      { "name": "startHeartbeat",      "description": "Background worker — sends health heartbeats to the SaaS control plane." }
+    ],
+    "ui_components": []
+  },
+  "consumes": {
+    "events": [
+      { "name": "meter.usage.aggregated.v1", "from": "@projexlight/sdk-meter" }
+    ],
+    "infra": ["postgres", "sdk-vault", "outbound-https-to-projexcloud"],
+    "config_keys": ["ONPREM_CUSTOMER_ID", "ONPREM_REGION", "ONPREM_HEARTBEAT_INTERVAL_MIN", "ONPREM_BILLING_UPLOAD_CADENCE_HOURS"]
+  },
+  "scenarios": [
+    {
+      "id": "register-customer-onprem",
+      "title": "Customer registers their on-prem install with SaaS control plane",
+      "when_to_use": "Initial on-prem deployment. Customer generates a keypair locally; registers the public key with the SaaS control plane; that's how subsequent bundles get signed against them.",
+      "example_code": "import { registerInstall } from '@projexlight/sdk-onprem';\nconst { install_id } = await registerInstall({\n  customer_id, region: 'us-east-1', public_key_pem,\n  deployment_kind: 'on-prem-kubernetes',\n});",
+      "expected_outcome": "Install row + emits .install.registered.v1. Customer can now receive signed bundles."
+    },
+    {
+      "id": "apply-signed-bundle",
+      "title": "Customer applies a signed product bundle",
+      "when_to_use": "SaaS publishes a new bundle (signed against this install's public key); customer downloads + applies. Signature verification mandatory.",
+      "example_code": "import { applyBundle } from '@projexlight/sdk-onprem';\nconst { applied, version } = await applyBundle({\n  install_id, bundle_path: '/tmp/projexcloud-v3.2.bundle',\n});",
+      "expected_outcome": "Signature verified + bundle applied. Emits .bundle.applied.v1 with the version. Failed-signature aborts the apply atomically."
+    },
+    {
+      "id": "register-local-llm",
+      "title": "Register the tenant's local vLLM endpoint",
+      "when_to_use": "Air-gapped tenant runs their own local LLM; register so sdk-ai-gateway routes prompt traffic to it instead of external providers.",
+      "example_code": "import { registerLocalLlm } from '@projexlight/sdk-onprem';\nawait registerLocalLlm({\n  install_id, provider: 'vllm', endpoint: 'http://vllm-internal:8000/v1',\n  model_id: 'llama-3-70b-instruct', allowed_uses: ['default','redaction-safe'],\n});",
+      "expected_outcome": "Model row written. sdk-ai-gateway picks it up via its provider registry refresh."
+    },
+    {
+      "id": "weekly-billing-upload",
+      "title": "Weekly billing snapshot upload",
+      "when_to_use": "Background worker — once a week the install uploads aggregated usage to the SaaS billing pipeline so finance can invoice.",
+      "example_code": "import { uploadBillingReport } from '@projexlight/sdk-onprem';\nconst { snapshot_hash } = await uploadBillingReport({\n  install_id, period: '2026-W21',\n});",
+      "expected_outcome": "Snapshot signed locally + posted to SaaS billing endpoint. Hash stored on both sides for integrity. Emits .billing.uploaded.v1."
+    },
+    {
+      "id": "heartbeat-monitor",
+      "title": "Heartbeat sweeper alerts when an install goes dark",
+      "when_to_use": "Background worker sends heartbeats; SaaS side notices a 30-min gap + alerts the customer-success oncall.",
+      "example_code": "import { startHeartbeat } from '@projexlight/sdk-onprem';\nstartHeartbeat({ install_id, interval_min: 5 });",
+      "expected_outcome": "Heartbeat .received.v1 lands every 5 min on the SaaS side. Missing heartbeats alert via sdk-notification."
+    }
+  ],
+  "compliance_posture": {
+    "regimes": ["SOC2-CC6.7", "FedRAMP-Moderate-Air-Gapped", "ITAR-controlled", "GDPR-Art-44-data-transfer-prohibition"],
+    "notes": "Customer keeps all PII inside their own data center; only aggregated usage uploads to SaaS — the GDPR Art-44 + ITAR + FedRAMP air-gap posture. Bundle signature verification mandatory; tampered bundles refused. Local LLM registration is the air-gapped tenant's escape valve from external AI providers."
+  },
+  "pool_placement": "global-catalog",
+  "pricing_skus": [
+    { "sku": "onprem.install.register",     "mode": "flat",    "unit_description": "per install per month" },
+    { "sku": "onprem.bundle.apply",         "mode": "metered", "unit_description": "per bundle applied" },
+    { "sku": "onprem.billing.upload",       "mode": "metered", "unit_description": "per uploaded billing report" },
+    { "sku": "onprem.heartbeat",            "mode": "metered", "unit_description": "per heartbeat received" }
+  ],
+  "no_endpoints": true,
+  "links": {
+    "readme": "packages/sdk-onprem/README.md",
+    "source": "packages/sdk-onprem/src/",
+    "prd_section": "P8-Deployment-Variants §3 / FR-ONP-1..5"
+  }
+}

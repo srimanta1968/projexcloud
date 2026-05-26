@@ -1,0 +1,91 @@
+{
+  "name": "@projexlight/sdk-sovereign",
+  "version": "1.0.0",
+  "schema_version": "1.0",
+  "summary": "Sovereign-cloud deployment substrate: per-region config (FedRAMP US-East / EU-GovCloud / DE-Sovereign), bundle release management with provenance attestation, cross-region leak monitor that fails the pipeline if any data crosses jurisdiction. The PRD's P8 sovereign variant — sits next to sdk-onprem but for managed-by-ProjexCloud sovereign regions vs. customer-managed air-gap.",
+  "tags": ["sovereign", "fedramp", "govcloud", "data-residency", "p8"],
+  "provides": {
+    "endpoints": [],
+    "events": [
+      { "name": "sovereign.region.configured.v1",     "retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "Sovereign region config registered / updated." },
+      { "name": "sovereign.bundle.released.v1",       "retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "Bundle released to a sovereign region with provenance attestation." },
+      { "name": "sovereign.attestation.verified.v1",  "retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "Attestation chain verified at runtime; required before bundles execute." },
+      { "name": "sovereign.leak.detected.v1",         "retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "Cross-region data leak detected; pipeline halt + ops page." }
+    ],
+    "models": [
+      { "schema": "sovereign", "table": "region_config",       "description": "Per-region row: name, regulatory profile, allowed providers, attestation_key." },
+      { "schema": "sovereign", "table": "bundle_release",      "description": "Per-release row: bundle_id, region, attestation, released_at." },
+      { "schema": "sovereign", "table": "attestation",         "description": "Per-attestation row: chain_id, verified_at, verifier_identity." },
+      { "schema": "sovereign", "table": "leak_monitor_alert",  "description": "Per-alert row: from_region, to_region, kind (event/data), severity." }
+    ],
+    "hooks": [
+      { "name": "configureRegion",       "description": "Create / update a sovereign region's regulatory + provider config." },
+      { "name": "releaseBundle",          "description": "Release a signed bundle to a sovereign region; signature chain enforced." },
+      { "name": "verifyAttestation",      "description": "Runtime — verify the attestation chain before the bundle executes." },
+      { "name": "startLeakMonitor",       "description": "Background monitor: probes outbound traffic for cross-region leaks; halts pipeline on detection." }
+    ],
+    "ui_components": []
+  },
+  "consumes": {
+    "events": [
+      { "name": "vault.key.rotated.v1",          "from": "@projexlight/sdk-vault" },
+      { "name": "lineage.backfill.completed.v1", "from": "@projexlight/sdk-lineage" }
+    ],
+    "infra": ["postgres", "sdk-vault", "sdk-lineage"],
+    "config_keys": ["SOVEREIGN_DEFAULT_PROFILE", "SOVEREIGN_LEAK_MONITOR_INTERVAL_SEC", "SOVEREIGN_ATTESTATION_REQUIRED"]
+  },
+  "scenarios": [
+    {
+      "id": "configure-eu-sovereign",
+      "title": "Configure the DE-Sovereign region",
+      "when_to_use": "New sovereign region brought up; configure regulatory profile + the allow-listed providers (e.g. only EU-hosted AI providers).",
+      "example_code": "import { configureRegion } from '@projexlight/sdk-sovereign';\nawait configureRegion({\n  name: 'de-sovereign',\n  regulatory_profile: ['BDSG','GDPR','C5'],\n  allowed_providers: ['azure-eu-de','aws-eu-central-1','aleph-alpha'],\n  attestation_key_id,\n});",
+      "expected_outcome": "Region config row written; emits .region.configured.v1. Deployments to this region pin to the allow-list automatically."
+    },
+    {
+      "id": "release-bundle-with-attestation",
+      "title": "Release a signed bundle to FedRAMP US-East with provenance",
+      "when_to_use": "New release goes out to a sovereign region; the build pipeline signs + attests, the sovereign install verifies before executing.",
+      "example_code": "import { releaseBundle } from '@projexlight/sdk-sovereign';\nconst { release_id } = await releaseBundle({\n  region: 'fedramp-us-east',\n  bundle_id: 'projexcloud-v3.2',\n  attestation_chain: [...], // SLSA-3 provenance\n});",
+      "expected_outcome": "Release row written; attestation chain stored. Emits .bundle.released.v1. Runtime verification happens on the sovereign side before execution."
+    },
+    {
+      "id": "verify-attestation-on-start",
+      "title": "Sovereign install verifies attestation on startup",
+      "when_to_use": "Service starts; calls verifyAttestation against the bundle it's running. If the chain fails (unsigned bundle, untrusted signer), the service refuses to start.",
+      "example_code": "import { verifyAttestation } from '@projexlight/sdk-sovereign';\nconst { ok, reason } = await verifyAttestation({\n  bundle_id: process.env.BUNDLE_ID,\n});\nif (!ok) { process.exit(1); }",
+      "expected_outcome": "Service refuses to boot on bad attestation. Emits .attestation.verified.v1 on success; ops paged on failure."
+    },
+    {
+      "id": "leak-monitor-halts-pipeline",
+      "title": "Leak monitor detects cross-region event traffic → pipeline halt",
+      "when_to_use": "Background monitor sees an event from eu-de namespace heading to a us-east pool. Halt the pipeline + page sovereignty oncall.",
+      "example_code": "import { startLeakMonitor } from '@projexlight/sdk-sovereign';\nstartLeakMonitor({\n  region_pair: ['eu-de','us-east'], halt_pipeline_on_detection: true,\n});",
+      "expected_outcome": "Pipeline halted within sec; emits .leak.detected.v1. Sovereignty officer reviews + decides whether to release the hold."
+    },
+    {
+      "id": "vault-rotation-cascade",
+      "title": "Reactive: vault key rotation triggers re-attestation",
+      "when_to_use": "vault.key.rotated.v1 fires; any bundle whose attestation chain references the rotated key needs re-verification against the new key.",
+      "example_code": "subscribeEvents('vault.key.rotated.v1', async (e) => {\n  await reVerifyAttestationsForKey({ old_key_id: e.payload.from_key_id });\n});",
+      "expected_outcome": "Affected attestations re-verified or flagged for re-release. Audit chain reflects the cascade."
+    }
+  ],
+  "compliance_posture": {
+    "regimes": ["FedRAMP-High", "C5-Germany", "GDPR-Art-44", "ITAR", "EU-Data-Boundary-Mandate", "SOC2-CC6.6"],
+    "notes": "Per-region regulatory profile pins the providers + the data flows allowed for each. SLSA-3 provenance attestation enforced on every bundle release — refused if missing. Leak monitor is the pipeline-level data-residency safety net; fails closed (halts) on any cross-region event detected."
+  },
+  "pool_placement": "global-catalog",
+  "pricing_skus": [
+    { "sku": "sovereign.region.configure",  "mode": "flat",    "unit_description": "per region" },
+    { "sku": "sovereign.bundle.release",    "mode": "metered", "unit_description": "per bundle release" },
+    { "sku": "sovereign.attestation.verify","mode": "metered", "unit_description": "per runtime attestation verify" },
+    { "sku": "sovereign.leak.probe",        "mode": "flat",    "unit_description": "per leak-monitor probe (background)" }
+  ],
+  "no_endpoints": true,
+  "links": {
+    "readme": "packages/sdk-sovereign/README.md",
+    "source": "packages/sdk-sovereign/src/",
+    "prd_section": "P8-Deployment-Variants §2 / FR-SOV-1..5"
+  }
+}
