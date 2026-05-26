@@ -1,6 +1,9 @@
+import { report } from '@projexlight/sdk-meter';
 import { loadConfig } from './config';
 import { bootRegistry, createRegistryRef, startCatalogWatcher } from './catalogSource';
 import { buildApp } from './app';
+import { buildMeterSink, composeAuditSinks } from './meterSink';
+import type { AuditSink } from './mcpHandler';
 
 export { buildApp, type AppDeps } from './app';
 export { loadConfig, type RegistryMcpConfig } from './config';
@@ -13,6 +16,7 @@ export {
   type WatcherHandle,
 } from './catalogSource';
 export { extractTenantContext, AuthError, type TenantContext } from './auth';
+export { buildMeterSink, composeAuditSinks, skuFor, TOOL_SKU_MAP, type MeterReporter, type MeterSinkOptions } from './meterSink';
 
 export async function startServer(): Promise<void> {
   const config = loadConfig();
@@ -31,15 +35,23 @@ export async function startServer(): Promise<void> {
     },
   });
 
+  const stdoutSink: AuditSink = (e) => {
+    process.stdout.write(
+      JSON.stringify({ kind: 'registry-mcp.tool', ...e, tenant: e.tenant.sub }) + '\n',
+    );
+  };
+
+  const meterSink = buildMeterSink({
+    report,
+    pool_index: process.env.REGISTRY_MCP_POOL_INDEX ?? 'global-catalog',
+    region: process.env.REGISTRY_MCP_REGION ?? 'us-east-1',
+  });
+
   const app = buildApp({
     config,
     registryRef: ref,
     embeddingsLoaded: ref.embeddingsLoaded,
-    audit: (e) => {
-      process.stdout.write(
-        JSON.stringify({ kind: 'registry-mcp.tool', ...e, tenant: e.tenant.sub }) + '\n',
-      );
-    },
+    audit: composeAuditSinks(stdoutSink, meterSink),
   });
 
   await app.listen({ host: config.host, port: config.port });
