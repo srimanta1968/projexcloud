@@ -1,0 +1,97 @@
+{
+  "name": "@projexlight/sdk-geo",
+  "version": "1.0.0",
+  "schema_version": "1.0",
+  "summary": "Address canonicalization + geocoding + reverse-geocoding for ProjexCloud: takes free-form input ('123 Main, Suite 4, Cambridge MA') → canonical address row + lat/lng. Aliases let multiple inputs collapse to one canonical row; merge events propagate when canonicalization rules tighten. Foundation for field-service routing + sales territory assignment + tax-jurisdiction lookup.",
+  "tags": ["geo", "address", "geocoding", "canonicalization", "p6b"],
+  "provides": {
+    "endpoints": [
+      { "method": "POST", "path": "/api/geo/canonicalize",    "description": "Normalize a free-form address to a canonical row; idempotent." },
+      { "method": "GET",  "path": "/api/geo/addresses/:address_id", "description": "Fetch canonical address + aliases + lat/lng." },
+      { "method": "POST", "path": "/api/geo/geocode",          "description": "Address → lat/lng via the configured provider." },
+      { "method": "POST", "path": "/api/geo/reverse-geocode",  "description": "Lat/lng → nearest canonical address." },
+      { "method": "POST", "path": "/api/geo/aliases",          "description": "Manually register an alias for a canonical address." },
+      { "method": "POST", "path": "/api/geo/merge",            "description": "Merge two canonical addresses (when canonicalization tightens)." }
+    ],
+    "events": [
+      { "name": "geo.address.canonicalized.v1", "retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "New canonical address row created or reused." },
+      { "name": "geo.address.geocoded.v1",      "retention_class": "operational","conflict_policy": "lww",            "description": "Lat/lng resolved for an address (cached for the configured TTL)." },
+      { "name": "geo.address.alias.added.v1",   "retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "New input string aliased to an existing canonical row." },
+      { "name": "geo.address.merged.v1",        "retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "Two canonical rows merged; downstream consumers update references." }
+    ],
+    "models": [
+      { "schema": "geo", "table": "address",         "description": "Per-canonical-address row: line1, line2, city, region, postal_code, country, lat, lng." },
+      { "schema": "geo", "table": "address_alias",   "description": "Per-(input, canonical) row — many aliases collapse to one canonical address." },
+      { "schema": "geo", "table": "merge_event",     "description": "Per-merge row: from_address, to_address, persona, reason, occurred_at." }
+    ],
+    "hooks": [
+      { "name": "canonicalize",  "description": "Free-form input → canonical row; idempotent." },
+      { "name": "geocode",        "description": "Address → lat/lng; cached." },
+      { "name": "reverseGeocode", "description": "Lat/lng → nearest canonical address." },
+      { "name": "addAlias",       "description": "Manually map an input string to an existing canonical row." },
+      { "name": "mergeAddresses", "description": "Merge two canonical rows (canonicalization rule tightened)." }
+    ],
+    "ui_components": []
+  },
+  "consumes": {
+    "events": [
+      { "name": "tenant.created.v1", "from": "@projexlight/sdk-tenant" }
+    ],
+    "infra": ["postgres", "mapbox-or-google-geocoder", "redis-optional"],
+    "config_keys": ["GEO_DEFAULT_GEOCODER", "GEO_GEOCODE_CACHE_TTL_DAYS", "GEO_CANONICALIZATION_RULES_REF"]
+  },
+  "scenarios": [
+    {
+      "id": "canonicalize-on-customer-create",
+      "title": "Customer signup → address canonicalized",
+      "when_to_use": "Webform passes a free-form address; canonicalize returns / creates the canonical row + the customer record stores the address_id (not raw text).",
+      "example_code": "import { canonicalize } from '@projexlight/sdk-geo';\nconst { address_id, was_existing } = await canonicalize({\n  tenant_id, input: '123 Main, Suite 4, Cambridge MA 02139',\n});",
+      "expected_outcome": "Returns existing address_id on dedupe-hit; creates + returns new id otherwise. Emits .canonicalized.v1 only on net-new."
+    },
+    {
+      "id": "geocode-for-route",
+      "title": "Field dispatch geocodes addresses for route optimization",
+      "when_to_use": "sdk-dispatch needs lat/lng for each stop; cached results return immediately, fresh ones hit the configured provider.",
+      "example_code": "import { geocode } from '@projexlight/sdk-geo';\nconst { lat, lng, accuracy_m } = await geocode({\n  address_id, force_refresh: false,\n});",
+      "expected_outcome": "Lat/lng + accuracy. Emits .geocoded.v1 (lww) on cache miss. Provider cost passes through pricing."
+    },
+    {
+      "id": "reverse-geocode-from-mobile",
+      "title": "Tech mobile app reverse-geocodes their GPS position",
+      "when_to_use": "Mobile app needs to know which address the tech is at for proof-of-presence on a work order.",
+      "example_code": "import { reverseGeocode } from '@projexlight/sdk-geo';\nconst { address_id, distance_m } = await reverseGeocode({\n  lat: 42.3601, lng: -71.0589, max_distance_m: 50,\n});",
+      "expected_outcome": "Nearest canonical address returned (within tolerance). If none, prompts the tech to confirm the address manually."
+    },
+    {
+      "id": "manual-alias",
+      "title": "Customer-success rep adds an alias",
+      "when_to_use": "Customer wrote 'Bldg 4, MIT' and the canonicalizer didn't match — rep manually aliases it to the canonical MIT address.",
+      "example_code": "import { addAlias } from '@projexlight/sdk-geo';\nawait addAlias({\n  address_id: mit_canonical_id, alias_input: 'Bldg 4, MIT',\n  added_by_persona_id,\n});",
+      "expected_outcome": "Alias row written; future canonicalize calls with that input return MIT immediately. Emits .alias.added.v1."
+    },
+    {
+      "id": "merge-after-rule-tighten",
+      "title": "Canonicalization tightened → merge two duplicates",
+      "when_to_use": "Two rows for the same physical address (different abbreviations); merge collapses them + downstream consumers update their refs.",
+      "example_code": "import { mergeAddresses } from '@projexlight/sdk-geo';\nawait mergeAddresses({\n  from_address_id: dup_id, to_address_id: canonical_id,\n  merged_by_persona_id, reason: 'apartment-vs-suite-normalization',\n});",
+      "expected_outcome": "Rows merged; emits .merged.v1. Downstream consumers (sdk-crm, sdk-dispatch) re-point references."
+    }
+  ],
+  "compliance_posture": {
+    "regimes": ["SOC2-CC7.1", "GDPR-Art-30", "FCC-Section-222-location-data", "Tax-jurisdiction-residency"],
+    "notes": "Address data is PII; lookups audited. Geocoder provider keys vault-wrapped via sdk-secrets. Merge events retain the from/to ref so a regulator can reconstruct the pre-merge state if needed."
+  },
+  "pool_placement": "app",
+  "pricing_skus": [
+    { "sku": "geo.canonicalize",   "mode": "metered", "unit_description": "per canonicalize (dedupe-hits free)" },
+    { "sku": "geo.geocode",        "mode": "metered", "unit_description": "per geocode (cache hits free; provider cost passes)" },
+    { "sku": "geo.reverse-geocode","mode": "metered", "unit_description": "per reverse-geocode" },
+    { "sku": "geo.alias.add",      "mode": "metered", "unit_description": "per alias added" },
+    { "sku": "geo.merge",          "mode": "flat",    "unit_description": "per merge operation (audited)" }
+  ],
+  "links": {
+    "readme": "packages/sdk-geo/README.md",
+    "source": "packages/sdk-geo/src/",
+    "prd_section": "P7-Field-Hyperscale §12 / FR-GEO-1..5"
+  }
+}

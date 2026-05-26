@@ -1,0 +1,102 @@
+{
+  "name": "@projexlight/sdk-campaign",
+  "version": "1.0.0",
+  "schema_version": "1.0",
+  "summary": "Marketing campaign + journey orchestration for ProjexCloud: define a campaign with named segments + a multi-step journey (each step is an action — send email, post to Slack, wait, branch, score). Journeys run per-contact, respect consent + quiet-hours, and audit every step. The marketing-automation analog to sdk-workflow's general-purpose engine.",
+  "tags": ["campaign", "marketing-automation", "journey", "segmentation", "p6b"],
+  "provides": {
+    "endpoints": [
+      { "method": "POST", "path": "/api/campaigns",                                "description": "Create a campaign envelope." },
+      { "method": "POST", "path": "/api/campaigns/:campaign_id/segments",          "description": "Add a segment (named contact set with definition)." },
+      { "method": "POST", "path": "/api/campaigns/segments/:segment_id/compute",   "description": "Recompute a segment's member set." },
+      { "method": "POST", "path": "/api/campaigns/:campaign_id/journeys",          "description": "Publish a journey definition (multi-step + branches)." },
+      { "method": "POST", "path": "/api/campaigns/journeys/:journey_id/start-run", "description": "Start a run of a journey for the segment's members." },
+      { "method": "POST", "path": "/api/campaigns/journeys/:journey_id/halt",      "description": "Halt all in-flight runs (kill switch)." }
+    ],
+    "events": [
+      { "name": "campaign.campaign.created.v1",     "retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "Campaign envelope created." },
+      { "name": "campaign.segment.computed.v1",     "retention_class": "operational","conflict_policy": "lww",            "description": "Segment refreshed; carries member count." },
+      { "name": "campaign.journey.published.v1",    "retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "Journey definition published; carries step graph hash." },
+      { "name": "campaign.journey_run.started.v1",  "retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "Run started for a (journey, contact) pair." },
+      { "name": "campaign.journey_run.step.v1",     "retention_class": "operational","conflict_policy": "event-sourcing", "description": "Per-step audit row for a run." },
+      { "name": "campaign.journey_run.completed.v1","retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "Run finished (normal or branch-out)." }
+    ],
+    "models": [
+      { "schema": "campaign", "table": "campaign",     "description": "Campaign envelope row: name, owner, channel mix, budget." },
+      { "schema": "campaign", "table": "segment",      "description": "Named contact set: definition (sql or rule), refreshed_at, member_count." },
+      { "schema": "campaign", "table": "journey",      "description": "Journey definition: steps json, graph hash, published_at." },
+      { "schema": "campaign", "table": "journey_run",  "description": "Per-(journey, contact) run: state, current_step, scheduled_next_step_at." }
+    ],
+    "hooks": [
+      { "name": "createCampaign",       "description": "Service entry for a new campaign envelope." },
+      { "name": "computeSegment",       "description": "Re-resolve a segment's members; idempotent." },
+      { "name": "publishJourney",       "description": "Compile + publish a journey definition (steps + branches)." },
+      { "name": "startJourneyRun",      "description": "Start runs for the journey's segment members (one run per contact)." },
+      { "name": "haltJourney",          "description": "Kill switch — halts every in-flight run for a journey." },
+      { "name": "startJourneyExecutor", "description": "Background worker that advances pending journey steps." }
+    ],
+    "ui_components": []
+  },
+  "consumes": {
+    "events": [
+      { "name": "lead_scoring.score.changed.v1",     "from": "@projexlight/sdk-lead-scoring" },
+      { "name": "consent.receipt.revoked.v1",     "from": "@projexlight/sdk-consent" },
+      { "name": "notification.message.delivered.v1", "from": "@projexlight/sdk-notification" }
+    ],
+    "infra": ["postgres", "redis-optional", "sdk-notification", "sdk-consent"],
+    "config_keys": ["CAMPAIGN_JOURNEY_EXECUTOR_INTERVAL_SEC", "CAMPAIGN_SEGMENT_REFRESH_CADENCE_MIN", "CAMPAIGN_MAX_PARALLEL_RUNS"]
+  },
+  "scenarios": [
+    {
+      "id": "create-eu-q3-nurture",
+      "title": "Create the 'EU Q3 Nurture' campaign + first segment",
+      "when_to_use": "Marketing manager kicks off a new nurture program; create the envelope + a segment for 'EU leads in Pro tier'.",
+      "example_code": "import { createCampaign, computeSegment } from '@projexlight/sdk-campaign';\nconst { campaign_id } = await createCampaign({\n  tenant_id, name: 'EU Q3 Nurture', owner_persona_id, channels: ['email','linkedin'],\n});\nconst { segment_id, member_count } = await computeSegment({\n  campaign_id, name: 'eu-pro-tier',\n  definition: { kind: 'sql', query: \"SELECT id FROM crm.contact WHERE region='EU' AND plan='pro'\" },\n});",
+      "expected_outcome": "Campaign + segment rows; member count returned. Segments refresh on the configured cadence."
+    },
+    {
+      "id": "publish-multi-step-journey",
+      "title": "Publish a 5-step nurture journey",
+      "when_to_use": "Define the journey graph: email → wait 3d → branch (opened? → demo invite : retry email).",
+      "example_code": "import { publishJourney } from '@projexlight/sdk-campaign';\nawait publishJourney({\n  campaign_id, name: 'eu-pro-nurture-v1',\n  steps: [\n    { id: 's1', kind: 'send-email', template: 'eu-pro-nurture-1' },\n    { id: 's2', kind: 'wait', duration: 'P3D' },\n    { id: 's3', kind: 'branch', condition: 'email.opened', true: 's4', false: 's5' },\n    { id: 's4', kind: 'send-email', template: 'eu-pro-demo-invite' },\n    { id: 's5', kind: 'send-email', template: 'eu-pro-nurture-1-retry' },\n  ],\n});",
+      "expected_outcome": "Journey published with graph hash. .journey.published.v1 emitted. Start runs explicitly via startJourneyRun."
+    },
+    {
+      "id": "score-triggers-journey-entry",
+      "title": "Lead score crosses threshold → auto-enroll in nurture",
+      "when_to_use": "Reactive on lead_scoring.score.changed.v1 — when a lead crosses MQL threshold, auto-enroll in the EU Q3 Nurture journey.",
+      "example_code": "subscribeEvents('lead_scoring.score.changed.v1', async (e) => {\n  if (e.payload.new_score < 70) return;\n  await enrollInJourney({ journey_id: 'eu-pro-nurture-v1', contact_id: e.payload.lead_id });\n});",
+      "expected_outcome": "Run started for the contact; emits .journey_run.started.v1. Journey executor advances steps per cadence."
+    },
+    {
+      "id": "consent-opt-out-halts-runs",
+      "title": "Reactive: consent opt-out halts in-flight runs",
+      "when_to_use": "consent.receipt.revoked.v1 fires with marketing=false; immediately halt any in-flight journey runs for that contact (TCPA / GDPR Art-7 compliance).",
+      "example_code": "subscribeEvents('consent.receipt.revoked.v1', async (e) => {\n  if (e.payload.kind === 'marketing' && e.payload.allowed === false) {\n    await haltRunsForContact({ contact_id: e.payload.contact_id });\n  }\n});",
+      "expected_outcome": "Active runs halted within seconds; emits .journey_run.completed.v1 with reason='consent-revoked'. No further messages sent."
+    },
+    {
+      "id": "kill-switch-halt-journey",
+      "title": "Kill switch — halt a misconfigured journey",
+      "when_to_use": "Marketing ops realizes journey is sending the wrong email; halt the journey instantly + audit who pulled the switch.",
+      "example_code": "import { haltJourney } from '@projexlight/sdk-campaign';\nawait haltJourney({\n  journey_id, reason: 'wrong-template-in-step-3',\n  halted_by_persona_id,\n});",
+      "expected_outcome": "All in-flight runs halted; emits .journey_run.completed.v1 with halt reason. Future enrolls in the journey refuse with error."
+    }
+  ],
+  "compliance_posture": {
+    "regimes": ["TCPA-Section-227", "CAN-SPAM-email", "GDPR-Art-7-consent", "CCPA-opt-out", "SOC2-CC7.1"],
+    "notes": "Journey executor checks sdk-consent before every outbound send. Consent revocation halts runs within sec. Every step audited so a regulator can replay 'why was this email sent to this person at this time'."
+  },
+  "pool_placement": "app",
+  "pricing_skus": [
+    { "sku": "campaign.create",               "mode": "flat",    "unit_description": "per campaign envelope" },
+    { "sku": "campaign.segment.compute",      "mode": "metered", "unit_description": "per segment refresh" },
+    { "sku": "campaign.journey.publish",      "mode": "flat",    "unit_description": "per journey version published" },
+    { "sku": "campaign.journey_run.execute",  "mode": "metered", "unit_description": "per active run (per-step billed via sdk-notification)" }
+  ],
+  "links": {
+    "readme": "packages/sdk-campaign/README.md",
+    "source": "packages/sdk-campaign/src/",
+    "prd_section": "P6B-Vertical-RevOps §4 / FR-CMP-1..6"
+  }
+}

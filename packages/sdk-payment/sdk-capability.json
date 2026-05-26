@@ -1,0 +1,92 @@
+{
+  "name": "@projexlight/sdk-payment",
+  "version": "1.0.0",
+  "schema_version": "1.0",
+  "summary": "Payment processing for ProjexCloud: tokenized payment-method attach (cards / ACH / wallets) via Stripe (default) with adapter slots for Adyen, Braintree, and on-prem PSPs. Charge + refund + multi-party distribution (escrow/marketplace flows). PCI scope minimized — PANs never touch our DB; only provider tokens + last-4 are persisted.",
+  "tags": ["payment", "stripe", "pci", "refund", "escrow", "marketplace", "p4"],
+  "provides": {
+    "endpoints": [
+      { "method": "POST", "path": "/api/payments/methods",                "description": "Attach a tokenized payment method to a tenant. Body carries a provider token (e.g. Stripe pi_*); we never see the PAN." },
+      { "method": "POST", "path": "/api/payments/charge",                 "description": "Charge an attached payment method. Idempotent on (tenant_id, idempotency_key). Returns the charge_id and captured amount." },
+      { "method": "POST", "path": "/api/payments/:charge_id/refund",      "description": "Issue a full or partial refund against a captured charge." },
+      { "method": "POST", "path": "/api/payments/:charge_id/distribute",  "description": "Multi-party distribution against a captured charge (marketplace / escrow / reseller commission). Splits routed to provider party-ids." }
+    ],
+    "events": [
+      { "name": "payment.method.attached.v1",  "retention_class": "regulated",  "conflict_policy": "event-sourcing", "description": "New payment method tokenized + saved against a tenant. Carries provider + last4 + brand." },
+      { "name": "payment.succeeded.v1",        "retention_class": "regulated",  "conflict_policy": "event-sourcing", "description": "Charge captured successfully. Consumed by sdk-billing to advance invoice dunning state machine." },
+      { "name": "payment.failed.v1",           "retention_class": "regulated",  "conflict_policy": "event-sourcing", "description": "Charge declined or errored. Carries the provider-level decline_code for retry decisions." },
+      { "name": "payment.refunded.v1",         "retention_class": "regulated",  "conflict_policy": "event-sourcing", "description": "Refund issued. Full vs partial flagged in payload." },
+      { "name": "payment.distributed.v1",      "retention_class": "regulated",  "conflict_policy": "event-sourcing", "description": "Multi-party split distributed. Carries the per-party splits + provider transfer IDs." }
+    ],
+    "models": [
+      { "schema": "payment", "table": "payment_method",  "description": "Tokenized payment-method handle. Stores provider_id + token + last4 + brand + status. NEVER PAN." },
+      { "schema": "payment", "table": "charge",          "description": "Captured charge against a payment_method. Idempotency-key indexed for replay safety." },
+      { "schema": "payment", "table": "refund",          "description": "Per-charge refund log. Refunded_amount may be partial." },
+      { "schema": "payment", "table": "distribution",    "description": "Per-charge multi-party split: party_id, amount, transfer_id, status." }
+    ],
+    "hooks": [
+      { "name": "registerStripeAdapter", "description": "Default provider adapter; wired at gateway startup if STRIPE_SECRET_KEY is set. Other providers slot in via the same registerPaymentProvider() shape." }
+    ],
+    "ui_components": []
+  },
+  "consumes": {
+    "events": [
+      { "name": "tenant.offboarded.v1", "from": "@projexlight/sdk-tenant-lifecycle" }
+    ],
+    "infra": ["postgres", "stripe-or-equivalent-psp"],
+    "config_keys": ["STRIPE_SECRET_KEY", "STRIPE_WEBHOOK_SECRET", "PAYMENT_DEFAULT_CURRENCY"]
+  },
+  "scenarios": [
+    {
+      "id": "attach-card",
+      "title": "Attach a credit card to a tenant",
+      "when_to_use": "Self-serve checkout flow. Customer enters card details in the provider's tokenized form (Stripe Elements / equivalent); the resulting token is what we accept.",
+      "example_code": "const r = await fetch('/api/payments/methods', {\n  method: 'POST',\n  headers: { Authorization: 'Bearer ' + jwt, 'Content-Type': 'application/json' },\n  body: JSON.stringify({ provider_token: stripeToken, label: 'Acme Visa' }),\n});\nconst { payment_method_id } = (await r.json()).data;",
+      "expected_outcome": "Payment_method row created; PAN never persisted. Emits payment.method.attached.v1. Tenant-admin Billing page shows the masked card."
+    },
+    {
+      "id": "charge-monthly-invoice",
+      "title": "Charge a tenant's saved card for a finalized invoice",
+      "when_to_use": "End-of-period billing close. Driven by a worker that picks up billing.invoice.finalized.v1 and charges the saved method.",
+      "example_code": "import { charge } from '@projexlight/sdk-payment';\nconst res = await charge({\n  tenant_id, payment_method_id, amount_cents: invoice.total_cents, currency: 'usd',\n  idempotency_key: `invoice:${invoice.invoice_id}`,\n});",
+      "expected_outcome": "Returns { charge_id, status }. Emits payment.succeeded.v1 or payment.failed.v1. sdk-billing's dunning workflow consumes either to advance/halt the invoice state machine."
+    },
+    {
+      "id": "refund-partial",
+      "title": "Partial refund after customer dispute",
+      "when_to_use": "Support resolves a dispute; refund a subset of a previously captured charge.",
+      "example_code": "await fetch(`/api/payments/${charge_id}/refund`, {\n  method: 'POST', headers: { Authorization: 'Bearer ' + jwt },\n  body: JSON.stringify({ amount_cents: 1500, reason: 'partial-credit' }),\n});",
+      "expected_outcome": "Refund row written; provider receives the refund instruction. Emits payment.refunded.v1. Operator-visible in the per-tenant ledger."
+    },
+    {
+      "id": "marketplace-distribution",
+      "title": "Split a charge across multiple party recipients (marketplace flow)",
+      "when_to_use": "Reseller commissions, escrow releases, or marketplace seller payouts where one customer charge fans out to many recipients.",
+      "example_code": "await fetch(`/api/payments/${charge_id}/distribute`, {\n  method: 'POST', body: JSON.stringify({\n    splits: [\n      { party_id: 'acct_reseller', amount_cents: 1500 },\n      { party_id: 'acct_seller_a', amount_cents: 7000 },\n      { party_id: 'acct_platform_fee', amount_cents: 500 },\n    ],\n  }),\n});",
+      "expected_outcome": "Per-split distribution row created; provider issues the transfers. Emits payment.distributed.v1 with the transfer_id per party. Reconciles 1:1 against payment.succeeded.v1."
+    },
+    {
+      "id": "offboarding-detach",
+      "title": "Auto-detach payment methods on tenant offboard",
+      "when_to_use": "Reactive worker — consumes tenant.offboarded.v1, deletes attached methods at the provider, marks rows revoked.",
+      "example_code": "subscribeEvents('tenant.offboarded.v1', async (e) => {\n  await detachAllForTenant(e.tenant_id);\n});",
+      "expected_outcome": "All payment_method rows for the tenant flip to revoked; provider tokens deleted upstream. Idempotent — safe to replay."
+    }
+  ],
+  "compliance_posture": {
+    "regimes": ["PCI-DSS-SAQ-A", "SOC2", "SOX-revenue-recognition", "PSD2-SCA", "GDPR-Art-32"],
+    "notes": "PCI scope is SAQ-A (lowest tier) because we never touch PANs — provider iframes handle the card capture and we only ever hold tokens. STRIPE_WEBHOOK_SECRET verifies inbound provider notifications. PSD2 Strong Customer Authentication handled by provider — we surface SCA challenges via the redirect_url returned from charge()."
+  },
+  "pool_placement": "app",
+  "pricing_skus": [
+    { "sku": "payment.method.attach",  "mode": "flat",    "unit_description": "per attached method (free; provider per-attach fee passthrough)" },
+    { "sku": "payment.charge",         "mode": "metered", "unit_description": "per charge (provider passthrough + ProjexCloud platform fee)" },
+    { "sku": "payment.refund",         "mode": "flat",    "unit_description": "per refund issued (no platform fee on refunds)" },
+    { "sku": "payment.distribute",     "mode": "metered", "unit_description": "per split distribution (marketplace tier required)" }
+  ],
+  "links": {
+    "readme": "packages/sdk-payment/README.md",
+    "source": "packages/sdk-payment/src/",
+    "prd_section": "P4-Operational-Billing §9"
+  }
+}

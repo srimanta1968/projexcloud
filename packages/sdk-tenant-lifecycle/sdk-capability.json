@@ -1,0 +1,95 @@
+{
+  "name": "@projexlight/sdk-tenant-lifecycle",
+  "version": "0.1.0",
+  "schema_version": "1.0",
+  "summary": "Tenant lifecycle state machine for ProjexCloud: provisioned → trial → active → suspended ↔ active, plus offboarding → offboarded with a default 30-day grace clock. Owns sandbox creation (sanitized sub-pool spin-up for support / testing) and the post-offboard shred chain. Refuses invalid transitions; emits one event per legal transition for downstream SDKs (vault, meter, pool-router, billing) to react.",
+  "tags": ["tenant-lifecycle", "state-machine", "offboarding", "sandbox", "grace-period", "p4"],
+  "provides": {
+    "endpoints": [
+      { "method": "POST", "path": "/api/tenant-lifecycle/:tenant_id/suspend",   "description": "Suspend a tenant. Requires reason. Refuses if not in active|trial. Active sessions revoked + writes rejected at the gateway." },
+      { "method": "POST", "path": "/api/tenant-lifecycle/:tenant_id/reinstate", "description": "Reinstate a suspended tenant back to its prior state. Refuses if not in suspended." },
+      { "method": "POST", "path": "/api/tenant-lifecycle/:tenant_id/offboard",  "description": "Begin offboarding. Sets status=offboarding + deadline_at (default now + 30d). Grace period during which tenant data can still be exported." },
+      { "method": "POST", "path": "/api/tenant-lifecycle/sandbox",              "description": "Spin up a sanitized sandbox sub-pool under the calling tenant. Used for support reproductions / testing; PII masked per sanitization_policy." },
+      { "method": "GET",  "path": "/api/tenant-lifecycle/:tenant_id/state",     "description": "Read current lifecycle state + transition history + (if offboarding) the deadline_at clock." }
+    ],
+    "events": [
+      { "name": "tenant.lifecycle.transitioned.v1",     "retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "Any legal state transition. Carries old_state, new_state, reason, actor_id." },
+      { "name": "tenant.suspended.v1",                  "retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "Tenant moved to suspended. Gateway middleware uses this to reject writes." },
+      { "name": "tenant.reinstated.v1",                 "retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "Tenant moved back to its prior active state." },
+      { "name": "tenant.lifecycle.sandbox.created.v1",  "retention_class": "operational","conflict_policy": "lww",            "description": "Sandbox sub-pool spun up. Carries parent_tenant_id + sanitization_policy + expires_at." },
+      { "name": "tenant.offboarded.v1",                 "retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "Grace period elapsed; tenant.status flipped to offboarded; downstream SDKs (vault.shred, meter.purge, pool-router.detach, payment.detach-methods) fan out to scrub the tenant's footprint." },
+      { "name": "tenant.offboard.requested.v1",         "retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "Offboard initiated; tenant.status now offboarding. Grace clock started." }
+    ],
+    "models": [
+      { "schema": "tenant_lifecycle", "table": "transition_log",  "description": "Append-only log of every legal state transition per tenant. Forensic source for offboarding-window disputes." },
+      { "schema": "tenant_lifecycle", "table": "sandbox",         "description": "Sandbox sub-pool registry: parent_tenant_id, sanitization_policy, sub_tenant_id, expires_at, status." },
+      { "schema": "tenant_lifecycle", "table": "offboard_request","description": "Open offboarding clock: requested_at, deadline_at, requested_by, completion_at." }
+    ],
+    "hooks": [
+      { "name": "suspendTenant",                  "description": "Service function — requires reason. Idempotent: suspending an already-suspended tenant is a no-op." },
+      { "name": "reinstateTenant",                "description": "Service function — only legal from suspended." },
+      { "name": "offboardTenant",                 "description": "Service function — starts the 30-day grace clock. deadline_at parameter optional (default now+30d)." },
+      { "name": "createSandboxTenant",            "description": "Spins a sandbox sub-pool with the requested sanitization policy." },
+      { "name": "startOffboardDeadlineScheduler", "description": "Background worker that fires at the deadline to flip offboarding → offboarded and emit tenant.offboarded.v1." }
+    ],
+    "ui_components": []
+  },
+  "consumes": {
+    "events": [
+      { "name": "tenant.created.v1", "from": "@projexlight/sdk-tenant" }
+    ],
+    "infra": ["postgres"],
+    "config_keys": ["TENANT_LIFECYCLE_DEFAULT_GRACE_DAYS", "TENANT_LIFECYCLE_SCHEDULER_INTERVAL_MS"]
+  },
+  "scenarios": [
+    {
+      "id": "suspend-for-nonpayment",
+      "title": "Suspend a tenant for non-payment",
+      "when_to_use": "Operator-triggered (projexcloud-admin Tenants page) or workflow-triggered when sdk-billing's dunning advance hits the suspend threshold.",
+      "example_code": "import { suspendTenant } from '@projexlight/sdk-tenant-lifecycle';\nconst state = await suspendTenant(tenant_id, 'non-payment after 60d grace', operator_id);",
+      "expected_outcome": "tenant.status='suspended'. Emits tenant.lifecycle.transitioned.v1 + tenant.suspended.v1. Gateway middleware now rejects writes for this tenant with 423 Locked."
+    },
+    {
+      "id": "reinstate-after-payment",
+      "title": "Reinstate after customer pays the overdue balance",
+      "when_to_use": "Customer makes good on the overdue balance; the dunning workflow auto-reinstates.",
+      "example_code": "import { reinstateTenant } from '@projexlight/sdk-tenant-lifecycle';\nawait reinstateTenant(tenant_id, 'sdk-billing.dunning.cleared');",
+      "expected_outcome": "tenant.status reverts to active. Emits tenant.reinstated.v1. Gateway resumes normal write flow within Redis TTL invalidation."
+    },
+    {
+      "id": "offboard-with-grace",
+      "title": "Customer requests offboard; 30-day grace before shred",
+      "when_to_use": "Customer ends contract. Default 30-day grace lets them export everything; can be tightened (e.g. immediate shred for regulatory holds) or extended via the deadline_at parameter.",
+      "example_code": "import { offboardTenant } from '@projexlight/sdk-tenant-lifecycle';\nconst state = await offboardTenant(tenant_id, operator_id, new Date(Date.now() + 30 * 86_400_000));",
+      "expected_outcome": "tenant.status='offboarding'; offboard_request row created. Emits tenant.offboard.requested.v1. Background scheduler watches deadline_at; on hit, transitions to offboarded + emits tenant.offboarded.v1 which fans out to every other SDK's shred handler."
+    },
+    {
+      "id": "create-support-sandbox",
+      "title": "Spin up a sanitized sandbox for support reproduction",
+      "when_to_use": "Support engineer needs to reproduce a customer bug against a copy of their data with PII masked. Sandbox lives for a limited window then auto-tears down.",
+      "example_code": "await fetch('/api/tenant-lifecycle/sandbox', {\n  method: 'POST', headers: { Authorization: 'Bearer ' + jwt },\n  body: JSON.stringify({ sanitization_policy: 'mask-pii-redact-secrets', expires_at: new Date(Date.now() + 7 * 86_400_000) }),\n});",
+      "expected_outcome": "Sandbox sub-tenant created under the parent. PII masked per policy; secrets redacted. Emits tenant.lifecycle.sandbox.created.v1. Auto-shredded at expires_at."
+    },
+    {
+      "id": "deadline-flipper-fires",
+      "title": "Background scheduler flips offboarding → offboarded at the deadline",
+      "when_to_use": "Production deployment. The scheduler is the source of truth for when shred happens — no manual flip required.",
+      "example_code": "import { startOffboardDeadlineScheduler } from '@projexlight/sdk-tenant-lifecycle';\nconst worker = startOffboardDeadlineScheduler({ intervalMs: 3_600_000 });\n// graceful shutdown:\nawait worker.stop();",
+      "expected_outcome": "Worker polls offboard_request rows; when deadline_at < now, transitions tenant + emits tenant.offboarded.v1. Downstream SDKs each fan out their shred handlers. Audit chain shows the full timeline for forensic / dispute resolution."
+    }
+  ],
+  "compliance_posture": {
+    "regimes": ["SOC2", "GDPR-Art-17-right-to-erasure", "HIPAA-data-destruction-164.310(d)(2)(i)", "FedRAMP-MP-6", "SOX-record-retention"],
+    "notes": "Grace period default 30 days satisfies GDPR Art-17 'without undue delay' for non-EU jurisdictions; configurable to 0 days for regulatory-hold cases (immediate shred) or 90 days for tenants with custom contract terms. Transition log retained 7 years post-offboard to satisfy SOX + dispute resolution."
+  },
+  "pool_placement": "admin",
+  "pricing_skus": [
+    { "sku": "tenant-lifecycle.transition", "mode": "flat",    "unit_description": "per transition (suspend / reinstate / offboard — free)" },
+    { "sku": "tenant-lifecycle.sandbox",    "mode": "metered", "unit_description": "per sandbox spin-up + per day of sandbox lifetime" }
+  ],
+  "links": {
+    "readme": "packages/sdk-tenant-lifecycle/README.md",
+    "source": "packages/sdk-tenant-lifecycle/src/",
+    "prd_section": "P4-Operational-Billing §10 / FR-TLC-1..6"
+  }
+}

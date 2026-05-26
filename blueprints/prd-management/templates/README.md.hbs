@@ -1,0 +1,55 @@
+# {{app_name}}
+
+PRD / spec management workspace — scaffolded from **{{blueprint_title}}**
+(Projexlight dogfood blueprint per PRD §5.7).
+
+## Configuration
+
+| Choice | Value |
+|---|---|
+| Hierarchy depth | `{{hierarchy_depth}}` |
+| AI-assisted authoring | `{{ai_review_enabled}}` |
+| Billing model | `{{billing_model}}` |
+
+## Layout
+
+- `src/prd/projects.ts` — Project + Epic CRUD
+- `src/prd/features.ts` — Feature + AI-assisted scenario generation +
+  approval-gate wiring
+- `db/migrations/001_prd_init.sql` — `prd.{project, epic, feature,
+  scenario, task}` tables
+
+## Hierarchy
+
+```
+Project → Epic → Feature → Scenario → Task
+                   ↑           ↑         ↑
+                   |           |         └─ assignee_persona_id, status
+                   |           └─ Given/When/Then JSON
+                   └─ acceptance_criteria, approval workflow
+```
+
+## Heritage
+
+Projexlight (the product) runs its own production on top of this
+blueprint plus a private AI-review SDK. The private SDK is NOT shipped
+in this blueprint per the Q-9 decision in the P9 PRD — customers who
+install this get the spec storage + AI gateway substrate but author
+their own review logic on top.
+
+## Next
+
+```sh
+projex install @projexlight/sdk-projection
+projex install @projexlight/sdk-identity
+projex install @projexlight/sdk-audit
+projex install @projexlight/sdk-billing
+projex install @projexlight/sdk-meter
+projex install @projexlight/sdk-ai-gateway
+projex install @projexlight/sdk-knowledge-rag
+projex install @projexlight/sdk-approval
+projex install @projexlight/sdk-webhook
+projex install @projexlight/sdk-api-keys
+```
+
+Or re-apply with `--install-sdks` to do all ten at once.

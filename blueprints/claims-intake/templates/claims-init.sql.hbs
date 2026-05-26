@@ -1,0 +1,29 @@
+-- {{app_name}} — Claims schema (blueprint: {{blueprint_id}})
+-- Settlement path: {{settlement_path}}
+-- Photo auto-redaction default: {{photo_redaction_default}}
+
+CREATE SCHEMA IF NOT EXISTS claims;
+
+CREATE TABLE IF NOT EXISTS claims.claim (
+  claim_id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id           UUID NOT NULL,
+  policy_id           UUID NOT NULL,
+  reporter_email      TEXT NOT NULL,
+  description         TEXT NOT NULL,
+  amount_claimed_cents INTEGER,
+  status              TEXT NOT NULL DEFAULT 'submitted'
+                        CHECK (status IN ('submitted','triage','in-review','siu-review','approved','denied','paid')),
+  evidence_ids        UUID[] NOT NULL DEFAULT '{}',
+  created_at          TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS claim_tenant_status_idx ON claims.claim (tenant_id, status);
+
+CREATE TABLE IF NOT EXISTS claims.decision (
+  decision_id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  claim_id               UUID NOT NULL REFERENCES claims.claim(claim_id) ON DELETE CASCADE,
+  decided_by_persona_id  UUID NOT NULL,
+  outcome                TEXT NOT NULL CHECK (outcome IN ('approve','deny')),
+  reason                 TEXT NOT NULL,
+  amount_approved_cents  INTEGER,
+  decided_at             TIMESTAMPTZ NOT NULL DEFAULT now()
+);

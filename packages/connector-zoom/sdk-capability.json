@@ -1,0 +1,91 @@
+{
+  "name": "@projexlight/connector-zoom",
+  "version": "1.0.0",
+  "schema_version": "1.0",
+  "summary": "Zoom connector: OAuth install + meeting scheduling + recording ingest. Lets a ProjexCloud encounter (sales demo, support call, customer onboarding) create + reconcile against a real Zoom meeting + pull the recording into sdk-media + sdk-evidence for archive.",
+  "tags": ["connector", "zoom", "meetings", "recordings", "oauth"],
+  "provides": {
+    "endpoints": [],
+    "events": [
+      { "name": "connector-zoom.install.created.v1",     "retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "Zoom OAuth complete." },
+      { "name": "connector-zoom.meeting.scheduled.v1",   "retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "Meeting created in Zoom against a ProjexCloud encounter." },
+      { "name": "connector-zoom.meeting.started.v1",     "retention_class": "operational","conflict_policy": "lww",            "description": "Zoom reports meeting actually started." },
+      { "name": "connector-zoom.meeting.ended.v1",       "retention_class": "operational","conflict_policy": "event-sourcing", "description": "Meeting ended; carries duration + participant count." },
+      { "name": "connector-zoom.recording.ingested.v1",  "retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "Recording pulled into sdk-media; carries blob_id + sha256." }
+    ],
+    "models": [
+      { "schema": "connector_zoom", "table": "zoom_meeting",   "description": "Per-meeting row: zoom_meeting_id, host_user_id, encounter_id, status." },
+      { "schema": "connector_zoom", "table": "zoom_recording", "description": "Per-recording row: meeting_id, media_blob_id (sdk-media), duration_sec." }
+    ],
+    "hooks": [
+      { "name": "installConnector",    "description": "OAuth install + refresh-token storage." },
+      { "name": "scheduleMeeting",     "description": "Create a Zoom meeting against a ProjexCloud encounter; returns join_url." },
+      { "name": "handleWebhook",       "description": "Process Zoom webhook (started, ended, recording.completed)." },
+      { "name": "ingestRecording",     "description": "Pull a finished recording into sdk-media + link to the meeting row." },
+      { "name": "startRecordingPoller","description": "Background worker: catches recordings that webhook didn't deliver." }
+    ],
+    "ui_components": []
+  },
+  "consumes": {
+    "events": [
+      { "name": "tenant.offboarded.v1",      "from": "@projexlight/sdk-tenant-lifecycle" },
+      { "name": "secrets.secret.rotated.v1", "from": "@projexlight/sdk-secrets" }
+    ],
+    "infra": ["postgres", "sdk-secrets", "sdk-webhook", "sdk-media"],
+    "config_keys": ["ZOOM_API_VERSION", "ZOOM_WEBHOOK_VERIFY_TOKEN_REF", "ZOOM_RECORDING_INGEST_TIMEOUT_MS"]
+  },
+  "scenarios": [
+    {
+      "id": "install-zoom",
+      "title": "Tenant connects Zoom account",
+      "when_to_use": "Admin grants OAuth scopes for meeting + recording access.",
+      "example_code": "import { installConnector } from '@projexlight/connector-zoom';\nconst { install_id } = await installConnector({ tenant_id, auth_code });",
+      "expected_outcome": "Install row + vault-wrapped refresh token."
+    },
+    {
+      "id": "schedule-demo-meeting",
+      "title": "Sales encounter creates a Zoom meeting",
+      "when_to_use": "Sales rep books a demo; ProjexCloud calls scheduleMeeting to create the matching Zoom meeting + sends the join_url via sdk-notification.",
+      "example_code": "import { scheduleMeeting } from '@projexlight/connector-zoom';\nconst { join_url, zoom_meeting_id } = await scheduleMeeting({\n  tenant_id, encounter_id,\n  host_email: rep.email,\n  topic: 'ACME × ProjexCloud demo', start_time, duration_min: 30,\n});",
+      "expected_outcome": "Meeting created + link stored. Emits .meeting.scheduled.v1."
+    },
+    {
+      "id": "ingest-recording",
+      "title": "Recording completed → pulled into sdk-media + sdk-evidence",
+      "when_to_use": "Webhook fires recording.completed; we pull the recording bytes into sdk-media, then sdk-evidence registers a capture for archive.",
+      "example_code": "import { ingestRecording } from '@projexlight/connector-zoom';\nawait ingestRecording({\n  tenant_id, zoom_meeting_id, recording_url,\n});",
+      "expected_outcome": "Recording stored in sdk-media (presigned upload); evidence capture written; emits .recording.ingested.v1 with blob_id."
+    },
+    {
+      "id": "webhook-meeting-ended",
+      "title": "Webhook updates meeting duration + participant count",
+      "when_to_use": "Zoom fires meeting.ended; we update the row + project duration into sdk-projection for billing / utilization analytics.",
+      "example_code": "import { handleWebhook } from '@projexlight/connector-zoom';\nawait handleWebhook({ tenant_id, signature, body, event_type: 'meeting.ended' });",
+      "expected_outcome": "Meeting row updated; emits .meeting.ended.v1."
+    },
+    {
+      "id": "recording-poller",
+      "title": "Poller backstops missed webhook events",
+      "when_to_use": "Zoom occasionally drops webhooks; the poller scans recent meetings every 15 min to catch any recording the webhook missed.",
+      "example_code": "import { startRecordingPoller } from '@projexlight/connector-zoom';\nstartRecordingPoller({ tenant_id, interval_min: 15 });",
+      "expected_outcome": "Missing recordings caught + ingested; emits .recording.ingested.v1 with reason='poller-backstop'."
+    }
+  ],
+  "compliance_posture": {
+    "regimes": ["SOC2-CC6.7-third-party", "GDPR-Art-28", "HIPAA-164.502-meetings", "Zoom-Trust-Center"],
+    "notes": "Refresh tokens vault-wrapped; webhook verify-token mandatory. HIPAA tenants pin to Zoom for Healthcare; recordings ingested under retention_class='regulated' so retention shredder honors policy."
+  },
+  "pool_placement": "app",
+  "pricing_skus": [
+    { "sku": "connector-zoom.install",          "mode": "flat",    "unit_description": "per active account per month" },
+    { "sku": "connector-zoom.meeting.schedule", "mode": "metered", "unit_description": "per meeting scheduled" },
+    { "sku": "connector-zoom.recording.ingest", "mode": "metered", "unit_description": "per recording pulled" },
+    { "sku": "connector-zoom.webhook",          "mode": "metered", "unit_description": "per ingested webhook" }
+  ],
+  "no_endpoints": true,
+  "links": {
+    "readme": "packages/connector-zoom/README.md",
+    "source": "packages/connector-zoom/src/",
+    "prd_section": "P6B-Connectors §6"
+  }
+}

@@ -1,0 +1,92 @@
+{
+  "name": "@projexlight/sdk-conversation",
+  "version": "1.0.0",
+  "schema_version": "1.0",
+  "summary": "Multi-turn conversation substrate for ProjexCloud: organize messages into Sessions (per-tenant + per-(patient,provider) or per-(customer,agent)), track Turns (human + AI), and support Handoffs (AI → human, agent → senior, async → sync). Backed by envelope-encrypted message bodies via sdk-vault; consumed by patient-portal secure messaging, support-bot chat, and the cloud-builder dialog.",
+  "tags": ["conversation", "messaging", "secure-chat", "ai-handoff", "p6b"],
+  "provides": {
+    "endpoints": [],
+    "events": [
+      { "name": "conversation.session.opened.v1",  "retention_class": "regulated",  "conflict_policy": "event-sourcing", "description": "New session opened between two or more personas. Carries channel kind (patient↔provider, customer↔agent, agent↔ai, cloud-builder)." },
+      { "name": "conversation.turn.posted.v1",     "retention_class": "regulated",  "conflict_policy": "event-sourcing", "description": "One turn added (human or AI). Encrypted body envelope ref + token usage if AI." },
+      { "name": "conversation.handoff.completed.v1","retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "Handoff completed (AI → human or human → human). New owner persona attached to the session." },
+      { "name": "conversation.session.closed.v1",  "retention_class": "regulated",  "conflict_policy": "event-sourcing", "description": "Session closed (resolved / abandoned / archived). Triggers retention-policy timer." }
+    ],
+    "models": [
+      { "schema": "conversation", "table": "session",  "description": "Session header: tenant_id, channel_kind, participants (persona ids), opened_at, closed_at, status." },
+      { "schema": "conversation", "table": "turn",     "description": "One row per message: session_id, author_persona_id, author_kind (human / agent / system), body_envelope, body_dek_id, sent_at, redactions_applied[]." },
+      { "schema": "conversation", "table": "handoff",  "description": "Per-handoff row: session_id, from_persona_id, to_persona_id, reason, completed_at." }
+    ],
+    "hooks": [
+      { "name": "openSession",     "description": "Start a new conversation. Returns session_id; participants attached." },
+      { "name": "postTurn",        "description": "Append a turn. Body is envelope-encrypted via sdk-vault before persistence." },
+      { "name": "requestHandoff",  "description": "Request a handoff (AI → human, agent → senior). Pending until accepted." },
+      { "name": "acceptHandoff",   "description": "New owner accepts; session.owner_persona updates; emits handoff.completed.v1." },
+      { "name": "closeSession",    "description": "Mark closed with a resolution + retention policy id. Retention timer starts." }
+    ],
+    "ui_components": [
+      { "name": "ConversationView", "description": "Threaded message view with handoff banner + AI-vs-human badge per turn." }
+    ]
+  },
+  "consumes": {
+    "events": [
+      { "name": "ai-gateway.completion.v1",   "from": "@projexlight/sdk-ai-gateway" },
+      { "name": "consent.receipt.revoked.v1", "from": "@projexlight/sdk-consent" }
+    ],
+    "infra": ["postgres", "sdk-vault", "ai-gateway"],
+    "config_keys": ["CONVERSATION_DEFAULT_RETENTION_DAYS", "CONVERSATION_MAX_TURNS_PER_SESSION"]
+  },
+  "scenarios": [
+    {
+      "id": "patient-provider-thread",
+      "title": "Patient ↔ provider secure messaging thread",
+      "when_to_use": "Patient-portal blueprint surface. Encrypted under tenant or encounter key; every message a chain-of-audit entry.",
+      "example_code": "import { openSession, postTurn } from '@projexlight/sdk-conversation';\nconst { session_id } = await openSession({\n  tenant_id, channel_kind: 'patient-provider',\n  participants: [patient_persona_id, provider_persona_id],\n});\nawait postTurn({ session_id, author_persona_id: patient_persona_id, body: 'Hi, my rash has spread.' });",
+      "expected_outcome": "Session row + turn row written. Body envelope-encrypted; the conversation.turn row stores body_envelope + body_dek_id only. Audit chain entry per turn."
+    },
+    {
+      "id": "ai-then-human-handoff",
+      "title": "AI bot answers first, escalates to a human after 3 turns",
+      "when_to_use": "Support flow — AI handles tier-1 questions, hands off to a human when it can't resolve or when the customer asks.",
+      "example_code": "import { postTurn, requestHandoff, acceptHandoff } from '@projexlight/sdk-conversation';\nawait postTurn({ session_id, author_persona_id: AI_PERSONA, body: 'I can help with billing questions. What's your invoice number?' });\n// ...AI determines it needs human help...\nconst { handoff_id } = await requestHandoff({ session_id, from_persona_id: AI_PERSONA, to_persona_id: HUMAN_AGENT, reason: 'requires policy override' });\nawait acceptHandoff({ handoff_id, accepted_by_persona_id: HUMAN_AGENT });",
+      "expected_outcome": "session.owner_persona transitions to the human agent. Customer sees a banner explaining the handoff. Emits conversation.handoff.completed.v1 for audit + ops."
+    },
+    {
+      "id": "cloud-builder-dialog",
+      "title": "Cloud-builder agent uses this for its chat surface",
+      "when_to_use": "E6 cloud builder /build surface; conversation persists across page reloads via the session id.",
+      "example_code": "// The E6 cloud-builder front-end opens a session per build attempt:\nconst { session_id } = await openSession({\n  tenant_id, channel_kind: 'cloud-builder',\n  participants: [user_persona_id, BUILDER_AGENT_PERSONA],\n});\n// Every user message + every agent step → postTurn",
+      "expected_outcome": "Replayable build session — operator can later inspect every prompt + response in the conversation, paired with the matching audit + MCP tool-call trail."
+    },
+    {
+      "id": "ai-turn-with-completion-link",
+      "title": "AI turn linked back to its ai-gateway completion",
+      "when_to_use": "Compliance / debugging — given a turn from the AI, reconstruct exactly which provider + prompt + tokens produced it.",
+      "example_code": "// postTurn for an AI author stamps the ai_gateway.completion.id into the turn metadata:\nawait postTurn({\n  session_id, author_persona_id: AGENT_PERSONA, author_kind: 'agent',\n  body: completion.message.content,\n  ai_metadata: { completion_id: completion.id, provider: completion.provider, model: completion.model, usage: completion.usage },\n});",
+      "expected_outcome": "Turn carries completion_id. Operator can join conversation.turn ↔ ai_gateway.completion to get the full provenance — prompt, model, redactions, usage. Satisfies EU AI Act Annex IV."
+    },
+    {
+      "id": "retention-on-close",
+      "title": "Closed session → retention timer fires after policy window",
+      "when_to_use": "Patient-provider sessions retained 7 years (HIPAA); cloud-builder sessions retained 30 days. Both driven by retention policy id at session close.",
+      "example_code": "import { closeSession } from '@projexlight/sdk-conversation';\nawait closeSession({\n  session_id, resolution: 'resolved',\n  retention_policy_id: 'hipaa-7y',\n});",
+      "expected_outcome": "session.closed_at + retention_policy_id set. Background worker walks sessions past retention; encrypts + cold-stores, then shreds the DEK so bodies become undecryptable."
+    }
+  ],
+  "compliance_posture": {
+    "regimes": ["HIPAA-164.312(e)(1)-transmission-security", "GDPR-Art-32", "SEC-17a-4-broker-dealer-comms-retention", "EU-AI-Act-Annex-IV-logging"],
+    "notes": "Message bodies envelope-encrypted via sdk-vault at-rest. AI turns carry the completion_id for EU AI Act per-turn provenance. Retention timers strictly enforced — shredding the DEK at retention expiry is irreversible (BYOK Variant A tenants control their own DEK)."
+  },
+  "pool_placement": "app",
+  "pricing_skus": [
+    { "sku": "conversation.turn",     "mode": "metered", "unit_description": "per turn posted (human or AI)" },
+    { "sku": "conversation.handoff",  "mode": "metered", "unit_description": "per handoff completed" },
+    { "sku": "conversation.retention","mode": "flat",    "unit_description": "per GB-month of retained-after-close body storage" }
+  ],
+  "no_endpoints": true,
+  "links": {
+    "readme": "packages/sdk-conversation/README.md",
+    "source": "packages/sdk-conversation/src/",
+    "prd_section": "P6B-Knowledge-Semantic §6"
+  }
+}

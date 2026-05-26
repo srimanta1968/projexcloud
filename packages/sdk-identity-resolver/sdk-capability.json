@@ -1,0 +1,84 @@
+{
+  "name": "@projexlight/sdk-identity-resolver",
+  "version": "1.0.0",
+  "schema_version": "1.0",
+  "summary": "Identity-resolution layer for ProjexCloud: given a partial signal (email, phone, anonymous device cookie, IP block, Salesforce contact id), return the canonical persona + the resolution explanation (what fields matched, what confidence, which version of the matching rules). Foundation for any 'who is this' workflow — anonymous-visitor-to-known-contact, multi-channel attribution, de-duplication.",
+  "tags": ["identity", "resolver", "matching", "attribution", "p2"],
+  "provides": {
+    "endpoints": [
+      { "method": "POST", "path": "/api/resolver/resolve",  "description": "Resolve a signal bundle to the most-likely persona; returns persona_id + confidence + matched fields." },
+      { "method": "POST", "path": "/api/resolver/explain",  "description": "Explain a past resolution — which rules fired, which fields matched." }
+    ],
+    "events": [
+      { "name": "identity-resolver.resolution.v1", "retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "Per-resolution row: input signals, resolved persona, matched_rules_json, confidence." },
+      { "name": "identity-resolver.merge.suggested.v1", "retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "Two distinct personas look like they should merge (high cross-match confidence). Suggested, not applied — operator confirms." }
+    ],
+    "models": [],
+    "hooks": [
+      { "name": "resolve", "description": "Resolve a signal bundle to a persona; returns persona_id + confidence + matched fields." },
+      { "name": "explain", "description": "Explain a past resolution: which rules fired, which fields matched, which confidence threshold applied." }
+    ],
+    "ui_components": []
+  },
+  "consumes": {
+    "events": [
+      { "name": "crm.contact.created.v1",   "from": "@projexlight/sdk-crm" },
+      { "name": "persona.app_identity.created.v1","from": "@projexlight/sdk-persona" }
+    ],
+    "infra": ["postgres", "redis-optional"],
+    "config_keys": ["RESOLVER_CONFIDENCE_AUTO_THRESHOLD", "RESOLVER_MERGE_SUGGEST_THRESHOLD", "RESOLVER_RULE_VERSION"]
+  },
+  "scenarios": [
+    {
+      "id": "anonymous-to-known",
+      "title": "Anonymous web visitor converts → resolve to existing contact",
+      "when_to_use": "Visitor filled a form with their email; resolver matches the email + the device cookie to an existing contact, attributing past sessions retroactively.",
+      "example_code": "import { resolve } from '@projexlight/sdk-identity-resolver';\nconst r = await resolve({\n  tenant_id, signals: { email: 'alice@acme.com', device_cookie, ip_block: '203.0.113.0/24' },\n});\n// r = { persona_id, confidence: 0.95, matched_fields: ['email','device_cookie'] }",
+      "expected_outcome": "Returns existing persona + confidence + matched fields. Past anonymous sessions retroactively attributed."
+    },
+    {
+      "id": "phone-only-resolve",
+      "title": "Inbound call → resolve from phone number",
+      "when_to_use": "Inbound voice call; we have only the phone number — resolver matches against contact + lead phone fields.",
+      "example_code": "const r = await resolve({\n  tenant_id, signals: { phone: '+1 617 555 0142' },\n});\n// r = { persona_id, confidence: 0.78, matched_fields: ['phone'] }",
+      "expected_outcome": "Best-match persona returned. Below RESOLVER_CONFIDENCE_AUTO_THRESHOLD the caller decides whether to act."
+    },
+    {
+      "id": "explain-resolution",
+      "title": "Customer-success rep asks: why did we attribute this session to Alice?",
+      "when_to_use": "Reviewer wants the trail for any past resolution — explain returns the rules that fired + which fields matched + the rule-set version at the time.",
+      "example_code": "import { explain } from '@projexlight/sdk-identity-resolver';\nconst x = await explain({ resolution_id });\n// x = { rules: [...], matched_fields: [...], rule_version: '2.1.0', evaluated_at }",
+      "expected_outcome": "Full reproducible trace. Sufficient for GDPR Art-22 + EU AI Act explainability."
+    },
+    {
+      "id": "merge-suggestion",
+      "title": "Two contacts look like the same person → merge suggested",
+      "when_to_use": "Same email-pattern + similar names + overlapping company; resolver flags as merge candidate (not auto-applied — operator confirms).",
+      "example_code": "// .merge.suggested.v1 fires; tenant-admin UI surfaces the candidates with reasons.\nsubscribeEvents('identity-resolver.merge.suggested.v1', async (e) => {\n  await queueOperatorReview({ candidates: e.payload.candidates });\n});",
+      "expected_outcome": "Operator reviews + accepts/rejects. Accepted merges flow through sdk-crm's merge path."
+    },
+    {
+      "id": "salesforce-id-resolve",
+      "title": "Resolve a Salesforce contact ID → ProjexCloud persona",
+      "when_to_use": "Inbound from connector-salesforce — we receive an SF Contact ID and need the matching ProjexCloud persona to attach activity.",
+      "example_code": "const r = await resolve({\n  tenant_id, signals: { external_ids: [{ system: 'salesforce', kind: 'Contact', id: '003...' }] },\n});",
+      "expected_outcome": "Direct match via the external_id mapping; high confidence. Caller attaches activity to the resolved persona."
+    }
+  ],
+  "compliance_posture": {
+    "regimes": ["GDPR-Art-22-automated-decisions", "EU-AI-Act-Annex-IV-explainability", "SOC2-CC7.1", "CCPA-Section-1798"],
+    "notes": "Every resolution pinned to the rule-set version + the matched fields, so a regulator can replay how an identity was inferred. Merge suggestions never auto-apply for high-stakes verticals (healthcare / finserv) — operator confirmation required."
+  },
+  "pool_placement": "admin",
+  "pricing_skus": [
+    { "sku": "identity-resolver.resolve", "mode": "metered", "unit_description": "per resolution" },
+    { "sku": "identity-resolver.explain", "mode": "metered", "unit_description": "per explanation served" },
+    { "sku": "identity-resolver.merge-suggest", "mode": "metered", "unit_description": "per merge candidate suggested" }
+  ],
+  "no_endpoints": false,
+  "links": {
+    "readme": "packages/sdk-identity-resolver/README.md",
+    "source": "packages/sdk-identity-resolver/src/",
+    "prd_section": "P2-Identity-Access §9 / FR-IDR-1..4"
+  }
+}

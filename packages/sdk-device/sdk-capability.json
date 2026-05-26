@@ -1,0 +1,93 @@
+{
+  "name": "@projexlight/sdk-device",
+  "version": "1.0.0",
+  "schema_version": "1.0",
+  "summary": "Device registry + attestation for ProjexCloud field operations: enroll a physical device (phone, tablet, body cam, vehicle terminal), link to a tech persona, run periodic attestation checks (OS integrity, jailbreak status, security patch level), and revoke when device is lost / out-of-policy. Underpins hdk-camera + sdk-evidence chain-of-custody — only attested devices can produce admissible evidence.",
+  "tags": ["device", "attestation", "field-service", "chain-of-custody", "p7"],
+  "provides": {
+    "endpoints": [
+      { "method": "POST", "path": "/api/devices",                              "description": "Enroll a new device (phone/tablet/body-cam/vehicle terminal). Returns device_uuid + enrollment token." },
+      { "method": "GET",  "path": "/api/devices/:device_uuid",                 "description": "Fetch a single device record + its current attestation status." },
+      { "method": "POST", "path": "/api/devices/:device_uuid/attest",          "description": "Run an attestation check; carries platform-signed integrity blob." }
+    ],
+    "events": [
+      { "name": "device.enrolled.v1",              "retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "New device enrolled + linked to a tech persona." },
+      { "name": "device.attestation.passed.v1",    "retention_class": "regulated", "conflict_policy": "lww",            "description": "Periodic attestation succeeded; device remains trusted." },
+      { "name": "device.attestation.failed.v1",    "retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "Attestation failed (jailbroken, patch out-of-date, integrity blob invalid)." },
+      { "name": "device.attestation.revoked.v1",   "retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "Operator (or auto-policy) revoked trust on a device; sdk-evidence + hdk-camera will refuse to register new captures." },
+      { "name": "device.person_link.changed.v1",   "retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "Device reassigned to a different persona (handoff, transfer, decommission)." }
+    ],
+    "models": [
+      { "schema": "device", "table": "device",      "description": "Per-device row: device_uuid, kind, model, os_version, enrolled_at, current_persona_id." },
+      { "schema": "device", "table": "attestation", "description": "Per-attestation log: timestamp, signal (passed/failed/revoked), platform integrity blob hash, reason." },
+      { "schema": "device", "table": "person_link", "description": "Per-link history: device_uuid, persona_id, linked_at, unlinked_at." }
+    ],
+    "hooks": [
+      { "name": "enrollDevice",     "description": "Service entry — register a device + bind to a tech persona; returns enrollment token used by the mobile client for subsequent API calls." },
+      { "name": "runAttestation",   "description": "Process a platform-signed integrity blob (DeviceCheck / Play Integrity / Windows TPM). Updates status + emits the appropriate event." },
+      { "name": "revokeTrust",      "description": "Operator-driven revoke with a reason. Emits .attestation.revoked.v1 which sdk-evidence + hdk-camera react to." },
+      { "name": "reassignDevice",   "description": "Reassign device to a different persona (tech transfer, decommission). Audited." },
+      { "name": "startAttestationCron","description": "Background worker — schedules periodic attestation per device. Safe to leave running in dev." }
+    ],
+    "ui_components": []
+  },
+  "consumes": {
+    "events": [
+      { "name": "tenant.offboarded.v1", "from": "@projexlight/sdk-tenant-lifecycle" }
+    ],
+    "infra": ["postgres", "apple-devicecheck-or-google-play-integrity", "redis-optional"],
+    "config_keys": ["DEVICE_ATTESTATION_INTERVAL_HOURS", "DEVICE_REVOKE_GRACE_MIN", "DEVICE_REQUIRED_OS_PATCH_LEVEL"]
+  },
+  "scenarios": [
+    {
+      "id": "enroll-field-tablet",
+      "title": "Onboarding: enroll a new tech's field tablet",
+      "when_to_use": "First-day setup. Tech installs the mobile app, scans an enrollment QR; sdk-device creates the device row + binds it to the tech's persona.",
+      "example_code": "import { enrollDevice } from '@projexlight/sdk-device';\nconst { device_uuid, enrollment_token } = await enrollDevice({\n  tenant_id, persona_id, kind: 'tablet', model: 'iPad-12.9-2024',\n  os_version: 'iOS-18.4', platform_id_blob,\n});",
+      "expected_outcome": "Device row written + linked. Emits .enrolled.v1. Mobile client stores enrollment_token + uses it on all subsequent API + attestation calls."
+    },
+    {
+      "id": "periodic-attestation-pass",
+      "title": "Device passes daily attestation",
+      "when_to_use": "Cron-driven nightly check. Mobile client uploads a fresh platform integrity blob; sdk-device validates against Apple DeviceCheck / Play Integrity + records the pass.",
+      "example_code": "import { runAttestation } from '@projexlight/sdk-device';\nawait runAttestation({\n  device_uuid, platform_integrity_blob,\n  os_version: 'iOS-18.4', patch_level: '2026-05',\n});",
+      "expected_outcome": "Attestation row written status='passed'. Emits .attestation.passed.v1. Device remains trusted; sdk-evidence + hdk-camera continue accepting captures."
+    },
+    {
+      "id": "jailbreak-detected",
+      "title": "Jailbroken device fails attestation → auto-revoke",
+      "when_to_use": "Integrity blob indicates jailbreak; attestation fails. Auto-policy emits .attestation.revoked.v1 within DEVICE_REVOKE_GRACE_MIN so a malicious tech can't burst-upload captures.",
+      "example_code": "// runAttestation logic:\nif (!integrityValid) {\n  await recordFailedAttestation({ device_uuid, reason: 'jailbreak-detected' });\n  scheduleAutoRevoke({ device_uuid, grace_min: DEVICE_REVOKE_GRACE_MIN });\n}",
+      "expected_outcome": "Emits .attestation.failed.v1 immediately + .attestation.revoked.v1 after grace. Ops paged. hdk-camera + sdk-evidence stop accepting captures from this device_uuid."
+    },
+    {
+      "id": "lost-device-revoke",
+      "title": "Tech reports lost tablet → operator revokes trust",
+      "when_to_use": "Tech reports the tablet stolen; operator revokes the device immediately so any captures from it are flagged unadmissible.",
+      "example_code": "import { revokeTrust } from '@projexlight/sdk-device';\nawait revokeTrust({\n  device_uuid, reason: 'reported-lost',\n  operator_persona_id,\n});",
+      "expected_outcome": "Device status=revoked; emits .attestation.revoked.v1. hdk-camera + sdk-evidence reject new uploads. Existing captures retained but flagged with the revocation timestamp for adjudication."
+    },
+    {
+      "id": "device-handoff",
+      "title": "Tech leaves company → reassign tablet to replacement",
+      "when_to_use": "Personnel change. Reassign the device to the new tech's persona; person_link history retains the prior linkage for audit.",
+      "example_code": "import { reassignDevice } from '@projexlight/sdk-device';\nawait reassignDevice({\n  device_uuid, new_persona_id,\n  reason: 'tech-transfer', operator_persona_id,\n});",
+      "expected_outcome": "Old person_link closed at unlinked_at; new link opened. Emits .person_link.changed.v1. Captures going forward attribute to the new persona; historical captures retain the original persona pin."
+    }
+  ],
+  "compliance_posture": {
+    "regimes": ["SOC2-CC6.6-endpoint", "ISO-27001-Annex-A-8-asset-management", "FRE-Rule-902-self-authentication", "HIPAA-164.310-physical-safeguards"],
+    "notes": "Federal Rules of Evidence 902 self-authentication chain extends through this SDK — captures are admissible only when traceable to an attested device at capture-time. ISO 27001 asset management satisfied by enrollment + reassignment + revoke audit trail. Jailbreak detection + auto-revoke kill the burst-upload attack window."
+  },
+  "pool_placement": "app",
+  "pricing_skus": [
+    { "sku": "device.enroll",       "mode": "flat",    "unit_description": "per device enrolled" },
+    { "sku": "device.attestation",  "mode": "metered", "unit_description": "per attestation check (background)" },
+    { "sku": "device.revoke",       "mode": "flat",    "unit_description": "per revocation (audited)" }
+  ],
+  "links": {
+    "readme": "packages/sdk-device/README.md",
+    "source": "packages/sdk-device/src/",
+    "prd_section": "P7-Field-Hyperscale §9 / FR-DEV-1..4"
+  }
+}

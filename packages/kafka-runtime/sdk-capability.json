@@ -1,0 +1,87 @@
+{
+  "name": "@projexlight/kafka-runtime",
+  "version": "1.0.0",
+  "schema_version": "1.0",
+  "summary": "Kafka client runtime — typed producer/consumer wrappers, schema-registry integration, dead-letter-queue plumbing, idempotent-write helpers. The wire for every cross-SDK event flow (UsageEvent.v1, AuditEvent.v1, lineage events).",
+  "tags": [
+    "foundation",
+    "runtime",
+    "kafka",
+    "events",
+    "infra"
+  ],
+  "provides": {
+    "endpoints": [],
+    "events": [],
+    "models": [],
+    "hooks": [
+      {
+        "name": "initKafka",
+        "description": "Initialize the Kafka client; warm topic + consumer-group registry."
+      },
+      {
+        "name": "closeKafka",
+        "description": "Graceful shutdown — flush producer + commit consumer offset."
+      },
+      {
+        "name": "publishMessage",
+        "description": "Publish a typed message; idempotent on the message_id key."
+      },
+      {
+        "name": "subscribe",
+        "description": "Subscribe to a topic + register a handler; auto-acks on success, sends to DLQ on persistent failure."
+      }
+    ],
+    "ui_components": []
+  },
+  "consumes": {
+    "events": [],
+    "infra": [
+      "kafka",
+      "schema-registry-optional"
+    ],
+    "config_keys": [
+      "KAFKA_BROKERS",
+      "KAFKA_CLIENT_ID",
+      "KAFKA_DLQ_TOPIC_SUFFIX"
+    ]
+  },
+  "scenarios": [
+    {
+      "id": "publish-usage-event",
+      "title": "SDK publishes a UsageEvent.v1",
+      "when_to_use": "Every metered SDK op — meter.report() ultimately calls publishMessage to the meter inbox topic.",
+      "example_code": "import { publishMessage } from '@projexlight/kafka-runtime';\nawait publishMessage('meter.usage.event.v1', usageEvent);",
+      "expected_outcome": "Message lands in the topic. Producer ack confirms durability before the call returns."
+    },
+    {
+      "id": "subscribe-with-dlq",
+      "title": "Consumer subscribes; persistent failures go to DLQ",
+      "when_to_use": "Background projector — subscribe(); handler runs per message; persistent errors after retries land in <topic>.dlq for replay.",
+      "example_code": "import { subscribe } from '@projexlight/kafka-runtime';\nsubscribe('meter.usage.event.v1', async (msg) => { await rollUp(msg); });",
+      "expected_outcome": "Handler runs per message. Auto-ack on success; DLQ on persistent failure. Consumer offset commits per batch."
+    },
+    {
+      "id": "graceful-shutdown",
+      "title": "SIGTERM triggers flush + commit",
+      "when_to_use": "Rolling deploy — closeKafka flushes producer + commits consumer offsets so no message gets dropped or duplicated across pod restarts.",
+      "example_code": "process.on('SIGTERM', () => closeKafka());",
+      "expected_outcome": "Zero message loss + at-least-once delivery preserved across deploys."
+    }
+  ],
+  "compliance_posture": {
+    "regimes": [
+      "SOC2-CC7.1",
+      "SOX-Section-404"
+    ],
+    "notes": "Idempotent producer + DLQ for unrecoverable messages ensures no audit-relevant event silently drops. Schema-registry pin prevents shape drift."
+  },
+  "pool_placement": "global-catalog",
+  "pricing_skus": [],
+  "no_endpoints": true,
+  "links": {
+    "readme": "packages/kafka-runtime/README.md",
+    "source": "packages/kafka-runtime/src/",
+    "prd_section": "Architecture-v3.1 §6"
+  }
+}

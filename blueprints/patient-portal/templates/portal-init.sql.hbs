@@ -1,0 +1,42 @@
+-- {{app_name}} — Patient portal schema (blueprint: {{blueprint_id}})
+-- PHI storage tier: {{phi_storage_tier}}
+-- Consent renewal cadence: {{consent_renewal_days}} days
+-- Default locale: {{portal_locale_default}}
+
+CREATE SCHEMA IF NOT EXISTS portal;
+
+-- Receipts owned by the consent SDK; this view is a denormalized copy
+-- for portal-side display, NOT a source of truth.
+CREATE TABLE IF NOT EXISTS portal.consent_receipt_view (
+  receipt_id           UUID PRIMARY KEY,
+  tenant_id            UUID NOT NULL,
+  patient_persona_id   UUID NOT NULL,
+  purpose_id           TEXT NOT NULL,
+  granted_at           TIMESTAMPTZ NOT NULL,
+  expires_at           TIMESTAMPTZ NOT NULL,
+  revoked_at           TIMESTAMPTZ,
+  channel              TEXT NOT NULL CHECK (channel IN ('in-person','portal-checkbox','voice-recorded','paper-signed'))
+);
+CREATE INDEX IF NOT EXISTS consent_patient_idx ON portal.consent_receipt_view (tenant_id, patient_persona_id, expires_at);
+
+CREATE TABLE IF NOT EXISTS portal.message_thread (
+  thread_id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id           UUID NOT NULL,
+  patient_persona_id  UUID NOT NULL,
+  provider_persona_id UUID NOT NULL,
+  subject             TEXT NOT NULL,
+  created_at          TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS portal.message (
+  message_id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  thread_id           UUID NOT NULL REFERENCES portal.message_thread(thread_id) ON DELETE CASCADE,
+  from_persona_id     UUID NOT NULL,
+  to_persona_id       UUID NOT NULL,
+  body_envelope       BYTEA NOT NULL,
+  body_dek_id         UUID NOT NULL,
+  attachment_evidence_ids UUID[] NOT NULL DEFAULT '{}',
+  locale              TEXT NOT NULL DEFAULT '{{portal_locale_default}}',
+  sent_at             TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS msg_thread_idx ON portal.message (thread_id, sent_at);

@@ -1,0 +1,93 @@
+{
+  "name": "@projexlight/sdk-event",
+  "version": "1.0.0",
+  "schema_version": "1.0",
+  "summary": "Conference + in-person event management: sessions, tickets, check-ins, capacity gates. Powers anything from a 50-person customer summit to a 5,000-attendee conference — composes with sdk-payment (ticket sales), sdk-notification (reminders), sdk-evidence (badge-scan proof), sdk-engagement (encounter per check-in).",
+  "tags": ["event", "conference", "tickets", "check-in", "p6b"],
+  "provides": {
+    "endpoints": [
+      { "method": "POST", "path": "/api/events/sessions",                "description": "Create a session (talk / workshop / panel)." },
+      { "method": "GET",  "path": "/api/events/sessions/:session_id",    "description": "Fetch a session + capacity + registered count." },
+      { "method": "POST", "path": "/api/events/tickets",                 "description": "Issue a ticket (paid or comp)." },
+      { "method": "POST", "path": "/api/events/checkin",                 "description": "Check an attendee into a session (badge scan)." }
+    ],
+    "events": [
+      { "name": "event.session.created.v1",  "retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "Session created with capacity + schedule." },
+      { "name": "event.ticket.issued.v1",    "retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "Ticket issued (paid or comp)." },
+      { "name": "event.checkin.recorded.v1", "retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "Attendee checked in to a session; carries timestamp + badge-scan device." },
+      { "name": "event.capacity.full.v1",    "retention_class": "operational","conflict_policy": "lww",            "description": "Session reached capacity; downstream waitlist + registration UIs react." }
+    ],
+    "models": [
+      { "schema": "event", "table": "session",  "description": "Per-session row: title, capacity, scheduled_start, location_id." },
+      { "schema": "event", "table": "ticket",   "description": "Per-ticket row: attendee_persona, session_id, kind (paid/comp/staff), payment_ref." },
+      { "schema": "event", "table": "checkin",  "description": "Per-checkin row: ticket_id, timestamp, device_id (hdk-scanner)." }
+    ],
+    "hooks": [
+      { "name": "createSession",  "description": "Create a session; capacity locked at creation, can be adjusted with an audit row." },
+      { "name": "issueTicket",    "description": "Issue a ticket; idempotent on (attendee, session)." },
+      { "name": "checkInAttendee","description": "Record a check-in. Refuses on duplicate scan / wrong session." },
+      { "name": "getRoster",      "description": "Return the attendee roster for a session with check-in status." }
+    ],
+    "ui_components": []
+  },
+  "consumes": {
+    "events": [
+      { "name": "payment.succeeded.v1",   "from": "@projexlight/sdk-payment" },
+      { "name": "device.attestation.passed.v1", "from": "@projexlight/sdk-device" }
+    ],
+    "infra": ["postgres", "sdk-payment", "sdk-notification", "hdk-scanner"],
+    "config_keys": ["EVENT_CHECKIN_DUPLICATE_GRACE_SEC", "EVENT_DEFAULT_REMINDER_HOURS_BEFORE"]
+  },
+  "scenarios": [
+    {
+      "id": "create-keynote-session",
+      "title": "Conference organizer creates the keynote session",
+      "when_to_use": "Pre-event setup. Create the session with capacity 500 + scheduled start.",
+      "example_code": "import { createSession } from '@projexlight/sdk-event';\nconst { session_id } = await createSession({\n  tenant_id, title: 'Opening Keynote — 2026 Customer Summit',\n  capacity: 500, scheduled_start: '2026-06-15T09:00Z', location_id: 'main-hall',\n});",
+      "expected_outcome": "Session row written; emits .session.created.v1. Sales page can start issuing tickets."
+    },
+    {
+      "id": "issue-paid-ticket",
+      "title": "Attendee pays → ticket issued",
+      "when_to_use": "Reactive on payment.succeeded.v1 — successful payment auto-issues the ticket + sends the QR confirmation.",
+      "example_code": "subscribeEvents('payment.succeeded.v1', async (e) => {\n  if (e.payload.purpose !== 'event-ticket') return;\n  await issueTicket({\n    attendee_persona_id: e.payload.persona_id,\n    session_id: e.payload.metadata.session_id, kind: 'paid', payment_ref: e.payload.charge_id,\n  });\n});",
+      "expected_outcome": "Ticket row written + emitted. Confirmation email + QR code sent via sdk-notification."
+    },
+    {
+      "id": "badge-scan-checkin",
+      "title": "Staff scans badge at door → attendee checked in",
+      "when_to_use": "hdk-scanner scans the badge QR; we validate the ticket + record the check-in.",
+      "example_code": "import { checkInAttendee } from '@projexlight/sdk-event';\nawait checkInAttendee({\n  ticket_id, session_id,\n  scanned_at: new Date(), device_id: badge_scanner.id,\n});",
+      "expected_outcome": "Check-in row written + emitted. Duplicate scan within EVENT_CHECKIN_DUPLICATE_GRACE_SEC is silently ignored (operator double-tap)."
+    },
+    {
+      "id": "capacity-full-waitlist",
+      "title": "Session hits capacity → waitlist + .capacity.full.v1",
+      "when_to_use": "499 → 500 registrations; system emits .capacity.full.v1; subsequent issueTicket refuses + adds to waitlist.",
+      "example_code": "subscribeEvents('event.capacity.full.v1', async (e) => {\n  await markSessionWaitlistOnly({ session_id: e.payload.session_id });\n});",
+      "expected_outcome": "Session flipped to waitlist-only; ticket sale page swaps button to 'Join waitlist'."
+    },
+    {
+      "id": "roster-export",
+      "title": "Session host pulls the attendee roster",
+      "when_to_use": "Pre-session — host wants to know who registered + who checked in.",
+      "example_code": "import { getRoster } from '@projexlight/sdk-event';\nconst rows = await getRoster({ session_id });\n// rows = [{ persona_id, ticket_kind, checked_in_at }]",
+      "expected_outcome": "Roster returned; ordered by check-in time. Useful for the next session's drop-off analysis."
+    }
+  ],
+  "compliance_posture": {
+    "regimes": ["SOC2-CC7.1", "GDPR-Art-30", "PCI-DSS-via-sdk-payment", "ADA-event-accessibility-records"],
+    "notes": "Ticket payments routed through sdk-payment (PCI-relevant logic stays there). Roster export is PII; gated by sdk-rebac persona checks. Check-in events traced to the scanning device for attestation chain."
+  },
+  "pool_placement": "app",
+  "pricing_skus": [
+    { "sku": "event.session.create",  "mode": "flat",    "unit_description": "per session" },
+    { "sku": "event.ticket.issue",    "mode": "metered", "unit_description": "per ticket issued (paid or comp)" },
+    { "sku": "event.checkin.record",  "mode": "metered", "unit_description": "per check-in" }
+  ],
+  "links": {
+    "readme": "packages/sdk-event/README.md",
+    "source": "packages/sdk-event/src/",
+    "prd_section": "P6B-Vertical-Events §1 / FR-EVT-1..4"
+  }
+}

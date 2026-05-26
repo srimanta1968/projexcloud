@@ -1,0 +1,91 @@
+{
+  "name": "@projexlight/sdk-social",
+  "version": "1.0.0",
+  "schema_version": "1.0",
+  "summary": "Social-account handle store + inbound-interaction primitive for ProjexCloud: register a tenant's social handles (LinkedIn / X / Instagram / TikTok), ingest interactions (mentions, DMs, comments), and capture-lead from a qualifying interaction. Composes with sdk-crm + sdk-engagement for social-sourced lead flow + with sdk-conversation for thread continuity.",
+  "tags": ["social", "linkedin", "x", "instagram", "lead-capture", "p6b"],
+  "provides": {
+    "endpoints": [
+      { "method": "POST", "path": "/api/social/handles",                              "description": "Register / update a tenant social handle." },
+      { "method": "POST", "path": "/api/social/interactions",                          "description": "Ingest a social interaction (usually inbound webhook from the platform)." },
+      { "method": "POST", "path": "/api/social/interactions/:interaction_id/capture-lead", "description": "Convert a qualifying interaction into a CRM lead." }
+    ],
+    "events": [
+      { "name": "social.handle.registered.v1",      "retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "Social handle registered." },
+      { "name": "social.interaction.ingested.v1",   "retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "Inbound interaction committed (mention / DM / comment)." },
+      { "name": "social.lead.captured.v1",          "retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "Interaction converted into a CRM lead." }
+    ],
+    "models": [
+      { "schema": "social", "table": "handle",      "description": "Per-(tenant, platform) handle row: username, oauth_token_ref, active." },
+      { "schema": "social", "table": "interaction", "description": "Per-interaction row: handle_id, kind (mention/dm/comment), payload, captured_lead_id." }
+    ],
+    "hooks": [
+      { "name": "registerHandle",     "description": "Register a tenant social handle + OAuth credential." },
+      { "name": "ingestInteraction",  "description": "Ingest an inbound social interaction; idempotent on platform_message_id." },
+      { "name": "captureLead",        "description": "Convert a qualifying interaction into a sdk-crm lead." },
+      { "name": "startSocialPoller",  "description": "Background poller for platforms without webhooks (X polling, instagram mentions)." }
+    ],
+    "ui_components": []
+  },
+  "consumes": {
+    "events": [
+      { "name": "tenant.offboarded.v1",      "from": "@projexlight/sdk-tenant-lifecycle" },
+      { "name": "secrets.secret.rotated.v1", "from": "@projexlight/sdk-secrets" }
+    ],
+    "infra": ["postgres", "sdk-secrets", "sdk-webhook"],
+    "config_keys": ["SOCIAL_DEFAULT_PLATFORMS", "SOCIAL_POLLER_INTERVAL_MIN", "SOCIAL_LEAD_AUTO_CAPTURE_RULES_REF"]
+  },
+  "scenarios": [
+    {
+      "id": "register-linkedin-handle",
+      "title": "Register tenant's LinkedIn company-page handle",
+      "when_to_use": "Tenant connects their LinkedIn page; we store OAuth refresh token + subscribe to mention webhooks.",
+      "example_code": "import { registerHandle } from '@projexlight/sdk-social';\nconst { handle_id } = await registerHandle({\n  tenant_id, platform: 'linkedin',\n  username: 'acme-inc', oauth_code,\n});",
+      "expected_outcome": "Handle row + vault-stored token. Webhook subscription established. Emits .handle.registered.v1."
+    },
+    {
+      "id": "ingest-mention",
+      "title": "LinkedIn webhook delivers an @-mention",
+      "when_to_use": "Inbound — LinkedIn fires a webhook on the @-mention; we ingest + classify.",
+      "example_code": "import { ingestInteraction } from '@projexlight/sdk-social';\nawait ingestInteraction({\n  handle_id, platform_message_id: '...',\n  kind: 'mention', from_user, body, occurred_at,\n});",
+      "expected_outcome": "Interaction row written (idempotent on platform_message_id). Emits .interaction.ingested.v1. Rule engine evaluates whether to auto-capture as a lead."
+    },
+    {
+      "id": "auto-capture-qualifying-lead",
+      "title": "Auto-capture when interaction matches lead rules",
+      "when_to_use": "Reactive — interaction matches rule like 'mention from director+ at company > 200 employees' → auto-create CRM lead.",
+      "example_code": "import { captureLead } from '@projexlight/sdk-social';\nconst { lead_id } = await captureLead({\n  interaction_id, owner_persona_id: round_robin_sdr.id,\n  rule_matched: 'director-plus-mid-market',\n});",
+      "expected_outcome": "Lead created in sdk-crm; interaction row links to it. Emits .lead.captured.v1. SDR notified via sdk-notification."
+    },
+    {
+      "id": "x-polling-without-webhook",
+      "title": "X (Twitter) polling for platforms without webhooks",
+      "when_to_use": "X API doesn't offer mention webhooks reliably; the poller queries the search API every 5 min for mentions.",
+      "example_code": "import { startSocialPoller } from '@projexlight/sdk-social';\nstartSocialPoller({\n  handle_id, interval_min: 5,\n});",
+      "expected_outcome": "Mentions ingested via the polling path. Same idempotency guarantees as webhook path (platform_message_id dedupe)."
+    },
+    {
+      "id": "instagram-dm-conversation",
+      "title": "Instagram DM auto-opens a conversation thread",
+      "when_to_use": "Inbound DM via Instagram webhook; we ingest + bridge into sdk-conversation so support sees it in the unified inbox.",
+      "example_code": "subscribeEvents('social.interaction.ingested.v1', async (e) => {\n  if (e.payload.kind !== 'dm') return;\n  await openConversationThread({ source_kind: 'instagram-dm', interaction_id: e.payload.interaction_id });\n});",
+      "expected_outcome": "Conversation thread opened; first message = the DM body. Support reply flows back to the IG DM."
+    }
+  ],
+  "compliance_posture": {
+    "regimes": ["SOC2-CC6.7-third-party", "GDPR-Art-30", "CCPA-Section-1798", "Platform-TOS-LinkedIn-Marketing-Developer-Program"],
+    "notes": "OAuth tokens vault-wrapped. Public posts ingested respect the originating platform's TOS; DMs treated as PII + permission-filtered. Auto-capture rules reviewable + auditable so a regulator can replay 'why was this person added as a lead'."
+  },
+  "pool_placement": "app",
+  "pricing_skus": [
+    { "sku": "social.handle.register",  "mode": "flat",    "unit_description": "per active handle per month" },
+    { "sku": "social.interaction.ingest","mode": "metered","unit_description": "per ingested interaction" },
+    { "sku": "social.lead.capture",     "mode": "metered", "unit_description": "per lead captured" },
+    { "sku": "social.poller.run",       "mode": "metered", "unit_description": "per poll tick (background)" }
+  ],
+  "links": {
+    "readme": "packages/sdk-social/README.md",
+    "source": "packages/sdk-social/src/",
+    "prd_section": "P6B-Vertical-RevOps §5 / FR-SOC-1..4"
+  }
+}

@@ -22,6 +22,9 @@ export default function RegisterPage(): JSX.Element {
           Ask your workspace admin to invite this email, or{' '}
           <Link href="/signup">create your own workspace</Link>.
         </p>
+        <p style={{ marginTop: 24, fontSize: 13, color: '#7a8597' }}>
+          Already signed in?  <Link href="/dashboard">Go to your workspace dashboard</Link>.
+        </p>
       </main>
     );
   }

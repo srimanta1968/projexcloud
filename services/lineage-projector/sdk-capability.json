@@ -1,0 +1,82 @@
+{
+  "name": "@projexlight/service-lineage-projector",
+  "version": "1.0.0",
+  "schema_version": "1.0",
+  "summary": "Cross-pool lineage projector service (G8 closer) — backs sdk-lineage. Pulls lineage events from every per-tenant pool, projects them into the global lineage graph, and runs backfills when new pool families attach. Handles the Iceberg REST catalog binding too — lineage rows reference Iceberg snapshots when sdk-analytics + connector-snowflake are present.",
+  "tags": ["service", "projector", "lineage", "cross-pool", "iceberg", "p6b"],
+  "provides": {
+    "endpoints": [],
+    "events": [
+      { "name": "lineage-projector.batch.committed.v1", "retention_class": "operational","conflict_policy": "lww",            "description": "Projector pass finished; carries nodes/edges processed." },
+      { "name": "lineage-projector.iceberg.bound.v1",   "retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "Lineage node bound to an Iceberg snapshot ref (analytics tier)." }
+    ],
+    "models": [],
+    "hooks": [
+      { "name": "startProjector",        "description": "Background worker — pulls lineage inbox + writes projection rows." },
+      { "name": "backfillPoolFamily",    "description": "Backfill lineage for a newly attached pool family." },
+      { "name": "bindIcebergSnapshot",   "description": "Bind a lineage node to an Iceberg snapshot ref (analytics)." }
+    ],
+    "ui_components": []
+  },
+  "consumes": {
+    "events": [
+      { "name": "lineage.node.recorded.v1",         "from": "@projexlight/sdk-lineage" },
+      { "name": "lineage.edge.recorded.v1",         "from": "@projexlight/sdk-lineage" },
+      { "name": "analytics.lakehouse.extracted.v1", "from": "@projexlight/sdk-analytics" }
+    ],
+    "infra": ["postgres", "kafka", "iceberg-rest-catalog-optional"],
+    "config_keys": ["LINEAGE_PROJECTOR_INTERVAL_MS", "LINEAGE_PROJECTOR_BATCH_SIZE", "LINEAGE_ICEBERG_REST_URL"]
+  },
+  "scenarios": [
+    {
+      "id": "boot-and-project",
+      "title": "Start projector; project lineage rows in batches",
+      "when_to_use": "Process startup.",
+      "example_code": "import { startProjector } from '@projexlight/service-lineage-projector';\nawait startProjector({ interval_ms: 5000 });",
+      "expected_outcome": "Per-tick batch projects lineage rows. Emits .batch.committed.v1."
+    },
+    {
+      "id": "iceberg-snapshot-bind",
+      "title": "Bind lineage node to Iceberg snapshot for analytics",
+      "when_to_use": "Reactive on analytics.lakehouse.extracted.v1 — bind the source lineage node to the resulting Iceberg snapshot ref.",
+      "example_code": "subscribeEvents('analytics.lakehouse.extracted.v1', async (e) => {\n  await bindIcebergSnapshot({ node_uri: e.payload.source, snapshot_ref: e.payload.snapshot_ref });\n});",
+      "expected_outcome": "Lineage rows carry the snapshot ref; queryDownstream can follow into the lakehouse."
+    },
+    {
+      "id": "new-pool-backfill",
+      "title": "New pool family attached → backfill lineage",
+      "when_to_use": "When pool-federation-runtime adds a new pool family, this service backfills its lineage so cross-pool queries see complete provenance.",
+      "example_code": "import { backfillPoolFamily } from '@projexlight/service-lineage-projector';\nawait backfillPoolFamily({ pool_family: 'eu-west-app-2' });",
+      "expected_outcome": "All historic lineage from the pool projected. Idempotent on (pool, checkpoint)."
+    },
+    {
+      "id": "shred-cascade",
+      "title": "Vault key shred propagates lineage tombstones",
+      "when_to_use": "Reactive: shred event → tombstone every lineage node encrypted under that key.",
+      "example_code": "// driven by subscribeEvents('vault.key.shredded.v1')",
+      "expected_outcome": "Downstream sdk-lineage queries see dead-ends with proper attribution to the shred event."
+    },
+    {
+      "id": "lag-alarm",
+      "title": "Lag alarm",
+      "when_to_use": "Inbox depth > threshold for > 5 min; on-call paged.",
+      "example_code": "// SLO monitor backed by sdk-notification.",
+      "expected_outcome": "Operator scales projector pool."
+    }
+  ],
+  "compliance_posture": {
+    "regimes": ["SOC2-CC7.2", "GDPR-Art-22-data-provenance", "EU-AI-Act-Annex-IV-data-lineage", "SOX-data-quality"],
+    "notes": "Cross-pool projection guarantees federated analytics queries see complete provenance. Iceberg snapshot bindings let the regulator replay 'what data + which transformation produced this number'."
+  },
+  "pool_placement": "warehouse",
+  "pricing_skus": [
+    { "sku": "lineage-projector.batch.commit", "mode": "metered", "unit_description": "per projector batch committed" },
+    { "sku": "lineage-projector.backfill",     "mode": "metered", "unit_description": "per pool-family backfill" }
+  ],
+  "no_endpoints": true,
+  "links": {
+    "readme": "services/lineage-projector/README.md",
+    "source": "services/lineage-projector/src/",
+    "prd_section": "P6B-Knowledge-Semantic §8 / G8"
+  }
+}

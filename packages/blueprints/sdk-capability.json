@@ -1,0 +1,72 @@
+{
+  "name": "@projexlight/blueprints",
+  "version": "1.0.0",
+  "schema_version": "1.0",
+  "summary": "Vertical blueprint schema + loader. A blueprint is YAML that declares (sdks, clarifying_questions, outputs) — the installer composes the SDK set, asks the questions, renders the templated outputs. Powers `projex blueprint apply` and the cloud-builder agent's blueprint-driven scaffolding path.",
+  "tags": [
+    "foundation",
+    "p9",
+    "blueprints",
+    "scaffold"
+  ],
+  "provides": {
+    "endpoints": [],
+    "events": [],
+    "models": [],
+    "hooks": [
+      {
+        "name": "loadBlueprint",
+        "description": "Parse + validate a blueprint YAML; returns typed Blueprint object."
+      },
+      {
+        "name": "listBlueprints",
+        "description": "Walk the blueprints/ directory + return all valid blueprints (silently skips invalid)."
+      }
+    ],
+    "ui_components": []
+  },
+  "consumes": {
+    "events": [],
+    "infra": [
+      "yaml"
+    ],
+    "config_keys": []
+  },
+  "scenarios": [
+    {
+      "id": "list-pilots",
+      "title": "CLI lists the available blueprints",
+      "when_to_use": "`projex blueprint list` → calls listBlueprints(), prints id + title + pack + sdk count.",
+      "example_code": "import { listBlueprints } from '@projexlight/blueprints';\nconst bps = await listBlueprints('blueprints');\nfor (const b of bps) console.log(b.id, b.title);",
+      "expected_outcome": "Returns the 6 pilots. Invalid blueprints in the dir are skipped (logged via console.warn, not thrown)."
+    },
+    {
+      "id": "load-blueprint-detail",
+      "title": "Load a specific blueprint by id",
+      "when_to_use": "`projex blueprint apply <id>` → loadBlueprint to get sdks + questions + outputs.",
+      "example_code": "import { loadBlueprint } from '@projexlight/blueprints';\nconst bp = await loadBlueprint('blueprints/revops-crm');\n// bp.sdks, bp.clarifying_questions, bp.outputs",
+      "expected_outcome": "Typed object returned. Validator catches missing required fields + reports the YAML line."
+    },
+    {
+      "id": "schema-versioning",
+      "title": "Blueprint schema_version pinned per blueprint",
+      "when_to_use": "Old blueprints stay loadable; new schema features only available when blueprint declares the new schema_version.",
+      "example_code": "// blueprint.yaml header:\nschema_version: \"1.0\"\n// loader validates against the matching schema",
+      "expected_outcome": "Old + new blueprints coexist. Authors opt in to new features at their own cadence."
+    }
+  ],
+  "compliance_posture": {
+    "regimes": [
+      "SOC2-CC8.1"
+    ],
+    "notes": "Blueprints are declarative + version-controlled. Operator review of every blueprint PR satisfies SOC2-CC8.1 for the templated outputs."
+  },
+  "pool_placement": "global-catalog",
+  "pricing_skus": [],
+  "no_endpoints": true,
+  "links": {
+    "readme": "packages/blueprints/README.md",
+    "source": "packages/blueprints/src/",
+    "prd_section": "P9-SDK-Discoverability §5.4 / FR-BP-1..5"
+  }
+}

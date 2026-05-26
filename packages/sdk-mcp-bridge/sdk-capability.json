@@ -1,0 +1,94 @@
+{
+  "name": "@projexlight/sdk-mcp-bridge",
+  "version": "1.0.0",
+  "schema_version": "1.0",
+  "summary": "Two-way MCP (Model Context Protocol) bridge for ProjexCloud: register external MCP servers a tenant wants to expose to their AI agents (e.g. their Salesforce MCP, their internal-tools MCP), and conversely expose this tenant's own SDK surface as MCP tools to AI clients. Foundation for any AI-agent surface; sdk-semantic's capability graph (G9) routes intents through here.",
+  "tags": ["mcp", "ai-agents", "bridge", "interop", "p6a"],
+  "provides": {
+    "endpoints": [
+      { "method": "GET",  "path": "/api/mcp/health",                              "description": "Bridge health: count of registered servers + their last-seen reachability." },
+      { "method": "POST", "path": "/api/mcp/server-registrations",                "description": "Register an external MCP server (URL, auth, capability tags)." },
+      { "method": "GET",  "path": "/api/mcp/server-registrations/:id",            "description": "Fetch a single registration + its tool list." },
+      { "method": "GET",  "path": "/api/mcp/server-registrations",                "description": "List registrations for the tenant." },
+      { "method": "POST", "path": "/api/mcp/server-registrations/:id/disable",    "description": "Disable a registration without deleting it (e.g. while debugging)." }
+    ],
+    "events": [
+      { "name": "mcp-bridge.server.registered.v1",        "retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "External MCP server registered; carries url + capability tags." },
+      { "name": "mcp-bridge.tool.invoked.v1",             "retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "Tool call dispatched through the bridge; carries server, tool, persona, duration, ok." },
+      { "name": "mcp-bridge.exposed-server.requested.v1", "retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "External AI client opened a session against this tenant's exposed MCP surface." }
+    ],
+    "models": [
+      { "schema": "mcp", "table": "server_registration", "description": "Per-registration row: url, auth_ref (sdk-secrets ref), capability_tags, enabled." },
+      { "schema": "mcp", "table": "tool",                "description": "Cached tool list per registration: name, description, input_schema_json." },
+      { "schema": "mcp", "table": "tool_invocation",     "description": "Per-call audit row: server, tool, persona, duration_ms, ok, error_class." },
+      { "schema": "mcp", "table": "exposed_server",      "description": "Per-exposed-surface row: name, scope (which SDKs to expose), auth profile." }
+    ],
+    "hooks": [
+      { "name": "registerExternalServer",  "description": "Add an external MCP server. Credentials wrap via sdk-secrets; capabilities discover at registration + cache." },
+      { "name": "invokeTool",              "description": "Dispatch a tool call to a registered external server. Audited + rate-limited per (tenant, server)." },
+      { "name": "exposeOwnSurface",        "description": "Expose this tenant's SDK surface as an MCP server (used by sdk-semantic for cross-domain bridging)." },
+      { "name": "discoverCapabilities",    "description": "Re-fetch a registered server's tool list. Background worker runs daily." }
+    ],
+    "ui_components": []
+  },
+  "consumes": {
+    "events": [
+      { "name": "secrets.secret.rotated.v1",         "from": "@projexlight/sdk-secrets" },
+      { "name": "semantic.capability.registered.v1", "from": "@projexlight/sdk-semantic" }
+    ],
+    "infra": ["postgres", "sdk-secrets", "redis-optional"],
+    "config_keys": ["MCP_BRIDGE_TOOL_DISCOVERY_INTERVAL_HOURS", "MCP_BRIDGE_INVOCATION_TIMEOUT_MS", "MCP_BRIDGE_RATE_LIMIT_PER_SERVER_PER_MIN"]
+  },
+  "scenarios": [
+    {
+      "id": "register-salesforce-mcp",
+      "title": "Tenant registers their existing Salesforce MCP server",
+      "when_to_use": "Customer already runs a Salesforce MCP for their internal AI bots; they want ProjexCloud agents to use it too without redeploying.",
+      "example_code": "import { registerExternalServer } from '@projexlight/sdk-mcp-bridge';\nconst { id } = await registerExternalServer({\n  tenant_id, name: 'their-salesforce-mcp',\n  url: 'https://mcp.acme.com/salesforce/sse',\n  auth: { kind: 'bearer', secret_ref: snowflake_token_ref },\n  capability_tags: ['crm', 'salesforce'],\n});",
+      "expected_outcome": "Registration row written; bridge fetches tool list + caches. Emits .server.registered.v1. ProjexCloud AI agents can now call those tools through invokeTool."
+    },
+    {
+      "id": "agent-invokes-external-tool",
+      "title": "AI agent calls a tool on the registered server",
+      "when_to_use": "Cloud-builder agent decides it needs to call 'salesforce_create_lead'. The bridge routes the call to the right registered server + audits the invocation.",
+      "example_code": "import { invokeTool } from '@projexlight/sdk-mcp-bridge';\nconst { content } = await invokeTool({\n  tenant_id, persona_id,\n  server_name: 'their-salesforce-mcp',\n  tool: 'salesforce_create_lead',\n  arguments: { first_name, last_name, email, source: 'projexcloud' },\n});",
+      "expected_outcome": "Tool call dispatched; result returned. Emits .tool.invoked.v1 with duration + ok. Rate-limited per (tenant, server)."
+    },
+    {
+      "id": "expose-own-sdks-as-mcp",
+      "title": "Expose this tenant's SDK surface as a tenant-owned MCP server",
+      "when_to_use": "Customer wants to integrate ProjexCloud into Claude Code / Cursor for their devs. exposeOwnSurface boots an MCP endpoint per their auth profile.",
+      "example_code": "import { exposeOwnSurface } from '@projexlight/sdk-mcp-bridge';\nconst { mcp_url } = await exposeOwnSurface({\n  tenant_id, name: 'acme-projexcloud-tools',\n  scope: ['sdk-tenant', 'sdk-billing', 'sdk-meter'],\n  auth: { kind: 'jwt', issuer: tenant_id },\n});",
+      "expected_outcome": "Returns mcp_url; customer pastes it into their AI tool's mcp.json. Each call hits a tenant-scoped MCP endpoint that authorizes via sdk-rebac before dispatching."
+    },
+    {
+      "id": "rotate-credential-cascade",
+      "title": "Reactive: re-validate registrations after secret rotation",
+      "when_to_use": "secrets.secret.rotated.v1 fires; any MCP registration whose auth points at the rotated secret needs a connectivity re-test before depending on the new credentials.",
+      "example_code": "subscribeEvents('secrets.secret.rotated.v1', async (e) => {\n  const regs = await findRegistrationsUsingSecret({ secret_ref: e.payload.ref });\n  for (const r of regs) await reTestConnectivity({ registration_id: r.id });\n});",
+      "expected_outcome": "Each affected registration re-tested. Failed ones disabled + ops paged with the failure context."
+    },
+    {
+      "id": "daily-discovery-refresh",
+      "title": "Daily capability re-discovery catches upstream tool drift",
+      "when_to_use": "External MCP server adds / removes tools; bridge's daily discovery refreshes the cached tool list so AI agents don't try to call removed tools.",
+      "example_code": "// driven by the daily cron:\nfor (const reg of await listEnabledRegistrations({ tenant_id })) {\n  await discoverCapabilities({ registration_id: reg.id });\n}",
+      "expected_outcome": "tool table refreshed; removed tools tombstoned. Subsequent invokeTool calls for removed tools fail fast with a structured error."
+    }
+  ],
+  "compliance_posture": {
+    "regimes": ["SOC2-CC6.7-third-party", "SOC2-CC7.1", "GDPR-Art-28-processor-contract", "EU-AI-Act-Annex-IV-agent-interop"],
+    "notes": "External MCP servers are third-party processors — registration captures the URL + auth scope for the CC6.7 vendor inventory. Tool invocation audit chain is the EU AI Act decision-trace lever for any AI-agent decision that touched an external tool. Credentials always vault-wrapped via sdk-secrets."
+  },
+  "pool_placement": "admin",
+  "pricing_skus": [
+    { "sku": "mcp-bridge.server.register", "mode": "flat",    "unit_description": "per server registered" },
+    { "sku": "mcp-bridge.tool.invoke",     "mode": "metered", "unit_description": "per dispatched tool call" },
+    { "sku": "mcp-bridge.surface.expose",  "mode": "flat",    "unit_description": "per exposed surface per month" }
+  ],
+  "links": {
+    "readme": "packages/sdk-mcp-bridge/README.md",
+    "source": "packages/sdk-mcp-bridge/src/",
+    "prd_section": "P6A-AI-Agents §4 / FR-MCP-B-1..6"
+  }
+}

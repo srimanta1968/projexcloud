@@ -1,0 +1,99 @@
+{
+  "name": "@projexlight/sdk-content",
+  "version": "1.0.0",
+  "schema_version": "1.0",
+  "summary": "Structured content + taxonomy for ProjexCloud: item types (article, snippet, page, faq), versioning, taxonomy-tag composition, publish workflow. Foundation for any marketing site, knowledge base, or content-driven journey step (sdk-campaign embeds content items as template body sources).",
+  "tags": ["content", "cms", "taxonomy", "versioning", "p6b"],
+  "provides": {
+    "endpoints": [
+      { "method": "POST",  "path": "/api/content/items",                          "description": "Create a content item (draft state)." },
+      { "method": "GET",   "path": "/api/content/items/:item_id",                 "description": "Fetch a content item + active version + tags." },
+      { "method": "POST",  "path": "/api/content/items/:item_id/versions",        "description": "Create a new version (auto-saved as draft)." },
+      { "method": "POST",  "path": "/api/content/items/:item_id/publish",         "description": "Promote a version to published." },
+      { "method": "POST",  "path": "/api/content/items/:item_id/retire",          "description": "Retire a version; URL returns 410 going forward." },
+      { "method": "POST",  "path": "/api/content/taxonomies",                     "description": "Create or update a taxonomy (set of tags)." },
+      { "method": "POST",  "path": "/api/content/items/:item_id/tags",            "description": "Apply or remove taxonomy tags on a content item." }
+    ],
+    "events": [
+      { "name": "content.item.created.v1",     "retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "Content item created (draft)." },
+      { "name": "content.version.created.v1",  "retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "New version drafted." },
+      { "name": "content.published.v1",        "retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "Version promoted to published; clients should bust caches." },
+      { "name": "content.retired.v1",          "retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "Version retired; future GETs 410 Gone." },
+      { "name": "content.taxonomy.changed.v1", "retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "Taxonomy edited; carries diff of added / removed tags." }
+    ],
+    "models": [
+      { "schema": "content", "table": "taxonomy", "description": "Named taxonomy: name, tags[], created_at." },
+      { "schema": "content", "table": "item",     "description": "Content item: slug, kind, owner_persona, taxonomies, current_published_version." },
+      { "schema": "content", "table": "version",  "description": "Per-version row: body, status (draft/published/retired), published_at." }
+    ],
+    "hooks": [
+      { "name": "createItem",     "description": "Create a content item in draft state." },
+      { "name": "addVersion",     "description": "Add a new version (always starts as draft)." },
+      { "name": "publishVersion", "description": "Atomically promote a version to published; previous published transitions to superseded." },
+      { "name": "retireVersion",  "description": "Retire a version; future fetches 410 Gone." },
+      { "name": "applyTags",      "description": "Apply or remove taxonomy tags on a content item." }
+    ],
+    "ui_components": []
+  },
+  "consumes": {
+    "events": [
+      { "name": "approval.request.approved.v1", "from": "@projexlight/sdk-approval" },
+      { "name": "tenant.offboarded.v1",     "from": "@projexlight/sdk-tenant-lifecycle" }
+    ],
+    "infra": ["postgres", "sdk-media", "sdk-search"],
+    "config_keys": ["CONTENT_DEFAULT_LOCALE", "CONTENT_SUPERSEDED_RETENTION_DAYS", "CONTENT_TAXONOMY_MAX_DEPTH"]
+  },
+  "scenarios": [
+    {
+      "id": "draft-article",
+      "title": "Marketer drafts a new blog article",
+      "when_to_use": "First-time author flow. Create the item; first version starts as draft; preview link works immediately, public URL stays 404 until publish.",
+      "example_code": "import { createItem, addVersion } from '@projexlight/sdk-content';\nconst { item_id } = await createItem({\n  tenant_id, slug: 'eu-q3-data-residency', kind: 'article', owner_persona_id,\n});\nconst { version_id } = await addVersion({\n  item_id, body_html: '<p>...</p>', locale: 'en-US',\n});",
+      "expected_outcome": "Item + version (draft) rows. Emits .item.created.v1 + .version.created.v1. Preview URL serves the draft; public URL returns 404."
+    },
+    {
+      "id": "publish-with-approval-gate",
+      "title": "Publish gated by sdk-approval (compliance review)",
+      "when_to_use": "Regulated tenant: every publish needs compliance approval. Reactive on approval.request.approved.v1 — when the approval clears, auto-publish the gated version.",
+      "example_code": "subscribeEvents('approval.request.approved.v1', async (e) => {\n  if (e.payload.subject_kind !== 'content.version') return;\n  await publishVersion({ version_id: e.payload.subject_id });\n});",
+      "expected_outcome": "Version promoted; emits .published.v1. CDN cache busted. Public URL serves the new content."
+    },
+    {
+      "id": "tag-with-taxonomy",
+      "title": "Tag article with multiple taxonomies",
+      "when_to_use": "Marketing wants the article surfaced under multiple categories — 'data-residency', 'eu', 'enterprise'. applyTags writes the join rows + emits .taxonomy.changed.v1.",
+      "example_code": "import { applyTags } from '@projexlight/sdk-content';\nawait applyTags({\n  item_id, taxonomy_id: 'industry-tags',\n  add: ['data-residency','eu','enterprise'], remove: [],\n});",
+      "expected_outcome": "Tags applied; emits .taxonomy.changed.v1. sdk-search re-indexes the item with the new tags."
+    },
+    {
+      "id": "retire-stale-article",
+      "title": "Retire an article that's compliance-out-of-date",
+      "when_to_use": "Article no longer reflects current regulations; retire it so search + nav can't surface it.",
+      "example_code": "import { retireVersion } from '@projexlight/sdk-content';\nawait retireVersion({\n  version_id, reason: 'compliance-out-of-date',\n  retired_by_persona_id,\n});",
+      "expected_outcome": "Version status='retired'. Future GETs 410 Gone. sdk-search drops it from the index."
+    },
+    {
+      "id": "campaign-embeds-content",
+      "title": "sdk-campaign references a content item as journey-step body",
+      "when_to_use": "Marketing journey step 'send-email' references content.item.slug='eu-q3-pro-tier'; the journey executor pulls the current published version at send time so updates propagate without republishing the journey.",
+      "example_code": "// In sdk-campaign journey step:\n{ id: 's1', kind: 'send-email', body_from: { content_item_slug: 'eu-q3-pro-tier' } }\n// At send-time, sdk-campaign fetches the current published version + uses its body.",
+      "expected_outcome": "Email body = current published version body. If content author publishes a new version mid-journey, future sends pick it up; in-flight scheduled sends use whichever version was current when the step started."
+    }
+  ],
+  "compliance_posture": {
+    "regimes": ["SOC2-CC7.1", "GDPR-Art-30", "ADA-WCAG-content-accessibility", "EU-Digital-Services-Act-takedown"],
+    "notes": "Every publish + retire pinned to persona + reason → DSA takedown trail. Versions retained for CONTENT_SUPERSEDED_RETENTION_DAYS so a regulator can replay 'what did this URL show on date X'. Retired-410 (not 404) preserves the takedown signal vs. a missing-page signal."
+  },
+  "pool_placement": "app",
+  "pricing_skus": [
+    { "sku": "content.item.create",    "mode": "flat",    "unit_description": "per content item created" },
+    { "sku": "content.version.create", "mode": "metered", "unit_description": "per draft version" },
+    { "sku": "content.publish",        "mode": "metered", "unit_description": "per publish action (CDN bust included)" },
+    { "sku": "content.tag.apply",      "mode": "metered", "unit_description": "per tag-set operation" }
+  ],
+  "links": {
+    "readme": "packages/sdk-content/README.md",
+    "source": "packages/sdk-content/src/",
+    "prd_section": "P6B-Vertical-Content §1 / FR-CON-1..6"
+  }
+}

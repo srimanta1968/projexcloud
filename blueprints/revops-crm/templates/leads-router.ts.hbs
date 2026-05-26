@@ -1,0 +1,26 @@
+/**
+ * {{app_name}} — Lead router
+ *
+ * Routes scored leads to the right BU / persona based on segment rules.
+ * Default channel for outbound: {{campaign_default_channel}}
+ */
+
+import type { Lead } from './intake';
+
+export interface RoutingRule {
+  match: (lead: Lead) => boolean;
+  bu_id: string;
+  persona_id?: string;
+}
+
+const RULES: RoutingRule[] = [
+  // Example: route EU leads to the EU sales team.
+  // { match: (l) => l.attrs?.country === 'DE', bu_id: 'eu-sales' },
+];
+
+export async function routeLead(lead: Lead): Promise<{ bu_id: string; persona_id?: string } | null> {
+  for (const rule of RULES) {
+    if (rule.match(lead)) return { bu_id: rule.bu_id, persona_id: rule.persona_id };
+  }
+  return null;
+}

@@ -1,0 +1,90 @@
+{
+  "name": "@projexlight/sdk-policy",
+  "version": "1.0.0",
+  "schema_version": "1.0",
+  "summary": "Policy engine for ProjexCloud — declarative ABAC rules (attribute-based access control) that complement ReBAC for cases needing dynamic, attribute-driven decisions (time-of-day, geo, risk score, recent incidents). Policies authored in a small DSL, compiled to a fast evaluator, and called from every SDK that needs 'is this safe right now?' beyond simple relationship checks.",
+  "tags": ["policy", "abac", "rules-engine", "authorization", "foundation"],
+  "provides": {
+    "endpoints": [
+      { "method": "POST", "path": "/api/policies",          "description": "Publish a new policy version (DSL source + compiled evaluator)." },
+      { "method": "GET",  "path": "/api/policies/:policy_id","description": "Fetch the latest version of a named policy + its evaluation history." },
+      { "method": "POST", "path": "/api/policies/evaluate", "description": "Evaluate a policy against an attribute bundle; returns allow/deny + which rule matched." }
+    ],
+    "events": [
+      { "name": "policy.published.v1",         "retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "New policy version published; carries DSL hash + compiler version." },
+      { "name": "policy.decision.evaluated.v1","retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "Per-evaluation row: which policy, which rule matched, decision, attributes fetched." },
+      { "name": "policy.attribute.fetched.v1", "retention_class": "operational","conflict_policy": "lww",          "description": "Attribute-fetcher run resolved a remote attribute; cached for the cache TTL." }
+    ],
+    "models": [
+      { "schema": "policy", "table": "policy",            "description": "Per-version row: name, version, dsl_source, compiled_blob, published_at, published_by." },
+      { "schema": "policy", "table": "attribute_fetcher", "description": "Per-fetcher row: name, source (sql / http / sdk), config, cache_ttl_ms." },
+      { "schema": "policy", "table": "decision",          "description": "Per-evaluation audit row: policy, rule_matched, decision, attributes_snapshot, evaluated_at." }
+    ],
+    "hooks": [
+      { "name": "publishPolicy",      "description": "Compile + publish a new policy version; idempotent on (name, version)." },
+      { "name": "evaluatePolicy",     "description": "Run the evaluator against an attribute bundle; returns decision + matched rule + evaluation trace." },
+      { "name": "registerFetcher",    "description": "Register an attribute fetcher (e.g. 'fetch current risk_score from sdk-fraud')." },
+      { "name": "startDecisionAuditor","description": "Background worker: replays decisions periodically against the current policy + flags drift." }
+    ],
+    "ui_components": []
+  },
+  "consumes": {
+    "events": [
+      { "name": "rebac.decision.evaluated.v1", "from": "@projexlight/sdk-rebac" },
+      { "name": "tenant.created.v1",           "from": "@projexlight/sdk-tenant" }
+    ],
+    "infra": ["postgres", "redis-optional"],
+    "config_keys": ["POLICY_DEFAULT_DECISION", "POLICY_EVAL_CACHE_TTL_MS", "POLICY_DSL_MAX_RULES"]
+  },
+  "scenarios": [
+    {
+      "id": "time-of-day-policy",
+      "title": "Refuse admin actions outside business hours",
+      "when_to_use": "Compliance ask: high-privilege actions only between 09:00-17:00 in the tenant's tz. Policy named 'admin-action-business-hours' fires when the resource attribute is_admin_action=true.",
+      "example_code": "import { publishPolicy } from '@projexlight/sdk-policy';\nawait publishPolicy({\n  tenant_id, name: 'admin-action-business-hours', version: '1.0.0',\n  dsl: `rule \"business-hours-only\" {\n    when resource.is_admin_action and not (now.hour >= 9 and now.hour < 17 and persona.tz_matches_tenant)\n    then deny with reason \"outside business hours\"\n  }`,\n});",
+      "expected_outcome": "Policy compiled + persisted. Subsequent evaluatePolicy calls deny admin actions outside hours."
+    },
+    {
+      "id": "risk-score-step-up",
+      "title": "Risk-score escalation triggers MFA step-up",
+      "when_to_use": "Adaptive auth — when risk_score is high, require MFA step-up before allowing privileged operations. The attribute fetcher pulls risk_score from sdk-fraud.",
+      "example_code": "import { evaluatePolicy } from '@projexlight/sdk-policy';\nconst { decision, matched_rule } = await evaluatePolicy({\n  tenant_id, policy: 'adaptive-mfa-step-up',\n  attributes: { principal, action, resource, risk_score: await getRiskScore() },\n});\nif (decision === 'step-up') redirectToMfa();",
+      "expected_outcome": "Decision = 'step-up' when risk_score crosses threshold. Audit chain has the matched rule + attribute snapshot for replay."
+    },
+    {
+      "id": "geo-data-residency",
+      "title": "Block exports of EU data outside the EU region",
+      "when_to_use": "Data-residency enforcement — outbound data transfer policy blocks EU-resident data leaving EU region pools, regardless of caller permissions.",
+      "example_code": "// policy dsl:\n//   rule \"eu-residency\" {\n//     when resource.region == 'EU' and target.region != 'EU'\n//     then deny with reason \"EU data cannot leave EU region\"\n//   }\nconst { decision } = await evaluatePolicy({\n  tenant_id, policy: 'eu-data-residency',\n  attributes: { resource: { region: 'EU' }, target: { region: 'US' } },\n});",
+      "expected_outcome": "Decision = 'deny'. Caller surfaces the policy's reason text to the operator. Audit row pins the policy + version that fired."
+    },
+    {
+      "id": "register-risk-fetcher",
+      "title": "Wire up the risk-score attribute fetcher",
+      "when_to_use": "One-time setup — fetcher caches risk-score lookups so adaptive-MFA policy can run on every request without DB hits.",
+      "example_code": "import { registerFetcher } from '@projexlight/sdk-policy';\nawait registerFetcher({\n  tenant_id, name: 'risk_score',\n  source: { kind: 'sdk', call: '@projexlight/sdk-fraud.getScore', args: { principal_id: '$principal.id' } },\n  cache_ttl_ms: 30_000,\n});",
+      "expected_outcome": "Fetcher registered; subsequent evaluatePolicy calls auto-resolve risk_score on demand. Emits .attribute.fetched.v1 per refresh."
+    },
+    {
+      "id": "decision-replay-audit",
+      "title": "Audit decisions against current policy",
+      "when_to_use": "Compliance review — were past 24h decisions still valid under the current policy? The auditor replays them + flags drift.",
+      "example_code": "import { startDecisionAuditor } from '@projexlight/sdk-policy';\nstartDecisionAuditor({\n  tenant_id, replay_window_hours: 24,\n  drift_alert_channel: 'oncall-compliance',\n});",
+      "expected_outcome": "Background pass replays decisions; drift > threshold pages the compliance oncall. Useful evidence for SOX + SOC2 control reviews."
+    }
+  ],
+  "compliance_posture": {
+    "regimes": ["SOC2-CC6.1-access-control", "SOX-Section-404-controls", "GDPR-Art-32", "PCI-DSS-7.1-need-to-know", "EU-AI-Act-Annex-IV-decision-transparency"],
+    "notes": "Every decision pinned to the policy version + matched rule + attribute snapshot — fully reproducible for SOX + EU AI Act decision-transparency requirements. Default-deny posture (POLICY_DEFAULT_DECISION) means a misconfigured policy fails closed."
+  },
+  "pool_placement": "admin",
+  "pricing_skus": [
+    { "sku": "policy.publish",  "mode": "flat",    "unit_description": "per policy version published" },
+    { "sku": "policy.evaluate", "mode": "metered", "unit_description": "per evaluation (cached at the attribute layer)" }
+  ],
+  "links": {
+    "readme": "packages/sdk-policy/README.md",
+    "source": "packages/sdk-policy/src/",
+    "prd_section": "P2-Identity-Access §8 / FR-POL-1..5"
+  }
+}

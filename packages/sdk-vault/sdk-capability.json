@@ -1,0 +1,99 @@
+{
+  "name": "@projexlight/sdk-vault",
+  "version": "0.1.0",
+  "schema_version": "1.0",
+  "summary": "Typed KMS facade and 7-tier key hierarchy for ProjexCloud. Wraps AWS KMS / GCP KMS / Azure Key Vault / HSM behind a single interface, manages envelope encryption with per-tenant + per-app + per-encounter data keys, runs the quarterly rotation scheduler, and supports BYOK/CMEK where the customer holds the wrapping key. Every encrypt/decrypt traverses the audit chain via sdk-audit.",
+  "tags": ["security", "kms", "encryption", "byok", "foundation", "p1"],
+  "provides": {
+    "endpoints": [
+      { "method": "GET",  "path": "/api/vault/health",                "description": "Liveness probe; confirms KMS connectivity and current rotation status." },
+      { "method": "POST", "path": "/api/vault/keys",                  "description": "Issue a new key in the 7-tier hierarchy under the caller's tenant scope." },
+      { "method": "POST", "path": "/api/vault/keys/:key_id/rotate",   "description": "Force a manual rotation of a key (otherwise rotation is quarterly via the scheduler)." },
+      { "method": "POST", "path": "/api/vault/keys/:key_id/shred",    "description": "Cryptographically shred a key — all envelopes wrapped by it become undecryptable." },
+      { "method": "POST", "path": "/api/vault/encrypt",               "description": "Encrypt a payload under a named data key; returns a base64 envelope." },
+      { "method": "POST", "path": "/api/vault/decrypt",               "description": "Decrypt an envelope; emits an audit entry for every decrypt." }
+    ],
+    "events": [
+      { "name": "vault.key.created.v1",  "retention_class": "regulated",  "conflict_policy": "event-sourcing", "description": "New key issued; subject_kind=key, subject_id=key_id." },
+      { "name": "vault.key.rotated.v1",  "retention_class": "regulated",  "conflict_policy": "event-sourcing", "description": "Key rotated; carries old + new version refs." },
+      { "name": "vault.key.shredded.v1", "retention_class": "regulated",  "conflict_policy": "event-sourcing", "description": "Key cryptographically destroyed; all dependent envelopes are now undecryptable." },
+      { "name": "vault.cmk.bound.v1",    "retention_class": "regulated",  "conflict_policy": "event-sourcing", "description": "P8 Variant A: customer-managed key bound as the wrapping key for a tenant." },
+      { "name": "vault.cmk.revoked.v1",  "retention_class": "regulated",  "conflict_policy": "event-sourcing", "description": "P8 Variant A: customer revoked their CMK; tenant data becomes UndecryptableError." }
+    ],
+    "models": [
+      { "schema": "vault", "table": "key",                  "description": "Master key registry; tier + status + version + KMS-backend reference." },
+      { "schema": "vault", "table": "key_operation",        "description": "Every encrypt/decrypt/rotate/shred for forensic replay; chained to sdk-audit." },
+      { "schema": "vault", "table": "encounter_key_seal",   "description": "Per-encounter ephemeral keys (L5 in the identity model); auto-shredded at encounter close." },
+      { "schema": "vault", "table": "byok_binding",         "description": "P8 Variant A: which tenants have CMK bindings + which provider (AWS / GCP / Azure)." },
+      { "schema": "vault", "table": "cmk_use_log",          "description": "Per-decrypt log against a CMK; powers the SIEM forwarder for customer audit pipelines." },
+      { "schema": "vault", "table": "cmk_rotation",         "description": "CMK rotation history with grace-window timestamps." }
+    ],
+    "hooks": [
+      { "name": "startRotationScheduler", "description": "Background worker that rotates eligible keys on the quarterly cadence; safe to leave running in dev." },
+      { "name": "setByokEmitter",         "description": "Wire an event-emitter callback so an external system can react to vault.cmk.* events." },
+      { "name": "setSiemForwarder",       "description": "Wire a SIEM HTTP forwarder so customer SOCs see every CMK use in their own pipelines." }
+    ],
+    "ui_components": []
+  },
+  "consumes": {
+    "events": [
+      { "name": "tenant.created.v1",     "from": "@projexlight/sdk-tenant" },
+      { "name": "tenant.offboarded.v1",  "from": "@projexlight/sdk-tenant-lifecycle" }
+    ],
+    "infra": ["postgres", "aws-kms-or-gcp-kms-or-azure-kv", "redis-optional"],
+    "config_keys": ["VAULT_KMS_PROVIDER", "AWS_REGION", "GCP_PROJECT_ID", "AZURE_KEY_VAULT_URL", "VAULT_ROTATION_INTERVAL_DAYS"]
+  },
+  "scenarios": [
+    {
+      "id": "issue-tenant-key",
+      "title": "Issue a tenant-tier data key on first tenant boot",
+      "when_to_use": "Called by sdk-tenant after a fresh tenant.created.v1 lands. Required before any tenant-scoped write can be encrypted.",
+      "example_code": "import { issueKey } from '@projexlight/sdk-vault';\nconst key = await issueKey({ tier: 'tenant', tenant_id, app_id, owner_id: 'sdk-tenant' });\n// key.key_id is the reference to pass into encrypt/decrypt calls.",
+      "expected_outcome": "Returns a KeyRecord with status='active'; emits vault.key.created.v1 to the per-tenant audit chain; the key is immediately usable for encrypt/decrypt."
+    },
+    {
+      "id": "encrypt-pii-field",
+      "title": "Encrypt a PII field with envelope encryption",
+      "when_to_use": "Any time an SDK writes PII (e.g., identity.person email, billing tax-id) and the column expects an envelope-encrypted blob.",
+      "example_code": "import { encrypt } from '@projexlight/sdk-vault';\nconst envelope = await encrypt({ key_id, plaintext: Buffer.from(email, 'utf-8'), context: { person_id } });\n// Store envelope.bytes (base64) in the column; envelope.dek_id never leaves vault.",
+      "expected_outcome": "Returns { bytes, dek_id, kms_version }. Adds one row to vault.key_operation. Reversible via decrypt() with the same context object."
+    },
+    {
+      "id": "rotate-quarterly",
+      "title": "Auto-rotate every quarter via the scheduler",
+      "when_to_use": "Leave the scheduler running in your service binary. Per-key rotation eligibility is determined by tier + last-rotated-at.",
+      "example_code": "import { startRotationScheduler } from '@projexlight/sdk-vault';\nconst handle = startRotationScheduler({ intervalMs: 86_400_000 });\n// Quiesce on shutdown:\nawait handle.stop();",
+      "expected_outcome": "Eligible keys flip to a new version; old version remains for a 10-minute grace window so in-flight decrypts succeed. Emits vault.key.rotated.v1 per rotation."
+    },
+    {
+      "id": "byok-revoke-renders-data-undecryptable",
+      "title": "BYOK / Variant A: customer revoke makes tenant data undecryptable",
+      "when_to_use": "When a customer using P8 Variant A revokes their CMK from their KMS — your decrypt path must surface UndecryptableError, not stall.",
+      "example_code": "import { decrypt, UndecryptableError } from '@projexlight/sdk-vault';\ntry {\n  const plaintext = await decrypt({ envelope, context });\n} catch (err) {\n  if (err instanceof UndecryptableError) { /* surface to operator + lock tenant */ }\n}",
+      "expected_outcome": "decrypt() throws UndecryptableError immediately (no retry storm). Emits vault.cmk.revoked.v1 if first observation. Operator console shows the tenant as 'CMK-locked'."
+    },
+    {
+      "id": "encounter-key-auto-shred",
+      "title": "Per-encounter ephemeral key auto-shredded at close",
+      "when_to_use": "Whenever an encounter (L5) holds short-lived sensitive data — visit recordings, in-flight chat transcripts. The key dies with the encounter.",
+      "example_code": "import { issueEncounterKey, closeEncounter } from '@projexlight/sdk-vault';\nconst { key_id } = await issueEncounterKey({ encounter_id });\n// ... use key_id for the encounter's encrypt/decrypt ...\nawait closeEncounter({ encounter_id }); // shreds the key + emits vault.key.shredded.v1.",
+      "expected_outcome": "On closeEncounter the encounter_key_seal row is deleted, sealed envelopes become undecryptable, and an audit entry is written. Any later decrypt against that key fails with UndecryptableError."
+    }
+  ],
+  "compliance_posture": {
+    "regimes": ["SOC2", "HIPAA", "PCI-DSS", "FedRAMP-Moderate", "GDPR-Art-32"],
+    "notes": "FIPS-140-2 / 140-3 KMS providers required for FedRAMP. PCI-DSS req 3.5/3.6 satisfied by envelope encryption + quarterly rotation + key_operation audit. HIPAA encryption-at-rest satisfied. P8 Variant A (BYOK) is the path for customers who need CMEK control."
+  },
+  "pool_placement": "admin",
+  "pricing_skus": [
+    { "sku": "vault.encrypt",       "mode": "metered", "unit_description": "per encrypt call; envelope size does not affect price" },
+    { "sku": "vault.decrypt",       "mode": "metered", "unit_description": "per decrypt call" },
+    { "sku": "vault.key.issue",     "mode": "metered", "unit_description": "per key issued (rare; one-time per tier-scope pair)" },
+    { "sku": "vault.byok.binding",  "mode": "flat",    "unit_description": "per tenant CMK binding per month (Variant A surcharge)" }
+  ],
+  "links": {
+    "readme": "packages/sdk-vault/README.md",
+    "source": "packages/sdk-vault/src/",
+    "prd_section": "P1-Foundation-Spine §5.1 / P8-Deployment-Variants §5 Variant A"
+  }
+}

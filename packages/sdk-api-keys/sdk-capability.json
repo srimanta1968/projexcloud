@@ -1,0 +1,89 @@
+{
+  "name": "@projexlight/sdk-api-keys",
+  "version": "1.0.0",
+  "schema_version": "1.0",
+  "summary": "Long-lived programmatic credentials for ProjexCloud: issue per-tenant API keys bound to a service-persona with a scope list, rotate with a grace window, revoke instantly. Hashes only — we never store the secret bytes; the customer sees the secret exactly once at issue time. Hot-path verifier is sub-ms because it reads from the projection layer + a Redis cache.",
+  "tags": ["api-keys", "credentials", "rotation", "scopes", "p2"],
+  "provides": {
+    "endpoints": [
+      { "method": "POST", "path": "/api/api-keys",                "description": "Issue a new key for (tenant, service_persona). Returns the secret EXACTLY ONCE; only the hash is stored." },
+      { "method": "GET",  "path": "/api/api-keys",                "description": "List active keys for the calling tenant (name, prefix, scopes, last_used_at, expires_at). Secrets are never returned." },
+      { "method": "POST", "path": "/api/api-keys/:key_id/revoke", "description": "Immediate revoke. Hot-path cache invalidated within the route-cache TTL." },
+      { "method": "POST", "path": "/api/api-keys/:key_id/rotate", "description": "Rotate: mint a new secret under the same key_id; old secret valid for 10-min grace window for zero-downtime swap." }
+    ],
+    "events": [
+      { "name": "api-keys.issued.v1",         "retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "New key minted; carries key_id + prefix (never the secret)." },
+      { "name": "api-keys.rotated.v1",        "retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "Key rotated; old + new key_version refs." },
+      { "name": "api-keys.revoked.v1",        "retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "Key revoked instantly. Cache invalidation broadcast." },
+      { "name": "api-keys.verification.failed.v1", "retention_class": "operational", "conflict_policy": "lww",     "description": "Failed-auth observability (signal: brute-force attempt? stale config?). Rate-limited per key prefix." }
+    ],
+    "models": [
+      { "schema": "api_keys", "table": "key", "description": "Per-key row: key_id, tenant_id, service_persona_id, prefix, hash_envelope (SHA-256 of secret, vault-wrapped), scopes, expires_at, status." }
+    ],
+    "hooks": [
+      { "name": "issueKey",     "description": "Service entry. Secret returned only here; the call should immediately hand the secret to the customer + clear from memory." },
+      { "name": "verifyKey",    "description": "Hot-path verifier. Sub-ms when the cache is warm; falls back to projection + DB on miss. Used by the gateway preHandler when Authorization is `Bearer apikey_*`." },
+      { "name": "rotateKey",    "description": "Mint a new secret under the same key_id; old secret stays valid for the grace window (default 10 min)." },
+      { "name": "revokeKey",    "description": "Instant revoke + cache invalidation broadcast on Redis. No grace window." }
+    ],
+    "ui_components": []
+  },
+  "consumes": {
+    "events": [
+      { "name": "tenant.offboarded.v1", "from": "@projexlight/sdk-tenant-lifecycle" }
+    ],
+    "infra": ["postgres", "redis-optional", "sdk-vault"],
+    "config_keys": ["API_KEY_ROTATION_GRACE_MS", "API_KEY_CACHE_TTL_MS", "API_KEY_DEFAULT_EXPIRY_DAYS"]
+  },
+  "scenarios": [
+    {
+      "id": "issue-ci-key",
+      "title": "Customer issues an API key for their CI pipeline",
+      "when_to_use": "Tenant admin needs a long-lived M2M credential for GitHub Actions / GitLab CI / Jenkins.",
+      "example_code": "import { issueKey } from '@projexlight/sdk-api-keys';\nconst { key_id, secret, prefix } = await issueKey({\n  tenant_id, service_persona_id,\n  name: 'ci-pipeline',\n  scopes: ['workflow.start', 'evidence.capture.register'],\n  expires_at: new Date(Date.now() + 90 * 86_400_000),\n});\n// IMMEDIATELY hand `secret` to the customer; we keep only the hash.",
+      "expected_outcome": "Returns the secret exactly once + a non-secret prefix. Emits api-keys.issued.v1. Subsequent listKeys() shows the prefix + scopes + expiry but NEVER the secret."
+    },
+    {
+      "id": "verify-on-request",
+      "title": "Gateway hot-path verifies the key on every request",
+      "when_to_use": "preHandler that runs on every Authorization: Bearer apikey_* request. Sub-ms is non-negotiable here.",
+      "example_code": "import { verifyKey } from '@projexlight/sdk-api-keys';\nconst claims = await verifyKey(rawSecret);\nif (!claims) return reply.code(401).send({ error: 'invalid api key' });\nreq.auth = claims; // same shape as a JWT-verified call",
+      "expected_outcome": "Returns the six-layer claim set matching the service-persona, or null. Cache miss writes warm-entry on success."
+    },
+    {
+      "id": "rotate-with-grace",
+      "title": "Rotate quarterly with zero-downtime config swap",
+      "when_to_use": "Customer rotates their CI secret per policy. They want a window to update the secret in their CI without dropping builds.",
+      "example_code": "import { rotateKey } from '@projexlight/sdk-api-keys';\nconst { new_secret } = await rotateKey({ key_id });\n// Customer has 10 min (default) to update CI config. Old secret stays valid until then.",
+      "expected_outcome": "Returns the new secret. Both old + new accepted by verifyKey for the grace window. After grace expires, old is silently rejected. Emits api-keys.rotated.v1."
+    },
+    {
+      "id": "instant-revoke",
+      "title": "Revoke instantly after a suspected leak",
+      "when_to_use": "Security incident — customer believes their CI runner was compromised. Need immediate revocation, no grace window.",
+      "example_code": "import { revokeKey } from '@projexlight/sdk-api-keys';\nawait revokeKey({ key_id, reason: 'suspected leak in CI logs' });",
+      "expected_outcome": "Key flipped to revoked. Redis pub/sub broadcasts the invalidation across every gateway replica within the route-cache TTL. Emits api-keys.revoked.v1 with the reason for the audit trail."
+    },
+    {
+      "id": "scope-narrowing",
+      "title": "Reissue a key with narrower scopes (least-privilege follow-up)",
+      "when_to_use": "Audit finds the old key had broader scopes than the workload actually needs; reissue narrower; revoke the old one.",
+      "example_code": "// 1. issueKey with narrower scopes\n// 2. customer swaps the secret in their CI\n// 3. revokeKey on the old key_id\n// All audited; no service interruption when steps 1-2 happen before step 3.",
+      "expected_outcome": "New key in service with minimum-privilege scopes. Audit chain shows the deprecation flow. Compliance report (SOC2 CC6.6) shows the reduction in privilege over time."
+    }
+  ],
+  "compliance_posture": {
+    "regimes": ["SOC2-CC6.6", "PCI-DSS-Req-8", "FedRAMP-AC-2", "HIPAA-164.308(a)(5)(ii)(C)", "NIST-800-63B-Authenticator-Lifecycle"],
+    "notes": "Secrets never persisted in plaintext — only SHA-256 hash, vault-wrapped. Customer-visible secret returned exactly once at issue time. Rotation grace window keeps M2M integrations functional; revoke is immediate (no grace). Audit chain attestation supports SOC2 CC6.6 logical-access review evidence."
+  },
+  "pool_placement": "admin",
+  "pricing_skus": [
+    { "sku": "api-keys.issue",   "mode": "flat",    "unit_description": "per key issued (rotate counts as a new issue for billing)" },
+    { "sku": "api-keys.verify",  "mode": "metered", "unit_description": "per verify call (most are cache hits; cache misses billed at a higher rate)" }
+  ],
+  "links": {
+    "readme": "packages/sdk-api-keys/README.md",
+    "source": "packages/sdk-api-keys/src/",
+    "prd_section": "P2-Identity-Access §8 / FR-AKY-1..4"
+  }
+}

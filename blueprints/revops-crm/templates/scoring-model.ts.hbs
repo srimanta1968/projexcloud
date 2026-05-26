@@ -1,0 +1,19 @@
+/**
+ * {{app_name}} — Lead scoring model
+ *
+ * Model: {{scoring_model}}
+ */
+
+import type { Lead } from '../leads/intake';
+
+export interface ScoredLead extends Lead {
+  score: number;
+  band: 'cold' | 'warm' | 'hot';
+}
+
+export async function score(lead: Lead): Promise<ScoredLead> {
+  // Replace with your real scoring; this is a placeholder.
+  const score = lead.source === 'inbound' ? 80 : lead.source === 'partner' ? 60 : 40;
+  const band: ScoredLead['band'] = score >= 70 ? 'hot' : score >= 50 ? 'warm' : 'cold';
+  return { ...lead, score, band };
+}

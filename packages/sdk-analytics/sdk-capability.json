@@ -1,0 +1,98 @@
+{
+  "name": "@projexlight/sdk-analytics",
+  "version": "1.0.0",
+  "schema_version": "1.0",
+  "summary": "OLAP + lakehouse layer for ProjexCloud: declare rollup specs, cohorts, funnels, and canonical KPIs once; the warehouse layer materializes them across per-tenant Iceberg tables. Federation manifest (G11) lets a single query span multiple per-tenant app pools without rehydrating into one central warehouse. Foundation for any analytics blueprint + the BI fan-out via connector-snowflake.",
+  "tags": ["analytics", "olap", "iceberg", "lakehouse", "federation", "kpi", "p6b"],
+  "provides": {
+    "endpoints": [],
+    "events": [
+      { "name": "analytics.rollup.materialized.v1",  "retention_class": "operational", "conflict_policy": "event-sourcing", "description": "Per-spec rollup completed; downstream BI tools can poll for freshness." },
+      { "name": "analytics.cohort.computed.v1",       "retention_class": "operational", "conflict_policy": "lww",            "description": "Cohort definition resolved into a member set (refreshable on demand)." },
+      { "name": "analytics.funnel.computed.v1",       "retention_class": "operational", "conflict_policy": "lww",            "description": "Funnel conversion rates recomputed (typically daily)." },
+      { "name": "analytics.kpi.published.v1",         "retention_class": "operational", "conflict_policy": "event-sourcing", "description": "Canonical KPI value published for the period. Source-of-truth for dashboards." },
+      { "name": "analytics.lakehouse.extracted.v1",   "retention_class": "regulated",  "conflict_policy": "event-sourcing", "description": "Source pool data extracted into an Iceberg snapshot. Carries snapshot ref + row count." },
+      { "name": "analytics.federation.query.served.v1","retention_class": "operational","conflict_policy": "lww",            "description": "Federation query spanning multiple pools served. Audit trail for cross-pool reads." }
+    ],
+    "models": [
+      { "schema": "analytics",  "table": "rollup_spec",                "description": "Declarative rollup definition: source tables, dimensions, aggregates, refresh cadence." },
+      { "schema": "analytics",  "table": "cohort",                     "description": "Named subject set: definition (SQL or rule list), refreshed_at, member_count." },
+      { "schema": "analytics",  "table": "funnel",                     "description": "Ordered-event sequence with conversion math + per-step retention." },
+      { "schema": "analytics",  "table": "kpi",                        "description": "Canonical KPI registry: name, formula, owner, refresh cadence." },
+      { "schema": "analytics",  "table": "extract_to_lakehouse",       "description": "Per-extract job row: source_pool, target_iceberg_table, snapshot_ref, status." },
+      { "schema": "federation", "table": "iceberg_catalog",            "description": "Catalog entry per Iceberg namespace this tenant publishes." },
+      { "schema": "federation", "table": "iceberg_table_binding",      "description": "Which per-tenant tables map to which federated Iceberg tables (G11)." },
+      { "schema": "federation", "table": "lakehouse_query_log",        "description": "Query log for federated reads; powers SemanticPolicy audit + cost attribution." }
+    ],
+    "hooks": [
+      { "name": "registerRollupSpec",   "description": "Declare a rollup spec; the worker materializes it on the spec's refresh cadence." },
+      { "name": "computeCohort",         "description": "Resolve a cohort definition into its current member set." },
+      { "name": "publishKpi",            "description": "Publish a canonical KPI value for a period; idempotent on (kpi, period)." },
+      { "name": "extractToLakehouse",    "description": "Push a source pool's data into an Iceberg snapshot; idempotent on (pool, table, period)." },
+      { "name": "federatedQuery",        "description": "Run a query across federated Iceberg bindings without rehydrating; respects SemanticPolicy decisions." }
+    ],
+    "ui_components": []
+  },
+  "consumes": {
+    "events": [
+      { "name": "meter.usage.aggregated.v1", "from": "@projexlight/sdk-meter" },
+      { "name": "tenant.created.v1",         "from": "@projexlight/sdk-tenant" }
+    ],
+    "infra": ["postgres", "iceberg-lakehouse", "spark-or-trino-optional", "clickhouse-optional"],
+    "config_keys": ["ANALYTICS_LAKEHOUSE_BACKEND", "ANALYTICS_ROLLUP_DEFAULT_CADENCE_MIN", "FEDERATION_QUERY_TIMEOUT_MS"]
+  },
+  "scenarios": [
+    {
+      "id": "declare-rollup",
+      "title": "Declare a daily MRR rollup",
+      "when_to_use": "Finance wants daily MRR snapshots. Declare the rollup spec once; worker materializes on the cadence.",
+      "example_code": "import { registerRollupSpec } from '@projexlight/sdk-analytics';\nawait registerRollupSpec({\n  tenant_id, name: 'mrr-daily',\n  source: 'billing.invoice',\n  dimensions: ['plan', 'tenant_id'],\n  aggregates: [{ fn: 'sum', column: 'mrr_cents' }],\n  refresh_cadence_min: 60,\n});",
+      "expected_outcome": "Spec persisted; worker rebuilds the materialized rollup hourly. Emits analytics.rollup.materialized.v1 per pass."
+    },
+    {
+      "id": "publish-kpi",
+      "title": "Publish the canonical 'monthly active accounts' KPI",
+      "when_to_use": "Single source of truth for the company metric; dashboards + investor decks all read from here.",
+      "example_code": "import { publishKpi } from '@projexlight/sdk-analytics';\nawait publishKpi({\n  tenant_id, kpi: 'mau-accounts',\n  period: '2026-05',\n  value: 18420,\n  source_query_hash: '...',\n});",
+      "expected_outcome": "KPI value persisted + emitted. Audit trail keeps source_query_hash so the number is reproducible end-to-end."
+    },
+    {
+      "id": "federated-cross-pool-query",
+      "title": "Federation: query across 5 tenant pools without rehydration",
+      "when_to_use": "Cross-tenant analytics for an operator dashboard ('what's the average DAU across all enterprise tenants?'). Federation reads Iceberg snapshots in place — no central warehouse needed.",
+      "example_code": "import { federatedQuery } from '@projexlight/sdk-analytics';\nconst rows = await federatedQuery({\n  pool_indices: ['pool-a','pool-b','pool-c','pool-d','pool-e'],\n  query: 'SELECT pool_id, AVG(dau) FROM events_daily WHERE date >= ?',\n  params: ['2026-05-01'],\n});",
+      "expected_outcome": "Single result set across pools. Each pool's contribution audited via analytics.federation.query.served.v1 for cost attribution + SemanticPolicy logging."
+    },
+    {
+      "id": "extract-to-lakehouse",
+      "title": "Extract a tenant's per-app event stream into Iceberg",
+      "when_to_use": "Daily batch — push raw events from the app pool into the tenant's Iceberg namespace for BI tools to read.",
+      "example_code": "import { extractToLakehouse } from '@projexlight/sdk-analytics';\nconst job = await extractToLakehouse({\n  tenant_id, source_pool: 'pool-app-7',\n  source_table: 'analytics.event_inbox',\n  target_iceberg_table: 'analytics.tenant_<id>.events',\n  period_start, period_end,\n});",
+      "expected_outcome": "Job row written; worker performs the extract + creates a new Iceberg snapshot. Emits analytics.lakehouse.extracted.v1 with the snapshot ref. connector-snowflake (and similar) can fan out from here."
+    },
+    {
+      "id": "compute-cohort",
+      "title": "Define a cohort: 'tenants on Pro plan as of last month'",
+      "when_to_use": "Marketing + product use cohorts for retention + expansion analysis. Definitions cached; recomputed on demand.",
+      "example_code": "import { computeCohort } from '@projexlight/sdk-analytics';\nconst { cohort_id, member_count } = await computeCohort({\n  tenant_id, name: 'pro-as-of-last-month',\n  definition: { kind: 'sql', query: \"SELECT tenant_id FROM billing.invoice WHERE plan='pro' AND period_start='2026-04-01'\" },\n});",
+      "expected_outcome": "Cohort persisted with the resolved member set. Subsequent funnel + retention queries reference cohort_id rather than re-resolving."
+    }
+  ],
+  "compliance_posture": {
+    "regimes": ["SOC2-CC7.1", "SOX-revenue-recognition", "EU-Data-Residency", "GDPR-Art-30"],
+    "notes": "Per-tenant Iceberg namespaces keep tenant data isolated even in federated queries. Federation queries logged in lakehouse_query_log for SOX + SOC2 + tenant-level cost attribution. KPI publish events are immutable — corrections write a new value with reason; never overwrite."
+  },
+  "pool_placement": "warehouse",
+  "pricing_skus": [
+    { "sku": "analytics.rollup.refresh",       "mode": "metered", "unit_description": "per rollup-spec refresh (cadence-driven)" },
+    { "sku": "analytics.kpi.publish",          "mode": "flat",    "unit_description": "per KPI value published" },
+    { "sku": "analytics.federation.query",     "mode": "metered", "unit_description": "per federated query (per-pool fan-out billed separately)" },
+    { "sku": "analytics.lakehouse.extract.gb", "mode": "metered", "unit_description": "per GB extracted into the lakehouse" }
+  ],
+  "no_endpoints": true,
+  "links": {
+    "readme": "packages/sdk-analytics/README.md",
+    "source": "packages/sdk-analytics/src/",
+    "prd_section": "P6B-Knowledge-Semantic §7 + P7-Field-Hyperscale §6 (G11)"
+  }
+}

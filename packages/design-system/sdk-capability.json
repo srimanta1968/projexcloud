@@ -1,0 +1,63 @@
+{
+  "name": "@projexlight/design-system",
+  "version": "1.0.0",
+  "schema_version": "1.0",
+  "summary": "Shared React component primitives for the apps/* surfaces — Button, Input, DataTable, Dialog, Toast, Form. Consumes branding kit at runtime so the same components render with each tenant's colors + logo in white-label deployments.",
+  "tags": ["foundation", "ui", "react", "design-system", "wave-0"],
+  "provides": {
+    "endpoints": [],
+    "events": [],
+    "models": [],
+    "hooks": [
+      { "name": "ThemeProvider",  "description": "React provider that loads the active branding kit + exposes theme tokens to children." }
+    ],
+    "ui_components": [
+      { "name": "Button" },
+      { "name": "Input" },
+      { "name": "DataTable" },
+      { "name": "Dialog" },
+      { "name": "Toast" },
+      { "name": "Form" }
+    ]
+  },
+  "consumes": {
+    "events": [],
+    "infra": ["react", "tailwindcss"],
+    "config_keys": []
+  },
+  "scenarios": [
+    {
+      "id": "wrap-app-with-theme",
+      "title": "Apps wrap their root in ThemeProvider",
+      "when_to_use": "Every Next.js app — wraps the root layout in ThemeProvider so child components inherit the kit.",
+      "example_code": "import { ThemeProvider } from '@projexlight/design-system';\nexport default function RootLayout({ children }) {\n  return <ThemeProvider><body>{children}</body></ThemeProvider>;\n}",
+      "expected_outcome": "Every component below the provider gets the current kit's tokens. Server-rendered pages match client-rendered hydration."
+    },
+    {
+      "id": "use-button-with-variants",
+      "title": "Use Button with built-in variants",
+      "when_to_use": "Any page needing a CTA — use the shared Button so accessibility + spacing stay consistent.",
+      "example_code": "import { Button } from '@projexlight/design-system';\n<Button variant=\"primary\" onClick={save}>Save</Button>",
+      "expected_outcome": "Renders with tenant's primary color. Keyboard + screen-reader behavior consistent across apps."
+    },
+    {
+      "id": "datatable-with-pagination",
+      "title": "DataTable renders a paginated list of rows",
+      "when_to_use": "Admin lists (contacts, invoices, leads) — DataTable handles sort/filter/paginate + URL state sync.",
+      "example_code": "<DataTable rows={contacts} columns={[{ key: 'email' }, { key: 'plan' }]} pageSize={20} />",
+      "expected_outcome": "Server-driven pagination works without writing per-page code. ARIA roles + keyboard navigation built-in."
+    }
+  ],
+  "compliance_posture": {
+    "regimes": ["ADA-WCAG-2.1-AA-accessibility"],
+    "notes": "Components ship WCAG 2.1 AA compliance — focus rings, ARIA labels, keyboard nav. Audited per release."
+  },
+  "pool_placement": "global-catalog",
+  "pricing_skus": [],
+  "no_endpoints": true,
+  "links": {
+    "readme": "packages/design-system/README.md",
+    "source": "packages/design-system/src/",
+    "prd_section": "SDK-Build-Plan-v3.1 Wave 0"
+  }
+}

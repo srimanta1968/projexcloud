@@ -1,0 +1,87 @@
+{
+  "name": "@projexlight/sdk-projection",
+  "version": "1.0.0",
+  "schema_version": "1.0",
+  "summary": "Identity Projection System (G4 closer): materialized per-(person, app, tenant) view of identity claims that every other SDK can sub-millisecond resolve against without joining live tables. Worker keeps the projection fresh from identity.* + tenant.* + persona.* deltas; projection_version on every claim envelope so consumers detect staleness. Foundation for the sub-ms identity hot path and any other denormalized canonical view downstream SDKs need.",
+  "tags": ["projection", "identity", "materialized-view", "hot-path", "foundation", "p2-p6"],
+  "provides": {
+    "endpoints": [],
+    "events": [
+      { "name": "projection.subject.refreshed.v1", "retention_class": "operational", "conflict_policy": "lww",            "description": "A (person, app, tenant) row was rebuilt from upstream deltas; carries new projection_version." },
+      { "name": "projection.subject.stale.v1",     "retention_class": "operational", "conflict_policy": "lww",            "description": "Worker detected a stale row beyond the SLA window; consumed by the alerter." },
+      { "name": "projection.batch.completed.v1",   "retention_class": "operational", "conflict_policy": "lww",            "description": "Bulk catch-up completed (e.g. after a tenant-wide identity change)." }
+    ],
+    "models": [
+      { "schema": "projection", "table": "subject_view", "description": "Denormalized identity claims keyed by (person_id, app_id, tenant_id). Includes admin_pool_index, app_pool_index, current_membership_role, bu_id, projection_version, refreshed_at." }
+    ],
+    "hooks": [
+      { "name": "resolveSubject",     "description": "Sub-ms lookup. Returns the full claims row or null. Used in the gateway hot path for every authenticated request." },
+      { "name": "enqueueRefresh",     "description": "Tells the worker a specific (person_id, app_id, tenant_id) needs rebuilding; idempotent." },
+      { "name": "startProjector",     "description": "Background worker that pulls inbox messages (from sdk-identity / sdk-tenant / sdk-persona) and rebuilds affected rows. Safe to leave running in dev." },
+      { "name": "inboxEnqueue",       "description": "Called by upstream SDKs whenever something they own changes (registerPerson, attachReseller, createSubTenant, etc.) so the projector picks it up." }
+    ],
+    "ui_components": []
+  },
+  "consumes": {
+    "events": [
+      { "name": "identity.person.registered.v1",   "from": "@projexlight/sdk-identity" },
+      { "name": "identity.session.created.v1",     "from": "@projexlight/sdk-identity" },
+      { "name": "tenant.created.v1",               "from": "@projexlight/sdk-tenant" },
+      { "name": "tenant.subtenant.created.v1",     "from": "@projexlight/sdk-tenant" }
+    ],
+    "infra": ["postgres", "redis-optional"],
+    "config_keys": ["PROJECTION_REFRESH_INTERVAL_MS", "PROJECTION_STALE_THRESHOLD_MS", "PROJECTION_INBOX_BATCH"]
+  },
+  "scenarios": [
+    {
+      "id": "gateway-hot-path",
+      "title": "Sub-ms identity resolve on every authenticated request",
+      "when_to_use": "The gateway hot path. After requireAuth validates the JWT, resolveSubject() pulls the full claim set so downstream SDKs don't have to re-join.",
+      "example_code": "import { resolveSubject } from '@projexlight/sdk-projection';\nconst subject = await resolveSubject({\n  person_id: req.auth.sub,\n  app_id: req.auth.app_id,\n  tenant_id: req.auth.tenant_id,\n});\nif (!subject) throw new Error('subject not projected yet; reject + enqueue');",
+      "expected_outcome": "Returns the projected row in O(1) (typically <1ms with the Redis warm path). Null indicates the row hasn't been rebuilt yet — caller should enqueueRefresh + 503."
+    },
+    {
+      "id": "forced-refresh-after-role-change",
+      "title": "Force-refresh after a role-template change",
+      "when_to_use": "Admin updates the role template for a tenant; we need affected subjects' projection rows rebuilt before the next request hits the cache.",
+      "example_code": "import { enqueueRefresh } from '@projexlight/sdk-projection';\nfor (const person_id of affectedPeople) {\n  await enqueueRefresh({ person_id, app_id, tenant_id });\n}",
+      "expected_outcome": "Worker rebuilds each row on its next tick (within PROJECTION_REFRESH_INTERVAL_MS). Emits projection.subject.refreshed.v1 per row with the new projection_version."
+    },
+    {
+      "id": "stale-detection",
+      "title": "Stale-row detector pages on-call when projection lag breaches SLA",
+      "when_to_use": "Production deployment. A stale row > 5s old in the gateway hot path is a Sev-2; the worker fires the alarm rather than the gateway returning incorrect claims.",
+      "example_code": "// Driven by the projector worker. To observe:\n// subscribeEvents('projection.subject.stale.v1', async (e) => {\n//   await page('projection-stale', e.payload);\n// });",
+      "expected_outcome": "Stale rows queue-jump to the next refresh tick. If lag persists, the projection_version on outgoing JWTs is forcibly bumped so consuming SDKs cache-miss + re-resolve."
+    },
+    {
+      "id": "bulk-rebuild-after-migration",
+      "title": "Bulk catch-up after a tenant-wide identity migration",
+      "when_to_use": "Operator runs a backfill (e.g. apply a new BU hierarchy across the tenant). Every projected row needs rebuild; we'd rather do it in one controlled pass than wait for inbox dribble.",
+      "example_code": "import { startProjector } from '@projexlight/sdk-projection';\nconst worker = startProjector({\n  bulkRebuild: { tenant_id, force: true },\n});\nawait worker.completed; // resolves when the bulk pass is done\nawait worker.stop();",
+      "expected_outcome": "Worker walks every (person, app) under the tenant, rebuilds each row, emits projection.batch.completed.v1 at end. New projection_version monotonically increases."
+    },
+    {
+      "id": "inbox-from-upstream",
+      "title": "sdk-identity enqueues into the inbox when a person registers",
+      "when_to_use": "Internal — every upstream identity write should land an inbox row so the projector picks it up. Documented here so downstream SDK authors know what to call.",
+      "example_code": "import { inboxEnqueue } from '@projexlight/sdk-projection';\n// after registerPerson():\nawait inboxEnqueue({\n  kind: 'identity.person.registered',\n  payload: { person_id, home_region },\n});",
+      "expected_outcome": "Inbox row written; projector picks it up on its next tick; affected (person_id, *, *) projection rows rebuilt."
+    }
+  ],
+  "compliance_posture": {
+    "regimes": ["SOC2-CC6.1", "GDPR-Art-30", "FedRAMP-AC-2-Account-Management"],
+    "notes": "Projected rows are denormalized COPIES — source of truth lives in identity.* + tenant.*. GDPR right-to-erasure handled by sdk-data-rights walking the projection alongside the source tables. projection_version on every claim envelope lets consumers detect (and recover from) stale reads."
+  },
+  "pool_placement": "admin",
+  "pricing_skus": [
+    { "sku": "projection.resolve", "mode": "metered", "unit_description": "per resolve call (most are cached; cache misses billed at a higher rate)" },
+    { "sku": "projection.rebuild", "mode": "metered", "unit_description": "per row rebuilt (background worker; rarely a hot SKU)" }
+  ],
+  "no_endpoints": true,
+  "links": {
+    "readme": "packages/sdk-projection/README.md",
+    "source": "packages/sdk-projection/src/",
+    "prd_section": "P2-Identity-Access §6 / G4"
+  }
+}

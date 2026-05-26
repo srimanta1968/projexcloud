@@ -1,0 +1,86 @@
+{
+  "name": "@projexlight/hdk-video-editor",
+  "version": "1.0.0",
+  "schema_version": "1.0",
+  "summary": "Server-side video editing primitives for ProjexCloud: trim / clip / redact-faces / burn-in-subtitle on uploaded videos. Designed for the body-cam + Zoom-recording flow — caller submits a job, worker produces derived variants in sdk-media that sdk-evidence binds as variants of the source capture.",
+  "tags": ["hdk", "video", "edit", "redaction", "subtitles", "p7"],
+  "provides": {
+    "endpoints": [
+      { "method": "GET", "path": "/api/hdk/video-editor/capabilities", "description": "Return the active editor's capability matrix (redact-faces / burn-subtitles / hw-accel-h264)." }
+    ],
+    "events": [
+      { "name": "hdk-video-editor.job.queued.v1",     "retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "Edit job queued." },
+      { "name": "hdk-video-editor.job.completed.v1",  "retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "Edit job finished; carries derived blob_id." },
+      { "name": "hdk-video-editor.job.failed.v1",     "retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "Edit job failed; carries error class + retry-policy applied." }
+    ],
+    "models": [],
+    "hooks": [
+      { "name": "getCapabilities", "description": "Return capability matrix for the editor backend." },
+      { "name": "submitJob",       "description": "Submit an edit job (trim / redact / burn-subtitle); returns job_id." },
+      { "name": "getJobStatus",    "description": "Job state + percent complete + derived blob_id when done." },
+      { "name": "startWorker",     "description": "Background worker — pulls queued jobs + runs ffmpeg pipeline." }
+    ],
+    "ui_components": []
+  },
+  "consumes": {
+    "events": [
+      { "name": "evidence.capture.registered.v1", "from": "@projexlight/sdk-evidence" },
+      { "name": "media.blob.ingested.v1",          "from": "@projexlight/sdk-media" }
+    ],
+    "infra": ["sdk-media", "sdk-evidence", "ffmpeg", "nvidia-or-amd-gpu-optional"],
+    "config_keys": ["HDK_VIDEO_EDITOR_FACE_REDACT_MODEL", "HDK_VIDEO_EDITOR_HW_ACCEL", "HDK_VIDEO_EDITOR_WORKER_CONCURRENCY"]
+  },
+  "scenarios": [
+    {
+      "id": "trim-bodycam",
+      "title": "Trim 4h body-cam down to the 30s of interest",
+      "when_to_use": "Adjuster needs the moment-of-impact clip; trim job extracts + uploads as a new blob to sdk-media.",
+      "example_code": "import { submitJob } from '@projexlight/hdk-video-editor';\nconst { job_id } = await submitJob({\n  tenant_id, source_blob_id, op: 'trim',\n  params: { start_sec: 7200, duration_sec: 30 },\n});",
+      "expected_outcome": "Job queued; worker produces the clip. Emits .completed.v1 with derived blob_id. sdk-evidence registers as a variant of the source capture."
+    },
+    {
+      "id": "redact-faces",
+      "title": "Redact bystander faces before sharing with customer",
+      "when_to_use": "Body-cam captured passers-by; PII-redact bystanders before the customer-facing release.",
+      "example_code": "import { submitJob } from '@projexlight/hdk-video-editor';\nconst { job_id } = await submitJob({\n  tenant_id, source_blob_id, op: 'redact-faces',\n  params: { keep_face_persona_ids: [customer.id] },\n});",
+      "expected_outcome": "Worker runs face-detection + blur; keeps the customer's face. Emits .completed.v1. Variant ready for release."
+    },
+    {
+      "id": "burn-subtitles",
+      "title": "Burn captions into a Zoom recording for accessibility",
+      "when_to_use": "Customer asks for captions baked in (vs. external SRT); burn-subtitles job uses ai-gateway-generated transcript.",
+      "example_code": "import { submitJob } from '@projexlight/hdk-video-editor';\nawait submitJob({\n  tenant_id, source_blob_id, op: 'burn-subtitles',\n  params: { transcript_ref, language: 'en' },\n});",
+      "expected_outcome": "New variant with hard-coded captions written to sdk-media. Accessible to any video player without SRT support."
+    },
+    {
+      "id": "hw-accel-when-available",
+      "title": "Use GPU acceleration when the host has it",
+      "when_to_use": "Capability negotiation chooses NVENC H.264 when available; falls back to libx264 CPU encode otherwise.",
+      "example_code": "const caps = await getCapabilities();\nif (caps.hw_accel_h264) // worker uses -c:v h264_nvenc automatically.",
+      "expected_outcome": "GPU-accelerated runs 5-10x faster. Capability detection prevents crashes on hosts without GPU."
+    },
+    {
+      "id": "retry-on-codec-fail",
+      "title": "Retry with software encode on hardware codec failure",
+      "when_to_use": "NVENC reports OOM mid-encode; the worker retries the job with libx264 automatically.",
+      "example_code": "// inside the worker; failure caught + retried with op-rewritten params.\n// caller sees the retry in getJobStatus as { attempts: 2, current_codec: 'libx264' }.",
+      "expected_outcome": "Job eventually completes; .completed.v1 carries the final codec. No caller intervention required."
+    }
+  ],
+  "compliance_posture": {
+    "regimes": ["GDPR-Art-32", "HIPAA-164.502", "FRE-Rule-902-self-authentication", "ADA-WCAG-captions"],
+    "notes": "Face-redaction is the GDPR + HIPAA bystander-protection lever for body-cam + meeting recording releases. Burn-in captions are the ADA-accessibility implementation. Source blob is preserved; variants are additive — original chain-of-custody never overwritten."
+  },
+  "pool_placement": "app",
+  "pricing_skus": [
+    { "sku": "hdk-video-editor.job.submit",  "mode": "metered", "unit_description": "per job submitted" },
+    { "sku": "hdk-video-editor.minute.cpu",  "mode": "metered", "unit_description": "per minute of CPU encode" },
+    { "sku": "hdk-video-editor.minute.gpu",  "mode": "metered", "unit_description": "per minute of GPU encode (lower rate)" },
+    { "sku": "hdk-video-editor.face.redact", "mode": "metered", "unit_description": "per face-redaction pass (compute-heavy)" }
+  ],
+  "links": {
+    "readme": "packages/hdk-video-editor/README.md",
+    "source": "packages/hdk-video-editor/src/",
+    "prd_section": "P7-Field-Hyperscale §15"
+  }
+}

@@ -1,0 +1,81 @@
+{
+  "name": "@projexlight/meter-collector",
+  "version": "1.0.0",
+  "schema_version": "1.0",
+  "summary": "Background rollup service for sdk-meter — consumes per-request UsageEvent.v1 rows + materializes the hourly + daily aggregates that sdk-billing.live reads + the soft-cap counter that meter.check() consults. Decouples the hot request path from the (slower) aggregation path so billing reads never block emit.",
+  "tags": ["service", "meter", "rollup", "billing", "background-worker"],
+  "provides": {
+    "endpoints": [],
+    "events": [
+      { "name": "meter-collector.hourly.rolled.v1", "retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "Hourly rollup committed; carries tenant + sku + units totals." },
+      { "name": "meter-collector.daily.rolled.v1",  "retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "Daily rollup committed; primary input to invoice generation." },
+      { "name": "meter-collector.softcap.alert.v1", "retention_class": "operational","conflict_policy": "lww",            "description": "Soft-cap counter crossed threshold; downstream WARN headers on meter.check()." }
+    ],
+    "models": [],
+    "hooks": [
+      { "name": "startCollector",      "description": "Background worker — runs rollup passes on the configured cadence." },
+      { "name": "rollupNow",           "description": "Force a rollup pass (typically end-of-day cutover or backfill)." },
+      { "name": "warmSoftCapCounter", "description": "Pre-populate the soft-cap counter for a tenant + SKU window." }
+    ],
+    "ui_components": []
+  },
+  "consumes": {
+    "events": [
+      { "name": "meter.usage.event.v1", "from": "@projexlight/sdk-meter" }
+    ],
+    "infra": ["postgres", "kafka", "redis"],
+    "config_keys": ["METER_COLLECTOR_INTERVAL_SEC", "METER_COLLECTOR_HOURLY_OFFSET_MIN", "METER_COLLECTOR_DAILY_OFFSET_HR"]
+  },
+  "scenarios": [
+    {
+      "id": "boot-collector",
+      "title": "Start the rollup cadence",
+      "when_to_use": "Process startup.",
+      "example_code": "import { startCollector } from '@projexlight/meter-collector';\nawait startCollector({ interval_sec: 60 });",
+      "expected_outcome": "Per-minute pass aggregates new rows + writes hourly + daily rollups. Soft-cap counter stays warm."
+    },
+    {
+      "id": "end-of-day-cutover",
+      "title": "End-of-day cutover triggers daily rollup",
+      "when_to_use": "Midnight per tenant tz — daily rollup commits + drives invoice draft generation in sdk-billing.",
+      "example_code": "import { rollupNow } from '@projexlight/meter-collector';\nawait rollupNow({ grain: 'daily', period: '2026-05-26' });",
+      "expected_outcome": "Daily rollup committed. Emits .daily.rolled.v1. sdk-billing picks it up + drafts the invoice."
+    },
+    {
+      "id": "softcap-alert-cascade",
+      "title": "Soft cap crossed → WARN headers fire",
+      "when_to_use": "Counter rollup detects a tenant crossed 80% of their plan ceiling — emits .softcap.alert.v1 so the gateway stamps WARN headers on future responses + the tenant-admin UI shows a banner.",
+      "example_code": "// driven by the periodic counter sweep inside startCollector",
+      "expected_outcome": "Future requests on the SKU get a Projex-Warning header. Tenant admin notified."
+    },
+    {
+      "id": "backfill-after-outage",
+      "title": "Backfill after a meter-emit outage",
+      "when_to_use": "Meter inbox queued up during an outage; rollupNow with a wide window processes everything in order.",
+      "example_code": "import { rollupNow } from '@projexlight/meter-collector';\nawait rollupNow({ grain: 'hourly', from: '2026-05-26T00:00Z', to: '2026-05-26T06:00Z' });",
+      "expected_outcome": "Aggregates caught up. Invoice draft regenerates if billing already cut once."
+    },
+    {
+      "id": "lag-monitor",
+      "title": "Lag alarm",
+      "when_to_use": "Rollup lag > threshold for > 5 min — page on-call.",
+      "example_code": "// SLO monitor via sdk-notification.",
+      "expected_outcome": "Operator scales collector or investigates upstream."
+    }
+  ],
+  "compliance_posture": {
+    "regimes": ["SOX-Section-404", "SOC2-CC7.1", "GDPR-Art-30"],
+    "notes": "Rollups are append-only; corrections happen via reverse-entry events, never overwrite. Daily rollup carries the snapshot hash that the customer invoice references for reproducibility."
+  },
+  "pool_placement": "app",
+  "pricing_skus": [
+    { "sku": "meter-collector.rollup.hourly", "mode": "metered", "unit_description": "per hourly rollup pass" },
+    { "sku": "meter-collector.rollup.daily",  "mode": "metered", "unit_description": "per daily rollup pass" }
+  ],
+  "no_endpoints": true,
+  "links": {
+    "readme": "services/meter-collector/README.md",
+    "source": "services/meter-collector/src/",
+    "prd_section": "P4-Operational-Billing §3 / FR-MET-*"
+  }
+}

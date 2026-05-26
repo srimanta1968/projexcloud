@@ -1,0 +1,98 @@
+{
+  "name": "@projexlight/sdk-service-request",
+  "version": "1.0.0",
+  "schema_version": "1.0",
+  "summary": "Service-request ticketing primitive for ProjexCloud: queue + routing-rule + ticket + assignment workflow that sits between intake (web form, email-in, conversational) and execution (sdk-dispatch / sdk-assignment / sdk-workflow). The 'help me with X' surface that any internal-ops or customer-support blueprint pulls in.",
+  "tags": ["service-request", "ticketing", "queue", "routing", "p6b"],
+  "provides": {
+    "endpoints": [
+      { "method": "POST", "path": "/api/service-request/tickets",                       "description": "Create a service-request ticket." },
+      { "method": "GET",  "path": "/api/service-request/tickets/:ticket_id",            "description": "Fetch a ticket + transition history + linked execution refs." },
+      { "method": "POST", "path": "/api/service-request/tickets/:ticket_id/assign",     "description": "Assign a ticket to a persona / queue." },
+      { "method": "POST", "path": "/api/service-request/tickets/:ticket_id/transition", "description": "Advance ticket state (open → in-progress → resolved → closed)." },
+      { "method": "POST", "path": "/api/service-request/queues",                        "description": "Create or update a queue + its routing rules." }
+    ],
+    "events": [
+      { "name": "service_request.ticket.created.v1",       "retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "Ticket created; carries intake-channel + initial classification." },
+      { "name": "service_request.ticket.assigned.v1",      "retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "Ticket assigned to a persona / queue." },
+      { "name": "service_request.ticket.transitioned.v1",  "retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "State transition; carries from/to + reason." },
+      { "name": "service_request.ticket.sla.breached.v1",  "retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "Ticket crossed its SLA deadline; downstream alerts." },
+      { "name": "service_request.routing.rule.fired.v1",   "retention_class": "operational","conflict_policy": "event-sourcing", "description": "Routing rule matched + routed a ticket." }
+    ],
+    "models": [
+      { "schema": "service_request", "table": "queue",         "description": "Per-queue row: name, default_assignee, sla_minutes, routing_rules." },
+      { "schema": "service_request", "table": "routing_rule",  "description": "Per-rule row: queue_id, predicate, priority, target." },
+      { "schema": "service_request", "table": "ticket",        "description": "Per-ticket row: requester_persona, kind, state, sla_deadline, assigned_to." }
+    ],
+    "hooks": [
+      { "name": "createTicket",      "description": "Service entry. Auto-routes via configured rules unless explicit queue specified." },
+      { "name": "assignTicket",      "description": "Assign a ticket; refuses if persona is not a member of the queue." },
+      { "name": "transitionTicket",  "description": "Advance state; refuses transitions outside the configured graph." },
+      { "name": "createQueue",       "description": "Create / update a queue + its routing rules." },
+      { "name": "startSlaSweeper",   "description": "Background worker: emits .sla.breached.v1 for tickets past deadline." }
+    ],
+    "ui_components": []
+  },
+  "consumes": {
+    "events": [
+      { "name": "conversation.session.opened.v1",   "from": "@projexlight/sdk-conversation" },
+      { "name": "connector-zendesk.ticket.created.v1","from": "@projexlight/connector-zendesk" },
+      { "name": "tenant.offboarded.v1",             "from": "@projexlight/sdk-tenant-lifecycle" }
+    ],
+    "infra": ["postgres", "redis-optional", "sdk-notification"],
+    "config_keys": ["SVCREQ_DEFAULT_SLA_MINUTES", "SVCREQ_SLA_SWEEPER_INTERVAL_SEC"]
+  },
+  "scenarios": [
+    {
+      "id": "create-ticket-from-form",
+      "title": "Customer submits a help form → ticket created",
+      "when_to_use": "Webform intake; auto-route to the right queue based on the configured rules.",
+      "example_code": "import { createTicket } from '@projexlight/sdk-service-request';\nconst { ticket_id, assigned_queue } = await createTicket({\n  tenant_id, requester_persona_id, kind: 'billing-question',\n  subject: 'Why was I charged twice?', body, priority: 'normal',\n});",
+      "expected_outcome": "Ticket row + auto-routed to billing queue per rule. Emits .ticket.created.v1 + .routing.rule.fired.v1."
+    },
+    {
+      "id": "conversation-started-routes-to-ticket",
+      "title": "Inbound chat thread auto-opens a ticket",
+      "when_to_use": "Reactive on conversation.session.opened.v1 with kind='support' — open a ticket so the support team has a tracked work item even if the chat moves async.",
+      "example_code": "subscribeEvents('conversation.session.opened.v1', async (e) => {\n  if (e.payload.kind !== 'support') return;\n  await createTicket({ requester_persona_id: e.payload.contact_persona_id, kind: 'inbound-chat', body: e.payload.first_message });\n});",
+      "expected_outcome": "Ticket opens linked to the conversation thread. Support agent sees both in the same view."
+    },
+    {
+      "id": "sla-sweeper-alerts",
+      "title": "Sweeper fires alert when ticket crosses SLA",
+      "when_to_use": "Background worker checks every 60s; tickets past their SLA deadline fire .sla.breached.v1 → sdk-notification routes to the queue manager.",
+      "example_code": "import { startSlaSweeper } from '@projexlight/sdk-service-request';\nstartSlaSweeper({ interval_sec: 60 });",
+      "expected_outcome": "Breach event fires once per ticket (idempotent). Notification escalates to the manager + the customer-success oncall."
+    },
+    {
+      "id": "supervisor-reassign",
+      "title": "Supervisor reassigns a stalled ticket",
+      "when_to_use": "Ticket stuck on rep who's OOO; supervisor reassigns to another rep in the same queue.",
+      "example_code": "import { assignTicket } from '@projexlight/sdk-service-request';\nawait assignTicket({\n  ticket_id, new_assignee_persona_id, reason: 'original-rep-ooo',\n});",
+      "expected_outcome": "Assignment row updated; emits .ticket.assigned.v1 with reason + supervisor pinned for audit."
+    },
+    {
+      "id": "resolve-with-execution-ref",
+      "title": "Ticket resolves with a link to the executed action",
+      "when_to_use": "Rep resolved by issuing a refund via sdk-payment; the ticket transition carries the refund ref so audit chain links cause + effect.",
+      "example_code": "import { transitionTicket } from '@projexlight/sdk-service-request';\nawait transitionTicket({\n  ticket_id, to_state: 'resolved',\n  execution_refs: [{ kind: 'payment.refund', id: refund_id }],\n  resolved_by_persona_id, summary: 'duplicate charge refunded',\n});",
+      "expected_outcome": "Ticket closes; emits .ticket.transitioned.v1. Execution refs visible in the ticket detail for SOC2 audit traceability."
+    }
+  ],
+  "compliance_posture": {
+    "regimes": ["SOC2-CC7.1-operations", "GDPR-Art-30", "HIPAA-164.502-support-records"],
+    "notes": "Ticket body is PII; permission filtering via sdk-rebac. Resolution refs link tickets to the actual SDK actions taken so a SOC2 auditor can replay cause→effect. SLA-breach events are the SOC2-CC7.1 monitoring artifact."
+  },
+  "pool_placement": "app",
+  "pricing_skus": [
+    { "sku": "service_request.ticket.create",   "mode": "metered", "unit_description": "per ticket created" },
+    { "sku": "service_request.ticket.assign",   "mode": "metered", "unit_description": "per assignment" },
+    { "sku": "service_request.ticket.transition","mode": "metered","unit_description": "per state transition" },
+    { "sku": "service_request.queue.create",    "mode": "flat",    "unit_description": "per queue" }
+  ],
+  "links": {
+    "readme": "packages/sdk-service-request/README.md",
+    "source": "packages/sdk-service-request/src/",
+    "prd_section": "P6B-Vertical-Support §1 / FR-SVR-1..5"
+  }
+}

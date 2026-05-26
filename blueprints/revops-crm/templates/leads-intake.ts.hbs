@@ -1,0 +1,38 @@
+/**
+ * {{app_name}} — Lead intake handler
+ *
+ * Scaffolded by blueprint {{blueprint_id}} ({{blueprint_title}}).
+ * Salesforce sync direction: {{sf_sync_direction}}
+ */
+
+import { emitEvent } from '@projexlight/sdk-audit';
+// import { resolveTenant } from '@projexlight/sdk-tenant';
+// import { score } from './scoring/model';
+
+export interface Lead {
+  lead_id: string;
+  tenant_id: string;
+  email: string;
+  source: 'web' | 'event' | 'partner' | 'inbound';
+  attrs?: Record<string, unknown>;
+}
+
+export async function intakeLead(lead: Lead): Promise<void> {
+  // 1. Validate + de-dupe against existing leads (your domain logic here).
+  // 2. Persist to your CRM table.
+  // 3. Emit to the audit chain so downstream consumers + compliance can replay.
+  await emitEvent({
+    event_type: 'crm.lead.created.v1',
+    payload: { lead_id: lead.lead_id, source: lead.source, attrs: lead.attrs ?? {} },
+    pool_index: 'app',
+    actor_kind: 'service',
+    actor_id: 'crm-leads-intake',
+    tenant_id: lead.tenant_id,
+    subject_kind: 'lead',
+    subject_id: lead.lead_id,
+  });
+
+  // 4. (Optional) Score + route via ./router.ts.
+  // const scored = await score(lead);
+  // await routeLead(scored);
+}

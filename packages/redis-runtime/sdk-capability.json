@@ -1,0 +1,86 @@
+{
+  "name": "@projexlight/redis-runtime",
+  "version": "1.0.0",
+  "schema_version": "1.0",
+  "summary": "Redis client runtime — cluster-aware client, soft-cap counter, rate-limit primitives, distributed lock helpers. Every SDK that needs sub-ms cache or distributed coordination imports from here.",
+  "tags": [
+    "foundation",
+    "runtime",
+    "redis",
+    "cache",
+    "infra"
+  ],
+  "provides": {
+    "endpoints": [],
+    "events": [],
+    "models": [],
+    "hooks": [
+      {
+        "name": "initRedis",
+        "description": "Initialize the Redis client (cluster or single-node based on env)."
+      },
+      {
+        "name": "closeRedis",
+        "description": "Graceful shutdown — drain in-flight commands, exit clean."
+      },
+      {
+        "name": "withLock",
+        "description": "Acquire a distributed lock for a duration; auto-release on callback exit."
+      },
+      {
+        "name": "tokenBucket",
+        "description": "Rate-limit primitive — token-bucket counter on a key."
+      }
+    ],
+    "ui_components": []
+  },
+  "consumes": {
+    "events": [],
+    "infra": [
+      "redis",
+      "redis-cluster-optional"
+    ],
+    "config_keys": [
+      "REDIS_URL",
+      "REDIS_TLS_ENABLED",
+      "REDIS_LOCK_DEFAULT_TTL_MS"
+    ]
+  },
+  "scenarios": [
+    {
+      "id": "init-on-boot",
+      "title": "Service initializes Redis on boot",
+      "when_to_use": "Every service that uses caching / rate-limits / locks.",
+      "example_code": "import { initRedis } from '@projexlight/redis-runtime';\nawait initRedis();",
+      "expected_outcome": "Client connects to cluster or single-node based on REDIS_URL shape. Failed init refuses service boot."
+    },
+    {
+      "id": "distributed-lock",
+      "title": "Cross-pod distributed lock for a once-per-tenant job",
+      "when_to_use": "Background worker that must not run concurrently across replicas — withLock ensures only one pod runs at a time.",
+      "example_code": "import { withLock } from '@projexlight/redis-runtime';\nawait withLock(`tenant:${tenant_id}:rollup`, 60_000, async () => { /* ... */ });",
+      "expected_outcome": "Only one replica runs the inner block. Lock auto-releases on callback exit or TTL expiry."
+    },
+    {
+      "id": "token-bucket-rate-limit",
+      "title": "Per-tenant rate limit via token bucket",
+      "when_to_use": "Hosted MCP / API gateway need to cap per-tenant traffic; tokenBucket gives a fast Redis-backed counter.",
+      "example_code": "import { tokenBucket } from '@projexlight/redis-runtime';\nconst ok = await tokenBucket(`tenant:${tenant_id}:requests`, { capacity: 120, refill_per_sec: 2 });\nif (!ok) reply.code(429).send();",
+      "expected_outcome": "Counter shared across all replicas in the cluster. Burst-tolerant + sustained-rate-limited."
+    }
+  ],
+  "compliance_posture": {
+    "regimes": [
+      "SOC2-CC7.1"
+    ],
+    "notes": "TLS required for production. No PII cached — only counters + locks + ephemeral session data."
+  },
+  "pool_placement": "global-catalog",
+  "pricing_skus": [],
+  "no_endpoints": true,
+  "links": {
+    "readme": "packages/redis-runtime/README.md",
+    "source": "packages/redis-runtime/src/",
+    "prd_section": "Architecture-v3.1 §6"
+  }
+}

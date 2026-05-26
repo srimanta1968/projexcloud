@@ -1,0 +1,94 @@
+{
+  "name": "@projexlight/connector-microsoft365",
+  "version": "1.0.0",
+  "schema_version": "1.0",
+  "summary": "Microsoft 365 connector: OAuth install at tenant scope, sync OneDrive / SharePoint files, Outlook calendar + mail, Teams messages. The enterprise IT integration — large tenants on M365 use this for unified search, audit, + ChatOps. Composes with sdk-evidence for file-archive workflows + sdk-notification for Teams-routed alerts.",
+  "tags": ["connector", "microsoft365", "m365", "enterprise", "oauth", "teams", "graph-api"],
+  "provides": {
+    "endpoints": [],
+    "events": [
+      { "name": "connector-microsoft365.install.created.v1",   "retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "M365 tenant OAuth complete." },
+      { "name": "connector-microsoft365.drive_item.synced.v1", "retention_class": "operational","conflict_policy": "event-sourcing", "description": "OneDrive / SharePoint file metadata cached." },
+      { "name": "connector-microsoft365.calendar.event.v1",    "retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "Calendar event change ingested." },
+      { "name": "connector-microsoft365.teams.message.v1",     "retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "Teams channel message ingested." },
+      { "name": "connector-microsoft365.mail.sent.v1",         "retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "Outbound mail send via Graph API." }
+    ],
+    "models": [
+      { "schema": "connector_microsoft365", "table": "m365_drive_item",     "description": "Cached OneDrive / SharePoint item row." },
+      { "schema": "connector_microsoft365", "table": "m365_calendar_event", "description": "Cached calendar event row." },
+      { "schema": "connector_microsoft365", "table": "m365_teams_message",  "description": "Cached Teams channel message row." },
+      { "schema": "connector_microsoft365", "table": "m365_mail_sent",      "description": "Per-sent-mail row." }
+    ],
+    "hooks": [
+      { "name": "installConnector", "description": "Tenant-scoped OAuth install; stores refresh token + records tenant_id." },
+      { "name": "syncDrive",         "description": "Sync OneDrive / SharePoint items (delta-token based)." },
+      { "name": "postTeamsMessage",  "description": "Post a message to a Teams channel (replaces / augments connector-slack for M365 shops)." },
+      { "name": "sendMail",          "description": "Send mail via Graph API (audited; recipient + persona pinned)." },
+      { "name": "handleWebhook",     "description": "Process inbound Graph change-notification subscriptions." }
+    ],
+    "ui_components": []
+  },
+  "consumes": {
+    "events": [
+      { "name": "tenant.offboarded.v1",         "from": "@projexlight/sdk-tenant-lifecycle" },
+      { "name": "notification.message.sent.v1", "from": "@projexlight/sdk-notification" }
+    ],
+    "infra": ["postgres", "sdk-secrets", "sdk-webhook", "sdk-media"],
+    "config_keys": ["M365_TENANT_ID", "M365_GRAPH_API_VERSION", "M365_WEBHOOK_NOTIFICATION_URL"]
+  },
+  "scenarios": [
+    {
+      "id": "install-m365-tenant",
+      "title": "Enterprise IT installs M365 connector at tenant scope",
+      "when_to_use": "Admin grants admin-consent for tenant-wide scopes (Files.Read.All, Calendar.Read, Teams.Send).",
+      "example_code": "import { installConnector } from '@projexlight/connector-microsoft365';\nconst { install_id } = await installConnector({\n  tenant_id, m365_tenant_id, auth_code,\n  scopes: ['Files.Read.All','Calendars.Read','ChatMessage.Send'],\n});",
+      "expected_outcome": "Install row + vault-wrapped refresh token. Initial delta-token captured."
+    },
+    {
+      "id": "drive-sync-with-delta-token",
+      "title": "Daily delta-sync of OneDrive folder into the file cache",
+      "when_to_use": "Compliance ask: every file in the 'Contracts' SharePoint site indexed locally for sdk-search + sdk-evidence archive.",
+      "example_code": "import { syncDrive } from '@projexlight/connector-microsoft365';\nawait syncDrive({\n  install_id, drive_id, folder_path: '/Contracts',\n  use_delta_token: true,\n});",
+      "expected_outcome": "Changed files synced; metadata cached + bytes optionally ingested into sdk-media. .drive_item.synced.v1 per file."
+    },
+    {
+      "id": "teams-alert-routing",
+      "title": "Storm alert routes to Teams channel",
+      "when_to_use": "Reactive on notification.message.sent.v1 with channel: { kind: 'teams' } — connector formats + posts via Graph API.",
+      "example_code": "import { postTeamsMessage } from '@projexlight/connector-microsoft365';\nawait postTeamsMessage({\n  install_id, team_id, channel_id,\n  text: '🚨 Storm declared — see ProjexCloud for details', mention_team: true,\n});",
+      "expected_outcome": "Message posted to Teams; emits .teams.message.v1. Failures retried (Graph throttles aggressively)."
+    },
+    {
+      "id": "send-outlook-mail",
+      "title": "Send a customer email via Outlook (Graph) for tenant-owned audit trail",
+      "when_to_use": "Tenant wants outbound mail to appear in the sender's Outlook Sent folder (not via a generic SMTP relay) for compliance + thread continuity.",
+      "example_code": "import { sendMail } from '@projexlight/connector-microsoft365';\nawait sendMail({\n  install_id, sender_user_id, to: customer.email,\n  subject: '...', body_html: '...',\n});",
+      "expected_outcome": "Mail sent + appears in sender's Sent. Emits .mail.sent.v1; sdk-audit picks up the chain."
+    },
+    {
+      "id": "calendar-webhook",
+      "title": "Calendar webhook updates the encounter row",
+      "when_to_use": "Graph change-notification fires when a meeting moves; we update the linked ProjexCloud encounter so the rep's schedule stays in sync.",
+      "example_code": "import { handleWebhook } from '@projexlight/connector-microsoft365';\nawait handleWebhook({ tenant_id, resource: 'calendar', body });",
+      "expected_outcome": "Encounter time updated; emits .calendar.event.v1. Affected reps notified via sdk-notification."
+    }
+  ],
+  "compliance_posture": {
+    "regimes": ["SOC2-CC6.7-third-party", "GDPR-Art-28", "Microsoft-GDPR-DPA", "HIPAA-164.502-business-associate", "FedRAMP-Moderate-via-GCC"],
+    "notes": "Refresh tokens vault-wrapped. Tenant-scoped admin-consent OAuth (vs. user-delegated) so service-account access is honored. GCC / GCC-High pinning available for FedRAMP-regulated tenants."
+  },
+  "pool_placement": "app",
+  "pricing_skus": [
+    { "sku": "connector-microsoft365.install",         "mode": "flat",    "unit_description": "per M365 tenant per month" },
+    { "sku": "connector-microsoft365.drive.sync.item", "mode": "metered", "unit_description": "per file synced" },
+    { "sku": "connector-microsoft365.teams.message",   "mode": "metered", "unit_description": "per Teams message sent" },
+    { "sku": "connector-microsoft365.mail.send",       "mode": "metered", "unit_description": "per Outlook mail sent via Graph" },
+    { "sku": "connector-microsoft365.webhook",         "mode": "metered", "unit_description": "per ingested change-notification" }
+  ],
+  "no_endpoints": true,
+  "links": {
+    "readme": "packages/connector-microsoft365/README.md",
+    "source": "packages/connector-microsoft365/src/",
+    "prd_section": "P6B-Connectors §9"
+  }
+}

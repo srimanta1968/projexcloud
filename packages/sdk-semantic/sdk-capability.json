@@ -1,0 +1,94 @@
+{
+  "name": "@projexlight/sdk-semantic",
+  "version": "1.0.0",
+  "schema_version": "1.0",
+  "summary": "Semantic layer for ProjexCloud (G9 closer): per-tenant Ontology (Object Types + Relation Types) + SemanticIntent (plain-English → query plan) + SemanticPolicy (allow / deny / reshape rules) + CapabilityGraph cross-domain bridges. The translation + safety layer that lets non-SQL users ask questions of the platform without bypassing tenant security. Cloud-builder + analytics blueprints rely on this.",
+  "tags": ["semantic", "ontology", "intent", "policy", "natural-language", "p6b"],
+  "provides": {
+    "endpoints": [],
+    "events": [
+      { "name": "semantic.ontology.published.v1",   "retention_class": "regulated",  "conflict_policy": "event-sourcing", "description": "New ontology version published; carries diff vs. prior version." },
+      { "name": "semantic.intent.resolved.v1",      "retention_class": "regulated",  "conflict_policy": "event-sourcing", "description": "Plain-English intent translated into a query plan; carries plan_hash + chosen ontology version." },
+      { "name": "semantic.policy.decision.v1",      "retention_class": "regulated",  "conflict_policy": "event-sourcing", "description": "Policy evaluated against an intent: allow / deny / reshape. Carries the reshape diff if applicable." },
+      { "name": "semantic.capability.registered.v1","retention_class": "regulated",  "conflict_policy": "lww",            "description": "MCP capability registered into the cross-domain graph (FR-SEM-9 / G9)." }
+    ],
+    "models": [
+      { "schema": "semantic", "table": "ontology",              "description": "Per-tenant ontology version: name, version, definition_blob, published_at." },
+      { "schema": "semantic", "table": "object_type",            "description": "Object-type definition (e.g. 'Customer', 'Invoice'); fields + relations." },
+      { "schema": "semantic", "table": "relation_type",          "description": "Relation-type definition (e.g. 'invoice belongs_to customer'); cardinality + traversal cost." },
+      { "schema": "semantic", "table": "capability_graph_edge",  "description": "Cross-domain bridge: MCP capability ↔ ontology object/relation. Used by the AI gateway to translate intents to concrete tool calls." },
+      { "schema": "semantic", "table": "intent",                 "description": "Per-call intent: query_text, persona, resolved_plan_id." },
+      { "schema": "semantic", "table": "intent_plan",            "description": "Resolved plan: ontology version, plan steps, estimated cost." },
+      { "schema": "semantic", "table": "policy",                 "description": "Per-tenant policy rule: match predicate, decision (allow / deny / reshape), reason template." },
+      { "schema": "semantic", "table": "cross_domain_bridge",    "description": "Cross-domain mappings (e.g. CRM lead ↔ Marketing campaign) needed for cross-vertical queries." }
+    ],
+    "hooks": [
+      { "name": "publishOntology",     "description": "Publish a new ontology version. Versions are pinned per intent so intents resolved against an old version stay reproducible." },
+      { "name": "registerCapability",  "description": "Register an MCP capability into the cross-domain graph (FR-SEM-9 closer for G9)." },
+      { "name": "resolveIntent",       "description": "Translate plain-English intent to a query plan. Includes ontology lookup + policy evaluation in one pass." },
+      { "name": "evaluatePolicy",      "description": "Standalone policy evaluation; useful for the cloud-builder agent to pre-check whether an intent would be allowed before executing." }
+    ],
+    "ui_components": []
+  },
+  "consumes": {
+    "events": [
+      { "name": "ai-gateway.completion.v1", "from": "@projexlight/sdk-ai-gateway" },
+      { "name": "tenant.created.v1",        "from": "@projexlight/sdk-tenant" }
+    ],
+    "infra": ["postgres", "ai-gateway", "redis-optional"],
+    "config_keys": ["SEMANTIC_DEFAULT_ONTOLOGY", "SEMANTIC_POLICY_STRICT_MODE", "SEMANTIC_INTENT_CACHE_TTL_MS"]
+  },
+  "scenarios": [
+    {
+      "id": "publish-customer-ontology",
+      "title": "Tenant publishes their canonical Customer + Invoice ontology",
+      "when_to_use": "First-time semantic setup. Tenant declares 'Customer' and 'Invoice' as object types + their relations.",
+      "example_code": "import { publishOntology } from '@projexlight/sdk-semantic';\nawait publishOntology({\n  tenant_id, name: 'crm-core', version: '1.0.0',\n  object_types: [\n    { name: 'Customer', fields: [{ name: 'email', kind: 'string' }, { name: 'plan', kind: 'string' }] },\n    { name: 'Invoice',  fields: [{ name: 'amount_cents', kind: 'integer' }, { name: 'paid_at', kind: 'timestamp' }] },\n  ],\n  relation_types: [\n    { name: 'belongs_to', from: 'Invoice', to: 'Customer', cardinality: 'many-to-one' },\n  ],\n});",
+      "expected_outcome": "Ontology v1.0.0 published. Future intents resolve against this version; older intents still resolve against whatever they were pinned to."
+    },
+    {
+      "id": "resolve-plain-english-intent",
+      "title": "Resolve 'show me top 10 customers by MRR last quarter'",
+      "when_to_use": "Cloud-builder or business-user query surface. SemanticIntent translates English → ontology-grounded plan.",
+      "example_code": "import { resolveIntent } from '@projexlight/sdk-semantic';\nconst { plan, policy_decisions } = await resolveIntent({\n  tenant_id, persona_id,\n  intent: 'show me top 10 customers by MRR last quarter',\n});\n// plan is a structured walk of Customer + Invoice ordered by an MRR aggregate.\n// policy_decisions explains any allow/deny/reshape rules that fired.",
+      "expected_outcome": "Plan + policy decision returned. Caller runs the plan through sdk-analytics.federatedQuery. Audit chain has intent + plan + decisions for full reproducibility."
+    },
+    {
+      "id": "policy-reshapes-query",
+      "title": "SemanticPolicy reshapes a too-broad query",
+      "when_to_use": "User asks 'show me every customer's payment-method last4'. Policy refuses to surface PII even if the user's role would permit raw access — reshapes to anonymized cohorts.",
+      "example_code": "// resolveIntent returns plan with reshaped projection:\n// SELECT plan_tier, COUNT(*) FROM customer GROUP BY plan_tier\n// rather than SELECT email, payment_method_last4 FROM customer.\n// policy_decisions explains why.",
+      "expected_outcome": "Caller gets a useful (anonymized) answer rather than a 'denied'. SemanticPolicy logs the reshape decision so an auditor can review."
+    },
+    {
+      "id": "register-mcp-capability",
+      "title": "Register an MCP tool into the cross-domain graph",
+      "when_to_use": "G9 closer (FR-SEM-9). When sdk-mcp-bridge installs a new MCP server, it tells the semantic layer about the tool's capabilities so cross-domain intents can route to them.",
+      "example_code": "import { registerCapability } from '@projexlight/sdk-semantic';\nawait registerCapability({\n  tenant_id, mcp_server: 'projex-registry',\n  tool_name: 'projex_registry_search_sdks',\n  capability_kind: 'discover-sdk',\n  bridges_to: ['ontology.Capability'],\n});",
+      "expected_outcome": "Capability_graph_edge written. Future cloud-builder intents that ask 'find a way to do X' can be routed to the MCP tool via the bridge."
+    },
+    {
+      "id": "policy-strict-mode",
+      "title": "Strict mode refuses ambiguous intents with an explanation",
+      "when_to_use": "Highly-regulated tenant (b2b-analytics blueprint with semantic_layer_strictness='strict-with-explanation'). Unknown column → refuse with a helpful error rather than guess.",
+      "example_code": "// User asks: 'show me invoices by churn'\n// Strict policy refuses: 'churn' is not a column in the ontology;\n// suggests {plan_tier, billing_status, mrr} as nearby concepts.",
+      "expected_outcome": "Caller receives a deny + explanation + suggested rephrasings. Better failure mode than guessing wrong + returning a misleading number."
+    }
+  ],
+  "compliance_posture": {
+    "regimes": ["SOC2-CC7.1", "GDPR-Art-22", "EU-AI-Act-Annex-IV-decision-logic", "ISO-27001-Annex-A-9-access-control"],
+    "notes": "Every intent's resolution carries the ontology version + the policy decision trace — the EU AI Act decision-logic transparency requirement is met because any AI-driven answer routed through here can be replayed from the same plan. SemanticPolicy is the GDPR Art-22 lever for automated-decision auditability."
+  },
+  "pool_placement": "warehouse",
+  "pricing_skus": [
+    { "sku": "semantic.ontology.publish", "mode": "flat",    "unit_description": "per ontology version published" },
+    { "sku": "semantic.intent.resolve",   "mode": "metered", "unit_description": "per intent resolved (cached intents billed at lower rate)" },
+    { "sku": "semantic.policy.evaluate",  "mode": "metered", "unit_description": "per standalone policy evaluation" }
+  ],
+  "no_endpoints": true,
+  "links": {
+    "readme": "packages/sdk-semantic/README.md",
+    "source": "packages/sdk-semantic/src/",
+    "prd_section": "P6B-Knowledge-Semantic §9 (G9 / FR-SEM-1..9)"
+  }
+}

@@ -1,0 +1,83 @@
+{
+  "name": "@projexlight/identity-projector",
+  "version": "1.0.0",
+  "schema_version": "1.0",
+  "summary": "Projector service for sdk-identity-resolver — consumes identity-events from sdk-persona / sdk-identity / sdk-crm and materializes the canonical persona projection so resolveIdentityContext returns sub-millisecond. Background workers backfill on attach + reproject on schema change.",
+  "tags": ["service", "projector", "identity", "background-worker", "p2"],
+  "provides": {
+    "endpoints": [],
+    "events": [
+      { "name": "identity-projector.projection.refreshed.v1", "retention_class": "operational","conflict_policy": "lww",            "description": "Projection rebuilt for a (tenant, persona) tuple." },
+      { "name": "identity-projector.backfill.completed.v1",   "retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "New pool family backfill finished." }
+    ],
+    "models": [],
+    "hooks": [
+      { "name": "startProjector",      "description": "Background worker — pulls identity events from inbox topic + writes projection rows." },
+      { "name": "backfillTenant",      "description": "One-shot backfill for a tenant whose projection is stale or missing." },
+      { "name": "drainAndShutdown",   "description": "Flush pending writes + exit." }
+    ],
+    "ui_components": []
+  },
+  "consumes": {
+    "events": [
+      { "name": "persona.app_identity.created.v1", "from": "@projexlight/sdk-persona" },
+      { "name": "persona.membership.added.v1",      "from": "@projexlight/sdk-persona" },
+      { "name": "persona.role.assigned.v1",         "from": "@projexlight/sdk-persona" },
+      { "name": "crm.contact.created.v1",           "from": "@projexlight/sdk-crm" }
+    ],
+    "infra": ["postgres", "kafka", "redis-optional"],
+    "config_keys": ["IDENTITY_PROJECTOR_BATCH_SIZE", "IDENTITY_PROJECTOR_BACKOFF_MS", "IDENTITY_PROJECTOR_INTERVAL_MS"]
+  },
+  "scenarios": [
+    {
+      "id": "boot-projector",
+      "title": "Start background projector",
+      "when_to_use": "Process startup. Subscribes to identity events; writes the canonical projection.",
+      "example_code": "import { startProjector } from '@projexlight/identity-projector';\nawait startProjector({ batch_size: 100, interval_ms: 5000 });",
+      "expected_outcome": "Per-tick batch reads + writes; emits .projection.refreshed.v1."
+    },
+    {
+      "id": "backfill-new-tenant",
+      "title": "Backfill projection on tenant attach",
+      "when_to_use": "New tenant onboarded; backfill walks all identity events for the tenant + materializes the projection from scratch.",
+      "example_code": "import { backfillTenant } from '@projexlight/identity-projector';\nawait backfillTenant({ tenant_id });",
+      "expected_outcome": "Projection populated; emits .backfill.completed.v1 with row counts."
+    },
+    {
+      "id": "schema-migration-reproject",
+      "title": "Schema change → reproject affected tenants",
+      "when_to_use": "Projection-row schema added; ops reprojects affected tenants over a few hours.",
+      "example_code": "for (const t of await listTenants()) await backfillTenant({ tenant_id: t.id });",
+      "expected_outcome": "All projections rebuilt with new schema. No application downtime — old + new schema rows coexist via additive migration."
+    },
+    {
+      "id": "lag-monitor",
+      "title": "Lag alarm if projector falls behind",
+      "when_to_use": "Background — if inbox depth > threshold for > 5 min, page on-call.",
+      "example_code": "// monitored via consumer-group lag metric; alarm wired to sdk-notification.",
+      "expected_outcome": "On-call paged. Operator scales the projector worker pool."
+    },
+    {
+      "id": "graceful-drain-on-deploy",
+      "title": "Graceful drain ensures no event loss",
+      "when_to_use": "Rolling deploy; drainAndShutdown commits the current batch + exits cleanly so the next pod picks up at the right offset.",
+      "example_code": "process.on('SIGTERM', () => drainAndShutdown());",
+      "expected_outcome": "Zero event loss. Consumer-group offset advances correctly."
+    }
+  ],
+  "compliance_posture": {
+    "regimes": ["SOC2-CC7.2-monitoring", "GDPR-Art-30"],
+    "notes": "Projector is fully derivable from the audit log; backfill replays from the source events. No persistent state lost on container restart."
+  },
+  "pool_placement": "app",
+  "pricing_skus": [
+    { "sku": "identity-projector.projection.refresh", "mode": "metered", "unit_description": "per projection refresh batch" },
+    { "sku": "identity-projector.backfill",            "mode": "metered", "unit_description": "per backfill (tenant)" }
+  ],
+  "no_endpoints": true,
+  "links": {
+    "readme": "services/identity-projector/README.md",
+    "source": "services/identity-projector/src/",
+    "prd_section": "P2-Identity-Access §6 / G4"
+  }
+}

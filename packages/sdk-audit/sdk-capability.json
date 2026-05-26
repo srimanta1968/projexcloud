@@ -1,0 +1,90 @@
+{
+  "name": "@projexlight/sdk-audit",
+  "version": "0.1.0",
+  "schema_version": "1.0",
+  "summary": "Append-only, hash-chained per-tenant audit ledger. Every state change in every other SDK calls emitEvent here; entries are SHA-256 chained so any single-row tamper breaks verification. Daily regional rollups + per-tenant chain-head signing + export-request flow back the compliance attestation story for SOC2 / HIPAA / FedRAMP / GDPR-DSAR.",
+  "tags": ["audit", "compliance", "tamper-evident", "hash-chain", "forensics", "foundation", "p1"],
+  "provides": {
+    "endpoints": [
+      { "method": "POST", "path": "/api/audit/append",  "description": "Append an entry to the calling tenant's chain. Most callers don't hit this directly — they call emitEvent() from this SDK which routes through it." },
+      { "method": "POST", "path": "/api/audit/verify",  "description": "Walk a tenant's chain since the last attested checkpoint; recompute hashes; return chain_intact:true or the offending entry_id." }
+    ],
+    "events": [
+      { "name": "audit.entry.appended.v1",            "retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "An entry was committed to a tenant's chain; carries entry_id + seq + chain_hash." },
+      { "name": "audit.chain.verified.v1",            "retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "Verifier walked the chain end-to-end; chain_intact result + verified_at." },
+      { "name": "audit.chain.broken.v1",              "retention_class": "regulated", "conflict_policy": "human-review",   "description": "Hash mismatch detected — fires only on tamper. Triggers operator page + sovereign-region holds." },
+      { "name": "audit.export.requested.v1",          "retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "Tenant admin requested a GDPR/SOC2-style audit export." },
+      { "name": "audit.export.completed.v1",          "retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "Export bundle ready for download; signed by the regional chain-head key." },
+      { "name": "audit.regional.rollup.computed.v1",  "retention_class": "operational","conflict_policy": "lww",            "description": "Daily aggregation done for a region; powers the operator dashboard counts." }
+    ],
+    "models": [
+      { "schema": "audit", "table": "entry",            "description": "Single immutable audit entry. Columns: tenant_id, seq, actor_kind, actor_id, action, subject_kind, subject_id, payload, occurred_at, chain_hash, prev_hash. Append-only — no UPDATE ever." },
+      { "schema": "audit", "table": "chain_head",       "description": "Latest hash per tenant; used to attach the next entry without scanning the whole chain." },
+      { "schema": "audit", "table": "regional_rollup",  "description": "Per-region daily counts; supports the operator dashboard + capacity planning." },
+      { "schema": "audit", "table": "export_request",   "description": "GDPR Art-15 / SOC2 evidence-request bundles; tracks status (requested → exporting → signed → expired)." }
+    ],
+    "hooks": [
+      { "name": "emitEvent",         "description": "The universal write surface every other SDK uses. Takes { event_type, payload, actor_kind, actor_id, tenant_id, subject_kind, subject_id, pool_index } and appends to the calling tenant's chain. Idempotent on (tenant_id, idempotency_key)." },
+      { "name": "verifyChain",       "description": "Synchronous verifier — pass a tenant_id and it walks every entry since the last verified checkpoint, recomputing hashes. Returns { ok, broken_at_entry_id? }." },
+      { "name": "startAuditVerifier","description": "Background worker that runs verifyChain on a rotating tenant set on the AUDIT_VERIFIER_INTERVAL_MS cadence (default daily). Fires audit.chain.broken.v1 on any mismatch." }
+    ],
+    "ui_components": []
+  },
+  "consumes": {
+    "events": [],
+    "infra": ["postgres", "kafka-optional"],
+    "config_keys": ["AUDIT_VERIFIER_INTERVAL_MS", "AUDIT_REGIONAL_ROLLUP_INTERVAL_MS", "AUDIT_CHAIN_SIGNING_KEY_REF"]
+  },
+  "scenarios": [
+    {
+      "id": "emit-event-from-sdk",
+      "title": "Emit an audit event from inside another SDK (the universal pattern)",
+      "when_to_use": "Every state change in every SDK does this. Tenant created? emitEvent. Key rotated? emitEvent. Invoice finalized? emitEvent. The audit chain is non-negotiable.",
+      "example_code": "import { emitEvent } from '@projexlight/sdk-audit';\nawait emitEvent({\n  event_type: 'tenant.created.v1',\n  payload: { tenant_id, app_id, region },\n  pool_index: 'admin',\n  actor_kind: 'service',\n  actor_id: 'sdk-tenant.create',\n  tenant_id,\n  subject_kind: 'tenant',\n  subject_id: tenant_id,\n});",
+      "expected_outcome": "Appends one row to audit.entry for the calling tenant with chain_hash = sha256(prev_hash || payload). Updates audit.chain_head atomically. Returns { entry_id, seq, chain_hash }."
+    },
+    {
+      "id": "verify-tenant-chain",
+      "title": "Compliance attestation — verify a tenant's chain integrity",
+      "when_to_use": "Customer asks for a SOC2 evidence bundle; operator clicks Verify on the Audit page in projexcloud-admin; an external auditor wants a chain attestation.",
+      "example_code": "import { verifyChain } from '@projexlight/sdk-audit';\nconst result = await verifyChain({ tenant_id, since_seq: lastAttestedSeq });\nif (!result.ok) {\n  // PAGE OPERATOR — chain broken at result.broken_at_entry_id\n}",
+      "expected_outcome": "Walks every entry since since_seq, recomputes hash chain, returns { ok: true } or { ok: false, broken_at_entry_id }. Emits audit.chain.verified.v1 (or audit.chain.broken.v1 on failure)."
+    },
+    {
+      "id": "background-verifier",
+      "title": "Background verifier rotates through tenants daily",
+      "when_to_use": "Production deployment. Catches silent tamper attempts within 24 hours rather than waiting for a customer-driven verify request.",
+      "example_code": "import { startAuditVerifier } from '@projexlight/sdk-audit';\nconst worker = startAuditVerifier({ intervalMs: 86_400_000 });\n// graceful shutdown:\nawait worker.stop();",
+      "expected_outcome": "Worker picks tenants in round-robin order, calls verifyChain, emits the result event. Any audit.chain.broken.v1 fires a high-severity page + halts new appends on that tenant until cleared."
+    },
+    {
+      "id": "dsar-export",
+      "title": "GDPR Art-15 subject-access-request audit export",
+      "when_to_use": "Customer's end-user files a DSAR; we need a signed bundle of every audit entry mentioning their subject_id.",
+      "example_code": "import { requestExport } from '@projexlight/sdk-audit';\nconst { export_request_id } = await requestExport({\n  tenant_id,\n  subject_kind: 'person',\n  subject_id: person_id,\n  range_start, range_end,\n});\n// Customer polls /api/audit/exports/:id until status='signed', then downloads.",
+      "expected_outcome": "Worker assembles the bundle, signs it with the regional chain-head key, stores in S3 with a 7-day TTL. Emits audit.export.requested.v1 then .completed.v1. Tenant admin sees status in the Audit page."
+    },
+    {
+      "id": "operator-replay",
+      "title": "Operator reconstructs an incident from the chain",
+      "when_to_use": "Post-incident: 'show me everything actor X did between T1 and T2 in tenant Y.'",
+      "example_code": "import { listEntries } from '@projexlight/sdk-audit';\nconst rows = await listEntries({\n  tenant_id,\n  actor_id: 'X',\n  from: t1, to: t2,\n  limit: 1000,\n});\n// rows are in seq order; chain_hash on the last row attests the chain was intact through that point.",
+      "expected_outcome": "Returns matching entries in seq order. UI in projexcloud-admin /audit page calls this; the per-row chain_hash lets the operator independently re-verify the slice."
+    }
+  ],
+  "compliance_posture": {
+    "regimes": ["SOC2-CC7.2", "HIPAA-Audit-Controls-164.312(b)", "PCI-DSS-Req-10", "FedRAMP-AU-family", "GDPR-Art-30-Records-of-Processing", "21-CFR-Part-11"],
+    "notes": "Append-only enforcement at the DB layer via revoked UPDATE/DELETE grants — application-layer code cannot UPDATE even if it wanted to. SHA-256 chain rolls forward atomically with the entry insert in a single transaction. Regional rollups + chain-head signing satisfy the 'attestation' clause in SOC2 CC7.2. Storage retention: 7 years default (configurable per regime)."
+  },
+  "pool_placement": "evidence",
+  "pricing_skus": [
+    { "sku": "audit.emit",      "mode": "metered", "unit_description": "per event appended; free up to plan ceiling (most tenants never exceed)" },
+    { "sku": "audit.verify",    "mode": "metered", "unit_description": "per chain verify call; background verifier does not bill" },
+    { "sku": "audit.export",    "mode": "metered", "unit_description": "per signed export bundle; SLA-backed delivery within 24h" }
+  ],
+  "links": {
+    "readme": "packages/sdk-audit/README.md",
+    "source": "packages/sdk-audit/src/",
+    "prd_section": "P1-Foundation-Spine §5.3"
+  }
+}

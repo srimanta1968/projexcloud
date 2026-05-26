@@ -1,0 +1,92 @@
+{
+  "name": "@projexlight/sdk-diagnostic-telemetry",
+  "version": "1.0.0",
+  "schema_version": "1.0",
+  "summary": "Crash + diagnostic telemetry for ProjexCloud: structured crash reports, per-tenant health snapshots, optional session-replay events. Sits next to sdk-trace (which handles request-level tracing) — this SDK is for product-level health: 'is the mobile app crashing for tenant X', 'what's the device-fleet OS version distribution', 'what UI step did the user reach before abandoning'.",
+  "tags": ["diagnostic", "telemetry", "crash-reporting", "health", "session-replay"],
+  "provides": {
+    "endpoints": [
+      { "method": "POST", "path": "/api/diagnostic/crash",       "description": "Submit a crash report (mobile / browser / server)." },
+      { "method": "GET",  "path": "/api/diagnostic/crash/:id",   "description": "Fetch one crash report + stack + related session-replay frames." },
+      { "method": "GET",  "path": "/api/diagnostic/crash",       "description": "List crashes for a tenant + filters." },
+      { "method": "GET",  "path": "/api/diagnostic/health",      "description": "Health snapshot per tenant: app version distribution, crash rate, replay sample rate." }
+    ],
+    "events": [
+      { "name": "diagnostic.crash.reported.v1",         "retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "Crash report committed." },
+      { "name": "diagnostic.crash.deduped.v1",          "retention_class": "operational","conflict_policy": "lww",            "description": "Identical crash matched an existing group; counter incremented." },
+      { "name": "diagnostic.health.snapshot.v1",        "retention_class": "operational","conflict_policy": "lww",            "description": "Per-tenant snapshot: crash rate, fleet versions, anomalies." },
+      { "name": "diagnostic.session_replay.captured.v1","retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "Session-replay frame captured (rate-limited; PII-redacted)." }
+    ],
+    "models": [
+      { "schema": "diagnostic", "table": "crash",                 "description": "Per-crash row: app_version, stack_hash, persona_id, occurred_at, group_id." },
+      { "schema": "diagnostic", "table": "health_snapshot",       "description": "Per-snapshot row: tenant_id, period, fleet_versions_json, crash_rate." },
+      { "schema": "diagnostic", "table": "session_replay_event",  "description": "Per-frame row: persona_id, ui_state_json, occurred_at, redaction_applied." }
+    ],
+    "hooks": [
+      { "name": "reportCrash",        "description": "Service entry — accept a crash report; dedup by stack hash; group with prior occurrences." },
+      { "name": "captureReplayFrame", "description": "Capture a session-replay frame (rate-limited + auto-redact known PII fields)." },
+      { "name": "computeHealthSnapshot","description": "Compute a per-tenant health snapshot for the period." },
+      { "name": "startSnapshotWorker","description": "Background worker — emits hourly snapshots." }
+    ],
+    "ui_components": []
+  },
+  "consumes": {
+    "events": [
+      { "name": "tenant.created.v1", "from": "@projexlight/sdk-tenant" }
+    ],
+    "infra": ["postgres", "clickhouse-optional"],
+    "config_keys": ["DIAGNOSTIC_CRASH_RETENTION_DAYS", "DIAGNOSTIC_REPLAY_SAMPLE_RATE", "DIAGNOSTIC_PII_REDACTION_FIELDS"]
+  },
+  "scenarios": [
+    {
+      "id": "report-mobile-crash",
+      "title": "Mobile app crashes → report submitted on next launch",
+      "when_to_use": "App crashed; on next launch the SDK uploads the structured crash. Dedup by stack hash groups same-bug occurrences.",
+      "example_code": "import { reportCrash } from '@projexlight/sdk-diagnostic-telemetry';\nawait reportCrash({\n  tenant_id, persona_id, app_version: '3.2.1',\n  platform: 'ios', stack: '...', context: { route: '/dispatch/route', last_action: 'route-materialize' },\n});",
+      "expected_outcome": "Crash row + emits .crash.reported.v1. If matches existing group, .crash.deduped.v1 fires + counter increments."
+    },
+    {
+      "id": "health-snapshot-cadence",
+      "title": "Hourly snapshot reveals a regression",
+      "when_to_use": "Snapshot shows crash-rate spike for app_version 3.2.1 on iOS; eng investigates + rolls back via sdk-feature-flags kill-switch.",
+      "example_code": "import { computeHealthSnapshot } from '@projexlight/sdk-diagnostic-telemetry';\nconst snap = await computeHealthSnapshot({ tenant_id, period: '2026-05-26T15:00Z' });\n// snap = { app_version_3_2_1_ios_crash_rate: 0.08, baseline: 0.005 }",
+      "expected_outcome": "Snapshot emitted. Anomaly detector pages on-call. Engineering ships hotfix or pulls flag."
+    },
+    {
+      "id": "session-replay-debug",
+      "title": "Customer reports broken flow → session replay shows the steps",
+      "when_to_use": "Support escalation; eng pulls the session-replay frames for the persona + sees exactly what UI states they hit.",
+      "example_code": "// frames captured passively by the client SDK (rate-limited + redacted):\nimport { captureReplayFrame } from '@projexlight/sdk-diagnostic-telemetry';\nawait captureReplayFrame({\n  tenant_id, persona_id, ui_state: { route, form_state },\n});",
+      "expected_outcome": "Frames stored with PII auto-redacted. Eng review reveals the off-by-one form-validation bug."
+    },
+    {
+      "id": "dedup-saves-storage",
+      "title": "Bug spike — 10k identical crashes dedup to one group",
+      "when_to_use": "Mass crash on app release; dedup groups them so the dashboard doesn't show 10k rows + storage stays manageable.",
+      "example_code": "// reportCrash internally hashes the normalized stack;\n// matches existing group → increments counter + emits .crash.deduped.v1.",
+      "expected_outcome": "Dashboard shows 1 group with count=10000. Storage cost proportional to unique groups, not raw events."
+    },
+    {
+      "id": "pii-redaction-on-replay",
+      "title": "Session-replay frame redacts known PII fields",
+      "when_to_use": "Replay frame captures a form with SSN + email; the SDK redacts before upload — eng sees the flow, not the values.",
+      "example_code": "// captureReplayFrame internally walks DIAGNOSTIC_PII_REDACTION_FIELDS\n// + replaces matched values with '[REDACTED]'.",
+      "expected_outcome": "Upload contains UI structure + types + non-PII values. Eng can reproduce the bug without seeing customer PII."
+    }
+  ],
+  "compliance_posture": {
+    "regimes": ["SOC2-CC7.2-monitoring", "GDPR-Art-32-encryption", "ISO-27001-Annex-A-12", "HIPAA-164.312-replay-restrictions"],
+    "notes": "Session-replay frames are PII-sensitive — auto-redaction enforced + frame retention bounded. Crash stacks scrubbed for embedded customer values before storage. Health snapshots are tenant-aggregated; no cross-tenant leakage."
+  },
+  "pool_placement": "app",
+  "pricing_skus": [
+    { "sku": "diagnostic.crash.report",        "mode": "metered", "unit_description": "per crash report (dedup hits billed lower)" },
+    { "sku": "diagnostic.replay.frame.capture","mode": "metered", "unit_description": "per replay frame" },
+    { "sku": "diagnostic.health.snapshot",     "mode": "metered", "unit_description": "per snapshot computed" }
+  ],
+  "links": {
+    "readme": "packages/sdk-diagnostic-telemetry/README.md",
+    "source": "packages/sdk-diagnostic-telemetry/src/",
+    "prd_section": "P7-Field-Hyperscale §17 / FR-DTM-1..5"
+  }
+}

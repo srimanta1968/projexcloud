@@ -1,0 +1,96 @@
+{
+  "name": "@projexlight/sdk-feature-flags",
+  "version": "1.0.0",
+  "schema_version": "1.0",
+  "summary": "Per-tenant feature flags + progressive rollouts for ProjexCloud: define a flag, target by tenant / persona / cohort, ramp from 1% to 100% with a kill-switch and an evaluation log. Audit-grade — every flag check leaves a trail so a regulator can replay 'which code path served this customer at time T'.",
+  "tags": ["feature-flags", "rollouts", "kill-switch", "experimentation", "foundation"],
+  "provides": {
+    "endpoints": [
+      { "method": "PUT",  "path": "/api/flags",                          "description": "Create or update a flag definition." },
+      { "method": "GET",  "path": "/api/flags",                          "description": "List flags for a tenant." },
+      { "method": "GET",  "path": "/api/flags/:flag_id",                 "description": "Fetch flag + current rollout + recent evaluations." },
+      { "method": "POST", "path": "/api/flags/:flag_id/kill-switch",     "description": "Toggle kill-switch (instant 0%)." },
+      { "method": "POST", "path": "/api/flags/:flag_id/rollout",         "description": "Advance a rollout step (e.g. 1% → 10%)." },
+      { "method": "POST", "path": "/api/flags/evaluate",                 "description": "Evaluate a flag for a specific (persona, tenant, cohort) tuple." }
+    ],
+    "events": [
+      { "name": "feature_flags.flag.created.v1",     "retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "New flag created." },
+      { "name": "feature_flags.rollout.advanced.v1", "retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "Rollout step advanced; carries old + new percentage + persona who advanced." },
+      { "name": "feature_flags.kill_switch.fired.v1","retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "Kill-switch toggled. Critical for incident audit chain." },
+      { "name": "feature_flags.evaluation.sampled.v1","retention_class": "operational","conflict_policy": "event-sourcing","description": "Sample of evaluations stored for replay (rate-limited to keep volume manageable)." }
+    ],
+    "models": [
+      { "schema": "feature_flags", "table": "flag",              "description": "Per-flag row: name, default_value, kind (bool/string/number), kill_switch_pulled." },
+      { "schema": "feature_flags", "table": "rollout",           "description": "Per-rollout row: flag_id, percentage, targeting_rules_json, advanced_at." },
+      { "schema": "feature_flags", "table": "evaluation_sample", "description": "Per-sample row: flag_id, persona_id, evaluated_value, reason." }
+    ],
+    "hooks": [
+      { "name": "putFlag",            "description": "Create / update a flag definition." },
+      { "name": "evaluate",           "description": "Evaluate a flag for a (persona, tenant) tuple. SDK-side cache keeps this O(1)." },
+      { "name": "advanceRollout",     "description": "Ramp the rollout percentage; emits .rollout.advanced.v1." },
+      { "name": "killSwitch",         "description": "Set kill-switch on; all evaluations return default until reverted." },
+      { "name": "startTargetingCache","description": "Background worker: hot-loads targeting rules to keep evaluate() in-memory." }
+    ],
+    "ui_components": []
+  },
+  "consumes": {
+    "events": [
+      { "name": "tenant.offboarded.v1", "from": "@projexlight/sdk-tenant-lifecycle" }
+    ],
+    "infra": ["postgres", "redis-optional"],
+    "config_keys": ["FF_EVALUATION_SAMPLE_RATE", "FF_TARGETING_CACHE_TTL_SEC", "FF_DEFAULT_ROLLOUT_STEPS"]
+  },
+  "scenarios": [
+    {
+      "id": "create-new-flag",
+      "title": "Create a new flag for a beta feature",
+      "when_to_use": "Eng wants to ship a new dashboard behind a flag; default off, beta-cohort on.",
+      "example_code": "import { putFlag } from '@projexlight/sdk-feature-flags';\nawait putFlag({\n  tenant_id, name: 'new-portfolio-dashboard',\n  default_value: false,\n  targeting_rules: [\n    { match: { cohort: 'beta' }, value: true },\n  ],\n});",
+      "expected_outcome": "Flag row + initial rollout (beta-only). Emits .flag.created.v1."
+    },
+    {
+      "id": "evaluate-in-app-code",
+      "title": "Application code calls evaluate() to gate UI rendering",
+      "when_to_use": "Universal pattern — feature-flag check on every server-rendered page or request.",
+      "example_code": "import { evaluate } from '@projexlight/sdk-feature-flags';\nconst { value, reason } = await evaluate({\n  flag: 'new-portfolio-dashboard',\n  persona: { id, cohort: 'beta', tenant_id },\n});\nif (value) renderNewDashboard(); else renderOldDashboard();",
+      "expected_outcome": "Returns value + reason. SDK cache makes this O(1) microseconds. Sampled into .evaluation.sampled.v1 per FF_EVALUATION_SAMPLE_RATE."
+    },
+    {
+      "id": "advance-rollout-step",
+      "title": "Ramp rollout 10% → 50%",
+      "when_to_use": "Beta went well; ops ramps to 50% of all tenants.",
+      "example_code": "import { advanceRollout } from '@projexlight/sdk-feature-flags';\nawait advanceRollout({\n  flag_id, to_percentage: 50,\n  advanced_by_persona_id, reason: 'beta-metrics-look-good',\n});",
+      "expected_outcome": "Rollout advanced; emits .rollout.advanced.v1. New evaluations route 50% of users into the new path."
+    },
+    {
+      "id": "incident-kill-switch",
+      "title": "Incident — pull the kill-switch instantly",
+      "when_to_use": "New dashboard crashes for 10% of users mid-rollout; pull kill-switch + investigate.",
+      "example_code": "import { killSwitch } from '@projexlight/sdk-feature-flags';\nawait killSwitch({\n  flag_id, pulled_by_persona_id, reason: 'P1-incident-2026-05-26',\n});",
+      "expected_outcome": "All future evaluations return default (false). Emits .kill_switch.fired.v1 — critical for the post-incident audit chain. Cache invalidates within sec."
+    },
+    {
+      "id": "cleanup-on-tenant-offboard",
+      "title": "Reactive: drop tenant-scoped flags on offboard",
+      "when_to_use": "tenant.offboarded.v1 fires; drop the tenant's flag rows so they don't accumulate.",
+      "example_code": "subscribeEvents('tenant.offboarded.v1', async (e) => {\n  await deleteFlagsForTenant({ tenant_id: e.payload.tenant_id });\n});",
+      "expected_outcome": "Flag rows + rollouts deleted. Cache invalidates."
+    }
+  ],
+  "compliance_posture": {
+    "regimes": ["SOC2-CC8.1-change-mgmt", "SOX-Section-404-controls", "GDPR-Art-22", "EU-AI-Act-Annex-IV"],
+    "notes": "Sampled evaluation log lets a regulator replay which code path served any customer at any time — critical for EU AI Act algorithm-transparency + SOX change-mgmt. Kill-switch event is the canonical incident-response artifact."
+  },
+  "pool_placement": "admin",
+  "pricing_skus": [
+    { "sku": "feature_flags.flag.write",    "mode": "metered", "unit_description": "per flag write" },
+    { "sku": "feature_flags.evaluate",      "mode": "metered", "unit_description": "per evaluation (cache hits billed lower)" },
+    { "sku": "feature_flags.rollout.step",  "mode": "metered", "unit_description": "per rollout advancement" },
+    { "sku": "feature_flags.kill_switch",   "mode": "flat",    "unit_description": "per kill-switch event" }
+  ],
+  "links": {
+    "readme": "packages/sdk-feature-flags/README.md",
+    "source": "packages/sdk-feature-flags/src/",
+    "prd_section": "P2-Identity-Access §11 / FR-FF-1..6"
+  }
+}

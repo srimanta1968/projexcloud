@@ -1,0 +1,85 @@
+{
+  "name": "@projexlight/service-pool-federation-runtime",
+  "version": "1.0.0",
+  "schema_version": "1.0",
+  "summary": "Cross-pool federation runtime (G10 closer) — discovery + health probing + routing for per-tenant + per-app pool families. Maintains the live pool topology so sdk-pool-router can resolve a tenant request to the right pool in O(1). Active-active failover engagement lives here.",
+  "tags": ["service", "pool-federation", "routing", "active-active", "p7"],
+  "provides": {
+    "endpoints": [],
+    "events": [
+      { "name": "pool-federation.topology.changed.v1",  "retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "Pool topology mutation (attach / detach / region change)." },
+      { "name": "pool-federation.health.degraded.v1",   "retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "Pool health probe crossed degraded threshold." },
+      { "name": "pool-federation.failover.engaged.v1",  "retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "Active-active failover engaged; partner region takes traffic." }
+    ],
+    "models": [],
+    "hooks": [
+      { "name": "registerPool",         "description": "Register a new pool into the federation topology." },
+      { "name": "deregisterPool",       "description": "Drain + remove a pool (decommission)." },
+      { "name": "probeHealth",          "description": "On-demand health probe; usually run by the periodic prober." },
+      { "name": "engageFailover",       "description": "Operator-driven (or auto-policy) failover to a partner region." },
+      { "name": "startProber",          "description": "Background worker — probes every pool on the configured cadence." }
+    ],
+    "ui_components": []
+  },
+  "consumes": {
+    "events": [
+      { "name": "tenant.created.v1",       "from": "@projexlight/sdk-tenant" },
+      { "name": "tenant.offboarded.v1",     "from": "@projexlight/sdk-tenant-lifecycle" }
+    ],
+    "infra": ["postgres", "redis"],
+    "config_keys": ["POOL_FEDERATION_PROBE_INTERVAL_SEC", "POOL_FEDERATION_DEGRADED_THRESHOLD_MS", "POOL_FEDERATION_FAILOVER_AUTO"]
+  },
+  "scenarios": [
+    {
+      "id": "register-new-pool",
+      "title": "Add a new EU app pool to the federation",
+      "when_to_use": "Scale-out — capacity team brings up a new EU pool; register it so pool-router can route EU tenants to it.",
+      "example_code": "import { registerPool } from '@projexlight/service-pool-federation-runtime';\nawait registerPool({\n  pool_index: 'eu-west-app-2', region: 'eu-west-1', kind: 'app',\n  capacity_class: 'standard',\n});",
+      "expected_outcome": "Pool registered; topology event emitted. lineage-projector backfills the new pool's lineage. pool-router starts routing eligible tenants."
+    },
+    {
+      "id": "degraded-health",
+      "title": "Pool degraded → traffic shifts away",
+      "when_to_use": "Probe detects elevated latency / error rate; emit .health.degraded.v1; pool-router de-weights the pool until recovery.",
+      "example_code": "// driven by startProber on cadence;\n// emits when p95 > POOL_FEDERATION_DEGRADED_THRESHOLD_MS for N consecutive probes.",
+      "expected_outcome": "Traffic gradually shifts to healthy peers. Recovery flips weight back."
+    },
+    {
+      "id": "active-active-failover",
+      "title": "Region-level failover",
+      "when_to_use": "Tier-G+ — partner region is healthy + home is degraded; engageFailover atomically points DNS + pool-router to the partner.",
+      "example_code": "import { engageFailover } from '@projexlight/service-pool-federation-runtime';\nawait engageFailover({\n  from_region: 'us-east-1', to_region: 'us-west-2',\n  reason: 'us-east-1 latency-degraded-15min',\n});",
+      "expected_outcome": "Failover engaged within ~60s (RTO target). Audit chain pins reason + persona who engaged. Sync-replicated SDKs (audit, payment) continue serving; async SDKs flush their tail."
+    },
+    {
+      "id": "decommission-pool",
+      "title": "Drain + remove an old pool",
+      "when_to_use": "Capacity team wants to retire an old pool; drain stops new tenants + lets existing finish.",
+      "example_code": "import { deregisterPool } from '@projexlight/service-pool-federation-runtime';\nawait deregisterPool({ pool_index: 'us-east-app-1', drain_hours: 24 });",
+      "expected_outcome": "Pool drained, then removed. Existing tenants migrated to peers."
+    },
+    {
+      "id": "monthly-failover-drill",
+      "title": "Monthly active-active failover drill",
+      "when_to_use": "Required for Tier-G+ SLO — monthly drill to prove failover works.",
+      "example_code": "// run via scheduled job; engageFailover + immediately revert.",
+      "expected_outcome": "Drill emits the same audit events as a real failover. SLO clock records drill duration."
+    }
+  ],
+  "compliance_posture": {
+    "regimes": ["SOC2-CC7.1-availability", "SOC2-CC7.4", "FedRAMP-CP-family", "GDPR-Art-44-residency"],
+    "notes": "Region pinning enforces residency — a tenant pinned to EU never has its requests federated to a US pool. Failover events satisfy SOC2-CC7.4 evidence; monthly drills satisfy the FedRAMP CP-9 contingency plan requirement."
+  },
+  "pool_placement": "global-catalog",
+  "pricing_skus": [
+    { "sku": "pool-federation.pool.register",  "mode": "flat",    "unit_description": "per pool registered" },
+    { "sku": "pool-federation.probe",          "mode": "metered", "unit_description": "per health probe (background)" },
+    { "sku": "pool-federation.failover.engage","mode": "flat",    "unit_description": "per failover engagement (drill or real)" }
+  ],
+  "no_endpoints": true,
+  "links": {
+    "readme": "services/pool-federation-runtime/README.md",
+    "source": "services/pool-federation-runtime/src/",
+    "prd_section": "P7-Field-Hyperscale §10 / G10"
+  }
+}

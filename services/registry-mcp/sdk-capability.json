@@ -1,0 +1,96 @@
+{
+  "name": "@projexlight/service-registry-mcp",
+  "version": "1.0.0",
+  "schema_version": "1.0",
+  "summary": "Hosted MCP service — Fastify daemon exposing the projex_registry_* tool surface over SSE so non-monorepo customers can discover + install SDKs from any MCP-aware AI client. Sibling of packages/registry-mcp-local (stdio variant). Adds JWT auth, per-tenant rate-limiting, audit→sdk-meter wiring, and on-disk catalog hot-reload so new SDK manifests propagate without restart.",
+  "tags": ["service", "mcp", "sse", "hosted", "p9", "discovery"],
+  "provides": {
+    "endpoints": [
+      { "method": "GET",  "path": "/healthz",                           "description": "Health + catalog + reload counters + active session count." },
+      { "method": "GET",  "path": "/mcp/sse",                           "description": "Open SSE stream + start MCP session (Bearer JWT)." },
+      { "method": "POST", "path": "/mcp/messages",                      "description": "Client → server JSON-RPC channel (Bearer JWT)." }
+    ],
+    "events": [
+      { "name": "registry-mcp.session.opened.v1",   "retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "SSE session opened; carries tenant + persona context." },
+      { "name": "registry-mcp.session.closed.v1",   "retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "SSE session closed normally or by disconnect." },
+      { "name": "registry-mcp.catalog.reloaded.v1", "retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "On-disk catalog mtime advanced; in-memory Registry swapped atomically." }
+    ],
+    "models": [],
+    "hooks": [
+      { "name": "startServer",         "description": "Boot Fastify; wire SSE + messages endpoints + healthz." },
+      { "name": "buildApp",            "description": "Lower-level entry — build the Fastify app for tests / embedding." },
+      { "name": "createRegistryRef",  "description": "Build a hot-reloadable Registry reference + watcher handle." }
+    ],
+    "ui_components": []
+  },
+  "consumes": {
+    "events": [
+      { "name": "meter.hardcap.denied.v1", "from": "@projexlight/sdk-meter" }
+    ],
+    "infra": ["postgres-optional", "fastify", "@modelcontextprotocol/sdk", "sdk-meter", "sdk-identity", "sdk-registry"],
+    "config_keys": [
+      "REGISTRY_MCP_PORT",
+      "REGISTRY_MCP_HOST",
+      "REGISTRY_MCP_CATALOG_PATH",
+      "REGISTRY_MCP_EMBEDDINGS_BIN",
+      "REGISTRY_MCP_EMBEDDINGS_META",
+      "REGISTRY_MCP_AUTH_MODE",
+      "REGISTRY_MCP_RATE_LIMIT",
+      "REGISTRY_MCP_WATCH_INTERVAL_MS",
+      "REGISTRY_MCP_POOL_INDEX",
+      "REGISTRY_MCP_REGION",
+      "JWT_SECRET"
+    ]
+  },
+  "scenarios": [
+    {
+      "id": "customer-claude-code-connect",
+      "title": "Customer's Claude Code opens an SSE session",
+      "when_to_use": "Customer ran `projex init my-app --hosted-url https://registry.projexcloud.com/mcp/sse --api-token <jwt>`; Claude Code now opens the SSE stream on startup.",
+      "example_code": "// Claude Code reads mcp.json:\n{\n  \"projex-registry\": {\n    \"type\": \"sse\",\n    \"url\": \"https://registry.projexcloud.com/mcp/sse\",\n    \"headers\": { \"Authorization\": \"Bearer <jwt>\" }\n  }\n}",
+      "expected_outcome": "Server validates JWT, rate-limits tenant, opens SSE, returns session_id. Subsequent JSON-RPC messages flow through /mcp/messages with the session_id. Tools light up in Claude Code."
+    },
+    {
+      "id": "tool-call-meters",
+      "title": "Each CallTool invocation meters against the tenant",
+      "when_to_use": "Every tool call hits the audit sink — composed audit→stdout + audit→sdk-meter chain attributes the call to the JWT's tenant + emits UsageEvent.v1 under a registry.read.* SKU.",
+      "example_code": "// inside mcpHandler.ts:\nconst result = await dispatchTool(name, args, registry);\nopts.audit?.({ tenant, tool: name, ok: !result.isError, duration_ms });\n// audit sink fans into stdout + buildMeterSink",
+      "expected_outcome": "UsageEvent.v1 emitted with the right SKU + dimensions. meter-collector rolls up; sdk-billing renders the invoice."
+    },
+    {
+      "id": "catalog-hot-reload",
+      "title": "Operator drops a new catalog onto the volume → no restart",
+      "when_to_use": "ci/cd writes a fresh registry.catalog.json + registry.embeddings.bin into the service's mount; the watcher polls the mtime + atomically swaps the in-memory Registry.",
+      "example_code": "// background watcher inside startCatalogWatcher.\n// open SSE sessions pick up the new catalog on their next CallTool.",
+      "expected_outcome": "GET /healthz shows catalog_reload_count++. No client reconnect required. Failed reloads (corrupt file) keep serving the previous Registry."
+    },
+    {
+      "id": "rate-limit-protection",
+      "title": "Rate limit protects against runaway agent",
+      "when_to_use": "Agent loops; rate-limiter denies past 120 calls/min per tenant.",
+      "example_code": "// inside app.ts:\nconst limit = limiter.check(tenant.tenant_id ?? tenant.sub);\nif (!limit.ok) return reply.code(429).send({ error: 'rate limited' });",
+      "expected_outcome": "Caller sees 429. Tenant-admin can adjust the limit if legitimate growth."
+    },
+    {
+      "id": "auth-disabled-for-dev",
+      "title": "Dev mode runs without JWT",
+      "when_to_use": "Local dev with REGISTRY_MCP_AUTH_MODE=disabled; returns anonymous context; useful for smoke tests.",
+      "example_code": "// set REGISTRY_MCP_AUTH_MODE=disabled in the dev .env",
+      "expected_outcome": "Service accepts unauthenticated requests; audit logs anonymous-dev as the actor."
+    }
+  ],
+  "compliance_posture": {
+    "regimes": ["SOC2-CC6.1-access-control", "GDPR-Art-32", "EU-AI-Act-Annex-IV-agent-tools"],
+    "notes": "Every tool call audited + metered against the JWT-bound tenant — full attribution for any AI-agent decision routed through the catalog. JWT validated against sdk-identity's six-layer claim shape; rate-limit per tenant enforces fair use. Hot-reload's fail-closed behavior on corrupt catalog satisfies SOC2 change-management."
+  },
+  "pool_placement": "global-catalog",
+  "pricing_skus": [
+    { "sku": "registry-mcp.session.open",   "mode": "metered", "unit_description": "per SSE session opened" },
+    { "sku": "registry-mcp.catalog.reload", "mode": "metered", "unit_description": "per catalog hot-reload" }
+  ],
+  "links": {
+    "readme": "services/registry-mcp/README.md",
+    "source": "services/registry-mcp/src/",
+    "prd_section": "P9-SDK-Discoverability §5.3 + §5.6 / FR-MCP-1..8"
+  }
+}

@@ -49,3 +49,38 @@ export async function signupTenant(input: SignupTenantRequest): Promise<SignupTe
   setToken(data.token);
   return data;
 }
+
+export interface LoginRequest {
+  email: string;
+  password: string;
+}
+
+export interface LoginResponse {
+  userId: string;
+  email: string;
+  tenant_id: string | null;
+  app_id: string | null;
+  org_id: string | null;
+  token: string;
+}
+
+/**
+ * POST /api/auth/login — verifies email + password, mints a six-layer JWT
+ * scoped to the user's active tenant/app/org, persists it for subsequent
+ * authenticated calls.
+ */
+export async function loginUser(input: LoginRequest): Promise<LoginResponse> {
+  const data = await apiPost<LoginResponse>('/api/auth/login', input);
+  setToken(data.token);
+  return data;
+}
+
+/**
+ * Local-only logout: clears the persisted token. The JWT itself remains
+ * cryptographically valid until expiry; for hard revoke the operator
+ * should rotate the JWT secret or block via sdk-identity's session
+ * deny-list (server-side concern).
+ */
+export function logoutUser(): void {
+  setToken(null);
+}

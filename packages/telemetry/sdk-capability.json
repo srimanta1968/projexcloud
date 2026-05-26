@@ -1,0 +1,86 @@
+{
+  "name": "@projexlight/telemetry",
+  "version": "1.0.0",
+  "schema_version": "1.0",
+  "summary": "Structured logging + Prom-style metric primitives for every SDK + service. Wraps pino + prom-client behind a uniform API so service code never imports the underlying libs directly — swapping backends is a single-package change.",
+  "tags": [
+    "foundation",
+    "telemetry",
+    "logging",
+    "metrics",
+    "wave-0"
+  ],
+  "provides": {
+    "endpoints": [],
+    "events": [],
+    "models": [],
+    "hooks": [
+      {
+        "name": "logger",
+        "description": "Per-module logger; pre-configured with structured fields + trace correlation."
+      },
+      {
+        "name": "counter",
+        "description": "Get-or-create a prom counter for a metric."
+      },
+      {
+        "name": "histogram",
+        "description": "Get-or-create a prom histogram for a metric."
+      },
+      {
+        "name": "scrapeMetrics",
+        "description": "Render metrics in Prometheus exposition format for /metrics endpoint."
+      }
+    ],
+    "ui_components": []
+  },
+  "consumes": {
+    "events": [],
+    "infra": [
+      "pino",
+      "prom-client"
+    ],
+    "config_keys": [
+      "LOG_LEVEL",
+      "METRICS_PREFIX"
+    ]
+  },
+  "scenarios": [
+    {
+      "id": "structured-log-with-trace",
+      "title": "Per-SDK logger inherits trace-id context",
+      "when_to_use": "Every SDK call inside a request — logger() returns a child with trace_id + sdk_name pre-filled.",
+      "example_code": "import { logger } from '@projexlight/telemetry';\nconst log = logger({ sdk: 'vault' });\nlog.info({ key_id }, 'encrypted envelope');",
+      "expected_outcome": "Log lines have consistent structured fields. Search by trace_id walks the whole request."
+    },
+    {
+      "id": "counter-and-histogram",
+      "title": "Per-SDK counter + histogram",
+      "when_to_use": "SDK records its own metrics — counter increments per call, histogram captures latency.",
+      "example_code": "import { counter, histogram } from '@projexlight/telemetry';\nconst c = counter('vault_encrypt_total');\nconst h = histogram('vault_encrypt_duration_ms');\nc.inc(); const end = h.startTimer(); /* ... */ end();",
+      "expected_outcome": "Metrics scraped by Prom + visible in Grafana. No double-registration on hot reload."
+    },
+    {
+      "id": "render-prom-endpoint",
+      "title": "Render /metrics endpoint",
+      "when_to_use": "Every service exposes GET /metrics; this hook renders the current state.",
+      "example_code": "import { scrapeMetrics } from '@projexlight/telemetry';\napp.get('/metrics', async () => scrapeMetrics());",
+      "expected_outcome": "Prometheus scrapes successfully. Histogram buckets pre-configured for the SLO targets."
+    }
+  ],
+  "compliance_posture": {
+    "regimes": [
+      "SOC2-CC7.2-monitoring",
+      "ISO-27001-Annex-A-12"
+    ],
+    "notes": "Structured logging is the SOC2-CC7.2 monitoring artifact. PII auto-redacted via the configured redact paths so logs are safe for retention."
+  },
+  "pool_placement": "global-catalog",
+  "pricing_skus": [],
+  "no_endpoints": true,
+  "links": {
+    "readme": "packages/telemetry/README.md",
+    "source": "packages/telemetry/src/",
+    "prd_section": "SDK-Build-Plan-v3.1 Wave 0"
+  }
+}

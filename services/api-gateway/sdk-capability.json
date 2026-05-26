@@ -1,0 +1,82 @@
+{
+  "name": "@projexlight/api-gateway",
+  "version": "1.0.0",
+  "schema_version": "1.0",
+  "summary": "The single front door for ProjexCloud — Fastify HTTP/HTTPS service that composes ~30 SDKs (vault, audit, identity, pool-router, meter, secrets, tenant, consent, policy, rebac, api-keys, projection, media, notification, payment, workflow, billing, webhook, etc.) into one tenant-scoped surface. Wires JWT auth, pool routing, meter gates, and the public REST endpoints every customer + admin SDK talks to.",
+  "tags": ["service", "api-gateway", "fastify", "composition-surface", "foundation"],
+  "provides": {
+    "endpoints": [],
+    "events": [
+      { "name": "api-gateway.boot.completed.v1",    "retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "Gateway started; carries SDK boot order + migration status." },
+      { "name": "api-gateway.request.served.v1",    "retention_class": "operational","conflict_policy": "lww",            "description": "Per-request envelope (sampled); feeds sdk-trace + cost attribution." },
+      { "name": "api-gateway.failover.engaged.v1",  "retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "Active-active failover engaged for this region." }
+    ],
+    "models": [],
+    "hooks": [
+      { "name": "startGateway",        "description": "Boot the gateway — runs SDK migrations in order, registers route handlers, starts background workers, opens listeners." },
+      { "name": "registerPlugin",      "description": "Register an additional Fastify plugin (rare; for tenant-customized routes)." },
+      { "name": "drainAndShutdown",   "description": "Graceful drain: stop accepting new requests, finish in-flight, flush meter + audit buffers, exit." }
+    ],
+    "ui_components": []
+  },
+  "consumes": {
+    "events": [
+      { "name": "vault.key.shredded.v1",       "from": "@projexlight/sdk-vault" },
+      { "name": "tenant.created.v1",            "from": "@projexlight/sdk-tenant" },
+      { "name": "meter.hardcap.denied.v1",      "from": "@projexlight/sdk-meter" }
+    ],
+    "infra": ["postgres", "redis", "kafka", "clickhouse", "30+ SDKs"],
+    "config_keys": ["GATEWAY_PORT", "GATEWAY_HOST", "GATEWAY_REQUEST_TIMEOUT_MS", "GATEWAY_LOG_LEVEL", "GATEWAY_GRACEFUL_DRAIN_SEC"]
+  },
+  "scenarios": [
+    {
+      "id": "boot-with-all-sdks",
+      "title": "Boot wires every composed SDK in dependency order",
+      "when_to_use": "Process startup. Foundation SDKs initialize first (vault, secrets, audit), then domain SDKs (tenant, identity), then operational (meter, billing), then verticals.",
+      "example_code": "import { startGateway } from '@projexlight/api-gateway';\nawait startGateway({\n  port: 3000, sdks: ['sdk-vault','sdk-audit','sdk-identity','sdk-tenant',...]\n});",
+      "expected_outcome": "Service listens; emits .boot.completed.v1 with per-SDK boot status. Health endpoint reports green."
+    },
+    {
+      "id": "request-served-with-trace",
+      "title": "Per-request lifecycle: auth → route → meter → response",
+      "when_to_use": "Universal — every inbound HTTP request goes through this flow.",
+      "example_code": "// implicit pipeline: jwt verify → tenant scope → policy check → meter.check → handler → meter.report → audit emit → response\n// gateway exports the middleware stack so other services can re-use it",
+      "expected_outcome": "Request served with trace span. Sampled into .request.served.v1 for cost attribution + observability."
+    },
+    {
+      "id": "graceful-drain-during-deploy",
+      "title": "Rolling deploy → graceful drain",
+      "when_to_use": "Kubernetes preStop hook calls drainAndShutdown — gateway stops accepting new requests, finishes in-flight within GRACEFUL_DRAIN_SEC, flushes buffers, exits 0.",
+      "example_code": "import { drainAndShutdown } from '@projexlight/api-gateway';\nprocess.on('SIGTERM', () => drainAndShutdown({ timeout_sec: 30 }));",
+      "expected_outcome": "Zero-downtime deploy. Trace shows no abandoned requests."
+    },
+    {
+      "id": "failover-active-active",
+      "title": "Active-active failover when home region degrades",
+      "when_to_use": "Tier-G+ deployment — region health drops; pool-router flips traffic to the partner region; gateway emits .failover.engaged.v1 for the audit chain.",
+      "example_code": "// driven by sdk-pool-router health probes;\n// gateway role is to emit the event + adjust its readiness probe response.",
+      "expected_outcome": "Traffic shifts within seconds. Failover event audited. SLO clock continues against the partner region until recovery."
+    },
+    {
+      "id": "hardcap-denial-passthrough",
+      "title": "meter.hardcap.denied.v1 → 429 response with policy detail",
+      "when_to_use": "Tenant exceeded a hard cap; gateway translates the event into a structured 429 with retry-after + the violated SKU.",
+      "example_code": "subscribeEvents('meter.hardcap.denied.v1', async (e) => {\n  // gateway caches the deny so subsequent requests can short-circuit before SDK dispatch\n});",
+      "expected_outcome": "Caller sees 429 with details. Cache invalidates on the next billing-cycle reset."
+    }
+  ],
+  "compliance_posture": {
+    "regimes": ["SOC2-CC6.1", "SOC2-CC7.1", "GDPR-Art-32", "FedRAMP-AC-AU-CM", "HIPAA-164.312"],
+    "notes": "Single entry point means every request has a uniform audit chain + meter gate. Failover events satisfy SOC2-CC7.1 availability evidence. Graceful drain ensures no audit-row loss during deploys."
+  },
+  "pool_placement": "app",
+  "pricing_skus": [
+    { "sku": "api-gateway.request.served", "mode": "metered", "unit_description": "per request served (sampled to control cardinality)" }
+  ],
+  "no_endpoints": true,
+  "links": {
+    "readme": "services/api-gateway/README.md",
+    "source": "services/api-gateway/src/",
+    "prd_section": "Architecture-v3.1 §6 + every P# SDK"
+  }
+}

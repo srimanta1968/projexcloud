@@ -1,0 +1,103 @@
+{
+  "name": "@projexlight/sdk-engagement",
+  "version": "1.0.0",
+  "schema_version": "1.0",
+  "summary": "Encounter primitives: every interaction with a customer (sales call, support session, onboarding meeting, field visit) is an Encounter with participants + a state machine. Pairs with sdk-crm for the contact + sdk-conversation for the messaging substrate. Every SDK that 'serves a customer' attaches its work to an encounter so reporting + audit have a single grouping key.",
+  "tags": ["engagement", "encounter", "interactions", "crm", "p6b"],
+  "provides": {
+    "endpoints": [
+      { "method": "POST",  "path": "/api/encounters",                              "description": "Create an encounter (kind + scheduled time + participants)." },
+      { "method": "GET",   "path": "/api/encounters/:encounter_id",                "description": "Fetch an encounter + its timeline." },
+      { "method": "POST",  "path": "/api/encounters/:encounter_id/transition",     "description": "Advance encounter state (scheduled → in-progress → completed / no-show / cancelled)." },
+      { "method": "POST",  "path": "/api/encounters/:encounter_id/participants",   "description": "Add a participant mid-encounter." },
+      { "method": "DELETE","path": "/api/encounters/:encounter_id/participants/:p","description": "Remove a participant (no-show, mistake)." },
+      { "method": "POST",  "path": "/api/encounters/:encounter_id/grants",         "description": "Grant temporary access (one-time agent join, customer self-serve viewer)." },
+      { "method": "GET",   "path": "/api/encounters/:encounter_id/grants",         "description": "List active grants for an encounter." },
+      { "method": "DELETE","path": "/api/encounters/:encounter_id/grants/:g",      "description": "Revoke a grant." },
+      { "method": "POST",  "path": "/api/encounters/:encounter_id/notes",          "description": "Add a structured note (typed by purpose: discovery / objection / next-step)." },
+      { "method": "GET",   "path": "/api/encounters/:encounter_id/notes",          "description": "List notes for an encounter." }
+    ],
+    "events": [
+      { "name": "engagement.encounter.scheduled.v1",   "retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "Encounter created in scheduled state." },
+      { "name": "engagement.encounter.started.v1",     "retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "Encounter transitioned to in-progress." },
+      { "name": "engagement.encounter.completed.v1",   "retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "Encounter completed normally; downstream SDKs key billing + commission on this." },
+      { "name": "engagement.encounter.no_show.v1",     "retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "Encounter ended without participant; no-show analytics." },
+      { "name": "engagement.participant.joined.v1",    "retention_class": "operational","conflict_policy": "event-sourcing", "description": "Participant added mid-encounter." },
+      { "name": "engagement.grant.issued.v1",          "retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "Temporary access grant issued (one-time agent join)." }
+    ],
+    "models": [
+      { "schema": "engagement", "table": "encounter",             "description": "Per-encounter row: kind, state, contact_id, scheduled_at, started_at, completed_at." },
+      { "schema": "engagement", "table": "encounter_participant", "description": "Per-(encounter, persona) row: role (host/attendee/observer), joined_at, left_at." },
+      { "schema": "engagement", "table": "encounter_grant",       "description": "Per-grant row: kind (agent_join / viewer / co-edit), issued_to, expires_at." }
+    ],
+    "hooks": [
+      { "name": "scheduleEncounter",  "description": "Create a scheduled encounter; participants invited via sdk-notification." },
+      { "name": "startEncounter",     "description": "Transition scheduled → in-progress; emits .started.v1." },
+      { "name": "completeEncounter",  "description": "Transition in-progress → completed; carries summary + outcome." },
+      { "name": "issueGrant",         "description": "Issue a temporary access grant (e.g. an agent joining a customer's session)." },
+      { "name": "addParticipant",     "description": "Add a participant mid-encounter (supervisor joining a triage call)." }
+    ],
+    "ui_components": []
+  },
+  "consumes": {
+    "events": [
+      { "name": "crm.activity.logged.v1",          "from": "@projexlight/sdk-crm" },
+      { "name": "connector-zoom.meeting.ended.v1", "from": "@projexlight/connector-zoom" }
+    ],
+    "infra": ["postgres", "redis-optional", "sdk-notification"],
+    "config_keys": ["ENGAGEMENT_NO_SHOW_GRACE_MIN", "ENGAGEMENT_GRANT_DEFAULT_TTL_MIN"]
+  },
+  "scenarios": [
+    {
+      "id": "schedule-demo-encounter",
+      "title": "AE schedules a demo encounter + invites the customer",
+      "when_to_use": "Outbound or inbound discovery — AE schedules; sdk-notification sends the invite; connector-zoom creates the meeting if configured.",
+      "example_code": "import { scheduleEncounter } from '@projexlight/sdk-engagement';\nconst { encounter_id } = await scheduleEncounter({\n  tenant_id, kind: 'demo',\n  contact_id, scheduled_at: '2026-05-28T15:00Z', duration_min: 30,\n  participants: [{ persona_id: ae.id, role: 'host' }, { contact_id: prospect.id, role: 'attendee' }],\n});",
+      "expected_outcome": "Encounter row in scheduled state; emits .scheduled.v1. connector-zoom creates the meeting; invite SMS/email sent."
+    },
+    {
+      "id": "supervisor-joins-mid-call",
+      "title": "Supervisor joins an in-progress support call",
+      "when_to_use": "Escalation — senior rep joins to assist; we add them as a participant mid-encounter for accurate timeline + commission attribution.",
+      "example_code": "import { addParticipant } from '@projexlight/sdk-engagement';\nawait addParticipant({\n  encounter_id, persona_id: senior.id, role: 'observer',\n  reason: 'escalation:complex-billing-question',\n});",
+      "expected_outcome": "Participant row written; emits .participant.joined.v1. Timeline shows senior joining at the correct timestamp."
+    },
+    {
+      "id": "issue-self-serve-viewer-grant",
+      "title": "Issue a viewer grant so the customer can replay the recording",
+      "when_to_use": "Post-encounter, AE wants the customer to be able to watch the Zoom recording without a ProjexCloud account.",
+      "example_code": "import { issueGrant } from '@projexlight/sdk-engagement';\nconst { grant_url } = await issueGrant({\n  encounter_id, kind: 'viewer',\n  issued_to_email: prospect.email,\n  ttl_min: 60 * 24 * 7,\n});",
+      "expected_outcome": "Grant_url returned (signed JWT). Email sent. Prospect can access the recording without a full account."
+    },
+    {
+      "id": "completion-triggers-commission",
+      "title": "Encounter completion triggers commission projection",
+      "when_to_use": "Reactive — engagement.encounter.completed.v1 with kind='demo-completed' counts toward the AE's quarterly demo target. sdk-projection rolls up.",
+      "example_code": "subscribeEvents('engagement.encounter.completed.v1', async (e) => {\n  if (e.payload.kind !== 'demo') return;\n  await incrementMetric({ persona_id: e.payload.host_persona_id, metric: 'demos-q2-2026' });\n});",
+      "expected_outcome": "Counter advanced; reflected in commission dashboard. Audit chain pins the encounter as the source."
+    },
+    {
+      "id": "no-show-grace-window",
+      "title": "Auto no-show after the grace window",
+      "when_to_use": "Encounter scheduled for 15:00; nobody starts it by 15:00 + ENGAGEMENT_NO_SHOW_GRACE_MIN (15) — system flips to no-show + emits .no_show.v1.",
+      "example_code": "// driven by a periodic sweeper:\nfor (const e of await findScheduledPastGrace({ tenant_id })) {\n  await transition({ encounter_id: e.id, to: 'no_show' });\n}",
+      "expected_outcome": "Stale encounter marked no_show; emits .no_show.v1. Marketing's no-show retargeting workflow picks it up."
+    }
+  ],
+  "compliance_posture": {
+    "regimes": ["SOC2-CC7.1", "GDPR-Art-30", "TCPA-Section-227-invitations", "HIPAA-164.502-patient-encounters"],
+    "notes": "Encounter rows + participants are the GDPR Art-30 record-of-processing for any customer-facing interaction. Healthcare tenants use this as the patient-encounter primitive — sdk-consent + sdk-evidence attach to encounter_id."
+  },
+  "pool_placement": "app",
+  "pricing_skus": [
+    { "sku": "engagement.encounter.schedule",    "mode": "metered", "unit_description": "per encounter scheduled" },
+    { "sku": "engagement.encounter.complete",    "mode": "flat",    "unit_description": "per encounter completed" },
+    { "sku": "engagement.grant.issue",           "mode": "metered", "unit_description": "per access grant issued" },
+    { "sku": "engagement.participant.add",       "mode": "metered", "unit_description": "per participant added" }
+  ],
+  "links": {
+    "readme": "packages/sdk-engagement/README.md",
+    "source": "packages/sdk-engagement/src/",
+    "prd_section": "P6B-Vertical-RevOps §2 / FR-ENG-1..5"
+  }
+}

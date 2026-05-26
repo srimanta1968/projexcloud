@@ -1,0 +1,115 @@
+{
+  "$schema_version": "1.0",
+  "catalog_id": "long-tail-sdks",
+  "version": 1,
+  "description": "Pricing for the long-tail SDKs (search / recommendation / persona / profile / event / trace / taxonomy / feature-flags / geo / parsing / agent-runtime / service-request / onprem / sovereign / social / identity-resolver / diagnostic-telemetry / hdk-measure / hdk-scanner / hdk-video-editor / hdk-watermark / mcp-bridge). Closes catalog coverage to every customer-billable SDK manifested in P9.",
+  "currency": "USD",
+  "created_by_operator_id": "seed:long-tail-sdks-v1",
+  "rates": [
+    { "sku": "search.index.declare",                "unit": "version",     "mode": "flat",    "price": 1.00,    "notes": "Per index version." },
+    { "sku": "search.query.execute",                "unit": "query",       "mode": "metered", "price": 0.0005,  "notes": "Per query; cached results billed at $0.0001." },
+    { "sku": "search.reindex",                      "unit": "partition",   "mode": "metered", "price": 0.50,    "notes": "Per partition reindexed (heavy)." },
+    { "sku": "search.saved_query.fire",             "unit": "fire",        "mode": "metered", "price": 0.005,   "notes": "Per saved-query refresh that emits an alert." },
+
+    { "sku": "recommendation.model.publish",        "unit": "version",     "mode": "flat",    "price": 1.00,    "notes": "Per model version." },
+    { "sku": "recommendation.suggestion.serve",     "unit": "suggestion",  "mode": "metered", "price": 0.0005,  "notes": "Per served suggestion." },
+    { "sku": "recommendation.feedback.record",      "unit": "feedback",    "mode": "metered", "price": 0.0001,  "notes": "Per feedback row." },
+    { "sku": "recommendation.retrain",              "unit": "pass",        "mode": "metered", "price": 2.50,    "notes": "Per retrain pass (compute-heavy)." },
+
+    { "sku": "persona.app_identity.create",         "unit": "identity",    "mode": "metered", "price": 0.001,   "notes": "Per app-identity created." },
+    { "sku": "persona.membership.add",              "unit": "membership",  "mode": "metered", "price": 0.0005,  "notes": "Per membership." },
+    { "sku": "persona.role.assign",                 "unit": "assignment",  "mode": "metered", "price": 0.0005,  "notes": "Per role assignment." },
+    { "sku": "persona.extension.write",             "unit": "write",       "mode": "metered", "price": 0.001,   "notes": "Per extension write (domain metadata)." },
+    { "sku": "persona.offboard",                    "unit": "offboard",    "mode": "flat",    "price": 0.50,    "notes": "Per persona offboarded (cascade trigger)." },
+
+    { "sku": "profile.band.read",                   "unit": "read",        "mode": "metered", "price": 0.00005, "notes": "Per band read (L1 / L2)." },
+    { "sku": "profile.band.write",                  "unit": "write",       "mode": "metered", "price": 0.0001,  "notes": "Per band write." },
+    { "sku": "profile.secure.read",                 "unit": "read",        "mode": "metered", "price": 0.005,   "notes": "Per secure-field read (audited; rate-limited)." },
+    { "sku": "profile.secure.write",                "unit": "write",       "mode": "metered", "price": 0.005,   "notes": "Per secure-field write." },
+    { "sku": "profile.secure.shred",                "unit": "shred",       "mode": "flat",    "price": 0.50,    "notes": "Per shred operation (compliance)." },
+
+    { "sku": "event.session.create",                "unit": "session",     "mode": "flat",    "price": 5.00,    "notes": "Per event session." },
+    { "sku": "event.ticket.issue",                  "unit": "ticket",      "mode": "metered", "price": 0.25,    "notes": "Per ticket issued (paid or comp)." },
+    { "sku": "event.checkin.record",                "unit": "checkin",     "mode": "metered", "price": 0.01,    "notes": "Per check-in scan." },
+
+    { "sku": "trace.span.record",                   "unit": "span",        "mode": "metered", "price": 0.000001,"notes": "Per span persisted (sampled)." },
+    { "sku": "trace.query.fetch",                   "unit": "trace",       "mode": "metered", "price": 0.001,   "notes": "Per trace fetched." },
+    { "sku": "trace.export.bytes",                  "unit": "gb",          "mode": "metered", "price": 0.10,    "notes": "Per GB exported to external OTLP sink." },
+    { "sku": "trace.regression.assert",             "unit": "assertion",   "mode": "metered", "price": 0.005,   "notes": "Per CI assertion run." },
+
+    { "sku": "taxonomy.version.publish",            "unit": "version",     "mode": "flat",    "price": 1.00,    "notes": "Per taxonomy version." },
+    { "sku": "taxonomy.extract",                    "unit": "extraction",  "mode": "metered", "price": 0.02,    "notes": "Per extraction; LLM cost passes through via sdk-ai-gateway." },
+    { "sku": "taxonomy.migration.plan",             "unit": "plan",        "mode": "metered", "price": 0.50,    "notes": "Per migration plan generated." },
+    { "sku": "taxonomy.migration.apply",            "unit": "reextract",   "mode": "metered", "price": 0.02,    "notes": "Per extraction re-run during migration." },
+
+    { "sku": "feature_flags.flag.write",            "unit": "write",       "mode": "metered", "price": 0.001,   "notes": "Per flag write." },
+    { "sku": "feature_flags.evaluate",              "unit": "evaluation",  "mode": "metered", "price": 0.000005,"notes": "Per evaluation (cache hits at this rate; the cache hit ratio is the lever)." },
+    { "sku": "feature_flags.rollout.step",          "unit": "step",        "mode": "metered", "price": 0.001,   "notes": "Per rollout advancement." },
+    { "sku": "feature_flags.kill_switch",           "unit": "event",       "mode": "flat",    "price": 5.00,    "notes": "Per kill-switch event (critical incident artifact)." },
+
+    { "sku": "geo.canonicalize",                    "unit": "address",     "mode": "metered", "price": 0.001,   "notes": "Per canonicalize; dedupe-hits free." },
+    { "sku": "geo.geocode",                         "unit": "geocode",     "mode": "metered", "price": 0.002,   "notes": "Per geocode; cache hits free; provider cost passes through." },
+    { "sku": "geo.reverse-geocode",                 "unit": "rev-geocode", "mode": "metered", "price": 0.002,   "notes": "Per reverse-geocode." },
+    { "sku": "geo.alias.add",                       "unit": "alias",       "mode": "metered", "price": 0.001,   "notes": "Per alias added." },
+    { "sku": "geo.merge",                           "unit": "merge",       "mode": "flat",    "price": 0.50,    "notes": "Per merge operation (audited)." },
+
+    { "sku": "parsing.job.submit",                  "unit": "job",         "mode": "metered", "price": 0.10,    "notes": "Per parsing job submitted." },
+    { "sku": "parsing.stage.ocr",                   "unit": "page",        "mode": "metered", "price": 0.01,    "notes": "Per page OCR'd." },
+    { "sku": "parsing.stage.extract",               "unit": "extraction",  "mode": "metered", "price": 0.02,    "notes": "Per extraction; LLM cost passes through." },
+    { "sku": "parsing.review.resolve",              "unit": "resolution",  "mode": "metered", "price": 0.05,    "notes": "Per human-review resolution." },
+
+    { "sku": "agents.token.mint",                   "unit": "token",       "mode": "metered", "price": 0.001,   "notes": "Per capability token minted." },
+    { "sku": "agents.run.start",                    "unit": "run",         "mode": "metered", "price": 0.01,    "notes": "Per agent run started." },
+    { "sku": "agents.tool.invoke",                  "unit": "call",        "mode": "metered", "price": 0.001,   "notes": "Per tool call within a run." },
+    { "sku": "agents.replay",                       "unit": "replay",      "mode": "metered", "price": 0.05,    "notes": "Per replay served (audit/debug)." },
+    { "sku": "agents.chaos.probe",                  "unit": "probe",       "mode": "flat",    "price": 0.00,    "notes": "Free; included in SLO tier (AC-2 chaos test)." },
+
+    { "sku": "service_request.ticket.create",       "unit": "ticket",      "mode": "metered", "price": 0.05,    "notes": "Per ticket created." },
+    { "sku": "service_request.ticket.assign",       "unit": "assign",      "mode": "metered", "price": 0.005,   "notes": "Per assignment." },
+    { "sku": "service_request.ticket.transition",   "unit": "transition",  "mode": "metered", "price": 0.005,   "notes": "Per state transition." },
+    { "sku": "service_request.queue.create",        "unit": "queue",       "mode": "flat",    "price": 5.00,    "notes": "Per queue created." },
+
+    { "sku": "onprem.install.register",             "unit": "install-month","mode": "flat",   "price": 500.00,  "notes": "Per on-prem install per month (control-plane fee)." },
+    { "sku": "onprem.bundle.apply",                 "unit": "apply",       "mode": "metered", "price": 0.10,    "notes": "Per bundle applied." },
+    { "sku": "onprem.billing.upload",               "unit": "report",      "mode": "metered", "price": 1.00,    "notes": "Per uploaded billing report (weekly)." },
+    { "sku": "onprem.heartbeat",                    "unit": "heartbeat",   "mode": "metered", "price": 0.0001,  "notes": "Per heartbeat received." },
+
+    { "sku": "sovereign.region.configure",          "unit": "region",      "mode": "flat",    "price": 2500.00, "notes": "Per sovereign region configured (one-time setup)." },
+    { "sku": "sovereign.bundle.release",            "unit": "release",     "mode": "metered", "price": 25.00,   "notes": "Per bundle release with attestation." },
+    { "sku": "sovereign.attestation.verify",        "unit": "verify",      "mode": "metered", "price": 0.001,   "notes": "Per runtime attestation verify." },
+    { "sku": "sovereign.leak.probe",                "unit": "probe",       "mode": "flat",    "price": 0.00,    "notes": "Free; pipeline safety control." },
+
+    { "sku": "social.handle.register",              "unit": "handle-month","mode": "flat",    "price": 10.00,   "notes": "Per active handle per month." },
+    { "sku": "social.interaction.ingest",           "unit": "interaction", "mode": "metered", "price": 0.001,   "notes": "Per ingested interaction." },
+    { "sku": "social.lead.capture",                 "unit": "lead",        "mode": "metered", "price": 0.10,    "notes": "Per lead captured." },
+    { "sku": "social.poller.run",                   "unit": "tick",        "mode": "metered", "price": 0.0001,  "notes": "Per poll tick (background)." },
+
+    { "sku": "identity-resolver.resolve",           "unit": "resolution",  "mode": "metered", "price": 0.001,   "notes": "Per resolution." },
+    { "sku": "identity-resolver.explain",           "unit": "explanation", "mode": "metered", "price": 0.005,   "notes": "Per explanation served." },
+    { "sku": "identity-resolver.merge-suggest",     "unit": "candidate",   "mode": "metered", "price": 0.01,    "notes": "Per merge candidate suggested." },
+
+    { "sku": "diagnostic.crash.report",             "unit": "crash",       "mode": "metered", "price": 0.0005,  "notes": "Per crash report; dedup hits at $0.00005." },
+    { "sku": "diagnostic.replay.frame.capture",     "unit": "frame",       "mode": "metered", "price": 0.0001,  "notes": "Per replay frame (rate-limited + PII-redacted)." },
+    { "sku": "diagnostic.health.snapshot",          "unit": "snapshot",    "mode": "metered", "price": 0.01,    "notes": "Per snapshot computed." },
+
+    { "sku": "hdk-measure.submit",                  "unit": "measurement", "mode": "metered", "price": 0.001,   "notes": "Per measurement submitted." },
+    { "sku": "hdk-measure.normalize",               "unit": "pass",        "mode": "metered", "price": 0.0005,  "notes": "Per normalize pass." },
+    { "sku": "hdk-measure.dispute",                 "unit": "dispute",     "mode": "flat",    "price": 0.50,    "notes": "Per dispute (audited)." },
+
+    { "sku": "hdk-scanner.capability.read",         "unit": "probe",       "mode": "metered", "price": 0.0001,  "notes": "Per capabilities probe." },
+    { "sku": "hdk-scanner.scan.record",             "unit": "scan",        "mode": "metered", "price": 0.0005,  "notes": "Per scan event." },
+
+    { "sku": "hdk-video-editor.job.submit",         "unit": "job",         "mode": "metered", "price": 0.10,    "notes": "Per editor job submitted." },
+    { "sku": "hdk-video-editor.minute.cpu",         "unit": "cpu-minute",  "mode": "metered", "price": 0.05,    "notes": "Per minute of CPU encode." },
+    { "sku": "hdk-video-editor.minute.gpu",         "unit": "gpu-minute",  "mode": "metered", "price": 0.02,    "notes": "Per minute of GPU encode (lower rate; faster)." },
+    { "sku": "hdk-video-editor.face.redact",        "unit": "pass",        "mode": "metered", "price": 0.20,    "notes": "Per face-redaction pass (compute-heavy)." },
+
+    { "sku": "hdk-watermark.apply.visible",         "unit": "apply",       "mode": "metered", "price": 0.005,   "notes": "Per visible-only watermark applied." },
+    { "sku": "hdk-watermark.apply.invisible",       "unit": "apply",       "mode": "metered", "price": 0.05,    "notes": "Per invisible (forensic) watermark applied." },
+    { "sku": "hdk-watermark.extract",               "unit": "extract",     "mode": "metered", "price": 0.50,    "notes": "Per forensic extraction (incident response)." },
+
+    { "sku": "mcp-bridge.server.register",          "unit": "server",      "mode": "flat",    "price": 5.00,    "notes": "Per external MCP server registered." },
+    { "sku": "mcp-bridge.tool.invoke",              "unit": "call",        "mode": "metered", "price": 0.002,   "notes": "Per dispatched external tool call." },
+    { "sku": "mcp-bridge.surface.expose",           "unit": "surface-month","mode": "flat",   "price": 50.00,   "notes": "Per exposed surface per month." }
+  ]
+}

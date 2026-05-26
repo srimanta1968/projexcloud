@@ -1,0 +1,88 @@
+{
+  "name": "@projexlight/hdk-camera",
+  "version": "1.0.0",
+  "schema_version": "1.0",
+  "summary": "Native camera capture for ProjexCloud's HDK — JS bindings for iOS + Android + desktop Electron camera devices. Captures still photos, short videos, and burst sequences with EXIF geo-stamp + tamper-evident attestation (device key signs the source bytes at capture time). Each capture lands in sdk-evidence with the chain-of-custody root row already attested. Powers field-service proof-of-work, healthcare lesion photos, and claims-intake FNOL flows.",
+  "tags": ["hdk", "camera", "mobile", "attestation", "exif", "native-bindings", "p4"],
+  "provides": {
+    "endpoints": [
+      { "method": "GET", "path": "/api/hdk/camera/capabilities",      "description": "Returns supported devices (front / rear / depth / IR) + format (jpeg / heic / dng / mp4) per platform." },
+      { "method": "GET", "path": "/api/hdk/camera/recording-presets", "description": "Returns tenant-allowed recording presets (resolution / bitrate / max-duration). Used by mobile UI to constrain capture." }
+    ],
+    "events": [
+      { "name": "hdk.camera.capture.v1",          "retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "Photo / video captured. Carries device_uuid + capture_persona + geo (lat/lng/accuracy) + source_hash + device_attestation_signature." },
+      { "name": "hdk.camera.attestation.failed.v1","retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "Device attestation failed (jailbroken / rooted device, signing key revoked). Capture refused at source." },
+      { "name": "hdk.camera.preset.applied.v1",   "retention_class": "operational", "conflict_policy": "lww",          "description": "Recording preset selected for a capture session." }
+    ],
+    "models": [],
+    "hooks": [
+      { "name": "capturePhoto",      "description": "Universal entry. Returns { blob, exif, attestation_signature }. Caller hands the bundle to sdk-evidence.registerCapture." },
+      { "name": "captureVideo",      "description": "Video variant with max-duration enforcement per the tenant's recording-preset policy." },
+      { "name": "captureBurst",      "description": "Burst sequence (e.g. 5 frames @ 1 fps). Each frame separately attested." },
+      { "name": "probeAttestation",  "description": "Returns whether the device is trusted (signing key present + not revoked, not on a rooted/jailbroken device). UI uses this to disable capture on untrusted devices." }
+    ],
+    "ui_components": [
+      { "name": "CameraView",     "description": "Native-rendered camera preview with capture button. Themed via @projexlight/design-system." },
+      { "name": "AttestationBadge","description": "Tiny status badge showing the device's trust state; tenant policy can refuse captures when red." }
+    ]
+  },
+  "consumes": {
+    "events": [
+      { "name": "device.attestation.revoked.v1", "from": "@projexlight/sdk-device" }
+    ],
+    "infra": ["native-bindings-ios", "native-bindings-android", "native-bindings-electron", "sdk-evidence", "sdk-vault"],
+    "config_keys": ["HDK_CAMERA_DEFAULT_FORMAT", "HDK_CAMERA_MAX_VIDEO_SECONDS", "HDK_CAMERA_REQUIRE_ATTESTATION"]
+  },
+  "scenarios": [
+    {
+      "id": "field-tech-proof-of-work",
+      "title": "Field tech captures a proof-of-work photo with geo-stamp + attestation",
+      "when_to_use": "End-of-job confirmation on the tech's mobile app. Photo, geo, attestation all bundled in one capture call.",
+      "example_code": "import { capturePhoto } from '@projexlight/hdk-camera';\nconst result = await capturePhoto({ device: 'rear', format: 'jpeg' });\nimport { registerCapture } from '@projexlight/sdk-evidence';\nawait registerCapture({\n  tenant_id, captured_by_persona_id, encounter_id,\n  media_blob_id: result.blob.id,\n  mime: 'image/jpeg',\n  source_hash_sha256: result.source_hash,\n  geo: result.exif.geo,\n  device_attestation_signature: result.attestation_signature,\n});",
+      "expected_outcome": "sdk-evidence row created with the attestation signature already attached. Adjudication trail starts attested from the source bytes outward."
+    },
+    {
+      "id": "healthcare-lesion-photo",
+      "title": "Clinician captures a skin-lesion photo via the patient portal",
+      "when_to_use": "Tele-health visit; clinician needs a high-quality lesion image. Native bindings give better quality + control than browser <input type='file'>.",
+      "example_code": "import { capturePhoto } from '@projexlight/hdk-camera';\nconst photo = await capturePhoto({ device: 'rear', format: 'heic', preset: 'medical-high' });\n// → hand to sdk-evidence via registerCapture with PHI tenant-key tier",
+      "expected_outcome": "HEIC photo at maximum sensor resolution. PHI tier enforced at the next step (sdk-evidence + sdk-vault encrypt under the tenant's PHI key)."
+    },
+    {
+      "id": "claim-fnol-burst",
+      "title": "Customer captures a 5-frame burst for the FNOL form",
+      "when_to_use": "Insurance claim from the customer's phone — multiple angles of the damage in one tap.",
+      "example_code": "import { captureBurst } from '@projexlight/hdk-camera';\nconst frames = await captureBurst({ count: 5, interval_ms: 1000 });\nfor (const f of frames) await registerCapture({ ...f });",
+      "expected_outcome": "5 separately-attested frames. Each becomes a sdk-evidence capture; UI shows the burst grouped under the same FNOL submission."
+    },
+    {
+      "id": "rooted-device-refused",
+      "title": "Capture refused on jailbroken / rooted device",
+      "when_to_use": "Tenant policy demands trusted-device-only capture (e.g. finserv chain-of-evidence). probeAttestation returns false; capture endpoint refuses; UI shows the trust-state badge red.",
+      "example_code": "import { probeAttestation, capturePhoto } from '@projexlight/hdk-camera';\nconst trusted = await probeAttestation();\nif (!trusted) {\n  // show \"this device cannot capture evidence; use a managed device\"\n  return;\n}\nconst photo = await capturePhoto({ device: 'rear' });",
+      "expected_outcome": "Untrusted device blocked at capture. Emits hdk.camera.attestation.failed.v1 with the reason. UI explains the refusal to the user."
+    },
+    {
+      "id": "recording-preset-enforcement",
+      "title": "Tenant restricts video captures to ≤ 30s 720p",
+      "when_to_use": "Storage / bandwidth cost control on free-tier tenants. Recording-preset policy enforced in the native layer so the cap can't be bypassed in the JS bridge.",
+      "example_code": "// Tenant policy: hdk-camera/recording-presets returns:\n// [{ id: 'default', resolution: '720p', max_seconds: 30 }]\nconst video = await captureVideo({ preset: 'default' });\n// Recording stops automatically at 30s.",
+      "expected_outcome": "Capture honors the preset. Tenant admin can relax / tighten via the policy update — instantly reflected in the next session via the recording-presets endpoint."
+    }
+  ],
+  "compliance_posture": {
+    "regimes": ["FRE-Rules-902/1001-Evidence-self-authentication", "HIPAA-164.312(b)", "GDPR-Art-25", "ISO-27037-digital-evidence"],
+    "notes": "Device-attestation signature at capture is the FRE 902(13) self-authentication lever — adjudicators don't need a chain-of-custody witness to admit the image because the device key signed the source bytes. ISO 27037 evidence-handling met by source_hash + attestation_signature + geo all bundled in the capture event."
+  },
+  "pool_placement": "app",
+  "pricing_skus": [
+    { "sku": "hdk.camera.capture",      "mode": "metered", "unit_description": "per photo/video/burst captured (free up to plan ceiling)" },
+    { "sku": "hdk.camera.attestation",  "mode": "metered", "unit_description": "per attestation probe (signal of mobile-app activity)" }
+  ],
+  "no_endpoints": false,
+  "links": {
+    "readme": "packages/hdk-camera/README.md",
+    "source": "packages/hdk-camera/src/",
+    "prd_section": "P4-Operational-Billing §14"
+  }
+}

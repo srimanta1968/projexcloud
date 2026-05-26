@@ -1,0 +1,48 @@
+id: claims-intake
+schema_version: "1.0"
+title: Insurance Claims Intake
+summary: >-
+  End-to-end claims-intake workflow: customer uploads photos + a description,
+  evidence enters the chain-of-custody ledger, a configurable approval chain
+  reviews + decides, and the SDK fan-out either issues payment or rejects with
+  a reason code. FNOL (first-notice-of-loss) through settlement in one app.
+pack: finserv
+tags: [insurance, claims, fnol, evidence, approval, pilot]
+sdks:
+  - name: "@projexlight/sdk-workflow"
+    reason: "FNOL → triage → review → decide → settle state machine."
+  - name: "@projexlight/sdk-evidence"
+    reason: "Photo + document chain-of-custody for adjudication trail."
+  - name: "@projexlight/sdk-approval"
+    reason: "Configurable approval chain (triage adjuster → senior → SIU when flagged)."
+  - name: "@projexlight/sdk-payment"
+    reason: "Issue settlement payments through the tokenized payment path."
+  - name: "@projexlight/hdk-image-editor"
+    reason: "On-device redaction of bystander PII in claim photos."
+  - name: "@projexlight/sdk-audit"
+    reason: "Every decision in the claim lifecycle goes to the audit chain."
+clarifying_questions:
+  - id: settlement_path
+    prompt: How should approved claims pay out?
+    type: enum
+    options: [stripe-ach, stripe-card, manual-batch, no-payout-yet]
+    default: stripe-ach
+  - id: siu_flag_keywords
+    prompt: Special Investigation Unit (SIU) auto-flag keywords (comma-separated)
+    type: string
+    default: "arson,suspicious,multiple-prior"
+    help: Empty disables SIU auto-flag; use the approval flow to route manually.
+  - id: photo_redaction_default
+    prompt: Automatically redact bystander faces in claim photos?
+    type: boolean
+    default: true
+outputs:
+  - path: src/claims/intake.ts
+    template: templates/intake.ts.hbs
+  - path: src/claims/review.ts
+    template: templates/review.ts.hbs
+  - path: db/migrations/001_claims_init.sql
+    template: templates/claims-init.sql.hbs
+  - path: README.md
+    template: templates/README.md.hbs
+estimated_minutes: 8

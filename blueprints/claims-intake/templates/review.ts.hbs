@@ -1,0 +1,26 @@
+/**
+ * {{app_name}} — Claim review + decision
+ *
+ * Wire sdk-approval to route to the right adjuster role; on approve,
+ * dispatch via the {{settlement_path}} path.
+ */
+
+import type { Claim } from './intake';
+
+export interface ReviewDecision {
+  decided_by_persona_id: string;
+  outcome: 'approve' | 'deny';
+  reason: string;
+  amount_approved_cents?: number;
+}
+
+export async function recordDecision(claim: Claim, decision: ReviewDecision): Promise<Claim> {
+  // 1. sdk-approval consumes the decision; downstream workflow advances.
+  // 2. On approve, emit claims.approved.v1 — settlement worker picks it up.
+  // 3. On deny, emit claims.denied.v1 + customer notification.
+  return {
+    ...claim,
+    status: decision.outcome === 'approve' ? 'approved' : 'denied',
+    amount_claimed_cents: decision.amount_approved_cents ?? claim.amount_claimed_cents,
+  };
+}

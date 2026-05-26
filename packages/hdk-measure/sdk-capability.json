@@ -1,0 +1,88 @@
+{
+  "name": "@projexlight/hdk-measure",
+  "version": "1.0.0",
+  "schema_version": "1.0",
+  "summary": "Device-side measurement primitive: tech mobile app uses phone camera + AR depth sensing to measure spaces (room dimensions, panel sizes, ceiling heights) and persist the measurement as a typed evidence-eligible record. The 'tape measure replacement' for field-service blueprints.",
+  "tags": ["hdk", "measurement", "ar", "field-service", "p7"],
+  "provides": {
+    "endpoints": [
+      { "method": "POST", "path": "/api/hdk/measure",         "description": "Submit a measurement payload from the mobile app." },
+      { "method": "GET",  "path": "/api/hdk/measure/:id",     "description": "Fetch a measurement + its variants (raw, normalized, evidence-bound)." },
+      { "method": "GET",  "path": "/api/hdk/measure",         "description": "List measurements for a tenant + filters (encounter, persona, date)." }
+    ],
+    "events": [
+      { "name": "hdk-measure.captured.v1",   "retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "Measurement submitted from a device; carries dimensions + units + sensor metadata." },
+      { "name": "hdk-measure.normalized.v1", "retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "Measurement normalized to canonical units + bound to encounter / work order." },
+      { "name": "hdk-measure.disputed.v1",   "retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "Reviewer flagged the measurement as inconsistent with photos / context." }
+    ],
+    "models": [
+      { "schema": "hdk_measure", "table": "measurement", "description": "Per-measurement row: kind (length / area / volume), value, units, sensor_metadata, device_uuid." }
+    ],
+    "hooks": [
+      { "name": "submitMeasurement", "description": "Service entry — accept a measurement payload + validate against device attestation." },
+      { "name": "normalizeUnits",    "description": "Convert to canonical units (meters / m² / m³); idempotent." },
+      { "name": "bindToEncounter",   "description": "Attach the measurement to a sdk-engagement encounter as evidence." },
+      { "name": "disputeMeasurement","description": "Reviewer marks a measurement disputed with reason." }
+    ],
+    "ui_components": []
+  },
+  "consumes": {
+    "events": [
+      { "name": "device.attestation.passed.v1", "from": "@projexlight/sdk-device" }
+    ],
+    "infra": ["postgres", "sdk-device", "sdk-evidence"],
+    "config_keys": ["HDK_MEASURE_CANONICAL_UNITS", "HDK_MEASURE_REQUIRE_ATTESTED_DEVICE"]
+  },
+  "scenarios": [
+    {
+      "id": "measure-room",
+      "title": "Tech measures a room with the phone camera",
+      "when_to_use": "Field-service tech needs to estimate paint / flooring; phone AR measures + submits.",
+      "example_code": "import { submitMeasurement } from '@projexlight/hdk-measure';\nconst { measurement_id } = await submitMeasurement({\n  tenant_id, persona_id, device_uuid,\n  kind: 'area', value: 18.4, units: 'm2',\n  sensor_metadata: { ar_session_id, lidar_used: true },\n});",
+      "expected_outcome": "Row written; emits .captured.v1. Linked to evidence + later disputable if recheck disagrees."
+    },
+    {
+      "id": "normalize-cm-to-m",
+      "title": "Old app submits cm; normalize to canonical m",
+      "when_to_use": "Older client sends cm; normalize hook converts + persists alongside raw.",
+      "example_code": "import { normalizeUnits } from '@projexlight/hdk-measure';\nawait normalizeUnits({ measurement_id });",
+      "expected_outcome": "Canonical-units row written. .normalized.v1 emitted. Caller decides whether to display raw or normalized."
+    },
+    {
+      "id": "bind-to-encounter",
+      "title": "Bind measurements to a work-order encounter for proof",
+      "when_to_use": "All measurements for a job link to the encounter so the customer can replay later (\"yes, my room really is 18.4 m²\").",
+      "example_code": "import { bindToEncounter } from '@projexlight/hdk-measure';\nawait bindToEncounter({ measurement_id, encounter_id });",
+      "expected_outcome": "Measurement bound; sdk-evidence registers it as proof. Future disputes resolve against this bind."
+    },
+    {
+      "id": "dispute-measurement",
+      "title": "Reviewer disputes a suspiciously small measurement",
+      "when_to_use": "QA reviewer spots a 0.2 m² room — clearly wrong; dispute flags it for retake.",
+      "example_code": "import { disputeMeasurement } from '@projexlight/hdk-measure';\nawait disputeMeasurement({\n  measurement_id, reason: 'value-too-small-for-context',\n  reviewer_persona_id,\n});",
+      "expected_outcome": "Disputed row; .disputed.v1 emitted. Tech re-measures; both rows retained for the audit trail."
+    },
+    {
+      "id": "reject-unattested-device",
+      "title": "Submission from unattested device rejected",
+      "when_to_use": "Device attestation must pass before any measurement is accepted — defeats spoofing.",
+      "example_code": "// Inside submitMeasurement, device attestation status is checked;\n// if revoked / failed, the submission errors out before write.",
+      "expected_outcome": "Submission refused with structured error. Mobile app prompts the tech to re-attest. No silent acceptance of unverified data."
+    }
+  ],
+  "compliance_posture": {
+    "regimes": ["FRE-Rule-901-authentication-of-evidence", "ISO-9001-measurement-traceability", "SOC2-CC7.1"],
+    "notes": "Measurements admissible because they're bound to attested devices (FRE-901 + ISO-9001 traceability). Sensor metadata + dispute trail let an auditor replay the chain of custody."
+  },
+  "pool_placement": "app",
+  "pricing_skus": [
+    { "sku": "hdk-measure.submit",    "mode": "metered", "unit_description": "per measurement submitted" },
+    { "sku": "hdk-measure.normalize", "mode": "metered", "unit_description": "per normalize pass" },
+    { "sku": "hdk-measure.dispute",   "mode": "flat",    "unit_description": "per dispute (audited)" }
+  ],
+  "links": {
+    "readme": "packages/hdk-measure/README.md",
+    "source": "packages/hdk-measure/src/",
+    "prd_section": "P7-Field-Hyperscale §13"
+  }
+}

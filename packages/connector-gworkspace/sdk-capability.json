@@ -1,0 +1,91 @@
+{
+  "name": "@projexlight/connector-gworkspace",
+  "version": "1.0.0",
+  "schema_version": "1.0",
+  "summary": "Google Workspace connector: domain-wide OAuth install, Drive sync, Calendar event handling, Gmail send via Workspace API. Counterpart to connector-microsoft365 for tenants on Google Workspace; same composition pattern with sdk-search + sdk-media + sdk-notification.",
+  "tags": ["connector", "gworkspace", "google", "drive", "gmail", "calendar", "oauth"],
+  "provides": {
+    "endpoints": [],
+    "events": [
+      { "name": "connector-gworkspace.install.created.v1",  "retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "Workspace domain-wide OAuth complete." },
+      { "name": "connector-gworkspace.drive_file.synced.v1","retention_class": "operational","conflict_policy": "event-sourcing", "description": "Drive file metadata cached." },
+      { "name": "connector-gworkspace.calendar.event.v1",   "retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "Calendar event change ingested." },
+      { "name": "connector-gworkspace.mail.sent.v1",        "retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "Outbound mail sent via Gmail API." }
+    ],
+    "models": [
+      { "schema": "connector_gworkspace", "table": "gws_drive_file",     "description": "Cached Drive file metadata row." },
+      { "schema": "connector_gworkspace", "table": "gws_calendar_event", "description": "Cached calendar event row." },
+      { "schema": "connector_gworkspace", "table": "gws_mail_sent",      "description": "Per-sent-mail row." }
+    ],
+    "hooks": [
+      { "name": "installConnector", "description": "Domain-wide OAuth install + service-account JSON storage." },
+      { "name": "syncDrive",         "description": "Sync Drive files (change-token based)." },
+      { "name": "sendMail",          "description": "Send mail via Gmail API as the impersonated user." },
+      { "name": "handleWatchPush",   "description": "Process Drive / Gmail / Calendar push-notification (watch endpoint)." },
+      { "name": "startScheduler",    "description": "Background sync + token refresh." }
+    ],
+    "ui_components": []
+  },
+  "consumes": {
+    "events": [
+      { "name": "tenant.offboarded.v1",         "from": "@projexlight/sdk-tenant-lifecycle" },
+      { "name": "notification.message.sent.v1", "from": "@projexlight/sdk-notification" }
+    ],
+    "infra": ["postgres", "sdk-secrets", "sdk-webhook", "sdk-media"],
+    "config_keys": ["GWS_DOMAIN", "GWS_SERVICE_ACCOUNT_SECRET_REF", "GWS_DELEGATED_SUBJECT_PATTERN"]
+  },
+  "scenarios": [
+    {
+      "id": "install-domain-wide",
+      "title": "Workspace super-admin grants domain-wide delegation",
+      "when_to_use": "First install. Super-admin pastes the service account's client_id into Workspace Admin → API Controls → Domain-wide delegation; we record the auth + verify impersonation works.",
+      "example_code": "import { installConnector } from '@projexlight/connector-gworkspace';\nconst { install_id } = await installConnector({\n  tenant_id, gws_domain: 'acme.com',\n  service_account_json: '...', // vault-stored\n  scopes: ['drive.readonly','gmail.send','calendar.events'],\n});",
+      "expected_outcome": "Install row + vault-wrapped service-account JSON. Test impersonation hits Drive successfully."
+    },
+    {
+      "id": "drive-sync",
+      "title": "Sync a shared Drive folder into the file cache",
+      "when_to_use": "Compliance ask: every doc in the 'Q2-Contracts' shared drive indexed locally for sdk-search.",
+      "example_code": "import { syncDrive } from '@projexlight/connector-gworkspace';\nawait syncDrive({\n  install_id, drive_id, folder_id, use_change_token: true,\n});",
+      "expected_outcome": "Changed files synced; metadata cached + optionally bytes pulled into sdk-media. .drive_file.synced.v1 per file."
+    },
+    {
+      "id": "send-mail-as-rep",
+      "title": "Send customer email as the sales rep (Gmail API)",
+      "when_to_use": "Outbound mail must appear in the rep's Gmail Sent folder + thread with prior conversation. Domain-wide delegation impersonates the rep.",
+      "example_code": "import { sendMail } from '@projexlight/connector-gworkspace';\nawait sendMail({\n  install_id, sender_user: rep.email,\n  to: customer.email, subject: '...', body_html: '...',\n  in_reply_to_message_id: prior_thread_id,\n});",
+      "expected_outcome": "Mail sent + threaded. Emits .mail.sent.v1. sdk-audit chain pins the impersonated subject."
+    },
+    {
+      "id": "calendar-watch-push",
+      "title": "Calendar push-notification updates the encounter",
+      "when_to_use": "Drive / Calendar push-notification fires; we update linked ProjexCloud entities. Google watch tokens expire — scheduler renews them weekly.",
+      "example_code": "import { handleWatchPush } from '@projexlight/connector-gworkspace';\nawait handleWatchPush({ tenant_id, resource: 'calendar', headers: req.headers });",
+      "expected_outcome": "Encounter updated; emits .calendar.event.v1."
+    },
+    {
+      "id": "scheduler-renews-watch",
+      "title": "Scheduler renews Google watch tokens before expiry",
+      "when_to_use": "Google watch subscriptions expire after a week; scheduler renews 24h before expiry so no push notifications get missed.",
+      "example_code": "// driven by startScheduler — weekly renew pass.",
+      "expected_outcome": "Watch tokens refreshed silently; install row's watch_expires_at advances."
+    }
+  ],
+  "compliance_posture": {
+    "regimes": ["SOC2-CC6.7-third-party", "GDPR-Art-28", "Google-Workspace-Trust", "HIPAA-164.502-BAA-Workspace"],
+    "notes": "Service-account JSON vault-wrapped. Domain-wide delegation requires super-admin consent + a posted audit log entry. EU domains pin to EU API regions where Google offers them."
+  },
+  "pool_placement": "app",
+  "pricing_skus": [
+    { "sku": "connector-gworkspace.install",         "mode": "flat",    "unit_description": "per Workspace domain per month" },
+    { "sku": "connector-gworkspace.drive.sync.item", "mode": "metered", "unit_description": "per file synced" },
+    { "sku": "connector-gworkspace.mail.send",       "mode": "metered", "unit_description": "per Gmail send" },
+    { "sku": "connector-gworkspace.watch.push",      "mode": "metered", "unit_description": "per ingested push-notification" }
+  ],
+  "no_endpoints": true,
+  "links": {
+    "readme": "packages/connector-gworkspace/README.md",
+    "source": "packages/connector-gworkspace/src/",
+    "prd_section": "P6B-Connectors §10"
+  }
+}

@@ -1,0 +1,47 @@
+id: b2b-analytics
+schema_version: "1.0"
+title: B2B SaaS Analytics
+summary: >-
+  Self-serve analytics workspace for B2B SaaS: ingest product events into the
+  Iceberg lakehouse, project canonical metrics via the lineage projector,
+  expose a SemanticIntent layer so business users query in plain English,
+  and fan out the warehouse to Snowflake for downstream BI.
+pack: general
+tags: [analytics, lakehouse, iceberg, semantic, snowflake, pilot]
+sdks:
+  - name: "@projexlight/sdk-analytics"
+    reason: "Iceberg lakehouse layer + event ingest."
+  - name: "@projexlight/sdk-lineage"
+    reason: "Cross-pool projection worker (G8) — keeps the warehouse fresh."
+  - name: "@projexlight/sdk-semantic"
+    reason: "SemanticIntent + SemanticPolicy (G9) — plain-English queries with safety rails."
+  - name: "@projexlight/connector-snowflake"
+    reason: "Bidirectional sync to the customer's Snowflake account for BI tools."
+  - name: "@projexlight/sdk-projection"
+    reason: "Materialized canonical metric views downstream BI queries hit."
+clarifying_questions:
+  - id: warehouse_target
+    prompt: Primary downstream warehouse for BI tools
+    type: enum
+    options: [snowflake, bigquery, redshift, databricks, none]
+    default: snowflake
+  - id: semantic_layer_strictness
+    prompt: How strict should the SemanticPolicy gate be?
+    type: enum
+    options: [permissive, balanced, strict-with-explanation]
+    default: balanced
+    help: "strict-with-explanation refuses ambiguous queries and explains why."
+  - id: refresh_cadence_minutes
+    prompt: Lineage projector refresh cadence (minutes)
+    type: number
+    default: 5
+outputs:
+  - path: src/analytics/ingest.ts
+    template: templates/ingest.ts.hbs
+  - path: src/analytics/semantic.ts
+    template: templates/semantic.ts.hbs
+  - path: db/migrations/001_analytics_init.sql
+    template: templates/analytics-init.sql.hbs
+  - path: README.md
+    template: templates/README.md.hbs
+estimated_minutes: 7

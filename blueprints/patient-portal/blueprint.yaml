@@ -1,0 +1,51 @@
+id: patient-portal
+schema_version: "1.0"
+title: Patient Portal (Healthcare)
+summary: >-
+  Tenant-scoped patient portal that captures explicit consent receipts for
+  every data-processing purpose, holds visit + measurement evidence in the
+  chain-of-custody ledger, supports HIPAA-grade secure messaging between
+  patient and provider, and fans out DSAR / right-to-erasure requests
+  through sdk-data-rights. Demonstrates the healthcare pack guardrails.
+pack: healthcare
+tags: [healthcare, hipaa, patient, consent, evidence, pilot]
+sdks:
+  - name: "@projexlight/sdk-consent"
+    reason: "GDPR / HIPAA consent receipts per processing purpose."
+  - name: "@projexlight/sdk-evidence"
+    reason: "Chain-of-custody for visit notes + lab results + photos."
+  - name: "@projexlight/sdk-conversation"
+    reason: "Secure messaging thread between patient and provider personas."
+  - name: "@projexlight/hdk-camera"
+    reason: "On-device capture (skin lesion photos, ID scans) with attestation."
+  - name: "@projexlight/sdk-data-rights"
+    reason: "DSAR + right-to-erasure orchestration across every tenant store."
+  - name: "@projexlight/sdk-audit"
+    reason: "21 CFR Part 11 + HIPAA Audit Controls — every PHI access logged."
+clarifying_questions:
+  - id: phi_storage_tier
+    prompt: PHI envelope-encryption tier
+    type: enum
+    options: [tenant, encounter, hybrid]
+    default: hybrid
+    help: "tenant=long-lived; encounter=shred-on-visit-close; hybrid=tenant key for record, encounter key for media."
+  - id: portal_locale_default
+    prompt: Default locale for patient-facing UI
+    type: enum
+    options: [en-US, en-GB, es-US, es-MX, fr-CA, de-DE]
+    default: en-US
+  - id: consent_renewal_days
+    prompt: How often (days) should explicit consent be re-confirmed?
+    type: number
+    default: 365
+    help: HIPAA Privacy Rule does not mandate a cadence; common practice is annual.
+outputs:
+  - path: src/portal/consent.ts
+    template: templates/consent.ts.hbs
+  - path: src/portal/messaging.ts
+    template: templates/messaging.ts.hbs
+  - path: db/migrations/001_portal_init.sql
+    template: templates/portal-init.sql.hbs
+  - path: README.md
+    template: templates/README.md.hbs
+estimated_minutes: 9

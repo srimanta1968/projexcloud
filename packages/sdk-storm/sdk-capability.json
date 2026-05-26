@@ -1,0 +1,88 @@
+{
+  "name": "@projexlight/sdk-storm",
+  "version": "1.0.0",
+  "schema_version": "1.0",
+  "summary": "Storm + mass-event coordinator: ingests external weather/outage feeds, materializes per-region intensity cells, and spawns a structured fan-out of dispatchable tasks. Decouples 'a hurricane is coming' from 'these 4,000 customers need triage in this order' so sdk-dispatch + sdk-assignment can absorb the wave without code changes per event.",
+  "tags": ["storm", "mass-event", "weather", "outage", "field-service", "p7"],
+  "provides": {
+    "endpoints": [],
+    "events": [
+      { "name": "storm.event.declared.v1",  "retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "Operator (or auto-trigger) declared a mass event; carries id, kind, geo extent, severity." },
+      { "name": "storm.event.spawned.v1",   "retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "Mass-event materialized: intensity cells generated + downstream consumers (sdk-dispatch) can fan out." },
+      { "name": "storm.event.closed.v1",    "retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "Event resolved; downstream queues released from elevated SLAs." },
+      { "name": "storm.intensity.updated.v1","retention_class": "operational","conflict_policy": "lww",          "description": "Per-cell intensity refreshed from upstream feed; sdk-dispatch can repriorize." }
+    ],
+    "models": [
+      { "schema": "storm", "table": "event",          "description": "Per-event row: kind (hurricane/wildfire/outage/snow), severity tier, geo extent (GeoJSON polygon), declared_at, expected_closed_at." },
+      { "schema": "storm", "table": "intensity_cell", "description": "Per-cell row: event_id, geo cell (H3 hex or quadkey), intensity (0..1), updated_at." }
+    ],
+    "hooks": [
+      { "name": "declareEvent",        "description": "Operator (or auto-trigger from a feed) declares a mass event. Emits .declared.v1 + warm sdk-dispatch's queue capacity." },
+      { "name": "ingestFeed",          "description": "Pull from an upstream weather/outage feed; refresh intensity cells. Idempotent on (feed, observation_time)." },
+      { "name": "spawnDispatchTasks", "description": "For each affected customer in the event's geo, queue a task via sdk-dispatch. Emits .spawned.v1 with the batch summary." },
+      { "name": "closeEvent",          "description": "Mark event resolved; downstream SLAs drop back to normal." },
+      { "name": "startFeedPoller",     "description": "Background worker — polls configured feeds + refreshes intensity. Safe to leave running in dev." }
+    ],
+    "ui_components": []
+  },
+  "consumes": {
+    "events": [
+      { "name": "dispatch.task.completed.v1", "from": "@projexlight/sdk-dispatch" }
+    ],
+    "infra": ["postgres", "external-weather-feed", "redis-optional"],
+    "config_keys": ["STORM_FEED_POLL_INTERVAL_SEC", "STORM_DEFAULT_CELL_RESOLUTION", "STORM_AUTO_DECLARE_THRESHOLD"]
+  },
+  "scenarios": [
+    {
+      "id": "operator-declares-hurricane",
+      "title": "Operator declares Cat-3 hurricane → 4,000 tasks queued",
+      "when_to_use": "NHC issues a hurricane warning for the tenant's service area; operator declares the event + spawns the task batch.",
+      "example_code": "import { declareEvent, spawnDispatchTasks } from '@projexlight/sdk-storm';\nconst e = await declareEvent({\n  tenant_id, kind: 'hurricane', severity: 3,\n  geo_extent: NHC_polygon, expected_closed_at: addDays(7),\n});\nawait spawnDispatchTasks({ event_id: e.event_id, skill: 'storm-triage', priority: 'critical' });",
+      "expected_outcome": "Event row written + .declared.v1 emitted. spawnDispatchTasks adds 4,000 rows to dispatch.queue + .spawned.v1 carries the batch count. sdk-dispatch + sdk-assignment absorb the wave."
+    },
+    {
+      "id": "auto-declare-from-outage-feed",
+      "title": "Power-grid outage feed auto-declares when threshold crossed",
+      "when_to_use": "Power-grid status feed indicates outage affecting 500+ accounts. Auto-declarer fires below the operator notice — emits .declared.v1 + alerts oncall.",
+      "example_code": "// driven by the feed poller:\nstartFeedPoller({ tenant_id, feed: 'grid-outage-us-fl' });\n// On crossing STORM_AUTO_DECLARE_THRESHOLD, the poller calls declareEvent + alerts oncall.",
+      "expected_outcome": "Event auto-declared, oncall alerted (PagerDuty / Slack via sdk-notification). Operator confirms + calls spawnDispatchTasks. Auto-trigger event itself audited in .declared.v1."
+    },
+    {
+      "id": "refresh-intensity",
+      "title": "Intensity refresh repriorizes a region",
+      "when_to_use": "Storm intensifies overnight; cells in the eyewall path jump to intensity=0.9. Refresh emits .intensity.updated.v1 which sdk-dispatch reacts to (re-prioritize queued tasks).",
+      "example_code": "// poller calls into sdk-storm:\nawait ingestFeed({ tenant_id, feed: 'nhc-public-advisory', observation_time });\n// per-cell update emits storm.intensity.updated.v1 to subscribers.",
+      "expected_outcome": "Cells updated atomically; .intensity.updated.v1 fires per affected (event, cell). sdk-dispatch can pull + re-materialize routes in the new priority order."
+    },
+    {
+      "id": "close-event",
+      "title": "Operator closes the event after restoration finishes",
+      "when_to_use": "Last triage task done; operator closes the event. Downstream SLAs drop back to normal; subsequent intake is regular priority.",
+      "example_code": "import { closeEvent } from '@projexlight/sdk-storm';\nawait closeEvent({ event_id, closed_by_persona_id, post_mortem_url });",
+      "expected_outcome": "Event closed; .closed.v1 emitted. Subsequent customer requests are queued at standard SLAs. Audit trail retains the full declare → spawn → intensity → close timeline."
+    },
+    {
+      "id": "throttle-on-saturation",
+      "title": "Reactive — back off spawning if dispatch queue saturated",
+      "when_to_use": "Reactive on dispatch.task.completed.v1 — track completion rate; if completion rate < spawn rate by 10x for >30 min, throttle spawn to avoid queue meltdown.",
+      "example_code": "subscribeEvents('dispatch.task.completed.v1', async (e) => {\n  recordCompletion(e); const ratio = spawnRate() / completionRate();\n  if (ratio > 10) await throttleSpawn({ tenant_id, factor: 0.5 });\n});",
+      "expected_outcome": "Spawn rate halved temporarily; operator paged with the saturation alert. When completion rate recovers, throttle auto-lifts."
+    }
+  ],
+  "compliance_posture": {
+    "regimes": ["SOC2-CC7.1-availability", "NERC-CIP-mass-restoration", "FCC-911-public-safety", "OSHA-disaster-response-records"],
+    "notes": "All declarations + closes pinned to operator persona for after-incident review (NERC-CIP). Intensity refresh log is the audit trail for 'why did we re-prioritize this customer at 02:34?'. Auto-declare threshold pinned per tenant + reviewed quarterly to avoid declaration fatigue."
+  },
+  "pool_placement": "app",
+  "pricing_skus": [
+    { "sku": "storm.event.declare",    "mode": "flat",    "unit_description": "per event declared" },
+    { "sku": "storm.tasks.spawn",      "mode": "metered", "unit_description": "per task spawned into dispatch (volume discount on mass events)" },
+    { "sku": "storm.feed.poll",        "mode": "metered", "unit_description": "per feed poll (background)" }
+  ],
+  "no_endpoints": true,
+  "links": {
+    "readme": "packages/sdk-storm/README.md",
+    "source": "packages/sdk-storm/src/",
+    "prd_section": "P7-Field-Hyperscale §6 / FR-STM-1..4"
+  }
+}

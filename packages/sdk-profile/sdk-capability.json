@@ -1,0 +1,98 @@
+{
+  "name": "@projexlight/sdk-profile",
+  "version": "1.0.0",
+  "schema_version": "1.0",
+  "summary": "Tiered profile data store for ProjexCloud personas: L1 / L2 / L3 bands separate display-ish data (name, photo URL, locale) from operational data (preferences, defaults) from secure data (SSN-last-4, DOB) — each band sits in a different storage class with different access rules. Field-level cryptographic shred for GDPR Art-17 erasure on the secure band.",
+  "tags": ["profile", "preferences", "pii-bands", "field-shred", "foundation"],
+  "provides": {
+    "endpoints": [
+      { "method": "GET",  "path": "/api/profile/bands/:app_identity_id/:band_kind", "description": "Fetch a profile band (L1 display / L2 operational). Secure-band uses dedicated endpoint." },
+      { "method": "PUT",  "path": "/api/profile/bands",                             "description": "Replace a band's contents (audit chain pins persona + field-set diff)." },
+      { "method": "GET",  "path": "/api/profile/secure-data/:person_id",            "description": "Fetch secure (L3) data; requires elevated scope + writes a secure-access audit row." },
+      { "method": "POST", "path": "/api/profile/secure-data/set-field",             "description": "Set / replace a secure field by name." },
+      { "method": "POST", "path": "/api/profile/secure-data/shred-field",           "description": "Cryptographically shred one secure field via sdk-vault key disposal." },
+      { "method": "GET",  "path": "/api/profile/secure-data/shred-log/:person_id",  "description": "Audit log of shred operations on a Person's secure data." }
+    ],
+    "events": [
+      { "name": "profile.band.updated.v1",        "retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "Band L1 or L2 updated; carries field-set diff." },
+      { "name": "profile.secure.field.set.v1",    "retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "Secure-band field set (NO plaintext in event)." },
+      { "name": "profile.secure.field.read.v1",   "retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "Secure-band field read; carries persona_id + caller_sdk." },
+      { "name": "profile.secure.field.shredded.v1","retention_class": "regulated","conflict_policy": "event-sourcing", "description": "Secure-band field cryptographically shredded; GDPR Art-17 fulfillment trail." }
+    ],
+    "models": [
+      { "schema": "profile", "table": "band_l2",         "description": "L2 operational band: preferences, defaults, locale." },
+      { "schema": "profile", "table": "secure_data",     "description": "L3 secure band: per-(person, field) ciphertext + vault key_id." },
+      { "schema": "profile", "table": "field_shred_log", "description": "Per-shred row: person_id, field, shred_reason, shredded_by_persona, occurred_at." }
+    ],
+    "hooks": [
+      { "name": "getBand",         "description": "Fetch L1 or L2 band; idempotent." },
+      { "name": "putBand",         "description": "Replace a band's contents." },
+      { "name": "setSecureField",  "description": "Encrypt + store a secure field via sdk-vault." },
+      { "name": "getSecureField",  "description": "Audited read of a secure field; rate-limited per persona." },
+      { "name": "shredSecureField","description": "Cryptographically shred one field by disposing the wrapping key. Irreversible." }
+    ],
+    "ui_components": []
+  },
+  "consumes": {
+    "events": [
+      { "name": "vault.key.shredded.v1",            "from": "@projexlight/sdk-vault" },
+      { "name": "data-rights.request.opened.v1", "from": "@projexlight/sdk-data-rights" }
+    ],
+    "infra": ["postgres", "sdk-vault"],
+    "config_keys": ["PROFILE_SECURE_READ_RATE_LIMIT_PER_PERSONA_PER_HOUR", "PROFILE_BAND_DEFAULT_LOCALE"]
+  },
+  "scenarios": [
+    {
+      "id": "user-updates-locale",
+      "title": "User changes UI locale via settings page",
+      "when_to_use": "Self-serve locale change. L2 band update is cheap + non-PII; emits .band.updated.v1.",
+      "example_code": "import { putBand } from '@projexlight/sdk-profile';\nawait putBand({\n  app_identity_id, band_kind: 'L2',\n  payload: { locale: 'es-MX', timezone: 'America/Mexico_City' },\n});",
+      "expected_outcome": "Band row updated; emits .band.updated.v1 with the field-set diff."
+    },
+    {
+      "id": "set-ssn-last4-secure",
+      "title": "Store SSN-last-4 as a secure-band field",
+      "when_to_use": "Financial-services onboarding requires SSN-last-4. setSecureField wraps the value with sdk-vault + the plaintext never leaves the call.",
+      "example_code": "import { setSecureField } from '@projexlight/sdk-profile';\nawait setSecureField({\n  person_id, field: 'ssn_last4', plaintext: '1234',\n  set_by_persona_id, purpose: 'kyc-tax-onboarding',\n});",
+      "expected_outcome": "Ciphertext stored; emits .secure.field.set.v1 (no plaintext). Subsequent reads audited."
+    },
+    {
+      "id": "secure-read-audited",
+      "title": "Compliance officer reads SSN-last-4 for an OFAC check",
+      "when_to_use": "Officer with elevated scope reads the field; we log who read what, when, why.",
+      "example_code": "import { getSecureField } from '@projexlight/sdk-profile';\nconst { plaintext } = await getSecureField({\n  person_id, field: 'ssn_last4',\n  caller_sdk: '@projexlight/sdk-compliance', reason: 'ofac-screen-2026-05',\n});",
+      "expected_outcome": "Plaintext returned. Emits .secure.field.read.v1 with persona + reason. Rate-limit blocks anomalous bursts."
+    },
+    {
+      "id": "shred-on-erasure-request",
+      "title": "GDPR erasure → cryptographic shred of secure fields",
+      "when_to_use": "Reactive on data-rights.request.opened.v1 — shred every secure field for the subject by disposing the wrapping keys.",
+      "example_code": "subscribeEvents('data-rights.request.opened.v1', async (e) => {\n  for (const f of await listSecureFields({ person_id: e.payload.person_id })) {\n    await shredSecureField({ person_id: e.payload.person_id, field: f.name, shred_reason: 'gdpr-art-17' });\n  }\n});",
+      "expected_outcome": "Each field's wrapping key disposed; ciphertext becomes permanently unreadable. Shred log retains the audit trail."
+    },
+    {
+      "id": "rate-limit-anomaly",
+      "title": "Anomalous secure-read burst → throttle + alert",
+      "when_to_use": "A persona suddenly reads 100 SSN-last-4 in an hour — the rate-limit fails subsequent reads + posts an alert.",
+      "example_code": "// rate-limit fires inside getSecureField; alert path:\nsubscribeEvents('profile.secure.field.read.v1', async (e) => {\n  if (await isAnomalousReadPattern({ persona_id: e.payload.persona_id })) {\n    alertSecurity({ persona_id: e.payload.persona_id });\n  }\n});",
+      "expected_outcome": "Reads throttled. Security alerted. SOC2 anomaly-detection control satisfied."
+    }
+  ],
+  "compliance_posture": {
+    "regimes": ["GDPR-Art-17-erasure", "GDPR-Art-32-encryption", "HIPAA-164.312-encryption", "PCI-DSS-3.4-stored-data", "SOC2-CC6.1"],
+    "notes": "Three-band separation matches the data-classification regimes — L1 display data can sit in Redis caches, L2 operational data in app DB, L3 secure data only in vault-wrapped storage. Field-level shred is the GDPR Art-17 + HIPAA right-to-be-forgotten implementation."
+  },
+  "pool_placement": "admin",
+  "pricing_skus": [
+    { "sku": "profile.band.read",   "mode": "metered", "unit_description": "per band read" },
+    { "sku": "profile.band.write",  "mode": "metered", "unit_description": "per band write" },
+    { "sku": "profile.secure.read", "mode": "metered", "unit_description": "per secure-field read (audited)" },
+    { "sku": "profile.secure.write","mode": "metered", "unit_description": "per secure-field write" },
+    { "sku": "profile.secure.shred","mode": "flat",    "unit_description": "per shred operation (compliance)" }
+  ],
+  "links": {
+    "readme": "packages/sdk-profile/README.md",
+    "source": "packages/sdk-profile/src/",
+    "prd_section": "P2-Identity-Access §10 / FR-PRF-1..6"
+  }
+}

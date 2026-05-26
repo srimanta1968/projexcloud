@@ -1,0 +1,104 @@
+{
+  "name": "@projexlight/sdk-data-rights",
+  "version": "1.0.0",
+  "schema_version": "1.0",
+  "summary": "Subject data-rights orchestrator for ProjexCloud (G5 closer): per-person pool-residency registry tracks every store any tenant SDK has ever touched for a subject, so DSAR / right-to-erasure / right-to-portability can fan out completely + verifiably. Request walks plan → executions → certificate. Reconciliation worker catches drift between the residency registry and reality. The compliance lever every GDPR / HIPAA / CCPA / LGPD tenant relies on.",
+  "tags": ["data-rights", "dsar", "right-to-erasure", "residency", "compliance", "p3"],
+  "provides": {
+    "endpoints": [
+      { "method": "POST", "path": "/api/data-rights/residency/touch",                       "description": "Internal: any SDK that writes data keyed by a subject calls this on first touch so the residency registry knows that store now holds data for the subject." },
+      { "method": "GET",  "path": "/api/data-rights/residency/:person_id",                  "description": "List every store registered as holding data for a person. Operator-visible." },
+      { "method": "POST", "path": "/api/data-rights/requests",                              "description": "Open a new data-rights request (access / erasure / portability / restriction)." },
+      { "method": "GET",  "path": "/api/data-rights/requests/:request_id",                  "description": "Read request state + plan + execution results + signed certificate (when complete)." },
+      { "method": "POST", "path": "/api/data-rights/requests/:request_id/transition",       "description": "Operator-driven state transition (e.g. accepted → executing → reviewed → completed)." },
+      { "method": "POST", "path": "/api/data-rights/requests/:request_id/plan-executions",  "description": "Materialize the execution plan from the residency registry: one execution row per store." },
+      { "method": "POST", "path": "/api/data-rights/executions/:execution_id/result",       "description": "Per-store SDK reports its result (success + payload, or failure + reason)." },
+      { "method": "POST", "path": "/api/data-rights/requests/:request_id/certificate",      "description": "Issue the signed completion certificate after reconciliation confirms every execution succeeded." },
+      { "method": "POST", "path": "/api/data-rights/reconciliation/run",                    "description": "Trigger a reconciliation pass — compares residency registry vs. actual store membership, raises drift events." }
+    ],
+    "events": [
+      { "name": "data-rights.residency.touched.v1",       "retention_class": "regulated", "conflict_policy": "lww",            "description": "Subject's residency registry updated; new store added." },
+      { "name": "data-rights.request.opened.v1",          "retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "Request submitted." },
+      { "name": "data-rights.plan.materialized.v1",       "retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "Execution plan generated from the residency registry." },
+      { "name": "data-rights.execution.completed.v1",     "retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "Per-store execution reported success or failure." },
+      { "name": "data-rights.certificate.signed.v1",      "retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "Final certificate signed; subject + auditors can verify." },
+      { "name": "data-rights.reconciliation.drift.v1",    "retention_class": "regulated", "conflict_policy": "human-review",   "description": "Reconciler found a store holding data the residency registry didn't know about. Investigated immediately." }
+    ],
+    "models": [
+      { "schema": "data_rights", "table": "person_pool_residency", "description": "(person_id, store_ref) tuples. The single canonical answer to 'where does this subject's data live?'." },
+      { "schema": "data_rights", "table": "request",               "description": "Request row: subject, request_kind (access / erasure / portability / restriction), status, opened_at." },
+      { "schema": "data_rights", "table": "execution",             "description": "Per-store execution row: store_ref, owner_sdk, status, result_payload (encrypted), completed_at." },
+      { "schema": "data_rights", "table": "certificate",           "description": "Completion certificate: request_id, signed_at, signing_chain_id, summary." },
+      { "schema": "data_rights", "table": "reconciliation_run",    "description": "Per-pass reconciliation row: drift_count, completed_at." }
+    ],
+    "hooks": [
+      { "name": "touchResidency",       "description": "Universal — every SDK calls this on first subject-keyed write. Idempotent on (person_id, store_ref)." },
+      { "name": "openRequest",          "description": "Open a DSAR. Returns request_id immediately; planning happens async." },
+      { "name": "materializePlan",      "description": "Walks the residency registry + creates execution rows per store. Each store's owning SDK is notified to execute." },
+      { "name": "reportExecutionResult","description": "Per-store SDK reports back via this (sdk-billing reports billing rows, sdk-evidence reports evidence rows, etc)." },
+      { "name": "signCertificate",      "description": "Issued after every execution succeeds; signing chain attested by the regional chain-head key." },
+      { "name": "startReconciler",      "description": "Background worker pass that catches drift between residency registry + reality." }
+    ],
+    "ui_components": []
+  },
+  "consumes": {
+    "events": [
+      { "name": "consent.receipt.revoked.v1", "from": "@projexlight/sdk-consent" },
+      { "name": "tenant.offboarded.v1",       "from": "@projexlight/sdk-tenant-lifecycle" }
+    ],
+    "infra": ["postgres", "kafka-optional"],
+    "config_keys": ["DATA_RIGHTS_RECONCILER_INTERVAL_MS", "DATA_RIGHTS_REQUEST_SLA_DAYS", "DATA_RIGHTS_CERTIFICATE_SIGNING_KEY"]
+  },
+  "scenarios": [
+    {
+      "id": "register-residency-on-write",
+      "title": "Every subject-keyed write registers residency",
+      "when_to_use": "Internal universal pattern. Whenever a SDK writes data keyed by a person_id, it calls touchResidency so the registry stays complete. Documented here so SDK authors know what to call.",
+      "example_code": "import { touchResidency } from '@projexlight/sdk-data-rights';\n// inside sdk-billing.generateInvoice():\nawait touchResidency({\n  person_id: invoice.subject_person_id,\n  store_ref: 'billing.invoice',\n  owner_sdk: '@projexlight/sdk-billing',\n});",
+      "expected_outcome": "Idempotent — same (person, store) pair counted once. Emits data-rights.residency.touched.v1 on the first touch. The DSAR plan-materializer now knows to include billing.invoice in any future request for this subject."
+    },
+    {
+      "id": "subject-access-dsar",
+      "title": "Subject files an access request (GDPR Art-15)",
+      "when_to_use": "Customer's end-user requests a copy of every piece of data the customer holds about them.",
+      "example_code": "import { openRequest, materializePlan } from '@projexlight/sdk-data-rights';\nconst { request_id } = await openRequest({\n  tenant_id, subject_person_id, request_kind: 'access',\n  requested_by_persona_id, deadline_at,\n});\nawait materializePlan({ request_id });",
+      "expected_outcome": "Plan created with one execution per registered store. Each store's owning SDK runs its access query + reports payload back. Final certificate signs the bundle for download."
+    },
+    {
+      "id": "right-to-erasure-fan-out",
+      "title": "Right-to-erasure — every store scrubbed + verified",
+      "when_to_use": "Subject revokes consent (sdk-consent fires the revoked event); this SDK consumes it + opens an erasure request automatically.",
+      "example_code": "// driven by event subscription:\nsubscribeEvents('consent.receipt.revoked.v1', async (e) => {\n  await openRequest({\n    tenant_id: e.tenant_id, subject_person_id: e.subject_person_id,\n    request_kind: 'erasure',\n    requested_by_persona_id: SYSTEM_PERSONA,\n  });\n});",
+      "expected_outcome": "Request opened; plan materialized + per-store execution. Each owning SDK scrubs its data + reports back. Certificate signs the completion. The customer can prove the erasure to their regulator with the signed certificate."
+    },
+    {
+      "id": "reconciliation-finds-drift",
+      "title": "Reconciler finds an undeclared store",
+      "when_to_use": "Periodic check (default daily) that compares the residency registry vs. reality. Drift is rare but a Sev-2 — it means a SDK is writing subject data without touching the registry.",
+      "example_code": "// Driven by startReconciler. On drift:\n// emits data-rights.reconciliation.drift.v1\n// + creates a tracking ticket\n// + pages on-call until the offending SDK is fixed.",
+      "expected_outcome": "Drift event filed for human review. Tenant compliance officer sees the drift in the operator dashboard. Untouched SDK author must fix + backfill residency touches before next reconciler pass."
+    },
+    {
+      "id": "certificate-verification",
+      "title": "Subject (or regulator) verifies the signed certificate",
+      "when_to_use": "Subject downloaded the access bundle months ago; needs to prove its integrity now.",
+      "example_code": "// Certificate carries:\n//   request_id, signed_at, signing_chain_id, content_hash\n// Verifier walks the regional chain-head ledger + recomputes content_hash.\n// Result: verified OR tampered.",
+      "expected_outcome": "Verification deterministic. Result either confirms the bundle is intact (good) or surfaces tamper evidence (Sev-1 incident)."
+    }
+  ],
+  "compliance_posture": {
+    "regimes": ["GDPR-Art-15-Art-17-Art-20-Art-21", "CCPA-CPRA", "Brazil-LGPD-Art-18", "HIPAA-164.524-right-of-access", "Quebec-Law-25", "UK-GDPR"],
+    "notes": "The G5 person_pool_residency registry is the lever that makes GDPR Art-17 actually completable — without it, fan-out is best-effort. The reconciler is the integrity guarantee on that registry. Certificate signing chain provides the audit-grade proof regulators expect for an erasure attestation."
+  },
+  "pool_placement": "admin",
+  "pricing_skus": [
+    { "sku": "data-rights.residency.touch",  "mode": "metered", "unit_description": "per first-touch (rare; cached aggressively)" },
+    { "sku": "data-rights.request",          "mode": "metered", "unit_description": "per request opened (DSAR + erasure free up to plan ceiling)" },
+    { "sku": "data-rights.certificate.sign", "mode": "metered", "unit_description": "per certificate signed (one per completed request)" }
+  ],
+  "links": {
+    "readme": "packages/sdk-data-rights/README.md",
+    "source": "packages/sdk-data-rights/src/",
+    "prd_section": "P3-Canonical-Privacy-HDK §5 / G5"
+  }
+}

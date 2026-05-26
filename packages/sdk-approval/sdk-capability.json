@@ -1,0 +1,93 @@
+{
+  "name": "@projexlight/sdk-approval",
+  "version": "1.0.0",
+  "schema_version": "1.0",
+  "summary": "Configurable approval routing for ProjexCloud: declare a Route once (trigger predicate → ordered approver steps → SLA per step) and any SDK can call requestApproval() to spin up a Request that walks the route. Approvers decide → step closes → next step opens or request closes. SLA breaches page the configured escalation persona. Used by tenant-admin destructive actions, FinServ payment 4-eyes, healthcare PHI-export sign-off, and PRD-management sign-off chains.",
+  "tags": ["approval", "workflow", "4-eyes", "sla", "governance", "p4"],
+  "provides": {
+    "endpoints": [
+      { "method": "POST", "path": "/api/approvals/routes",              "description": "Register an approval route (trigger predicate + ordered steps + SLA per step + escalation persona)." },
+      { "method": "POST", "path": "/api/approvals/requests",            "description": "Open an approval request against a route. Body carries the action + evidence." },
+      { "method": "POST", "path": "/api/approvals/steps/:step_id/decide", "description": "Approver decides a step (approve / reject + comment). Auto-advances or closes the request." },
+      { "method": "GET",  "path": "/api/approvals/requests/:request_id", "description": "Read a request + every step + every decision (for the requester + auditors)." }
+    ],
+    "events": [
+      { "name": "approval.route.registered.v1",  "retention_class": "regulated", "conflict_policy": "lww",            "description": "New route created or replaced." },
+      { "name": "approval.request.opened.v1",    "retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "Request opened; first step now pending its assigned approver." },
+      { "name": "approval.step.decided.v1",      "retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "Approver made a decision; carries outcome + comment + decided_by_persona_id." },
+      { "name": "approval.request.approved.v1",  "retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "Final step approved; downstream consumer SDK may proceed with the original action." },
+      { "name": "approval.request.rejected.v1",  "retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "Any step rejected; the original action is blocked." },
+      { "name": "approval.sla.breached.v1",      "retention_class": "regulated", "conflict_policy": "lww",            "description": "Step's SLA elapsed without a decision; escalation persona paged." }
+    ],
+    "models": [
+      { "schema": "approval", "table": "route",   "description": "Route definition: trigger predicate, ordered approver-spec list, per-step SLA minutes, escalation persona." },
+      { "schema": "approval", "table": "request", "description": "Open request: tenant_id, route_id, requester_persona, action payload, status (pending / approved / rejected / cancelled)." },
+      { "schema": "approval", "table": "step",    "description": "One row per route step per request: assigned approver, opened_at, decision_at, outcome, comment, sla_due_at." }
+    ],
+    "hooks": [
+      { "name": "registerRoute",      "description": "Service entry to declare a new route (idempotent on name + tenant_id)." },
+      { "name": "requestApproval",    "description": "Open a request against a matching route. Returns request_id immediately; caller polls or subscribes." },
+      { "name": "decide",             "description": "Approver hook used by the gateway endpoint; can be invoked programmatically for automated reviewers (CI gates, policy bots)." },
+      { "name": "startSlaWatcher",    "description": "Background worker that fires approval.sla.breached.v1 when due_at slips. Safe to leave running in dev." }
+    ],
+    "ui_components": []
+  },
+  "consumes": {
+    "events": [
+      { "name": "tenant.offboarded.v1", "from": "@projexlight/sdk-tenant-lifecycle" }
+    ],
+    "infra": ["postgres", "redis-optional"],
+    "config_keys": ["APPROVAL_SLA_DEFAULT_MINUTES", "APPROVAL_ESCALATION_DEFAULT_PERSONA"]
+  },
+  "scenarios": [
+    {
+      "id": "register-payment-route",
+      "title": "Finance team registers a 4-eyes route for outbound payments over $10k",
+      "when_to_use": "Tenant admin sets up policy once; every Stripe payout > $10k auto-routes through finance + a senior approver before settle.",
+      "example_code": "import { registerRoute } from '@projexlight/sdk-approval';\nawait registerRoute({\n  tenant_id, name: 'payment-over-10k',\n  trigger: { sku: 'payment.charge', condition: 'amount_cents > 1000000' },\n  steps: [\n    { role: 'finance-reviewer', sla_minutes: 240 },\n    { role: 'finance-senior',   sla_minutes: 240 },\n  ],\n  escalation_persona_id,\n});",
+      "expected_outcome": "Route persisted. Emits approval.route.registered.v1. Future sdk-payment.charge calls matching the predicate spawn an approval.request automatically."
+    },
+    {
+      "id": "open-request-and-decide",
+      "title": "Approver decides a pending step",
+      "when_to_use": "Approver picks an item from the Approvals queue in tenant-admin and clicks Approve / Reject.",
+      "example_code": "import { decide } from '@projexlight/sdk-approval';\nawait decide({\n  step_id, decided_by_persona_id,\n  outcome: 'approve',\n  comment: 'Verified counterparty; ABA matches the W-9 on file.',\n});",
+      "expected_outcome": "Step transitions to decided; emits approval.step.decided.v1. If last step: request transitions to approved + emits approval.request.approved.v1. Otherwise the next step opens for its assigned approver."
+    },
+    {
+      "id": "sla-breach-paging",
+      "title": "Step SLA breached → escalation persona paged",
+      "when_to_use": "Background worker spots a step whose due_at has slipped; escalates rather than letting the request rot.",
+      "example_code": "import { startSlaWatcher } from '@projexlight/sdk-approval';\nconst worker = startSlaWatcher({ intervalMs: 60_000 });\n// graceful shutdown:\nawait worker.stop();",
+      "expected_outcome": "Emits approval.sla.breached.v1. The route's escalation persona receives a notification (via sdk-notification); the step is re-assigned to them so they can either approve directly or chase the original approver."
+    },
+    {
+      "id": "policy-bot-as-approver",
+      "title": "Automated policy bot acts as one of the approvers",
+      "when_to_use": "A CI gate or compliance bot can call decide() programmatically — useful for SOX SOD checks where the bot verifies that the requester and approver are different personas.",
+      "example_code": "import { decide } from '@projexlight/sdk-approval';\n// Bot persona owns its own persona_id.\nawait decide({\n  step_id, decided_by_persona_id: BOT_PERSONA_ID,\n  outcome: requester_persona_id === BOT_PERSONA_ID ? 'reject' : 'approve',\n  comment: 'SOD check: requester !== approver',\n});",
+      "expected_outcome": "Bot's decision counts as a full step decision. Audit chain shows actor.kind='service' so reviewers can distinguish automated approvals from human ones."
+    },
+    {
+      "id": "destructive-action-gate",
+      "title": "Tenant admin gates destructive operations behind approval",
+      "when_to_use": "Any 'delete all records' or 'rotate BYOK key' action in tenant-admin should route through approval rather than execute immediately.",
+      "example_code": "import { requestApproval } from '@projexlight/sdk-approval';\nconst { request_id } = await requestApproval({\n  tenant_id, requester_persona_id,\n  route_name: 'destructive-tenant-action',\n  action: { kind: 'bulk-delete', table: 'crm.lead', filter: { older_than_days: 365 } },\n});\n// UI shows 'pending approval'; on approve event the actual delete fires.",
+      "expected_outcome": "Action is blocked until the route's steps clear. On approve: dispatcher fires the original action. On reject: UI shows the rejection comment to the requester. Either way the audit chain has the full trail."
+    }
+  ],
+  "compliance_posture": {
+    "regimes": ["SOX-segregation-of-duties", "SOC2-CC6.6", "PCI-DSS-Req-7", "HIPAA-164.308(a)(4)", "FedRAMP-AC-3"],
+    "notes": "Segregation-of-duties (SOX): requester ≠ approver enforced at decide(). 4-eyes (PCI-DSS Req-7): require ≥2 steps with distinct approver roles. Audit chain entries are immutable — once decided, a step's outcome cannot be edited (write a compensating action instead)."
+  },
+  "pool_placement": "app",
+  "pricing_skus": [
+    { "sku": "approval.request",   "mode": "metered", "unit_description": "per request opened (free below plan ceiling)" },
+    { "sku": "approval.sla.breach","mode": "metered", "unit_description": "per SLA-breach event (proxy for ops cost)" }
+  ],
+  "links": {
+    "readme": "packages/sdk-approval/README.md",
+    "source": "packages/sdk-approval/src/",
+    "prd_section": "P4-Operational-Billing §11 / FR-APR-1..6"
+  }
+}

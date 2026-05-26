@@ -1,0 +1,39 @@
+# {{app_name}}
+
+RevOps CRM workspace — scaffolded from the **{{blueprint_title}}** blueprint
+(`{{blueprint_id}}`).
+
+## What was configured
+
+| Choice | Value |
+|---|---|
+| Salesforce sync direction | `{{sf_sync_direction}}` |
+| Lead-scoring model | `{{scoring_model}}` |
+| Default campaign channel | `{{campaign_default_channel}}` |
+
+## Project layout
+
+- `src/leads/intake.ts` — receive raw leads, persist + emit `crm.lead.created.v1`
+- `src/leads/router.ts` — segment + route to the right BU / persona
+- `src/scoring/model.ts` — lead scoring (replace with real model)
+- `src/campaigns/dispatch.ts` — outbound dispatch via the default channel
+- `db/migrations/001_revops_init.sql` — Postgres schema for `revops.lead` + `revops.campaign`
+
+## Next steps
+
+```sh
+# 1. Install the SDKs this blueprint composes:
+projex install @projexlight/sdk-tenant
+projex install @projexlight/sdk-identity
+projex install @projexlight/sdk-audit
+projex install @projexlight/sdk-billing
+projex install @projexlight/sdk-meter
+
+# 2. Run your app's bootstrap (runs all SDK migrations on first boot)
+pnpm install && pnpm build
+
+# 3. Iterate — replace the placeholder scoring + routing rules with your real logic.
+```
+
+For SDK manifests + scenarios, use your MCP-aware AI tool: ask "show me the
+manifest for `@projexlight/sdk-audit`" and the local MCP will return it.

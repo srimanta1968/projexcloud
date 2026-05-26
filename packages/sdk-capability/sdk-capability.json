@@ -1,0 +1,86 @@
+{
+  "name": "@projexlight/sdk-capability",
+  "version": "1.0.0",
+  "schema_version": "1.0",
+  "summary": "Schema + validator + scaffolder for SDK capability manifests. Defines the JSON shape every SDK ships, lints it, and provides the scaffold CLI used to author this very manifest. The foundation of P9 — without it no AI agent can reason about what SDKs are available.",
+  "tags": [
+    "foundation",
+    "p9",
+    "manifest",
+    "validator",
+    "self-referential"
+  ],
+  "provides": {
+    "endpoints": [],
+    "events": [],
+    "models": [],
+    "hooks": [
+      {
+        "name": "validateManifest",
+        "description": "Parse + validate a manifest against the schema; returns structured errors per field."
+      },
+      {
+        "name": "lintManifest",
+        "description": "Soft-fail lints (TBD detection, scenario-code shape, summary length, minimum scenarios)."
+      },
+      {
+        "name": "diffManifests",
+        "description": "Diff two manifests for breaking-change detection in CI."
+      },
+      {
+        "name": "scaffoldManifest",
+        "description": "Auto-detect endpoints + events + models from the SDK source + write a starter manifest."
+      }
+    ],
+    "ui_components": []
+  },
+  "consumes": {
+    "events": [],
+    "infra": [],
+    "config_keys": []
+  },
+  "scenarios": [
+    {
+      "id": "ci-validate-pr",
+      "title": "CI gate validates every SDK PR",
+      "when_to_use": "scripts/registry-validate.mjs walks packages/* + services/* on every PR — refuses the merge if any manifest fails validation.",
+      "example_code": "import { validateManifest } from '@projexlight/sdk-capability';\nconst result = validateManifest(JSON.parse(fs.readFileSync('packages/X/sdk-capability.json')));\nif (!result.ok) process.exit(1);",
+      "expected_outcome": "PR blocked until manifest validates. Authors fix at PR time, not at release time."
+    },
+    {
+      "id": "scaffold-new-sdk",
+      "title": "Scaffold a starter manifest for a new SDK",
+      "when_to_use": "New SDK author runs `sdk-capability scaffold --dir packages/sdk-foo`; tool auto-detects endpoints + models + events from src/server/, src/events.ts, db/migrations/*.sql.",
+      "example_code": "$ npx @projexlight/sdk-capability scaffold --dir packages/sdk-foo\nWrote scaffolded manifest to packages/sdk-foo/sdk-capability.json\nNext: edit the placeholder fields (summary, scenarios, compliance) then validate",
+      "expected_outcome": "Starter manifest with auto-detected fields + placeholder strings for the prose parts. Author fills in + validates."
+    },
+    {
+      "id": "diff-for-breaking-changes",
+      "title": "Diff old vs new manifest before release",
+      "when_to_use": "Release-time CI — diff against the prior version's manifest; if any consumer-facing event is removed or a model is renamed, fail the release.",
+      "example_code": "import { diffManifests } from '@projexlight/sdk-capability';\nconst d = diffManifests(prevManifest, nextManifest);\nif (d.breaking.length > 0) throw new Error('Breaking change requires major-version bump');",
+      "expected_outcome": "Breaking changes caught at release time. Authors either revert, bump major, or document the migration."
+    },
+    {
+      "id": "lint-minimum-scenarios",
+      "title": "Lint enforces ≥3 scenarios per manifest",
+      "when_to_use": "Quality bar — every SDK ships at least 3 scenarios so AI agents have enough examples to reason about it.",
+      "example_code": "// inside lintManifest:\nif (manifest.scenarios.length < 3) return { severity: 'error', message: 'minimum 3 scenarios required' };",
+      "expected_outcome": "Manifests with < 3 scenarios refused. Authors think about real use-cases."
+    }
+  ],
+  "compliance_posture": {
+    "regimes": [
+      "SOC2-CC8.1-change-mgmt"
+    ],
+    "notes": "Manifest is the SOC2-CC8.1 change-management artifact for SDK API surface — every documented capability traces to a versioned manifest in git."
+  },
+  "pool_placement": "global-catalog",
+  "pricing_skus": [],
+  "no_endpoints": true,
+  "links": {
+    "readme": "packages/sdk-capability/README.md",
+    "source": "packages/sdk-capability/src/",
+    "prd_section": "P9-SDK-Discoverability §5.1 / FR-CAP-1..5"
+  }
+}

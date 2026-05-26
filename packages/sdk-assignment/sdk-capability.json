@@ -1,0 +1,90 @@
+{
+  "name": "@projexlight/sdk-assignment",
+  "version": "1.0.0",
+  "schema_version": "1.0",
+  "summary": "Assignment authority for field-service operations: claims dispatched tasks under a lease, balances workload across techs within a territory, and supports re-assignment with full audit trail. Decoupled from sdk-dispatch so the same authority can serve multiple dispatch sources (call center, storm, scheduled visits, customer self-serve).",
+  "tags": ["assignment", "field-service", "workload-balancing", "territory", "p7"],
+  "provides": {
+    "endpoints": [],
+    "events": [
+      { "name": "assignment.assignment.claimed.v1",   "retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "Authority took a lease on a dispatch task for a specific tech; carries lease_expires_at." },
+      { "name": "assignment.assignment.released.v1",  "retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "Lease released (tech declined, lease expired, or supervisor reclaimed)." },
+      { "name": "assignment.assignment.reassigned.v1","retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "Active assignment moved from one tech to another; carries reason + supervisor persona." },
+      { "name": "assignment.workload.rebalanced.v1",  "retention_class": "operational","conflict_policy": "lww",            "description": "Workload-balancer pass redistributed pending assignments across techs in a territory." }
+    ],
+    "models": [
+      { "schema": "assignment", "table": "assignment", "description": "Per-claim row: dispatch_task_id, assigned_to_persona, lease_expires_at, status (claimed/released/completed)." },
+      { "schema": "assignment", "table": "territory",  "description": "Geo polygon + assigned techs + escalation chain; supports nested + overlapping territories." },
+      { "schema": "assignment", "table": "workload",   "description": "Per-(tech, day) workload snapshot used by the balancer: assigned_count, completed_count, drive_minutes." }
+    ],
+    "hooks": [
+      { "name": "claimTask",       "description": "Lease a dispatchable task for a tech. Atomic — refuses if already claimed. Lease default 30 min, refreshable." },
+      { "name": "releaseAssignment","description": "Release a lease (tech declined / shift ending / supervisor reclaim). Re-queues the task." },
+      { "name": "reassignTask",    "description": "Move an active assignment to a different tech with a reason + supervisor persona. Audited." },
+      { "name": "rebalanceTerritory","description": "Balancer pass — redistribute pending assignments across techs whose workload variance exceeds a threshold." },
+      { "name": "startLeaseSweeper","description": "Background worker — releases expired leases so other techs can claim them. Safe to leave running in dev." }
+    ],
+    "ui_components": []
+  },
+  "consumes": {
+    "events": [
+      { "name": "dispatch.task.enqueued.v1", "from": "@projexlight/sdk-dispatch" },
+      { "name": "dispatch.task.cancelled.v1","from": "@projexlight/sdk-dispatch" }
+    ],
+    "infra": ["postgres", "redis-optional"],
+    "config_keys": ["ASSIGNMENT_LEASE_TTL_SEC", "ASSIGNMENT_REBALANCE_INTERVAL_SEC", "ASSIGNMENT_WORKLOAD_VARIANCE_THRESHOLD"]
+  },
+  "scenarios": [
+    {
+      "id": "tech-claims-next-task",
+      "title": "Tech opens mobile app → claims next task in territory",
+      "when_to_use": "Standard pull-style assignment. Tech taps 'next job'; authority finds the highest-priority queued task in their territory + leases it.",
+      "example_code": "import { claimTask } from '@projexlight/sdk-assignment';\nconst { assignment_id, lease_expires_at } = await claimTask({\n  tenant_id, persona_id, territory_id,\n  preferred_skill: 'hvac-residential',\n});",
+      "expected_outcome": "Lease row written with status='claimed' + 30-min TTL. Emits .claimed.v1 which sdk-dispatch reacts to (marks task dispatched). Tech sees the job in their mobile app."
+    },
+    {
+      "id": "lease-expires-and-recycles",
+      "title": "Tech doesn't act on claimed task → lease sweeper recycles it",
+      "when_to_use": "Tech claimed a task, then went offline. Sweeper releases the lease + emits .released.v1 so the queue picks it up for another tech.",
+      "example_code": "// driven by the background sweeper:\nstartLeaseSweeper({ tenant_id, interval_ms: 60_000 });\n// At each tick: SELECT * FROM assignment WHERE status='claimed' AND lease_expires_at < now();\n// → releaseAssignment for each.",
+      "expected_outcome": "Stale lease rows transition to 'released'. Emits .released.v1 which sdk-dispatch reacts to (re-queues the task). Original tech notified that the lease expired."
+    },
+    {
+      "id": "supervisor-reassigns",
+      "title": "Supervisor pulls a tech off a job + reassigns to senior",
+      "when_to_use": "Job escalates mid-route (complex repair); supervisor reassigns to a senior tech with the skill set. Audited handoff for blame-storm later if needed.",
+      "example_code": "import { reassignTask } from '@projexlight/sdk-assignment';\nawait reassignTask({\n  assignment_id, new_persona_id,\n  reason: 'requires senior diagnostic skills',\n  supervisor_persona_id,\n});",
+      "expected_outcome": "Assignment moved; original tech notified. Emits .reassigned.v1 to the audit chain — supervisor reason + persona pinned forever."
+    },
+    {
+      "id": "balance-territory",
+      "title": "Balancer evens out workload across 8 techs in a territory",
+      "when_to_use": "Storm aftermath — some techs ended up with 12 tasks, others with 3. Balancer redistributes pending assignments so per-tech workload variance drops below threshold.",
+      "example_code": "import { rebalanceTerritory } from '@projexlight/sdk-assignment';\nconst { moves } = await rebalanceTerritory({\n  tenant_id, territory_id,\n  variance_threshold: 0.30, // max 30% spread\n});",
+      "expected_outcome": "Returns the list of (assignment, from_tech, to_tech) moves applied. Emits .workload.rebalanced.v1 summarizing the pass. Affected techs get push notifications."
+    },
+    {
+      "id": "cancel-cascade",
+      "title": "Customer cancels job → assignment auto-releases",
+      "when_to_use": "Reactive on dispatch.task.cancelled.v1 — drop the matching assignment + free the lease so the tech doesn't drive out for nothing.",
+      "example_code": "// driven by event subscription:\nsubscribeEvents('dispatch.task.cancelled.v1', async (e) => {\n  await releaseAssignmentByTask({ task_id: e.payload.task_id, reason: 'customer-cancelled' });\n});",
+      "expected_outcome": "Active assignment row marked 'released'; emits .released.v1. Tech receives a push notification + the route auto-re-materializes minus the cancelled stop."
+    }
+  ],
+  "compliance_posture": {
+    "regimes": ["SOC2-CC7.1", "GDPR-Art-30", "Labor-law-workload-records", "OSHA-shift-records"],
+    "notes": "Per-assignment audit (claim, release, reassignment) is the GDPR Art-30 record-of-processing for tech allocation decisions. Workload snapshots persisted long enough to satisfy labor-law inquiries. Reassignment reason + supervisor persona pinned to defeat 'who pulled me off the job' disputes."
+  },
+  "pool_placement": "app",
+  "pricing_skus": [
+    { "sku": "assignment.claim",       "mode": "metered", "unit_description": "per task claimed" },
+    { "sku": "assignment.reassign",    "mode": "metered", "unit_description": "per supervisor-driven reassignment" },
+    { "sku": "assignment.rebalance",   "mode": "metered", "unit_description": "per balancer pass run" }
+  ],
+  "no_endpoints": true,
+  "links": {
+    "readme": "packages/sdk-assignment/README.md",
+    "source": "packages/sdk-assignment/src/",
+    "prd_section": "P7-Field-Hyperscale §4 / FR-ASGN-1..6"
+  }
+}

@@ -1,0 +1,97 @@
+{
+  "name": "@projexlight/sdk-billing",
+  "version": "1.0.0",
+  "schema_version": "1.0",
+  "summary": "Operational billing for ProjexCloud: per-tenant invoice generation from metered usage, live-meter accrual for in-period dashboards, reprice dry-runs for pricing-change impact analysis, per-BU showback aggregation, and the dunning state machine for overdue invoices. Pinned to a pricing-catalog version per invoice so historical billing stays reproducible after rate changes.",
+  "tags": ["billing", "invoices", "metering", "showback", "dunning", "p4"],
+  "provides": {
+    "endpoints": [
+      { "method": "POST", "path": "/api/billing/invoices/generate",  "description": "Generate an invoice for a tenant + period from accumulated meter rows; pins the pricing-catalog version at finalization." },
+      { "method": "GET",  "path": "/api/billing/live",                "description": "Live in-period meter accrual for the calling tenant: subtotal, per-SKU units + amount, meter-lag in ms." },
+      { "method": "POST", "path": "/api/billing/reprice-dry-run",     "description": "Apply a candidate pricing catalog to historical usage rows; returns the would-be invoice without committing." },
+      { "method": "GET",  "path": "/api/billing/showback",            "description": "Per-BU (business-unit) usage breakdown for the period; powers internal chargeback dashboards." }
+    ],
+    "events": [
+      { "name": "billing.invoice.generated.v1", "retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "New invoice in 'draft'; carries period bounds + pricing_catalog_version." },
+      { "name": "billing.invoice.finalized.v1", "retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "Invoice locked + immutable; downstream payment + audit pipelines key off this." },
+      { "name": "billing.invoice.voided.v1",    "retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "Invoice voided; emits a compensating event rather than mutating the row." },
+      { "name": "billing.reprice.completed.v1", "retention_class": "operational","conflict_policy": "lww",            "description": "Dry-run finished; carries the diff vs. the current catalog." },
+      { "name": "billing.showback.refreshed.v1","retention_class": "operational","conflict_policy": "lww",            "description": "Showback aggregation finished; consumed by tenant-admin Billing UI." },
+      { "name": "billing.dunning.advanced.v1",  "retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "Dunning state machine moved the invoice forward (notice → second-notice → suspension)." }
+    ],
+    "models": [
+      { "schema": "billing", "table": "invoice",          "description": "Header row per (tenant, period); pins pricing_catalog_version + currency + total." },
+      { "schema": "billing", "table": "line_item",        "description": "One row per SKU per invoice; carries units, rate, amount, source meter run id." },
+      { "schema": "billing", "table": "dunning_state",    "description": "Per-invoice dunning state machine: current_state, last_notice_at, next_action_at, severity." },
+      { "schema": "billing", "table": "reprice_dry_run",  "description": "Reprice dry-run inputs + outputs; expires after 30 days." },
+      { "schema": "billing", "table": "soft_cap_state",   "description": "Per-(tenant, sku) soft-cap watermark; powers the WARN-header middleware in the gateway." }
+    ],
+    "hooks": [
+      { "name": "registerStripeForInvoicePush", "description": "Wire a Stripe adapter so finalized invoices auto-push to Stripe as draft invoices for collection." },
+      { "name": "registerDunningWorkflow",      "description": "Plug an external workflow (e.g. CRM ticket) into the dunning advance events." },
+      { "name": "registerPostFinalizeHook",     "description": "Fire arbitrary tenant-side webhooks on billing.invoice.finalized.v1." }
+    ],
+    "ui_components": []
+  },
+  "consumes": {
+    "events": [
+      { "name": "meter.usage.aggregated.v1", "from": "@projexlight/sdk-meter" },
+      { "name": "payment.succeeded.v1",      "from": "@projexlight/sdk-payment" },
+      { "name": "tenant.offboarded.v1",      "from": "@projexlight/sdk-tenant-lifecycle" }
+    ],
+    "infra": ["postgres", "redis-optional"],
+    "config_keys": ["BILLING_DUNNING_NOTICE_DAYS", "BILLING_DUNNING_SUSPEND_DAYS", "BILLING_DEFAULT_CURRENCY"]
+  },
+  "scenarios": [
+    {
+      "id": "monthly-close",
+      "title": "Generate and finalize the monthly invoice for a tenant",
+      "when_to_use": "End-of-period close. Pulls the tenant's metered usage for [start, end), prices it against the published catalog, writes the invoice + line items.",
+      "example_code": "import { generateInvoice } from '@projexlight/sdk-billing';\nconst inv = await generateInvoice({\n  tenant_id, period_start: '2026-05-01', period_end: '2026-05-31',\n  finalize: true,\n});",
+      "expected_outcome": "Returns an invoice with status='finalized', pricing_catalog_version pinned, and 1 row per SKU in billing.line_item. Emits billing.invoice.generated.v1 + .finalized.v1."
+    },
+    {
+      "id": "live-meter-dashboard",
+      "title": "Render the in-period live meter on the tenant Billing page",
+      "when_to_use": "Customer admin opens /billing in the tenant-admin console; we show subtotal + per-SKU units accrued so far this period.",
+      "example_code": "const r = await fetch(`/api/billing/live?tenant_id=${tid}`, { headers: { Authorization: `Bearer ${jwt}` } });\nconst { subtotal, by_sku, lag_ms } = (await r.json()).data;",
+      "expected_outcome": "Returns the rolling-window aggregate. Updated within ~60 s of meter ingest (FR-BIL-7). lag_ms tells you how stale the rollup is."
+    },
+    {
+      "id": "reprice-dry-run",
+      "title": "Model the impact of a proposed quarterly price bump",
+      "when_to_use": "Finance is proposing a 10% rate hike on vault.encrypt. Run dry-run on a representative cohort to estimate revenue impact before publishing the new catalog.",
+      "example_code": "import { runRepriceDryRun } from '@projexlight/sdk-billing';\nconst diff = await runRepriceDryRun({ tenant_id, candidate_catalog_id, period_start, period_end });\nconsole.log(`current: $${diff.baseline} → candidate: $${diff.candidate} (delta ${diff.delta_pct}%)`);",
+      "expected_outcome": "Returns baseline + candidate totals + per-SKU breakdown. Stored in billing.reprice_dry_run for 30 days for follow-up analysis. Does NOT touch invoice."
+    },
+    {
+      "id": "showback-per-bu",
+      "title": "Per-BU chargeback aggregation",
+      "when_to_use": "Customer wants to split ProjexCloud spend across their internal cost centers (engineering, sales, support).",
+      "example_code": "const r = await fetch(`/api/billing/showback?period_start=2026-05-01&period_end=2026-05-31&group_by=bu_id`, { headers: { Authorization: `Bearer ${jwt}` } });\nconst { rows } = (await r.json()).data;\n// rows: [{ bu_id, bu_name, amount, sku_breakdown: { ... } }, ...]",
+      "expected_outcome": "Returns aggregated usage by business unit. Tenant-admin Billing page uses this for the chargeback view; CSV export available."
+    },
+    {
+      "id": "dunning-advance",
+      "title": "Dunning state machine advances overdue invoice",
+      "when_to_use": "Background worker discovers an invoice past its grace period; the dunning state machine advances notice → second-notice → suspension.",
+      "example_code": "// Driven by a cron worker; not called directly. To observe:\n// subscribe('billing.dunning.advanced.v1', async (event) => {\n//   await notifyTenantAdmin(event.tenant_id, event.payload.new_state);\n// });",
+      "expected_outcome": "billing.dunning_state row updated. Emits billing.dunning.advanced.v1 carrying old + new state. Customer admin can override via tenant-admin Billing approval gate."
+    }
+  ],
+  "compliance_posture": {
+    "regimes": ["SOC2", "PCI-DSS", "SOX-revenue-recognition", "GDPR-Art-30"],
+    "notes": "Invoice immutability via finalized event + compensating-void pattern satisfies SOX revenue-recognition controls. PCI scope minimized: this SDK NEVER stores PANs — payment provider tokens live in sdk-payment + sdk-vault. Dunning notices are tenant-admin-configurable to honor customer-defined grace periods."
+  },
+  "pool_placement": "app",
+  "pricing_skus": [
+    { "sku": "billing.invoice.generate", "mode": "flat",    "unit_description": "per invoice generated (free up to plan ceiling)" },
+    { "sku": "billing.live.read",        "mode": "metered", "unit_description": "per live-meter read call" },
+    { "sku": "billing.reprice.dry-run",  "mode": "metered", "unit_description": "per reprice dry-run (compute-heavy; rate-limited)" }
+  ],
+  "links": {
+    "readme": "packages/sdk-billing/README.md",
+    "source": "packages/sdk-billing/src/",
+    "prd_section": "P4-Operational-Billing §9"
+  }
+}

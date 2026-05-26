@@ -1,0 +1,115 @@
+{
+  "name": "@projexlight/sdk-agent-runtime",
+  "version": "1.0.0",
+  "schema_version": "1.0",
+  "summary": "AI agent isolation + execution runtime for ProjexCloud (P6A): declare an agent + its allowed tools + its vector namespace + a capability-token scope, then runs execute under that token with every tool call audited. Scope exceptions, replay, action journals, and cross-tenant leakage chaos tests are the contract — this SDK is the difference between 'a customer agent' and 'a tenant-isolated agent that survives an audit'.",
+  "tags": ["agent", "ai-isolation", "capability-token", "tool-audit", "p6a"],
+  "provides": {
+    "endpoints": [
+      { "method": "GET",  "path": "/api/agent-runtime/health",                          "description": "Runtime + provider readiness probe." },
+      { "method": "POST", "path": "/api/agent-runtime/tokens",                          "description": "Mint a capability token scoped to (agent, tenant, persona, tool-set, vector-namespace, expires_at)." },
+      { "method": "POST", "path": "/api/agent-runtime/tokens/:token_id/validate",      "description": "Server-side validate a token — does it still cover this tool call?" },
+      { "method": "POST", "path": "/api/agent-runtime/tokens/:token_id/revoke",        "description": "Revoke a capability token immediately (kill-switch for a runaway agent)." },
+      { "method": "POST", "path": "/api/agent-runtime/runs/:run_id/replay",            "description": "Replay an agent run from the journal for debugging / audit." },
+      { "method": "POST", "path": "/api/agent-runtime/agents",                          "description": "Register / update an agent definition." },
+      { "method": "GET",  "path": "/api/agent-runtime/agents/:agent_id",                "description": "Fetch agent definition + active tokens + recent runs." },
+      { "method": "POST", "path": "/api/agent-runtime/runs",                            "description": "Start an agent run; returns run_id + initial token." },
+      { "method": "GET",  "path": "/api/agent-runtime/runs/:run_id",                    "description": "Fetch a run + its action journal + per-tool invocations." },
+      { "method": "POST", "path": "/api/agent-runtime/runs/:run_id/abort",              "description": "Abort a run; outstanding tool calls cancel." },
+      { "method": "POST", "path": "/api/agent-runtime/scope-exceptions",                "description": "Record a scope exception (audit-grade; a tool call refused mid-run)." },
+      { "method": "GET",  "path": "/api/agent-runtime/vector-namespaces/:tenant_id",   "description": "List vector namespaces for a tenant; agents read/write only their scoped namespace." }
+    ],
+    "events": [
+      { "name": "agents.agent.registered.v1",       "retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "Agent definition created / updated." },
+      { "name": "agents.token.minted.v1",           "retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "Capability token minted; carries scope + expiry." },
+      { "name": "agents.token.revoked.v1",          "retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "Token revoked; kill-switch for runaway runs." },
+      { "name": "agents.run.started.v1",            "retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "Agent run started." },
+      { "name": "agents.tool.invoked.v1",           "retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "Tool call dispatched within a run; carries tool + arguments + result-hash + duration." },
+      { "name": "agents.scope.violation.detected.v1","retention_class": "regulated","conflict_policy": "event-sourcing", "description": "Token-scope check refused a tool call; chaos-test signal + real-time abuse signal." },
+      { "name": "agents.run.completed.v1",          "retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "Run finished (success / aborted / error)." }
+    ],
+    "models": [
+      { "schema": "agents", "table": "agent_definition",          "description": "Per-agent row: name, allowed_tools, allowed_vector_namespaces, default_max_steps." },
+      { "schema": "agents", "table": "vector_namespace_registry", "description": "Per-(tenant, namespace) row — agents are scope-pinned to one namespace." },
+      { "schema": "agents", "table": "agent_run",                 "description": "Per-run row: agent_id, persona_id, tenant_id, status, started_at, completed_at." },
+      { "schema": "agents", "table": "capability_token",          "description": "Per-token row: scope blob, expires_at, revoked_at." },
+      { "schema": "agents", "table": "tool_invocation",           "description": "Per-tool-call row: run_id, tool, args, result_hash, ok, duration_ms." },
+      { "schema": "agents", "table": "execution_log_entry",       "description": "Per-step log row (audit chain replay)." },
+      { "schema": "agents", "table": "scope_exception",           "description": "Per-violation row: token_id, requested_tool, refusal_reason." },
+      { "schema": "agents", "table": "action_journal",            "description": "Per-run journal: full tool-call sequence + LLM messages for replay." }
+    ],
+    "hooks": [
+      { "name": "registerAgent",        "description": "Create / update an agent definition (allowed tools, vector namespaces)." },
+      { "name": "mintToken",            "description": "Mint a capability token for a run; scope-pinned + expires." },
+      { "name": "startRun",             "description": "Begin an agent run with a fresh token. Returns run_id." },
+      { "name": "invokeTool",           "description": "Internal — every tool call routes through here for scope check + audit." },
+      { "name": "abortRun",             "description": "Abort a run + revoke its token. Idempotent." },
+      { "name": "replayRun",            "description": "Reconstruct a run from the action journal for audit / debug." },
+      { "name": "startChaosLeakage",    "description": "AC-2 chaos test — periodic cross-tenant leakage probe (built-in; fails the deploy if regression)." }
+    ],
+    "ui_components": []
+  },
+  "consumes": {
+    "events": [
+      { "name": "mcp-bridge.tool.invoked.v1",     "from": "@projexlight/sdk-mcp-bridge" },
+      { "name": "ai-gateway.completion.v1",        "from": "@projexlight/sdk-ai-gateway" },
+      { "name": "tenant.offboarded.v1",            "from": "@projexlight/sdk-tenant-lifecycle" }
+    ],
+    "infra": ["postgres", "sdk-vault", "sdk-ai-gateway", "sdk-mcp-bridge", "redis-optional"],
+    "config_keys": ["AGENT_RUNTIME_DEFAULT_TOKEN_TTL_MIN", "AGENT_RUNTIME_CHAOS_AC2_INTERVAL_HOURS", "AGENT_RUNTIME_MAX_STEPS_DEFAULT"]
+  },
+  "scenarios": [
+    {
+      "id": "register-cs-agent",
+      "title": "Register a customer-support agent (tools: search-kb + create-ticket)",
+      "when_to_use": "Customer wants an AI support agent on their portal; register it with the minimum tool-set + their tenant's vector namespace.",
+      "example_code": "import { registerAgent } from '@projexlight/sdk-agent-runtime';\nconst { agent_id } = await registerAgent({\n  tenant_id, name: 'cs-tier1',\n  allowed_tools: ['kb.search', 'tickets.create', 'tickets.update_status'],\n  allowed_vector_namespaces: [`tenant:${tenant_id}:knowledge`],\n  default_max_steps: 12,\n});",
+      "expected_outcome": "Agent definition row + emitted .agent.registered.v1. Future runs scope-check against this allowlist."
+    },
+    {
+      "id": "mint-token-and-run",
+      "title": "Mint a capability token + start a run for a customer chat session",
+      "when_to_use": "Customer chat starts → mint a token scoped to this session + start an agent run under it.",
+      "example_code": "import { mintToken, startRun } from '@projexlight/sdk-agent-runtime';\nconst { token_id } = await mintToken({\n  agent_id, persona_id: customer.persona_id, tenant_id,\n  ttl_min: 15,\n});\nconst { run_id } = await startRun({\n  agent_id, token_id, initial_message: customer.message,\n});",
+      "expected_outcome": "Token + run rows; every tool call inside the run validates against this token. Token expires after 15 min — even if the agent tries to keep going."
+    },
+    {
+      "id": "scope-violation-blocks-call",
+      "title": "Agent tries a non-allowed tool → refusal + audit",
+      "when_to_use": "Agent hallucinates a `billing.refund` call; runtime refuses because the agent's tool-allowlist doesn't include it. The refusal is audited so red-team can replay.",
+      "example_code": "// inside the agent loop:\nawait invokeTool({ run_id, tool: 'billing.refund', args }); \n// → throws ScopeViolation; emits agents.scope.violation.detected.v1.",
+      "expected_outcome": "Tool call refused. Run continues (with a refusal message back to the LLM). Audit chain has the violation for post-incident review."
+    },
+    {
+      "id": "ac2-cross-tenant-chaos",
+      "title": "AC-2 chaos test — cross-tenant leakage probe",
+      "when_to_use": "Continuous integration safety: every hour, a synthetic run for tenant-A tries to read tenant-B's vector namespace. Token-scope must refuse. Failure halts the deploy pipeline.",
+      "example_code": "import { startChaosLeakage } from '@projexlight/sdk-agent-runtime';\nstartChaosLeakage({\n  interval_hours: 1, halt_pipeline_on_failure: true,\n});",
+      "expected_outcome": "Probe fires on cadence; emits .scope.violation.detected.v1 with chaos_test=true. Real ones (production agents) flagged separately. AC-2 SLO tracked."
+    },
+    {
+      "id": "replay-for-audit",
+      "title": "Replay a run for regulator audit",
+      "when_to_use": "Compliance regulator asks 'what did this agent do at time T'; replayRun reconstructs the full tool-call sequence + LLM messages from the action journal.",
+      "example_code": "import { replayRun } from '@projexlight/sdk-agent-runtime';\nconst replay = await replayRun({ run_id });\n// replay = ordered list of { step, kind: 'llm-message' | 'tool-call', payload }",
+      "expected_outcome": "Full reproducible trace. Sufficient for GDPR Art-22 + EU AI Act decision-logic audit obligations."
+    }
+  ],
+  "compliance_posture": {
+    "regimes": ["EU-AI-Act-Annex-IV-decision-logic", "GDPR-Art-22-automated-decisions", "SOC2-CC6.1-access-control", "ISO-27001-Annex-A-9", "NIST-AI-RMF-Govern"],
+    "notes": "Capability-token scope enforcement is the AC-2 chaos-test artifact — proves cross-tenant isolation under adversarial conditions. Action journals + replayRun answer the EU AI Act decision-trace requirement. Token revoke + abortRun are the killable-agent contract under NIST AI RMF Govern."
+  },
+  "pool_placement": "app",
+  "pricing_skus": [
+    { "sku": "agents.token.mint",      "mode": "metered", "unit_description": "per token minted" },
+    { "sku": "agents.run.start",       "mode": "metered", "unit_description": "per run started" },
+    { "sku": "agents.tool.invoke",     "mode": "metered", "unit_description": "per tool call (within a run)" },
+    { "sku": "agents.replay",          "mode": "metered", "unit_description": "per replay served" },
+    { "sku": "agents.chaos.probe",     "mode": "flat",    "unit_description": "per chaos-test probe (background; included in SLO tier)" }
+  ],
+  "links": {
+    "readme": "packages/sdk-agent-runtime/README.md",
+    "source": "packages/sdk-agent-runtime/src/",
+    "prd_section": "P6A-AI-Agents §3 / FR-AGT-1..8 + AC-2 chaos"
+  }
+}
