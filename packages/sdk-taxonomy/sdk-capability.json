@@ -1,0 +1,94 @@
+{
+  "name": "@projexlight/sdk-taxonomy",
+  "version": "1.0.0",
+  "schema_version": "1.0",
+  "summary": "AI-driven taxonomy + extraction-schema layer: declare what fields you want pulled out of free-form text (claim descriptions, support tickets, support email bodies) + the model + prompt template + few-shot examples that do it. Versioned, with migration plans so a taxonomy change doesn't silently invalidate older extractions. Foundation for any document-understanding workflow.",
+  "tags": ["taxonomy", "extraction", "llm", "schema-versioning", "p6b"],
+  "provides": {
+    "endpoints": [
+      { "method": "GET",  "path": "/api/taxonomy/health",                                    "description": "Health + provider readiness." },
+      { "method": "GET",  "path": "/api/taxonomy/extraction-schemas",                       "description": "List active + draft extraction schemas." },
+      { "method": "GET",  "path": "/api/taxonomy/prompt-templates",                          "description": "List prompt templates per schema." },
+      { "method": "POST", "path": "/api/taxonomy/versions/:taxonomy_version_id/activate",   "description": "Activate a draft taxonomy version; new extractions run against it." }
+    ],
+    "events": [
+      { "name": "taxonomy.version.published.v1",     "retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "New taxonomy version published; carries field-set diff vs. prior." },
+      { "name": "taxonomy.extraction.completed.v1",  "retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "Extraction run finished; carries source_hash + fields_extracted + cost." },
+      { "name": "taxonomy.migration.planned.v1",     "retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "Migration plan generated for moving older extractions to the new version." }
+    ],
+    "models": [
+      { "schema": "taxonomy", "table": "version",            "description": "Per-version row: version, status (draft/active/retired), published_at." },
+      { "schema": "taxonomy", "table": "extraction_schema",  "description": "Per-version schema: field defs (name, type, required, validator)." },
+      { "schema": "taxonomy", "table": "prompt_template",    "description": "Per-version prompt: system + few-shot + provider + model_id." },
+      { "schema": "taxonomy", "table": "migration_plan",     "description": "Plan for moving older extractions onto the new version: re-run policy, field re-mapping." }
+    ],
+    "hooks": [
+      { "name": "publishVersion",  "description": "Publish a new taxonomy version (draft → active). Idempotent on (name, version)." },
+      { "name": "extractFields",   "description": "Run extraction on a source text against the active version; cached on source_hash." },
+      { "name": "planMigration",   "description": "Generate a migration plan for older extractions; preview only — caller decides whether to apply." },
+      { "name": "applyMigration",  "description": "Apply a planned migration; re-runs flagged extractions on the new version." }
+    ],
+    "ui_components": []
+  },
+  "consumes": {
+    "events": [
+      { "name": "ai-gateway.completion.v1", "from": "@projexlight/sdk-ai-gateway" },
+      { "name": "tenant.created.v1",                "from": "@projexlight/sdk-tenant" }
+    ],
+    "infra": ["postgres", "sdk-ai-gateway"],
+    "config_keys": ["TAXONOMY_DEFAULT_PROVIDER", "TAXONOMY_EXTRACTION_CACHE_TTL_HOURS", "TAXONOMY_MAX_VERSION_PER_TENANT"]
+  },
+  "scenarios": [
+    {
+      "id": "publish-claims-taxonomy",
+      "title": "Publish v2 of the auto-claims extraction taxonomy",
+      "when_to_use": "Insurance team adds 3 new fields they want pulled from claim narratives.",
+      "example_code": "import { publishVersion } from '@projexlight/sdk-taxonomy';\nawait publishVersion({\n  tenant_id, name: 'auto-claims', version: '2.0.0',\n  schema: { fields: [\n    { name: 'vehicle_vin', type: 'string', required: true, validator: 'vin' },\n    { name: 'incident_date', type: 'date', required: true },\n    { name: 'estimated_severity', type: 'enum', values: ['minor','moderate','severe'] },\n    /* ...existing fields */\n  ]},\n  prompt: { provider: 'anthropic', model_id: 'claude-haiku-4-5-20251001', system: '...', few_shot: [...] },\n  activate: true,\n});",
+      "expected_outcome": "Version published + activated. Future extractions use v2; older extractions stay on v1 until migrated."
+    },
+    {
+      "id": "extract-claim-narrative",
+      "title": "Pull structured fields out of an incoming claim narrative",
+      "when_to_use": "Inbound claim email arrives via sdk-parsing; extractFields against the active taxonomy version returns structured data.",
+      "example_code": "import { extractFields } from '@projexlight/sdk-taxonomy';\nconst { fields, confidence, cost_usd } = await extractFields({\n  tenant_id, name: 'auto-claims',\n  source_text: emailBody,\n});\n// fields = { vehicle_vin: '1HG...', incident_date: '2026-05-22', ... }",
+      "expected_outcome": "Structured field map + per-field confidence returned. Cached on source_hash so re-runs are free. Emits .extraction.completed.v1."
+    },
+    {
+      "id": "plan-migration",
+      "title": "Preview a migration for older extractions",
+      "when_to_use": "Before v2 activates, ops wants to see what changes for older data — how many extractions need re-run, what fields re-map.",
+      "example_code": "import { planMigration } from '@projexlight/sdk-taxonomy';\nconst plan = await planMigration({\n  tenant_id, name: 'auto-claims', from: '1.0.0', to: '2.0.0',\n});",
+      "expected_outcome": "Plan object returned: count of extractions, per-field re-map rules, estimated cost. Ops decides whether to apply."
+    },
+    {
+      "id": "apply-migration",
+      "title": "Apply the migration — re-run older extractions on v2",
+      "when_to_use": "Ops accepts the plan + applies. Background job re-runs extractions; results stored as new rows linked to the old.",
+      "example_code": "import { applyMigration } from '@projexlight/sdk-taxonomy';\nconst { job_id } = await applyMigration({\n  plan_id, dry_run: false,\n});",
+      "expected_outcome": "Job_id returned. Re-extractions run async; progress visible. Audit trail links old → new extraction per source."
+    },
+    {
+      "id": "cache-on-source-hash",
+      "title": "Repeat extraction skipped via cache",
+      "when_to_use": "Same source text seen twice (e.g. a duplicate ticket); cached extraction returned for free.",
+      "example_code": "// Calling extractFields twice on the same source_text:\nconst first = await extractFields({ source_text });   // cost > 0\nconst second = await extractFields({ source_text });  // cost = 0, cached",
+      "expected_outcome": "Second call returns the cached result. Cost = 0; no LLM round-trip. Cache TTL configurable."
+    }
+  ],
+  "compliance_posture": {
+    "regimes": ["EU-AI-Act-Annex-IV-decision-logic", "SOC2-CC7.1", "GDPR-Art-30", "HIPAA-164.502"],
+    "notes": "Every extraction pinned to the taxonomy version + prompt template version, so a regulator can replay the exact LLM call any time. Migration plans always preview-able for SOX change-management compliance."
+  },
+  "pool_placement": "app",
+  "pricing_skus": [
+    { "sku": "taxonomy.version.publish", "mode": "flat",    "unit_description": "per taxonomy version" },
+    { "sku": "taxonomy.extract",         "mode": "metered", "unit_description": "per extraction (LLM cost passes through)" },
+    { "sku": "taxonomy.migration.plan",  "mode": "metered", "unit_description": "per migration plan generated" },
+    { "sku": "taxonomy.migration.apply", "mode": "metered", "unit_description": "per extraction re-run during migration" }
+  ],
+  "links": {
+    "readme": "packages/sdk-taxonomy/README.md",
+    "source": "packages/sdk-taxonomy/src/",
+    "prd_section": "P6B-Knowledge-Semantic §13 / FR-TAX-1..5"
+  }
+}

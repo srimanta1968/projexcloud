@@ -1,0 +1,92 @@
+{
+  "name": "@projexlight/sdk-parsing",
+  "version": "1.0.0",
+  "schema_version": "1.0",
+  "summary": "Multi-stage document parsing pipeline: ingest a binary (PDF / DOCX / scanned image) → OCR → layout analysis → structured field extraction (delegates to sdk-taxonomy) → human-review queue for low-confidence rows. Powers claims-intake, contract analysis, invoice processing, healthcare record digitization.",
+  "tags": ["parsing", "ocr", "document-extraction", "pipeline", "p6b"],
+  "provides": {
+    "endpoints": [],
+    "events": [
+      { "name": "parsing.job.created.v1",         "retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "Parsing job submitted; carries source blob_id + stages config." },
+      { "name": "parsing.stage.completed.v1",     "retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "Pipeline stage finished (OCR / layout / extract); carries output ref + cost." },
+      { "name": "parsing.job.completed.v1",       "retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "Full pipeline finished; carries extracted fields + per-field confidence." },
+      { "name": "parsing.review.assigned.v1",     "retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "Low-confidence fields routed to human review queue." },
+      { "name": "parsing.review.resolved.v1",     "retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "Reviewer corrected (or approved) extracted fields; feeds back into taxonomy training." }
+    ],
+    "models": [
+      { "schema": "parsing", "table": "job",              "description": "Per-job row: source_blob_id, stages, status, started_at, completed_at." },
+      { "schema": "parsing", "table": "stage_result",     "description": "Per-stage row: kind (ocr/layout/extract), output_ref, duration_ms, cost." },
+      { "schema": "parsing", "table": "extracted_field",  "description": "Per-extracted-field row: name, value, confidence, source_bbox." },
+      { "schema": "parsing", "table": "review_task",      "description": "Per-review-task row: extracted_field_id, assigned_to_persona, resolved_at." }
+    ],
+    "hooks": [
+      { "name": "submitJob",      "description": "Submit a parsing job; returns job_id." },
+      { "name": "getJobStatus",   "description": "Job state + per-stage progress." },
+      { "name": "resolveReview",  "description": "Human reviewer corrects or approves a low-confidence field." },
+      { "name": "startWorker",    "description": "Background worker — pulls submitted jobs + drives them through stages." }
+    ],
+    "ui_components": []
+  },
+  "consumes": {
+    "events": [
+      { "name": "media.blob.ingested.v1",            "from": "@projexlight/sdk-media" },
+      { "name": "taxonomy.version.published.v1",     "from": "@projexlight/sdk-taxonomy" }
+    ],
+    "infra": ["postgres", "tesseract-or-cloud-ocr", "sdk-taxonomy", "sdk-media"],
+    "config_keys": ["PARSING_LOW_CONFIDENCE_THRESHOLD", "PARSING_WORKER_CONCURRENCY", "PARSING_DEFAULT_OCR_LANG"]
+  },
+  "scenarios": [
+    {
+      "id": "parse-claim-pdf",
+      "title": "Inbound claim PDF → structured fields",
+      "when_to_use": "Insurance claim arrives as PDF in sdk-media; submit a parsing job that runs OCR + layout + taxonomy extraction.",
+      "example_code": "import { submitJob } from '@projexlight/sdk-parsing';\nconst { job_id } = await submitJob({\n  tenant_id, source_blob_id,\n  stages: ['ocr','layout','extract:auto-claims'],\n});",
+      "expected_outcome": "Job_id returned. Background worker drives stages; emits .stage.completed.v1 per stage + .job.completed.v1 at the end."
+    },
+    {
+      "id": "auto-flow-from-blob-ingest",
+      "title": "Reactive: media.blob.ingested.v1 with kind=pdf auto-submits a parsing job",
+      "when_to_use": "Tenant has 'auto-parse all PDFs' policy; reactive consumer submits jobs automatically on every PDF ingest.",
+      "example_code": "subscribeEvents('media.blob.ingested.v1', async (e) => {\n  if (e.payload.mime !== 'application/pdf') return;\n  await submitJob({ source_blob_id: e.payload.blob_id, stages: ['ocr','layout','extract:auto-claims'] });\n});",
+      "expected_outcome": "PDF uploaded → parsed automatically. Structured fields available within minutes."
+    },
+    {
+      "id": "human-review-low-confidence",
+      "title": "Low-confidence field routes to human review",
+      "when_to_use": "Extraction confidence < PARSING_LOW_CONFIDENCE_THRESHOLD; the field routes to a review queue + a human approves / corrects.",
+      "example_code": "// auto-triggered by the parser; reviewer resolves:\nimport { resolveReview } from '@projexlight/sdk-parsing';\nawait resolveReview({\n  review_task_id, corrected_value: '1HGBH41JXMN109186',\n  resolver_persona_id, decision: 'corrected',\n});",
+      "expected_outcome": "Field updated; emits .review.resolved.v1. Correction signal feeds back into sdk-taxonomy for the next training pass."
+    },
+    {
+      "id": "retry-failed-stage",
+      "title": "Retry just the failed OCR stage on a job",
+      "when_to_use": "OCR failed (out-of-memory on a huge PDF); the worker auto-retries with smaller chunking. If still failing, the job is parked with a human-resolvable error.",
+      "example_code": "// stage worker handles retry; getJobStatus surfaces:\n{ status: 'partial-failure', failed_stage: 'ocr', retries: 3, parked_for_review: true }",
+      "expected_outcome": "Job state visible; ops can intervene if needed. Audit chain has the full retry trail."
+    },
+    {
+      "id": "taxonomy-migration-rerun",
+      "title": "New taxonomy version → re-run extractions",
+      "when_to_use": "Reactive on taxonomy.version.published.v1 — for tenants opted into auto-migrate, re-run the extract stage on recent jobs with the new version.",
+      "example_code": "subscribeEvents('taxonomy.version.published.v1', async (e) => {\n  if (await tenantOptsAutoMigrate({ tenant_id: e.tenant_id })) {\n    await reRunExtractStageForRecentJobs({ taxonomy_version: e.payload.version });\n  }\n});",
+      "expected_outcome": "Recent jobs re-extracted on the new taxonomy. Old extractions retained alongside new for diff review."
+    }
+  ],
+  "compliance_posture": {
+    "regimes": ["SOC2-CC7.2", "HIPAA-164.502-patient-records", "EU-AI-Act-Annex-IV-decision-logic", "21-CFR-Part-11-electronic-records"],
+    "notes": "Every stage pinned to its provider + model version so a regulator can replay. Source blob retained for the full retention period; extracted fields keep source_bbox so any value traces back to its pixel location for HIPAA + claims-adjudication review."
+  },
+  "pool_placement": "app",
+  "pricing_skus": [
+    { "sku": "parsing.job.submit",      "mode": "metered", "unit_description": "per job submitted" },
+    { "sku": "parsing.stage.ocr",       "mode": "metered", "unit_description": "per page OCR'd" },
+    { "sku": "parsing.stage.extract",   "mode": "metered", "unit_description": "per extraction (LLM cost passes through)" },
+    { "sku": "parsing.review.resolve",  "mode": "metered", "unit_description": "per human-review resolution" }
+  ],
+  "no_endpoints": true,
+  "links": {
+    "readme": "packages/sdk-parsing/README.md",
+    "source": "packages/sdk-parsing/src/",
+    "prd_section": "P6B-Knowledge-Semantic §14 / FR-PRS-1..5"
+  }
+}

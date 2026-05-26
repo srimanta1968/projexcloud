@@ -1,0 +1,93 @@
+{
+  "name": "@projexlight/sdk-trace",
+  "version": "1.0.0",
+  "schema_version": "1.0",
+  "summary": "Distributed-tracing primitive for ProjexCloud: span model + OTLP exporter + per-trace query API + regression assertions for CI. Every SDK boundary auto-emits a span via the @trace decorator so a single trace_id walks the request from the API gateway through every SDK that processed it. Foundation for any debugging or SLO investigation.",
+  "tags": ["tracing", "observability", "otlp", "spans", "p7"],
+  "provides": {
+    "endpoints": [
+      { "method": "GET",  "path": "/api/trace/health",                "description": "Trace ingest + storage health probe." },
+      { "method": "GET",  "path": "/api/trace/:trace_id",             "description": "Fetch one trace + every span with parent/child links." },
+      { "method": "POST", "path": "/api/trace/exports",               "description": "Configure an OTLP exporter destination (Datadog / Honeycomb / Tempo / Jaeger)." },
+      { "method": "POST", "path": "/api/trace/regression-assert",     "description": "CI-time assertion: 'this trace should not have grown past N spans / N ms'." }
+    ],
+    "events": [
+      { "name": "trace.span.recorded.v1",        "retention_class": "operational","conflict_policy": "event-sourcing", "description": "Span persisted (high-volume; usually sampled)." },
+      { "name": "trace.regression.detected.v1",  "retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "Regression assertion failed in CI; carries baseline + observed." },
+      { "name": "trace.export.configured.v1",    "retention_class": "regulated", "conflict_policy": "lww",            "description": "Export destination configured / changed." }
+    ],
+    "models": [
+      { "schema": "trace", "table": "trace",  "description": "Per-trace row: trace_id, root_span_id, started_at, total_duration_ms." },
+      { "schema": "trace", "table": "span",   "description": "Per-span row: span_id, parent_span_id, sdk_name, operation, duration_ms, attributes." },
+      { "schema": "trace", "table": "export", "description": "Per-export-destination row: kind, endpoint, sample_rate." }
+    ],
+    "hooks": [
+      { "name": "recordSpan",         "description": "Low-level: write a span. Usually called from the @trace decorator, rarely directly." },
+      { "name": "getTrace",           "description": "Fetch a full trace by trace_id; ordered by span graph." },
+      { "name": "configureExport",    "description": "Register / update an OTLP export destination." },
+      { "name": "assertRegression",   "description": "CI helper — assert a trace stays within baseline bounds." },
+      { "name": "startSamplingTuner", "description": "Background worker: tunes sample_rate per export to stay within destination quota." }
+    ],
+    "ui_components": []
+  },
+  "consumes": {
+    "events": [
+      { "name": "tenant.created.v1",       "from": "@projexlight/sdk-tenant" }
+    ],
+    "infra": ["postgres", "clickhouse-optional", "otlp-exporter-target"],
+    "config_keys": ["TRACE_DEFAULT_SAMPLE_RATE", "TRACE_OTLP_DEFAULT_ENDPOINT", "TRACE_RETENTION_DAYS"]
+  },
+  "scenarios": [
+    {
+      "id": "decorator-emits-span",
+      "title": "@trace decorator auto-emits spans across SDK boundaries",
+      "when_to_use": "Universal pattern — every SDK service method is decorated; the decorator opens + closes a span, attaching parent context.",
+      "example_code": "import { trace } from '@projexlight/sdk-trace';\n\nclass CrmService {\n  @trace('crm.createContact')\n  async createContact(input) { /* ... */ }\n}",
+      "expected_outcome": "Each call to createContact opens a span linked to the parent (incoming request) span. trace_id walks the request all the way through. .span.recorded.v1 emitted (or dropped per sample_rate)."
+    },
+    {
+      "id": "trace-by-id",
+      "title": "Debug a slow request via /api/trace/:trace_id",
+      "when_to_use": "Support escalation — customer reports a slow request; pull the trace_id from logs + view the full waterfall.",
+      "example_code": "import { getTrace } from '@projexlight/sdk-trace';\nconst { spans } = await getTrace({ trace_id });\nconsole.table(spans.map(s => ({ sdk: s.sdk_name, op: s.operation, ms: s.duration_ms })));",
+      "expected_outcome": "Full span graph returned. Caller spots the slow span (e.g. sdk-search took 2.3s due to missing index)."
+    },
+    {
+      "id": "configure-datadog-export",
+      "title": "Configure Datadog OTLP export",
+      "when_to_use": "Tenant already uses Datadog — point exports there + set a sample rate to stay within their ingest quota.",
+      "example_code": "import { configureExport } from '@projexlight/sdk-trace';\nawait configureExport({\n  tenant_id, kind: 'datadog',\n  endpoint: 'https://trace.agent.datadoghq.eu/v0.4/traces',\n  sample_rate: 0.1,\n});",
+      "expected_outcome": "Export destination registered. Sampling tuner monitors Datadog ingest cost + adjusts sample_rate if needed."
+    },
+    {
+      "id": "ci-regression-assertion",
+      "title": "CI fails when a synthetic trace grew past baseline",
+      "when_to_use": "PR ran a synthetic load test; we assert the trace stayed within last week's baseline + 20%.",
+      "example_code": "import { assertRegression } from '@projexlight/sdk-trace';\nawait assertRegression({\n  trace_id: synthetic_trace_id,\n  baseline_id: last_week_baseline_id,\n  max_growth_pct: 20,\n});",
+      "expected_outcome": "Pass / fail. On fail, emits .regression.detected.v1 + CI step fails with the diff in stdout."
+    },
+    {
+      "id": "sample-rate-tuner",
+      "title": "Sampling tuner backs off when destination throttles",
+      "when_to_use": "Background — exporter starts seeing 429s from Datadog. Tuner halves sample_rate + alerts ops if persistent.",
+      "example_code": "import { startSamplingTuner } from '@projexlight/sdk-trace';\nstartSamplingTuner({ tenant_id, interval_min: 5 });",
+      "expected_outcome": "Sample rate adjusts automatically. Persistent throttles page ops via sdk-notification."
+    }
+  ],
+  "compliance_posture": {
+    "regimes": ["SOC2-CC7.2-monitoring", "GDPR-Art-32", "EU-AI-Act-Annex-IV-observability", "ISO-27001-Annex-A-12"],
+    "notes": "Spans never carry plaintext PII — only field-names + types. Trace export destinations vetted via sdk-vault for outbound URL allow-list. Retention default 14 days; tenants can extend up to 90 with regulated-class storage."
+  },
+  "pool_placement": "app",
+  "pricing_skus": [
+    { "sku": "trace.span.record",        "mode": "metered", "unit_description": "per span persisted (sampled)" },
+    { "sku": "trace.query.fetch",        "mode": "metered", "unit_description": "per trace fetched" },
+    { "sku": "trace.export.bytes",       "mode": "metered", "unit_description": "per GB exported to external OTLP sink" },
+    { "sku": "trace.regression.assert",  "mode": "metered", "unit_description": "per CI assertion run" }
+  ],
+  "links": {
+    "readme": "packages/sdk-trace/README.md",
+    "source": "packages/sdk-trace/src/",
+    "prd_section": "P7-Field-Hyperscale §11 / FR-TRC-1..5"
+  }
+}
