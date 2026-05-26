@@ -9,6 +9,17 @@
 export { runInit, type InitFlags, type InitResult } from './commands/init';
 export { runInstall, type InstallFlags, type InstallResult, type InstallAction } from './commands/install';
 export {
+  runBlueprintList,
+  runBlueprintApply,
+  type BlueprintListFlags,
+  type BlueprintListResult,
+  type BlueprintListEntry,
+  type BlueprintApplyFlags,
+  type BlueprintApplyResult,
+  type ApplyAction,
+  type ApplyFileResult,
+} from './commands/blueprint';
+export {
   runRegistryRefresh,
   runRegistryList,
   type RefreshFlags,

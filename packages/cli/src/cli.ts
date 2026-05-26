@@ -16,7 +16,8 @@
 import { runInit } from './commands/init';
 import { runInstall } from './commands/install';
 import { runRegistryRefresh, runRegistryList } from './commands/registry';
-import { loginStub, deployStub, blueprintStub, type StubOutput } from './commands/stubs';
+import { loginStub, deployStub, type StubOutput } from './commands/stubs';
+import { runBlueprintList, runBlueprintApply } from './commands/blueprint';
 
 interface ParsedArgs {
   subcommand: string;
@@ -135,6 +136,29 @@ function emit(result: unknown, jsonMode: boolean): void {
     }
     return;
   }
+  if (typeof result === 'object' && result !== null && 'blueprints' in result && 'filtered' in result) {
+    const r = result as { root: string; total: number; filtered: number; blueprints: Array<{ id: string; title: string; pack: string; sdk_count: number; estimated_minutes: number; summary: string }> };
+    process.stdout.write(`Blueprints root: ${r.root}\n`);
+    process.stdout.write(`  ${r.filtered}/${r.total} blueprint(s)\n\n`);
+    for (const b of r.blueprints) {
+      const sum = b.summary.length > 80 ? b.summary.slice(0, 77) + '...' : b.summary;
+      process.stdout.write(`  ${b.id.padEnd(20)}  [${b.pack.padEnd(14)}]  ${b.sdk_count}sdk  ~${b.estimated_minutes}min   ${b.title}\n    ${sum}\n`);
+    }
+    return;
+  }
+  if (typeof result === 'object' && result !== null && 'blueprint_id' in result && 'files' in result) {
+    const r = result as { blueprint_id: string; blueprint_title: string; targetDir: string; files: Array<{ path: string; action: string }>; sdks_to_install: string[]; warnings: string[] };
+    process.stdout.write(`Applied ${r.blueprint_id} (${r.blueprint_title}) to ${r.targetDir}\n`);
+    process.stdout.write(`  Files:\n`);
+    for (const f of r.files) process.stdout.write(`    ${f.action.padEnd(20)} ${f.path}\n`);
+    process.stdout.write(`\n  Next: install the SDKs this blueprint composes:\n`);
+    for (const s of r.sdks_to_install) process.stdout.write(`    projex install ${s}\n`);
+    if (r.warnings.length > 0) {
+      process.stdout.write(`\n  Warnings:\n`);
+      for (const w of r.warnings) process.stdout.write(`    - ${w}\n`);
+    }
+    return;
+  }
   if (typeof result === 'object' && result !== null && 'command' in result) {
     const s = result as StubOutput;
     process.stdout.write(`${s.command} — ${s.phase}\n  ${s.description}\n  → ${s.next_step}\n`);
@@ -199,9 +223,31 @@ async function main(): Promise<void> {
 
       case 'blueprint': {
         const action = args.positional[0] || 'list';
-        const id = args.positional[1];
-        emit(blueprintStub(action, id), jsonMode);
-        return;
+        if (action === 'list') {
+          const result = runBlueprintList({
+            tag: typeof args.flags.tag === 'string' ? args.flags.tag : undefined,
+            root: typeof args.flags.root === 'string' ? args.flags.root : undefined,
+          });
+          emit(result, jsonMode);
+          return;
+        }
+        if (action === 'apply') {
+          const id = args.positional[1];
+          if (!id) {
+            process.stderr.write(`projex blueprint apply: missing <id>. Try 'projex blueprint list' to see available ids.\n`);
+            process.exit(2);
+          }
+          const result = runBlueprintApply({
+            blueprint_id: id,
+            answersJson: typeof args.flags.answers === 'string' ? args.flags.answers : undefined,
+            force: args.flags.force === true,
+            root: typeof args.flags.root === 'string' ? args.flags.root : undefined,
+          });
+          emit(result, jsonMode);
+          return;
+        }
+        process.stderr.write(`unknown subcommand: blueprint ${action}. Try: projex blueprint list | apply <id>\n`);
+        process.exit(2);
       }
 
       case 'login':

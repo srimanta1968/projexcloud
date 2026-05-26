@@ -5,7 +5,8 @@
  * the contract independently of transport choice.
  */
 
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, afterEach } from 'vitest';
+import { join } from 'node:path';
 import {
   buildCatalog,
   registryFromCatalog,
@@ -241,25 +242,76 @@ describe('projex_registry_list_compatible_sdks', () => {
 
 /* blueprint stubs ------------------------------------------------------- */
 
-describe('projex_registry_list_blueprints (stub until E4)', () => {
-  it('returns empty array + note (not an error)', async () => {
+describe('projex_registry_list_blueprints', () => {
+  const SAVED_ROOT = process.env.PROJEX_BLUEPRINTS_ROOT;
+  const SAVED_DEV = process.env.PROJEX_DEV_ROOT;
+  afterEach(() => {
+    if (SAVED_ROOT === undefined) delete process.env.PROJEX_BLUEPRINTS_ROOT;
+    else process.env.PROJEX_BLUEPRINTS_ROOT = SAVED_ROOT;
+    if (SAVED_DEV === undefined) delete process.env.PROJEX_DEV_ROOT;
+    else process.env.PROJEX_DEV_ROOT = SAVED_DEV;
+  });
+
+  it('returns empty + note when no root configured', async () => {
+    delete process.env.PROJEX_BLUEPRINTS_ROOT;
+    delete process.env.PROJEX_DEV_ROOT;
     const r = await dispatchTool('projex_registry_list_blueprints', {}, makeRegistry());
     expect(r.isError).toBeFalsy();
     const body = JSON.parse(r.content[0].text);
     expect(body.blueprints).toEqual([]);
-    expect(body.note).toMatch(/not yet wired/);
+    expect(body.note).toMatch(/No blueprints root configured/);
+  });
+
+  it('lists real blueprints from PROJEX_BLUEPRINTS_ROOT', async () => {
+    process.env.PROJEX_BLUEPRINTS_ROOT = join(__dirname, '..', '..', '..', 'blueprints');
+    const r = await dispatchTool('projex_registry_list_blueprints', {}, makeRegistry());
+    expect(r.isError).toBeFalsy();
+    const body = JSON.parse(r.content[0].text);
+    expect(body.count).toBeGreaterThanOrEqual(1);
+    expect(body.blueprints.find((b: { id: string }) => b.id === 'revops-crm')).toBeDefined();
+  });
+
+  it('respects tag filter', async () => {
+    process.env.PROJEX_BLUEPRINTS_ROOT = join(__dirname, '..', '..', '..', 'blueprints');
+    const r = await dispatchTool('projex_registry_list_blueprints', { tag: 'pilot' }, makeRegistry());
+    const body = JSON.parse(r.content[0].text);
+    expect(body.blueprints.every((b: { tags: string[] }) => b.tags.includes('pilot'))).toBe(true);
   });
 });
 
-describe('projex_registry_get_blueprint (stub until E4)', () => {
-  it('returns a structured error pointing at E4', async () => {
-    const r = await dispatchTool(
-      'projex_registry_get_blueprint',
-      { blueprint_id: 'revops-crm' },
-      makeRegistry(),
-    );
+describe('projex_registry_get_blueprint', () => {
+  const SAVED_ROOT = process.env.PROJEX_BLUEPRINTS_ROOT;
+  const SAVED_DEV = process.env.PROJEX_DEV_ROOT;
+  afterEach(() => {
+    if (SAVED_ROOT === undefined) delete process.env.PROJEX_BLUEPRINTS_ROOT;
+    else process.env.PROJEX_BLUEPRINTS_ROOT = SAVED_ROOT;
+    if (SAVED_DEV === undefined) delete process.env.PROJEX_DEV_ROOT;
+    else process.env.PROJEX_DEV_ROOT = SAVED_DEV;
+  });
+
+  it('errors when no root configured', async () => {
+    delete process.env.PROJEX_BLUEPRINTS_ROOT;
+    delete process.env.PROJEX_DEV_ROOT;
+    const r = await dispatchTool('projex_registry_get_blueprint', { blueprint_id: 'revops-crm' }, makeRegistry());
     expect(r.isError).toBe(true);
-    expect(r.content[0].text).toMatch(/not yet wired/);
+    expect(r.content[0].text).toMatch(/No blueprints root configured/);
+  });
+
+  it('errors on unknown blueprint id', async () => {
+    process.env.PROJEX_BLUEPRINTS_ROOT = join(__dirname, '..', '..', '..', 'blueprints');
+    const r = await dispatchTool('projex_registry_get_blueprint', { blueprint_id: 'no-such-bp' }, makeRegistry());
+    expect(r.isError).toBe(true);
+    expect(r.content[0].text).toMatch(/not found/);
+  });
+
+  it('returns the full blueprint when loaded', async () => {
+    process.env.PROJEX_BLUEPRINTS_ROOT = join(__dirname, '..', '..', '..', 'blueprints');
+    const r = await dispatchTool('projex_registry_get_blueprint', { blueprint_id: 'revops-crm' }, makeRegistry());
+    expect(r.isError).toBeFalsy();
+    const bp = JSON.parse(r.content[0].text);
+    expect(bp.id).toBe('revops-crm');
+    expect(bp.pack).toBe('general');
+    expect(bp.sdks.length).toBe(5);
   });
 });
 

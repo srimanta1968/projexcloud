@@ -10,7 +10,10 @@
  * a later phase that proxies them to the hosted MCP via the tenant API key.
  */
 
+import { existsSync } from 'node:fs';
+import { join } from 'node:path';
 import { Registry, RegistryHit, getScaffold } from '@projexlight/sdk-registry';
+import { listBlueprints, loadBlueprint } from '@projexlight/blueprints';
 
 export interface ToolDefinition {
   name: string;
@@ -85,11 +88,11 @@ export const READ_TOOLS: ToolDefinition[] = [
   {
     name: 'projex_registry_list_blueprints',
     description:
-      'Lists vertical blueprints (multi-SDK compositions) available to install. Optional tag filter. Returns blueprint id, title, summary, pack, and estimated install minutes.',
+      'Lists vertical blueprints (multi-SDK compositions) the developer can install via `projex blueprint apply <id>`. Optional tag filter. Returns id, title, summary, pack, sdk_count, estimated_minutes per blueprint.',
     inputSchema: {
       type: 'object',
       properties: {
-        tag: { type: 'string', description: 'Optional tag filter (e.g. "healthcare").' },
+        tag: { type: 'string', description: 'Optional tag filter (case-insensitive substring).' },
       },
     },
   },
@@ -195,21 +198,41 @@ export async function dispatchTool(
       }
 
       case 'projex_registry_list_blueprints': {
-        // E4 blueprint library lands in a later commit. Return a stable empty
-        // shape with a note so AI clients see a real response (not an error)
-        // when they ask about blueprints early in the build.
-        return ok({
-          blueprints: [],
-          note: 'Blueprint library (E4) is not yet wired. This tool will return real entries once the blueprints/ package is loaded.',
-        });
+        const root = resolveBlueprintsRoot();
+        if (!root) {
+          return ok({
+            blueprints: [],
+            note: 'No blueprints root configured. Set PROJEX_BLUEPRINTS_ROOT or PROJEX_DEV_ROOT (with a blueprints/ subdir).',
+          });
+        }
+        const tagFilter = typeof args.tag === 'string' ? args.tag.toLowerCase() : null;
+        const entries = listBlueprints(root)
+          .filter((r) => !tagFilter || (r.blueprint.tags ?? []).some((t) => t.toLowerCase().includes(tagFilter)))
+          .map((r) => ({
+            id: r.blueprint.id,
+            title: r.blueprint.title,
+            summary: r.blueprint.summary,
+            pack: r.blueprint.pack,
+            sdk_count: r.blueprint.sdks.length,
+            estimated_minutes: r.blueprint.estimated_minutes,
+            tags: r.blueprint.tags ?? [],
+          }));
+        return ok({ root, count: entries.length, blueprints: entries });
       }
 
       case 'projex_registry_get_blueprint': {
         const blueprint_id = String(args.blueprint_id ?? '');
         if (!blueprint_id) return err('blueprint_id is required');
-        return err(
-          `Blueprint "${blueprint_id}" not found. The blueprint library (E4) is not yet wired.`,
-        );
+        const root = resolveBlueprintsRoot();
+        if (!root) return err('No blueprints root configured. Set PROJEX_BLUEPRINTS_ROOT or PROJEX_DEV_ROOT.');
+        const dir = join(root, blueprint_id);
+        if (!existsSync(dir)) return err(`Blueprint "${blueprint_id}" not found under ${root}.`);
+        try {
+          const r = loadBlueprint({ dir });
+          return ok(r.blueprint);
+        } catch (e) {
+          return err((e as Error).message);
+        }
       }
 
       case 'projex_registry_scaffold': {
@@ -233,4 +256,14 @@ export async function dispatchTool(
   } catch (e) {
     return err((e as Error).message);
   }
+}
+
+/** Resolve where blueprint manifests live. Env override → dev-root fallback. */
+function resolveBlueprintsRoot(): string | null {
+  if (process.env.PROJEX_BLUEPRINTS_ROOT) return process.env.PROJEX_BLUEPRINTS_ROOT;
+  if (process.env.PROJEX_DEV_ROOT) {
+    const dev = join(process.env.PROJEX_DEV_ROOT, 'blueprints');
+    if (existsSync(dev)) return dev;
+  }
+  return null;
 }
