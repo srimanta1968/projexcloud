@@ -1,0 +1,99 @@
+{
+  "name": "@projexlight/sdk-lead-scoring",
+  "version": "1.0.0",
+  "schema_version": "1.0",
+  "summary": "Per-tenant lead-scoring engine: declarative weighted-feature models + on-demand or event-driven score recomputation. Scores publish to sdk-crm.lead/contact + push out to Salesforce/HubSpot via connector exports. Compliant by design — every score is traceable to the contributing features for any regulator who asks 'why was this lead prioritized'.",
+  "tags": ["lead-scoring", "ml", "revops", "model-versioning", "p6b"],
+  "provides": {
+    "endpoints": [
+      { "method": "GET",  "path": "/api/lead-scoring/models/:id",          "description": "Fetch a model definition + active version + feature weights." },
+      { "method": "POST", "path": "/api/lead-scoring/models/:id/activate", "description": "Activate a new model version; scoring switches over atomically." },
+      { "method": "POST", "path": "/api/lead-scoring/models/:id/retire",   "description": "Retire a model version; historic scores remain readable." },
+      { "method": "POST", "path": "/api/lead-scoring/score",                "description": "Score one lead now (sync)." },
+      { "method": "POST", "path": "/api/lead-scoring/score-bulk",           "description": "Score a cohort of leads (async; returns a job_id)." },
+      { "method": "GET",  "path": "/api/lead-scoring/scores/:lead_id",      "description": "Fetch the current score + contributing features for one lead." },
+      { "method": "GET",  "path": "/api/lead-scoring/scores/:lead_id/history","description": "All historical scores for one lead (audit / drift analysis)." },
+      { "method": "POST", "path": "/api/lead-scoring/weights/:model_id",    "description": "Update feature weights for the active model version (creates a new draft version)." }
+    ],
+    "events": [
+      { "name": "lead_scoring.model.published.v1",  "retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "New model version published; carries feature weights + activation timestamp." },
+      { "name": "lead_scoring.score.computed.v1",   "retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "Lead scored; carries score, contributing features + their weights, model version." },
+      { "name": "lead_scoring.score.changed.v1",    "retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "Score crossed a configured threshold; triggers downstream workflows." }
+    ],
+    "models": [
+      { "schema": "lead_scoring", "table": "model",          "description": "Per-model row: name, version, status (draft/active/retired), defined_at." },
+      { "schema": "lead_scoring", "table": "score",          "description": "Per-(lead, model_version) row: score, contributing_features_json, computed_at." },
+      { "schema": "lead_scoring", "table": "feature_weight", "description": "Per-(model_version, feature) row: weight, source, last_updated_at." }
+    ],
+    "hooks": [
+      { "name": "publishModelVersion",  "description": "Draft → publish a new model version + activate it atomically." },
+      { "name": "scoreLead",            "description": "Score one lead; idempotent on (lead_id, model_version)." },
+      { "name": "scoreBulk",            "description": "Async batch scoring; returns a job_id." },
+      { "name": "explainScore",         "description": "Return the score + contributing features + weights for one lead (regulator / SDR view)." },
+      { "name": "startDriftMonitor",    "description": "Background worker: flags weight-drift between draft + active model." }
+    ],
+    "ui_components": []
+  },
+  "consumes": {
+    "events": [
+      { "name": "crm.contact.created.v1",         "from": "@projexlight/sdk-crm" },
+      { "name": "crm.lead.created.v1",            "from": "@projexlight/sdk-crm" },
+      { "name": "engagement.encounter.completed.v1","from": "@projexlight/sdk-engagement" }
+    ],
+    "infra": ["postgres", "redis-optional"],
+    "config_keys": ["LEAD_SCORING_DEFAULT_THRESHOLD", "LEAD_SCORING_BULK_BATCH_SIZE", "LEAD_SCORING_DRIFT_CHECK_INTERVAL_HOURS"]
+  },
+  "scenarios": [
+    {
+      "id": "publish-mql-model",
+      "title": "Publish v2 of the MQL scoring model with new firmographic weights",
+      "when_to_use": "Analytics team validated new weights against historical conversions; publish as v2 + activate.",
+      "example_code": "import { publishModelVersion } from '@projexlight/sdk-lead-scoring';\nawait publishModelVersion({\n  tenant_id, model_id: 'mql-v2', version: '2.0.0',\n  weights: [\n    { feature: 'company_size_employees', weight: 0.30 },\n    { feature: 'industry_match', weight: 0.25 },\n    { feature: 'site_visits_30d', weight: 0.20 },\n    { feature: 'demo_attended', weight: 0.25 },\n  ],\n  activate: true,\n});",
+      "expected_outcome": "v2 active for new scores; v1 still readable for historic. Emits .model.published.v1."
+    },
+    {
+      "id": "score-on-encounter-completion",
+      "title": "Re-score lead after a demo encounter completes",
+      "when_to_use": "Reactive on engagement.encounter.completed.v1 with kind='demo' — demo attendance is a strong signal, re-score immediately so SDRs route hot leads to AEs.",
+      "example_code": "subscribeEvents('engagement.encounter.completed.v1', async (e) => {\n  if (e.payload.kind !== 'demo') return;\n  await scoreLead({ tenant_id: e.tenant_id, lead_id: e.payload.contact_id });\n});",
+      "expected_outcome": "Score recomputed; emits .score.computed.v1 + .score.changed.v1 if crossed threshold."
+    },
+    {
+      "id": "bulk-rescore-after-model-change",
+      "title": "Bulk re-score every active lead after model v2",
+      "when_to_use": "v2 activated; we want the AE board to reflect the new ordering by tomorrow morning. Bulk job runs overnight.",
+      "example_code": "import { scoreBulk } from '@projexlight/sdk-lead-scoring';\nconst { job_id } = await scoreBulk({\n  tenant_id, model_id: 'mql-v2',\n  filter: { stage: 'open' },\n});",
+      "expected_outcome": "Job_id returned. Per-batch progress visible via job status endpoint. Each lead emits .score.computed.v1."
+    },
+    {
+      "id": "explain-score-for-regulator",
+      "title": "Regulator asks: 'why was this contact prioritized?'",
+      "when_to_use": "GDPR Art-22 / EU AI Act request — the explanation API returns the score + every contributing feature + its weight at the time of scoring.",
+      "example_code": "import { explainScore } from '@projexlight/sdk-lead-scoring';\nconst exp = await explainScore({\n  lead_id, at: '2026-05-15T12:00Z',\n});\n// exp = { score: 87, model_version: 'mql-v2', contributing: [{ feature: 'demo_attended', value: true, weight: 0.25, contribution: 0.25 }, ...] }",
+      "expected_outcome": "Full reproducible scoring trace returned. Sufficient for regulator + internal SDR coaching."
+    },
+    {
+      "id": "drift-monitor",
+      "title": "Drift monitor flags weight divergence between draft + active",
+      "when_to_use": "Data scientist edits the draft (mql-v3); drift monitor periodically checks if the draft's predicted score distribution diverges materially from active. If yes, alerts the data team.",
+      "example_code": "import { startDriftMonitor } from '@projexlight/sdk-lead-scoring';\nstartDriftMonitor({ tenant_id, model_id: 'mql', interval_hours: 24 });",
+      "expected_outcome": "Daily KS-test on score distributions; if divergence > threshold, alert posted via sdk-notification."
+    }
+  ],
+  "compliance_posture": {
+    "regimes": ["GDPR-Art-22-automated-decisions", "EU-AI-Act-Annex-IV-decision-logic", "SOC2-CC7.1", "Fair-Lending-Equal-Credit-Opportunity"],
+    "notes": "Every score is fully reproducible — model version pinned + contributing features snapshotted. EU AI Act decision-trace requirement met for downstream automated routing. Weights audited on publish so a model can't change retroactively."
+  },
+  "pool_placement": "app",
+  "pricing_skus": [
+    { "sku": "lead-scoring.model.publish", "mode": "flat",    "unit_description": "per model version published" },
+    { "sku": "lead-scoring.score.compute", "mode": "metered", "unit_description": "per individual score" },
+    { "sku": "lead-scoring.score.bulk",    "mode": "metered", "unit_description": "per bulk batch (volume discount)" },
+    { "sku": "lead-scoring.score.explain", "mode": "metered", "unit_description": "per explanation served" }
+  ],
+  "links": {
+    "readme": "packages/sdk-lead-scoring/README.md",
+    "source": "packages/sdk-lead-scoring/src/",
+    "prd_section": "P6B-Vertical-RevOps §3 / FR-LSC-1..5"
+  }
+}

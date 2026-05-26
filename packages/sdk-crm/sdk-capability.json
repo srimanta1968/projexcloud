@@ -1,0 +1,103 @@
+{
+  "name": "@projexlight/sdk-crm",
+  "version": "1.0.0",
+  "schema_version": "1.0",
+  "summary": "Canonical CRM primitives for ProjexCloud: contacts, leads, deals, activities. Native ProjexCloud system-of-record that can stand alone or sync bidirectionally with Salesforce / HubSpot via the connector SDKs. Foundation for any revops blueprint — sdk-lead-scoring + sdk-campaign + sdk-engagement all reference the entities defined here.",
+  "tags": ["crm", "revops", "contacts", "deals", "leads", "p6b"],
+  "provides": {
+    "endpoints": [
+      { "method": "POST",  "path": "/api/crm/contacts",                "description": "Create a contact." },
+      { "method": "GET",   "path": "/api/crm/contacts/:contact_id",    "description": "Fetch a contact + recent activity timeline." },
+      { "method": "PATCH", "path": "/api/crm/contacts/:contact_id",    "description": "Partial update on a contact; field-level audit emitted." },
+      { "method": "POST",  "path": "/api/crm/leads",                   "description": "Create a lead (pre-qualified prospect)." },
+      { "method": "POST",  "path": "/api/crm/leads/:lead_id/convert",  "description": "Convert a lead into a contact + deal (atomic)." },
+      { "method": "POST",  "path": "/api/crm/deals",                   "description": "Create a deal tied to a contact + amount + stage." }
+    ],
+    "events": [
+      { "name": "crm.contact.created.v1",  "retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "Contact committed; carries normalized email + dedupe key." },
+      { "name": "crm.contact.updated.v1",  "retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "Field-level update; carries before/after snapshot." },
+      { "name": "crm.lead.created.v1",     "retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "Lead row written." },
+      { "name": "crm.lead.converted.v1",   "retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "Lead converted into contact + deal." },
+      { "name": "crm.deal.stage.changed.v1","retention_class": "regulated","conflict_policy": "event-sourcing", "description": "Deal moved to a new stage; powers funnel + forecast analytics." },
+      { "name": "crm.deal.closed.v1",      "retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "Deal closed (won/lost); drives commission + lifecycle workflows." },
+      { "name": "crm.activity.logged.v1",  "retention_class": "operational","conflict_policy": "event-sourcing", "description": "Activity (call / email / meeting / note) logged against a contact or deal." }
+    ],
+    "models": [
+      { "schema": "crm", "table": "contact",  "description": "Person record: email, phone, company, owner_persona, custom fields." },
+      { "schema": "crm", "table": "lead",     "description": "Pre-qualified prospect; converts to contact + deal." },
+      { "schema": "crm", "table": "deal",     "description": "Opportunity: contact_id, amount, stage, close_date, owner." },
+      { "schema": "crm", "table": "activity", "description": "Per-activity row: kind, contact_id or deal_id, persona_id, occurred_at, summary." }
+    ],
+    "hooks": [
+      { "name": "createContact",   "description": "Service entry — dedupes against email + phone + the configured fuzzy-match rules." },
+      { "name": "convertLead",     "description": "Atomic lead → (contact + deal); idempotent on lead_id." },
+      { "name": "advanceDeal",     "description": "Move a deal to a new stage; refuses transitions outside the configured pipeline." },
+      { "name": "logActivity",     "description": "Log an activity. Frequently called by sdk-engagement + connector-salesforce on inbound events." },
+      { "name": "exportToConnector","description": "Push a contact / deal into a registered connector (salesforce, hubspot). Idempotent on the external system's id." }
+    ],
+    "ui_components": []
+  },
+  "consumes": {
+    "events": [
+      { "name": "engagement.encounter.completed.v1",       "from": "@projexlight/sdk-engagement" },
+      { "name": "connector-salesforce.webhook.received.v1","from": "@projexlight/connector-salesforce" },
+      { "name": "connector-hubspot.webhook.received.v1",   "from": "@projexlight/connector-hubspot" }
+    ],
+    "infra": ["postgres", "redis-optional"],
+    "config_keys": ["CRM_DEDUPE_FUZZY_THRESHOLD", "CRM_PIPELINE_DEFINITION_REF", "CRM_OWNER_ROUND_ROBIN_ENABLED"]
+  },
+  "scenarios": [
+    {
+      "id": "create-contact-with-dedupe",
+      "title": "Inbound webform submit creates / dedupes a contact",
+      "when_to_use": "Marketing webform posts to sdk-crm; we dedupe against email + the configured fuzzy-match before inserting.",
+      "example_code": "import { createContact } from '@projexlight/sdk-crm';\nconst { contact_id, duplicate_of } = await createContact({\n  tenant_id, email: 'alice@acme.com', full_name: 'Alice Smith',\n  source: 'webform:eu-q2-campaign',\n});",
+      "expected_outcome": "Returns existing contact_id when fuzzy-match hits; emits .contact.created.v1 only on net-new. Audit chain pins the source attribution."
+    },
+    {
+      "id": "convert-lead-atomically",
+      "title": "SDR converts a qualified lead → contact + deal in one call",
+      "when_to_use": "SDR finishes discovery; convertLead atomically creates a contact + opening-stage deal so the AE picks up everything linked.",
+      "example_code": "import { convertLead } from '@projexlight/sdk-crm';\nconst { contact_id, deal_id } = await convertLead({\n  lead_id, deal_amount_cents: 120_000_00, deal_owner_persona_id: ae.id,\n});",
+      "expected_outcome": "Both rows created; emits .lead.converted.v1. If the lead's email matches an existing contact, the deal attaches to that contact (no double)."
+    },
+    {
+      "id": "advance-deal-stage",
+      "title": "Move a deal to 'proposal' → triggers commission projection",
+      "when_to_use": "AE updates pipeline stage; advanceDeal validates the transition + emits a stage-change event that sdk-projection consumes for the commission forecast.",
+      "example_code": "import { advanceDeal } from '@projexlight/sdk-crm';\nawait advanceDeal({\n  deal_id, to_stage: 'proposal', reason: 'demo accepted', persona_id: ae.id,\n});",
+      "expected_outcome": "Stage advances; emits .deal.stage.changed.v1. Refuses with a structured error if the transition isn't in the configured pipeline."
+    },
+    {
+      "id": "salesforce-inbound",
+      "title": "Inbound: Salesforce Platform Event creates / updates contact",
+      "when_to_use": "connector-salesforce.webhook.received.v1 with event_type='ContactCreated' — we mirror the new SF Contact into sdk-crm.contact so downstream SDKs (lead-scoring, campaign) see it.",
+      "example_code": "subscribeEvents('connector-salesforce.webhook.received.v1', async (e) => {\n  if (e.payload.event_type !== 'ContactCreated') return;\n  await upsertContactFromExternal({ external_id: e.payload.sf_id, ...e.payload.fields });\n});",
+      "expected_outcome": "Contact row in sdk-crm mirrors the SF Contact. Future updates flow both ways via sync direction config."
+    },
+    {
+      "id": "push-deal-to-connector",
+      "title": "Push a closed-won deal back to Salesforce",
+      "when_to_use": "Deal closes won in ProjexCloud (e.g. PLG self-serve signup converted by ops); push to SF Opportunity for the rep's quota tracking.",
+      "example_code": "import { exportToConnector } from '@projexlight/sdk-crm';\nawait exportToConnector({\n  entity_kind: 'deal', entity_id: deal_id,\n  connector: '@projexlight/connector-salesforce',\n});",
+      "expected_outcome": "SF Opportunity created or updated; SF id stored on the deal row. Subsequent SF-side edits flow back via the connector."
+    }
+  ],
+  "compliance_posture": {
+    "regimes": ["SOC2-CC7.1", "GDPR-Art-30", "GDPR-Art-17-right-to-erasure", "CCPA-Section-1798", "TCPA-do-not-call"],
+    "notes": "Contact data is PII — DSAR / erasure routes through sdk-data-rights which cascades into crm.contact. Owner round-robin respects sdk-rebac territory bounds. Activity log is the GDPR Art-30 record-of-processing for sales interactions."
+  },
+  "pool_placement": "app",
+  "pricing_skus": [
+    { "sku": "crm.contact.create",   "mode": "metered", "unit_description": "per contact written (dedupes free)" },
+    { "sku": "crm.lead.convert",     "mode": "flat",    "unit_description": "per lead conversion" },
+    { "sku": "crm.deal.transition",  "mode": "metered", "unit_description": "per deal stage change" },
+    { "sku": "crm.activity.log",     "mode": "metered", "unit_description": "per activity logged" },
+    { "sku": "crm.connector.export", "mode": "metered", "unit_description": "per push to a registered connector" }
+  ],
+  "links": {
+    "readme": "packages/sdk-crm/README.md",
+    "source": "packages/sdk-crm/src/",
+    "prd_section": "P6B-Vertical-RevOps §1 / FR-CRM-1..6"
+  }
+}
