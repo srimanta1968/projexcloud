@@ -1,0 +1,59 @@
+id: prd-management
+schema_version: "1.0"
+title: PRD Management (Projexlight-shaped)
+summary: >-
+  Public, customer-installable PRD / spec workspace shaped like Projexlight.
+  Multi-tenant projects → epics → features → scenarios → tasks, semantic
+  search across the corpus via sdk-knowledge-rag, AI-assisted feature
+  generation through sdk-ai-gateway, approval gates on PRD sign-off, and
+  per-seat or per-project billing. Per PRD §5.7 this is the dogfood
+  blueprint that Projexlight itself runs on top of.
+pack: general
+tags: [prd, spec, project-management, dogfood, projexlight, pilot]
+sdks:
+  - name: "@projexlight/sdk-projection"
+    reason: "Materialized canonical views for projects/epics/features/tasks."
+  - name: "@projexlight/sdk-identity"
+    reason: "Per-tenant member personas + role templates."
+  - name: "@projexlight/sdk-audit"
+    reason: "Every PRD edit goes to the hash-chained audit ledger."
+  - name: "@projexlight/sdk-billing"
+    reason: "Per-seat or per-project billing tier."
+  - name: "@projexlight/sdk-meter"
+    reason: "Meter AI-review calls + storage SKUs."
+  - name: "@projexlight/sdk-ai-gateway"
+    reason: "Substrate for AI feature/scenario generation (Projexlight's private review logic sits on top — public registry ships without it per Q-9)."
+  - name: "@projexlight/sdk-knowledge-rag"
+    reason: "Semantic search across the PRD corpus + cross-feature reference detection."
+  - name: "@projexlight/sdk-approval"
+    reason: "PRD sign-off gates (manager + compliance + product reviewers)."
+  - name: "@projexlight/sdk-webhook"
+    reason: "Outbound notifications to CI / Slack / Jira when features advance."
+  - name: "@projexlight/sdk-api-keys"
+    reason: "Per-project API keys for the dev MCP + CI integrations."
+clarifying_questions:
+  - id: hierarchy_depth
+    prompt: Maximum hierarchy depth your team works at
+    type: enum
+    options: [project-epic-feature, project-epic-feature-scenario, project-epic-feature-scenario-task]
+    default: project-epic-feature-scenario-task
+  - id: ai_review_enabled
+    prompt: Enable AI-assisted feature/scenario generation?
+    type: boolean
+    default: true
+    help: Wires sdk-ai-gateway into the spec workflow. Disable for fully manual authoring.
+  - id: billing_model
+    prompt: Billing model for this workspace
+    type: enum
+    options: [per-seat, per-project, hybrid]
+    default: per-seat
+outputs:
+  - path: src/prd/projects.ts
+    template: templates/projects.ts.hbs
+  - path: src/prd/features.ts
+    template: templates/features.ts.hbs
+  - path: db/migrations/001_prd_init.sql
+    template: templates/prd-init.sql.hbs
+  - path: README.md
+    template: templates/README.md.hbs
+estimated_minutes: 10

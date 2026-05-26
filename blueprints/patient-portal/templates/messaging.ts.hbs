@@ -1,0 +1,44 @@
+/**
+ * {{app_name}} — Secure patient ↔ provider messaging
+ *
+ * Default locale: {{portal_locale_default}}
+ *
+ * Wire to sdk-conversation. Every message envelope-encrypted under the
+ * patient's PHI key tier ({{phi_storage_tier}}). PHI-tagged attachments
+ * flow through sdk-evidence for the chain-of-custody trail.
+ */
+
+export interface Message {
+  message_id: string;
+  thread_id: string;
+  from_persona_id: string;
+  to_persona_id: string;
+  body_ciphertext: Buffer;
+  attachments: string[]; // evidence_ids
+  locale: string;
+  sent_at: string;
+}
+
+export async function sendMessage(input: {
+  thread_id: string;
+  from_persona_id: string;
+  to_persona_id: string;
+  body: string;
+  attachments?: string[];
+  locale?: string;
+}): Promise<Message> {
+  // 1. Encrypt body via sdk-vault (encounter or tenant key per
+  //    {{phi_storage_tier}} answer).
+  // 2. Persist via sdk-conversation.
+  // 3. Emit messaging.message.sent.v1 → audit chain.
+  return {
+    message_id: 'msg_' + Math.random().toString(36).slice(2, 10),
+    thread_id: input.thread_id,
+    from_persona_id: input.from_persona_id,
+    to_persona_id: input.to_persona_id,
+    body_ciphertext: Buffer.from(input.body, 'utf-8'),
+    attachments: input.attachments ?? [],
+    locale: input.locale ?? '{{portal_locale_default}}',
+    sent_at: new Date().toISOString(),
+  };
+}

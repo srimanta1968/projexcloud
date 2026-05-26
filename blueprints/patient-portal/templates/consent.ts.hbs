@@ -1,0 +1,49 @@
+/**
+ * {{app_name}} — Patient consent receipts
+ *
+ * PHI storage tier: {{phi_storage_tier}}
+ * Consent renewal cadence: every {{consent_renewal_days}} days
+ *
+ * Wire to sdk-consent. Every patient interaction that touches PHI must
+ * have a non-expired receipt referencing a registered processing purpose.
+ */
+
+export interface ConsentReceipt {
+  receipt_id: string;
+  tenant_id: string;
+  patient_persona_id: string;
+  purpose_id: string;
+  granted_at: string;
+  expires_at: string;
+  revoked_at?: string;
+  channel: 'in-person' | 'portal-checkbox' | 'voice-recorded' | 'paper-signed';
+}
+
+const RENEWAL_DAYS = {{consent_renewal_days}};
+
+export function defaultExpiry(grantedAtIso: string): string {
+  const expires = new Date(grantedAtIso);
+  expires.setUTCDate(expires.getUTCDate() + RENEWAL_DAYS);
+  return expires.toISOString();
+}
+
+export async function grantConsent(input: {
+  tenant_id: string;
+  patient_persona_id: string;
+  purpose_id: string;
+  channel: ConsentReceipt['channel'];
+}): Promise<ConsentReceipt> {
+  const now = new Date().toISOString();
+  return {
+    receipt_id: 'rcp_' + Math.random().toString(36).slice(2, 10),
+    granted_at: now,
+    expires_at: defaultExpiry(now),
+    ...input,
+  };
+}
+
+export async function revokeConsent(receipt_id: string): Promise<void> {
+  // sdk-consent.revoke triggers sdk-data-rights to start the erasure
+  // fan-out for every purpose tied to this receipt.
+  void receipt_id;
+}

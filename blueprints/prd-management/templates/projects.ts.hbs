@@ -1,0 +1,42 @@
+/**
+ * {{app_name}} — Project + epic CRUD
+ *
+ * Hierarchy depth: {{hierarchy_depth}}
+ * Billing model: {{billing_model}}
+ */
+
+export interface Project {
+  project_id: string;
+  tenant_id: string;
+  name: string;
+  description: string;
+  created_at: string;
+}
+
+export interface Epic {
+  epic_id: string;
+  project_id: string;
+  title: string;
+  description: string;
+  status: 'draft' | 'active' | 'shipped' | 'cancelled';
+  created_at: string;
+}
+
+export async function createProject(input: Omit<Project, 'project_id' | 'created_at'>): Promise<Project> {
+  // Persist via sdk-projection; emit prd.project.created.v1; sdk-billing
+  // meters this against the "{{billing_model}}" model.
+  return {
+    project_id: 'proj_' + Math.random().toString(36).slice(2, 10),
+    created_at: new Date().toISOString(),
+    ...input,
+  };
+}
+
+export async function createEpic(input: Omit<Epic, 'epic_id' | 'status' | 'created_at'>): Promise<Epic> {
+  return {
+    epic_id: 'epic_' + Math.random().toString(36).slice(2, 10),
+    status: 'draft',
+    created_at: new Date().toISOString(),
+    ...input,
+  };
+}

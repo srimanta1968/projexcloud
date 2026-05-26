@@ -1,0 +1,37 @@
+/**
+ * {{app_name}} — Features + scenarios + tasks
+ *
+ * Hierarchy depth: {{hierarchy_depth}}
+ * AI-assisted authoring: {{ai_review_enabled}}
+ *
+ * The {{ai_review_enabled}} answer wires sdk-ai-gateway into createFeature
+ * so an LLM can pre-populate scenarios. Projexlight's proprietary review
+ * logic plugs in here as a private dep (not shipped in this blueprint per
+ * PRD Q-9).
+ */
+
+export interface Feature {
+  feature_id: string;
+  epic_id: string;
+  title: string;
+  rationale: string;
+  acceptance_criteria: string[];
+  status: 'draft' | 'in-progress' | 'ready-for-review' | 'approved' | 'shipped';
+}
+
+export async function createFeature(input: Omit<Feature, 'feature_id' | 'status'>): Promise<Feature> {
+  const feature: Feature = {
+    feature_id: 'feat_' + Math.random().toString(36).slice(2, 10),
+    status: 'draft',
+    ...input,
+  };
+  // When AI assist is on: hand off to sdk-ai-gateway to generate
+  // initial scenarios + flag missing acceptance criteria.
+  return feature;
+}
+
+export async function submitForApproval(feature_id: string): Promise<void> {
+  // Wire to sdk-approval; depending on tenant rules the request fans out
+  // to manager + product + (optionally) compliance reviewers.
+  void feature_id;
+}

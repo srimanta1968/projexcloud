@@ -1,0 +1,42 @@
+# {{app_name}}
+
+Healthcare patient portal — scaffolded from **{{blueprint_title}}**.
+
+## Configuration
+
+| Choice | Value |
+|---|---|
+| PHI storage tier | `{{phi_storage_tier}}` |
+| Default portal locale | `{{portal_locale_default}}` |
+| Consent renewal cadence | `{{consent_renewal_days}} days` |
+
+## Layout
+
+- `src/portal/consent.ts` — explicit consent receipts (grant + revoke)
+- `src/portal/messaging.ts` — patient ↔ provider secure messaging
+- `db/migrations/001_portal_init.sql` — denormalized consent-receipt
+  view + message_thread + message tables
+
+## Pack: healthcare
+
+When the healthcare pack is enabled on the tenant, the platform enforces:
+
+- Every PHI write goes through `sdk-vault` envelope encryption (no
+  raw PHI in any column).
+- Every PHI access writes to the `sdk-audit` chain — HIPAA §164.312(b)
+  Audit Controls + 21 CFR Part 11.
+- `sdk-data-rights` consumes `consent.revoked.v1` and fans erasure
+  out to every store keyed by the subject.
+
+## Next
+
+```sh
+projex install @projexlight/sdk-consent
+projex install @projexlight/sdk-evidence
+projex install @projexlight/sdk-conversation
+projex install @projexlight/hdk-camera
+projex install @projexlight/sdk-data-rights
+projex install @projexlight/sdk-audit
+```
+
+Or re-apply with `--install-sdks` to do all six at once.
