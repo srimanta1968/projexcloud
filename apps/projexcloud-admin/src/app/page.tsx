@@ -1,13 +1,16 @@
 import Link from 'next/link';
 
 const SECTIONS = [
-  { href: '/tenants',      label: 'Tenants',        desc: 'Provision, suspend, offboard' },
-  { href: '/pools',        label: 'Pools',          desc: 'Pool routing + status flips' },
-  { href: '/pricing-catalogs', label: 'Pricing catalogs', desc: 'Catalog versioning + soft caps' },
-  { href: '/invoices',     label: 'Invoices',       desc: 'Per-tenant invoice search' },
-  { href: '/webhooks',     label: 'Webhooks',       desc: 'Tenant webhooks + DLQ replay' },
-  { href: '/approvals',    label: 'Approvals',      desc: 'Routes + pending requests' },
-  { href: '/audit',        label: 'Audit',          desc: 'Hash-chain trail browser' },
+  { href: '/tenants',           label: 'Tenants',          desc: 'Provision, suspend, offboard' },
+  { href: '/pools',             label: 'Pools',            desc: 'Pool routing + status flips' },
+  { href: '/pricing-catalogs',  label: 'Pricing catalogs', desc: 'Catalog versioning + soft caps' },
+  { href: '/invoices',          label: 'Invoices',         desc: 'Per-tenant invoice search' },
+  { href: '/webhooks',          label: 'Webhooks',         desc: 'Tenant webhooks + DLQ replay' },
+  { href: '/approvals',         label: 'Approvals',        desc: 'Routes + pending requests' },
+  { href: '/audit',             label: 'Audit',            desc: 'Hash-chain trail browser' },
+  { href: '/sovereign-regions', label: 'Sovereign regions',desc: 'FedRAMP / IL5 / PIPL / EU sovereign' },
+  { href: '/onprem-installs',   label: 'On-Prem installs', desc: 'Air-gapped customers + bundle releases' },
+  { href: '/active-active',     label: 'Active-Active',    desc: 'Tier-G+ profiles + chaos drills' },
 ];
 
 export default function HomePage(): JSX.Element {
