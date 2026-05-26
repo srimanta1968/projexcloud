@@ -12,6 +12,7 @@ in `draft` status until an operator explicitly promotes it to `active`.
 | `registry-mcp-v1.json` | `registry.read.*`, `registry.tool.other` (8 SKUs) | Rates for the SKUs the hosted `services/registry-mcp` emits via its audit→meter sink. |
 | `foundation-sdks-v1.json` | vault / billing / tenant / meter / identity / audit / pool-router / rebac / policy / secrets / projection (30 SKUs across 11 SDKs) | Overage rates for the platform-foundation tier every tenant inherits. Tuned for sub-cent per-unit pricing; plan ceilings absorb most usage. |
 | `vertical-sdks-v1.json` | evidence / payment / workflow / conversation / approval / consent / data-rights / webhook / api-keys / ai-gateway / knowledge-rag / tenant-lifecycle / notification / hdk-image-editor / hdk-camera (45 SKUs across 15 SDKs) | Vertical-tier add-on SDKs customers install per use case. Rates reflect actual compute / network / provider passthrough cost — DSAR fan-out priced at dollars per request; per-call ops at fractions of a cent. |
+| `connector-sdks-v1.json` | Salesforce / HubSpot / Slack / Jira / Linear / Zoom / Zendesk / GitHub / M365 / Google Workspace / Snowflake (45 SKUs across 11 connectors) | Per-install monthly fees + per-event metering. Provider-side costs (Twilio SMS, Snowflake warehouse seconds, Zoom storage) pass through unchanged via separate billing channels. |
 
 ## Applying
 
