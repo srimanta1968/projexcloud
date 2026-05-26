@@ -1,0 +1,115 @@
+{
+  "name": "@projexlight/sdk-identity",
+  "version": "1.0.0",
+  "schema_version": "1.0",
+  "summary": "Six-layer identity at hyperscale for ProjexCloud: canonical Master Person + alias graph + envelope-encrypted credentials, OIDC discovery + JWKS, password/MFA login, SAML 2.0 ServiceProvider, SCIM 2.0 user provisioning, social IdP (Google/Apple/Microsoft) callbacks, and customer-consented support impersonation. Mints six-layer JWTs that downstream SDKs key authorization off.",
+  "tags": ["identity", "oidc", "mfa", "saml", "scim", "social-login", "impersonation", "foundation", "p2"],
+  "provides": {
+    "endpoints": [
+      { "method": "POST",   "path": "/api/auth/register",                            "description": "Create an identity.person + email alias + password credential; returns a six-layer JWT." },
+      { "method": "POST",   "path": "/api/auth/signup-tenant",                       "description": "Self-serve signup: person + org + default app + trial tenant + admin membership in one transaction. Returns a JWT scoped to the new tenant." },
+      { "method": "POST",   "path": "/api/auth/login",                               "description": "Verify email+password, mint six-layer JWT. Optional tenant_id selects the calling tenant context from the person's memberships." },
+      { "method": "GET",    "path": "/.well-known/openid-configuration",             "description": "OIDC discovery document; public." },
+      { "method": "GET",    "path": "/.well-known/jwks.json",                        "description": "JWKS public-key set for JWT verification; public." },
+      { "method": "GET",    "path": "/api/userinfo",                                 "description": "OIDC userinfo endpoint; bearer-authed; returns the claim set of the calling JWT." },
+      { "method": "POST",   "path": "/api/mfa/challenge",                            "description": "Issue an MFA challenge (TOTP / SMS / WebAuthn / passkey) for the calling persona." },
+      { "method": "POST",   "path": "/api/mfa/verify",                               "description": "Verify a presented MFA factor; on success mints a JWT with the factor in the AMR claim." },
+      { "method": "POST",   "path": "/api/identity/aliases",                         "description": "Merge an additional alias (phone, social subject, SAML NameID) into the calling person's MDM graph." },
+      { "method": "POST",   "path": "/api/impersonation/request",                    "description": "Support persona requests temporary access to a tenant; emits impersonation_grant in 'pending'." },
+      { "method": "POST",   "path": "/api/impersonation/:grant_id/approve",          "description": "Manager + tenant approve the grant; mints a short-lived impersonation JWT bearing the support_impersonator actor kind." },
+      { "method": "POST",   "path": "/api/impersonation/:grant_id/end",              "description": "Voluntary or expiry-driven termination of an impersonation session." },
+      { "method": "GET",    "path": "/saml/:tenant_id/metadata",                     "description": "SAML 2.0 SP metadata document for tenant-specific IdP integration." },
+      { "method": "POST",   "path": "/saml/:tenant_id/acs",                          "description": "SAML 2.0 Assertion Consumer Service; consumes IdP response, JIT-provisions the person + memberships." },
+      { "method": "POST",   "path": "/scim/v2/Users",                                "description": "SCIM 2.0 user provisioning from upstream IdP (Okta, Azure AD, OneLogin)." },
+      { "method": "DELETE", "path": "/scim/v2/Users/:person_id",                     "description": "SCIM 2.0 user deprovisioning; soft-suspends the person and revokes active sessions." },
+      { "method": "POST",   "path": "/api/identity/social/:provider/callback",       "description": "Social IdP OAuth callback (Google / Apple / Microsoft). JIT-creates or merges the alias graph." }
+    ],
+    "events": [
+      { "name": "identity.person.registered.v1",       "retention_class": "regulated",  "conflict_policy": "event-sourcing", "description": "New Master Person created; carries home_region." },
+      { "name": "identity.session.created.v1",         "retention_class": "operational","conflict_policy": "lww",            "description": "Successful login or token mint; carries amr, mfa_satisfied, tenant_id." },
+      { "name": "identity.mfa.verified.v1",            "retention_class": "regulated",  "conflict_policy": "event-sourcing", "description": "MFA factor verified; carries the factor kind." },
+      { "name": "identity.impersonation.requested.v1", "retention_class": "regulated",  "conflict_policy": "event-sourcing", "description": "Support persona requested tenant access." },
+      { "name": "identity.impersonation.approved.v1",  "retention_class": "regulated",  "conflict_policy": "event-sourcing", "description": "Manager + tenant approved the impersonation grant." },
+      { "name": "identity.impersonation.ended.v1",     "retention_class": "regulated",  "conflict_policy": "event-sourcing", "description": "Impersonation session ended (voluntary or expiry)." },
+      { "name": "identity.federation.config.upserted.v1", "retention_class": "regulated", "conflict_policy": "lww",          "description": "SAML / SCIM / social IdP config registered or updated for a tenant." },
+      { "name": "identity.scim.user.provisioned.v1",   "retention_class": "regulated",  "conflict_policy": "event-sourcing", "description": "SCIM upstream provisioned a user; carries external_id mapping." }
+    ],
+    "models": [
+      { "schema": "identity", "table": "person",                "description": "Canonical Master Person (L1) per P2 §5. Per-tenant key tier wraps everything below." },
+      { "schema": "identity", "table": "alias",                 "description": "MDM alias graph: email / phone / gov-id / biometric / social_idp_subject / saml_nameid → person_id." },
+      { "schema": "identity", "table": "credential",            "description": "Passwords + MFA secrets, vaulted via envelope encryption (sdk-vault)." },
+      { "schema": "identity", "table": "app_identity",          "description": "L2 — per (person, app) materialization on first login." },
+      { "schema": "identity", "table": "tenant_membership",     "description": "L3 — person + tenant + bu + role_template_id; sourced for JWT claims." },
+      { "schema": "identity", "table": "federation_config",     "description": "Per-tenant SAML / SCIM / social IdP config; jit_enabled flag." },
+      { "schema": "identity", "table": "session",               "description": "Active sessions; also held in Redis for hot lookup." },
+      { "schema": "identity", "table": "impersonation_grant",   "description": "Manager-approved + customer-consented support sessions; short-lived." }
+    ],
+    "hooks": [
+      { "name": "buildSixLayerClaims", "description": "Helper that assembles a SixLayerJwtClaims object from a (person, tenant, app) tuple; used by login + signup + SAML/SCIM JIT paths." },
+      { "name": "verifyJwt",           "description": "Verifies + decodes a JWT minted by this SDK. Throws on expired/invalid." },
+      { "name": "requireAuth",         "description": "Fastify preHandler middleware that attaches the verified six-layer claims to req.auth or 401s." }
+    ],
+    "ui_components": []
+  },
+  "consumes": {
+    "events": [
+      { "name": "tenant.created.v1",     "from": "@projexlight/sdk-tenant" },
+      { "name": "vault.key.created.v1",  "from": "@projexlight/sdk-vault" }
+    ],
+    "infra": ["postgres", "redis-optional", "kafka-optional"],
+    "config_keys": ["JWT_SECRET", "JWT_EXPIRES_IN", "BCRYPT_ROUNDS", "SCIM_BEARER_SECRET", "SAML_SIGNING_CERT"]
+  },
+  "scenarios": [
+    {
+      "id": "register-person-and-issue-jwt",
+      "title": "Register a person with email + password, return a JWT",
+      "when_to_use": "Self-serve signup flow where a new human is creating an account but joining an existing tenant later (via invite).",
+      "example_code": "import { registerPerson, signJwt, buildSixLayerClaims } from '@projexlight/sdk-identity';\nconst result = await registerPerson({ email, password });\nconst token = signJwt(buildSixLayerClaims({ person_id: result.person.person_id, email, actor_kind: 'human', mfa_methods: ['pwd'] }));",
+      "expected_outcome": "Returns a JWT whose sub is the new person_id and tenant_id is null. Emits identity.person.registered.v1 to the audit chain."
+    },
+    {
+      "id": "signup-full-tenant",
+      "title": "Self-serve full-tenant signup in one transaction",
+      "when_to_use": "When a new customer is starting a workspace from scratch — person + org + default app + trial tenant + admin membership all in one DB transaction.",
+      "example_code": "import { signupTenant } from '@projexlight/sdk-identity';\nconst { person_id, tenant_id, app_id } = await signupTenant({ email, password, company_name, region: 'us-east-1' });",
+      "expected_outcome": "Atomic: either all six rows land or none do. New tenant.status is 'trial'. Returned JWT carries tenant_id + app_id so downstream SDKs route correctly without re-login."
+    },
+    {
+      "id": "login-with-mfa",
+      "title": "Login + MFA challenge + verify",
+      "when_to_use": "Production sign-in flow where the calling persona requires MFA before being granted a full-permission JWT.",
+      "example_code": "await fetch('/api/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) });\nawait fetch('/api/mfa/challenge', { headers: { Authorization: 'Bearer ' + token } });\nconst r = await fetch('/api/mfa/verify', { method: 'POST', body: JSON.stringify({ challenge_id, otp }) });\nconst { token: fullToken } = await r.json();",
+      "expected_outcome": "Final JWT has mfa_satisfied=true and the AMR claim lists the factor used. Emits identity.mfa.verified.v1 to the audit chain."
+    },
+    {
+      "id": "saml-sp-handshake",
+      "title": "SAML 2.0 ServiceProvider handshake with JIT user provisioning",
+      "when_to_use": "Enterprise customers federating via Okta / Azure AD / OneLogin. ProjexCloud is the SP; their IdP redirects to /saml/:tenant_id/acs.",
+      "example_code": "// Customer's IdP fetches SP metadata at GET /saml/<tenant_id>/metadata\n// User signs in at IdP; IdP POSTs SAMLResponse to our ACS\nawait fetch('/saml/' + tenant_id + '/acs', { method: 'POST', body: new URLSearchParams({ SAMLResponse }) });",
+      "expected_outcome": "First-time login JIT-creates an identity.person with a saml_nameid alias and an identity.tenant_membership for the asserted role. Repeat logins reuse the existing person. Emits identity.session.created.v1."
+    },
+    {
+      "id": "support-impersonation-with-consent",
+      "title": "Support persona impersonates a tenant with manager + customer approval",
+      "when_to_use": "L3 / L4 support engineer needs to reproduce a customer bug in their tenant. Hard requirement: customer-side consent + manager-side approval, both recorded.",
+      "example_code": "const reqRes = await fetch('/api/impersonation/request', { method: 'POST', body: JSON.stringify({ target_tenant_id, ticket_ref, justification }) });\nconst { grant_id } = await reqRes.json();\nawait fetch('/api/impersonation/' + grant_id + '/approve', { method: 'POST' });\nawait fetch('/api/impersonation/' + grant_id + '/end', { method: 'POST' });",
+      "expected_outcome": "Granted JWT carries actor.kind='support_impersonator' and impersonator_user_id; expires in 1 hour by default. Every request made under this JWT is tagged in the audit chain so the customer can review post-incident."
+    }
+  ],
+  "compliance_posture": {
+    "regimes": ["SOC2", "HIPAA", "PCI-DSS", "FedRAMP-Moderate", "GDPR-Art-32", "SAML-2.0", "OIDC-1.0", "SCIM-2.0"],
+    "notes": "Bcrypt rounds default to 10 (OWASP minimum). Credentials envelope-encrypted via sdk-vault. SAML signing cert must be FIPS-140-2 for FedRAMP. SCIM provisioning honors the federation_config.jit_enabled flag — disable for strict provisioned-only tenants."
+  },
+  "pool_placement": "admin",
+  "pricing_skus": [
+    { "sku": "identity.login",              "mode": "metered", "unit_description": "per successful login (includes MFA verify if applicable)" },
+    { "sku": "identity.mfa.challenge",      "mode": "metered", "unit_description": "per MFA challenge issued (SMS factor has provider passthrough cost)" },
+    { "sku": "identity.scim.provisioning",  "mode": "metered", "unit_description": "per SCIM Users provision/deprovision call" },
+    { "sku": "identity.saml.assertion",     "mode": "metered", "unit_description": "per SAML ACS assertion accepted" }
+  ],
+  "links": {
+    "readme": "packages/sdk-identity/README.md",
+    "source": "packages/sdk-identity/src/",
+    "prd_section": "P2-Identity-Access §5.2 / FR-IDN-1..11"
+  }
+}
