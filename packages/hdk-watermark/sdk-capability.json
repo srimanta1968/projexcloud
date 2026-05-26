@@ -1,0 +1,85 @@
+{
+  "name": "@projexlight/hdk-watermark",
+  "version": "1.0.0",
+  "schema_version": "1.0",
+  "summary": "Watermarking primitive: apply visible (logo / time / persona name) + invisible (steganographic forensic) watermarks to images, PDFs, and video frames at egress. Underpins evidence-leak attribution + customer-portal screen-grab tracing — if a watermarked artifact surfaces in the wild, the invisible mark identifies who exported it + when.",
+  "tags": ["hdk", "watermark", "forensics", "leak-attribution", "p7"],
+  "provides": {
+    "endpoints": [
+      { "method": "POST", "path": "/api/hdk/watermark",       "description": "Apply a watermark; returns the new blob_id + application_id." },
+      { "method": "GET",  "path": "/api/hdk/watermark/:id",   "description": "Fetch an application's metadata + extracted-marks (for forensics)." },
+      { "method": "GET",  "path": "/api/hdk/watermark",       "description": "List watermark applications for a tenant + filters." }
+    ],
+    "events": [
+      { "name": "hdk-watermark.applied.v1",   "retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "Watermark applied; carries persona_id + reason + visible/invisible flags." },
+      { "name": "hdk-watermark.extracted.v1", "retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "Invisible watermark extracted from a suspected-leak artifact; carries identified persona + confidence." }
+    ],
+    "models": [
+      { "schema": "hdk_watermark", "table": "application", "description": "Per-application row: source_blob_id, derived_blob_id, persona_id, reason, visible_payload, invisible_payload_id." }
+    ],
+    "hooks": [
+      { "name": "applyWatermark",   "description": "Apply visible + invisible watermarks; returns the new blob_id." },
+      { "name": "extractWatermark", "description": "Forensic extraction — given a suspected-leak artifact, recover the invisible mark + identify the persona." }
+    ],
+    "ui_components": []
+  },
+  "consumes": {
+    "events": [
+      { "name": "evidence.export.signed.v1", "from": "@projexlight/sdk-evidence" }
+    ],
+    "infra": ["sdk-media", "sdk-evidence"],
+    "config_keys": ["HDK_WATERMARK_DEFAULT_OPACITY", "HDK_WATERMARK_INVISIBLE_ALGO", "HDK_WATERMARK_PAYLOAD_BITS"]
+  },
+  "scenarios": [
+    {
+      "id": "watermark-on-export",
+      "title": "Auto-apply on every legal-export bundle",
+      "when_to_use": "Reactive on evidence.export.signed.v1 — every exported artifact gets a visible 'CONFIDENTIAL — exported by <persona> on <date>' overlay + an invisible mark for forensic recovery.",
+      "example_code": "subscribeEvents('evidence.export.signed.v1', async (e) => {\n  for (const blob_id of e.payload.bundle_blob_ids) {\n    await applyWatermark({\n      source_blob_id: blob_id,\n      persona_id: e.payload.requested_by_persona_id,\n      reason: `legal-export:${e.payload.export_id}`,\n      visible: true, invisible: true,\n    });\n  }\n});",
+      "expected_outcome": "Watermarked variants written; emits .applied.v1. Original blob retained. Customer receives the watermarked bundle."
+    },
+    {
+      "id": "customer-portal-download",
+      "title": "Watermark customer-portal downloads with their persona",
+      "when_to_use": "Self-serve evidence download from customer portal — watermark every download with the downloading persona + timestamp for leak attribution.",
+      "example_code": "import { applyWatermark } from '@projexlight/hdk-watermark';\nconst { derived_blob_id } = await applyWatermark({\n  source_blob_id, persona_id: customer.id,\n  reason: 'portal-download', visible: true, invisible: true,\n});",
+      "expected_outcome": "Customer downloads the watermarked variant; original blob never released. Future leak can be traced back."
+    },
+    {
+      "id": "forensic-extraction",
+      "title": "Leak found in the wild → forensic extraction",
+      "when_to_use": "Sensitive document surfaces on a public forum; extractWatermark identifies which persona exported it.",
+      "example_code": "import { extractWatermark } from '@projexlight/hdk-watermark';\nconst { persona_id, confidence, applied_at } = await extractWatermark({\n  blob_id: suspected_leak_blob_id,\n});",
+      "expected_outcome": "Persona + timestamp identified with confidence score. Sufficient evidence for HR / legal action."
+    },
+    {
+      "id": "visible-only-for-watermarked-share",
+      "title": "Visible-only watermark for casual sharing",
+      "when_to_use": "Customer-success rep shares a screenshot in chat; visible watermark is enough (no need for invisible forensic).",
+      "example_code": "import { applyWatermark } from '@projexlight/hdk-watermark';\nawait applyWatermark({\n  source_blob_id, persona_id: rep.id,\n  reason: 'cs-share', visible: true, invisible: false,\n});",
+      "expected_outcome": "Visible-only variant. No invisible payload computation cost."
+    },
+    {
+      "id": "invisible-fallback-when-img-resized",
+      "title": "Invisible watermark survives resize / re-encode",
+      "when_to_use": "Algo (DCT-domain) is chosen so that resize / re-save / re-encode preserves the invisible payload; extraction still works on the downstream artifact.",
+      "example_code": "// Algorithm picked via HDK_WATERMARK_INVISIBLE_ALGO; default 'dct-low-freq' survives typical compression.",
+      "expected_outcome": "Extraction works on resized / re-encoded leaks. Forensic chain holds."
+    }
+  ],
+  "compliance_posture": {
+    "regimes": ["SOC2-CC7.2-data-leak", "GDPR-Art-32", "Trade-Secret-Misappropriation-DTSA", "HIPAA-164.308-leak-attribution"],
+    "notes": "Watermark application is the leak-attribution control under SOC2-CC7.2. Invisible mark survives the typical defeat attempts (resize / re-encode / screenshot of screenshot)."
+  },
+  "pool_placement": "app",
+  "pricing_skus": [
+    { "sku": "hdk-watermark.apply.visible",   "mode": "metered", "unit_description": "per visible-only watermark applied" },
+    { "sku": "hdk-watermark.apply.invisible", "mode": "metered", "unit_description": "per invisible (forensic) watermark applied" },
+    { "sku": "hdk-watermark.extract",         "mode": "metered", "unit_description": "per forensic extraction" }
+  ],
+  "links": {
+    "readme": "packages/hdk-watermark/README.md",
+    "source": "packages/hdk-watermark/src/",
+    "prd_section": "P7-Field-Hyperscale §16"
+  }
+}

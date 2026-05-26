@@ -1,0 +1,80 @@
+{
+  "name": "@projexlight/hdk-scanner",
+  "version": "1.0.0",
+  "schema_version": "1.0",
+  "summary": "Device-side barcode / QR / NFC / RFID scanner kit: capability negotiation per device + scan-event ingest with attestation. Powers ticket badge check-in (sdk-event), inventory pick-pack workflows, evidence chain-of-custody barcoding, and any 'tap to confirm' physical interaction.",
+  "tags": ["hdk", "scanner", "barcode", "qr", "nfc", "rfid", "p7"],
+  "provides": {
+    "endpoints": [
+      { "method": "GET",  "path": "/api/hdk/scanner/capabilities", "description": "Return the active device's scanner capability matrix (camera-qr / hardware-laser / nfc / rfid)." }
+    ],
+    "events": [
+      { "name": "hdk-scanner.scanned.v1",         "retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "Scan-event committed; carries kind, value, device_uuid, geo." },
+      { "name": "hdk-scanner.duplicate.suppressed.v1","retention_class": "operational","conflict_policy": "lww",        "description": "Duplicate scan within grace window suppressed (double-tap)." }
+    ],
+    "models": [],
+    "hooks": [
+      { "name": "getCapabilities", "description": "Return scanner capability matrix for the device." },
+      { "name": "recordScan",      "description": "Record a scan event; deduped within grace window." }
+    ],
+    "ui_components": []
+  },
+  "consumes": {
+    "events": [
+      { "name": "device.attestation.passed.v1", "from": "@projexlight/sdk-device" }
+    ],
+    "infra": ["sdk-device"],
+    "config_keys": ["HDK_SCANNER_DUPLICATE_GRACE_SEC", "HDK_SCANNER_DEFAULT_BARCODE_FORMATS"]
+  },
+  "scenarios": [
+    {
+      "id": "ticket-checkin-scan",
+      "title": "Door staff scans an event ticket QR",
+      "when_to_use": "Conference check-in (sdk-event); scanner records the scan + routes to sdk-event.checkInAttendee.",
+      "example_code": "import { recordScan } from '@projexlight/hdk-scanner';\nawait recordScan({\n  tenant_id, persona_id: staff.id, device_uuid,\n  kind: 'qr', value: ticket_qr_payload,\n});",
+      "expected_outcome": "Scan event emitted. sdk-event consumer validates the ticket + records the check-in."
+    },
+    {
+      "id": "evidence-bag-barcode",
+      "title": "Field tech barcodes an evidence bag",
+      "when_to_use": "Chain-of-custody — every evidence bag gets a barcode; the scan binds the bag to a capture in sdk-evidence.",
+      "example_code": "import { recordScan } from '@projexlight/hdk-scanner';\nconst { scan_id } = await recordScan({\n  tenant_id, kind: 'barcode-code128',\n  value: 'EVID-2026-05-26-001', device_uuid,\n});",
+      "expected_outcome": "Scan committed; sdk-evidence binds the bag identifier to the capture row."
+    },
+    {
+      "id": "capability-negotiation",
+      "title": "Mobile app queries capabilities to render UI",
+      "when_to_use": "App startup — if no NFC, hide the 'tap to confirm' button; if no hardware laser, fall back to camera-QR.",
+      "example_code": "const caps = await fetch('/api/hdk/scanner/capabilities').then(r => r.json());\nif (caps.nfc) enableTapToConfirm();\nif (caps.hardware_laser) enableLaserMode();",
+      "expected_outcome": "Returns capability matrix. Client UI adapts to whatever the device supports."
+    },
+    {
+      "id": "duplicate-suppression",
+      "title": "Double-tap suppressed within grace window",
+      "when_to_use": "Operator scans the same QR twice within HDK_SCANNER_DUPLICATE_GRACE_SEC; second scan is silently dropped.",
+      "example_code": "// First scan → .scanned.v1. Second scan within grace → .duplicate.suppressed.v1 (no business effect).",
+      "expected_outcome": "Downstream consumers see exactly one effective scan. Audit chain has both events for diagnosis."
+    },
+    {
+      "id": "nfc-attendance",
+      "title": "NFC-tap attendance at restricted door",
+      "when_to_use": "High-security area; employees tap their NFC badge. Scanner verifies + emits scan event for security log.",
+      "example_code": "// hardware NFC ring → recordScan({ kind: 'nfc', value: nfc_serial }).\n// sdk-evidence + sdk-audit register the access.",
+      "expected_outcome": "Access logged. Audit chain answers 'who was inside the room at 14:23'."
+    }
+  ],
+  "compliance_posture": {
+    "regimes": ["SOC2-CC6.1-physical-access", "ISO-27001-Annex-A-11", "FRE-Rule-901-self-authentication"],
+    "notes": "Scan attestation chain via sdk-device. Duplicate suppression is a UX feature; both events retained for audit so a 5-min discrepancy can be diagnosed."
+  },
+  "pool_placement": "app",
+  "pricing_skus": [
+    { "sku": "hdk-scanner.capability.read", "mode": "metered", "unit_description": "per capabilities probe" },
+    { "sku": "hdk-scanner.scan.record",     "mode": "metered", "unit_description": "per scan event" }
+  ],
+  "links": {
+    "readme": "packages/hdk-scanner/README.md",
+    "source": "packages/hdk-scanner/src/",
+    "prd_section": "P7-Field-Hyperscale §14"
+  }
+}
