@@ -14,6 +14,7 @@
 
 import { copyFileSync, existsSync, mkdirSync, statSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
+import { loadRegistry } from '@projexlight/sdk-registry';
 import {
   projexCacheDir,
   userCatalogPath,
@@ -74,5 +75,80 @@ export function runRegistryRefresh(flags: RefreshFlags): RefreshResult {
     catalogTarget,
     embeddingsCopied,
     bytes: statSync(catalogTarget).size,
+  };
+}
+
+/* --------------------------------------------------------------- list */
+
+export interface ListFlags {
+  /** Filter by tag substring (case-insensitive). */
+  tag?: string;
+  /** Substring filter against name + summary (case-insensitive). */
+  search?: string;
+  /** Override catalog path (testing). */
+  catalogPath?: string;
+}
+
+export interface ListEntry {
+  name: string;
+  version: string;
+  summary: string;
+  pool_placement: string;
+  tags: string[];
+  scenarios: number;
+  endpoints: number;
+}
+
+export interface ListResult {
+  catalogPath: string;
+  total: number;
+  filtered: number;
+  entries: ListEntry[];
+}
+
+/**
+ * Reads the cached catalog and returns a pretty-printable summary of
+ * every SDK in it. Supports --tag + --search filters for quick lookup
+ * from the CLI without going through the MCP.
+ */
+export function runRegistryList(flags: ListFlags): ListResult {
+  const catalogPath = resolve(flags.catalogPath ?? userCatalogPath());
+  if (!existsSync(catalogPath)) {
+    throw new Error(
+      `No registry catalog at ${catalogPath}. Run 'projex registry refresh' first.`,
+    );
+  }
+  const registry = loadRegistry(catalogPath);
+  const all = registry.list();
+
+  const tagLower = flags.tag?.toLowerCase();
+  const searchLower = flags.search?.toLowerCase();
+
+  const entries: ListEntry[] = all
+    .filter((e) => {
+      if (tagLower && !e.manifest.tags.some((t) => t.toLowerCase().includes(tagLower))) {
+        return false;
+      }
+      if (searchLower) {
+        const hay = (e.manifest.name + ' ' + e.manifest.summary).toLowerCase();
+        if (!hay.includes(searchLower)) return false;
+      }
+      return true;
+    })
+    .map((e) => ({
+      name: e.manifest.name,
+      version: e.manifest.version,
+      summary: e.manifest.summary,
+      pool_placement: e.manifest.pool_placement,
+      tags: e.manifest.tags,
+      scenarios: e.manifest.scenarios.length,
+      endpoints: e.manifest.provides.endpoints.length,
+    }));
+
+  return {
+    catalogPath,
+    total: all.length,
+    filtered: entries.length,
+    entries,
   };
 }

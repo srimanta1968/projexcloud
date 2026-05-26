@@ -15,7 +15,7 @@
 
 import { runInit } from './commands/init';
 import { runInstall } from './commands/install';
-import { runRegistryRefresh } from './commands/registry';
+import { runRegistryRefresh, runRegistryList } from './commands/registry';
 import { loginStub, deployStub, blueprintStub, type StubOutput } from './commands/stubs';
 
 interface ParsedArgs {
@@ -60,6 +60,8 @@ Subcommands:
                               Pull the SDK catalog into ~/.projex/cache/
                               (from PROJEX_CATALOG_SOURCE / PROJEX_DEV_ROOT
                               by default).
+  registry list [--tag <tag>] [--search <q>]
+                              Print SDK list from the cached catalog.
   install <sdk_name> [--force]
                               Add a ProjexCloud SDK to the current app:
                               edits package.json, drops a starter integration
@@ -121,6 +123,18 @@ function emit(result: unknown, jsonMode: boolean): void {
     }
     return;
   }
+  if (typeof result === 'object' && result !== null && 'entries' in result && 'filtered' in result) {
+    const r = result as { catalogPath: string; total: number; filtered: number; entries: Array<{ name: string; version: string; summary: string; pool_placement: string; scenarios: number; endpoints: number }> };
+    process.stdout.write(`Catalog: ${r.catalogPath}\n`);
+    process.stdout.write(`  ${r.filtered}/${r.total} SDK(s)\n\n`);
+    const maxName = Math.max(20, ...r.entries.map((e) => e.name.length));
+    for (const e of r.entries) {
+      const truncSummary = e.summary.length > 80 ? e.summary.slice(0, 77) + '...' : e.summary;
+      process.stdout.write(`  ${e.name.padEnd(maxName)}  v${e.version.padEnd(8)}  [${e.pool_placement.padEnd(14)}]  ${e.endpoints}ep ${e.scenarios}sc\n`);
+      process.stdout.write(`    ${truncSummary}\n`);
+    }
+    return;
+  }
   if (typeof result === 'object' && result !== null && 'command' in result) {
     const s = result as StubOutput;
     process.stdout.write(`${s.command} — ${s.phase}\n  ${s.description}\n  → ${s.next_step}\n`);
@@ -149,15 +163,23 @@ async function main(): Promise<void> {
 
       case 'registry': {
         const sub = args.positional[0];
-        if (sub !== 'refresh') {
-          process.stderr.write(`unknown subcommand: registry ${sub}. Try: projex registry refresh\n`);
-          process.exit(2);
+        if (sub === 'refresh') {
+          const result = runRegistryRefresh({
+            source: typeof args.flags.source === 'string' ? args.flags.source : undefined,
+          });
+          emit(result, jsonMode);
+          return;
         }
-        const result = runRegistryRefresh({
-          source: typeof args.flags.source === 'string' ? args.flags.source : undefined,
-        });
-        emit(result, jsonMode);
-        return;
+        if (sub === 'list') {
+          const result = runRegistryList({
+            tag: typeof args.flags.tag === 'string' ? args.flags.tag : undefined,
+            search: typeof args.flags.search === 'string' ? args.flags.search : undefined,
+          });
+          emit(result, jsonMode);
+          return;
+        }
+        process.stderr.write(`unknown subcommand: registry ${sub}. Try: projex registry refresh | list\n`);
+        process.exit(2);
       }
 
       case 'install': {

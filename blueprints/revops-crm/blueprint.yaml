@@ -1,0 +1,52 @@
+id: revops-crm
+schema_version: "1.0"
+title: RevOps CRM
+summary: >-
+  A B2B sales-ops workspace that wires Salesforce as the system of record,
+  tracks tenant-side leads and engagements, scores them with a configurable
+  model, and routes outbound campaigns by segment. Foundation for the
+  cloud-builder demo flow.
+pack: general
+tags: [crm, revops, sales, salesforce, pilot]
+sdks:
+  - name: "@projexlight/sdk-tenant"
+    reason: "Every workspace needs a tenant root."
+  - name: "@projexlight/sdk-identity"
+    reason: "Persona-scoped JWTs for the sales team."
+  - name: "@projexlight/sdk-audit"
+    reason: "Every lead state change goes to the chain for forensics + SOX."
+  - name: "@projexlight/sdk-billing"
+    reason: "Subscription billing for seat-based pricing."
+  - name: "@projexlight/sdk-meter"
+    reason: "Meter API calls + seat usage for the billing path."
+clarifying_questions:
+  - id: sf_sync_direction
+    prompt: How should leads flow between Salesforce and ProjexCloud?
+    type: enum
+    options: [salesforce-to-projex, projex-to-salesforce, bidirectional]
+    default: bidirectional
+    help: Bidirectional is the most common; one-way modes are for legacy migrations.
+  - id: scoring_model
+    prompt: Which lead-scoring model do you want pre-installed?
+    type: enum
+    options: [simple-recency, weighted-rules, ml-based]
+    default: weighted-rules
+  - id: campaign_default_channel
+    prompt: Default outbound channel for new campaigns
+    type: enum
+    options: [email, sms, slack-mention, multi-touch]
+    default: email
+outputs:
+  - path: src/leads/intake.ts
+    template: templates/leads-intake.ts.hbs
+  - path: src/leads/router.ts
+    template: templates/leads-router.ts.hbs
+  - path: src/scoring/model.ts
+    template: templates/scoring-model.ts.hbs
+  - path: src/campaigns/dispatch.ts
+    template: templates/campaign-dispatch.ts.hbs
+  - path: db/migrations/001_revops_init.sql
+    template: templates/revops-init.sql.hbs
+  - path: README.md
+    template: templates/README.md.hbs
+estimated_minutes: 5
