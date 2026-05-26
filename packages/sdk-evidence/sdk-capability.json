@@ -1,0 +1,95 @@
+{
+  "name": "@projexlight/sdk-evidence",
+  "version": "1.0.0",
+  "schema_version": "1.0",
+  "summary": "Chain-of-custody evidence ledger for ProjexCloud: capture (photos / videos / documents / signatures) → variant generation (thumbnail / OCR / redacted) → tamper-evident hash + signature → legal export bundle. Every transition writes to sdk-audit; variants stay linked to the original capture so adjudication can replay the full forensic trail. Foundation SDK for field-service, insurance claims, and healthcare verticals.",
+  "tags": ["evidence", "chain-of-custody", "forensics", "field-service", "insurance", "healthcare", "p7"],
+  "provides": {
+    "endpoints": [
+      { "method": "POST", "path": "/api/evidence/capture",        "description": "Register a new evidence capture (binary uploaded out-of-band via sdk-media presigned URL). Returns evidence_id." },
+      { "method": "GET",  "path": "/api/evidence/capture/:id",    "description": "Fetch a single evidence record + its chain-of-custody trail." },
+      { "method": "GET",  "path": "/api/evidence/capture",        "description": "List captures for a tenant + optional persona / encounter / date filters." }
+    ],
+    "events": [
+      { "name": "evidence.capture.registered.v1",     "retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "New capture committed; carries SHA-256 of the source bytes." },
+      { "name": "evidence.variant.derived.v1",        "retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "Variant (thumbnail / OCR / redacted) produced from a capture." },
+      { "name": "evidence.custody.transferred.v1",    "retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "Custody handoff (e.g. tech → adjuster); each handoff appended to the chain." },
+      { "name": "evidence.export.requested.v1",       "retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "Legal export bundle requested (for discovery, regulatory submission)." },
+      { "name": "evidence.export.signed.v1",          "retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "Export bundle finalized + signed; signing chain attested by the regional chain-head key." }
+    ],
+    "models": [
+      { "schema": "evidence", "table": "capture",           "description": "Root capture row: source bytes hash, mime, geo-stamp, captured-by persona, encounter ref." },
+      { "schema": "evidence", "table": "variant",           "description": "Derived form (thumbnail / OCR text / redacted variant); always linked to a capture." },
+      { "schema": "evidence", "table": "chain_of_custody",  "description": "Append-only handoff log per capture: from_persona, to_persona, reason, witnessed_at." },
+      { "schema": "evidence", "table": "legal_export",      "description": "Export-request rows: requested_by, scope, status, signing_chain_id, expires_at (7-day TTL by default)." }
+    ],
+    "hooks": [
+      { "name": "registerCapture",      "description": "Service entry — accepts a presigned media ref + metadata; emits evidence.capture.registered.v1 + writes the first chain entry." },
+      { "name": "deriveVariant",        "description": "Run a derivation (thumbnail / OCR / PII-redaction); stores the variant + links to the source capture." },
+      { "name": "transferCustody",      "description": "Append a custody handoff. Refuses on missing witnessed_by when the tenant policy demands it." },
+      { "name": "exportLegalBundle",    "description": "Assemble + sign a discovery bundle for a capture set; bundle TTL is 7 days by default." }
+    ],
+    "ui_components": []
+  },
+  "consumes": {
+    "events": [
+      { "name": "tenant.offboarded.v1", "from": "@projexlight/sdk-tenant-lifecycle" },
+      { "name": "vault.key.shredded.v1", "from": "@projexlight/sdk-vault" }
+    ],
+    "infra": ["postgres", "s3-or-equivalent-blob-store", "redis-optional"],
+    "config_keys": ["EVIDENCE_DEFAULT_REGION", "EVIDENCE_EXPORT_BUNDLE_TTL_HOURS", "EVIDENCE_RETENTION_INTERVAL_MS"]
+  },
+  "scenarios": [
+    {
+      "id": "capture-field-photo",
+      "title": "Field tech captures a proof-of-work photo with attestation",
+      "when_to_use": "Mobile app uploads a photo via sdk-media presigned URL; sdk-evidence registers the capture so it's discoverable in the adjudication trail.",
+      "example_code": "import { registerCapture } from '@projexlight/sdk-evidence';\nconst evidence = await registerCapture({\n  tenant_id, captured_by_persona_id, encounter_id,\n  media_blob_id, mime: 'image/jpeg',\n  source_hash_sha256: hash, geo: { lat, lng, accuracy_m },\n});",
+      "expected_outcome": "Returns evidence_id. Emits evidence.capture.registered.v1 to the audit chain. The first chain_of_custody row is written with the capturing persona as the holder."
+    },
+    {
+      "id": "redact-pii-variant",
+      "title": "Auto-redact bystander faces into a variant",
+      "when_to_use": "Photo carries identifiable bystanders; before sharing with the customer we need a PII-redacted variant that's safe to release.",
+      "example_code": "import { deriveVariant } from '@projexlight/sdk-evidence';\nconst variant = await deriveVariant({\n  evidence_id, kind: 'pii-redacted',\n  derivation_engine: 'hdk-image-editor.v1',\n});",
+      "expected_outcome": "Returns variant_id pointing at the redacted blob. Original capture untouched. Emits evidence.variant.derived.v1 carrying the derivation provenance for replay."
+    },
+    {
+      "id": "handoff-to-adjuster",
+      "title": "Insurance claim: field adjuster hands off custody to senior reviewer",
+      "when_to_use": "Claim escalates from triage to senior review; the chain-of-custody trail records every handoff so disputes can replay the path the evidence took.",
+      "example_code": "import { transferCustody } from '@projexlight/sdk-evidence';\nawait transferCustody({\n  evidence_id, from_persona_id, to_persona_id,\n  reason: 'escalated to senior review for SIU flagging',\n  witnessed_by_persona_id, // tenant policy required\n});",
+      "expected_outcome": "Appends to evidence.chain_of_custody. Emits evidence.custody.transferred.v1. Refuses with a structured error if witnessed_by is missing and the tenant policy requires it."
+    },
+    {
+      "id": "legal-export-bundle",
+      "title": "Discovery / regulatory submission — sign a legal export bundle",
+      "when_to_use": "Customer's legal team needs a signed bundle for a court date, regulator request, or DSAR fulfillment.",
+      "example_code": "import { exportLegalBundle } from '@projexlight/sdk-evidence';\nconst exp = await exportLegalBundle({\n  tenant_id, requested_by_persona_id,\n  scope: { evidence_ids: [...], date_range: { from, to } },\n  ttl_hours: 168, // 7 days default\n});",
+      "expected_outcome": "Bundle assembled in S3 with a signed manifest; signing chain attested by the regional chain-head key. Emits .export.requested + .export.signed. Recipients have 7 days to download."
+    },
+    {
+      "id": "shred-on-tenant-offboard",
+      "title": "Tenant offboards → evidence corpus shredded on grace expiry",
+      "when_to_use": "Reactive: sdk-tenant-lifecycle fires tenant.offboarded.v1; sdk-evidence's worker scrubs the corpus along with the rest of the SDK fan-out.",
+      "example_code": "// Worker subscribes to tenant.offboarded.v1 from sdk-tenant-lifecycle.\n// On match: walk every capture + variant + chain row + export for tenant_id;\n// delete S3 objects; mark DB rows tombstoned; emit evidence.tenant.shredded.v1.\n// Idempotent on the (tenant_id) key.",
+      "expected_outcome": "All capture rows + variant rows + S3 objects gone. Audit chain retains the .shredded event so the customer can prove erasure to their regulator."
+    }
+  ],
+  "compliance_posture": {
+    "regimes": ["HIPAA-164.524-right-of-access", "21-CFR-Part-11", "FRE-Rules-902/1001-Evidence", "SOC2-CC7.2", "GDPR-Art-30", "FedRAMP-AU-family"],
+    "notes": "Federal Rules of Evidence 902/1001 self-authentication satisfied by SHA-256 source-hash + signed chain-of-custody. 21 CFR Part 11 met for life-sciences evidence via the signing chain + chain_head attestation. HIPAA right-of-access (164.524) supported by the legal-export flow scoped per subject."
+  },
+  "pool_placement": "evidence",
+  "pricing_skus": [
+    { "sku": "evidence.capture.register", "mode": "metered", "unit_description": "per capture registered (binary storage billed separately via sdk-media)" },
+    { "sku": "evidence.variant.derive",   "mode": "metered", "unit_description": "per variant generated (PII-redact + OCR are compute-heavy)" },
+    { "sku": "evidence.custody.transfer", "mode": "metered", "unit_description": "per custody handoff (audit + signing overhead)" },
+    { "sku": "evidence.export.signed",    "mode": "metered", "unit_description": "per signed export bundle (one-time, 7-day TTL)" }
+  ],
+  "links": {
+    "readme": "packages/sdk-evidence/README.md",
+    "source": "packages/sdk-evidence/src/",
+    "prd_section": "P7-Field-Hyperscale §5 / FR-EVD-1..6"
+  }
+}

@@ -1,0 +1,97 @@
+{
+  "name": "@projexlight/sdk-workflow",
+  "version": "1.0.0",
+  "schema_version": "1.0",
+  "summary": "Durable workflow engine for ProjexCloud: declare a Definition once (ordered steps + signals + compensations), start Runs against it, send Signals from external events, and the engine resumes after crashes / replays from journals. Backed by Postgres in dev and Temporal-shaped in production. Used for FNOL → settlement, tenant offboard pipeline, multi-step onboard, dunning advance — anywhere the work spans more time / failures than a single request can hold.",
+  "tags": ["workflow", "durable", "saga", "compensation", "temporal", "p4"],
+  "provides": {
+    "endpoints": [
+      { "method": "POST", "path": "/api/workflows/definitions",     "description": "Register a workflow definition (steps + signal hooks + compensation handlers). Validates that every step has an in-process handler." },
+      { "method": "POST", "path": "/api/workflows/start",           "description": "Start a Run of a definition. Returns run_id; the engine handles all subsequent execution." },
+      { "method": "POST", "path": "/api/workflows/:run_id/signal", "description": "Deliver a signal to a paused Run (e.g. 'approval-granted', 'payment-cleared'). Wakes the Run up if it was awaiting." },
+      { "method": "GET",  "path": "/api/workflows/:run_id",         "description": "Inspect a Run's state, history, current step, and any pending compensations." }
+    ],
+    "events": [
+      { "name": "workflow.definition.registered.v1", "retention_class": "regulated",  "conflict_policy": "lww",            "description": "Definition added or updated." },
+      { "name": "workflow.run.started.v1",           "retention_class": "regulated",  "conflict_policy": "event-sourcing", "description": "New run started; carries input + correlation key." },
+      { "name": "workflow.step.completed.v1",        "retention_class": "operational","conflict_policy": "event-sourcing", "description": "A step finished; carries step output for replay." },
+      { "name": "workflow.run.completed.v1",         "retention_class": "regulated",  "conflict_policy": "event-sourcing", "description": "Final step done; run terminated normally." },
+      { "name": "workflow.run.failed.v1",            "retention_class": "regulated",  "conflict_policy": "event-sourcing", "description": "Unrecoverable step error after retries exhausted. Compensations fire automatically." },
+      { "name": "workflow.compensation.fired.v1",    "retention_class": "regulated",  "conflict_policy": "event-sourcing", "description": "A compensation step ran after a failure; saga rollback trail." }
+    ],
+    "models": [
+      { "schema": "workflow", "table": "definition",   "description": "Static definition: name, version, step_specs (ordered), signal_specs, compensation_specs." },
+      { "schema": "workflow", "table": "run",          "description": "Per-execution state: current_step, status (running / waiting-signal / completed / failed), input, output, started_at." },
+      { "schema": "workflow", "table": "step",         "description": "Per-step execution row: started_at, completed_at, attempt, output. Append-only journal supports replay." },
+      { "schema": "workflow", "table": "compensation", "description": "Per-failed-step compensation row: original step ref, compensation_handler_name, fired_at, succeeded." }
+    ],
+    "hooks": [
+      { "name": "registerStep",         "description": "Register an in-process step handler. Must be called at boot before any definition referencing the step can register." },
+      { "name": "registerSignalHandler","description": "Wire a signal-spec to a handler. Signals can short-circuit waiting Runs." },
+      { "name": "registerCompensation", "description": "Wire a step to its compensation. If the step fails, the compensation runs as part of the saga rollback." },
+      { "name": "startEngine",          "description": "Boot the worker that drives Runs forward. Polls workflow.run for state=running rows; safe to leave running in dev." }
+    ],
+    "ui_components": []
+  },
+  "consumes": {
+    "events": [
+      { "name": "tenant.offboarded.v1",    "from": "@projexlight/sdk-tenant-lifecycle" },
+      { "name": "approval.request.approved.v1", "from": "@projexlight/sdk-approval" },
+      { "name": "payment.succeeded.v1",    "from": "@projexlight/sdk-payment" }
+    ],
+    "infra": ["postgres", "redis-optional", "temporal-optional"],
+    "config_keys": ["WORKFLOW_ENGINE_BACKEND", "WORKFLOW_POLL_INTERVAL_MS", "WORKFLOW_RETRY_MAX_ATTEMPTS"]
+  },
+  "scenarios": [
+    {
+      "id": "claims-fnol-pipeline",
+      "title": "Insurance claim — FNOL → triage → review → settle",
+      "when_to_use": "Multi-day, multi-actor process where steps await human decisions + provider responses. The workflow engine survives restarts + retries.",
+      "example_code": "import { registerStep, registerCompensation, startEngine } from '@projexlight/sdk-workflow';\nregisterStep('triage',     async (input) => { /* assign to adjuster */ });\nregisterStep('await-review', async (input, { waitForSignal }) => waitForSignal('decision'));\nregisterStep('settle',     async (input) => { /* sdk-payment.charge */ });\nregisterCompensation('settle', async (input) => { /* sdk-payment.refund */ });\nstartEngine({});",
+      "expected_outcome": "Engine drives runs through steps. The await-review step pauses until /api/workflows/:run_id/signal delivers the adjuster's decision. On settle failure, the compensation refunds the partial settlement before marking the run failed."
+    },
+    {
+      "id": "start-run-with-input",
+      "title": "Start a Run programmatically",
+      "when_to_use": "External trigger (e.g. customer files a claim) starts a Run with structured input.",
+      "example_code": "import { startRun } from '@projexlight/sdk-workflow';\nconst { run_id } = await startRun({\n  tenant_id, definition_name: 'claims-fnol-pipeline',\n  input: { claim_id, reporter_email, photos: [...] },\n  correlation_key: claim_id,\n});",
+      "expected_outcome": "Returns run_id. Emits workflow.run.started.v1. correlation_key lets downstream lookups find the run without storing the id."
+    },
+    {
+      "id": "deliver-signal",
+      "title": "Deliver a signal to wake a paused Run",
+      "when_to_use": "Adjuster clicks Approve in tenant-admin → the gateway delivers the signal to the paused await-review step.",
+      "example_code": "await fetch(`/api/workflows/${run_id}/signal`, {\n  method: 'POST',\n  body: JSON.stringify({ name: 'decision', payload: { outcome: 'approve', amount_cents: 75000 } }),\n});",
+      "expected_outcome": "The waitForSignal in the await-review step resolves with the payload. Engine advances to settle. Audit chain shows the full trail."
+    },
+    {
+      "id": "compensation-on-failure",
+      "title": "Saga compensation fires when a downstream step fails",
+      "when_to_use": "Payment refused after partial fulfilment. The compensation undoes the work the prior steps committed.",
+      "example_code": "// Pseudo-trace:\n// triage     ✓\n// await-review ✓ (signal: approve)\n// settle     ✗ (Stripe declined)\n//   → fires compensation for settle (refund) AND any prior step that registered one\n//   → run terminates with status='failed'",
+      "expected_outcome": "Emits workflow.run.failed.v1 + a workflow.compensation.fired.v1 per compensation. Customer-visible state shows the failure with the compensation trail attached."
+    },
+    {
+      "id": "inspect-run",
+      "title": "Operator inspects a stuck Run",
+      "when_to_use": "Run isn't advancing; operator needs to see what step it's on + why.",
+      "example_code": "const r = await fetch(`/api/workflows/${run_id}`, { headers: { Authorization: 'Bearer ' + jwt } });\nconst { status, current_step, history, pending_compensations } = (await r.json()).data;",
+      "expected_outcome": "Returns the full state. Common reasons for stuck: status='waiting-signal' (no signal delivered yet), or status='running' with retry_after_at in the future (transient error backoff)."
+    }
+  ],
+  "compliance_posture": {
+    "regimes": ["SOC2-CC7.5", "SOX-process-controls", "21-CFR-Part-11", "ISO-9001-quality-management"],
+    "notes": "Append-only step journal supports SOX 'evidence of design + operating effectiveness' for any process the workflow models. 21 CFR Part 11 met by hash-chained step rows + signing on terminal status. Compensations are themselves auditable steps — they don't bypass the audit chain."
+  },
+  "pool_placement": "app",
+  "pricing_skus": [
+    { "sku": "workflow.run.started",  "mode": "metered", "unit_description": "per run started" },
+    { "sku": "workflow.step.executed","mode": "metered", "unit_description": "per step executed (compensations included)" },
+    { "sku": "workflow.signal",       "mode": "metered", "unit_description": "per signal delivered" }
+  ],
+  "links": {
+    "readme": "packages/sdk-workflow/README.md",
+    "source": "packages/sdk-workflow/src/",
+    "prd_section": "P4-Operational-Billing §12 / FR-WFL-1..7"
+  }
+}
