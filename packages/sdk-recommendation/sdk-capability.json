@@ -1,0 +1,90 @@
+{
+  "name": "@projexlight/sdk-recommendation",
+  "version": "1.0.0",
+  "schema_version": "1.0",
+  "summary": "Recommendation engine for ProjexCloud: declarative per-domain models that produce ranked suggestions (next-best-action for an AE, next-best-content for a portal visitor, similar tickets for a support agent). Feedback events close the loop so models improve. Composes with sdk-lead-scoring + sdk-search + sdk-knowledge-rag.",
+  "tags": ["recommendation", "ml", "ranking", "next-best-action", "p6b"],
+  "provides": {
+    "endpoints": [],
+    "events": [
+      { "name": "recommendation.model.published.v1",  "retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "New recommendation model version published." },
+      { "name": "recommendation.suggestion.served.v1","retention_class": "operational","conflict_policy": "event-sourcing", "description": "Suggestion delivered to a consumer; powers attribution + feedback." },
+      { "name": "recommendation.feedback.recorded.v1","retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "User accepted/rejected/ignored a suggestion; feeds model improvement." }
+    ],
+    "models": [
+      { "schema": "recommendation", "table": "model",      "description": "Per-model row: domain, version, weights/algo config." },
+      { "schema": "recommendation", "table": "suggestion", "description": "Per-(subject, model) row: ranked items, served_at, expires_at." },
+      { "schema": "recommendation", "table": "feedback",   "description": "Per-feedback row: suggestion_id, item_id, action (accept/reject/ignore), persona_id." }
+    ],
+    "hooks": [
+      { "name": "publishModel",      "description": "Publish a new model version (per domain)." },
+      { "name": "getSuggestions",    "description": "Return ranked suggestions for a subject + domain. Tenant + permission scoped." },
+      { "name": "recordFeedback",    "description": "Log user feedback against a served suggestion; feeds the model." },
+      { "name": "startRetrainer",    "description": "Background trainer: re-fits weights from accumulated feedback per cadence." }
+    ],
+    "ui_components": []
+  },
+  "consumes": {
+    "events": [
+      { "name": "engagement.encounter.completed.v1",    "from": "@projexlight/sdk-engagement" },
+      { "name": "lead_scoring.score.changed.v1",        "from": "@projexlight/sdk-lead-scoring" },
+      { "name": "search.query.executed.v1",             "from": "@projexlight/sdk-search" }
+    ],
+    "infra": ["postgres", "redis-optional"],
+    "config_keys": ["RECOMMENDATION_DEFAULT_TOP_K", "RECOMMENDATION_RETRAIN_INTERVAL_HOURS", "RECOMMENDATION_FEEDBACK_HALFLIFE_DAYS"]
+  },
+  "scenarios": [
+    {
+      "id": "next-best-action-for-ae",
+      "title": "AE opens a deal → 5 ranked next-best-action suggestions",
+      "when_to_use": "AE's deal view loads; we surface 5 suggested next actions ('send proposal', 'schedule technical demo', 'introduce to security team') ranked by historic conversion.",
+      "example_code": "import { getSuggestions } from '@projexlight/sdk-recommendation';\nconst { suggestions } = await getSuggestions({\n  tenant_id, persona_id: ae.id,\n  subject: { kind: 'deal', id: deal_id },\n  domain: 'next-best-action',\n  top_k: 5,\n});",
+      "expected_outcome": "5 ranked actions returned with confidence scores. Emits .suggestion.served.v1 for attribution. AE can accept/reject — feedback feeds the next training pass."
+    },
+    {
+      "id": "feedback-closes-the-loop",
+      "title": "AE accepts a suggestion → feedback recorded",
+      "when_to_use": "AE clicks 'do this' on a suggestion; recordFeedback closes the loop so the next retrain weights this combination higher.",
+      "example_code": "import { recordFeedback } from '@projexlight/sdk-recommendation';\nawait recordFeedback({\n  suggestion_id, item_id: 'send-proposal',\n  action: 'accept', persona_id: ae.id,\n});",
+      "expected_outcome": "Feedback row written; emits .feedback.recorded.v1. Next retrainer pass uses this signal."
+    },
+    {
+      "id": "publish-content-recommender",
+      "title": "Publish a content-recommender model for the customer portal",
+      "when_to_use": "Marketing wants 'related articles' suggestions on the customer portal — publish a content-similarity model.",
+      "example_code": "import { publishModel } from '@projexlight/sdk-recommendation';\nawait publishModel({\n  tenant_id, domain: 'content-related', version: '1.0.0',\n  algo: 'content-vector-similarity',\n  config: { vector_source: 'sdk-knowledge-rag', top_k_default: 5 },\n});",
+      "expected_outcome": "Model published. Portal pages can call getSuggestions(domain='content-related', subject={kind:'article', id}) to render 'related articles'."
+    },
+    {
+      "id": "retrainer-cadence",
+      "title": "Daily retrainer absorbs feedback into new weights",
+      "when_to_use": "Background retrainer runs nightly; re-fits weights using exponentially-decayed feedback (RECOMMENDATION_FEEDBACK_HALFLIFE_DAYS), publishes a new draft version.",
+      "example_code": "import { startRetrainer } from '@projexlight/sdk-recommendation';\nstartRetrainer({ tenant_id, domain: 'next-best-action', interval_hours: 24 });",
+      "expected_outcome": "Nightly run produces a draft version; ops reviews + activates if KPIs hold. Emits .model.published.v1."
+    },
+    {
+      "id": "score-driven-suggestions",
+      "title": "Lead-score change triggers a fresh suggestion set",
+      "when_to_use": "Reactive on lead_scoring.score.changed.v1 — when a lead heats up, pre-compute next-best-action suggestions so the AE sees them on dashboard load.",
+      "example_code": "subscribeEvents('lead_scoring.score.changed.v1', async (e) => {\n  if (e.payload.new_score < 70) return;\n  await getSuggestions({ subject: { kind: 'lead', id: e.payload.lead_id }, domain: 'next-best-action' });\n});",
+      "expected_outcome": "Suggestion row precomputed + cached. AE sees instant suggestions instead of a loading spinner."
+    }
+  ],
+  "compliance_posture": {
+    "regimes": ["GDPR-Art-22-automated-decisions", "EU-AI-Act-Annex-IV-decision-logic", "SOC2-CC7.1", "Fair-Lending-Equal-Credit-Opportunity"],
+    "notes": "Same explainability posture as sdk-lead-scoring — every suggestion traces to model version + contributing features for any regulator who asks 'why was this recommended'. Feedback events are PII-light; persona_id pinned for attribution."
+  },
+  "pool_placement": "app",
+  "pricing_skus": [
+    { "sku": "recommendation.model.publish",  "mode": "flat",    "unit_description": "per model version" },
+    { "sku": "recommendation.suggestion.serve","mode": "metered","unit_description": "per served suggestion" },
+    { "sku": "recommendation.feedback.record","mode": "metered", "unit_description": "per feedback row" },
+    { "sku": "recommendation.retrain",        "mode": "metered", "unit_description": "per retrain pass (compute-heavy)" }
+  ],
+  "no_endpoints": true,
+  "links": {
+    "readme": "packages/sdk-recommendation/README.md",
+    "source": "packages/sdk-recommendation/src/",
+    "prd_section": "P6B-Knowledge-Semantic §12 / FR-REC-1..4"
+  }
+}

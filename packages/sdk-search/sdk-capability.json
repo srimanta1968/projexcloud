@@ -1,0 +1,96 @@
+{
+  "name": "@projexlight/sdk-search",
+  "version": "1.0.0",
+  "schema_version": "1.0",
+  "summary": "Cross-SDK search for ProjexCloud: declare indexes per entity kind (contact, content item, ticket, file), the indexer fans out from source-of-truth events, and queries return tenant-scoped + permission-filtered hits. Hybrid BM25 + vector reranking when sdk-knowledge-rag is composed in; pure lexical otherwise.",
+  "tags": ["search", "indexing", "discovery", "p6b", "knowledge"],
+  "provides": {
+    "endpoints": [
+      { "method": "GET",  "path": "/api/search",                    "description": "Run a query (q + index_filter); returns ranked hits with permission filtering." },
+      { "method": "POST", "path": "/api/search",                    "description": "Run a query with a body payload (for long queries / complex filters)." },
+      { "method": "POST", "path": "/api/search/index",              "description": "Declare or update an index definition (entity kind + field map + partitioning)." },
+      { "method": "POST", "path": "/api/search/saved-queries",      "description": "Save a named query for later (dashboards, alerts)." },
+      { "method": "POST", "path": "/api/search/reindex",            "description": "Trigger a reindex of a specific index + partition." }
+    ],
+    "events": [
+      { "name": "search.index.declared.v1",      "retention_class": "regulated", "conflict_policy": "lww",            "description": "New index definition or schema-change applied." },
+      { "name": "search.partition.reindexed.v1", "retention_class": "operational","conflict_policy": "event-sourcing", "description": "Per-partition reindex finished; carries doc count + elapsed." },
+      { "name": "search.query.executed.v1",      "retention_class": "operational","conflict_policy": "lww",            "description": "Query executed; audited for usage + cost attribution." },
+      { "name": "search.saved_query.fired.v1",   "retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "Saved-query refresh result diverged from last run; powers alerts." }
+    ],
+    "models": [
+      { "schema": "search", "table": "index_definition", "description": "Per-index row: name, entity_kind, field_map, refresh_cadence." },
+      { "schema": "search", "table": "index_partition",  "description": "Per-(index, partition) row: shard, doc_count, last_indexed_at." },
+      { "schema": "search", "table": "saved_query",      "description": "Named query: q, filters, owner_persona, refresh_cadence." }
+    ],
+    "hooks": [
+      { "name": "declareIndex",       "description": "Create / update an index definition. Migrations applied async." },
+      { "name": "query",              "description": "Execute a search query. Permission filtering via sdk-rebac." },
+      { "name": "saveQuery",          "description": "Persist a named query for re-execution / alerting." },
+      { "name": "reindexPartition",   "description": "Force a reindex of one partition (after schema change / data correction)." },
+      { "name": "startIndexerWorker", "description": "Background worker that fans out from source events into the index." }
+    ],
+    "ui_components": []
+  },
+  "consumes": {
+    "events": [
+      { "name": "content.published.v1",   "from": "@projexlight/sdk-content" },
+      { "name": "crm.contact.created.v1", "from": "@projexlight/sdk-crm" }
+    ],
+    "infra": ["postgres", "opensearch-or-elastic", "sdk-knowledge-rag-optional"],
+    "config_keys": ["SEARCH_DEFAULT_BACKEND", "SEARCH_INDEXER_BATCH_SIZE", "SEARCH_QUERY_TIMEOUT_MS"]
+  },
+  "scenarios": [
+    {
+      "id": "declare-contact-index",
+      "title": "Declare a contacts index with fuzzy-name + company fields",
+      "when_to_use": "Sales team needs quick contact search by name / company / email. Declare once; indexer fans out from crm.contact.created.v1 + .updated.v1 to keep it fresh.",
+      "example_code": "import { declareIndex } from '@projexlight/sdk-search';\nawait declareIndex({\n  tenant_id, name: 'contacts',\n  entity_kind: 'crm.contact',\n  field_map: { full_name: 'text-fuzzy', company: 'keyword', email: 'keyword', custom: 'object' },\n  partition_by: 'territory_id',\n});",
+      "expected_outcome": "Index definition persisted; emits .index.declared.v1. Indexer worker backfills + then subscribes to source events."
+    },
+    {
+      "id": "query-with-permission-filter",
+      "title": "AE searches contacts; results filtered by their territory",
+      "when_to_use": "AE issues 'company:acme'; we filter by their territory via sdk-rebac so they don't see contacts outside their book.",
+      "example_code": "import { query } from '@projexlight/sdk-search';\nconst hits = await query({\n  tenant_id, persona_id, index: 'contacts',\n  q: 'company:acme', filters: { stage_in: ['open','negotiation'] },\n  page_size: 20,\n});",
+      "expected_outcome": "Permission-filtered ranked hits returned. .query.executed.v1 audited for usage + cost. Out-of-territory matches silently dropped."
+    },
+    {
+      "id": "save-query-with-alert",
+      "title": "Save a query with a daily-refresh alert",
+      "when_to_use": "Sales-ops wants daily 'enterprise deals stalled > 30d'; saved query refreshes nightly + alerts when the set diverges from last run.",
+      "example_code": "import { saveQuery } from '@projexlight/sdk-search';\nawait saveQuery({\n  tenant_id, name: 'enterprise-stalled-30d',\n  q: 'stage:negotiation', filters: { tier: 'enterprise', last_activity_lt: 'now-30d' },\n  refresh_cadence_min: 1440, alert_on_diff: true,\n});",
+      "expected_outcome": "Saved query stored. Daily refresh; .saved_query.fired.v1 emitted on diff. sdk-notification routes to the owner."
+    },
+    {
+      "id": "reindex-after-field-add",
+      "title": "Reindex after adding a new field to the index definition",
+      "when_to_use": "Schema change: added a 'persona_segment' field; reindex to populate it.",
+      "example_code": "import { reindexPartition } from '@projexlight/sdk-search';\nawait reindexPartition({\n  index: 'contacts', partition: 'territory:us-east',\n});",
+      "expected_outcome": "Reindex job queued; partition rebuilt. Emits .partition.reindexed.v1 with doc count + elapsed."
+    },
+    {
+      "id": "hybrid-with-rag",
+      "title": "Hybrid lexical + vector with sdk-knowledge-rag composed",
+      "when_to_use": "Composed deployment — sdk-knowledge-rag provides vector reranking on top of the BM25 lexical pass for natural-language queries.",
+      "example_code": "import { query } from '@projexlight/sdk-search';\nconst hits = await query({\n  tenant_id, persona_id, index: 'contacts',\n  q: 'who at acme owns billing decisions', mode: 'hybrid',\n});",
+      "expected_outcome": "Hybrid pass: lexical BM25 narrows; vector rerank surfaces the most relevant. Falls back to lexical-only when sdk-knowledge-rag isn't installed."
+    }
+  ],
+  "compliance_posture": {
+    "regimes": ["SOC2-CC7.1", "GDPR-Art-30", "GDPR-Art-17-erasure-propagation", "EU-Data-Residency"],
+    "notes": "Permission filtering via sdk-rebac is mandatory on every query — index can't leak across territories / BU bounds. Erasure events propagate to the index (search rows removed within minutes). Partition_by region pin satisfies residency."
+  },
+  "pool_placement": "app",
+  "pricing_skus": [
+    { "sku": "search.index.declare", "mode": "flat",    "unit_description": "per index version" },
+    { "sku": "search.query.execute", "mode": "metered", "unit_description": "per query (cached results billed lower)" },
+    { "sku": "search.reindex",       "mode": "metered", "unit_description": "per partition reindexed" },
+    { "sku": "search.saved_query.fire","mode": "metered","unit_description": "per saved-query refresh that emits an alert" }
+  ],
+  "links": {
+    "readme": "packages/sdk-search/README.md",
+    "source": "packages/sdk-search/src/",
+    "prd_section": "P6B-Knowledge-Semantic §11 / FR-SRC-1..5"
+  }
+}
