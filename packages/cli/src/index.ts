@@ -7,6 +7,7 @@
  */
 
 export { runInit, type InitFlags, type InitResult } from './commands/init';
+export { runInstall, type InstallFlags, type InstallResult, type InstallAction } from './commands/install';
 export { runRegistryRefresh, type RefreshFlags, type RefreshResult } from './commands/registry';
 export {
   loginStub,

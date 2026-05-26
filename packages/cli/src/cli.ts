@@ -14,8 +14,9 @@
  */
 
 import { runInit } from './commands/init';
+import { runInstall } from './commands/install';
 import { runRegistryRefresh } from './commands/registry';
-import { loginStub, deployStub, installStub, blueprintStub, type StubOutput } from './commands/stubs';
+import { loginStub, deployStub, blueprintStub, type StubOutput } from './commands/stubs';
 
 interface ParsedArgs {
   subcommand: string;
@@ -59,7 +60,10 @@ Subcommands:
                               Pull the SDK catalog into ~/.projex/cache/
                               (from PROJEX_CATALOG_SOURCE / PROJEX_DEV_ROOT
                               by default).
-  install <sdk_name>          [Phase 1.5 stub] Add an SDK to the local app.
+  install <sdk_name> [--force]
+                              Add a ProjexCloud SDK to the current app:
+                              edits package.json, drops a starter integration
+                              at src/integrations/, updates src/index.ts.
   blueprint list|apply [id]   [E4 stub] Vertical blueprint library.
   login                       [E3 Phase 2 stub] OAuth device flow.
   deploy [--env <env>]        [E3 Phase 2 stub] Ship to tenant pool.
@@ -86,8 +90,22 @@ function emit(result: unknown, jsonMode: boolean): void {
     process.stdout.write(JSON.stringify(result, null, 2) + '\n');
     return;
   }
-  // Pretty print common shapes; fall back to JSON for unknown.
-  if (typeof result === 'object' && result !== null && 'targetDir' in result) {
+  // Pretty print common shapes; check most-specific first so the
+  // dispatch routes correctly (install result also has targetDir, so it
+  // must be checked before the init shape).
+  if (typeof result === 'object' && result !== null && 'integrationPath' in result) {
+    const r = result as { sdk_name: string; depVersion: string; packageJsonAction: string; integrationAction: string; integrationPath: string; indexUpdated: boolean; warnings: string[] };
+    process.stdout.write(`Installed ${r.sdk_name} @ ${r.depVersion}\n`);
+    process.stdout.write(`  package.json:  ${r.packageJsonAction}\n`);
+    process.stdout.write(`  integration:   ${r.integrationAction} (${r.integrationPath})\n`);
+    process.stdout.write(`  src/index.ts:  ${r.indexUpdated ? 'updated' : 'unchanged'}\n`);
+    if (r.warnings.length > 0) {
+      process.stdout.write(`  Warnings:\n`);
+      for (const w of r.warnings) process.stdout.write(`    - ${w}\n`);
+    }
+    return;
+  }
+  if (typeof result === 'object' && result !== null && 'appName' in result) {
     const r = result as { appName: string; targetDir: string; files: string[]; mcpWrites: Array<{ tool: string; action: string; configPath: string }>; warnings: string[] };
     process.stdout.write(`Created ${r.appName} at ${r.targetDir}\n`);
     process.stdout.write(`  Files: ${r.files.length}\n`);
@@ -143,8 +161,17 @@ async function main(): Promise<void> {
       }
 
       case 'install': {
-        const sdk_name = args.positional[0] || '<sdk-name>';
-        emit(installStub(sdk_name), jsonMode);
+        const sdk_name = args.positional[0];
+        if (!sdk_name) {
+          process.stderr.write(`projex install: missing <sdk_name>. Example: projex install @projexlight/sdk-vault\n`);
+          process.exit(2);
+        }
+        const result = runInstall({
+          sdk_name,
+          force: args.flags.force === true,
+          noPackageEdit: args.flags['no-package-edit'] === true,
+        });
+        emit(result, jsonMode);
         return;
       }
 
