@@ -1,0 +1,96 @@
+{
+  "name": "@projexlight/sdk-media",
+  "version": "1.0.0",
+  "schema_version": "1.0",
+  "summary": "Binary-asset layer for ProjexCloud: presigned upload + playback URLs for blobs, content-addressable storage (SHA-256), and transcode/derivation jobs for video + image variants. Decouples 'where do the bytes live' from 'who can use them' so sdk-evidence + hdk-camera + sdk-content can move large objects through the platform without holding bytes in app memory.",
+  "tags": ["media", "blob-storage", "presigned-url", "transcode", "foundation"],
+  "provides": {
+    "endpoints": [
+      { "method": "POST", "path": "/api/media/upload-url",            "description": "Get a presigned PUT URL for a new blob. Mobile/web client uploads directly to S3 (or equivalent), bypassing our API tier." },
+      { "method": "POST", "path": "/api/media/:blob_id/ready",        "description": "Mark a blob upload as committed; emits .ingested.v1 so downstream SDKs (evidence, content) can pick it up." },
+      { "method": "GET",  "path": "/api/media/:blob_id/playback-url", "description": "Get a presigned GET URL for download/playback. Scoped TTL." },
+      { "method": "POST", "path": "/api/media/:blob_id/transcode",    "description": "Kick off a transcode/derivation job (e.g. video → 720p + thumbnails, or PDF → searchable PDF)." },
+      { "method": "GET",  "path": "/api/media/transcode-jobs/:job_id","description": "Job status: pending / processing / done / failed + the derived blob_ids when done." }
+    ],
+    "events": [
+      { "name": "media.blob.ingested.v1",          "retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "Client committed a blob upload; carries blob_id + sha256 + mime + size." },
+      { "name": "media.blob.playback_requested.v1","retention_class": "operational","conflict_policy": "lww",            "description": "Playback URL issued; used for access auditing + cost attribution." },
+      { "name": "media.transcode.completed.v1",    "retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "Transcode/derivation job finished; carries the derived blob_ids." },
+      { "name": "media.blob.deleted.v1",           "retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "Blob deleted (retention expiry / tenant offboard); carries blob_id + reason." }
+    ],
+    "models": [
+      { "schema": "media", "table": "blob",          "description": "Per-blob row: blob_id, sha256, mime, size, storage_uri (s3://…), ingested_at, retention_class." },
+      { "schema": "media", "table": "signed_url",    "description": "Per-issued-url row: blob_id, kind (upload/download), issued_to_persona, expires_at." },
+      { "schema": "media", "table": "transcode_job", "description": "Per-job row: source_blob, derivation_kind, status, derived_blob_ids, started_at, finished_at." }
+    ],
+    "hooks": [
+      { "name": "getUploadUrl",      "description": "Issue a presigned PUT URL for a new blob. Returns blob_id (placeholder) + url + headers." },
+      { "name": "markBlobReady",     "description": "Confirm a blob upload — server verifies the SHA-256 + emits .ingested.v1." },
+      { "name": "getPlaybackUrl",    "description": "Issue a presigned GET URL for an existing blob. TTL respects tenant + retention policy." },
+      { "name": "startTranscode",    "description": "Queue a transcode/derivation job (video → 720p, PDF → OCR, image → thumb)." },
+      { "name": "startRetentionShredder","description": "Background worker: deletes blobs past their retention_class TTL. Emits .deleted.v1 per blob." }
+    ],
+    "ui_components": []
+  },
+  "consumes": {
+    "events": [
+      { "name": "evidence.capture.registered.v1", "from": "@projexlight/sdk-evidence" },
+      { "name": "tenant.offboarded.v1",           "from": "@projexlight/sdk-tenant-lifecycle" }
+    ],
+    "infra": ["postgres", "s3-or-equivalent-blob-store", "ffmpeg-or-similar-transcoder"],
+    "config_keys": ["MEDIA_DEFAULT_REGION", "MEDIA_PRESIGNED_URL_TTL_SEC", "MEDIA_TRANSCODE_CONCURRENCY"]
+  },
+  "scenarios": [
+    {
+      "id": "mobile-uploads-photo",
+      "title": "Tech mobile app uploads a proof-of-work photo",
+      "when_to_use": "Mobile client gets a presigned URL, uploads the photo directly to S3 (skipping our API), then calls markBlobReady to commit.",
+      "example_code": "import { getUploadUrl, markBlobReady } from '@projexlight/sdk-media';\nconst { blob_id, url, headers } = await getUploadUrl({\n  tenant_id, mime: 'image/jpeg', size: 2_400_000,\n});\n// mobile PUTs bytes directly to S3:\nawait fetch(url, { method: 'PUT', headers, body: photoBytes });\nawait markBlobReady({ blob_id, sha256: bytesSha256 });",
+      "expected_outcome": "Blob row written, .ingested.v1 emitted. sdk-evidence picks it up + binds to the encounter without ever touching the bytes."
+    },
+    {
+      "id": "playback-link-for-review",
+      "title": "Adjuster reviews evidence photos",
+      "when_to_use": "Insurance adjuster opens a claim; UI fetches presigned download URLs to render the proof photos.",
+      "example_code": "import { getPlaybackUrl } from '@projexlight/sdk-media';\nconst { url } = await getPlaybackUrl({\n  blob_id, ttl_sec: 300, persona_id: adjuster_id,\n});",
+      "expected_outcome": "URL valid for 5 min; emits .playback_requested.v1. Adjuster's browser fetches directly from S3 (no API bandwidth)."
+    },
+    {
+      "id": "transcode-video-evidence",
+      "title": "Body-cam video → 720p + thumbnail for review",
+      "when_to_use": "Body-cam upload is 4K; transcoder produces a 720p variant for fast review + a thumbnail for the evidence-list grid.",
+      "example_code": "import { startTranscode } from '@projexlight/sdk-media';\nconst { job_id } = await startTranscode({\n  source_blob_id, derivations: [\n    { kind: 'video-720p' },\n    { kind: 'thumbnail-jpg' },\n  ],\n});",
+      "expected_outcome": "Job queued; worker picks it up + writes derived blobs. Emits .transcode.completed.v1 with the derived blob_ids. sdk-evidence variants point at the derived blobs."
+    },
+    {
+      "id": "retention-shredder",
+      "title": "Daily worker deletes expired blobs",
+      "when_to_use": "Blobs tagged retention_class='evidence-7-year' delete on day 7×365+1; 'operational-30-day' deletes after 30 days. Background worker drives the schedule.",
+      "example_code": "import { startRetentionShredder } from '@projexlight/sdk-media';\nstartRetentionShredder({ tenant_id, interval_min: 60 });",
+      "expected_outcome": "Per-tick scan deletes blobs past TTL; emits .deleted.v1 per blob. Customer can prove deletion to their regulator."
+    },
+    {
+      "id": "shred-on-tenant-offboard",
+      "title": "Tenant offboard → shred all blobs",
+      "when_to_use": "Reactive on tenant.offboarded.v1 — scrub every blob_id for the tenant. Idempotent on the (tenant_id) key.",
+      "example_code": "subscribeEvents('tenant.offboarded.v1', async (e) => {\n  await shredAllBlobsForTenant({ tenant_id: e.payload.tenant_id });\n});",
+      "expected_outcome": "Every blob deleted; emits .deleted.v1 per blob. Sync history retained but with storage_uri tombstoned."
+    }
+  ],
+  "compliance_posture": {
+    "regimes": ["SOC2-CC7.2-storage", "GDPR-Art-32-encryption", "HIPAA-164.312-technical-safeguards", "FRE-Rule-902-self-authentication", "EU-Data-Residency"],
+    "notes": "SHA-256 content-addressable storage means any byte tampering shows up as a mismatch. Presigned URLs scoped per persona + audited via .playback_requested.v1. Storage region pinned per tenant for EU residency. Cryptographic erasure for HIPAA + GDPR via vault-key shred on the blob's wrapping key."
+  },
+  "pool_placement": "evidence",
+  "pricing_skus": [
+    { "sku": "media.blob.ingest",          "mode": "metered", "unit_description": "per blob committed" },
+    { "sku": "media.storage.gb-month",     "mode": "metered", "unit_description": "per GB stored per month" },
+    { "sku": "media.playback.url",         "mode": "metered", "unit_description": "per presigned download URL issued" },
+    { "sku": "media.transcode.minute",     "mode": "metered", "unit_description": "per transcoder-minute (video derivations)" }
+  ],
+  "links": {
+    "readme": "packages/sdk-media/README.md",
+    "source": "packages/sdk-media/src/",
+    "prd_section": "P5-Media §1 / FR-MED-1..6"
+  }
+}

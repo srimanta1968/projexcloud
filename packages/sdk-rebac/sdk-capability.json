@@ -1,0 +1,88 @@
+{
+  "name": "@projexlight/sdk-rebac",
+  "version": "1.0.0",
+  "schema_version": "1.0",
+  "summary": "Relationship-based access control (ReBAC) for ProjexCloud: model 'who is related to what and how' (Zanzibar-style relation tuples), then ask 'can this user perform this action on this resource?' Universal authorization primitive — every other SDK delegates 'is this allowed' to this one so policy logic stays centralized + auditable.",
+  "tags": ["rebac", "authorization", "zanzibar", "access-control", "foundation"],
+  "provides": {
+    "endpoints": [
+      { "method": "POST", "path": "/api/relationships",                       "description": "Write a relationship tuple (subject, relation, object). Idempotent on the tuple key." },
+      { "method": "PUT",  "path": "/api/relationships/:relationship_id/scope","description": "Update the scope (tenant_id / bu_id pin) of an existing relationship." },
+      { "method": "POST", "path": "/api/relationships/check",                 "description": "Decision endpoint — returns allow/deny + the relationship chain that justified it." }
+    ],
+    "events": [
+      { "name": "rebac.relationship.added.v1",     "retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "Tuple committed; carries (subject, relation, object) keys." },
+      { "name": "rebac.relationship.removed.v1",   "retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "Tuple removed (explicit revoke or cascade from upstream change)." },
+      { "name": "rebac.decision.evaluated.v1",     "retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "Authorization check evaluated; carries decision + walked-edges trace." }
+    ],
+    "models": [
+      { "schema": "rebac", "table": "relationship",          "description": "Tuple row: (subject_kind, subject_id, relation, object_kind, object_id, tenant_id, bu_id). Index for both directions." },
+      { "schema": "rebac", "table": "relationship_decision", "description": "Per-check audit row: principal, action, resource, decision (allow/deny), walked_edges, evaluated_at." }
+    ],
+    "hooks": [
+      { "name": "addRelationship",   "description": "Write a tuple — idempotent on (subject, relation, object). Emits .added.v1." },
+      { "name": "removeRelationship","description": "Remove a tuple. Cascades dependent permissions if cascade flag set." },
+      { "name": "checkPermission",  "description": "Universal authorization check; walks the tuple graph to a fixed depth + returns allow/deny + edge trace." },
+      { "name": "expandPermissions","description": "List every (subject, action) the given principal can perform on the given resource. Useful for tenant-admin UIs that show 'who can do what'." }
+    ],
+    "ui_components": []
+  },
+  "consumes": {
+    "events": [
+      { "name": "tenant.offboarded.v1", "from": "@projexlight/sdk-tenant-lifecycle" }
+    ],
+    "infra": ["postgres", "redis-optional"],
+    "config_keys": ["REBAC_MAX_TRAVERSAL_DEPTH", "REBAC_CACHE_TTL_MS"]
+  },
+  "scenarios": [
+    {
+      "id": "grant-org-owner",
+      "title": "Make a user the owner of a tenant org",
+      "when_to_use": "Onboarding — first admin of a new tenant gets the 'owner' relation, which other SDKs trust as the highest-permission anchor.",
+      "example_code": "import { addRelationship } from '@projexlight/sdk-rebac';\nawait addRelationship({\n  subject: { kind: 'persona', id: persona_id },\n  relation: 'owner',\n  object: { kind: 'org', id: org_id },\n  scope: { tenant_id, bu_id: null },\n});",
+      "expected_outcome": "Tuple persisted; emits .added.v1. Subsequent checkPermission calls for that persona on org-scoped actions resolve allow."
+    },
+    {
+      "id": "check-document-edit",
+      "title": "Can this user edit this document?",
+      "when_to_use": "Per-request authorization in any SDK that operates on resources. The check walks the relation graph (persona → team_member → team → editor → document).",
+      "example_code": "import { checkPermission } from '@projexlight/sdk-rebac';\nconst { allow, walked_edges } = await checkPermission({\n  principal: { kind: 'persona', id: persona_id },\n  action: 'document.edit',\n  resource: { kind: 'document', id: doc_id },\n  tenant_id,\n});",
+      "expected_outcome": "Decision row written + emitted. allow=true with walked_edges showing the path. Default deny if no path found."
+    },
+    {
+      "id": "expand-permissions-for-ui",
+      "title": "Tenant admin UI: 'what can Alice do on this project?'",
+      "when_to_use": "Permissions-explorer panel — operator wants to see the full set of (action, resource) pairs Alice can perform without making N check calls.",
+      "example_code": "import { expandPermissions } from '@projexlight/sdk-rebac';\nconst rows = await expandPermissions({\n  principal: { kind: 'persona', id: alice_id },\n  resource: { kind: 'project', id: project_id },\n});",
+      "expected_outcome": "Returns array of { action, allow, walked_edges } — UI renders as a permissions matrix."
+    },
+    {
+      "id": "remove-on-offboard",
+      "title": "Reactive: remove all relationships when a persona offboards",
+      "when_to_use": "Persona leaves the company; cascade-remove every tuple they're the subject of so their old permissions don't persist.",
+      "example_code": "import { removeRelationshipsForSubject } from '@projexlight/sdk-rebac';\nsubscribeEvents('persona.offboarded.v1', async (e) => {\n  await removeRelationshipsForSubject({ kind: 'persona', id: e.payload.persona_id, cascade: true });\n});",
+      "expected_outcome": "Every tuple where the persona was subject removed; emits .removed.v1 per tuple. Future checkPermission for this persona returns deny."
+    },
+    {
+      "id": "scope-relationship-to-bu",
+      "title": "Scope a relationship to a single business unit",
+      "when_to_use": "Multi-BU tenant — grant 'editor' on a project only within BU-A, not the whole org. Required for the six-layer scope model.",
+      "example_code": "import { addRelationship } from '@projexlight/sdk-rebac';\nawait addRelationship({\n  subject: { kind: 'persona', id }, relation: 'editor',\n  object: { kind: 'project', id: project_id },\n  scope: { tenant_id, bu_id: bu_a_id },\n});",
+      "expected_outcome": "Tuple bound to BU-A. checkPermission outside BU-A's scope returns deny even for the same project."
+    }
+  ],
+  "compliance_posture": {
+    "regimes": ["SOC2-CC6.1-access-control", "ISO-27001-Annex-A-9", "GDPR-Art-32-security", "FedRAMP-AC-family"],
+    "notes": "Every decision is auditable to the relation chain walked — full SOC2-CC6.1 + ISO 27001 access-control audit trail without needing separate access logs. Cascade-remove on persona offboard is the GDPR Art-32 + 'principle of least privilege' implementation lever."
+  },
+  "pool_placement": "admin",
+  "pricing_skus": [
+    { "sku": "rebac.relationship.write", "mode": "metered", "unit_description": "per tuple written or removed" },
+    { "sku": "rebac.permission.check",   "mode": "metered", "unit_description": "per checkPermission call (cached decisions billed at lower rate)" }
+  ],
+  "links": {
+    "readme": "packages/sdk-rebac/README.md",
+    "source": "packages/sdk-rebac/src/",
+    "prd_section": "P2-Identity-Access §7 / FR-REBAC-1..6"
+  }
+}

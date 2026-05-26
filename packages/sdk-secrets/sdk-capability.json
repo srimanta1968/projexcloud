@@ -1,0 +1,92 @@
+{
+  "name": "@projexlight/sdk-secrets",
+  "version": "1.0.0",
+  "schema_version": "1.0",
+  "summary": "Tenant-scoped secrets store for ProjexCloud: holds the customer-supplied credentials each SDK needs to talk to external systems (Snowflake account keys, Salesforce OAuth refresh tokens, Twilio API keys, custom webhook signing secrets). Envelope-encrypted via sdk-vault, with versioned rotation + named references so application code never sees raw plaintext.",
+  "tags": ["secrets", "credentials", "vault", "rotation", "foundation"],
+  "provides": {
+    "endpoints": [
+      { "method": "POST", "path": "/api/secrets",                "description": "Create or replace a named secret. Returns a stable ref (the plaintext is wrapped + discarded)." },
+      { "method": "GET",  "path": "/api/secrets/:ref",           "description": "Read a secret by ref. Returns plaintext only to callers with secrets.read.<scope> permission." },
+      { "method": "POST", "path": "/api/secrets/:ref/rotate",    "description": "Rotate a secret: write a new version + retire the previous after the consumers have switched." }
+    ],
+    "events": [
+      { "name": "secrets.secret.written.v1",  "retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "Secret created or replaced; carries ref + version (NO plaintext)." },
+      { "name": "secrets.secret.read.v1",     "retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "Secret retrieved; carries ref, persona_id, caller_sdk for audit." },
+      { "name": "secrets.secret.rotated.v1",  "retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "Rotation completed; carries old + new version numbers." },
+      { "name": "secrets.secret.retired.v1",  "retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "Old version retired (no longer readable). Final compliance moment before key disposal." }
+    ],
+    "models": [
+      { "schema": "secrets", "table": "secret",         "description": "Per-secret row: ref, current_version, scope (tenant_id / bu_id), purpose tag." },
+      { "schema": "secrets", "table": "secret_version", "description": "Per-version row: ciphertext, vault_key_id, created_at, retired_at, retired_reason." }
+    ],
+    "hooks": [
+      { "name": "putSecret",       "description": "Create/replace a secret. Plaintext encrypted via sdk-vault; plaintext discarded from process memory." },
+      { "name": "getSecret",       "description": "Retrieve a secret by ref. Audited; rate-limited per persona to surface anomalies." },
+      { "name": "rotateSecret",    "description": "Write a new version + plan retirement of the old (with consumer-acknowledgement window)." },
+      { "name": "startRetirementWorker", "description": "Background worker: retires versions past their grace window. Emits .retired.v1." }
+    ],
+    "ui_components": []
+  },
+  "consumes": {
+    "events": [
+      { "name": "vault.key.shredded.v1",   "from": "@projexlight/sdk-vault" },
+      { "name": "tenant.offboarded.v1",    "from": "@projexlight/sdk-tenant-lifecycle" }
+    ],
+    "infra": ["postgres", "sdk-vault"],
+    "config_keys": ["SECRETS_RETIREMENT_GRACE_HOURS", "SECRETS_READ_RATE_LIMIT_PER_PERSONA_PER_MIN"]
+  },
+  "scenarios": [
+    {
+      "id": "store-snowflake-credential",
+      "title": "Tenant uploads Snowflake service-user credentials",
+      "when_to_use": "Customer installs connector-snowflake; their Snowflake private key + service-user gets put into sdk-secrets so the connector can fetch it on demand.",
+      "example_code": "import { putSecret } from '@projexlight/sdk-secrets';\nconst { ref } = await putSecret({\n  tenant_id, name: 'snowflake-prod-svc',\n  plaintext: privateKeyPem,\n  purpose: 'connector-snowflake',\n});\n// Persist `ref` in the connector install row instead of the key.",
+      "expected_outcome": "Plaintext encrypted via sdk-vault, then discarded; ref returned. Emits .written.v1 (no plaintext)."
+    },
+    {
+      "id": "consumer-fetches-secret",
+      "title": "Connector fetches credential at sync time",
+      "when_to_use": "connector-snowflake's scheduled sync run pulls the credential just before opening the Snowflake session; never caches plaintext in app memory.",
+      "example_code": "import { getSecret } from '@projexlight/sdk-secrets';\nconst plaintext = await getSecret({ ref, caller_sdk: '@projexlight/connector-snowflake' });\nconst session = await snowflake.connect({ privateKey: plaintext });\n// plaintext goes out of scope immediately after.",
+      "expected_outcome": "Plaintext returned (audited). Read event has caller_sdk + persona_id so anomalies show up in usage reviews."
+    },
+    {
+      "id": "rotate-credential",
+      "title": "Tenant rotates Snowflake credentials after the security review",
+      "when_to_use": "Annual rotation. New private key uploaded; old key kept readable for grace window so any in-flight syncs finish, then retired.",
+      "example_code": "import { rotateSecret } from '@projexlight/sdk-secrets';\nconst { new_version } = await rotateSecret({\n  ref, new_plaintext: newPrivateKeyPem,\n  grace_hours: 24,\n});",
+      "expected_outcome": "New version written + emitted. Old version retires automatically after 24h; emits .retired.v1. Consumers read by ref get the new version on next fetch."
+    },
+    {
+      "id": "shred-on-offboard",
+      "title": "Reactive: shred all secrets when tenant offboards",
+      "when_to_use": "tenant.offboarded.v1 → mark every (tenant) secret retired immediately + delete the wrapped ciphertext. Vault key shred via sdk-vault handles the cryptographic erasure.",
+      "example_code": "subscribeEvents('tenant.offboarded.v1', async (e) => {\n  await retireAllSecretsForTenant({ tenant_id: e.payload.tenant_id, reason: 'tenant-offboarded' });\n});",
+      "expected_outcome": "Every secret marked retired; ciphertext deleted. .retired.v1 fires per row. Customer can prove cryptographic erasure to their regulator."
+    },
+    {
+      "id": "anomalous-read-detection",
+      "title": "Rate-limit catches anomalous read burst",
+      "when_to_use": "Defensive — if a persona suddenly reads 100 secrets in 60s, throttle + alert. May indicate a compromised service account or rogue tech.",
+      "example_code": "// rate-limit fires automatically in getSecret; alert path:\nsubscribeEvents('secrets.secret.read.v1', async (e) => {\n  const c = await getRecentReadCount({ persona_id: e.payload.persona_id, window_sec: 60 });\n  if (c > 50) alertOps({ persona_id: e.payload.persona_id, count: c });\n});",
+      "expected_outcome": "Operator paged. Persona reads beyond the limit fail closed (rate-limit error). SOC2 anomaly-detection control satisfied."
+    }
+  ],
+  "compliance_posture": {
+    "regimes": ["SOC2-CC6.1-access-control", "PCI-DSS-3.5-key-management", "GDPR-Art-32-encryption", "FedRAMP-SC-13", "ISO-27001-Annex-A-10-cryptography"],
+    "notes": "Every read audited; reads outside business hours auto-flagged. PCI 3.5 + FedRAMP SC-13 key-management satisfied via sdk-vault envelope encryption. Cryptographic erasure on tenant offboard via vault-key shred — strongest GDPR Art-17 / Art-32 posture."
+  },
+  "pool_placement": "admin",
+  "pricing_skus": [
+    { "sku": "secrets.put",     "mode": "metered", "unit_description": "per secret written" },
+    { "sku": "secrets.read",    "mode": "metered", "unit_description": "per secret read (audited)" },
+    { "sku": "secrets.rotate",  "mode": "flat",    "unit_description": "per rotation cycle" }
+  ],
+  "no_endpoints": false,
+  "links": {
+    "readme": "packages/sdk-secrets/README.md",
+    "source": "packages/sdk-secrets/src/",
+    "prd_section": "P1-Foundation-Spine §6 / FR-SEC-1..5"
+  }
+}
