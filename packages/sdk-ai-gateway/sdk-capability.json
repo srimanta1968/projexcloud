@@ -1,0 +1,93 @@
+{
+  "name": "@projexlight/sdk-ai-gateway",
+  "version": "1.0.0",
+  "schema_version": "1.0",
+  "summary": "Multi-provider LLM gateway for ProjexCloud agents. Wraps Anthropic / OpenAI / Bedrock / Gemini behind one interface, routes requests by route_rule (tenant policy + cost + latency), strips PII via configurable redaction rules before egress, meters tokens through sdk-meter, signs every completion into the audit chain. The substrate every AI-touching SDK and the cloud builder agent sits on top of.",
+  "tags": ["ai", "llm", "anthropic", "openai", "bedrock", "gemini", "redaction", "p6a"],
+  "provides": {
+    "endpoints": [
+      { "method": "GET",  "path": "/api/ai-gateway/health",   "description": "Liveness probe; confirms every required provider is reachable + capability-token signing key loaded." },
+      { "method": "POST", "path": "/api/ai-gateway/complete", "description": "Non-streaming completion. Returns the full message + usage + provider + route_rule_id used." },
+      { "method": "POST", "path": "/api/ai-gateway/stream",   "description": "Streaming completion via SSE. Same shape as complete but delta tokens stream as they arrive." }
+    ],
+    "events": [
+      { "name": "ai-gateway.completion.v1",       "retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "Every completion (streaming or not) writes one event at end-of-response; carries provider + model + usage + redaction_decisions." },
+      { "name": "ai-gateway.redaction.applied.v1","retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "PII / PHI redaction rule fired on egress. Carries rule_id + count_redacted." },
+      { "name": "ai-gateway.route.flipped.v1",    "retention_class": "regulated", "conflict_policy": "lww",            "description": "Route rule updated (provider switch, cost ceiling change). Cache invalidation broadcast." },
+      { "name": "ai-gateway.provider.degraded.v1","retention_class": "operational","conflict_policy": "lww",            "description": "Provider health probe failed; route_rule fallback engaged." }
+    ],
+    "models": [
+      { "schema": "ai_gateway", "table": "provider",            "description": "Per-provider config: name (anthropic/openai/bedrock/gemini), api_base, signing-key vault ref, health_status." },
+      { "schema": "ai_gateway", "table": "route_rule",          "description": "Per-(tenant, intent) routing: which provider + model, cost ceiling, latency target, fallback chain." },
+      { "schema": "ai_gateway", "table": "completion",          "description": "Per-completion log: tenant, persona, intent, provider, model, prompt_tokens, completion_tokens, latency_ms." },
+      { "schema": "ai_gateway", "table": "pii_redaction_rule",  "description": "Regex + ML-classifier rules; pre-egress redaction with reversible tokenization for round-trippable redaction." }
+    ],
+    "hooks": [
+      { "name": "complete",          "description": "Universal completion entry. Picks provider + model from the route_rule, applies redaction, meters tokens, signs audit." },
+      { "name": "stream",            "description": "Streaming variant returning an AsyncIterable of token deltas + a final usage object." },
+      { "name": "registerProvider",  "description": "Wire a new provider adapter (Anthropic / OpenAI / Bedrock / Gemini / custom)." },
+      { "name": "addRedactionRule",  "description": "Add a tenant-scoped PII / PHI redaction rule; pre-egress + post-ingress symmetry." }
+    ],
+    "ui_components": []
+  },
+  "consumes": {
+    "events": [
+      { "name": "vault.key.rotated.v1",    "from": "@projexlight/sdk-vault" },
+      { "name": "tenant.offboarded.v1",    "from": "@projexlight/sdk-tenant-lifecycle" }
+    ],
+    "infra": ["postgres", "redis-optional", "langfuse-optional"],
+    "config_keys": ["AI_GATEWAY_REQUIRED_PROVIDERS", "ANTHROPIC_API_KEY", "OPENAI_API_KEY", "AWS_BEDROCK_ACCESS_KEY", "GEMINI_API_KEY", "AI_GATEWAY_LANGFUSE_ENABLED"]
+  },
+  "scenarios": [
+    {
+      "id": "cloud-builder-completion",
+      "title": "Cloud-builder agent generates scaffold instructions via the gateway",
+      "when_to_use": "The E6 cloud builder agent calls complete() for every reasoning step. Routing picks the cheapest model that satisfies the tenant's quality + latency targets.",
+      "example_code": "import { complete } from '@projexlight/sdk-ai-gateway';\nconst result = await complete({\n  tenant_id, persona_id, intent: 'blueprint-clarify',\n  messages: [{ role: 'user', content: 'I want a claims-intake workflow with photo evidence' }],\n  max_tokens: 1000,\n});\nconsole.log(result.message.content, result.usage);",
+      "expected_outcome": "Returns { message, usage, provider, model, route_rule_id }. Emits ai-gateway.completion.v1 to the audit chain. Tokens metered via sdk-meter under the ai-gateway.completion SKU."
+    },
+    {
+      "id": "pii-redaction",
+      "title": "PII auto-redacted before being sent to the provider",
+      "when_to_use": "Healthcare or FinServ tenant; PHI / PII can never leak to a third-party LLM. The pre-egress redactor strips it; tokens flow back through the reverse map on response.",
+      "example_code": "import { addRedactionRule, complete } from '@projexlight/sdk-ai-gateway';\nawait addRedactionRule({\n  tenant_id, rule_id: 'ssn',\n  pattern: '\\\\b\\\\d{3}-\\\\d{2}-\\\\d{4}\\\\b',\n  replacement_strategy: 'reversible-token',\n});\n// Now every complete() call has SSNs in the prompt replaced with tokens before the LLM sees them, and reversed in the response.",
+      "expected_outcome": "Provider never sees the SSN. Emits ai-gateway.redaction.applied.v1 with count. Response surface has the original SSN restored from the reverse map (or stays redacted if reversal disabled)."
+    },
+    {
+      "id": "route-rule-cost-cap",
+      "title": "Route rule caps tenant spend by downgrading to a cheaper model",
+      "when_to_use": "Tenant's monthly LLM budget is exhausting; route_rule auto-downgrades from gpt-4-class to a cheaper model until reset.",
+      "example_code": "// route_rule rows:\n// { intent: 'blueprint-clarify', primary: 'anthropic/claude-sonnet', fallback_on_cost_cap: 'anthropic/claude-haiku' }\n// On budget exhaustion the gateway switches automatically.",
+      "expected_outcome": "Cost cap respected automatically. Emits ai-gateway.route.flipped.v1 with reason='cost-cap'. Tenant admin sees the warning on the Billing page."
+    },
+    {
+      "id": "provider-degraded-failover",
+      "title": "Provider degraded → automatic failover to backup",
+      "when_to_use": "Anthropic API returns 5xx; route_rule's fallback chain engages without the agent caller seeing the disruption.",
+      "example_code": "// Health probe spots the degradation; flips ai_gateway.provider.health_status\n// Next complete() call uses the fallback in the route_rule's chain.\n// Emits ai-gateway.provider.degraded.v1.",
+      "expected_outcome": "Caller's complete() succeeds via the fallback provider. Result carries the actual provider used so observability can attribute traffic correctly."
+    },
+    {
+      "id": "streaming-completion",
+      "title": "Stream tokens for an interactive chat UI",
+      "when_to_use": "Cloud-builder UI streams tokens as they arrive for snappy feedback.",
+      "example_code": "import { stream } from '@projexlight/sdk-ai-gateway';\nfor await (const delta of stream({\n  tenant_id, persona_id, intent: 'cloud-builder-chat',\n  messages: [...],\n})) {\n  process.stdout.write(delta.token);\n}",
+      "expected_outcome": "AsyncIterable yields incremental tokens; a final delta carries the usage object. Single ai-gateway.completion.v1 event at end-of-stream (not per-token)."
+    }
+  ],
+  "compliance_posture": {
+    "regimes": ["SOC2-CC6.7", "HIPAA-Privacy-Rule-egress-control", "GDPR-Art-44-third-country-transfer", "FedRAMP-AC-4", "EU-AI-Act-Annex-IV-logging"],
+    "notes": "Provider keys vault-wrapped; never in plaintext env vars in production. Egress redaction is the HIPAA / GDPR safeguard — a misconfiguration here is a data-protection incident. EU AI Act logging satisfied by ai-gateway.completion.v1 per-call. Customers in regulated jurisdictions may pin route_rule to providers in-region only (e.g. Bedrock eu-west-1)."
+  },
+  "pool_placement": "app",
+  "pricing_skus": [
+    { "sku": "ai-gateway.completion",       "mode": "metered", "unit_description": "per completion (provider cost passthrough + ProjexCloud platform fee)" },
+    { "sku": "ai-gateway.stream",           "mode": "metered", "unit_description": "per streaming session (priced identically to completion)" },
+    { "sku": "ai-gateway.redaction.applied","mode": "metered", "unit_description": "per redaction rule fired (free in healthcare/finserv packs)" }
+  ],
+  "links": {
+    "readme": "packages/sdk-ai-gateway/README.md",
+    "source": "packages/sdk-ai-gateway/src/",
+    "prd_section": "P6A-AI-Isolation-MCP §5 / FR-AGW-1..7"
+  }
+}

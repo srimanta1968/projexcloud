@@ -1,0 +1,95 @@
+{
+  "name": "@projexlight/sdk-webhook",
+  "version": "1.0.0",
+  "schema_version": "1.0",
+  "summary": "Outbound webhook delivery for ProjexCloud: register Endpoints, subscribe them to event types, publish events through the queue, and a worker retries with exponential backoff + signed HMAC. Failed deliveries land in the per-tenant DLQ for replay from the tenant-admin Webhooks page. Subscription keys are vault-stored signing references — never raw secrets.",
+  "tags": ["webhook", "delivery", "hmac", "dlq", "replay", "p4"],
+  "provides": {
+    "endpoints": [
+      { "method": "POST", "path": "/api/webhooks/endpoints",                          "description": "Register a new endpoint (URL + signing-key vault ref + tenant_id)." },
+      { "method": "POST", "path": "/api/webhooks/endpoints/:endpoint_id/subscribe",   "description": "Subscribe an endpoint to one or more event type names (e.g. 'tenant.created.v1')." },
+      { "method": "POST", "path": "/api/webhooks/publish",                            "description": "Publish an event to every subscribed endpoint. Usually internal — other SDKs call into emitEvent and we pick it up." },
+      { "method": "GET",  "path": "/api/webhooks/deliveries",                         "description": "List delivery rows (filterable by tenant, endpoint, status). The DLQ view in tenant-admin reads this." },
+      { "method": "POST", "path": "/api/webhooks/deliveries/:delivery_id/replay",     "description": "Force-replay a DLQ delivery; restarts attempt count from 1." }
+    ],
+    "events": [
+      { "name": "webhook.endpoint.registered.v1",  "retention_class": "regulated", "conflict_policy": "lww",            "description": "New endpoint persisted; carries the signing key vault ref (not the secret itself)." },
+      { "name": "webhook.subscription.added.v1",   "retention_class": "operational","conflict_policy": "lww",            "description": "Endpoint subscribed to an event-type." },
+      { "name": "webhook.delivery.attempted.v1",   "retention_class": "operational","conflict_policy": "event-sourcing", "description": "One delivery attempt completed (success or failure); carries http_status + duration_ms." },
+      { "name": "webhook.delivery.dlq.v1",         "retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "Delivery moved to DLQ after retry exhaustion." },
+      { "name": "webhook.delivery.replayed.v1",    "retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "DLQ delivery re-queued by an operator (tenant-admin or projexcloud-admin)." }
+    ],
+    "models": [
+      { "schema": "webhook", "table": "endpoint",          "description": "URL + tenant + signing_key_ref + active flag. Vault holds the secret material." },
+      { "schema": "webhook", "table": "subscription",      "description": "(endpoint_id, event_type) join; an endpoint can subscribe to many event types." },
+      { "schema": "webhook", "table": "delivery",          "description": "One row per event-fanout-target. Carries current status (pending / sent / dlq / replayed) + final http_status." },
+      { "schema": "webhook", "table": "delivery_attempt",  "description": "Append-only attempt log per delivery: attempt_no, http_status, response_body_truncated, attempted_at." }
+    ],
+    "hooks": [
+      { "name": "registerEndpoint",  "description": "Service entry — accepts URL + tenant + signing-key vault ref. Refuses non-HTTPS URLs in production." },
+      { "name": "subscribe",         "description": "Wire an endpoint to event types. Idempotent on the (endpoint_id, event_type) pair." },
+      { "name": "publish",           "description": "Fan an event out to every subscribed endpoint. Most callers don't hit this directly; sdk-audit's emitEvent pipes here when configured." },
+      { "name": "startDeliveryWorker","description": "Background worker that polls delivery for pending rows, signs with HMAC, POSTs, advances state. Safe to leave running in dev." }
+    ],
+    "ui_components": []
+  },
+  "consumes": {
+    "events": [
+      { "name": "tenant.offboarded.v1", "from": "@projexlight/sdk-tenant-lifecycle" }
+    ],
+    "infra": ["postgres", "redis-optional"],
+    "config_keys": ["WEBHOOK_RETRY_MAX_ATTEMPTS", "WEBHOOK_RETRY_BACKOFF_MS", "WEBHOOK_DELIVERY_TIMEOUT_MS"]
+  },
+  "scenarios": [
+    {
+      "id": "register-endpoint",
+      "title": "Customer wires their endpoint via tenant-admin",
+      "when_to_use": "Tenant admin sets up an outbound webhook so their downstream system gets notified on platform events.",
+      "example_code": "import { registerEndpoint } from '@projexlight/sdk-webhook';\nconst { endpoint_id, signing_key_ref } = await registerEndpoint({\n  tenant_id, url: 'https://customer.example.com/projex',\n  description: 'Pipe lead-created events to our CRM',\n});\n// signing_key_ref is a vault handle; the actual secret is shown to the customer once via the UI.",
+      "expected_outcome": "Endpoint row created. Emits webhook.endpoint.registered.v1. Vault-issued signing key shown to the customer exactly once at the tenant-admin Webhooks page."
+    },
+    {
+      "id": "subscribe-to-events",
+      "title": "Subscribe the endpoint to specific event types",
+      "when_to_use": "After registering, pick which event types fan out. Start narrow — easier to add than remove.",
+      "example_code": "import { subscribe } from '@projexlight/sdk-webhook';\nawait subscribe({\n  endpoint_id,\n  event_types: ['crm.lead.created.v1', 'billing.invoice.finalized.v1'],\n});",
+      "expected_outcome": "Two subscription rows added. Future publish() calls for either event type queue a delivery per subscribed endpoint."
+    },
+    {
+      "id": "delivery-with-hmac",
+      "title": "Worker delivers an event with HMAC signature",
+      "when_to_use": "Production background path. Worker pulls pending delivery rows, signs the payload, POSTs to the endpoint URL.",
+      "example_code": "// Driven by startDeliveryWorker. Outbound request looks like:\n// POST https://customer.example.com/projex\n// Content-Type: application/json\n// X-Projex-Signature: t=<ts>,v1=<hmac_sha256>\n// X-Projex-Event-Type: crm.lead.created.v1\n// X-Projex-Delivery-Id: <delivery_uuid>\n// <event payload>",
+      "expected_outcome": "On 2xx: delivery.status='sent'. On 5xx/timeout/connect-error: exponential backoff (default 5 attempts over ~30 min). On exhaustion: delivery moves to DLQ + emits webhook.delivery.dlq.v1."
+    },
+    {
+      "id": "dlq-replay",
+      "title": "Operator replays a DLQ delivery after the customer fixes their endpoint",
+      "when_to_use": "Customer admin tells us their endpoint had a config error; they've fixed it; replay everything since the failure window.",
+      "example_code": "// projexcloud-admin /webhooks/dlq page surfaces this; behind the scenes:\nawait fetch(`/api/webhooks/deliveries/${delivery_id}/replay`, {\n  method: 'POST',\n  headers: { 'x-admin-ops-token': token },\n});",
+      "expected_outcome": "Delivery rewound to pending with attempt_no=1; worker picks it up on next tick. Emits webhook.delivery.replayed.v1 to the audit chain for compliance."
+    },
+    {
+      "id": "rotate-signing-key",
+      "title": "Rotate the endpoint's signing key with a grace window",
+      "when_to_use": "Quarterly rotation, or after a suspected key leak. Old key valid for a 60-second overlap so the customer can swap config without dropped deliveries.",
+      "example_code": "// Triggered from tenant-admin /webhooks/rotate-secret:\n// 1. Vault mints a new signing-key version under the same key_id.\n// 2. New signature uses v2; old verification key kept for 60s.\n// 3. After grace window, old key shredded.",
+      "expected_outcome": "Customer can swap config any time within the 60s window with zero dropped events. Vault enforces the grace + shred timing; this SDK just records the rotation against the endpoint."
+    }
+  ],
+  "compliance_posture": {
+    "regimes": ["SOC2-CC7.1", "GDPR-Art-32", "PCI-DSS-Req-8.2", "Banking-PSD2-Strong-Authentication"],
+    "notes": "HTTPS-only in production (HTTP allowed only in dev mode). HMAC-SHA256 signature + timestamp prevents replay attacks beyond the 5-minute window. Signing-key secret material lives only in sdk-vault; webhook DB only ever holds the vault ref. DLQ retention default 30 days; replay-after-shred is impossible."
+  },
+  "pool_placement": "app",
+  "pricing_skus": [
+    { "sku": "webhook.endpoint",   "mode": "flat",    "unit_description": "per active endpoint per month (free up to plan ceiling)" },
+    { "sku": "webhook.delivery",   "mode": "metered", "unit_description": "per delivery attempted (DLQ retries included)" },
+    { "sku": "webhook.dlq.replay", "mode": "metered", "unit_description": "per DLQ replay (operator-triggered)" }
+  ],
+  "links": {
+    "readme": "packages/sdk-webhook/README.md",
+    "source": "packages/sdk-webhook/src/",
+    "prd_section": "P4-Operational-Billing §13 / FR-WHK-1..6"
+  }
+}

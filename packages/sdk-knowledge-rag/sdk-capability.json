@@ -1,0 +1,90 @@
+{
+  "name": "@projexlight/sdk-knowledge-rag",
+  "version": "1.0.0",
+  "schema_version": "1.0",
+  "summary": "Retrieval-Augmented Generation substrate for ProjexCloud: define a Corpus, ingest Documents with sdk-parsing, chunk + embed via the ai-gateway, retrieve top-k by hybrid (vector + BM25) for any LLM prompt. Per-corpus access control + per-tenant chunking + reproducible retrieval audit so a customer can prove which sources fed which AI answer. Foundation for PRD-management's semantic search across the spec corpus and for the cloud builder's blueprint-discovery agent.",
+  "tags": ["rag", "knowledge", "retrieval", "embeddings", "semantic-search", "p6b"],
+  "provides": {
+    "endpoints": [],
+    "events": [
+      { "name": "rag.corpus.created.v1",      "retention_class": "regulated",  "conflict_policy": "lww",            "description": "New corpus defined for a tenant; carries access policy + chunking strategy." },
+      { "name": "rag.document.ingested.v1",   "retention_class": "regulated",  "conflict_policy": "event-sourcing", "description": "Document parsed + chunked + embedded; carries chunk_count + token_count." },
+      { "name": "rag.retrieval.served.v1",    "retention_class": "regulated",  "conflict_policy": "event-sourcing", "description": "Retrieval query answered; carries the chunk_ids returned so the audit trail can reconstruct what fed an AI answer." },
+      { "name": "rag.document.deleted.v1",    "retention_class": "regulated",  "conflict_policy": "event-sourcing", "description": "Document removed (DSAR or admin action); all derived chunks + vectors removed." }
+    ],
+    "models": [
+      { "schema": "rag", "table": "corpus",     "description": "Per-tenant knowledge collection; carries access policy (which personas can query) + chunking strategy." },
+      { "schema": "rag", "table": "document",   "description": "Source document row: kind (md/pdf/html/text), uri, source_hash, ingested_at, last_reindexed_at." },
+      { "schema": "rag", "table": "chunk",      "description": "Per-chunk row: document_id, ordinal, text, vector_ref (pgvector / Qdrant), token_count." },
+      { "schema": "rag", "table": "retrieval",  "description": "Per-query audit row: tenant, persona, intent, query_text, returned_chunk_ids[], scores[], served_at." }
+    ],
+    "hooks": [
+      { "name": "createCorpus",        "description": "Register a corpus with a chunking strategy + access policy. Empty until ingestDocument is called." },
+      { "name": "ingestDocument",      "description": "Parse → chunk → embed → write. Idempotent on (corpus_id, source_hash) so re-ingestion is safe." },
+      { "name": "retrieve",            "description": "Hybrid retrieval (vector + BM25). Returns top-k chunks + scores + the retrieval audit row id." },
+      { "name": "deleteDocument",      "description": "Remove a document + all its chunks + vectors. Emits rag.document.deleted.v1 (consumed by sdk-data-rights for DSAR fan-out)." }
+    ],
+    "ui_components": []
+  },
+  "consumes": {
+    "events": [
+      { "name": "ai-gateway.completion.v1", "from": "@projexlight/sdk-ai-gateway" },
+      { "name": "consent.receipt.revoked.v1","from": "@projexlight/sdk-consent" }
+    ],
+    "infra": ["postgres-pgvector-or-qdrant", "ai-gateway", "sdk-parsing"],
+    "config_keys": ["RAG_DEFAULT_CHUNK_SIZE_TOKENS", "RAG_DEFAULT_TOP_K", "RAG_VECTOR_BACKEND"]
+  },
+  "scenarios": [
+    {
+      "id": "ingest-product-docs",
+      "title": "Ingest a tenant's product documentation corpus",
+      "when_to_use": "Bootstrap a support-bot or PRD-management semantic-search; tenant uploads markdown / PDF / HTML through a one-time ingest job.",
+      "example_code": "import { createCorpus, ingestDocument } from '@projexlight/sdk-knowledge-rag';\nconst { corpus_id } = await createCorpus({\n  tenant_id, name: 'product-docs',\n  chunking: { strategy: 'recursive', size_tokens: 800, overlap: 80 },\n});\nfor (const doc of docs) {\n  await ingestDocument({ corpus_id, kind: 'markdown', uri: doc.uri });\n}",
+      "expected_outcome": "Corpus row + N document rows + many chunk rows. Vectors land in pgvector / Qdrant. Re-running with the same source_hash is a no-op (idempotent)."
+    },
+    {
+      "id": "retrieve-for-prompt",
+      "title": "Pull top-k chunks for an LLM prompt",
+      "when_to_use": "Cloud-builder agent or support bot wants context-aware answers. Retrieve chunks → pack into the prompt → call ai-gateway.complete.",
+      "example_code": "import { retrieve } from '@projexlight/sdk-knowledge-rag';\nconst { chunks, retrieval_id } = await retrieve({\n  tenant_id, persona_id, corpus_id,\n  query: 'how do I cancel a subscription mid-cycle?',\n  top_k: 6,\n});\n// pack chunks into a system message; call ai-gateway.complete with retrieval_id in the metadata.",
+      "expected_outcome": "Returns ranked chunks + retrieval_id. Emits rag.retrieval.served.v1 with the returned chunk_ids. Downstream audit can trace 'this AI answer used chunks X/Y/Z from doc D'."
+    },
+    {
+      "id": "semantic-search-prds",
+      "title": "Semantic search across the PRD corpus",
+      "when_to_use": "prd-management blueprint surface: 'show me every feature that references audit chain forensics.'",
+      "example_code": "import { retrieve } from '@projexlight/sdk-knowledge-rag';\nconst { chunks } = await retrieve({\n  tenant_id, persona_id, corpus_id: PRD_CORPUS,\n  query: 'audit chain forensics across features',\n  top_k: 10,\n  filters: { feature_status: ['approved', 'in-progress'] },\n});",
+      "expected_outcome": "Returns up to 10 chunks ordered by hybrid score. UI surfaces the parent feature + a snippet around the matched chunk. Audit row gives the operator full traceability."
+    },
+    {
+      "id": "right-to-erasure-fan-out",
+      "title": "DSAR triggers document + chunk + vector deletion",
+      "when_to_use": "Subject revokes consent; sdk-consent fires the revoked event; this SDK consumes + removes every chunk derived from documents tagged with that subject.",
+      "example_code": "// Driven by event subscription:\nsubscribeEvents('consent.receipt.revoked.v1', async (e) => {\n  const docs = await findDocumentsForSubject(e.payload.subject_persona_id);\n  for (const doc of docs) await deleteDocument({ document_id: doc.id });\n});",
+      "expected_outcome": "Documents + their chunks + vectors all removed. Emits rag.document.deleted.v1 per doc. Retrieval audit rows retain the old chunk_ids for compliance — they're tombstones now, not retrievable."
+    },
+    {
+      "id": "reproducible-retrieval-audit",
+      "title": "Operator reproduces an AI answer for compliance review",
+      "when_to_use": "Customer disputes an AI-generated answer; we need to show exactly which corpus chunks fed it, and what the prompt + completion looked like.",
+      "example_code": "// Walk the chain:\n// 1. ai-gateway.completion.v1 has the prompt + completion + retrieval_id\n// 2. rag.retrieval.served.v1 keyed by retrieval_id has the chunk_ids returned\n// 3. fetch each chunk + parent document\n// → full provenance trail end-to-end",
+      "expected_outcome": "Operator can reconstruct: question → retrieval scores → chunks used → completion text. Sufficient for EU AI Act Annex IV logging + most regulator transparency requests."
+    }
+  ],
+  "compliance_posture": {
+    "regimes": ["GDPR-Art-22-automated-decisions", "EU-AI-Act-Annex-IV-logging", "HIPAA-Privacy-Rule-de-identification", "SOC2-CC7.2"],
+    "notes": "Reproducible retrieval audit is the AI Act compliance lever — auditors can reconstruct any AI answer to its source chunks. Per-corpus access policy enforced before retrieval — a persona without read access on a corpus never sees its chunks even if their query would match. Right-to-erasure fan-out is synchronous: vector deletion happens before the operation returns success."
+  },
+  "pool_placement": "app",
+  "pricing_skus": [
+    { "sku": "rag.document.ingest", "mode": "metered", "unit_description": "per document ingested (parsing + chunking + embedding billed end-to-end)" },
+    { "sku": "rag.retrieval",       "mode": "metered", "unit_description": "per retrieval query (cache hits billed at lower rate)" },
+    { "sku": "rag.storage.gb",      "mode": "flat",    "unit_description": "per GB of vector + chunk text storage per month" }
+  ],
+  "no_endpoints": true,
+  "links": {
+    "readme": "packages/sdk-knowledge-rag/README.md",
+    "source": "packages/sdk-knowledge-rag/src/",
+    "prd_section": "P6B-Knowledge-Semantic §5 / FR-KRG-1..5"
+  }
+}
