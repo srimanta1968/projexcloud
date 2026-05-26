@@ -1,0 +1,105 @@
+{
+  "name": "@projexlight/cli",
+  "version": "1.0.0",
+  "schema_version": "1.0",
+  "summary": "The projex command-line tool — developer entry point to ProjexCloud. Subcommands: init / install / blueprint / registry / login / deploy / version / help. `projex init --hosted-url` writes SSE entries into Claude Code / Cursor / Windsurf / Cline mcp.json files so customers wire up the hosted MCP without manual config.",
+  "tags": [
+    "foundation",
+    "p9",
+    "cli",
+    "developer-tools"
+  ],
+  "provides": {
+    "endpoints": [],
+    "events": [],
+    "models": [],
+    "hooks": [
+      {
+        "name": "runInit",
+        "description": "Create a new app dir + scaffold + write mcp.json files."
+      },
+      {
+        "name": "runInstall",
+        "description": "Add an SDK to the current app's package.json + drop an integration stub."
+      },
+      {
+        "name": "runRegistryRefresh",
+        "description": "Pull a fresh catalog into ~/.projex/cache."
+      },
+      {
+        "name": "runRegistryList",
+        "description": "List SDKs in the local catalog with optional tag/search filter."
+      },
+      {
+        "name": "runBlueprintApply",
+        "description": "Apply a blueprint — render outputs + optionally install SDKs."
+      },
+      {
+        "name": "runBlueprintList",
+        "description": "List available blueprints."
+      }
+    ],
+    "ui_components": []
+  },
+  "consumes": {
+    "events": [],
+    "infra": [
+      "sdk-registry",
+      "blueprints"
+    ],
+    "config_keys": [
+      "PROJEX_DEV_ROOT"
+    ]
+  },
+  "scenarios": [
+    {
+      "id": "init-with-hosted-mcp",
+      "title": "Customer wires up Claude Code to the hosted MCP in one command",
+      "when_to_use": "Most common first-touch flow: customer has a JWT, wants their AI tools talking to the hosted MCP without copy-pasting config.",
+      "example_code": "$ projex init my-app --blueprint field-dispatch \\\n    --hosted-url https://registry.projexcloud.com/mcp/sse \\\n    --api-token <jwt>",
+      "expected_outcome": "Creates my-app/ with scaffolded code; writes SSE entry into every detected AI-tool mcp.json. Claude Code / Cursor / Windsurf / Cline all light up with projex_registry_* tools on next launch."
+    },
+    {
+      "id": "install-sdk-into-existing-app",
+      "title": "Add an SDK to an existing app",
+      "when_to_use": "Mid-development — `projex install @projexlight/sdk-evidence` adds the dep + drops a starter integration file.",
+      "example_code": "$ cd my-app\n$ projex install @projexlight/sdk-evidence",
+      "expected_outcome": "package.json updated; src/integrations/sdk-evidence.ts written. src/index.ts re-exports the integration."
+    },
+    {
+      "id": "blueprint-apply-with-install",
+      "title": "Apply a blueprint including SDK installs",
+      "when_to_use": "Fast path to a working vertical — clones the blueprint into the current app + auto-installs every required SDK.",
+      "example_code": "$ projex blueprint apply revops-crm --install-sdks",
+      "expected_outcome": "Templates rendered with operator-answered clarifying questions; all 5 SDKs added to package.json; integration stubs written."
+    },
+    {
+      "id": "registry-refresh",
+      "title": "Pull the latest catalog into the local cache",
+      "when_to_use": "After a new SDK ships — `projex registry refresh` pulls the fresh catalog so local searches reflect it.",
+      "example_code": "$ projex registry refresh\nDownloaded registry.catalog.json (73 SDKs)\nDownloaded registry.embeddings.bin",
+      "expected_outcome": "~/.projex/cache updated. registry-mcp-local picks up the new catalog on next stdio connection."
+    },
+    {
+      "id": "registry-list-filter",
+      "title": "Browse the catalog with a tag filter",
+      "when_to_use": "Discovery from the CLI without launching an AI tool.",
+      "example_code": "$ projex registry list --tag healthcare\n@projexlight/sdk-consent       HIPAA-compliant consent receipts\n@projexlight/sdk-evidence      Chain-of-custody ledger\n...",
+      "expected_outcome": "Filtered list rendered. Pipes to grep / awk friendly."
+    }
+  ],
+  "compliance_posture": {
+    "regimes": [
+      "SOC2-CC6.1"
+    ],
+    "notes": "Authentication via OAuth device-flow (deferred to login command, currently stub). API tokens stored in OS keychain when supported; fallback to env."
+  },
+  "pool_placement": "global-catalog",
+  "pricing_skus": [],
+  "no_endpoints": true,
+  "links": {
+    "readme": "packages/cli/README.md",
+    "source": "packages/cli/src/",
+    "prd_section": "P9-SDK-Discoverability §5.5 / FR-CLI-1..8"
+  }
+}

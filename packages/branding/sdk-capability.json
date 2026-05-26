@@ -1,0 +1,88 @@
+{
+  "name": "@projexlight/branding",
+  "version": "1.0.0",
+  "schema_version": "1.0",
+  "summary": "Per-tenant branding primitives — logo URL, color palette, email-template header/footer overrides. White-label customers register their kit once; sdk-notification + admin portals + customer-facing emails consume it uniformly.",
+  "tags": [
+    "foundation",
+    "branding",
+    "white-label",
+    "wave-0"
+  ],
+  "provides": {
+    "endpoints": [],
+    "events": [
+      {
+        "name": "branding.kit.published.v1",
+        "retention_class": "regulated",
+        "conflict_policy": "event-sourcing",
+        "description": "Tenant published / updated their branding kit."
+      }
+    ],
+    "models": [],
+    "hooks": [
+      {
+        "name": "publishKit",
+        "description": "Publish or update a tenant branding kit."
+      },
+      {
+        "name": "resolveKit",
+        "description": "Resolve the active branding kit for a tenant (falls back to ProjexCloud default)."
+      }
+    ],
+    "ui_components": []
+  },
+  "consumes": {
+    "events": [],
+    "infra": [
+      "sdk-media"
+    ],
+    "config_keys": [
+      "BRANDING_DEFAULT_LOGO_URL",
+      "BRANDING_DEFAULT_PRIMARY_COLOR"
+    ]
+  },
+  "scenarios": [
+    {
+      "id": "publish-kit",
+      "title": "Tenant publishes their branding kit",
+      "when_to_use": "First-time onboarding. Tenant uploads logo via sdk-media, sets primary color + email header HTML.",
+      "example_code": "import { publishKit } from '@projexlight/branding';\nawait publishKit({\n  tenant_id, logo_blob_id, primary_color: '#0f7af5',\n  email_header_html, email_footer_html,\n});",
+      "expected_outcome": "Kit row written; emits .kit.published.v1. Future emails + UI surfaces inherit the kit."
+    },
+    {
+      "id": "resolve-for-notification",
+      "title": "Notification renderer resolves kit before send",
+      "when_to_use": "sdk-notification template renderer fetches the kit for the recipient's tenant + interpolates into the template.",
+      "example_code": "import { resolveKit } from '@projexlight/branding';\nconst kit = await resolveKit({ tenant_id });\nconst rendered = template(kit);",
+      "expected_outcome": "Email sent with tenant logo + colors. Fallback to ProjexCloud default if no kit published."
+    },
+    {
+      "id": "white-label-portal",
+      "title": "White-label admin portal renders tenant branding",
+      "when_to_use": "Reseller customer with their own brand — tenant-admin portal reads the kit on every page render.",
+      "example_code": "// in the portal layout component:\nconst kit = await resolveKit({ tenant_id: session.tenant_id });\n<Header logo={kit.logo_url} primary={kit.primary_color} />",
+      "expected_outcome": "Portal renders with the customer's brand. Multi-tenant resellers don't see each other's branding."
+    }
+  ],
+  "compliance_posture": {
+    "regimes": [
+      "SOC2-CC7.1"
+    ],
+    "notes": "Branding kit is non-PII display data. Logo URLs stored as blob refs via sdk-media — no inline base64 storage."
+  },
+  "pool_placement": "admin",
+  "pricing_skus": [
+    {
+      "sku": "branding.kit.publish",
+      "mode": "metered",
+      "unit_description": "per kit version published"
+    }
+  ],
+  "no_endpoints": true,
+  "links": {
+    "readme": "packages/branding/README.md",
+    "source": "packages/branding/src/",
+    "prd_section": "SDK-Build-Plan-v3.1 Wave 0"
+  }
+}

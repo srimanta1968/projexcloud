@@ -1,0 +1,70 @@
+{
+  "name": "@projexlight/config",
+  "version": "1.0.0",
+  "schema_version": "1.0",
+  "summary": "Typed environment + config loader — reads process.env, parses + validates against a Zod-style schema, surfaces friendly errors at boot. Every SDK + service exposes its config_keys through this loader so misconfiguration fails-closed at startup rather than at request time.",
+  "tags": [
+    "foundation",
+    "config",
+    "env",
+    "wave-0"
+  ],
+  "provides": {
+    "endpoints": [],
+    "events": [],
+    "models": [],
+    "hooks": [
+      {
+        "name": "loadConfig",
+        "description": "Parse process.env against a schema; throws on missing required fields."
+      },
+      {
+        "name": "describeMissing",
+        "description": "Diagnostic helper — lists exactly which env keys are missing for a given schema."
+      }
+    ],
+    "ui_components": []
+  },
+  "consumes": {
+    "events": [],
+    "infra": [],
+    "config_keys": []
+  },
+  "scenarios": [
+    {
+      "id": "boot-fails-on-missing",
+      "title": "Service boot fails fast on missing required env",
+      "when_to_use": "Every service startup. If DATABASE_URL is missing, loadConfig throws before any worker spawns.",
+      "example_code": "import { loadConfig } from '@projexlight/config';\nconst cfg = loadConfig(GatewaySchema, process.env);",
+      "expected_outcome": "Misconfigured deploys fail at boot, never at request time. Operator sees the exact missing keys."
+    },
+    {
+      "id": "type-narrowed-config",
+      "title": "Config object is type-narrowed for downstream consumers",
+      "when_to_use": "Downstream code reads cfg.PORT as number (parsed + bounded) instead of string from raw env.",
+      "example_code": "// schema: { PORT: z.coerce.number().int().min(1).max(65535) }\nconst cfg = loadConfig(Schema, process.env);\nfastify.listen({ port: cfg.PORT });",
+      "expected_outcome": "Compile-time type-safety; runtime validation."
+    },
+    {
+      "id": "describe-missing-for-operator",
+      "title": "describeMissing helps operators diagnose",
+      "when_to_use": "CI pre-flight or operator console — lists exactly which env keys a service needs without booting it.",
+      "example_code": "import { describeMissing } from '@projexlight/config';\nconsole.log(describeMissing(GatewaySchema, process.env));",
+      "expected_outcome": "Operator sees the full diff between required + present. No boot attempt needed."
+    }
+  ],
+  "compliance_posture": {
+    "regimes": [
+      "SOC2-CC8.1"
+    ],
+    "notes": "Fail-closed on missing config eliminates a whole class of mis-deploys. Secrets never logged — schema validation reports key names only."
+  },
+  "pool_placement": "global-catalog",
+  "pricing_skus": [],
+  "no_endpoints": true,
+  "links": {
+    "readme": "packages/config/README.md",
+    "source": "packages/config/src/",
+    "prd_section": "SDK-Build-Plan-v3.1 Wave 0"
+  }
+}

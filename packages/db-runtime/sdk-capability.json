@@ -1,0 +1,86 @@
+{
+  "name": "@projexlight/db-runtime",
+  "version": "1.0.0",
+  "schema_version": "1.0",
+  "summary": "Postgres pool runtime for ProjexCloud — multi-pool client (admin / app / evidence / global-catalog / warehouse / vector / olap), transaction helpers, dataService abstraction every SDK uses. Routes queries to the right pool via sdk-pool-router; PgBouncer-compatible connection management.",
+  "tags": [
+    "foundation",
+    "runtime",
+    "postgres",
+    "infra"
+  ],
+  "provides": {
+    "endpoints": [],
+    "events": [],
+    "models": [],
+    "hooks": [
+      {
+        "name": "initPool",
+        "description": "Initialize the global pool pool — reads DATABASE_URL per logical pool."
+      },
+      {
+        "name": "getPool",
+        "description": "Get the pg.Pool for a named logical pool (admin / app / etc)."
+      },
+      {
+        "name": "withTransaction",
+        "description": "Run a callback inside a SERIALIZABLE transaction with automatic retry on conflict."
+      },
+      {
+        "name": "dataService",
+        "description": "Higher-level service abstraction — repo-style methods over a logical pool."
+      }
+    ],
+    "ui_components": []
+  },
+  "consumes": {
+    "events": [],
+    "infra": [
+      "postgres",
+      "pgbouncer-optional"
+    ],
+    "config_keys": [
+      "DATABASE_URL",
+      "DATABASE_POOL_MAX",
+      "DATABASE_STATEMENT_TIMEOUT_MS"
+    ]
+  },
+  "scenarios": [
+    {
+      "id": "init-on-service-boot",
+      "title": "Service boots the pool once at startup",
+      "when_to_use": "Every service startup — initPool reads env, opens connections, runs migrations.",
+      "example_code": "import { initPool } from '@projexlight/db-runtime';\nawait initPool({ logical: 'app' });",
+      "expected_outcome": "Pool ready; subsequent getPool() calls return without re-initialization."
+    },
+    {
+      "id": "transactional-write",
+      "title": "Multi-statement write in a transaction",
+      "when_to_use": "SDK writing multiple related rows — wrap in withTransaction so partial failures roll back atomically.",
+      "example_code": "import { withTransaction } from '@projexlight/db-runtime';\nawait withTransaction('app', async (tx) => {\n  await tx.query('INSERT INTO crm.contact ...');\n  await tx.query('INSERT INTO crm.activity ...');\n});",
+      "expected_outcome": "Both rows commit or neither. Serialization conflicts retried automatically up to N times."
+    },
+    {
+      "id": "multi-pool-routing",
+      "title": "Route audit writes to evidence pool, billing to admin pool",
+      "when_to_use": "Universal pattern — each SDK declares its pool placement; db-runtime + pool-router handle the routing.",
+      "example_code": "const adminPool = getPool('admin');\nconst evidencePool = getPool('evidence');\n// each pool independently sized + scaled",
+      "expected_outcome": "Hot writes on one pool don't starve others. Connection limits per pool independently tuned."
+    }
+  ],
+  "compliance_posture": {
+    "regimes": [
+      "SOC2-CC7.1",
+      "PCI-DSS-2.2-secure-configurations"
+    ],
+    "notes": "Connection strings only via env (never hardcoded). Statement-timeout enforced per pool to prevent runaway queries. SSL required for all pools."
+  },
+  "pool_placement": "global-catalog",
+  "pricing_skus": [],
+  "no_endpoints": true,
+  "links": {
+    "readme": "packages/db-runtime/README.md",
+    "source": "packages/db-runtime/src/",
+    "prd_section": "Architecture-v3.1 §6 (Pool Topology)"
+  }
+}

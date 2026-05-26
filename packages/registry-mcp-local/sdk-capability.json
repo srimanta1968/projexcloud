@@ -1,0 +1,89 @@
+{
+  "name": "@projexlight/registry-mcp-local",
+  "version": "1.0.0",
+  "schema_version": "1.0",
+  "summary": "Stdio MCP server bundled with the projex CLI. Speaks MCP wire protocol v1 over stdio so any MCP-aware AI client (Claude Code, Cursor, Windsurf, Cline) plugs in via mcp.json. Caches the catalog locally; READ tools answered offline; writes proxy to the hosted services/registry-mcp.",
+  "tags": [
+    "foundation",
+    "p9",
+    "mcp",
+    "stdio",
+    "cli-companion"
+  ],
+  "provides": {
+    "endpoints": [],
+    "events": [],
+    "models": [],
+    "hooks": [
+      {
+        "name": "initializeServer",
+        "description": "Build the MCP Server with list/call handlers."
+      },
+      {
+        "name": "runStdio",
+        "description": "Connect on stdio; resolves when the transport closes."
+      },
+      {
+        "name": "bootRegistry",
+        "description": "Resolve catalog + embedding paths (env → ~/.projex/cache → dev-fallback)."
+      }
+    ],
+    "ui_components": []
+  },
+  "consumes": {
+    "events": [],
+    "infra": [
+      "@modelcontextprotocol/sdk",
+      "sdk-registry",
+      "blueprints"
+    ],
+    "config_keys": [
+      "PROJEX_CATALOG_PATH",
+      "PROJEX_DEV_ROOT"
+    ]
+  },
+  "scenarios": [
+    {
+      "id": "claude-code-plugs-in",
+      "title": "Claude Code spawns the MCP via mcp.json",
+      "when_to_use": "After `projex init`, the user's ~/.claude/mcp.json points at this binary; Claude Code spawns it as a child process via stdio.",
+      "example_code": "// ~/.claude/mcp.json\n{ \"projex-registry\": { \"command\": \"npx\", \"args\": [\"-y\", \"@projexlight/registry-mcp-local\"] } }",
+      "expected_outcome": "Claude Code spawns the server. ListTools returns projex_registry_search_sdks, get_manifest, get_example, list_compatible_sdks, list_blueprints, get_blueprint, scaffold."
+    },
+    {
+      "id": "offline-search",
+      "title": "Catalog cached locally → offline search works",
+      "when_to_use": "After `projex registry refresh`, the catalog + embeddings live under ~/.projex/cache; search continues to work without network.",
+      "example_code": "// boot order: PROJEX_CATALOG_PATH → ~/.projex/cache → dev-fallback (monorepo path)",
+      "expected_outcome": "All READ tools answered from local cache. Writes proxy to hosted MCP (Phase 2)."
+    },
+    {
+      "id": "dev-mode-monorepo",
+      "title": "Dev mode uses the in-repo build",
+      "when_to_use": "Monorepo developer sets PROJEX_DEV_ROOT; the local MCP loads the catalog from packages/sdk-registry/dist instead of the user cache.",
+      "example_code": "// projex init writes: { command: 'node', args: [path, '...'], env: { PROJEX_DEV_ROOT: '...' } }",
+      "expected_outcome": "Dev edits to manifests reflect in the MCP without rebuild-publish-install cycle."
+    },
+    {
+      "id": "cohabit-with-projexlight-mcp",
+      "title": "Coexists with Projexlight's dev MCP",
+      "when_to_use": "Per FR-COHAB-2 — all tool names prefixed projex_registry_* so they can't collide with the existing projexlight_* dev MCP when both are loaded.",
+      "example_code": "// Both MCPs visible to Claude Code; the LLM sees both tool families distinctly.",
+      "expected_outcome": "No tool-name collisions. Each MCP can be enabled/disabled independently."
+    }
+  ],
+  "compliance_posture": {
+    "regimes": [
+      "SOC2-CC6.1"
+    ],
+    "notes": "Read-only on the local; no write surface; no PII handled. Sandbox-friendly."
+  },
+  "pool_placement": "global-catalog",
+  "pricing_skus": [],
+  "no_endpoints": true,
+  "links": {
+    "readme": "packages/registry-mcp-local/README.md",
+    "source": "packages/registry-mcp-local/src/",
+    "prd_section": "P9-SDK-Discoverability §5.3b / FR-MCP-L1..6"
+  }
+}

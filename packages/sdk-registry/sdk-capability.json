@@ -1,0 +1,108 @@
+{
+  "name": "@projexlight/sdk-registry",
+  "version": "1.0.0",
+  "schema_version": "1.0",
+  "summary": "Build-time scanner + runtime API for the SDK registry. Walks packages/* + services/* manifests, produces a normalized catalog JSON + bge-small embedding index, then serves loadRegistry / searchByIntent / findCompatibleSdks / getScaffold at runtime. The data layer the MCP servers + projex CLI consume.",
+  "tags": [
+    "foundation",
+    "p9",
+    "registry",
+    "embeddings",
+    "discovery"
+  ],
+  "provides": {
+    "endpoints": [],
+    "events": [],
+    "models": [],
+    "hooks": [
+      {
+        "name": "scanWorkspace",
+        "description": "Walk packages/* + services/* for sdk-capability.json files."
+      },
+      {
+        "name": "buildCatalog",
+        "description": "Normalize scanned manifests into the canonical catalog shape."
+      },
+      {
+        "name": "createEmbedder",
+        "description": "Lazy bge-small-en-v1.5 embedder (via @huggingface/transformers, INT8-quantized)."
+      },
+      {
+        "name": "loadRegistry",
+        "description": "Runtime — load catalog + optional embeddings into a queryable Registry object."
+      },
+      {
+        "name": "searchByIntent",
+        "description": "Cosine ANN search over scenario embeddings; falls back to substring when embeddings absent."
+      },
+      {
+        "name": "findCompatibleSdks",
+        "description": "Walk the consume/produce graph to surface SDKs that compose naturally."
+      },
+      {
+        "name": "getScaffold",
+        "description": "Generate a starter app tree from a list of SDKs (package.json + tsconfig + per-SDK integration stubs + tests)."
+      }
+    ],
+    "ui_components": []
+  },
+  "consumes": {
+    "events": [],
+    "infra": [
+      "@huggingface/transformers"
+    ],
+    "config_keys": []
+  },
+  "scenarios": [
+    {
+      "id": "build-catalog-from-monorepo",
+      "title": "CI builds the catalog on every main commit",
+      "when_to_use": "Post-merge job — scanner walks the workspace, builds the catalog, computes the deterministic content hash, publishes the JSON + embedding bin.",
+      "example_code": "$ node packages/sdk-registry/dist/cli.js --repo . --built-at '2026-05-26T00:00:00Z'\nWrote registry.catalog.json + registry.embeddings.bin\nembeddings_hash=...\nelapsed=5417ms",
+      "expected_outcome": "Catalog + embeddings written to dist/. Hosted MCP picks them up via its hot-reload watcher; no service restart."
+    },
+    {
+      "id": "search-by-intent",
+      "title": "Cloud-builder agent searches the catalog",
+      "when_to_use": "Agent receives 'I need consent management for healthcare' — runs searchByIntent which embeds the query + returns top-k SDKs by cosine similarity.",
+      "example_code": "import { loadRegistry } from '@projexlight/sdk-registry';\nconst reg = loadRegistry('registry.catalog.json', { embeddingPaths: { bin, meta }, embedder });\nconst hits = await reg.searchByIntent('consent management healthcare', 5);",
+      "expected_outcome": "Top 5 SDKs returned with score + reasoning excerpt. sdk-consent + sdk-evidence + sdk-data-rights surface for that query."
+    },
+    {
+      "id": "find-compatible-sdks",
+      "title": "Find SDKs that compose with sdk-evidence",
+      "when_to_use": "After installing sdk-evidence, suggest peers via the event consume/produce graph.",
+      "example_code": "const peers = reg.findCompatibleSdks('@projexlight/sdk-evidence');\n// → ['sdk-media','sdk-vault','sdk-audit','hdk-camera','hdk-watermark']",
+      "expected_outcome": "Compatible peers returned in order of edge weight. CLI shows them as install suggestions."
+    },
+    {
+      "id": "scaffold-app-tree",
+      "title": "Generate a starter app tree for a blueprint",
+      "when_to_use": "projex blueprint apply calls getScaffold(registry, sdkNames, appName) to produce { path, contents } tuples the CLI writes.",
+      "example_code": "import { getScaffold } from '@projexlight/sdk-registry';\nconst tree = getScaffold(registry, ['sdk-tenant','sdk-billing'], 'my-app');\nfor (const f of tree.files) writeFileSync(join(target, f.path), f.contents);",
+      "expected_outcome": "Tree includes package.json (deps pinned to versions in catalog), tsconfig, per-SDK integration stubs, vitest setup, README, CLAUDE.md."
+    },
+    {
+      "id": "deterministic-catalog-hash",
+      "title": "AC-2 deterministic catalog rebuild",
+      "when_to_use": "Run the build twice on the same source — catalog + embedding hashes match byte-for-byte. Required for the CI gate that audits cross-build reproducibility.",
+      "example_code": "// run twice → manifest_hash + embeddings_hash identical.\n// Stable sort + canonical JSON serialization in catalog.ts guarantees this.",
+      "expected_outcome": "Hashes identical. CI gate green."
+    }
+  ],
+  "compliance_posture": {
+    "regimes": [
+      "SOC2-CC8.1",
+      "EU-AI-Act-Annex-IV-decision-logic"
+    ],
+    "notes": "Embedding index hash + manifest hash both deterministic — any change to the registry leaves a reproducible audit trail."
+  },
+  "pool_placement": "global-catalog",
+  "pricing_skus": [],
+  "no_endpoints": true,
+  "links": {
+    "readme": "packages/sdk-registry/README.md",
+    "source": "packages/sdk-registry/src/",
+    "prd_section": "P9-SDK-Discoverability §5.2 / FR-REG-1..6"
+  }
+}

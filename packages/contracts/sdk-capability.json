@@ -1,0 +1,61 @@
+{
+  "name": "@projexlight/contracts",
+  "version": "1.0.0",
+  "schema_version": "1.0",
+  "summary": "Typed source of truth for ProjexCloud — TypeScript interfaces, event envelopes (UsageEvent.v1, AuditEvent.v1, six-layer JWT claims), DTO shapes, error codes. Every SDK + service imports from here so cross-package contracts stay in lockstep. Pure declarative — no runtime code beyond barrel exports.",
+  "tags": [
+    "foundation",
+    "contracts",
+    "types",
+    "wave-0"
+  ],
+  "provides": {
+    "endpoints": [],
+    "events": [],
+    "models": [],
+    "hooks": [],
+    "ui_components": []
+  },
+  "consumes": {
+    "events": [],
+    "infra": [],
+    "config_keys": []
+  },
+  "scenarios": [
+    {
+      "id": "import-event-shape",
+      "title": "Import a canonical event envelope shape",
+      "when_to_use": "Any SDK emitting or consuming UsageEvent.v1 / AuditEvent.v1 / SixLayerJwtClaims — import the type instead of redeclaring.",
+      "example_code": "import type { UsageEventV1, SixLayerJwtClaims } from '@projexlight/contracts';",
+      "expected_outcome": "Type compiles. Cross-SDK shape stays in lockstep — bumping the contract version cascades the type change to every consumer at build time."
+    },
+    {
+      "id": "extend-error-codes",
+      "title": "Use the canonical error-code enum",
+      "when_to_use": "Any service emitting structured errors — use the shared ErrorCode union so consumers can switch on the same set.",
+      "example_code": "import { ErrorCode } from '@projexlight/contracts';\nthrow new HttpError({ code: ErrorCode.HARD_CAP_DENIED });",
+      "expected_outcome": "Consumers across SDKs handle the same code. No drift between services."
+    },
+    {
+      "id": "extend-contract-additively",
+      "title": "Add a new event v2 alongside v1",
+      "when_to_use": "Schema evolution — never mutate v1; declare v2 alongside. Consumers migrate at their own cadence.",
+      "example_code": "// in this package: export interface UsageEventV2 extends Omit<UsageEventV1, 'dimensions'> { dimensions: ExtendedDimensions; }",
+      "expected_outcome": "Old + new event shapes coexist. CI gate refuses any v1 mutation that would break consumers."
+    }
+  ],
+  "compliance_posture": {
+    "regimes": [
+      "SOC2-CC8.1-change-mgmt"
+    ],
+    "notes": "Pure types — no runtime behavior. Contract changes pass through the same PR review that gates schema migrations."
+  },
+  "pool_placement": "global-catalog",
+  "pricing_skus": [],
+  "no_endpoints": true,
+  "links": {
+    "readme": "packages/contracts/README.md",
+    "source": "packages/contracts/src/",
+    "prd_section": "SDK-Build-Plan-v3.1 Wave 0"
+  }
+}

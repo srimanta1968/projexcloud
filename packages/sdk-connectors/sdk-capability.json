@@ -1,0 +1,81 @@
+{
+  "name": "@projexlight/sdk-connectors",
+  "version": "1.0.0",
+  "schema_version": "1.0",
+  "summary": "Connector framework — the shared scaffolding every connector-* SDK builds on: OAuth flow helpers, refresh-token rotation, webhook signature verification, sync-job scheduling primitives, dead-letter handling. Customers don't install this directly; specific connector SDKs (salesforce/hubspot/slack/etc) compose it.",
+  "tags": ["foundation", "connector-framework", "oauth", "webhooks", "p6b"],
+  "provides": {
+    "endpoints": [
+      { "method": "POST", "path": "/api/connectors/install",              "description": "Generic install endpoint; routes to the right connector's installer." },
+      { "method": "POST", "path": "/api/connectors/oauth/callback",       "description": "OAuth callback handler — exchanges code → refresh token via sdk-secrets." },
+      { "method": "POST", "path": "/api/connectors/webhooks/:connector",  "description": "Inbound webhook receiver; verifies signature + routes to handler." },
+      { "method": "POST", "path": "/api/connectors/syncs/run-now",        "description": "Force-run a sync job (operator action)." },
+      { "method": "GET",  "path": "/api/connectors/syncs/:sync_id",       "description": "Sync job status + last run + next scheduled." },
+      { "method": "POST", "path": "/api/connectors/dlq/replay",           "description": "Replay a dead-lettered webhook from the DLQ." },
+      { "method": "GET",  "path": "/api/connectors/installs",             "description": "List active installs for a tenant." },
+      { "method": "DELETE","path": "/api/connectors/installs/:install_id","description": "Uninstall (revokes OAuth + drops bindings)." }
+    ],
+    "events": [
+      { "name": "connectors.oauth.completed.v1",   "retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "OAuth flow completed; refresh token stored in vault." },
+      { "name": "connectors.sync.scheduled.v1",    "retention_class": "operational","conflict_policy": "event-sourcing", "description": "Sync job scheduled." },
+      { "name": "connectors.webhook.verified.v1",  "retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "Inbound webhook signature verified." },
+      { "name": "connectors.webhook.rejected.v1",  "retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "Webhook signature failed; rejected with 401." }
+    ],
+    "models": [],
+    "hooks": [
+      { "name": "completeOauth",         "description": "Exchange OAuth code → refresh token; store via sdk-secrets." },
+      { "name": "verifyWebhookSignature","description": "Generic HMAC verifier; per-connector signature schemes." },
+      { "name": "scheduleSync",          "description": "Schedule a recurring sync job." },
+      { "name": "replayDlq",             "description": "Replay a webhook from the DLQ." }
+    ],
+    "ui_components": []
+  },
+  "consumes": {
+    "events": [
+      { "name": "secrets.secret.rotated.v1", "from": "@projexlight/sdk-secrets" }
+    ],
+    "infra": ["postgres", "sdk-secrets", "sdk-webhook"],
+    "config_keys": ["CONNECTORS_OAUTH_REDIRECT_URI", "CONNECTORS_DLQ_RETENTION_DAYS"]
+  },
+  "scenarios": [
+    {
+      "id": "oauth-completion",
+      "title": "Generic OAuth callback handler",
+      "when_to_use": "Every connector-* SDK uses completeOauth for its OAuth dance; the framework handles state validation + token storage uniformly.",
+      "example_code": "import { completeOauth } from '@projexlight/sdk-connectors';\nawait completeOauth({ connector: 'salesforce', code, state });",
+      "expected_outcome": "State validated. Refresh token vault-wrapped. Emits .oauth.completed.v1."
+    },
+    {
+      "id": "webhook-signature-verify",
+      "title": "Webhook signature verified per connector",
+      "when_to_use": "Inbound webhook arrives; the framework looks up the connector's signature scheme + verifies before dispatching to the handler.",
+      "example_code": "import { verifyWebhookSignature } from '@projexlight/sdk-connectors';\nconst ok = await verifyWebhookSignature({ connector: 'github', headers, body });\nif (!ok) reply.code(401).send();",
+      "expected_outcome": "Mismatched signatures → 401 + .webhook.rejected.v1. Verified → handler runs + .webhook.verified.v1."
+    },
+    {
+      "id": "schedule-sync-job",
+      "title": "Per-connector sync scheduling",
+      "when_to_use": "After install, connector calls scheduleSync to register its recurring sync — framework handles the cron + retry + DLQ.",
+      "example_code": "import { scheduleSync } from '@projexlight/sdk-connectors';\nawait scheduleSync({ connector: 'salesforce', install_id, cadence_min: 15 });",
+      "expected_outcome": "Sync registered; runs on cadence. Failures retry + eventually DLQ."
+    },
+    {
+      "id": "replay-dlq",
+      "title": "Replay a dead-lettered webhook",
+      "when_to_use": "Operator notices a webhook in the DLQ + replays after fixing the root cause.",
+      "example_code": "import { replayDlq } from '@projexlight/sdk-connectors';\nawait replayDlq({ message_id });",
+      "expected_outcome": "Message re-dispatched. If fails again, returns to DLQ with the failure count incremented."
+    }
+  ],
+  "compliance_posture": {
+    "regimes": ["SOC2-CC6.7-third-party", "GDPR-Art-28"],
+    "notes": "OAuth tokens vault-wrapped. Signature verification mandatory; missing/invalid → 401 + audited. DLQ retention bounded so replays of stale messages eventually expire."
+  },
+  "pool_placement": "app",
+  "pricing_skus": [],
+  "links": {
+    "readme": "packages/sdk-connectors/README.md",
+    "source": "packages/sdk-connectors/src/",
+    "prd_section": "P4-Operational-Billing §6 (Connector Framework)"
+  }
+}

@@ -1,0 +1,85 @@
+{
+  "name": "@projexlight/clickhouse-runtime",
+  "version": "1.0.0",
+  "schema_version": "1.0",
+  "summary": "ClickHouse client runtime for OLAP-heavy reads — trace spans, meter rollups, lineage queries. Wraps the official @clickhouse/client with pool management + typed query helpers.",
+  "tags": [
+    "foundation",
+    "runtime",
+    "clickhouse",
+    "olap",
+    "infra"
+  ],
+  "provides": {
+    "endpoints": [],
+    "events": [],
+    "models": [],
+    "hooks": [
+      {
+        "name": "initClickHouse",
+        "description": "Initialize the ClickHouse client; runs schema migrations on the OLAP database."
+      },
+      {
+        "name": "closeClickHouse",
+        "description": "Graceful client shutdown."
+      },
+      {
+        "name": "queryRows",
+        "description": "Run a SELECT + return typed rows."
+      },
+      {
+        "name": "insertBatch",
+        "description": "Bulk insert (use Native format for max throughput)."
+      }
+    ],
+    "ui_components": []
+  },
+  "consumes": {
+    "events": [],
+    "infra": [
+      "clickhouse"
+    ],
+    "config_keys": [
+      "CLICKHOUSE_URL",
+      "CLICKHOUSE_DATABASE",
+      "CLICKHOUSE_BATCH_INSERT_SIZE"
+    ]
+  },
+  "scenarios": [
+    {
+      "id": "init-on-boot",
+      "title": "Service initializes ClickHouse on boot",
+      "when_to_use": "Services that need OLAP reads (meter-collector, sdk-trace query, sdk-analytics).",
+      "example_code": "import { initClickHouse } from '@projexlight/clickhouse-runtime';\nawait initClickHouse();",
+      "expected_outcome": "Client connects; migrations run if schema version is behind."
+    },
+    {
+      "id": "bulk-insert-spans",
+      "title": "Bulk-insert trace spans every 5s",
+      "when_to_use": "sdk-trace span buffer flushes every 5s via insertBatch for max throughput.",
+      "example_code": "import { insertBatch } from '@projexlight/clickhouse-runtime';\nawait insertBatch({ table: 'trace.span', rows: bufferedSpans });",
+      "expected_outcome": "10k+ rows/sec sustained. ClickHouse Native format minimizes serialization overhead."
+    },
+    {
+      "id": "aggregate-meter-rollup",
+      "title": "Daily rollup aggregates per-tenant SKU totals",
+      "when_to_use": "meter-collector's daily pass runs a heavy aggregate against the usage_event table.",
+      "example_code": "import { queryRows } from '@projexlight/clickhouse-runtime';\nconst rows = await queryRows<RollupRow>(`SELECT tenant_id, sku, sum(units) FROM usage_event WHERE day = ? GROUP BY tenant_id, sku`, [day]);",
+      "expected_outcome": "Returns typed rows. Query plan uses the partition key on day for fast scan."
+    }
+  ],
+  "compliance_posture": {
+    "regimes": [
+      "SOC2-CC7.1"
+    ],
+    "notes": "ClickHouse holds analytics-class data only; PII-sensitive fields hashed before insert. Retention policies enforced via TTL on tables."
+  },
+  "pool_placement": "olap",
+  "pricing_skus": [],
+  "no_endpoints": true,
+  "links": {
+    "readme": "packages/clickhouse-runtime/README.md",
+    "source": "packages/clickhouse-runtime/src/",
+    "prd_section": "Architecture-v3.1 §6"
+  }
+}

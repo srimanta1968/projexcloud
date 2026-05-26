@@ -1,0 +1,84 @@
+{
+  "name": "@projexlight/service-semantic",
+  "version": "1.0.0",
+  "schema_version": "1.0",
+  "summary": "Backing service for sdk-semantic (G9 closer) — runs the ontology / intent / policy engine as a long-lived process so resolveIntent stays sub-second under load. Hosts the policy evaluator + ontology cache + cross-domain bridge registry. Composes with sdk-ai-gateway for the LLM round-trip behind intent resolution.",
+  "tags": ["service", "semantic", "ontology", "intent", "policy", "p6b"],
+  "provides": {
+    "endpoints": [],
+    "events": [
+      { "name": "semantic-service.ontology.reloaded.v1", "retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "Ontology cache refreshed (publish event consumed)." },
+      { "name": "semantic-service.intent.resolved.v1",   "retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "Intent resolved end-to-end; carries plan + policy decisions + cost." },
+      { "name": "semantic-service.policy.warned.v1",     "retention_class": "operational","conflict_policy": "lww",            "description": "Policy fired a reshape; downstream UI shows the warning." }
+    ],
+    "models": [],
+    "hooks": [
+      { "name": "startService",       "description": "Boot service; warm ontology cache; subscribe to relevant events." },
+      { "name": "resolveIntent",      "description": "Translate plain-English intent → plan + policy decisions." },
+      { "name": "registerCapability", "description": "Wire an MCP capability into the cross-domain graph (FR-SEM-9)." },
+      { "name": "warmOntology",       "description": "Pre-load ontology versions for fast resolveIntent on first call." }
+    ],
+    "ui_components": []
+  },
+  "consumes": {
+    "events": [
+      { "name": "semantic.ontology.published.v1",        "from": "@projexlight/sdk-semantic" },
+      { "name": "semantic.capability.registered.v1",     "from": "@projexlight/sdk-semantic" },
+      { "name": "ai-gateway.completion.v1",              "from": "@projexlight/sdk-ai-gateway" }
+    ],
+    "infra": ["postgres", "redis", "sdk-ai-gateway", "sdk-semantic"],
+    "config_keys": ["SEMANTIC_SERVICE_PORT", "SEMANTIC_SERVICE_CACHE_TTL_SEC", "SEMANTIC_SERVICE_DEFAULT_ONTOLOGY"]
+  },
+  "scenarios": [
+    {
+      "id": "warm-ontology-on-boot",
+      "title": "Boot warms the ontology cache",
+      "when_to_use": "Process startup — load every active ontology version into Redis-backed cache so first request resolves in tens of ms.",
+      "example_code": "import { startService } from '@projexlight/service-semantic';\nawait startService({ warm_ontologies: true });",
+      "expected_outcome": "Cache populated; emits .ontology.reloaded.v1 per version."
+    },
+    {
+      "id": "resolve-intent-end-to-end",
+      "title": "Resolve plain-English intent → plan + policy decisions",
+      "when_to_use": "Cloud-builder agent calls resolveIntent; service evaluates against cached ontology + policy + emits the resolution event.",
+      "example_code": "import { resolveIntent } from '@projexlight/service-semantic';\nconst { plan, policy_decisions } = await resolveIntent({\n  tenant_id, persona_id, intent: 'show me top 10 customers by MRR last quarter',\n});",
+      "expected_outcome": "Plan + decisions returned in <500ms. Emits .intent.resolved.v1 with cost attribution."
+    },
+    {
+      "id": "policy-reshape-warning",
+      "title": "Strict-mode policy reshapes a too-broad query",
+      "when_to_use": "PII-sensitive intent; policy reshapes; emit .policy.warned.v1 so the caller UI shows the reshape banner.",
+      "example_code": "// inside resolveIntent: when reshape applies, emit warned event",
+      "expected_outcome": "Caller gets the reshaped plan + UI shows the warning. Audit chain pins the policy decision."
+    },
+    {
+      "id": "register-mcp-capability",
+      "title": "Register an MCP tool into the cross-domain graph",
+      "when_to_use": "sdk-mcp-bridge installs a new MCP server; the service registers each tool into the capability graph so cross-domain intents can route to it.",
+      "example_code": "import { registerCapability } from '@projexlight/service-semantic';\nawait registerCapability({ tenant_id, mcp_server, tool_name, capability_kind, bridges_to });",
+      "expected_outcome": "Capability registered + .capability.registered.v1 emitted. Future intents resolve through the new tool."
+    },
+    {
+      "id": "ontology-publish-reload",
+      "title": "Reactive: new ontology version → cache reload",
+      "when_to_use": "Reactive on semantic.ontology.published.v1 — service loads the new version into cache so subsequent resolveIntent calls use it.",
+      "example_code": "subscribeEvents('semantic.ontology.published.v1', async (e) => {\n  await warmOntology({ tenant_id: e.tenant_id, version: e.payload.version });\n});",
+      "expected_outcome": "Cache updated within seconds. Old ontology version retained for resolveIntent calls that pinned to it."
+    }
+  ],
+  "compliance_posture": {
+    "regimes": ["EU-AI-Act-Annex-IV-decision-logic", "GDPR-Art-22", "SOC2-CC7.1", "ISO-27001-Annex-A-9"],
+    "notes": "Every intent resolution carries the ontology version + matched policy rules — fully reproducible for EU AI Act decision-trace + GDPR Art-22 automated-decision audits. Cache invalidation strict so a published ontology change takes effect within seconds."
+  },
+  "pool_placement": "warehouse",
+  "pricing_skus": [
+    { "sku": "semantic-service.intent.resolve",  "mode": "metered", "unit_description": "per intent resolved" },
+    { "sku": "semantic-service.ontology.reload", "mode": "metered", "unit_description": "per cache reload" }
+  ],
+  "no_endpoints": true,
+  "links": {
+    "readme": "services/semantic-service/README.md",
+    "source": "services/semantic-service/src/",
+    "prd_section": "P6B-Knowledge-Semantic §9 / G9 / FR-SEM-1..9"
+  }
+}

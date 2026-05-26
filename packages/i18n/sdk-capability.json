@@ -1,0 +1,79 @@
+{
+  "name": "@projexlight/i18n",
+  "version": "1.0.0",
+  "schema_version": "1.0",
+  "summary": "Locale + message catalog primitives — typed message keys, ICU MessageFormat support, per-tenant brand + locale override. Used by sdk-notification template bodies, admin UI strings, audit reason text. Pure runtime resolution; no build-time codegen.",
+  "tags": [
+    "foundation",
+    "i18n",
+    "locale",
+    "wave-0"
+  ],
+  "provides": {
+    "endpoints": [],
+    "events": [],
+    "models": [],
+    "hooks": [
+      {
+        "name": "t",
+        "description": "Resolve a message key + params against a locale."
+      },
+      {
+        "name": "registerCatalog",
+        "description": "Register a tenant-scoped message catalog override."
+      },
+      {
+        "name": "listLocales",
+        "description": "List the locales the runtime currently supports."
+      }
+    ],
+    "ui_components": []
+  },
+  "consumes": {
+    "events": [],
+    "infra": [
+      "intl-messageformat"
+    ],
+    "config_keys": [
+      "I18N_DEFAULT_LOCALE",
+      "I18N_FALLBACK_CHAIN"
+    ]
+  },
+  "scenarios": [
+    {
+      "id": "resolve-message",
+      "title": "Resolve a templated message",
+      "when_to_use": "Notification template renders the body — t() handles plural / gender / date formatting.",
+      "example_code": "import { t } from '@projexlight/i18n';\nconst body = t({ locale: 'es-MX', key: 'tech-eta-sms', params: { tech_name, eta_start } });",
+      "expected_outcome": "Returns the locale-correct string. Falls back to default locale if key missing in target."
+    },
+    {
+      "id": "tenant-override",
+      "title": "Tenant-scoped message override",
+      "when_to_use": "Tenant wants to override the default 'Welcome' message; register their catalog and it takes precedence.",
+      "example_code": "import { registerCatalog } from '@projexlight/i18n';\nregisterCatalog({ tenant_id, locale: 'en-US', overrides: { welcome: 'Glad you joined Acme!' } });",
+      "expected_outcome": "Future t() calls for that tenant return the override; other tenants unaffected."
+    },
+    {
+      "id": "missing-key-fallback",
+      "title": "Missing key falls through the fallback chain",
+      "when_to_use": "Key not found in es-MX → fallback to es → fallback to en. Configurable chain.",
+      "example_code": "// configured: I18N_FALLBACK_CHAIN=es-MX,es,en\n// runtime: t({ key: 'rare-key', locale: 'es-MX' }) → returns en value if only en defined",
+      "expected_outcome": "Always returns *something* readable. Missing-key telemetry counter increments so translators can fill gaps."
+    }
+  ],
+  "compliance_posture": {
+    "regimes": [
+      "GDPR-Art-12-transparent-information"
+    ],
+    "notes": "All notifications + UI strings resolve through here, so satisfying GDPR's transparent-information requirement (notice must be in subject's language) is a single config away."
+  },
+  "pool_placement": "global-catalog",
+  "pricing_skus": [],
+  "no_endpoints": true,
+  "links": {
+    "readme": "packages/i18n/README.md",
+    "source": "packages/i18n/src/",
+    "prd_section": "SDK-Build-Plan-v3.1 Wave 0"
+  }
+}
