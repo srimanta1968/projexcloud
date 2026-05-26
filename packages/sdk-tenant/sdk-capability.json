@@ -1,0 +1,104 @@
+{
+  "name": "@projexlight/sdk-tenant",
+  "version": "1.0.0",
+  "schema_version": "1.0",
+  "summary": "Canonical tenant hierarchy for ProjexCloud: Org → App → Tenant (with optional sub-tenants) → BU, plus Reseller, GeoNode (for residency-class enforcement), RoleTemplate (for tenant-scoped permission templates), and FiscalPeriod (for per-tenant year/quarter/month/week calendars). Every state change emits to the audit chain; tenant_id is the primary scoping key across every other SDK.",
+  "tags": ["tenant", "org", "hierarchy", "reseller", "bu", "geo", "fiscal", "foundation", "p2"],
+  "provides": {
+    "endpoints": [
+      { "method": "POST", "path": "/api/tenants",                                "description": "Provision a new tenant under an existing App. Materializes root_tenant_id via DB trigger." },
+      { "method": "GET",  "path": "/api/tenants/:tenant_id",                     "description": "Fetch a tenant record including isolation_tier, pool assignments, module_subscriptions." },
+      { "method": "POST", "path": "/api/resellers",                              "description": "Register a new Reseller (partner brand selling under their own banner)." },
+      { "method": "POST", "path": "/api/tenants/:tenant_id/reseller-attach",     "description": "Attach a tenant to a Reseller with commission terms. Used when a partner brings a customer in." },
+      { "method": "POST", "path": "/api/tenants/:tenant_id/sub-tenants",         "description": "Create a sub-tenant under a parent. placement = 'share' (shared pools) | 'tier-p' (premium isolation) | 'tier-g' (gov / sovereign)." },
+      { "method": "POST", "path": "/api/tenants/:tenant_id/bus",                 "description": "Create a Business Unit under a tenant; supports nesting via parent_bu_id + materialized ancestors path." },
+      { "method": "POST", "path": "/api/geo-nodes",                              "description": "Register a GeoNode (region / country / state / city / locality) with a residency_class (open / regulated / sovereign)." },
+      { "method": "POST", "path": "/api/role-templates",                         "description": "Create a per-tenant or per-app role template; consumed by sdk-rebac for permission resolution." },
+      { "method": "POST", "path": "/api/tenants/:tenant_id/fiscal-calendar",     "description": "Define a tenant's fiscal calendar (year_start_month + base_currency); auto-generates FY + Q1..Q4 periods for the current + next year." }
+    ],
+    "events": [
+      { "name": "tenant.created.v1",            "retention_class": "regulated",  "conflict_policy": "event-sourcing", "description": "New tenant materialized. Carries app_id, parent_tenant_id, isolation_tier, region. Triggers per-tenant initialization across every other SDK." },
+      { "name": "tenant.pool.assigned.v1",      "retention_class": "regulated",  "conflict_policy": "event-sourcing", "description": "Initial pool routing assigned (admin_pool_index + app_pool_index map). sdk-pool-router consumes this to seed routing.tenant_pool_map." },
+      { "name": "tenant.subtenant.created.v1",  "retention_class": "regulated",  "conflict_policy": "event-sourcing", "description": "Sub-tenant linked to a parent; parent_tenant_id audit chain receives a copy." },
+      { "name": "reseller.created.v1",          "retention_class": "regulated",  "conflict_policy": "event-sourcing", "description": "Reseller registered under an org." },
+      { "name": "reseller.tenant.attached.v1",  "retention_class": "regulated",  "conflict_policy": "event-sourcing", "description": "Tenant attached to a reseller; carries the commission rules at attachment time." },
+      { "name": "tenant.bu.created.v1",         "retention_class": "operational","conflict_policy": "lww",            "description": "BU added to a tenant; affects showback aggregation in sdk-billing." },
+      { "name": "tenant.fiscal-calendar.set.v1","retention_class": "regulated",  "conflict_policy": "lww",            "description": "Fiscal calendar set or replaced; downstream consumers re-key their period-bucketed aggregates." }
+    ],
+    "models": [
+      { "schema": "tenant", "table": "org",            "description": "Top-level customer organization. May have parent_org_id (acquisitions / org chart)." },
+      { "schema": "tenant", "table": "app",            "description": "An app under an org (TEXT primary key, slug-style)." },
+      { "schema": "tenant", "table": "reseller",       "description": "Partner brand; carries cname_host + commission_rules + invoice_aggregation (per-tenant | consolidated) + portfolio_kill_switch." },
+      { "schema": "tenant", "table": "geo_node",       "description": "Geo hierarchy with residency_class enforcement." },
+      { "schema": "tenant", "table": "tenant",         "description": "The canonical tenant row. Carries isolation_tier (S/P/G), region, pool indices, module_subscriptions, status (provisioned/trial/active/suspended/offboarding/offboarded). root_tenant_id materialized via trigger for O(1) ancestor walks." },
+      { "schema": "tenant", "table": "bu",             "description": "Business unit; supports nested hierarchy via materialized ancestors path." },
+      { "schema": "tenant", "table": "role_template",  "description": "Per-tenant or per-app permission template; consumed by sdk-rebac." },
+      { "schema": "tenant", "table": "fiscal_period",  "description": "FY / Q / M / W periods auto-generated from year_start_month + base_currency." }
+    ],
+    "hooks": [
+      { "name": "createTenant",            "description": "Service function to provision a tenant atomically. Emits tenant.created.v1 + tenant.pool.assigned.v1 + (if sub-tenant) tenant.subtenant.created.v1." },
+      { "name": "getTenant",               "description": "Single-row read by tenant_id." },
+      { "name": "listTenants",             "description": "Operator-level list (admin-token guarded at the gateway level)." },
+      { "name": "getTenantAncestorChain",  "description": "Recursive-CTE walker returning the parent chain immediate → root; powers sdk-audit cross-tenant roll-ups." },
+      { "name": "createSubTenant",         "description": "Sub-tenant variant with placement (share/tier-p/tier-g) that inherits parent isolation as appropriate." }
+    ],
+    "ui_components": []
+  },
+  "consumes": {
+    "events": [],
+    "infra": ["postgres"],
+    "config_keys": ["DEFAULT_FISCAL_YEAR_START_MONTH", "DEFAULT_BASE_CURRENCY"]
+  },
+  "scenarios": [
+    {
+      "id": "provision-trial-tenant",
+      "title": "Provision a brand-new trial tenant under an existing App",
+      "when_to_use": "Operator-driven onboarding flow in projexcloud-admin, or self-serve signup via sdk-identity's signupTenant() which calls into here.",
+      "example_code": "import { createTenant } from '@projexlight/sdk-tenant';\nconst t = await createTenant({\n  app_id: 'acme-app',\n  display_name: 'Acme Corp',\n  region: 'us-east-1',\n  isolation_tier: 'S',\n  module_subscriptions: ['crm', 'billing', 'audit'],\n});",
+      "expected_outcome": "Returns the TenantRecord. Emits tenant.created.v1 + tenant.pool.assigned.v1. tenant.status starts at 'provisioned'; sdk-tenant-lifecycle transitions it to 'trial' or 'active'."
+    },
+    {
+      "id": "attach-reseller",
+      "title": "Attach an existing tenant to a Reseller with commission terms",
+      "when_to_use": "Partner brings a customer in mid-stream; commission flows back to the partner via consolidated invoicing.",
+      "example_code": "import { attachReseller } from '@projexlight/sdk-tenant';\nconst t = await attachReseller(tenant_id, reseller_id, {\n  commission_rules: { pct: 15, tier: 'gold' },\n});",
+      "expected_outcome": "Updates tenant.reseller_id. Stores the commission_rules snapshot at attachment time. Emits reseller.tenant.attached.v1."
+    },
+    {
+      "id": "create-premium-subtenant",
+      "title": "Create a premium-isolated sub-tenant under a parent",
+      "when_to_use": "Parent customer wants a dedicated app pool for a regulated business unit while keeping shared admin services.",
+      "example_code": "import { createSubTenant } from '@projexlight/sdk-tenant';\nconst sub = await createSubTenant(parent_tenant_id, {\n  app_id: parent.app_id,\n  display_name: 'Regulated BU',\n  region: parent.region,\n  module_subscriptions: parent.module_subscriptions,\n}, { placement: 'tier-p' });",
+      "expected_outcome": "Sub-tenant inherits parent_tenant_id + root_tenant_id (via trigger). isolation_tier='P'; admin_pool inherited but app_pool dedicated. Emits tenant.subtenant.created.v1 on BOTH the parent and child chains."
+    },
+    {
+      "id": "create-bu-hierarchy",
+      "title": "Build a nested Business-Unit hierarchy",
+      "when_to_use": "Customer organizes around regions / cost-centers / product lines; sdk-billing showback groups by BU.",
+      "example_code": "import { createBu } from '@projexlight/sdk-tenant';\nconst region = await createBu(tenant_id, { name: 'North America', kind: 'region' });\nconst sales = await createBu(tenant_id, { name: 'Sales', kind: 'cost-center', parent_bu_id: region.bu_id });",
+      "expected_outcome": "sales.ancestors is materialized as ['North America']. Queries against bu_id filter the tree by ancestors path in O(1) lookups."
+    },
+    {
+      "id": "fiscal-calendar-setup",
+      "title": "Set a non-calendar fiscal year (e.g. Apr–Mar) and auto-generate periods",
+      "when_to_use": "Customer uses a non-calendar fiscal year and wants invoice/showback periods to align.",
+      "example_code": "import { setFiscalCalendar } from '@projexlight/sdk-tenant';\nconst periods = await setFiscalCalendar(tenant_id, {\n  year_start_month: 4,\n  base_currency: 'USD',\n});",
+      "expected_outcome": "Generates 2 FY rows (current + next) + 8 quarter rows. Emits tenant.fiscal-calendar.set.v1; sdk-billing rebuilds its period-bucketed aggregates."
+    }
+  ],
+  "compliance_posture": {
+    "regimes": ["SOC2", "GDPR-Art-30", "FedRAMP-AC-family", "EU-Data-Residency", "Reseller-PCI-passthrough"],
+    "notes": "GeoNode.residency_class='sovereign' triggers tenant placement on isolated pool families per P8 Variant B. Reseller.portfolio_kill_switch supports incident response on a partner's entire book of business. parent_org_id supports M&A consolidation without rewriting tenant_id references."
+  },
+  "pool_placement": "admin",
+  "pricing_skus": [
+    { "sku": "tenant.create",          "mode": "flat",    "unit_description": "per tenant provisioned (often included in seat-based plans)" },
+    { "sku": "tenant.subtenant.create","mode": "flat",    "unit_description": "per sub-tenant under a parent" },
+    { "sku": "tenant.bu.create",       "mode": "flat",    "unit_description": "free up to plan ceiling" }
+  ],
+  "links": {
+    "readme": "packages/sdk-tenant/README.md",
+    "source": "packages/sdk-tenant/src/",
+    "prd_section": "P2-Identity-Access §4"
+  }
+}

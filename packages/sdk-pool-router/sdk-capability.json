@@ -1,0 +1,96 @@
+{
+  "name": "@projexlight/sdk-pool-router",
+  "version": "0.1.0",
+  "schema_version": "1.0",
+  "summary": "Tenant-to-pool routing for ProjexCloud's pool-based horizontal scaling (no sharding). Resolves (tenant_id, kind) → pool_index for admin / app / evidence / etc. pools; supports pool lifecycle flips (active / degraded / drain) with Redis pub/sub so every gateway replica picks up status changes within a 5-min TTL. Owns pool_federation_manifest for P7 lakehouse federation + active-active replication profiles.",
+  "tags": ["routing", "pools", "scaling", "active-active", "federation", "foundation", "p1"],
+  "provides": {
+    "endpoints": [
+      { "method": "GET",  "path": "/api/router/resolve",                                "description": "Resolve (tenant_id, kind) → pool_index. Cached locally; invalidated by pool:status-flip pub/sub." },
+      { "method": "GET",  "path": "/admin/pools",                                       "description": "List all pools with current status, tenant_count, capacity utilization." },
+      { "method": "GET",  "path": "/admin/pools/:pool_index",                           "description": "Fetch a single pool with its lifecycle history." },
+      { "method": "POST", "path": "/admin/pools/:pool_index/status",                    "description": "Flip pool status (active / degraded / drain). Broadcasts pool:status-flip on Redis." }
+    ],
+    "events": [
+      { "name": "pool.status.flipped.v1",       "retention_class": "regulated",  "conflict_policy": "event-sourcing", "description": "Pool transitioned status. Carries old + new status + operator_id. Every gateway invalidates its route cache." },
+      { "name": "pool.tenant.assigned.v1",      "retention_class": "regulated",  "conflict_policy": "event-sourcing", "description": "A (tenant, kind) pair was assigned to a pool. Consumed by sdk-tenant on provision." },
+      { "name": "pool.federation.manifest.updated.v1", "retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "P7: Pool federation manifest updated (Iceberg lakehouse routing). Consumed by lineage-projector + semantic-service." },
+      { "name": "active-active.drill.completed.v1", "retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "Failover drill finished; report attached for the operator console." }
+    ],
+    "models": [
+      { "schema": "routing",       "table": "pool",                          "description": "Pool definition with capacity targets, current status, DSN hint, replica topology." },
+      { "schema": "routing",       "table": "tenant_pool_map",               "description": "The lookup table: (tenant_id, kind) → pool_index. Hot-cached in Redis; invalidated by pub/sub." },
+      { "schema": "routing",       "table": "pool_lifecycle_event",          "description": "Full status-flip history per pool; powers the operator audit trail." },
+      { "schema": "routing",       "table": "pool_federation_manifest",      "description": "P7: which pools participate in cross-pool Iceberg lakehouse reads." },
+      { "schema": "active_active", "table": "profile",                       "description": "Per-tenant active-active config: sync vs async replication preference, RPO/RTO targets." },
+      { "schema": "active_active", "table": "replication_stream",            "description": "Per-(tenant, table-family) replication stream state + lag metrics." },
+      { "schema": "active_active", "table": "failover_drill",                "description": "Drill runs: scheduled_at, executed_at, lag_at_drill, write_routing_during_drill, report." }
+    ],
+    "hooks": [
+      { "name": "resolvePool",            "description": "Synchronous resolve — checks in-memory cache → Redis → Postgres. Used in the gateway hot path." },
+      { "name": "setCache",               "description": "Inject a custom RouteCache (defaults to InMemoryRouteCache; production swaps for RedisRouteCache)." },
+      { "name": "installRedisUsageCounter", "description": "Wire the Redis-backed usage counter so soft-cap checks in the gateway stay O(1)." },
+      { "name": "subscribeToFlips",       "description": "Subscribe to Redis pool:status-flip channel; called automatically by RedisRouteCache.subscribeToFlips()." }
+    ],
+    "ui_components": []
+  },
+  "consumes": {
+    "events": [
+      { "name": "tenant.created.v1",     "from": "@projexlight/sdk-tenant" },
+      { "name": "tenant.offboarded.v1",  "from": "@projexlight/sdk-tenant-lifecycle" }
+    ],
+    "infra": ["postgres", "redis-optional"],
+    "config_keys": ["ROUTE_CACHE_TTL_MS", "REDIS_ENABLED", "REDIS_HOST", "REDIS_PORT"]
+  },
+  "scenarios": [
+    {
+      "id": "resolve-pool-on-request",
+      "title": "Resolve the pool for an incoming request (gateway hot path)",
+      "when_to_use": "Every request the api-gateway accepts. The gateway looks up which DB pool to talk to before doing anything else.",
+      "example_code": "import { resolvePool } from '@projexlight/sdk-pool-router';\nconst pool_index = await resolvePool(tenant_id, 'admin');\n// pass pool_index to dataService.tx({ pool_index }, async (q) => { ... });",
+      "expected_outcome": "Sub-ms when Redis cache hits. Falls back to Postgres on miss + populates the cache. Returns pool_index string used by db-runtime."
+    },
+    {
+      "id": "drain-pool-for-capacity-roll",
+      "title": "Drain a pool to roll capacity without dropping connections",
+      "when_to_use": "Operator scaling down a pool. Flip to 'drain' so new traffic routes elsewhere; in-flight connections finish naturally.",
+      "example_code": "await fetch(`${gw}/admin/pools/pool-42/status`, { method: 'POST', body: JSON.stringify({ status: 'drain' }) });\n// Wait for connection count to fall to 0 (typically <5 min), then decommission.",
+      "expected_outcome": "Emits pool.status.flipped.v1. Redis pool:status-flip broadcast invalidates every gateway replica's route cache within the TTL window (default 5 min). New traffic routes to peer pools; existing connections drain."
+    },
+    {
+      "id": "tenant-pool-assignment",
+      "title": "Tenant provisioned → assign initial admin + app pools",
+      "when_to_use": "sdk-tenant provisions a new tenant; we need a pool to write its initial rows to.",
+      "example_code": "// Driven by sdk-tenant.createTenant() which consumes tenant.created.v1.\n// Behind the scenes:\nimport { assignTenant } from '@projexlight/sdk-pool-router';\nawait assignTenant(tenant_id, { admin: 'pool-admin-3', app: { default: 'pool-app-7' } });",
+      "expected_outcome": "Writes to routing.tenant_pool_map. Emits pool.tenant.assigned.v1. New tenant's requests now resolve cleanly through resolvePool()."
+    },
+    {
+      "id": "active-active-drill",
+      "title": "Run a multi-region active-active failover drill",
+      "when_to_use": "Monthly compliance drill for Tier-G+ tenants. Validates RPO/RTO targets are still met under simulated primary outage.",
+      "example_code": "// Triggered from projexcloud-admin /active-active page or scheduled cron:\n// 1. Force writes through secondary briefly\n// 2. Measure replication lag\n// 3. Produce report; emit active-active.drill.completed.v1\n// 4. Restore primary routing",
+      "expected_outcome": "active_active.failover_drill row recorded with lag_at_drill_ms + write_routing_during_drill. Report visible in operator console. Yellow flag if any replica lag > 5 s; red flag if a replica refused writes."
+    },
+    {
+      "id": "cross-pool-federation-read",
+      "title": "P7: register a cross-pool federation manifest for lakehouse reads",
+      "when_to_use": "Analytics queries (sdk-analytics + Iceberg) need to read across multiple per-tenant app pools without rehydrating data into one warehouse.",
+      "example_code": "// Operator publishes:\n// POST /admin/pools/federation { pool_indices: ['pool-a','pool-b','pool-c'], iceberg_namespace: 'analytics.tenant_<id>' }\n// Emits pool.federation.manifest.updated.v1.",
+      "expected_outcome": "lineage-projector + semantic-service receive the manifest; their next read plans include the federation set. Read federation lakehouse satisfies G11 (PRD §3 P7)."
+    }
+  ],
+  "compliance_posture": {
+    "regimes": ["SOC2", "FedRAMP-SC-family", "EU-Data-Residency", "Active-Active-RPO-RTO-attestation"],
+    "notes": "Pool resolution NEVER crosses jurisdiction. A tenant in eu-west-1 routes only to pools tagged eu-west-1 — enforced at the assignTenant() layer + checked at every resolvePool() call. Active-active replication preference is per-tenant; opt-out forces single-region strict consistency."
+  },
+  "pool_placement": "admin",
+  "pricing_skus": [
+    { "sku": "router.resolve",       "mode": "metered", "unit_description": "per resolve call (rarely a hot SKU; cached aggressively)" },
+    { "sku": "active-active.drill",  "mode": "flat",    "unit_description": "per drill run (typically monthly per tenant)" }
+  ],
+  "links": {
+    "readme": "packages/sdk-pool-router/README.md",
+    "source": "packages/sdk-pool-router/src/",
+    "prd_section": "P1-Foundation-Spine §5.4 / P7-Field-Hyperscale §5 (G10/G11) / P8-Deployment-Variants §5 Variant D"
+  }
+}

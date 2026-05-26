@@ -1,0 +1,96 @@
+{
+  "name": "@projexlight/sdk-meter",
+  "version": "0.1.0",
+  "schema_version": "1.0",
+  "summary": "Universal metering for ProjexCloud: every billable action (API call, MB processed, AI token, evidence frame) flows through emitUsage(); rates resolve against a versioned pricing_catalog; soft caps stamp WARN headers; hard caps DENY. Emits usage.events.v1 to Kafka so sdk-billing + analytics can aggregate independently. The pricing-catalog versioning means historical invoices stay reproducible after rate bumps.",
+  "tags": ["metering", "usage", "pricing", "quota", "soft-cap", "hard-cap", "foundation", "p1-p4"],
+  "provides": {
+    "endpoints": [
+      { "method": "GET",  "path": "/api/meter/health",                                "description": "Liveness probe; confirms catalog + Kafka emitter connectivity." },
+      { "method": "GET",  "path": "/admin/meter/pricing-catalogs",                   "description": "List published pricing catalogs across versions." },
+      { "method": "POST", "path": "/admin/meter/pricing-catalogs",                   "description": "Publish a new pricing catalog version." },
+      { "method": "POST", "path": "/admin/meter/pricing-catalogs/:catalog_id/rates/:sku", "description": "Set or update a rate for a specific SKU within a catalog." },
+      { "method": "POST", "path": "/admin/meter/pricing-catalogs/:catalog_id/status",     "description": "Flip catalog status (draft → published → archived)." }
+    ],
+    "events": [
+      { "name": "meter.usage.event.v1",        "retention_class": "regulated",  "conflict_policy": "event-sourcing", "description": "Per-call usage event emitted on every metered operation. Partitioned by tenant_id in Kafka." },
+      { "name": "meter.usage.aggregated.v1",   "retention_class": "operational","conflict_policy": "lww",            "description": "Hourly / daily rollups computed by the meter-collector service; consumed by sdk-billing.live + invoice generation." },
+      { "name": "meter.catalog.published.v1",  "retention_class": "regulated",  "conflict_policy": "event-sourcing", "description": "New catalog version published; sdk-billing pins existing invoices to the old version and uses the new for future periods." },
+      { "name": "meter.softcap.exceeded.v1",   "retention_class": "operational","conflict_policy": "lww",            "description": "Tenant breached a soft cap on a SKU; downstream stamps WARN headers and surfaces in tenant-admin billing." },
+      { "name": "meter.hardcap.denied.v1",     "retention_class": "regulated",  "conflict_policy": "event-sourcing", "description": "Tenant breached a hard cap; request denied with 429. P7 phase flips soft caps to hard caps once tenants are migrated." }
+    ],
+    "models": [
+      { "schema": "meter", "table": "pricing_catalog",   "description": "Catalog header (id, version, status, currency, effective_from, effective_to)." },
+      { "schema": "meter", "table": "pricing_rate",      "description": "Per-(catalog, sku) rate row. Rate is decimal, supports tiered pricing via JSON metadata." },
+      { "schema": "meter", "table": "quota_policy",      "description": "Per-(tenant, sku) soft / hard cap thresholds + alert routing." },
+      { "schema": "meter", "table": "usage_ledger_day",  "description": "Daily roll-up table queried by sdk-billing.live; partitioned by day for fast retention pruning." },
+      { "schema": "meter", "table": "quota_denial",      "description": "Log of every hard-cap denial; surfaced to tenant admin + billing dunning." }
+    ],
+    "hooks": [
+      { "name": "emitUsage",                  "description": "Universal metering entry point. Every other SDK calls this on every billable operation. Idempotent on (tenant_id, dedup_key)." },
+      { "name": "registerSoftCapResolver",    "description": "Plug a resolver that decides which soft-cap applies for a given (tenant_id, sku) — defaults to reading meter.quota_policy." },
+      { "name": "registerCurrentUsageResolver","description": "Plug a fast-path lookup for current-period usage so soft-cap checks stay O(1) (uses Redis when available)." },
+      { "name": "setEmitter",                 "description": "Swap the default in-process emitter for a Kafka emitter (production); used at api-gateway startup when KAFKA_ENABLED=true." }
+    ],
+    "ui_components": []
+  },
+  "consumes": {
+    "events": [
+      { "name": "tenant.created.v1",     "from": "@projexlight/sdk-tenant" },
+      { "name": "tenant.offboarded.v1",  "from": "@projexlight/sdk-tenant-lifecycle" }
+    ],
+    "infra": ["postgres", "kafka", "redis-optional", "clickhouse-optional"],
+    "config_keys": ["KAFKA_ENABLED", "USAGE_EVENTS_TOPIC", "METER_VERIFIER_INTERVAL_MS", "CLICKHOUSE_ENABLED"]
+  },
+  "scenarios": [
+    {
+      "id": "emit-usage-from-sdk",
+      "title": "Emit a usage event from any SDK on every billable call",
+      "when_to_use": "Every billable call across ProjexCloud (encrypt, decrypt, login, MFA challenge, AI inference, scaffold, etc.).",
+      "example_code": "import { emitUsage } from '@projexlight/sdk-meter';\nawait emitUsage({\n  tenant_id, sku: 'vault.encrypt', units: 1,\n  dimensions: { app_id, bu_id, persona_id },\n  dedup_key: `${trace_id}:vault.encrypt`,\n});",
+      "expected_outcome": "Idempotent — same dedup_key counted at most once. Writes to in-process buffer (or Kafka when KAFKA_ENABLED). Flows to meter.usage_ledger_day within ~60 s. Triggers soft-cap / hard-cap gates if thresholds exceeded."
+    },
+    {
+      "id": "publish-quarterly-catalog",
+      "title": "Publish a new pricing catalog version (quarterly bump)",
+      "when_to_use": "Finance rolls out a rate change; old invoices stay pinned to the prior catalog, new periods price against the new one.",
+      "example_code": "// 1. Clone the current catalog to draft\n// 2. PUT each new rate via /admin/meter/pricing-catalogs/:catalog_id/rates/:sku\n// 3. Flip status to 'published'\nawait fetch(`${gw}/admin/meter/pricing-catalogs/${draft_id}/status`, { method: 'POST', body: JSON.stringify({ status: 'published' }) });",
+      "expected_outcome": "Emits meter.catalog.published.v1. New invoices generated by sdk-billing for periods starting after the catalog's effective_from use the new rates. Existing finalized invoices are immutable."
+    },
+    {
+      "id": "soft-cap-warning",
+      "title": "Tenant exceeds a soft cap; WARN header stamped, request still succeeds",
+      "when_to_use": "Pre-GA / trial customers should not be hard-denied — surface the breach so they can decide to upgrade.",
+      "example_code": "// Middleware at the gateway calls into soft-cap check automatically.\n// If exceeded:\n// response.headers['x-projex-meter-warn'] = 'softcap-exceeded:vault.encrypt'\n// Listen via:\nsubscribeEvents('meter.softcap.exceeded.v1', async (e) => {\n  await notifyTenantAdmin(e.tenant_id, e.payload.sku, e.payload.current, e.payload.cap);\n});",
+      "expected_outcome": "Request succeeds with the WARN header. Emits meter.softcap.exceeded.v1 (rate-limited per tenant+sku to avoid spam). Tenant-admin Billing page surfaces the yellow badge."
+    },
+    {
+      "id": "hardcap-deny",
+      "title": "Hard cap exceeded — request denied with 429 + structured reason",
+      "when_to_use": "P7+ tenants where the soft-cap → hard-cap migration has completed; hard caps prevent surprise bills.",
+      "example_code": "// Middleware DENIES the call:\n// HTTP 429 + body: { error: 'QuotaExceeded', sku: 'vault.encrypt', cap: 10000, current: 10001 }\n// Caller catches and either backs off or surfaces to the customer.",
+      "expected_outcome": "Request denied. quota_denial row written. Emits meter.hardcap.denied.v1. Tenant admin can request a temporary lift via the Approvals flow (sdk-approval)."
+    },
+    {
+      "id": "verifier-replay-for-reconciliation",
+      "title": "Background meter verifier reconciles per-day rollups against the raw event log",
+      "when_to_use": "Daily compliance check that meter.usage_ledger_day matches the sum of meter.usage.event.v1 events; catches dropped messages or rollup bugs.",
+      "example_code": "// Runs automatically when METER_VERIFIER_INTERVAL_MS is set (default 24h).\n// To observe:\n// tail -f logs | grep 'meter-verifier'",
+      "expected_outcome": "Drift below 0.1% logs as INFO. Drift above pages on-call. Fixed by re-running the rollup with the verified raw event set."
+    }
+  ],
+  "compliance_posture": {
+    "regimes": ["SOC2", "PCI-DSS-Req-10.2", "SOX-revenue-recognition", "GDPR-Art-30"],
+    "notes": "Usage events are themselves audit-chain entries via sdk-audit. Pricing catalog version pinning satisfies SOX revenue-recognition immutability. Tenants in regulated jurisdictions have the option of having their usage events held in-region (set USAGE_EVENTS_REGIONAL_HOLD=true)."
+  },
+  "pool_placement": "global-catalog",
+  "pricing_skus": [
+    { "sku": "meter.emit",      "mode": "metered", "unit_description": "per usage event accepted (free up to plan ceiling; rarely a hot SKU itself)" },
+    { "sku": "meter.catalog.publish", "mode": "flat", "unit_description": "per published catalog version" }
+  ],
+  "links": {
+    "readme": "packages/sdk-meter/README.md",
+    "source": "packages/sdk-meter/src/",
+    "prd_section": "P1-Foundation-Spine §5.5 / P4-Operational-Billing §9"
+  }
+}
