@@ -1,0 +1,28 @@
+{
+  "$schema_version": "1.0",
+  "catalog_id": "field-ops-sdks",
+  "version": 1,
+  "description": "Pricing for the field-operations tier (sdk-dispatch / sdk-assignment / sdk-storm / hdk-map / sdk-device). Backs the field-dispatch pilot blueprint. Mass-event throughput (storm spawns) gets a volume discount built into the per-task rate; map tile provider costs pass through unchanged.",
+  "currency": "USD",
+  "created_by_operator_id": "seed:field-ops-sdks-v1",
+  "rates": [
+    { "sku": "dispatch.task.enqueue",      "unit": "task",       "mode": "metered", "price": 0.005,  "notes": "Per task enqueued; storm-batches priced at $0.001 via tier overrides." },
+    { "sku": "dispatch.route.materialize", "unit": "route",      "mode": "metered", "price": 0.02,   "notes": "Per tech-day route materialized; geo-optimization compute." },
+    { "sku": "dispatch.task.complete",     "unit": "task",       "mode": "flat",    "price": 0.50,   "notes": "Per completed task — drives billing on the downstream commercial workflow." },
+
+    { "sku": "assignment.claim",           "unit": "claim",      "mode": "metered", "price": 0.001,  "notes": "Per task claimed (lease + ack)." },
+    { "sku": "assignment.reassign",        "unit": "reassign",   "mode": "metered", "price": 0.005,  "notes": "Per supervisor-driven reassignment." },
+    { "sku": "assignment.rebalance",       "unit": "pass",       "mode": "metered", "price": 0.05,   "notes": "Per territory balancer pass." },
+
+    { "sku": "storm.event.declare",        "unit": "event",      "mode": "flat",    "price": 25.00,  "notes": "Per mass event declared (hurricane/wildfire/outage)." },
+    { "sku": "storm.tasks.spawn",          "unit": "task",       "mode": "metered", "price": 0.001,  "notes": "Per task spawned; volume-discounted vs. standard enqueue." },
+    { "sku": "storm.feed.poll",            "unit": "poll",       "mode": "metered", "price": 0.0001, "notes": "Per feed-poll tick (background)." },
+
+    { "sku": "hdk-map.capabilities.read",  "unit": "call",       "mode": "metered", "price": 0.0001, "notes": "Per /api/hdk/map/capabilities call; mobile app polls on resume." },
+    { "sku": "hdk-map.provider.switch",    "unit": "switch",     "mode": "flat",    "price": 5.00,   "notes": "Per provider switch (audited operator action)." },
+
+    { "sku": "device.enroll",              "unit": "device",     "mode": "flat",    "price": 2.00,   "notes": "Per device enrolled (one-time)." },
+    { "sku": "device.attestation",         "unit": "attestation","mode": "metered", "price": 0.0005, "notes": "Per attestation check (typically nightly)." },
+    { "sku": "device.revoke",              "unit": "revoke",     "mode": "flat",    "price": 1.00,   "notes": "Per revocation (audited)." }
+  ]
+}
