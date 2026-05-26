@@ -1,0 +1,81 @@
+name: p9-acceptance
+
+# AC-3 (semantic search precision), AC-9 (blueprint smoke), AC-13 (MCP cohabitation)
+# CI suite. AC-1 + AC-2 already covered by registry-validate.yml.
+# AC-6 (k6 load) runs nightly via a separate workflow against staging.
+# AC-4, AC-5, AC-11 are manual user tests gated by the release engineer.
+
+on:
+  pull_request:
+    paths:
+      - 'packages/sdk-registry/**'
+      - 'packages/sdk-capability/**'
+      - 'packages/registry-mcp-local/**'
+      - 'packages/cli/**'
+      - 'packages/blueprints/**'
+      - 'services/registry-mcp/**'
+      - 'blueprints/**'
+      - 'scripts/eval-search-precision.mjs'
+      - 'scripts/smoke-blueprints.mjs'
+      - 'scripts/test-mcp-cohabitation.mjs'
+      - '.github/workflows/p9-acceptance.yml'
+  push:
+    branches: [main, 'release/**']
+
+jobs:
+  precision:
+    name: AC-3 · search precision@3
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v3
+        with: { version: 9 }
+      - uses: actions/setup-node@v4
+        with: { node-version: 20, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @projexlight/sdk-capability build
+      - run: pnpm --filter @projexlight/sdk-registry build
+      - name: Build catalog + embeddings
+        run: pnpm --filter @projexlight/sdk-registry exec registry-build
+      - name: Run precision eval
+        run: node scripts/eval-search-precision.mjs
+
+  cohabitation:
+    name: AC-13 · MCP cohabitation
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v3
+        with: { version: 9 }
+      - uses: actions/setup-node@v4
+        with: { node-version: 20, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @projexlight/sdk-capability build
+      - run: pnpm --filter @projexlight/sdk-registry build
+      - run: pnpm --filter @projexlight/blueprints build
+      - run: pnpm --filter @projexlight/registry-mcp-local build
+      - name: Build catalog
+        run: pnpm --filter @projexlight/sdk-registry exec registry-build
+      - run: node scripts/test-mcp-cohabitation.mjs
+
+  blueprint-smoke:
+    name: AC-9 · blueprint smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v3
+        with: { version: 9 }
+      - uses: actions/setup-node@v4
+        with: { node-version: 20, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @projexlight/sdk-capability build
+      - run: pnpm --filter @projexlight/sdk-registry build
+      - run: pnpm --filter @projexlight/blueprints build
+      - run: pnpm --filter @projexlight/registry-mcp-local build
+      - run: pnpm --filter @projexlight/cli build
+      - name: Build catalog
+        run: pnpm --filter @projexlight/sdk-registry exec registry-build
+      - run: node scripts/smoke-blueprints.mjs

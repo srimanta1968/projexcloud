@@ -1,0 +1,1236 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>ProjexCloud · SDK Discoverability &amp; AI-Driven Vertical App Builder — v3.1</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<style>
+  :root {
+    --bg: #0b0f17; --panel: #121826; --panel-2: #1a2234; --line: #243049;
+    --text: #e6ecf5; --muted: #8a98b3; --accent: #c9a86a; --accent-2: #6aa9ff;
+    --teal: #2dd4bf; --green: #5dd39e; --red: #ff6b6b; --yellow: #f5c451; --purple: #b88dff;
+    --code-bg: #0f1422;
+  }
+  * { box-sizing: border-box; }
+  html, body { background: var(--bg); color: var(--text); font-family: ui-sans-serif, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", sans-serif; margin: 0; padding: 0; line-height: 1.55; }
+  .page { max-width: 1260px; margin: 0 auto; padding: 56px 32px 96px; }
+  header.cover { border-bottom: 1px solid var(--line); padding-bottom: 36px; margin-bottom: 48px; }
+  header.cover .eyebrow { color: var(--accent); letter-spacing: 0.18em; text-transform: uppercase; font-size: 12px; font-weight: 700; }
+  header.cover h1 { font-size: 42px; line-height: 1.15; margin: 12px 0 8px; letter-spacing: -0.02em; }
+  header.cover .sub { color: var(--muted); font-size: 17px; max-width: 980px; }
+  header.cover .meta { display: flex; gap: 24px; flex-wrap: wrap; margin-top: 24px; color: var(--muted); font-size: 13px; }
+  header.cover .meta b { color: var(--text); font-weight: 600; }
+  header.cover .changelog { margin-top: 22px; background: var(--panel-2); border-left: 3px solid var(--accent-2); border-radius: 0 10px 10px 0; padding: 14px 18px; font-size: 13.5px; color: #d6deef; }
+  header.cover .changelog b { color: var(--accent-2); }
+
+  h2 { font-size: 26px; letter-spacing: -0.01em; margin: 56px 0 18px; padding-bottom: 8px; border-bottom: 1px solid var(--line); }
+  h3 { font-size: 18px; margin: 28px 0 10px; color: var(--text); }
+  h4 { font-size: 13px; margin: 18px 0 8px; color: var(--accent); text-transform: uppercase; letter-spacing: 0.12em; }
+  p { color: #c8d1e3; }
+  small, .muted { color: var(--muted); }
+
+  .grid { display: grid; gap: 16px; }
+  .grid.cols-2 { grid-template-columns: repeat(2, minmax(0,1fr)); }
+  .grid.cols-3 { grid-template-columns: repeat(3, minmax(0,1fr)); }
+  .grid.cols-4 { grid-template-columns: repeat(4, minmax(0,1fr)); }
+  @media (max-width: 900px) {
+    .grid.cols-2, .grid.cols-3, .grid.cols-4 { grid-template-columns: 1fr; }
+    header.cover h1 { font-size: 30px; }
+  }
+
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 18px 18px 16px; }
+  .card .label { color: var(--accent); font-size: 11px; text-transform: uppercase; letter-spacing: 0.14em; font-weight: 700; }
+  .card .title { font-weight: 600; margin: 6px 0 6px; font-size: 15px; }
+  .card .body { color: var(--muted); font-size: 13.5px; }
+
+  .pill { display: inline-block; padding: 3px 10px; border-radius: 999px; font-size: 11px; border: 1px solid var(--line); color: var(--muted); margin-right: 6px; }
+  .pill.gold { color: var(--accent); border-color: rgba(201,168,106,0.4); }
+  .pill.blue { color: var(--accent-2); border-color: rgba(106,169,255,0.4); }
+  .pill.teal { color: var(--teal); border-color: rgba(45,212,191,0.4); }
+  .pill.green { color: var(--green); border-color: rgba(93,211,158,0.4); }
+  .pill.red { color: var(--red); border-color: rgba(255,107,107,0.4); }
+  .pill.yellow { color: var(--yellow); border-color: rgba(245,196,81,0.4); }
+  .pill.purple { color: var(--purple); border-color: rgba(184,141,255,0.4); }
+
+  table { width: 100%; border-collapse: collapse; margin-top: 12px; font-size: 14px; }
+  th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { color: var(--muted); font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; }
+
+  pre, code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+  pre { background: var(--code-bg); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; overflow-x: auto; font-size: 12.5px; line-height: 1.55; }
+  code { background: var(--code-bg); padding: 1px 6px; border-radius: 4px; font-size: 12.5px; }
+
+  .diagram-wrap { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 22px; overflow-x: auto; margin: 12px 0; }
+  .caption { color: var(--muted); font-size: 12.5px; margin-top: 10px; text-align: center; }
+  .mermaid { background: transparent; }
+
+  nav.toc { position: sticky; top: 0; background: rgba(11,15,23,0.92); backdrop-filter: blur(10px); border-bottom: 1px solid var(--line); padding: 10px 32px; z-index: 10; }
+  nav.toc .row { max-width: 1260px; margin: 0 auto; display: flex; flex-wrap: wrap; gap: 10px; font-size: 12px; }
+  nav.toc a { color: var(--muted); text-decoration: none; border-bottom: 1px solid transparent; }
+  nav.toc a:hover { color: var(--accent); border-color: var(--accent); }
+
+  .callout { border-left: 3px solid var(--accent); background: var(--panel-2); padding: 14px 18px; border-radius: 0 10px 10px 0; margin: 18px 0; color: #d6deef; font-size: 14px; }
+  .callout.blue { border-color: var(--accent-2); }
+  .callout.green { border-color: var(--green); }
+  .callout.red { border-color: var(--red); }
+  .callout.purple { border-color: var(--purple); }
+  .callout.teal { border-color: var(--teal); }
+
+  .layer { display: grid; grid-template-columns: 64px 1fr; gap: 18px; padding: 18px 22px; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; margin-bottom: 12px; }
+  .layer .lnum { width: 64px; height: 64px; border-radius: 14px; display: grid; place-items: center; background: linear-gradient(135deg, var(--purple), #6e4ed1); color: #190b3a; font-weight: 800; font-size: 22px; }
+  .layer h3 { margin: 0 0 6px; font-size: 19px; color: var(--text); }
+  .layer .role { color: var(--accent); font-size: 11px; text-transform: uppercase; letter-spacing: 0.14em; font-weight: 700; margin-bottom: 6px; }
+  .layer p { margin: 0; color: var(--muted); font-size: 14px; line-height: 1.55; }
+
+  ul.tight li { margin: 4px 0; color: #c8d1e3; }
+  .kbd { background: var(--panel-2); border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 4px; padding: 1px 6px; font-family: ui-monospace, monospace; font-size: 12px; color: var(--text); }
+  .tag-new { display: inline-block; font-size: 10px; padding: 1px 6px; border-radius: 4px; background: rgba(184,141,255,0.18); color: var(--purple); margin-left: 8px; vertical-align: middle; letter-spacing: 0.08em; }
+</style>
+</head>
+<body>
+
+<nav class="toc">
+  <div class="row">
+    <a href="#tldr">TL;DR</a>
+    <a href="#why">Why Auto-Discovery</a>
+    <a href="#architecture">Four-Layer Architecture</a>
+    <a href="#layer1">L1 · Manifests</a>
+    <a href="#layer2">L2 · Registry</a>
+    <a href="#layer3">L3 · MCP (Hosted+Local)</a>
+    <a href="#layer4cli">L4 · CLI Path</a>
+    <a href="#layer4cloud">L4 · Cloud Path</a>
+    <a href="#discovery">Discovery Mechanism</a>
+    <a href="#flows">End-to-End Flows</a>
+    <a href="#cohabitation">MCP Cohabitation</a>
+    <a href="#security">Security &amp; Guardrails</a>
+    <a href="#glossary">Glossary</a>
+  </div>
+</nav>
+
+<div class="page">
+
+<header class="cover">
+  <div class="eyebrow">ProjexCloud · Architecture · v3.1 · P9 Companion</div>
+  <h1>SDK Discoverability &amp; AI-Driven Vertical App Builder</h1>
+  <div class="sub">
+    How a tenant auto-discovers ProjexCloud's ~70 SDK catalog and composes a working vertical
+    application — either locally through Claude Code / Cursor / Windsurf in the CLI, or remotely
+    through the hosted Cloud Builder agent. Companion architectural narrative for
+    <code>P9-SDK-Discoverability-AI-Builder.md</code>.
+  </div>
+  <div class="meta">
+    <div><b>Phase</b> · P9 (W50–W62) · P9.1 follow-up W64</div>
+    <div><b>Wave</b> · W7 productization</div>
+    <div><b>Gates</b> · G13 SDK Composability · G14 AI-Native Builder</div>
+    <div><b>Status</b> · Architecture Draft · Pending WG Review</div>
+    <div><b>Source PRD</b> · <code>prd/P9-SDK-Discoverability-AI-Builder.md</code></div>
+  </div>
+  <div class="changelog">
+    <b>What this document does</b> — Translates the P9 PRD into the architectural picture an
+    implementing engineer needs: how the four layers (capability manifests → registry → MCP →
+    builders) compose, how an AI client on a developer's machine discovers ProjexCloud SDKs
+    with zero prior knowledge, how the hosted/local MCP split balances latency against
+    authority, and how a non-developer's natural-language prompt is funneled into the same
+    substrate. Diagrams are normative; prose explains intent.
+  </div>
+</header>
+
+<!-- ============================================================ -->
+<section id="tldr">
+<h2>1 · TL;DR</h2>
+<p>
+ProjexCloud's ~70 cross-cutting SDKs (identity, tenancy, billing, audit, AI gateway, evidence
+chain, geo, dispatch, …) are useless if a tenant developer has to grep source to find them.
+P9 fixes that by turning the SDK catalog into a <b>machine-readable, AI-consumable platform</b>.
+The architecture is four cooperating layers:
+</p>
+
+<div class="grid cols-4">
+  <div class="card">
+    <div class="label">Layer 1</div>
+    <div class="title">Capability Manifests</div>
+    <div class="body">Every SDK ships <code>sdk-capability.json</code> describing what it provides,
+      consumes, and when to use it. CI rejects publishes without one.</div>
+  </div>
+  <div class="card">
+    <div class="label">Layer 2</div>
+    <div class="title">Registry &amp; Embedding Index</div>
+    <div class="body">Build-time scanner unifies manifests into a catalog + ANN vector index.
+      Powers semantic <code>searchByIntent()</code> across the SDK universe.</div>
+  </div>
+  <div class="card">
+    <div class="label">Layer 3</div>
+    <div class="title">MCP Server (Split)</div>
+    <div class="body">Hosted half handles tenant-scoped reads &amp; <i>all writes</i>; local half
+      ships in the CLI for offline reads + write proxy. Same wire protocol both sides.</div>
+  </div>
+  <div class="card">
+    <div class="label">Layer 4</div>
+    <div class="title">Two Builder Entrypoints</div>
+    <div class="body">CLI path — <code>projex init</code> wires Claude Code / Cursor / Windsurf
+      to the local MCP. Cloud path — <code>/build</code> chat surface inside the tenant
+      workspace, driven by the same MCP tools.</div>
+  </div>
+</div>
+
+<div class="callout blue">
+  <b>The one-sentence model:</b> manifests make SDKs <i>describable</i>, the registry makes
+  them <i>findable</i>, MCP makes them <i>callable by AI</i>, and the builders make them
+  <i>composable into a running tenant app</i> — all without the developer ever cloning the
+  monorepo.
+</div>
+</section>
+
+<!-- ============================================================ -->
+<section id="why">
+<h2>2 · Why auto-discovery, why now</h2>
+<p>
+After P1–P8 the SDK stack is broad enough that the bottleneck to ProjexCloud's growth is no
+longer features — it is <b>composability</b>. A tenant who signs up today gets an empty
+workspace; the only way to actually build something is to clone the monorepo and learn ~70
+packages. That doesn't scale to thousands of tenants.
+</p>
+
+<p>
+The MCP ecosystem (Anthropic, Cursor, Windsurf, Cline) has converged on a stable protocol over
+the last 6 months. Building on it now means <b>every AI coding tool, present and future,
+becomes a ProjexCloud entry point</b> with no per-tool plugin. Delay means: every onboarding
+burns operator hours, the AI-native window closes as competitors ship their own MCP catalogs,
+and the P8 vertical packs (Healthcare, FinServ, Public Sector) have no surface to materialize
+on.
+</p>
+
+<div class="grid cols-2">
+  <div class="card">
+    <div class="label">Before P9</div>
+    <div class="title">Read-the-source discovery</div>
+    <div class="body">Tenant dev clones monorepo · greps for an SDK that "does billing" ·
+      reads 3 READMEs · pastes example code · prays it compiles. Onboarding: 2–6 weeks.</div>
+  </div>
+  <div class="card">
+    <div class="label">After P9</div>
+    <div class="title">Prompt-to-app discovery</div>
+    <div class="body">Tenant dev runs one command · their AI tool already sees every SDK ·
+      types "I need consent receipts for GDPR" · AI calls <code>projex_registry_search_sdks</code>
+      · scaffolds working code. Onboarding: minutes.</div>
+  </div>
+</div>
+</section>
+
+<!-- ============================================================ -->
+<section id="architecture">
+<h2>3 · The four-layer architecture</h2>
+
+<div class="diagram-wrap">
+<div class="mermaid">
+flowchart TB
+  subgraph DEV["Developer's machine"]
+    direction TB
+    AI["AI Coding Tool<br/>(Claude Code · Cursor · Windsurf · Cline)"]
+    LOCAL["registry-mcp-local<br/>(stdio · CLI-bundled)"]
+    CACHE[("~/.projex/cache<br/>catalog.json + embeddings.bin")]
+    CLI["@projexlight/cli<br/>projex init/install/deploy"]
+    AI -- "MCP stdio<br/>tool calls" --> LOCAL
+    LOCAL -- "reads" --> CACHE
+    CLI -- "writes config" --> AI
+    CLI -- "spawns" --> LOCAL
+  end
+
+  subgraph TENANT["Tenant Workspace · Browser"]
+    BUILDER["/build chat UI<br/>(apps/cloud-builder)"]
+    AGENT["sdk-agent-runtime<br/>+ sdk-ai-gateway"]
+    BUILDER --> AGENT
+  end
+
+  subgraph HOSTED["ProjexCloud · Per-Region"]
+    GW["api-gateway"]
+    HMCP["registry-mcp (HOSTED)<br/>SSE transport"]
+    REG[("dist/registry.catalog.json<br/>+ embeddings.bin · S3")]
+    BP[("blueprints/<br/>YAML + templates")]
+    AUDIT["sdk-audit · chain"]
+    METER["sdk-meter"]
+    POLICY["sdk-policy<br/>(pack guardrails)"]
+    SCAFFOLD["scaffold + deploy<br/>orchestrator"]
+    GW --> HMCP
+    HMCP --> REG
+    HMCP --> BP
+    HMCP --> AUDIT
+    HMCP --> METER
+    HMCP --> POLICY
+    HMCP --> SCAFFOLD
+  end
+
+  subgraph POOLS["Tenant Pools"]
+    APP[("Tenant App Pool")]
+    EVID[("Evidence Pool")]
+    SCAFFOLD --> APP
+    SCAFFOLD --> EVID
+  end
+
+  LOCAL -- "daily ETag pull<br/>read tools (cache miss)" --> GW
+  LOCAL -- "write proxy: scaffold/deploy" --> GW
+  AGENT -- "MCP/SSE" --> HMCP
+  CLI -- "deploy upload" --> GW
+
+  classDef dev fill:#1a2234,stroke:#6aa9ff,color:#e6ecf5;
+  classDef ten fill:#1a2234,stroke:#b88dff,color:#e6ecf5;
+  classDef host fill:#1a2234,stroke:#5dd39e,color:#e6ecf5;
+  classDef pool fill:#1a2234,stroke:#c9a86a,color:#e6ecf5;
+  class AI,LOCAL,CACHE,CLI dev;
+  class BUILDER,AGENT ten;
+  class GW,HMCP,REG,BP,AUDIT,METER,POLICY,SCAFFOLD host;
+  class APP,EVID pool;
+</div>
+<div class="caption">Figure 3.1 — End-to-end topology. The local MCP and hosted MCP speak the
+  same wire protocol; the split is about <i>where authority lives</i>, not what the AI sees.</div>
+</div>
+
+<div class="layer">
+  <div class="lnum">1</div>
+  <div>
+    <div class="role">Layer 1 · Self-describing SDKs</div>
+    <h3>Capability Manifests</h3>
+    <p>Every SDK ships an <code>sdk-capability.json</code>. Without one, CI refuses to publish
+      it. The manifest is the contract — it tells the registry, MCP, agent, and downstream
+      tooling exactly what the SDK <i>provides</i>, <i>consumes</i>, when to use it, and what
+      compliance posture it carries.</p>
+  </div>
+</div>
+
+<div class="layer">
+  <div class="lnum">2</div>
+  <div>
+    <div class="role">Layer 2 · Aggregation &amp; semantic index</div>
+    <h3>Registry &amp; Embedding Index</h3>
+    <p>A build-time scanner walks <code>packages/*</code> and <code>services/*</code>, validates
+      every manifest, and emits a single normalized catalog plus an ANN vector index over the
+      hand-written scenarios. This is what makes "search by intent" possible.</p>
+  </div>
+</div>
+
+<div class="layer">
+  <div class="lnum">3</div>
+  <div>
+    <div class="role">Layer 3 · The discovery wire</div>
+    <h3>MCP Server (Hosted + Local split)</h3>
+    <p>Two binaries, one wire protocol. The hosted half (per-region, behind api-gateway)
+      owns tenant scope and writes. The local half (CLI-bundled, stdio) caches the public
+      catalog and proxies writes. AI tools see one tool list; the split is invisible to them.</p>
+  </div>
+</div>
+
+<div class="layer">
+  <div class="lnum">4</div>
+  <div>
+    <div class="role">Layer 4 · The two builder personas</div>
+    <h3>CLI Builder (developer) · Cloud Builder (non-developer)</h3>
+    <p><b>CLI path:</b> <code>projex init</code> auto-detects installed AI tools and writes
+      their MCP configs. The developer prompts their AI tool; the AI calls registry tools and
+      writes code. <b>Cloud path:</b> the tenant workspace exposes a chat surface at
+      <code>/build</code>; a hosted agent calls the same MCP tools server-side and returns a
+      working URL.</p>
+  </div>
+</div>
+</section>
+
+<!-- ============================================================ -->
+<section id="layer1">
+<h2>4 · Layer 1 — Capability Manifests</h2>
+
+<p>
+The <code>sdk-capability.json</code> file is the foundation of the whole stack. If a manifest
+doesn't exist, the SDK doesn't exist to the AI. If a manifest is wrong, the AI suggests it for
+the wrong things. The schema is versioned (<code>schema_version: "1.0"</code>); future bumps
+are backward-compatible or carry a migration.
+</p>
+
+<h3>4.1 — Manifest anatomy</h3>
+
+<pre><code>{
+  "schema_version": "1.0",
+  "name": "sdk-consent",
+  "version": "1.4.2",
+  "summary": "GDPR/CCPA consent receipts with cryptographic proof, double opt-in flows, and revocation propagation.",
+  "tags": ["privacy", "gdpr", "ccpa", "consent", "compliance"],
+  "provides": {
+    "endpoints": ["POST /v1/consent", "GET /v1/consent/:subject"],
+    "events":    ["consent.granted.v1", "consent.revoked.v1"],
+    "models":    ["ConsentReceipt", "ConsentScope"],
+    "hooks":     ["beforeConsentGrant", "afterConsentRevoke"],
+    "ui_components": ["&lt;ConsentBanner/&gt;", "&lt;ConsentPreferences/&gt;"]
+  },
+  "consumes": {
+    "events":      ["identity.subject.created.v1"],
+    "infra":       ["sdk-audit", "sdk-vault"],
+    "config_keys": ["CONSENT_DEFAULT_TTL_DAYS"]
+  },
+  "scenarios": [
+    {
+      "id": "gdpr-receipt",
+      "title": "Issue a GDPR-compliant consent receipt",
+      "when_to_use": "Customer opts in to marketing email; you must store proof.",
+      "example_code": "await consent.grant({ subject, scope: 'marketing.email' });",
+      "expected_outcome": "Hash-anchored receipt; event emitted; revocation honored within 30 days."
+    }
+    /* … 2–4 more scenarios … */
+  ],
+  "compliance_posture": {
+    "regimes": ["GDPR", "CCPA", "SOC2"],
+    "notes":   "Receipts hash-anchored into sdk-audit chain."
+  },
+  "pool_placement": "app",
+  "pricing_skus":   [{ "sku": "consent.receipt", "mode": "metered", "unit_description": "per receipt issued" }],
+  "links": {
+    "readme":      "packages/sdk-consent/README.md",
+    "source":      "packages/sdk-consent",
+    "prd_section": "P3#consent"
+  }
+}</code></pre>
+
+<div class="callout">
+  <b>Why scenarios matter most.</b> The <code>scenarios[]</code> block is the only part of the
+  manifest that gets embedded into the vector index. <code>summary</code> and <code>tags</code>
+  help keyword search; scenarios are what make <i>"I need consent receipts for GDPR"</i> land
+  on <code>sdk-consent</code> with score ≥ 0.7. Quality bar in CI: ≥ 3 scenarios, no
+  <code>TBD</code> placeholders, compliance posture filled.
+</div>
+
+<h3>4.2 — Authoring economics</h3>
+
+<p>
+Hand-writing 70 manifests was the single biggest risk (R-1 in the PRD). It is mitigated by
+splitting the work:
+</p>
+
+<div class="grid cols-2">
+  <div class="card">
+    <div class="label">Auto-generated</div>
+    <div class="title">Boilerplate (≈60% of the file)</div>
+    <div class="body">
+      <code>npx @projexlight/sdk-capability scaffold</code> introspects <code>package.json</code>,
+      route registrations, <code>events.ts</code>, and DB migrations to emit the
+      <code>provides</code> / <code>consumes</code> / <code>links</code> blocks deterministically.
+    </div>
+  </div>
+  <div class="card">
+    <div class="label">Hand-authored</div>
+    <div class="title">Prose (≈40% of the file)</div>
+    <div class="body">
+      Summary, scenarios, compliance notes, when-to-use guidance. ~half-day per SDK owner.
+      First 5 manifests pair-authored with platform team to set quality bar; CI lints reject
+      <code>TBD</code> placeholders.
+    </div>
+  </div>
+</div>
+
+<h3>4.3 — CI gate (the no-exceptions rule)</h3>
+
+<pre><code># .github/workflows/registry-validate.yml (excerpt)
+- name: Validate every manifest
+  run: pnpm registry:validate
+  # Fails the build with structured errors:
+  #   MANIFEST_MISSING  packages/sdk-foo          (no sdk-capability.json)
+  #   MANIFEST_INVALID  packages/sdk-bar/v1.0.0   (summary > 500 chars)
+  #   SCENARIO_TBD      packages/sdk-baz#sc-2     (example_code contains "TBD")
+</code></pre>
+
+<p>
+This gate codifies Architecture Doctrine §C — <b>Capability-First SDK Authoring</b>: every new
+SDK ships its manifest at v1.0. No exceptions.
+</p>
+</section>
+
+<!-- ============================================================ -->
+<section id="layer2">
+<h2>5 · Layer 2 — Registry &amp; Embedding Index</h2>
+
+<p>
+The registry is two artifacts produced by one build job:
+</p>
+
+<table>
+  <thead>
+    <tr><th>Artifact</th><th>Format</th><th>Purpose</th><th>Refresh</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>dist/registry.catalog.json</code></td>
+      <td>Normalized JSON</td>
+      <td>Every manifest + derived dependency graph (who-consumes-whose-events). Drives
+        <code>list()</code>, <code>get()</code>, <code>findCompatibleSdks()</code>.</td>
+      <td>On any manifest change · RPO ≤ 1h via S3</td>
+    </tr>
+    <tr>
+      <td><code>dist/registry.embeddings.bin</code></td>
+      <td>ANN vector index (HNSW)</td>
+      <td>Vectors keyed by <code>(sdk_name, scenario_id)</code>. Powers
+        <code>searchByIntent(query, top_k)</code>.</td>
+      <td>Deterministic per content hash · CI-cached</td>
+    </tr>
+  </tbody>
+</table>
+
+<h3>5.1 — Why <code>bge-small-en-v1.5</code></h3>
+
+<p>
+Open question Q-1 (locked 2026-05-25) chose <code>bge-small-en-v1.5</code> loaded via
+<code>@huggingface/transformers</code> as INT8-quantized ONNX. Three properties matter:
+</p>
+
+<ul class="tight">
+  <li><b>In-process.</b> ~33 MB on disk, ~150 MB resident. Runs inside both the hosted MCP and
+    the CLI-bundled local MCP — <i>no separate inference service, no per-query API cost</i>.</li>
+  <li><b>Offline-capable.</b> The same model that built the index runs on the developer's
+    laptop, so <code>search_sdks</code> still works with no network — required for AC-12.</li>
+  <li><b>On-par recall.</b> For a 70-SDK corpus its precision@3 matches
+    <code>text-embedding-3-small</code> within noise, while saving ~$140/mo at projected traffic.</li>
+</ul>
+
+<h3>5.2 — Public API surface</h3>
+
+<pre><code>// @projexlight/sdk-registry
+export interface Registry {
+  list(): SdkCapabilityManifest[];
+  get(sdk_name: string): SdkCapabilityManifest | null;
+  searchByIntent(query: string, top_k?: number): Promise&lt;RegistryHit[]&gt;;
+  findCompatibleSdks(sdk_name: string): string[];
+  getScaffold(sdk_names: string[], app_name: string): ScaffoldTree;
+}
+export function loadRegistry(catalogPath?: string): Promise&lt;Registry&gt;;</code></pre>
+
+<div class="callout blue">
+  <b>Deterministic builds.</b> AC-2 requires that running <code>pnpm registry:build</code>
+  twice on identical inputs produces byte-identical artifacts. This rules out
+  non-deterministic float math in the embedding pipeline (INT8 quantization is required, not
+  optional) and lets CI cache the index across PRs.
+</div>
+</section>
+
+<!-- ============================================================ -->
+<section id="layer3">
+<h2>6 · Layer 3 — MCP Server (Hosted + Local Split)</h2>
+
+<p>
+The MCP layer is where the architecture's most consequential design decision lives: <b>split
+into two cooperating binaries that share one wire protocol</b>.
+</p>
+
+<div class="callout purple">
+  <b>The split rationale.</b> Read tools are ~95% of MCP traffic. AI coding tools prefer
+  <i>local stdio MCPs</i> for latency, trust, and offline tolerance. But writes —
+  scaffolding into a tenant's pool, deploying, listing tenant-scoped SDKs — cannot be trusted
+  to the client. They need server-side identity, audit, billing, and pack guardrails.
+  Forcing one binary to do both jobs means doing both poorly. Splitting cleanly avoids that.
+</div>
+
+<h3>6.1 — Side-by-side</h3>
+
+<table>
+  <thead>
+    <tr><th></th><th>registry-mcp <span class="pill green">HOSTED</span></th><th>registry-mcp-local <span class="pill blue">LOCAL</span></th></tr>
+  </thead>
+  <tbody>
+    <tr><td><b>Lives</b></td><td>Per-region, behind api-gateway</td><td>Developer's machine (Docker or <code>npx</code>)</td></tr>
+    <tr><td><b>Transport</b></td><td>SSE over HTTPS (Q-2 decision)</td><td>stdio (the MCP default)</td></tr>
+    <tr><td><b>Catalog source</b></td><td>S3 (canonical)</td><td><code>~/.projex/cache/</code> (ETag-refreshed daily)</td></tr>
+    <tr><td><b>Authoritative for</b></td><td>tenant-scoped reads + ALL writes</td><td>public reads only</td></tr>
+    <tr><td><b>Auth</b></td><td>tenant API key → SixLayer JWT</td><td>same key, stored in OS keychain</td></tr>
+    <tr><td><b>Emits audit events</b></td><td>yes (every tool call)</td><td>no (writes are proxied)</td></tr>
+    <tr><td><b>Distribution</b></td><td>internal service binary</td><td><code>projexcloud/registry-mcp-local</code> (Docker) · <code>@projexlight/registry-mcp-local</code> (npx)</td></tr>
+  </tbody>
+</table>
+
+<h3>6.2 — How the same wire protocol works both ways</h3>
+
+<div class="diagram-wrap">
+<div class="mermaid">
+sequenceDiagram
+  autonumber
+  participant AI as "AI Tool (Claude Code)"
+  participant L as "registry-mcp-local (stdio)"
+  participant C as "Local cache"
+  participant GW as "api-gateway"
+  participant H as "registry-mcp hosted (SSE)"
+  participant A as "sdk-audit"
+  participant P as "Tenant Pool"
+
+  Note over AI,L: READ path — answered locally, zero network
+  AI->>L: tools/call search_sdks (query=consent receipts GDPR)
+  L->>C: load embeddings and catalog
+  L-->>AI: top_k hits (offline OK)
+
+  Note over AI,H: WRITE path — proxied to hosted, authority server-side
+  AI->>L: tools/call scaffold (sdks=[sdk-consent, sdk-identity], app=my-app)
+  L->>GW: POST /mcp/v1/sse with x-projex-api-key
+  GW->>H: forward
+  H->>H: validate API key, mint SixLayer JWT
+  H->>H: sdk-policy pack guardrails check
+  H->>P: write scaffold tree
+  H->>A: emit registry.tool.invoked.v1
+  H-->>GW: stream scaffold_id and file list
+  GW-->>L: SSE stream
+  L-->>AI: same response shape as a local call
+</div>
+<div class="caption">Figure 6.1 — One AI client view, two execution paths. The AI never sees
+  the split: read and write responses use the same MCP envelope.</div>
+</div>
+
+<h3>6.3 — Tool catalog (what AI tools see)</h3>
+
+<div class="grid cols-2">
+  <div class="card">
+    <div class="label">Read tools · cache-answerable</div>
+    <div class="title">Browse + discover</div>
+    <div class="body">
+      <code>projex_registry_search_sdks(query)</code><br/>
+      <code>projex_registry_get_manifest(sdk_name)</code><br/>
+      <code>projex_registry_get_example(sdk_name, scenario_id)</code><br/>
+      <code>projex_registry_list_compatible_sdks(sdk_name)</code><br/>
+      <code>projex_registry_list_blueprints()</code><br/>
+      <code>projex_registry_get_blueprint(blueprint_id)</code>
+    </div>
+  </div>
+  <div class="card">
+    <div class="label">Write tools · hosted-only</div>
+    <div class="title">Mutate + deploy</div>
+    <div class="body">
+      <code>projex_registry_scaffold(sdks[], app_name, target_dir?)</code><br/>
+      <code>projex_registry_deploy(scaffold_id, env)</code><br/>
+      <code>projex_registry_list_my_sdks()</code> <span class="pill yellow">tenant-scoped</span><br/>
+      <code>projex_registry_list_my_blueprints()</code> <span class="pill yellow">pack-filtered</span><br/>
+      <code>projex_registry_request_pack_upgrade(pack_id)</code>
+    </div>
+  </div>
+</div>
+
+<h3>6.4 — Offline behavior</h3>
+
+<p>
+When the hosted side is unreachable, the local MCP gracefully degrades per FR-MCP-L5:
+</p>
+<ul class="tight">
+  <li>Read tools — answer from <code>~/.projex/cache/</code>. AI tool notices nothing.</li>
+  <li>Write tools — return a structured error: <code>{ status: "queued", queued_id: ... }</code>.
+    The CLI surfaces <code>projex deploy --queue</code> hints. On reconnect,
+    <code>projex registry drain</code> replays queued operations.</li>
+</ul>
+
+<p>AC-12 enforces this in chaos tests: network down → all reads succeed → write queues → reconnect → queue drains within 30 s with byte-identical results to an online write.</p>
+</section>
+
+<!-- ============================================================ -->
+<section id="layer4cli">
+<h2>7 · Layer 4a — The CLI / IDE path (Claude Code, Cursor, Windsurf)</h2>
+
+<p>
+This is the path most tenant developers will take. It is built around <b>zero-configuration
+auto-discovery</b>: the developer never reads the SDK list, never edits MCP configs by hand,
+and never has to know which region their tenant lives in.
+</p>
+
+<h3>7.1 — The first-run flow</h3>
+
+<div class="diagram-wrap">
+<div class="mermaid">
+sequenceDiagram
+  autonumber
+  participant U as Tenant Developer
+  participant CLI as @projexlight/cli
+  participant KC as OS Keychain
+  participant IDE as Claude Code / Cursor / Windsurf
+  participant L as registry-mcp-local
+  participant H as registry-mcp (hosted)
+
+  U->>CLI: npx @projexlight/cli init my-app --blueprint revops-crm
+  CLI->>U: open browser for OAuth device flow
+  U->>CLI: authorize (tenant API key minted)
+  CLI->>KC: store refresh token
+  CLI->>CLI: detect installed AI tools<br/>(~/.claude · ~/.cursor · ~/.windsurf)
+  CLI->>IDE: write .claude/mcp.json, .cursor/mcp.json, .windsurf/mcp.json<br/>(only configs needed)
+  CLI->>L: pull catalog + embeddings (first-time)
+  CLI->>U: scaffold revops-crm blueprint locally
+  U->>IDE: open editor in my-app/
+  IDE->>L: list_tools()  -- discovers projex_registry_*
+  Note over U,L: AI now sees every SDK · no README reading needed
+  U->>IDE: "Add a lead routing rule that sends EU leads<br/>to our EU team queue"
+  IDE->>L: projex_registry_search_sdks("lead routing")
+  L-->>IDE: top 3: sdk-lead-routing, sdk-engagement, sdk-crm
+  IDE->>L: projex_registry_get_manifest("sdk-lead-routing")
+  IDE->>L: projex_registry_get_example("sdk-lead-routing", "geo-route")
+  IDE->>U: writes src/leads/route.ts (working code)
+  U->>CLI: projex deploy --env staging
+  CLI->>H: upload + trigger migrations
+  H-->>U: https://my-app.tenant42.projexcloud.com
+</div>
+<div class="caption">Figure 7.1 — From <code>npx init</code> to deployed URL. The developer
+  types <i>two</i> commands and one prompt; everything else is automatic.</div>
+</div>
+
+<h3>7.2 — What <code>projex init</code> actually writes</h3>
+
+<pre><code>// .claude/mcp.json — auto-generated by `projex init`
+{
+  "mcpServers": {
+    "projex_registry": {
+      "command": "npx",
+      "args": ["-y", "@projexlight/registry-mcp-local"],
+      "env": {
+        "PROJEX_HOSTED_MCP": "https://mcp.us-east.projexcloud.com",
+        "PROJEX_TENANT_ID":  "tenant_01HXY...",
+        "PROJEX_KEYCHAIN_REF": "projex.tenant_01HXY"
+      }
+    }
+    // If Projexlight is detected on this machine, projex_dev_mcp and
+    // projex_test_mcp blocks are appended here too (see §10 Cohabitation).
+  }
+}</code></pre>
+
+<h3>7.3 — The full CLI surface</h3>
+
+<table>
+  <thead>
+    <tr><th>Command</th><th>What it does</th><th>Talks to</th></tr>
+  </thead>
+  <tbody>
+    <tr><td><code>projex login</code></td><td>OAuth device flow · stores refresh token in OS keychain</td><td>Identity SDK</td></tr>
+    <tr><td><code>projex init &lt;app&gt; [--blueprint]</code></td><td>Skeleton repo + AI tool MCP configs + optional blueprint scaffold</td><td>Local FS · Registry</td></tr>
+    <tr><td><code>projex install &lt;sdk&gt;</code></td><td>Adds SDK to <code>package.json</code> · drops starter snippet</td><td>Local MCP (read)</td></tr>
+    <tr><td><code>projex blueprint list | apply &lt;id&gt;</code></td><td>List blueprints or run installer (clarifying Qs → templates → migrations → seed → smoke tests)</td><td>Hosted MCP (write)</td></tr>
+    <tr><td><code>projex deploy [--env]</code></td><td>Package · upload · migrate · roll back on failure (AC-10)</td><td>Hosted MCP + Tenant pool</td></tr>
+    <tr><td><code>projex logs [--tail]</code></td><td>Stream deployed-app logs</td><td>Tenant pool</td></tr>
+    <tr><td><code>projex registry refresh</code></td><td>Force-pull latest catalog into local cache</td><td>Hosted (ETag GET)</td></tr>
+    <tr><td><code>projex registry drain</code></td><td>Replay queued offline writes</td><td>Hosted</td></tr>
+  </tbody>
+</table>
+
+<div class="callout green">
+  <b>Why <code>npx</code>-only for v1 (Q-6 decision).</b> Most P9 users already have Node 20+.
+  Non-Node users get a one-liner installer that puts Node on the box and aliases
+  <code>projex</code> → <code>npx @projexlight/cli</code>; Node becomes invisible. Native
+  binaries (signed, auto-updating) deferred to P10.
+</div>
+</section>
+
+<!-- ============================================================ -->
+<section id="layer4cloud">
+<h2>8 · Layer 4b — The Cloud Builder path (non-developers)</h2>
+
+<p>
+The Cloud Builder is the same substrate aimed at a different persona: <b>a non-developer in a
+tenant who wants a working application without filing an IT ticket</b>. It lives at
+<code>/build</code> inside the tenant workspace.
+</p>
+
+<h3>8.1 — Anatomy of a build session</h3>
+
+<div class="diagram-wrap">
+<div class="mermaid">
+sequenceDiagram
+  autonumber
+  participant U as Non-Dev User
+  participant UI as /build chat UI
+  participant AG as sdk-agent-runtime
+  participant GW as sdk-ai-gateway
+  participant H as registry-mcp (hosted)
+  participant P as sdk-policy
+  participant M as sdk-meter
+  participant POOL as Tenant App Pool
+  participant A as sdk-audit
+
+  U->>UI: "I need a claims intake workflow with photo evidence"
+  UI->>AG: prompt + tenant context
+  AG->>GW: completion req (with MCP tools attached)
+  GW->>H: projex_registry_search_sdks + list_blueprints
+  H-->>GW: top blueprints: claims-intake, field-dispatch
+  AG->>U: "claims-intake matches best — 2 quick questions:"
+  U->>AG: settle in-app · photos in S3 · approver = ops lead
+  AG->>H: projex_registry_get_blueprint("claims-intake")
+  AG->>U: "Here's what I'll install. Deploy?"
+  U->>AG: Deploy
+  AG->>P: pack guardrail check (Healthcare? HIPAA fields?)
+  P-->>AG: OK
+  AG->>M: meter builder.session
+  AG->>H: projex_registry_scaffold(...) + deploy(env=trial)
+  H->>POOL: write app · run migrations · seed
+  H->>A: registry.tool.invoked.v1 (chain)
+  H-->>AG: scaffold_id + URL
+  AG->>U: https://claims-intake-7f3.tenant42.projexcloud.com
+  Note over U,A: Full conversation reconstructable<br/>from audit chain · AC-7
+</div>
+<div class="caption">Figure 8.1 — Prompt-to-URL in five minutes (AC-5 target). Same MCP tools
+  the CLI uses; the difference is the agent driving them.</div>
+</div>
+
+<h3>8.2 — The guardrail layer (where safety actually lives)</h3>
+
+<p>
+The agent does <i>not</i> enforce safety. The agent is treated as untrusted prompt-pipe;
+real enforcement happens server-side in two places:
+</p>
+
+<div class="grid cols-2">
+  <div class="card">
+    <div class="label">Pack guardrails</div>
+    <div class="title">sdk-policy decisions</div>
+    <div class="body">
+      Healthcare pack refuses unencrypted PHI columns. FinServ pack refuses uncertified data
+      egress. PublicSector pack refuses non-FedRAMP infra. Decisions cite the offending rule
+      and return HTTP 403 from the MCP — the agent gets a refusal, the user gets a clear
+      explanation. AC-8 validates this in CI.
+    </div>
+  </div>
+  <div class="card">
+    <div class="label">Confirm-by-default (Q-7)</div>
+    <div class="title">Human-in-loop deployment</div>
+    <div class="body">
+      Default: agent generates a preview · user clicks <b>Deploy</b>. Opt-in autonomous mode
+      lets the tenant admin set <code>cloud_builder.autonomous = true</code> with a per-session
+      $ ceiling (default $10). Destructive operations <i>always</i> require confirm — autonomous
+      mode never overrides this.
+    </div>
+  </div>
+</div>
+
+<h3>8.3 — Cost shaping (Q-4 decision)</h3>
+
+<table>
+  <thead>
+    <tr><th>Tier</th><th>Included builds / month</th><th>Overage</th><th>Notes</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>Trial</td><td>3</td><td>Hard cap — block + upgrade prompt</td><td>One-hour iteration window per session — refinements don't double-charge.</td></tr>
+    <tr><td>Pro</td><td>20</td><td>$2/build OR LLM token pass-through, lower wins</td><td>Same iteration rule.</td></tr>
+    <tr><td>Enterprise</td><td>Unlimited</td><td>—</td><td>Subject to abuse SLO.</td></tr>
+  </tbody>
+</table>
+</section>
+
+<!-- ============================================================ -->
+<section id="discovery">
+<h2>9 · The auto-discovery mechanism — how it actually works</h2>
+
+<p>
+This is the part the user most cares about. <i>Auto-discovery</i> isn't one mechanism — it
+is a chain of four discrete handshakes that compose into the experience of "the AI just
+knew what was available." Each handshake is independently observable and independently
+testable.
+</p>
+
+<div class="diagram-wrap">
+<div class="mermaid">
+flowchart LR
+  D1["Handshake 1<br/><br/>CLI detects<br/>installed AI tools"]:::hs
+  D2["Handshake 2<br/><br/>CLI writes<br/>per-tool MCP config"]:::hs
+  D3["Handshake 3<br/><br/>AI tool launches<br/>local MCP & lists tools"]:::hs
+  D4["Handshake 4<br/><br/>AI tool queries<br/>by intent → registry"]:::hs
+
+  D1 --> D2 --> D3 --> D4
+
+  classDef hs fill:#1a2234,stroke:#c9a86a,color:#e6ecf5,padding:14px;
+</div>
+<div class="caption">Figure 9.1 — Four handshakes that compose into "auto-discovery." Each is
+  visible in CLI/MCP logs and is independently chaos-testable.</div>
+</div>
+
+<h3>9.1 — Handshake 1: CLI detects installed AI tools</h3>
+
+<p>
+When <code>projex init</code> runs, the CLI looks for marker files in the user's home directory:
+</p>
+
+<pre><code>// @projexlight/cli — detection logic (sketch)
+const DETECTORS = {
+  "claude-code": () =&gt; existsSync(path.join(os.homedir(), ".claude")),
+  "cursor":      () =&gt; existsSync(path.join(os.homedir(), ".cursor")),
+  "windsurf":    () =&gt; existsSync(path.join(os.homedir(), ".windsurf")),
+  "cline":       () =&gt; existsSync(path.join(os.homedir(), ".cline")),
+  // Projexlight cohabitation marker — see §10
+  "projexlight": () =&gt; existsSync(path.join(os.homedir(), ".projexlight", "config.json")),
+};
+const installed = Object.entries(DETECTORS).filter(([_, fn]) =&gt; fn()).map(([k]) =&gt; k);</code></pre>
+
+<p>
+The CLI writes configs only for the tools actually installed. Order matters: detection is
+per-machine, but every AI client ends up seeing the same MCP tool catalog.
+</p>
+
+<h3>9.2 — Handshake 2: CLI writes per-tool MCP config</h3>
+
+<p>
+Each AI tool has its own config path; the CLI knows them all and writes the matching block.
+Critical property: the CLI is the <i>only sanctioned writer</i> of these files. If a user
+hand-edits, the next <code>projex init</code> warns rather than overwrites. This avoids the
+"two MCPs in Claude Code config confuse non-technical users" failure mode (R-11).
+</p>
+
+<table>
+  <thead><tr><th>AI Tool</th><th>Config path</th><th>Format</th></tr></thead>
+  <tbody>
+    <tr><td>Claude Code</td><td><code>~/.claude/mcp.json</code> + <code>./.claude/mcp.json</code></td><td>JSON · <code>mcpServers</code></td></tr>
+    <tr><td>Cursor</td><td><code>~/.cursor/mcp.json</code></td><td>JSON · <code>mcpServers</code></td></tr>
+    <tr><td>Windsurf</td><td><code>~/.codeium/windsurf/mcp_config.json</code></td><td>JSON · <code>servers</code></td></tr>
+    <tr><td>Cline</td><td><code>~/.cline/mcp_settings.json</code></td><td>JSON · <code>mcpServers</code></td></tr>
+  </tbody>
+</table>
+
+<h3>9.3 — Handshake 3: AI tool launches local MCP and lists tools</h3>
+
+<p>
+This handshake is standard MCP, no ProjexCloud customization. When the IDE starts, it spawns
+<code>npx @projexlight/registry-mcp-local</code> as a stdio child process, exchanges the MCP
+initialize handshake, then calls <code>tools/list</code>. The local MCP responds with the
+tool catalog defined in §6.3 — read tools backed by the local cache, write tools that proxy
+to the hosted side.
+</p>
+
+<pre><code>// MCP initialize handshake (excerpt of stdio JSON-RPC)
+&gt; { "jsonrpc": "2.0", "id": 1, "method": "initialize",
+&gt;   "params": { "protocolVersion": "2025-03-26",
+&gt;               "capabilities": { "tools": {} },
+&gt;               "clientInfo": { "name": "claude-code", "version": "1.x" } } }
+&lt; { "jsonrpc": "2.0", "id": 1, "result":
+&lt;   { "protocolVersion": "2025-03-26",
+&lt;     "serverInfo": { "name": "projex-registry-local", "version": "1.0.0" },
+&lt;     "capabilities": { "tools": { "listChanged": true } } } }
+
+&gt; { "jsonrpc": "2.0", "id": 2, "method": "tools/list" }
+&lt; { "jsonrpc": "2.0", "id": 2, "result":
+&lt;   { "tools": [
+&lt;     { "name": "projex_registry_search_sdks",      "description": "...", "inputSchema": { ... } },
+&lt;     { "name": "projex_registry_get_manifest",     "description": "...", "inputSchema": { ... } },
+&lt;     { "name": "projex_registry_scaffold",         "description": "...", "inputSchema": { ... } },
+&lt;     ...
+&lt;   ] } }</code></pre>
+
+<h3>9.4 — Handshake 4: AI tool queries by intent → registry returns relevant SDKs</h3>
+
+<p>
+This is the handshake users <i>feel</i>. When the developer types
+<i>"I need consent receipts for GDPR"</i>, the AI tool decides (based on the tool
+descriptions in §9.3) to call <code>projex_registry_search_sdks(query: "consent receipts for GDPR")</code>.
+The local MCP:
+</p>
+
+<ol>
+  <li>Embeds the query with <code>bge-small-en-v1.5</code> in-process (~5 ms).</li>
+  <li>Searches the HNSW index over <code>(sdk_name, scenario_id)</code> vectors (~2–10 ms).</li>
+  <li>Returns top-K hits with score, scenario excerpt, and a "why this matched" snippet.</li>
+</ol>
+
+<pre><code>// Sample response (top 3 of K=5)
+{
+  "hits": [
+    { "sdk_name": "sdk-consent", "scenario_id": "gdpr-receipt", "score": 0.91,
+      "summary": "GDPR/CCPA consent receipts with cryptographic proof...",
+      "why_match": "scenario 'gdpr-receipt' matches 'consent receipts for GDPR'" },
+    { "sdk_name": "sdk-privacy",  "scenario_id": "dsar-flow",     "score": 0.74, "...": "..." },
+    { "sdk_name": "sdk-audit",    "scenario_id": "evidence-anchor","score": 0.68, "...": "..." }
+  ]
+}</code></pre>
+
+<p>AC-3 enforces this works: a 50-query test suite must hit <b>precision@3 ≥ 0.9</b> with the
+target SDK in the top 3. Quarterly catalog-quality audits widen the suite to 200 queries and
+trigger manifest rewrite PRs when precision regresses.</p>
+
+<div class="callout teal">
+  <b>The closed loop.</b> If precision drops, the fix is <i>almost always</i> in the manifest,
+  not the model. Better scenarios → better embeddings → better discovery. The platform team
+  owns this feedback loop via the quarterly audit (Q-5 decision).
+</div>
+</section>
+
+<!-- ============================================================ -->
+<section id="flows">
+<h2>10 · End-to-end build flows</h2>
+
+<h3>10.1 — Building a vertical app from scratch (CLI path)</h3>
+
+<div class="diagram-wrap">
+<div class="mermaid">
+flowchart TB
+  S1["1. Tenant admin signs up<br/>workspace + API key issued"] --> S2
+  S2["2. Tenant dev runs<br/>projex login + projex init my-app --blueprint revops-crm"] --> S3
+  S3["3. CLI detects Claude Code/Cursor<br/>writes MCP configs · pulls catalog"] --> S4
+  S4["4. CLI runs blueprint installer:<br/>clarifying Qs → templates → migrations → seed"] --> S5
+  S5["5. Dev opens IDE · AI tool now sees<br/>~70 ProjexCloud SDKs via local MCP"] --> S6
+  S6["6. Dev prompts: 'add EU-lead routing rule'<br/>AI calls search_sdks → get_manifest → writes code"] --> S7
+  S7["7. Dev runs projex deploy --env trial<br/>hosted MCP scaffolds, migrates, returns URL"] --> S8
+  S8["8. Working app at<br/>my-app.tenant42.projexcloud.com<br/>audit chain captures every step"]
+
+  classDef step fill:#1a2234,stroke:#6aa9ff,color:#e6ecf5;
+  class S1,S2,S3,S4,S5,S6,S7,S8 step;
+</div>
+<div class="caption">Figure 10.1 — Eight steps, two human commands. AC-4 requires this end-to-end
+  in ≤ 45 min for a developer who has never read a ProjexCloud README.</div>
+</div>
+
+<h3>10.2 — Building a vertical app from a prompt (Cloud path)</h3>
+
+<div class="diagram-wrap">
+<div class="mermaid">
+flowchart TB
+  C1["1. Non-dev opens /build<br/>in tenant workspace"] --> C2
+  C2["2. Types: 'I need claims intake<br/>with photo evidence'"] --> C3
+  C3["3. Agent calls hosted MCP:<br/>search_sdks + list_blueprints"] --> C4
+  C4["4. Agent presents top 2-3 blueprints<br/>asks blueprint's clarifying questions"] --> C5
+  C5["5. User answers → agent shows preview<br/>(files, tables, billing impact)"] --> C6
+  C6["6. User clicks Deploy<br/>(or auto-deploy if autonomous mode + under $ ceiling)"] --> C7
+  C7["7. sdk-policy guardrail check<br/>(pack-aware: HIPAA/FinServ/PubSec)"] --> C8
+  C8["8. Hosted MCP scaffold + deploy<br/>sdk-meter charges builder.session"] --> C9
+  C9["9. Working URL returned<br/>in ≤ 5 minutes (AC-5)"]
+
+  classDef step fill:#1a2234,stroke:#b88dff,color:#e6ecf5;
+  class C1,C2,C3,C4,C5,C6,C7,C8,C9 step;
+</div>
+<div class="caption">Figure 10.2 — Same substrate, different driver. The agent is a thin shim
+  over the MCP tools; safety lives in <code>sdk-policy</code>, not in the prompt.</div>
+</div>
+
+<h3>10.3 — The unified picture</h3>
+
+<p>
+Both paths end up in the same place: a scaffolded application running in the tenant's app
+pool, with every step in the audit chain, every tool call metered, and every guardrail
+enforced server-side. The difference is the <i>orchestrator</i> (developer-with-IDE vs.
+agent-with-prompt), not the substrate.
+</p>
+</section>
+
+<!-- ============================================================ -->
+<section id="cohabitation">
+<h2>11 · Cohabitation with existing Projexlight MCPs</h2>
+
+<p>
+ProjexCloud's new <code>registry-mcp-local</code> is a <b>peer</b>, not a replacement, of the
+existing Projexlight MCPs at <code>projex_mcp/projex_dev_mcp</code> and
+<code>projex_mcp/projex_test_mcp</code>. They expose disjoint tool catalogs and zero-collision
+names.
+</p>
+
+<table>
+  <thead>
+    <tr><th>MCP</th><th>Tool prefix</th><th>Catalog</th><th>Lives</th><th>Auth</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>projex_dev_mcp</code></td>
+      <td><code>projexlight_*</code></td>
+      <td>Projexlight PRD/feature/scenario/task ops · LLM review · autofix · embedding</td>
+      <td>Docker, local</td>
+      <td>Projexlight project API key</td>
+    </tr>
+    <tr>
+      <td><code>projex_test_mcp</code></td>
+      <td><code>projexlight_*</code></td>
+      <td>UI test recorder · API functional-test runner</td>
+      <td>Docker, local</td>
+      <td>Projexlight project API key</td>
+    </tr>
+    <tr>
+      <td><code>registry-mcp-local</code> <span class="tag-new">NEW</span></td>
+      <td><code>projex_registry_*</code></td>
+      <td>ProjexCloud SDK catalog: search · manifest · scaffold · deploy</td>
+      <td>Docker or npx, local</td>
+      <td>ProjexCloud tenant API key</td>
+    </tr>
+    <tr>
+      <td><code>registry-mcp</code> <span class="tag-new">NEW</span></td>
+      <td><code>projex_registry_*</code></td>
+      <td>Same wire surface · tenant-scoped + write-authoritative</td>
+      <td>Hosted, per-region</td>
+      <td>ProjexCloud tenant API key</td>
+    </tr>
+  </tbody>
+</table>
+
+<h3>11.1 — One config, all MCPs</h3>
+
+<p>
+When <code>projex init</code> detects <code>~/.projexlight/config.json</code>, it writes a
+single <code>.claude/mcp.json</code> (and equivalents) that registers <i>both</i> Projexlight
+MCPs and the new <code>registry-mcp-local</code>. The AI client sees all three in one tool
+list and routes calls by name.
+</p>
+
+<pre><code>// .claude/mcp.json — Projexlight + ProjexCloud cohabiting
+{
+  "mcpServers": {
+    "projex_registry": {
+      "command": "npx", "args": ["-y", "@projexlight/registry-mcp-local"],
+      "env": { "PROJEX_HOSTED_MCP": "https://mcp.us-east.projexcloud.com" }
+    },
+    "projex_dev": {
+      "command": "docker", "args": ["run", "--rm", "-i", "projexlight/projex_dev_mcp:latest"]
+    },
+    "projex_test": {
+      "command": "docker", "args": ["run", "--rm", "-i", "projexlight/projex_test_mcp:latest"]
+    }
+  }
+}</code></pre>
+
+<p>
+AC-13 enforces this works: load all three in one Claude Code session, invoke
+<code>projex_registry_search_sdks</code> and <code>projexlight_create_feature</code> in the
+same conversation, both succeed.
+</p>
+
+<h3>11.2 — Projexlight-on-ProjexCloud — the dogfood proof</h3>
+
+<p>
+The <code>prd-management</code> blueprint (FR-DF-1..5) rebuilds Projexlight's PRD/feature/
+scenario/task surface as a vertical app composed from ProjexCloud SDKs. Projexlight retains
+its proprietary AI-review IP (as a private SDK), but every cross-cutting concern
+(multi-tenancy, identity, billing, audit, webhooks, approvals, RAG search, AI gateway) is
+delegated to ProjexCloud SDKs.
+</p>
+
+<div class="callout green">
+  <b>Why this matters architecturally.</b> Projexlight becomes the worked example for every
+  customer building a vertical app: <i>"here is a real product that ships its own domain
+  MCP alongside its app, runs on ProjexCloud's substrate, and still keeps its differentiating
+  AI IP private."</i> AC-11 (deferred to P9.1) is the verification that this is real, not just
+  a roadmap claim.
+</div>
+</section>
+
+<!-- ============================================================ -->
+<section id="security">
+<h2>12 · Security, guardrails, compliance</h2>
+
+<div class="grid cols-2">
+  <div class="card">
+    <div class="label">Identity</div>
+    <div class="title">Tenant API key → SixLayer JWT</div>
+    <div class="body">CLI stores refresh token in OS keychain. Hosted MCP validates the
+      API key per request and mints a short-lived SixLayer JWT for downstream calls. No
+      long-lived bearer tokens in transit.</div>
+  </div>
+  <div class="card">
+    <div class="label">Transport</div>
+    <div class="title">TLS 1.3 + SSE session tokens</div>
+    <div class="body">SSE channel auth uses a per-key short-lived session token (rotated
+      hourly). Stdio local MCP never exposes a network surface.</div>
+  </div>
+  <div class="card">
+    <div class="label">Audit</div>
+    <div class="title">Every tool call chained</div>
+    <div class="body"><code>registry.tool.invoked.v1</code> with full args + outcome.
+      AC-7 requires that an operator can reconstruct an entire build session from this stream.
+      Cloud builder transcripts retained 30 days.</div>
+  </div>
+  <div class="card">
+    <div class="label">Pack guardrails</div>
+    <div class="title">sdk-policy server-side decisions</div>
+    <div class="body">Healthcare / FinServ / PublicSector packs each carry sdk-policy rules.
+      Violation = HTTP 403 before any scaffold/deploy returns. AC-8 fixture: PHI bound to
+      unencrypted column must be refused with citation.</div>
+  </div>
+  <div class="card">
+    <div class="label">Rate &amp; cost limits</div>
+    <div class="title">sdk-meter soft + hard caps</div>
+    <div class="body">100 RPM/key default · 1000 RPS aggregate · cloud builder $ ceiling
+      per Q-4. Cap exceeded → structured error + upgrade path link.</div>
+  </div>
+  <div class="card">
+    <div class="label">Deploy safety</div>
+    <div class="title">Snapshot + transactional rollback</div>
+    <div class="body">Every <code>projex deploy</code> snapshots the tenant pool before
+      migration; failure auto-rolls-back to that snapshot (AC-10 chaos test). No orphaned
+      tables, no half-written rows.</div>
+  </div>
+</div>
+
+<h3>12.1 — The five non-negotiables</h3>
+
+<ol>
+  <li>Writes never happen client-side. Local MCP can <i>queue</i>, never <i>commit</i>.</li>
+  <li>Every write is audited before it succeeds. Audit failure = write failure.</li>
+  <li>Pack guardrails are <i>policy</i>, not prompt. Agent can't talk its way out.</li>
+  <li>Confirm-by-default for non-dev users. Autonomous mode is opt-in and $ -capped.</li>
+  <li>Catalog is single-source-of-truth across hosted + local. Cache mismatches are detected
+    at install time and refuse to scaffold removed SDKs (R-10 mitigation).</li>
+</ol>
+</section>
+
+<!-- ============================================================ -->
+<section id="glossary">
+<h2>13 · Component glossary</h2>
+
+<table>
+  <thead><tr><th>Component</th><th>Layer</th><th>Lives</th><th>Owns</th></tr></thead>
+  <tbody>
+    <tr><td><code>@projexlight/sdk-capability</code></td><td>L1</td><td>npm package</td><td>Manifest schema · validator · scaffold CLI</td></tr>
+    <tr><td><code>sdk-capability.json</code></td><td>L1</td><td>Every SDK's package root</td><td>The contract — what an SDK is, in JSON</td></tr>
+    <tr><td><code>@projexlight/sdk-registry</code></td><td>L2</td><td>Build-time + runtime npm package</td><td>Catalog builder · embedding index · search API</td></tr>
+    <tr><td><code>dist/registry.catalog.json</code></td><td>L2</td><td>S3 (canonical) + <code>~/.projex/cache/</code> (mirror)</td><td>Normalized manifests + dependency graph</td></tr>
+    <tr><td><code>dist/registry.embeddings.bin</code></td><td>L2</td><td>S3 + local cache</td><td>HNSW vector index over scenarios</td></tr>
+    <tr><td><code>services/registry-mcp</code></td><td>L3</td><td>Per-region hosted service</td><td>Tenant-scoped reads + ALL writes · SSE</td></tr>
+    <tr><td><code>@projexlight/registry-mcp-local</code></td><td>L3</td><td>Developer machine · stdio</td><td>Cached reads · write proxy · offline mode</td></tr>
+    <tr><td><code>blueprints/</code></td><td>L3</td><td>Build-time YAML + templates</td><td>Declarative SDK compositions</td></tr>
+    <tr><td><code>@projexlight/cli</code></td><td>L4 (CLI)</td><td>Developer machine</td><td><code>projex init/install/blueprint/deploy/logs</code></td></tr>
+    <tr><td><code>apps/cloud-builder</code></td><td>L4 (Cloud)</td><td>Tenant App Pool</td><td><code>/build</code> chat surface · agent driver</td></tr>
+    <tr><td><code>sdk-agent-runtime</code></td><td>P6A dep</td><td>Tenant pool</td><td>Drives cloud builder agent loop</td></tr>
+    <tr><td><code>sdk-ai-gateway</code></td><td>P6A dep</td><td>Per-region</td><td>LLM call abstraction + per-tenant token caps</td></tr>
+    <tr><td><code>sdk-policy</code></td><td>P3 dep</td><td>Per-region</td><td>Pack guardrail decisions (HIPAA/FinServ/PubSec)</td></tr>
+    <tr><td><code>sdk-audit</code></td><td>P1 dep</td><td>Evidence pool</td><td>Hash-anchored event chain</td></tr>
+    <tr><td><code>sdk-meter</code></td><td>P4 dep</td><td>Per-region</td><td>SKU metering · soft+hard caps</td></tr>
+  </tbody>
+</table>
+
+<h3>13.1 — Key NFRs at a glance</h3>
+
+<table>
+  <thead><tr><th>Dimension</th><th>Target</th></tr></thead>
+  <tbody>
+    <tr><td>Latency · <code>search_sdks</code> p99</td><td>300 ms cold · 80 ms warm</td></tr>
+    <tr><td>Latency · blueprint apply (5-SDK)</td><td>≤ 60 s end-to-end</td></tr>
+    <tr><td>Latency · <code>projex deploy</code> (≤50 files)</td><td>≤ 90 s p99</td></tr>
+    <tr><td>Throughput · MCP tool calls</td><td>1000 RPS aggregate · 100 RPM/key</td></tr>
+    <tr><td>Availability · hosted registry MCP</td><td>99.9% monthly</td></tr>
+    <tr><td>Durability · registry catalog</td><td>RPO ≤ 1h · rebuildable from source ≤ 10 min</td></tr>
+    <tr><td>Time-to-URL (cloud builder, non-dev)</td><td>≤ 5 min (AC-5)</td></tr>
+    <tr><td>Time-to-working-app (CLI, dev)</td><td>≤ 45 min (AC-4, blueprint + 1 prompt)</td></tr>
+  </tbody>
+</table>
+
+<h3>13.2 — Related companion docs</h3>
+
+<ul class="tight">
+  <li><code>Architecture-v3.1.html</code> — overall ProjexCloud architecture &amp; doctrines</li>
+  <li><code>SDK-Build-Plan-v3.1.html</code> — SDK roadmap that ~70 manifests will describe</li>
+  <li><code>AgenticIntegration-v3.1.html</code> — agent runtime, AI gateway, MCP bridge details</li>
+  <li><code>ProjectStructure-v3.1.html</code> — monorepo layout (where manifests live)</li>
+  <li><code>prd/P9-SDK-Discoverability-AI-Builder.md</code> — source PRD for this architecture</li>
+</ul>
+</section>
+
+<footer style="margin-top:64px; padding-top:24px; border-top:1px solid var(--line); color: var(--muted); font-size:12.5px;">
+  <div><b>ProjexCloud · v3.1 · P9 architectural companion</b></div>
+  <div style="margin-top:6px;">Living document — kept in sync with <code>prd/P9-SDK-Discoverability-AI-Builder.md</code>. Open questions Q-1..Q-11 are locked as of 2026-05-25; this doc reflects those decisions.</div>
+</footer>
+
+</div>
+
+<script>
+  mermaid.initialize({
+    startOnLoad: true,
+    theme: 'dark',
+    themeVariables: {
+      darkMode: true,
+      background: '#121826',
+      primaryColor: '#1a2234',
+      primaryTextColor: '#e6ecf5',
+      primaryBorderColor: '#243049',
+      lineColor: '#8a98b3',
+      secondaryColor: '#1a2234',
+      tertiaryColor: '#0f1422',
+      fontFamily: 'ui-sans-serif, -apple-system, "Segoe UI", Roboto, sans-serif'
+    },
+    flowchart: { htmlLabels: true, curve: 'basis', padding: 12 },
+    sequence:  { actorMargin: 50, boxMargin: 10, mirrorActors: false }
+  });
+</script>
+
+</body>
+</html>

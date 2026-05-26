@@ -15,9 +15,13 @@
 
 import { runInit } from './commands/init';
 import { runInstall } from './commands/install';
-import { runRegistryRefresh, runRegistryList } from './commands/registry';
-import { loginStub, deployStub, type StubOutput } from './commands/stubs';
+import { runRegistryRefresh, runRegistryList, runRegistryDrain } from './commands/registry';
 import { runBlueprintList, runBlueprintApply } from './commands/blueprint';
+import { runLogin } from './commands/login';
+import { runDeploy } from './commands/deploy';
+import { runLogs } from './commands/logs';
+import { runTelemetry } from './commands/telemetry';
+import { maybeWarnNewerVersion } from './versionCheck';
 
 interface ParsedArgs {
   subcommand: string;
@@ -57,19 +61,23 @@ Subcommands:
   init <app_name> [--blueprint <id>] [--no-mcp] [--all-tools] [--hosted-url <url>] [--api-token <token>] [--json]
                               Create a new app directory + auto-write MCP
                               config for detected AI tools.
-  registry refresh [--source <path>]
-                              Pull the SDK catalog into ~/.projex/cache/
-                              (from PROJEX_CATALOG_SOURCE / PROJEX_DEV_ROOT
-                              by default).
-  registry list [--tag <tag>] [--search <q>]
-                              Print SDK list from the cached catalog.
+  login [--hosted-url <url>] [--api-key <key>] [--dry-run] [--json]
+                              Enroll this machine against a hosted MCP. Stores
+                              ~/.projex/auth.json (0o600). Used by deploy/logs/proxy.
   install <sdk_name> [--force]
                               Add a ProjexCloud SDK to the current app:
                               edits package.json, drops a starter integration
                               at src/integrations/, updates src/index.ts.
-  blueprint list|apply [id]   [E4 stub] Vertical blueprint library.
-  login                       [E3 Phase 2 stub] OAuth device flow.
-  deploy [--env <env>]        [E3 Phase 2 stub] Ship to tenant pool.
+  blueprint list|apply [id]   Vertical blueprint library.
+  deploy [--env trial|staging|prod] [--app-dir <path>] [--no-watch] [--dry-run] [--json]
+                              Package the current app + ship to the tenant pool
+                              via the hosted MCP. Polls until terminal status;
+                              rollback enforced server-side.
+  logs <app_name> [--tail] [--limit <n>] [--json]
+                              Fetch last N log events or tail live (SSE).
+  registry refresh|list|drain [--source <path>] [--tag <tag>] [--search <q>]
+                              Catalog cache ops. drain replays queued offline writes.
+  telemetry on|off|status     Opt-in local telemetry (anonymous tool counters).
   version                     Print CLI version.
   help                        This help.
 
@@ -80,6 +88,9 @@ Env vars:
   PROJEX_HOME                 Override ~/.projex (default: $HOME/.projex).
   PROJEX_DEV_ROOT             Monorepo root for dev-mode catalog + MCP.
   PROJEX_CATALOG_SOURCE       Override catalog source for registry refresh.
+  PROJEX_HOSTED_MCP           Hosted MCP base URL (overrides ~/.projex/auth.json).
+  PROJEX_API_KEY              Tenant API key (overrides ~/.projex/auth.json).
+  PROJEX_SKIP_VERSION_CHECK   Disable the periodic newer-CLI-available check.
 
 Exit codes:
   0  Success.
@@ -155,9 +166,9 @@ function emit(result: unknown, jsonMode: boolean): void {
       process.stdout.write(`\n  SDK installs:\n`);
       for (const inst of r.installs) {
         if (inst.ok && inst.result) {
-          process.stdout.write(`    ✓ ${inst.sdk_name}  (package=${inst.result.packageJsonAction}, integration=${inst.result.integrationAction})\n`);
+          process.stdout.write(`    OK  ${inst.sdk_name}  (package=${inst.result.packageJsonAction}, integration=${inst.result.integrationAction})\n`);
         } else {
-          process.stdout.write(`    ✗ ${inst.sdk_name}  — ${inst.error}\n`);
+          process.stdout.write(`    ERR ${inst.sdk_name}  — ${inst.error}\n`);
         }
       }
     } else {
@@ -170,9 +181,38 @@ function emit(result: unknown, jsonMode: boolean): void {
     }
     return;
   }
-  if (typeof result === 'object' && result !== null && 'command' in result) {
-    const s = result as StubOutput;
-    process.stdout.write(`${s.command} — ${s.phase}\n  ${s.description}\n  → ${s.next_step}\n`);
+  if (typeof result === 'object' && result !== null && 'command' in result && (result as { command: string }).command === 'projex login') {
+    const r = result as unknown as { hosted_url: string; auth_path: string; status: string; api_key_prefix: string };
+    process.stdout.write(`Logged in.\n  hosted: ${r.hosted_url}\n  key:    ${r.api_key_prefix}\n  path:   ${r.auth_path}\n  status: ${r.status}\n`);
+    return;
+  }
+  if (typeof result === 'object' && result !== null && 'command' in result && (result as { command: string }).command === 'projex deploy') {
+    const r = result as unknown as { app_name: string; env: string; status: string; deploy_id?: string; url?: string; duration_ms?: number; rollback?: boolean; error?: string; manifest_file_count: number; manifest_total_bytes: number };
+    process.stdout.write(`Deploy: ${r.app_name} → ${r.env}\n`);
+    process.stdout.write(`  status:        ${r.status}${r.rollback ? ' (rolled back)' : ''}\n`);
+    if (r.deploy_id) process.stdout.write(`  deploy_id:     ${r.deploy_id}\n`);
+    if (r.url) process.stdout.write(`  url:           ${r.url}\n`);
+    process.stdout.write(`  files:         ${r.manifest_file_count} (${r.manifest_total_bytes} bytes)\n`);
+    if (r.duration_ms != null) process.stdout.write(`  duration_ms:   ${r.duration_ms}\n`);
+    if (r.error) process.stdout.write(`  error:         ${r.error}\n`);
+    return;
+  }
+  if (typeof result === 'object' && result !== null && 'command' in result && (result as { command: string }).command === 'projex logs') {
+    const r = result as unknown as { app_name: string; event_count: number; status: string; error?: string };
+    process.stdout.write(`Logs: ${r.app_name}  ${r.event_count} event(s)  status=${r.status}${r.error ? '  err=' + r.error : ''}\n`);
+    return;
+  }
+  if (typeof result === 'object' && result !== null && 'action' in result && 'remaining_count' in result) {
+    const r = result as unknown as { drained: Array<{ queue_id: string; tool: string; ok: boolean; error?: string }>; remaining_count: number };
+    process.stdout.write(`Drained ${r.drained.length} entry(ies); ${r.remaining_count} remaining\n`);
+    for (const d of r.drained) {
+      process.stdout.write(`  ${d.ok ? 'OK ' : 'ERR'}  ${d.queue_id}  ${d.tool}${d.error ? '  — ' + d.error : ''}\n`);
+    }
+    return;
+  }
+  if (typeof result === 'object' && result !== null && 'enabled' in result && 'path' in result) {
+    const r = result as unknown as { enabled: boolean; device_id?: string; path: string };
+    process.stdout.write(`Telemetry ${r.enabled ? 'ENABLED' : 'DISABLED'}\n  config: ${r.path}\n  device: ${r.device_id ?? '(none)'}\n`);
     return;
   }
   process.stdout.write(JSON.stringify(result, null, 2) + '\n');
@@ -181,6 +221,11 @@ function emit(result: unknown, jsonMode: boolean): void {
 async function main(): Promise<void> {
   const args = parseArgs(process.argv);
   const jsonMode = args.flags.json === true;
+
+  // FR-CLI-8 — non-blocking newer-version warning. Cached 24h; opt-out via env.
+  if (process.env.PROJEX_SKIP_VERSION_CHECK !== '1') {
+    void maybeWarnNewerVersion();
+  }
 
   try {
     switch (args.subcommand) {
@@ -215,7 +260,12 @@ async function main(): Promise<void> {
           emit(result, jsonMode);
           return;
         }
-        process.stderr.write(`unknown subcommand: registry ${sub}. Try: projex registry refresh | list\n`);
+        if (sub === 'drain') {
+          const result = await runRegistryDrain();
+          emit(result, jsonMode);
+          return;
+        }
+        process.stderr.write(`unknown subcommand: registry ${sub}. Try: projex registry refresh | list | drain\n`);
         process.exit(2);
       }
 
@@ -264,13 +314,56 @@ async function main(): Promise<void> {
         process.exit(2);
       }
 
-      case 'login':
-        emit(loginStub(), jsonMode);
+      case 'login': {
+        const result = await runLogin({
+          hostedUrl: typeof args.flags['hosted-url'] === 'string' ? args.flags['hosted-url'] : undefined,
+          apiKey: typeof args.flags['api-key'] === 'string' ? args.flags['api-key'] : undefined,
+          dryRun: args.flags['dry-run'] === true,
+        });
+        emit(result, jsonMode);
         return;
+      }
 
-      case 'deploy':
-        emit(deployStub(), jsonMode);
+      case 'deploy': {
+        const result = await runDeploy({
+          env: ((args.flags.env as string) ?? 'trial') as 'trial' | 'staging' | 'prod',
+          appDir: (args.flags['app-dir'] as string) ?? process.cwd(),
+          appName: typeof args.flags['app-name'] === 'string' ? args.flags['app-name'] : undefined,
+          hostedUrl: typeof args.flags['hosted-url'] === 'string' ? args.flags['hosted-url'] : undefined,
+          apiKey: typeof args.flags['api-key'] === 'string' ? args.flags['api-key'] : undefined,
+          watch: args.flags['no-watch'] !== true,
+          dryRun: args.flags['dry-run'] === true,
+        });
+        emit(result, jsonMode);
+        if (result.status === 'failed') process.exit(1);
         return;
+      }
+
+      case 'logs': {
+        const appName = args.positional[0];
+        if (!appName) {
+          process.stderr.write(`projex logs: missing <app_name>.\n`);
+          process.exit(2);
+        }
+        const result = await runLogs({
+          appName,
+          tail: args.flags.tail === true,
+          limit: typeof args.flags.limit === 'string' ? parseInt(args.flags.limit, 10) : undefined,
+          hostedUrl: typeof args.flags['hosted-url'] === 'string' ? args.flags['hosted-url'] : undefined,
+          apiKey: typeof args.flags['api-key'] === 'string' ? args.flags['api-key'] : undefined,
+          json: jsonMode,
+        });
+        emit(result, jsonMode);
+        if (result.status === 'failed') process.exit(1);
+        return;
+      }
+
+      case 'telemetry': {
+        const action = (args.positional[0] ?? 'status') as 'on' | 'off' | 'status';
+        const result = runTelemetry(action);
+        emit(result, jsonMode);
+        return;
+      }
 
       case 'version':
         emit({ name: '@projexlight/cli', version: '0.1.0' }, jsonMode);

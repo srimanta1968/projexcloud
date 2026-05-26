@@ -55,6 +55,50 @@ export function hostedMcpServerEntry(url: string, apiToken?: string): McpSseEntr
 }
 
 const REGISTRY_SERVER_KEY = 'projex-registry';
+const PROJEXLIGHT_DEV_KEY = 'projexlight-dev';
+const PROJEXLIGHT_TEST_KEY = 'projexlight-test';
+
+/**
+ * FR-COHAB-1 — detect Projexlight on the dev's machine. We look for the
+ * canonical config at ~/.projexlight/config.json which both projex_dev_mcp
+ * and projex_test_mcp write on first install. When detected, projex init
+ * splices both into the AI tool's mcp.json so an AI client sees ONE tool
+ * list with all four servers (projex-registry + projexlight-dev +
+ * projexlight-test + any others), routed by prefix per FR-COHAB-2.
+ */
+export interface ProjexlightDetection {
+  detected: boolean;
+  config_path: string;
+  dev_mcp_command?: string;
+  test_mcp_command?: string;
+}
+
+export function detectProjexlight(homeDir?: string): ProjexlightDetection {
+  const home = homeDir ?? homedir();
+  const config_path = join(home, '.projexlight', 'config.json');
+  if (!existsSync(config_path)) {
+    return { detected: false, config_path };
+  }
+  try {
+    const cfg = JSON.parse(readFileSync(config_path, 'utf-8')) as {
+      mcps?: { dev?: { command?: string }; test?: { command?: string } };
+    };
+    return {
+      detected: true,
+      config_path,
+      dev_mcp_command: cfg.mcps?.dev?.command ?? 'projex_dev_mcp',
+      test_mcp_command: cfg.mcps?.test?.command ?? 'projex_test_mcp',
+    };
+  } catch {
+    // Config exists but is malformed; assume defaults.
+    return {
+      detected: true,
+      config_path,
+      dev_mcp_command: 'projex_dev_mcp',
+      test_mcp_command: 'projex_test_mcp',
+    };
+  }
+}
 
 /**
  * Where each AI tool reads its mcp.json. Paths normalized for the host OS.
@@ -114,6 +158,7 @@ export interface WriteResult {
  */
 export function writeMcpConfigs(opts: WriteOptions): WriteResult[] {
   const targets = knownConfigPaths(opts.homeDir);
+  const projexlight = detectProjexlight(opts.homeDir);
   const results: WriteResult[] = [];
 
   for (const t of targets) {
@@ -135,9 +180,31 @@ export function writeMcpConfigs(opts: WriteOptions): WriteResult[] {
     }
 
     const mcpServers = { ...(existing.mcpServers ?? {}) };
-    const before = JSON.stringify(mcpServers[REGISTRY_SERVER_KEY] ?? null);
+    const before = JSON.stringify({
+      r: mcpServers[REGISTRY_SERVER_KEY] ?? null,
+      d: mcpServers[PROJEXLIGHT_DEV_KEY] ?? null,
+      tst: mcpServers[PROJEXLIGHT_TEST_KEY] ?? null,
+    });
+
     mcpServers[REGISTRY_SERVER_KEY] = opts.server;
-    const after = JSON.stringify(mcpServers[REGISTRY_SERVER_KEY]);
+
+    // FR-COHAB-1 — when Projexlight is detected on this machine, splice
+    // its MCPs into the same config. Existing entries take precedence so
+    // we don't clobber a user's customizations.
+    if (projexlight.detected) {
+      if (!mcpServers[PROJEXLIGHT_DEV_KEY] && projexlight.dev_mcp_command) {
+        mcpServers[PROJEXLIGHT_DEV_KEY] = { command: projexlight.dev_mcp_command } satisfies McpStdioEntry;
+      }
+      if (!mcpServers[PROJEXLIGHT_TEST_KEY] && projexlight.test_mcp_command) {
+        mcpServers[PROJEXLIGHT_TEST_KEY] = { command: projexlight.test_mcp_command } satisfies McpStdioEntry;
+      }
+    }
+
+    const after = JSON.stringify({
+      r: mcpServers[REGISTRY_SERVER_KEY] ?? null,
+      d: mcpServers[PROJEXLIGHT_DEV_KEY] ?? null,
+      tst: mcpServers[PROJEXLIGHT_TEST_KEY] ?? null,
+    });
 
     if (!created && before === after) {
       results.push({ tool: t.tool, configPath: t.configPath, action: 'unchanged' });

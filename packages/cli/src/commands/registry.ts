@@ -15,6 +15,7 @@
 import { copyFileSync, existsSync, mkdirSync, statSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { loadRegistry } from '@projexlight/sdk-registry';
+import { drainQueue, resolveProxySettings } from '@projexlight/registry-mcp-local';
 import {
   projexCacheDir,
   userCatalogPath,
@@ -151,4 +152,26 @@ export function runRegistryList(flags: ListFlags): ListResult {
     filtered: entries.length,
     entries,
   };
+}
+
+/* --------------------------------------------------------------- drain */
+
+/**
+ * `projex registry drain` — replays queued offline writes against the
+ * hosted MCP. Returns a per-entry result; exits non-zero on first failed
+ * entry so CI can detect partial drains.
+ */
+export async function runRegistryDrain(): Promise<{
+  action: 'drained';
+  drained: Array<{ queue_id: string; tool: string; ok: boolean; error?: string }>;
+  remaining_count: number;
+}> {
+  const settings = resolveProxySettings();
+  if (!settings) {
+    throw new Error(
+      'projex registry drain needs a hosted target. Run `projex login` or set PROJEX_HOSTED_MCP + PROJEX_API_KEY.',
+    );
+  }
+  const r = await drainQueue(settings);
+  return { action: 'drained', ...r };
 }

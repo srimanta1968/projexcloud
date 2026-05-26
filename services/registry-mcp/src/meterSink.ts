@@ -40,6 +40,10 @@ export const TOOL_SKU_MAP: Record<string, string> = {
   projex_registry_list_blueprints: 'registry.read.blueprints',
   projex_registry_get_blueprint: 'registry.read.blueprint',
   projex_registry_scaffold: 'registry.read.scaffold',
+  projex_registry_list_my_sdks: 'registry.read.my_sdks',
+  projex_registry_list_my_blueprints: 'registry.read.my_blueprints',
+  projex_registry_request_pack_upgrade: 'registry.write.pack_upgrade',
+  projex_registry_deploy: 'registry.write.deploy',
 };
 
 export function skuFor(toolName: string): string {
