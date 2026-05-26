@@ -1,0 +1,94 @@
+{
+  "name": "@projexlight/connector-snowflake",
+  "version": "1.0.0",
+  "schema_version": "1.0",
+  "summary": "Bidirectional Snowflake connector for ProjexCloud: install per-tenant + bind ProjexCloud tables to Snowflake target tables, run scheduled sync runs (push, pull, or merge), query Snowflake from the lakehouse federation layer. Customer credentials vault-stored; per-bind sync logs let the customer + ProjexCloud reconcile cost + freshness without sharing the warehouse password.",
+  "tags": ["connector", "snowflake", "warehouse", "etl", "federation", "p6b"],
+  "provides": {
+    "endpoints": [],
+    "events": [
+      { "name": "connector-snowflake.install.created.v1",    "retention_class": "regulated",  "conflict_policy": "event-sourcing", "description": "Customer installed the connector + provided credentials." },
+      { "name": "connector-snowflake.binding.created.v1",    "retention_class": "regulated",  "conflict_policy": "event-sourcing", "description": "Table-to-table binding registered (ProjexCloud table ↔ Snowflake table)." },
+      { "name": "connector-snowflake.sync.completed.v1",     "retention_class": "operational","conflict_policy": "event-sourcing", "description": "Sync run finished; carries rows_pushed, rows_pulled, duration_ms." },
+      { "name": "connector-snowflake.sync.failed.v1",        "retention_class": "regulated",  "conflict_policy": "event-sourcing", "description": "Sync run failed; carries error class + retry plan." },
+      { "name": "connector-snowflake.query.served.v1",       "retention_class": "operational","conflict_policy": "lww",            "description": "Federation query routed to Snowflake; logged for cost attribution." }
+    ],
+    "models": [
+      { "schema": "connector_snowflake", "table": "install",         "description": "Per-tenant install: account_url, warehouse, database, role, credentials_vault_ref." },
+      { "schema": "connector_snowflake", "table": "table_binding",   "description": "Per-binding row: source_table, target_table, sync_mode (push / pull / merge), schedule." },
+      { "schema": "connector_snowflake", "table": "sync_run",        "description": "Per-run row: binding_id, started_at, finished_at, rows_in, rows_out, status." },
+      { "schema": "connector_snowflake", "table": "query_log",       "description": "Per-federated-query row: query_hash, rows_returned, duration_ms, snowflake_warehouse_seconds." }
+    ],
+    "hooks": [
+      { "name": "installConnector",  "description": "Register a tenant's Snowflake credentials (vault-wrapped) + validate the connection." },
+      { "name": "registerBinding",   "description": "Wire a source (ProjexCloud) table to a target (Snowflake) table with a sync mode + schedule." },
+      { "name": "runSyncNow",        "description": "Force-run a sync regardless of schedule. Useful after the customer fixes a Snowflake side issue." },
+      { "name": "startScheduler",    "description": "Background worker that drives scheduled sync runs. Safe to leave running in dev." },
+      { "name": "queryFederated",    "description": "Run a Snowflake query as part of an sdk-analytics federation. Logged for cost attribution." }
+    ],
+    "ui_components": []
+  },
+  "consumes": {
+    "events": [
+      { "name": "analytics.lakehouse.extracted.v1", "from": "@projexlight/sdk-analytics" },
+      { "name": "tenant.offboarded.v1",             "from": "@projexlight/sdk-tenant-lifecycle" }
+    ],
+    "infra": ["postgres", "snowflake-account", "sdk-vault"],
+    "config_keys": ["SNOWFLAKE_DEFAULT_TIMEOUT_MS", "SNOWFLAKE_RETRY_MAX_ATTEMPTS", "SNOWFLAKE_FEDERATION_ENABLED"]
+  },
+  "scenarios": [
+    {
+      "id": "install-connector",
+      "title": "Customer installs Snowflake connector via tenant-admin Connectors page",
+      "when_to_use": "First-time setup. Customer provides account URL + service-user credentials; we validate the connection + store credentials vault-wrapped.",
+      "example_code": "import { installConnector } from '@projexlight/connector-snowflake';\nconst { install_id } = await installConnector({\n  tenant_id, account_url: 'acme.snowflakecomputing.com',\n  warehouse: 'PROJEX_WH', database: 'PROJEX_DB', role: 'PROJEX_RW',\n  credentials: { username: 'PROJEX_SVC', private_key_pem: '...' }, // vault-stored\n});",
+      "expected_outcome": "Install row written; credentials stored in sdk-vault under a fresh key; emits connector-snowflake.install.created.v1. Tenant admin sees the install in their Connectors page with a green health dot."
+    },
+    {
+      "id": "register-table-binding",
+      "title": "Push canonical invoices to a Snowflake fact table",
+      "when_to_use": "Customer wants billing data in their Snowflake account for BI tools. Bind ProjexCloud billing.invoice → snowflake FACT_INVOICE every hour.",
+      "example_code": "import { registerBinding } from '@projexlight/connector-snowflake';\nawait registerBinding({\n  install_id, source_table: 'billing.invoice',\n  target_table: 'ANALYTICS.FACT_INVOICE',\n  sync_mode: 'push', schedule: 'hourly',\n});",
+      "expected_outcome": "Binding row written + scheduler picks up the cadence. Hourly sync runs land in connector_snowflake.sync_run with row counts + duration. Customer's BI dashboards refresh on the same cadence."
+    },
+    {
+      "id": "force-resync-after-fix",
+      "title": "Customer fixed a Snowflake permission issue; force-resync now",
+      "when_to_use": "Sync was failing because of a permission gap; customer fixed it; we don't want to wait for the next scheduled tick.",
+      "example_code": "import { runSyncNow } from '@projexlight/connector-snowflake';\nconst { sync_run_id } = await runSyncNow({ binding_id });",
+      "expected_outcome": "Immediate sync run; result lands in sync_run with the new status. Emits .sync.completed.v1 or .sync.failed.v1."
+    },
+    {
+      "id": "query-federated-from-snowflake",
+      "title": "sdk-analytics federation routes a query to Snowflake",
+      "when_to_use": "Federated analytics query spans both Iceberg lakehouse + Snowflake; this connector executes the Snowflake leg.",
+      "example_code": "import { queryFederated } from '@projexlight/connector-snowflake';\nconst { rows, warehouse_seconds } = await queryFederated({\n  install_id, query: 'SELECT plan_tier, SUM(mrr_cents) FROM ANALYTICS.FACT_INVOICE GROUP BY 1',\n});",
+      "expected_outcome": "Returns rows + warehouse_seconds. The latter is the cost attribution unit — both ProjexCloud + the customer can reconcile Snowflake bills against actual usage."
+    },
+    {
+      "id": "offboard-cleanup",
+      "title": "Tenant offboards → drop the install + revoke credentials",
+      "when_to_use": "Reactive worker on tenant.offboarded.v1 — credentials shredded; sync history retained per the tenant's retention policy for dispute resolution."
+,
+      "example_code": "// driven by event subscription:\nsubscribeEvents('tenant.offboarded.v1', async (e) => {\n  await shredCredentialsForTenant(e.payload.tenant_id);\n});",
+      "expected_outcome": "Vault key for the credential blob shredded — making the credentials undecryptable. Sync history rows retained but with credentials_vault_ref tombstoned."
+    }
+  ],
+  "compliance_posture": {
+    "regimes": ["SOC2-CC6.7-third-party", "GDPR-Art-28-processor-contract", "EU-Data-Residency", "Snowflake-SOC2"],
+    "notes": "Customer credentials always vault-wrapped — we never log raw credentials. EU-residency tenants pin sync_mode + warehouse region to keep data in-jurisdiction. Snowflake itself is SOC2-attested; our use of it inherits the chain when customer chooses a region-appropriate account."
+  },
+  "pool_placement": "app",
+  "pricing_skus": [
+    { "sku": "connector-snowflake.install",      "mode": "flat",    "unit_description": "per active install per month" },
+    { "sku": "connector-snowflake.sync.run",     "mode": "metered", "unit_description": "per scheduled sync run" },
+    { "sku": "connector-snowflake.bytes.moved",  "mode": "metered", "unit_description": "per GB synced (push or pull)" },
+    { "sku": "connector-snowflake.federation",   "mode": "metered", "unit_description": "per federated query (Snowflake warehouse-seconds billed passthrough)" }
+  ],
+  "no_endpoints": true,
+  "links": {
+    "readme": "packages/connector-snowflake/README.md",
+    "source": "packages/connector-snowflake/src/",
+    "prd_section": "P6B-Knowledge-Semantic §10"
+  }
+}

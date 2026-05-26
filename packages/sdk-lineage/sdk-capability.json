@@ -1,0 +1,93 @@
+{
+  "name": "@projexlight/sdk-lineage",
+  "version": "1.0.0",
+  "schema_version": "1.0",
+  "summary": "Cross-pool data-lineage projector (G8 closer): captures every transformation node + edge across the platform, projects them into a queryable graph, and backfills new pool families on attach. Answers 'where did this number come from?' and 'if we shred this source, what derivatives die?' Foundation for analytics audit + the SemanticPolicy + DSAR fan-out integrity guarantee.",
+  "tags": ["lineage", "data-provenance", "graph", "audit", "cross-pool", "p6b"],
+  "provides": {
+    "endpoints": [],
+    "events": [
+      { "name": "lineage.node.recorded.v1",            "retention_class": "regulated",  "conflict_policy": "event-sourcing", "description": "New lineage node committed (source, transform, or sink)." },
+      { "name": "lineage.edge.recorded.v1",            "retention_class": "regulated",  "conflict_policy": "event-sourcing", "description": "New edge between nodes (input/output relationship)." },
+      { "name": "lineage.projection.completed.v1",     "retention_class": "operational", "conflict_policy": "lww",            "description": "Projector pass finished for a pool; carries node/edge counts processed." },
+      { "name": "lineage.backfill.completed.v1",       "retention_class": "regulated",  "conflict_policy": "event-sourcing", "description": "New pool's lineage backfilled successfully." }
+    ],
+    "models": [
+      { "schema": "lineage", "table": "node",                          "description": "Per-node row: kind (source/transform/sink), uri, schema_hash, owner_sdk, pool_index." },
+      { "schema": "lineage", "table": "edge",                          "description": "Per-edge row: from_node, to_node, transform_kind, transform_metadata." },
+      { "schema": "lineage", "table": "cross_pool_projection_queue",   "description": "Pending projections to apply when a pool comes online or its schema changes." },
+      { "schema": "lineage", "table": "backfill_checkpoint",           "description": "Per-(pool, node-kind) checkpoint so resumed backfills don't re-process committed work." }
+    ],
+    "hooks": [
+      { "name": "recordNode",        "description": "Universal entry — every SDK that produces or consumes a data artifact registers the node." },
+      { "name": "recordEdge",        "description": "Register an edge between two nodes after a transformation." },
+      { "name": "queryUpstream",     "description": "Walk the graph backwards from a sink: what sources contributed?" },
+      { "name": "queryDownstream",   "description": "Walk forward from a source: what derivatives exist?" },
+      { "name": "startProjector",    "description": "Background worker that pulls inbox messages + projects lineage rows. Cross-pool aware (G8)." },
+      { "name": "backfillPool",      "description": "Backfill lineage for a newly attached pool; idempotent on the checkpoint." }
+    ],
+    "ui_components": []
+  },
+  "consumes": {
+    "events": [
+      { "name": "analytics.rollup.materialized.v1", "from": "@projexlight/sdk-analytics" },
+      { "name": "analytics.lakehouse.extracted.v1", "from": "@projexlight/sdk-analytics" },
+      { "name": "vault.key.shredded.v1",            "from": "@projexlight/sdk-vault" }
+    ],
+    "infra": ["postgres", "kafka-optional"],
+    "config_keys": ["LINEAGE_PROJECTOR_INTERVAL_MS", "LINEAGE_BACKFILL_BATCH_SIZE"]
+  },
+  "scenarios": [
+    {
+      "id": "register-rollup-lineage",
+      "title": "Rollup-spec produces lineage automatically",
+      "when_to_use": "Universal pattern. Every analytics rollup emits a node for the rollup target + edges from every source table. Documented here so SDK authors know what to call.",
+      "example_code": "import { recordNode, recordEdge } from '@projexlight/sdk-lineage';\n// Inside analytics rollup worker:\nconst node = await recordNode({ kind: 'sink', uri: 'analytics.mrr_daily', owner_sdk: '@projexlight/sdk-analytics', pool_index });\nfor (const src of sources) await recordEdge({ from_node: src.node_id, to_node: node.id, transform_kind: 'sql-aggregate' });",
+      "expected_outcome": "Lineage graph reflects every source → target derivation. Future queryUpstream on the rollup answers 'where did this number come from' in O(graph depth)."
+    },
+    {
+      "id": "trace-bad-number",
+      "title": "Operator traces a suspicious KPI back to source",
+      "when_to_use": "Sev-3 ticket — 'this number looks wrong.' Walk upstream from the KPI node to every source table contribution.",
+      "example_code": "import { queryUpstream } from '@projexlight/sdk-lineage';\nconst chain = await queryUpstream({ node_uri: 'analytics.mau_accounts', depth: 5 });\nconsole.log(chain);  // ordered list of every transformation + source",
+      "expected_outcome": "Returns the upstream graph slice. Operator can spot the offending source table + identify the bug + write a backfill."
+    },
+    {
+      "id": "shred-impact-analysis",
+      "title": "What dies if we shred this source?",
+      "when_to_use": "GDPR right-to-erasure planning. Before shredding a source dataset, walk downstream to find every derivative that depends on it.",
+      "example_code": "import { queryDownstream } from '@projexlight/sdk-lineage';\nconst dependents = await queryDownstream({ node_uri: 'identity.alias', depth: 10 });\n// Every downstream rollup, cohort, KPI that depends on alias data.",
+      "expected_outcome": "Returns the downstream subgraph. Operator knows which materializations need recomputation post-shred."
+    },
+    {
+      "id": "cross-pool-projection",
+      "title": "Projector pulls lineage from a new pool family on attach",
+      "when_to_use": "G8 closer — when a new pool family attaches, the projector backfills its lineage so cross-pool queries see complete provenance.",
+      "example_code": "import { backfillPool } from '@projexlight/sdk-lineage';\nawait backfillPool({ pool_index: 'pool-new-x', checkpoint_resume: true });",
+      "expected_outcome": "Lineage graph extended to include the new pool. Emits lineage.backfill.completed.v1 with the node/edge counts. Idempotent — re-running resumes from the checkpoint."
+    },
+    {
+      "id": "shred-event-propagates",
+      "title": "vault.key.shredded.v1 propagates as lineage tombstones",
+      "when_to_use": "When a vault key is shredded, every node encrypted under it becomes effectively dead. Lineage marks those nodes tombstoned so downstream queries surface the dead-end explicitly.",
+      "example_code": "// Driven by subscribing:\nsubscribeEvents('vault.key.shredded.v1', async (e) => {\n  await tombstoneNodesEncryptedUnder({ key_id: e.payload.key_id });\n});",
+      "expected_outcome": "Tombstoned nodes retain their position in the graph but mark themselves undecryptable. Downstream queries see the dead-end + can attribute downstream staleness to the shred event."
+    }
+  ],
+  "compliance_posture": {
+    "regimes": ["SOC2-CC7.2", "GDPR-Art-22-data-provenance", "EU-AI-Act-Annex-IV-data-lineage", "SOX-data-quality"],
+    "notes": "Lineage is the GDPR Art-22 + EU AI Act lever — for any automated decision or AI output, you can trace its inputs back to source. SOX data-quality controls satisfied by lineage + the materialized rollup audit. Cross-pool projection is the integrity guarantee on federated analytics queries."
+  },
+  "pool_placement": "warehouse",
+  "pricing_skus": [
+    { "sku": "lineage.node.record", "mode": "metered", "unit_description": "per node recorded (most are background)" },
+    { "sku": "lineage.query",       "mode": "metered", "unit_description": "per upstream/downstream walk (depth-bounded)" },
+    { "sku": "lineage.backfill",    "mode": "metered", "unit_description": "per pool backfilled" }
+  ],
+  "no_endpoints": true,
+  "links": {
+    "readme": "packages/sdk-lineage/README.md",
+    "source": "packages/sdk-lineage/src/",
+    "prd_section": "P6B-Knowledge-Semantic §8 (G8)"
+  }
+}
