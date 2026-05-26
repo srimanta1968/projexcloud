@@ -1,0 +1,50 @@
+{
+  "$schema_version": "1.0",
+  "catalog_id": "foundation-sdks",
+  "version": 1,
+  "description": "Starter pricing for the 11 platform-foundation SDKs every tenant inherits (vault / billing / tenant / meter / identity / audit / pool-router / rebac / policy / secrets / projection). Rates here are 'overage' — most tenants hit plan ceilings before per-unit billing kicks in. Operators tune per their commercial model before flipping to active.",
+  "currency": "USD",
+  "created_by_operator_id": "seed:foundation-sdks-v1",
+  "rates": [
+    { "sku": "vault.encrypt",                "unit": "call",    "mode": "metered", "price": 0.00005, "notes": "Envelope encrypt; envelope size capped so price is uniform." },
+    { "sku": "vault.decrypt",                "unit": "call",    "mode": "metered", "price": 0.00005, "notes": "Envelope decrypt." },
+    { "sku": "vault.key.issue",              "unit": "call",    "mode": "metered", "price": 0.05,    "notes": "Rare; one-time per tier-scope pair." },
+    { "sku": "vault.byok.binding",           "unit": "month",   "mode": "flat",    "price": 250.00,  "notes": "Variant A surcharge per tenant CMK binding per month." },
+
+    { "sku": "billing.invoice.generate",     "unit": "invoice", "mode": "flat",    "price": 0.50,    "notes": "Per invoice generated above plan ceiling." },
+    { "sku": "billing.live.read",            "unit": "call",    "mode": "metered", "price": 0.0001,  "notes": "Live-meter read; cached aggressively." },
+    { "sku": "billing.reprice.dry-run",      "unit": "call",    "mode": "metered", "price": 0.02,    "notes": "Compute-heavy + rate-limited; reflect actual cost." },
+
+    { "sku": "tenant.create",                "unit": "tenant",  "mode": "flat",    "price": 25.00,   "notes": "Per tenant provisioned above seat-plan ceiling." },
+    { "sku": "tenant.subtenant.create",      "unit": "tenant",  "mode": "flat",    "price": 10.00,   "notes": "Per sub-tenant under a parent." },
+    { "sku": "tenant.bu.create",             "unit": "bu",      "mode": "flat",    "price": 5.00,    "notes": "Per BU above plan ceiling." },
+
+    { "sku": "meter.emit",                   "unit": "event",   "mode": "metered", "price": 0.000001,"notes": "Per usage event; effectively free at small scale." },
+    { "sku": "meter.catalog.publish",        "unit": "version", "mode": "flat",    "price": 0.00,    "notes": "Free; operator-side action." },
+
+    { "sku": "identity.login",               "unit": "call",    "mode": "metered", "price": 0.0001,  "notes": "Per successful login (incl. MFA verify)." },
+    { "sku": "identity.mfa.challenge",       "unit": "call",    "mode": "metered", "price": 0.005,   "notes": "SMS factor has provider passthrough; price reflects average." },
+    { "sku": "identity.scim.provisioning",   "unit": "call",    "mode": "metered", "price": 0.001,   "notes": "Per SCIM Users provision/deprovision." },
+    { "sku": "identity.saml.assertion",      "unit": "call",    "mode": "metered", "price": 0.0001,  "notes": "Per SAML ACS assertion accepted." },
+
+    { "sku": "audit.emit",                   "unit": "event",   "mode": "metered", "price": 0.000001,"notes": "Per event appended; effectively free." },
+    { "sku": "audit.verify",                 "unit": "call",    "mode": "metered", "price": 0.001,   "notes": "Per on-demand chain verify; background verifier free." },
+    { "sku": "audit.export",                 "unit": "bundle",  "mode": "metered", "price": 1.00,    "notes": "Per signed export bundle; SLA-backed delivery within 24h." },
+
+    { "sku": "router.resolve",               "unit": "call",    "mode": "metered", "price": 0.000005,"notes": "Cached aggressively; effectively free in practice." },
+    { "sku": "active-active.drill",          "unit": "drill",   "mode": "flat",    "price": 50.00,   "notes": "Typically monthly per tenant." },
+
+    { "sku": "rebac.relationship.write",     "unit": "tuple",   "mode": "metered", "price": 0.00005, "notes": "Per tuple written or removed." },
+    { "sku": "rebac.permission.check",       "unit": "call",    "mode": "metered", "price": 0.00001, "notes": "Cached decisions billed at the same low rate; cache hit-rate is the lever." },
+
+    { "sku": "policy.publish",               "unit": "version", "mode": "flat",    "price": 0.50,    "notes": "Per policy version published." },
+    { "sku": "policy.evaluate",              "unit": "call",    "mode": "metered", "price": 0.00005, "notes": "Per evaluation (attribute layer cached)." },
+
+    { "sku": "secrets.put",                  "unit": "call",    "mode": "metered", "price": 0.001,   "notes": "Per secret written." },
+    { "sku": "secrets.read",                 "unit": "call",    "mode": "metered", "price": 0.0001,  "notes": "Per secret read (audited)." },
+    { "sku": "secrets.rotate",               "unit": "cycle",   "mode": "flat",    "price": 0.50,    "notes": "Per rotation cycle." },
+
+    { "sku": "projection.resolve",           "unit": "call",    "mode": "metered", "price": 0.00005, "notes": "Cache hits free; this is the cache-miss rate." },
+    { "sku": "projection.rebuild",           "unit": "row",     "mode": "metered", "price": 0.000001,"notes": "Background; rarely hot." }
+  ]
+}

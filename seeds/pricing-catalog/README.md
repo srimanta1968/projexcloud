@@ -9,7 +9,8 @@ in `draft` status until an operator explicitly promotes it to `active`.
 
 | Seed | Covers | Purpose |
 |------|--------|---------|
-| `registry-mcp-v1.json` | `registry.read.*`, `registry.tool.other` | Rates for the SKUs the hosted `services/registry-mcp` emits via its audit→meter sink. |
+| `registry-mcp-v1.json` | `registry.read.*`, `registry.tool.other` (8 SKUs) | Rates for the SKUs the hosted `services/registry-mcp` emits via its audit→meter sink. |
+| `foundation-sdks-v1.json` | vault / billing / tenant / meter / identity / audit / pool-router / rebac / policy / secrets / projection (30 SKUs across 11 SDKs) | Overage rates for the platform-foundation tier every tenant inherits. Tuned for sub-cent per-unit pricing; plan ceilings absorb most usage. |
 
 ## Applying
 
