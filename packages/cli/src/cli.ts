@@ -147,12 +147,23 @@ function emit(result: unknown, jsonMode: boolean): void {
     return;
   }
   if (typeof result === 'object' && result !== null && 'blueprint_id' in result && 'files' in result) {
-    const r = result as { blueprint_id: string; blueprint_title: string; targetDir: string; files: Array<{ path: string; action: string }>; sdks_to_install: string[]; warnings: string[] };
+    const r = result as { blueprint_id: string; blueprint_title: string; targetDir: string; files: Array<{ path: string; action: string }>; sdks_to_install: string[]; warnings: string[]; installs?: Array<{ sdk_name: string; ok: boolean; result?: { packageJsonAction: string; integrationAction: string }; error?: string }> };
     process.stdout.write(`Applied ${r.blueprint_id} (${r.blueprint_title}) to ${r.targetDir}\n`);
     process.stdout.write(`  Files:\n`);
     for (const f of r.files) process.stdout.write(`    ${f.action.padEnd(20)} ${f.path}\n`);
-    process.stdout.write(`\n  Next: install the SDKs this blueprint composes:\n`);
-    for (const s of r.sdks_to_install) process.stdout.write(`    projex install ${s}\n`);
+    if (r.installs) {
+      process.stdout.write(`\n  SDK installs:\n`);
+      for (const inst of r.installs) {
+        if (inst.ok && inst.result) {
+          process.stdout.write(`    ✓ ${inst.sdk_name}  (package=${inst.result.packageJsonAction}, integration=${inst.result.integrationAction})\n`);
+        } else {
+          process.stdout.write(`    ✗ ${inst.sdk_name}  — ${inst.error}\n`);
+        }
+      }
+    } else {
+      process.stdout.write(`\n  Next: install the SDKs this blueprint composes (or re-run with --install-sdks):\n`);
+      for (const s of r.sdks_to_install) process.stdout.write(`    projex install ${s}\n`);
+    }
     if (r.warnings.length > 0) {
       process.stdout.write(`\n  Warnings:\n`);
       for (const w of r.warnings) process.stdout.write(`    - ${w}\n`);
@@ -242,6 +253,7 @@ async function main(): Promise<void> {
             answersJson: typeof args.flags.answers === 'string' ? args.flags.answers : undefined,
             force: args.flags.force === true,
             root: typeof args.flags.root === 'string' ? args.flags.root : undefined,
+            installSdks: args.flags['install-sdks'] === true,
           });
           emit(result, jsonMode);
           return;

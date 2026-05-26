@@ -19,6 +19,7 @@
 import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync, readdirSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { listBlueprints, loadBlueprint, type Blueprint } from '@projexlight/blueprints';
+import { runInstall, type InstallResult } from './install';
 
 /* --------------------------------------------------------------- shared */
 
@@ -94,6 +95,14 @@ export interface BlueprintApplyFlags {
   answersJson?: string;
   /** Overwrite existing output files. */
   force?: boolean;
+  /**
+   * After templates are written, iterate through blueprint.sdks and call
+   * runInstall for each. Closes the manual "next: install these" loop.
+   * Requires the catalog to be present (projex registry refresh).
+   */
+  installSdks?: boolean;
+  /** Override catalog path passed through to runInstall (testing). */
+  catalogPath?: string;
 }
 
 export type ApplyAction = 'written' | 'skipped-exists' | 'template-missing';
@@ -112,6 +121,8 @@ export interface BlueprintApplyResult {
   files: ApplyFileResult[];
   warnings: string[];
   sdks_to_install: string[];
+  /** Populated when --install-sdks was passed. One entry per SDK. */
+  installs?: Array<{ sdk_name: string; ok: boolean; result?: InstallResult; error?: string }>;
 }
 
 export function runBlueprintApply(flags: BlueprintApplyFlags): BlueprintApplyResult {
@@ -175,6 +186,26 @@ export function runBlueprintApply(flags: BlueprintApplyFlags): BlueprintApplyRes
     files.push({ path: out.path, template: out.template, action: 'written' });
   }
 
+  // ── optionally install every SDK the blueprint composes ───────────────
+  let installs: BlueprintApplyResult['installs'];
+  if (flags.installSdks) {
+    installs = [];
+    for (const ref of blueprint.sdks) {
+      try {
+        const result = runInstall({
+          sdk_name: ref.name,
+          targetDir,
+          catalogPath: flags.catalogPath,
+          force: flags.force,
+        });
+        installs.push({ sdk_name: ref.name, ok: true, result });
+      } catch (err) {
+        installs.push({ sdk_name: ref.name, ok: false, error: (err as Error).message });
+        warnings.push(`Auto-install of ${ref.name} failed: ${(err as Error).message}`);
+      }
+    }
+  }
+
   return {
     blueprint_id: blueprint.id,
     blueprint_title: blueprint.title,
@@ -183,6 +214,7 @@ export function runBlueprintApply(flags: BlueprintApplyFlags): BlueprintApplyRes
     files,
     warnings,
     sdks_to_install: blueprint.sdks.map((s) => s.name),
+    installs,
   };
 }
 
