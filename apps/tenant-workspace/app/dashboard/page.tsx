@@ -30,6 +30,7 @@ function decode(token: string): DecodedClaims | null {
 }
 
 const TILES = [
+  { href: '/build',       label: 'Build with AI', desc: 'Compose a vertical app from blueprints via chat' },
   { href: '/admin/audit', label: 'Audit ledger',  desc: 'Append + verify the tamper-evident chain' },
   { href: '/admin/keys',  label: 'Key hierarchy', desc: 'Vault key tiers + status' },
 ];
