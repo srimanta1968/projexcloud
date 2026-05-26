@@ -1,0 +1,22 @@
+/**
+ * {{app_name}} — Product event ingest into the Iceberg lakehouse
+ *
+ * Downstream warehouse: {{warehouse_target}}
+ * Lineage projector refresh: every {{refresh_cadence_minutes}} min
+ */
+
+export interface ProductEvent {
+  event_id: string;
+  tenant_id: string;
+  user_id: string;
+  event_type: string;
+  occurred_at: string;
+  attrs: Record<string, unknown>;
+}
+
+export async function ingest(event: ProductEvent): Promise<void> {
+  // sdk-analytics writes to the Iceberg lakehouse partitioned by
+  // (tenant_id, event_type, dt); sdk-lineage's projector worker picks up
+  // the new partitions on its {{refresh_cadence_minutes}}-min cadence.
+  void event;
+}

@@ -1,0 +1,40 @@
+# {{app_name}}
+
+B2B SaaS analytics workspace — scaffolded from **{{blueprint_title}}**.
+
+## Configuration
+
+| Choice | Value |
+|---|---|
+| Downstream warehouse | `{{warehouse_target}}` |
+| SemanticPolicy strictness | `{{semantic_layer_strictness}}` |
+| Projector refresh cadence | `{{refresh_cadence_minutes}} min` |
+
+## Layout
+
+- `src/analytics/ingest.ts` — product-event ingest into Iceberg
+- `src/analytics/semantic.ts` — plain-English query layer
+- `db/migrations/001_analytics_init.sql` — `analytics.event_inbox` + `analytics.semantic_audit`
+
+## How it composes
+
+```
+product events → sdk-analytics.ingest()
+                 ↓ Iceberg lakehouse (per-tenant partitions)
+                 ↓ sdk-lineage projector (every {{refresh_cadence_minutes}} min)
+                 ↓ canonical metric views (sdk-projection)
+                 ↓ sdk-semantic.ask(intent) ← business user
+                 ↓ optional fan-out → {{warehouse_target}} (connector)
+```
+
+## Next
+
+```sh
+projex install @projexlight/sdk-analytics
+projex install @projexlight/sdk-lineage
+projex install @projexlight/sdk-semantic
+projex install @projexlight/connector-snowflake
+projex install @projexlight/sdk-projection
+```
+
+Or re-apply with `--install-sdks` to do all five at once.

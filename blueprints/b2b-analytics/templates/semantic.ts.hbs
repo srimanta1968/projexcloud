@@ -1,0 +1,27 @@
+/**
+ * {{app_name}} — SemanticIntent query layer
+ *
+ * Policy strictness: {{semantic_layer_strictness}}
+ *
+ * The {{semantic_layer_strictness}} answer controls how sdk-semantic
+ * handles ambiguous or under-constrained queries.
+ */
+
+export interface SemanticQuery {
+  intent: string;
+  /** Optional structured context (tenant scope, time range, etc). */
+  context?: Record<string, unknown>;
+}
+
+export interface SemanticResult {
+  rows: Array<Record<string, unknown>>;
+  plan: { sql: string; tables: string[] };
+  policy_decisions: Array<{ rule: string; decision: 'allow' | 'deny'; reason?: string }>;
+}
+
+export async function ask(query: SemanticQuery): Promise<SemanticResult> {
+  // Wire sdk-semantic.translate(query) → SQL; run via sdk-analytics; surface
+  // policy decisions so business users see exactly why a query was reshaped.
+  void query;
+  return { rows: [], plan: { sql: '', tables: [] }, policy_decisions: [] };
+}

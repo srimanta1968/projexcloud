@@ -1,0 +1,39 @@
+/**
+ * {{app_name}} — Field-service dispatcher
+ *
+ * Assignment strategy: {{assignment_strategy}}
+ * Weather auto-hold threshold: {{weather_hold_threshold}}
+ * Photo required on completion: {{photo_capture_required}}
+ */
+
+export type JobStatus =
+  | 'queued'
+  | 'assigned'
+  | 'en-route'
+  | 'on-site'
+  | 'on-hold-weather'
+  | 'completed'
+  | 'cancelled';
+
+export interface Job {
+  job_id: string;
+  tenant_id: string;
+  customer_id: string;
+  service_kind: string;
+  location: { lat: number; lng: number; address?: string };
+  status: JobStatus;
+  scheduled_for?: string;
+  assigned_tech_id?: string;
+}
+
+export async function enqueueJob(job: Omit<Job, 'status'>): Promise<Job> {
+  // Persist via sdk-dispatch + emit dispatch.job.queued.v1.
+  const queued: Job = { ...job, status: 'queued' };
+  return queued;
+}
+
+export async function advanceStatus(job_id: string, next: JobStatus): Promise<void> {
+  // Wire to sdk-dispatch + sdk-notification to fan-out to customer.
+  void job_id;
+  void next;
+}

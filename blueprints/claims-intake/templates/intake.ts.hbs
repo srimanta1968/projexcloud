@@ -1,0 +1,46 @@
+/**
+ * {{app_name}} — Claims intake (FNOL handler)
+ *
+ * Settlement path: {{settlement_path}}
+ * SIU auto-flag keywords: {{siu_flag_keywords}}
+ * Photo auto-redaction: {{photo_redaction_default}}
+ */
+
+export type ClaimStatus =
+  | 'submitted'
+  | 'triage'
+  | 'in-review'
+  | 'siu-review'
+  | 'approved'
+  | 'denied'
+  | 'paid';
+
+export interface Claim {
+  claim_id: string;
+  tenant_id: string;
+  policy_id: string;
+  reporter_email: string;
+  description: string;
+  evidence_ids: string[];
+  status: ClaimStatus;
+  amount_claimed_cents?: number;
+}
+
+export async function submitFnol(input: Omit<Claim, 'claim_id' | 'status' | 'evidence_ids'> & { evidence_ids?: string[] }): Promise<Claim> {
+  // Persist via sdk-workflow, attach each evidence_id to the chain-of-custody
+  // ledger via sdk-evidence, then fire claims.fnol.submitted.v1.
+  const claim: Claim = {
+    claim_id: 'claim_' + Math.random().toString(36).slice(2, 10),
+    evidence_ids: input.evidence_ids ?? [],
+    status: 'submitted',
+    ...input,
+  };
+  return claim;
+}
+
+export function shouldFlagForSIU(description: string): boolean {
+  const kws = '{{siu_flag_keywords}}'.split(',').map((s) => s.trim()).filter(Boolean);
+  if (kws.length === 0) return false;
+  const lower = description.toLowerCase();
+  return kws.some((kw) => lower.includes(kw.toLowerCase()));
+}

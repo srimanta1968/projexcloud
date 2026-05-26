@@ -1,0 +1,51 @@
+id: field-dispatch
+schema_version: "1.0"
+title: Field Service Dispatch
+summary: >-
+  Mobile-first field-service workspace: dispatch jobs from a central queue to
+  the closest qualified technician using geofence + assignment scoring,
+  capture proof-of-work photos with chain-of-custody, and notify customers
+  on every status flip. Built on the P7 field SDKs.
+pack: general
+tags: [field-service, dispatch, mobile, geofence, evidence, pilot]
+sdks:
+  - name: "@projexlight/sdk-dispatch"
+    reason: "Job queue + state machine for the field workflow."
+  - name: "@projexlight/sdk-assignment"
+    reason: "Geofence + workload scoring picks the right tech for each job."
+  - name: "@projexlight/sdk-storm"
+    reason: "Weather + risk overlays for safety holds on outdoor jobs."
+  - name: "@projexlight/hdk-map"
+    reason: "Native map + routing on the technician's mobile app."
+  - name: "@projexlight/hdk-camera"
+    reason: "Capture proof-of-work photos with attestation."
+  - name: "@projexlight/sdk-notification"
+    reason: "Customer notifications on status flips (en-route / on-site / complete)."
+  - name: "@projexlight/sdk-evidence"
+    reason: "Chain-of-custody for photo + signature evidence."
+clarifying_questions:
+  - id: assignment_strategy
+    prompt: How should jobs be auto-assigned?
+    type: enum
+    options: [closest-available, round-robin, lowest-workload, manual-only]
+    default: closest-available
+  - id: weather_hold_threshold
+    prompt: Weather severity threshold to auto-hold outdoor jobs
+    type: enum
+    options: [advisory, watch, warning, none]
+    default: warning
+    help: "advisory is the most conservative; none disables auto-hold."
+  - id: photo_capture_required
+    prompt: Require a photo on job completion?
+    type: boolean
+    default: true
+outputs:
+  - path: src/jobs/dispatcher.ts
+    template: templates/dispatcher.ts.hbs
+  - path: src/jobs/assignment.ts
+    template: templates/assignment.ts.hbs
+  - path: db/migrations/001_field_init.sql
+    template: templates/field-init.sql.hbs
+  - path: README.md
+    template: templates/README.md.hbs
+estimated_minutes: 6

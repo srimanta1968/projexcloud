@@ -1,0 +1,31 @@
+-- {{app_name}} — Field service initial schema (blueprint: {{blueprint_id}})
+-- Assignment strategy: {{assignment_strategy}}
+-- Weather hold threshold: {{weather_hold_threshold}}
+
+CREATE SCHEMA IF NOT EXISTS field;
+
+CREATE TABLE IF NOT EXISTS field.job (
+  job_id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id      UUID NOT NULL,
+  customer_id    UUID NOT NULL,
+  service_kind   TEXT NOT NULL,
+  location_lat   DOUBLE PRECISION NOT NULL,
+  location_lng   DOUBLE PRECISION NOT NULL,
+  address        TEXT,
+  status         TEXT NOT NULL DEFAULT 'queued'
+                   CHECK (status IN ('queued','assigned','en-route','on-site','on-hold-weather','completed','cancelled')),
+  scheduled_for  TIMESTAMPTZ,
+  assigned_tech_id UUID,
+  created_at     TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS job_tenant_status_idx ON field.job (tenant_id, status);
+
+CREATE TABLE IF NOT EXISTS field.technician (
+  tech_id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id       UUID NOT NULL,
+  active          BOOLEAN NOT NULL DEFAULT TRUE,
+  certifications  TEXT[] NOT NULL DEFAULT '{}',
+  current_lat     DOUBLE PRECISION,
+  current_lng     DOUBLE PRECISION,
+  active_job_count INTEGER NOT NULL DEFAULT 0
+);

@@ -1,0 +1,28 @@
+-- {{app_name}} — Analytics schema (blueprint: {{blueprint_id}})
+-- Downstream warehouse: {{warehouse_target}}
+-- Projector refresh cadence: {{refresh_cadence_minutes}} min
+
+CREATE SCHEMA IF NOT EXISTS analytics;
+
+-- Local-pool landing table; sdk-analytics promotes rows to Iceberg.
+CREATE TABLE IF NOT EXISTS analytics.event_inbox (
+  event_id     UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id    UUID NOT NULL,
+  user_id      UUID NOT NULL,
+  event_type   TEXT NOT NULL,
+  occurred_at  TIMESTAMPTZ NOT NULL,
+  attrs        JSONB NOT NULL DEFAULT '{}'::jsonb,
+  ingested_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS event_inbox_tenant_type_idx ON analytics.event_inbox (tenant_id, event_type, occurred_at);
+
+-- SemanticIntent audit so business users can trace why a query went the way it did.
+CREATE TABLE IF NOT EXISTS analytics.semantic_audit (
+  audit_id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id         UUID NOT NULL,
+  asked_by_persona  UUID NOT NULL,
+  intent            TEXT NOT NULL,
+  resolved_sql      TEXT NOT NULL,
+  policy_decisions  JSONB NOT NULL DEFAULT '[]'::jsonb,
+  asked_at          TIMESTAMPTZ NOT NULL DEFAULT now()
+);
