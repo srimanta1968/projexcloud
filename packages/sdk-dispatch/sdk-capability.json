@@ -1,0 +1,91 @@
+{
+  "name": "@projexlight/sdk-dispatch",
+  "version": "1.0.0",
+  "schema_version": "1.0",
+  "summary": "Dispatch engine for field-service work: a per-tenant queue of dispatchable tasks, a router that selects + sequences them into routes, and a hand-off contract that lets sdk-assignment claim a task atomically. Backbone of any field-operations blueprint — couples upstream intake (storm, support, scheduled visits) to downstream tech execution.",
+  "tags": ["dispatch", "field-service", "queue", "routing", "p7"],
+  "provides": {
+    "endpoints": [],
+    "events": [
+      { "name": "dispatch.task.enqueued.v1",     "retention_class": "operational", "conflict_policy": "event-sourcing", "description": "New task queued for dispatch; carries SLA + skill requirements + geo." },
+      { "name": "dispatch.task.dispatched.v1",   "retention_class": "operational", "conflict_policy": "event-sourcing", "description": "Task handed off to sdk-assignment (assignment authority took the row)." },
+      { "name": "dispatch.task.completed.v1",    "retention_class": "operational", "conflict_policy": "event-sourcing", "description": "Tech reported task complete; closes the dispatch loop." },
+      { "name": "dispatch.task.cancelled.v1",    "retention_class": "operational", "conflict_policy": "event-sourcing", "description": "Task cancelled before completion (customer, weather, dependency)." },
+      { "name": "dispatch.route.materialized.v1","retention_class": "operational", "conflict_policy": "lww",            "description": "Router emitted a fresh route ordering for a tech's day." }
+    ],
+    "models": [
+      { "schema": "dispatch", "table": "queue", "description": "Per-tenant queue: status (pending/dispatched/done), priority, sla_deadline, skill_tag." },
+      { "schema": "dispatch", "table": "task",  "description": "Canonical dispatchable unit: customer_ref, address, geo, skill_required, materials_estimate." },
+      { "schema": "dispatch", "table": "route", "description": "Per-tech ordered route for a date: ordered_task_ids, drive_time_min_estimate." }
+    ],
+    "hooks": [
+      { "name": "enqueueTask",       "description": "Service entry — accepts a task spec, inserts to dispatch.queue, emits .enqueued.v1." },
+      { "name": "materializeRoute", "description": "Router pass — for a tech + date, pick + sequence queued tasks into a drive-optimized route. Idempotent per (tech, date)." },
+      { "name": "completeTask",      "description": "Tech reports completion; closes the row + emits .completed.v1." },
+      { "name": "cancelTask",        "description": "Cancel a task with a reason code. Refuses if already in flight (use rescind path instead)." },
+      { "name": "startWorker",       "description": "Background worker: pulls .enqueued.v1 + .storm.spawned.v1 + customer-request events into the queue. Safe to leave running in dev." }
+    ],
+    "ui_components": []
+  },
+  "consumes": {
+    "events": [
+      { "name": "storm.event.spawned.v1",            "from": "@projexlight/sdk-storm" },
+      { "name": "assignment.assignment.claimed.v1",  "from": "@projexlight/sdk-assignment" }
+    ],
+    "infra": ["postgres", "redis-optional"],
+    "config_keys": ["DISPATCH_ROUTER_CADENCE_SEC", "DISPATCH_DEFAULT_SLA_MIN", "DISPATCH_MAX_ROUTE_STOPS"]
+  },
+  "scenarios": [
+    {
+      "id": "enqueue-customer-request",
+      "title": "Customer call center logs a service request → tech queue",
+      "when_to_use": "Inbound work intake. Call-center agent files a job; sdk-dispatch puts it in the queue with the SLA pulled from the customer contract.",
+      "example_code": "import { enqueueTask } from '@projexlight/sdk-dispatch';\nconst t = await enqueueTask({\n  tenant_id, customer_ref, address,\n  geo: { lat, lng },\n  skill_required: 'hvac-residential',\n  priority: 'standard',\n  sla_deadline: new Date(Date.now() + 24*3600e3),\n});",
+      "expected_outcome": "Task in dispatch.queue with status='pending'. Router pass within DISPATCH_ROUTER_CADENCE_SEC picks it up + assigns to the next route."
+    },
+    {
+      "id": "storm-fan-out",
+      "title": "Storm spawns 200 tasks at once",
+      "when_to_use": "Reactive worker on storm.event.spawned.v1 — each affected service polygon spawns a batch of dispatchable tasks for restoration / triage / damage assessment.",
+      "example_code": "// driven by event subscription:\nsubscribeEvents('storm.event.spawned.v1', async (e) => {\n  for (const cust of affectedCustomers(e.payload)) {\n    await enqueueTask({\n      tenant_id: e.tenant_id, customer_ref: cust.id, address: cust.address,\n      geo: cust.geo, skill_required: 'storm-triage', priority: 'critical',\n      sla_deadline: storm_response_sla(cust.tier),\n    });\n  }\n});",
+      "expected_outcome": "200 tasks added with priority='critical'. Router pass interleaves them with the existing standard queue + materializes new routes for impacted techs."
+    },
+    {
+      "id": "materialize-daily-route",
+      "title": "Router materializes a tech's day at 06:00",
+      "when_to_use": "Pre-shift batch — pick + sequence the tech's queued tasks into a drive-optimized route. Idempotent so running again at 06:30 is safe.",
+      "example_code": "import { materializeRoute } from '@projexlight/sdk-dispatch';\nconst route = await materializeRoute({\n  tenant_id, tech_persona_id, date: '2026-05-26',\n  max_stops: 8,\n});",
+      "expected_outcome": "dispatch.route row with ordered_task_ids + drive_time_min_estimate. Emits .route.materialized.v1 to drive the tech mobile app + the customer-facing ETA notifications via sdk-notification."
+    },
+    {
+      "id": "claim-handoff",
+      "title": "Assignment authority claims a task atomically",
+      "when_to_use": "sdk-assignment claims a row out of the queue (lease + ack). Dispatch flips status to 'dispatched' on the .claimed.v1 event so the queue cannot double-allocate.",
+      "example_code": "// driven by event subscription on assignment.assignment.claimed.v1:\nsubscribeEvents('assignment.assignment.claimed.v1', async (e) => {\n  await markDispatched({ task_id: e.payload.task_id, claimed_by: e.payload.assigned_to });\n});",
+      "expected_outcome": "Task row status='dispatched'. Subsequent enqueueTask calls for the same customer/SLA cannot re-add (idempotency key check). Emits .dispatched.v1 to close the handoff."
+    },
+    {
+      "id": "complete-task",
+      "title": "Tech reports completion; sdk-evidence captures the proof",
+      "when_to_use": "Tech finishes the job; mobile app calls completeTask + uploads proof-of-work photos via sdk-evidence. The completion event drives billing + customer notification.",
+      "example_code": "import { completeTask } from '@projexlight/sdk-dispatch';\nawait completeTask({\n  tenant_id, task_id,\n  completed_by_persona_id, evidence_ids: [...],\n  notes: 'replaced capacitor, system tested green',\n});",
+      "expected_outcome": "Row marked complete; emits .completed.v1 which sdk-billing + sdk-notification react to (invoice draft + customer 'job complete' SMS). Closes the dispatch loop."
+    }
+  ],
+  "compliance_posture": {
+    "regimes": ["SOC2-CC7.1-operations", "GDPR-Art-30-records-of-processing", "FCC-CPNI-customer-data", "OSHA-field-worker-safety-logs"],
+    "notes": "Customer address + phone are PII — masked in operator UIs unless the persona has 'dispatch.read.customer-contact' permission. Completion events feed sdk-billing — SOX-relevant once revenue ties to the .completed.v1 timestamp. Storm-driven mass enqueues are rate-capped to keep the queue from drowning sdk-assignment's lease pool."
+  },
+  "pool_placement": "app",
+  "pricing_skus": [
+    { "sku": "dispatch.task.enqueue",        "mode": "metered", "unit_description": "per task enqueued (storm-batches priced at a lower rate)" },
+    { "sku": "dispatch.route.materialize",   "mode": "metered", "unit_description": "per tech-day route materialized" },
+    { "sku": "dispatch.task.complete",       "mode": "flat",    "unit_description": "per completed task (drives billing)" }
+  ],
+  "no_endpoints": true,
+  "links": {
+    "readme": "packages/sdk-dispatch/README.md",
+    "source": "packages/sdk-dispatch/src/",
+    "prd_section": "P7-Field-Hyperscale §3 / FR-DISP-1..5"
+  }
+}

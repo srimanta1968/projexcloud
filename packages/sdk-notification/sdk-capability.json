@@ -1,0 +1,96 @@
+{
+  "name": "@projexlight/sdk-notification",
+  "version": "1.0.0",
+  "schema_version": "1.0",
+  "summary": "Multichannel notification fan-out for ProjexCloud: SMS + email + push + voice + in-app, driven by named templates with localization + brand kits. Quiet-hours engine respects per-recipient + per-tenant DND windows; channel fallback (SMS fails → email) is configured per template. Source-of-truth for any outbound customer + tech + operator message.",
+  "tags": ["notification", "sms", "email", "push", "voice", "templates", "p7"],
+  "provides": {
+    "endpoints": [
+      { "method": "POST", "path": "/api/notifications/send",        "description": "Send a notification (template-driven or raw). Returns message_id + per-channel status." },
+      { "method": "POST", "path": "/api/notifications/templates",   "description": "Create or update a notification template (multi-channel, multi-locale)." },
+      { "method": "POST", "path": "/api/notifications/quiet-hours", "description": "Set per-recipient or per-tenant quiet-hours windows. Repeat-sends inside a window are deferred or routed to a fallback channel." }
+    ],
+    "events": [
+      { "name": "notification.message.sent.v1",      "retention_class": "operational", "conflict_policy": "event-sourcing", "description": "Notification accepted by the carrier/provider; per-channel transit." },
+      { "name": "notification.message.delivered.v1", "retention_class": "operational", "conflict_policy": "lww",            "description": "Provider confirmed delivery (read-receipt where supported)." },
+      { "name": "notification.message.failed.v1",    "retention_class": "regulated",   "conflict_policy": "event-sourcing", "description": "All channel attempts failed; carries error class + which fallback (if any) was used." },
+      { "name": "notification.template.published.v1","retention_class": "regulated",   "conflict_policy": "event-sourcing", "description": "New template version published; carries the diff vs. prior version." }
+    ],
+    "models": [
+      { "schema": "notification", "table": "template",    "description": "Per-template definition: name, version, channels, localized bodies, fallback chain." },
+      { "schema": "notification", "table": "message",     "description": "Per-send row: template_ref or raw body, recipient, channel, status, delivery_at." },
+      { "schema": "notification", "table": "quiet_hours", "description": "Per-(recipient or tenant) quiet-hours window (timezone-aware)." }
+    ],
+    "hooks": [
+      { "name": "sendNotification",   "description": "Service entry — accepts template + recipient, returns message_id + channel statuses." },
+      { "name": "publishTemplate",    "description": "Publish a new template version; idempotent on (name, version)." },
+      { "name": "setQuietHours",      "description": "Set per-recipient or per-tenant quiet-hours window." },
+      { "name": "startProviderWebhook","description": "Stand up the webhook receiver for carrier callbacks (delivery, opens, replies)." }
+    ],
+    "ui_components": []
+  },
+  "consumes": {
+    "events": [
+      { "name": "dispatch.route.materialized.v1",  "from": "@projexlight/sdk-dispatch" },
+      { "name": "dispatch.task.completed.v1",      "from": "@projexlight/sdk-dispatch" },
+      { "name": "storm.event.declared.v1",         "from": "@projexlight/sdk-storm" },
+      { "name": "hdk-map.tiles.quota.warn.v1",     "from": "@projexlight/hdk-map" }
+    ],
+    "infra": ["postgres", "twilio-or-equivalent-sms", "ses-or-equivalent-email", "apns-and-fcm-push", "redis-optional"],
+    "config_keys": ["NOTIFICATION_DEFAULT_FROM_SMS", "NOTIFICATION_DEFAULT_FROM_EMAIL", "NOTIFICATION_QUIET_HOURS_DEFAULT_TZ", "NOTIFICATION_RATE_LIMIT_PER_RECIPIENT_PER_HOUR"]
+  },
+  "scenarios": [
+    {
+      "id": "send-eta-sms",
+      "title": "Tech route materialized → customer 'tech on the way' SMS",
+      "when_to_use": "Reactive on dispatch.route.materialized.v1 — pull the next stop's customer + send a templated SMS with the ETA window.",
+      "example_code": "import { sendNotification } from '@projexlight/sdk-notification';\nawait sendNotification({\n  tenant_id, recipient: { kind: 'sms', value: customer.phone },\n  template: { name: 'tech-eta-sms', version: '1.0.0' },\n  variables: { tech_name, eta_start, eta_end, route_link },\n});",
+      "expected_outcome": "Returns message_id + per-channel status. Customer gets the SMS within ~10 sec. Emits .sent.v1 immediately; .delivered.v1 once Twilio confirms."
+    },
+    {
+      "id": "quiet-hours-defer",
+      "title": "Marketing nudge respects per-customer quiet hours",
+      "when_to_use": "Outbound marketing/billing reminder; sender doesn't track timezones — the engine respects the customer's quiet-hours window + defers to the next-allowed slot.",
+      "example_code": "import { sendNotification } from '@projexlight/sdk-notification';\nawait sendNotification({\n  tenant_id, recipient: { persona_id },\n  template: { name: 'invoice-reminder', version: '1.0.0' },\n  scheduling: { respect_quiet_hours: true },\n});",
+      "expected_outcome": "If now is inside the recipient's quiet-hours window, the message is queued for the next allowed slot (e.g. 09:00 in their tz). Emits .sent.v1 at actual send time."
+    },
+    {
+      "id": "channel-fallback",
+      "title": "SMS fails → automatic email fallback",
+      "when_to_use": "Carrier returns 'invalid number'; template specifies fallback chain SMS → email. Engine retries on the next channel without operator intervention.",
+      "example_code": "// template config:\n{ name: 'tech-eta', channels: ['sms', 'email'], fallback_after_attempts: 1 }\n// after SMS failure, engine sends email with the same variables.",
+      "expected_outcome": "Email goes out; emits .sent.v1 on the email + .failed.v1 on the SMS leg. Customer reachable + message delivered without escalation."
+    },
+    {
+      "id": "operator-page-on-storm",
+      "title": "Storm declared → oncall paged via voice + Slack",
+      "when_to_use": "Reactive on storm.event.declared.v1 — high-priority operator page; the template is 'oncall-storm-page' which routes through voice + Slack simultaneously (no fallback, both required).",
+      "example_code": "subscribeEvents('storm.event.declared.v1', async (e) => {\n  await sendNotification({\n    tenant_id: e.tenant_id, recipient: { group: 'oncall' },\n    template: { name: 'oncall-storm-page', version: '1.0.0' },\n    variables: { event_kind: e.payload.kind, severity: e.payload.severity },\n    scheduling: { ignore_quiet_hours: true },\n  });\n});",
+      "expected_outcome": "PagerDuty + Slack channel both fire within ~5 sec. ignore_quiet_hours flag honored because operator pages are P1. Emits .sent.v1 per channel + .delivered.v1 when ack'd."
+    },
+    {
+      "id": "template-version-published",
+      "title": "Publish v1.1 of the ETA template with a richer route preview",
+      "when_to_use": "Template change with backward-compat — old in-flight messages keep referencing v1.0.0 while new sends pick up v1.1.0.",
+      "example_code": "import { publishTemplate } from '@projexlight/sdk-notification';\nawait publishTemplate({\n  tenant_id, name: 'tech-eta-sms', version: '1.1.0',\n  locales: { 'en-US': '...', 'es-MX': '...' },\n  channels: ['sms','email'],\n});",
+      "expected_outcome": "v1.1.0 active for new sends. Emits .template.published.v1 with diff. v1.0.0 retained for replay + audit."
+    }
+  ],
+  "compliance_posture": {
+    "regimes": ["TCPA-Section-227-sms", "CAN-SPAM-email", "GDPR-Art-7-consent", "CCPA-opt-out", "SOC2-CC7.1"],
+    "notes": "TCPA + CAN-SPAM require recorded consent per recipient + per channel + an opt-out path; sdk-consent + sdk-notification join via recipient.persona_id. Quiet-hours engine respects do-not-disturb windows. Provider webhooks update delivered/failed status, persisted for the per-message audit trail."
+  },
+  "pool_placement": "app",
+  "pricing_skus": [
+    { "sku": "notification.sms.send",      "mode": "metered", "unit_description": "per SMS (carrier passthrough billed separately)" },
+    { "sku": "notification.email.send",    "mode": "metered", "unit_description": "per email" },
+    { "sku": "notification.push.send",     "mode": "metered", "unit_description": "per push" },
+    { "sku": "notification.voice.minute",  "mode": "metered", "unit_description": "per voice-call minute" },
+    { "sku": "notification.template.publish","mode": "flat",  "unit_description": "per template version published" }
+  ],
+  "links": {
+    "readme": "packages/sdk-notification/README.md",
+    "source": "packages/sdk-notification/src/",
+    "prd_section": "P7-Field-Hyperscale §8 / FR-NOT-1..5"
+  }
+}

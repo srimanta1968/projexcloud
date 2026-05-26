@@ -1,0 +1,80 @@
+{
+  "name": "@projexlight/hdk-map",
+  "version": "1.0.0",
+  "schema_version": "1.0",
+  "summary": "Hardware-driven map kit: per-tenant tile-provider routing (Mapbox / Google / Apple / ESRI / OSM-self-host), capability negotiation (turn-by-turn, isochrone, offline tiles), and a thin server-side API for the mobile + web clients to fetch the right configuration at runtime. Keeps tile-provider keys on the server so mobile binaries don't ship credentials.",
+  "tags": ["map", "tiles", "geocoding", "field-service", "hdk", "p7"],
+  "provides": {
+    "endpoints": [
+      { "method": "GET", "path": "/api/hdk/map/capabilities",    "description": "Return the active provider's capability matrix (turn-by-turn? offline? isochrone? max-zoom?)." },
+      { "method": "GET", "path": "/api/hdk/map/tile-providers",  "description": "Return the per-tenant configured providers + the active one, with rotation-safe public keys." }
+    ],
+    "events": [
+      { "name": "hdk-map.provider.switched.v1", "retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "Operator switched the active tile provider (cost / outage / regional compliance)." },
+      { "name": "hdk-map.tiles.quota.warn.v1",  "retention_class": "operational","conflict_policy": "lww",            "description": "Provider quota nearing limit; ops should provision / switch before throttling kicks in." }
+    ],
+    "models": [],
+    "hooks": [
+      { "name": "getCapabilities",   "description": "Return active provider's capability matrix for a tenant + region." },
+      { "name": "getTileProviders",  "description": "List configured providers + active one. Returns rotation-safe public keys; private keys stay vault-wrapped." },
+      { "name": "switchProvider",    "description": "Operator-driven switch with a reason. Audited; emits .provider.switched.v1." }
+    ],
+    "ui_components": []
+  },
+  "consumes": {
+    "events": [],
+    "infra": ["postgres", "sdk-vault", "external-tile-provider"],
+    "config_keys": ["HDK_MAP_DEFAULT_PROVIDER", "HDK_MAP_TILE_QUOTA_WARN_PCT", "HDK_MAP_OFFLINE_TILES_ENABLED"]
+  },
+  "scenarios": [
+    {
+      "id": "mobile-fetches-capabilities",
+      "title": "Tech mobile app boots → fetches provider capabilities",
+      "when_to_use": "App startup. Client doesn't hardcode provider; calls /api/hdk/map/capabilities + builds the UI for whatever the tenant is on today.",
+      "example_code": "// mobile client:\nconst caps = await fetch('/api/hdk/map/capabilities').then(r => r.json());\nif (caps.offline_tiles) { enableOfflineTilePrefetch(); }",
+      "expected_outcome": "Returns { provider: 'mapbox-v11', offline_tiles: true, turn_by_turn: true, max_zoom: 22, isochrone: true }. App configures features accordingly."
+    },
+    {
+      "id": "operator-switches-provider",
+      "title": "Operator switches from Google to Mapbox after pricing change",
+      "when_to_use": "Google bumped per-request pricing; operator switches to a cheaper provider with similar capabilities. Audited for the cost-justification trail.",
+      "example_code": "import { switchProvider } from '@projexlight/hdk-map';\nawait switchProvider({\n  tenant_id, new_provider: 'mapbox-v11',\n  reason: 'google-billing-increase-2026-05',\n  operator_persona_id,\n});",
+      "expected_outcome": "Provider switched atomically; emits .provider.switched.v1 with operator + reason. Mobile clients pick up the new provider on next /api/hdk/map/capabilities poll."
+    },
+    {
+      "id": "quota-warning",
+      "title": "Tile quota warning fires before throttling kicks in",
+      "when_to_use": "Provider reports 80% of monthly quota consumed; we want ops to provision more or switch providers before customers see throttling.",
+      "example_code": "// driven by the daily quota check:\nif (consumed_pct > HDK_MAP_TILE_QUOTA_WARN_PCT) {\n  emitEvent('hdk-map.tiles.quota.warn.v1', { provider, consumed_pct, days_remaining });\n}",
+      "expected_outcome": "Event fires; sdk-notification routes to oncall via Slack + PagerDuty. Ops has time to provision additional quota or switch providers before customers experience map degradation."
+    },
+    {
+      "id": "regional-compliance-provider",
+      "title": "EU-data-residency tenant pinned to ESRI EU + OSM Europe",
+      "when_to_use": "Tenant compliance profile requires EU-resident map tiles. Provider config pinned to EU-region endpoints + audited annually.",
+      "example_code": "// config in db, surfaced via /api/hdk/map/tile-providers:\n{ active: 'esri-eu', providers: [{ name: 'esri-eu', region: 'eu-west-1', residency: 'EU' }, ...] }",
+      "expected_outcome": "Mobile + web clients always hit EU endpoints for this tenant. switchProvider attempts to a non-EU provider refuse with a policy error pointing at the residency profile."
+    },
+    {
+      "id": "offline-tile-prefetch",
+      "title": "Tech prefetches offline tiles for an upcoming rural route",
+      "when_to_use": "Route includes areas with poor cell signal; tech prefetches tiles before driving out. Capability negotiation tells the app this provider supports offline.",
+      "example_code": "// mobile client:\nif (caps.offline_tiles && route.has_low_signal_areas) {\n  await prefetchTilesForBoundingBox(route.bbox, { max_zoom: 16 });\n}",
+      "expected_outcome": "Tiles cached locally before the tech leaves cell range. Tile counts billed via the provider, not by ProjexCloud — but we cap per-tech offline volume to avoid runaway downloads."
+    }
+  ],
+  "compliance_posture": {
+    "regimes": ["SOC2-CC6.7-third-party", "GDPR-Art-44-data-transfer", "EU-Data-Residency", "FCC-Section-222-location-data"],
+    "notes": "Tile-provider keys stay vault-wrapped — public ('discoverable') keys are rotation-safe scoped tokens, never the master account credential. EU tenants pinned to EU-region providers; switchProvider enforces residency profile. Map fetch metadata is location data — FCC §222 governs operator visibility on it."
+  },
+  "pool_placement": "app",
+  "pricing_skus": [
+    { "sku": "hdk-map.capabilities.read", "mode": "metered", "unit_description": "per /api/hdk/map/capabilities call (mobile app polls on resume)" },
+    { "sku": "hdk-map.provider.switch",   "mode": "flat",    "unit_description": "per provider switch (audited)" }
+  ],
+  "links": {
+    "readme": "packages/hdk-map/README.md",
+    "source": "packages/hdk-map/src/",
+    "prd_section": "P7-Field-Hyperscale §7"
+  }
+}
