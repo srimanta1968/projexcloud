@@ -54,7 +54,7 @@ Usage:
   projex <subcommand> [args] [flags]
 
 Subcommands:
-  init <app_name> [--blueprint <id>] [--no-mcp] [--all-tools] [--json]
+  init <app_name> [--blueprint <id>] [--no-mcp] [--all-tools] [--hosted-url <url>] [--api-token <token>] [--json]
                               Create a new app directory + auto-write MCP
                               config for detected AI tools.
   registry refresh [--source <path>]
@@ -191,6 +191,8 @@ async function main(): Promise<void> {
           blueprint: typeof args.flags.blueprint === 'string' ? args.flags.blueprint : undefined,
           noMcp: args.flags['no-mcp'] === true,
           allTools: args.flags['all-tools'] === true,
+          hostedUrl: typeof args.flags['hosted-url'] === 'string' ? args.flags['hosted-url'] : undefined,
+          apiToken: typeof args.flags['api-token'] === 'string' ? args.flags['api-token'] : undefined,
         });
         emit(result, jsonMode);
         return;

@@ -2,7 +2,7 @@ import { describe, expect, it, beforeEach, afterEach } from 'vitest';
 import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, existsSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
-import { knownConfigPaths, writeMcpConfigs, PROJEX_REGISTRY_KEY } from '../src/configWriters';
+import { knownConfigPaths, writeMcpConfigs, hostedMcpServerEntry, PROJEX_REGISTRY_KEY } from '../src/configWriters';
 
 const SAVED_ENV = { ...process.env };
 
@@ -90,6 +90,32 @@ describe('writeMcpConfigs', () => {
     const results = writeMcpConfigs({ server, homeDir: TEMP_HOME });
     const claudeResult = results.find((r) => r.tool === 'claude-code')!;
     expect(claudeResult.action).toBe('unchanged');
+  });
+
+  it('hostedMcpServerEntry builds SSE entry with bearer header when token supplied', () => {
+    const entry = hostedMcpServerEntry('https://registry.projexcloud.com/mcp/sse', 'tok-abc');
+    expect(entry).toEqual({
+      type: 'sse',
+      url: 'https://registry.projexcloud.com/mcp/sse',
+      headers: { Authorization: 'Bearer tok-abc' },
+    });
+  });
+
+  it('hostedMcpServerEntry omits headers when no token supplied', () => {
+    const entry = hostedMcpServerEntry('https://registry.projexcloud.com/mcp/sse');
+    expect(entry).toEqual({
+      type: 'sse',
+      url: 'https://registry.projexcloud.com/mcp/sse',
+    });
+  });
+
+  it('writes hosted SSE entry into mcp.json (matches Claude Code / Cursor SSE shape)', () => {
+    const claudePath = knownConfigPaths(TEMP_HOME).find((p) => p.tool === 'claude-code')!.configPath;
+    mkdirSync(dirname(claudePath), { recursive: true });
+    const sseEntry = hostedMcpServerEntry('https://registry.projexcloud.com/mcp/sse', 'tok-xyz');
+    writeMcpConfigs({ server: sseEntry, homeDir: TEMP_HOME });
+    const parsed = JSON.parse(readFileSync(claudePath, 'utf-8'));
+    expect(parsed.mcpServers[PROJEX_REGISTRY_KEY]).toEqual(sseEntry);
   });
 
   it('handles corrupt existing config by treating as create', () => {

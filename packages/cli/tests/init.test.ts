@@ -128,4 +128,44 @@ describe('runInit — MCP config writes', () => {
     // path may use forward or back slashes depending on platform; just verify the segment
     expect(written.includes('packages') && written.includes('registry-mcp-local')).toBe(true);
   });
+
+  it('--hosted-url writes SSE entry pointing at the hosted service (token in Authorization header)', async () => {
+    delete process.env.PROJEX_DEV_ROOT;
+    const tempHome = mkdtempSync(join(tmpdir(), 'projex-home-'));
+    const dir = join(mkdtempSync(join(tmpdir(), 'projex-init-')), 'hosted-app');
+    const r = await runInit({
+      app_name: 'hosted-app',
+      targetDir: dir,
+      allTools: true,
+      homeDir: tempHome,
+      hostedUrl: 'https://registry.projexcloud.com/mcp/sse',
+      apiToken: 'tok-abc',
+    });
+    expect(r.mcpWrites.length).toBe(4);
+    const written = JSON.parse(readFileSync(r.mcpWrites[0].configPath, 'utf-8'));
+    const entry = written.mcpServers['projex-registry'];
+    expect(entry.type).toBe('sse');
+    expect(entry.url).toBe('https://registry.projexcloud.com/mcp/sse');
+    expect(entry.headers.Authorization).toBe('Bearer tok-abc');
+    // stdio fields absent
+    expect(entry.command).toBeUndefined();
+    expect(entry.args).toBeUndefined();
+  });
+
+  it('--hosted-url without token writes SSE entry with no Authorization header', async () => {
+    delete process.env.PROJEX_DEV_ROOT;
+    const tempHome = mkdtempSync(join(tmpdir(), 'projex-home-'));
+    const dir = join(mkdtempSync(join(tmpdir(), 'projex-init-')), 'hosted-noauth-app');
+    const r = await runInit({
+      app_name: 'hosted-noauth-app',
+      targetDir: dir,
+      allTools: true,
+      homeDir: tempHome,
+      hostedUrl: 'https://registry.projexcloud.com/mcp/sse',
+    });
+    const written = JSON.parse(readFileSync(r.mcpWrites[0].configPath, 'utf-8'));
+    const entry = written.mcpServers['projex-registry'];
+    expect(entry.type).toBe('sse');
+    expect(entry.headers).toBeUndefined();
+  });
 });

@@ -27,10 +27,31 @@ export interface ToolDetection {
   detected: boolean;
 }
 
-export interface McpServerEntry {
+/** Stdio MCP server — child process spawned by the AI client over stdio. */
+export interface McpStdioEntry {
   command: string;
   args?: string[];
   env?: Record<string, string>;
+}
+
+/** SSE MCP server — AI client connects to a hosted HTTP endpoint. */
+export interface McpSseEntry {
+  type: 'sse';
+  url: string;
+  headers?: Record<string, string>;
+}
+
+export type McpServerEntry = McpStdioEntry | McpSseEntry;
+
+/**
+ * Build the SSE entry for the hosted registry-mcp service. Bearer token
+ * is embedded as an Authorization header — the AI client passes it on
+ * every request the server makes for tenant scoping + metering.
+ */
+export function hostedMcpServerEntry(url: string, apiToken?: string): McpSseEntry {
+  const entry: McpSseEntry = { type: 'sse', url };
+  if (apiToken) entry.headers = { Authorization: `Bearer ${apiToken}` };
+  return entry;
 }
 
 const REGISTRY_SERVER_KEY = 'projex-registry';

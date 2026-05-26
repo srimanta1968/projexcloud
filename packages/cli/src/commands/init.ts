@@ -23,7 +23,7 @@
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { getScaffold, loadRegistry, type Registry } from '@projexlight/sdk-registry';
-import { writeMcpConfigs, type McpServerEntry, type WriteResult } from '../configWriters';
+import { writeMcpConfigs, hostedMcpServerEntry, type McpServerEntry, type WriteResult } from '../configWriters';
 import { userCatalogPath, userEmbeddingsBinPath, userEmbeddingsMetaPath } from '../paths';
 
 export interface InitFlags {
@@ -39,6 +39,10 @@ export interface InitFlags {
   catalogPath?: string;
   /** Override homedir() for mcp.json path resolution (testing). */
   homeDir?: string;
+  /** Hosted registry-mcp SSE URL — when set, mcp.json points at the hosted service instead of spawning a stdio child. */
+  hostedUrl?: string;
+  /** Bearer token sent with hosted-MCP requests (six-layer JWT). */
+  apiToken?: string;
 }
 
 export interface InitResult {
@@ -94,7 +98,7 @@ export async function runInit(flags: InitFlags): Promise<InitResult> {
     mkdirSync(targetDir, { recursive: true });
     const files = writeBlankSkeleton(targetDir, flags.app_name);
     const mcpWrites = flags.noMcp ? [] : writeMcpConfigs({
-      server: defaultMcpServerEntry(),
+      server: resolveMcpServerEntry(flags),
       force: flags.allTools,
       homeDir: flags.homeDir,
     });
@@ -129,8 +133,9 @@ export async function runInit(flags: InitFlags): Promise<InitResult> {
   }
 
   const mcpWrites = flags.noMcp ? [] : writeMcpConfigs({
-    server: defaultMcpServerEntry(),
+    server: resolveMcpServerEntry(flags),
     force: flags.allTools,
+    homeDir: flags.homeDir,
   });
 
   return {
@@ -145,6 +150,15 @@ export async function runInit(flags: InitFlags): Promise<InitResult> {
 }
 
 /* --------------------------------------------------------------- helpers */
+
+function resolveMcpServerEntry(flags: InitFlags): McpServerEntry {
+  // Hosted SSE wins when --hosted-url is set: the AI client connects
+  // directly to services/registry-mcp without spawning a stdio child.
+  if (flags.hostedUrl) {
+    return hostedMcpServerEntry(flags.hostedUrl, flags.apiToken);
+  }
+  return defaultMcpServerEntry();
+}
 
 function defaultMcpServerEntry(): McpServerEntry {
   // In a checked-out monorepo we point straight at the local build. In
