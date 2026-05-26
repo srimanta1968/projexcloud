@@ -1,28 +1,50 @@
 import { loadConfig } from './config';
-import { bootRegistry } from './catalogSource';
+import { bootRegistry, createRegistryRef, startCatalogWatcher } from './catalogSource';
 import { buildApp } from './app';
 
 export { buildApp, type AppDeps } from './app';
 export { loadConfig, type RegistryMcpConfig } from './config';
-export { bootRegistry, type BootedRegistry } from './catalogSource';
+export {
+  bootRegistry,
+  createRegistryRef,
+  startCatalogWatcher,
+  type BootedRegistry,
+  type RegistryRef,
+  type WatcherHandle,
+} from './catalogSource';
 export { extractTenantContext, AuthError, type TenantContext } from './auth';
 
 export async function startServer(): Promise<void> {
   const config = loadConfig();
-  const { registry, embeddingsLoaded } = await bootRegistry(config);
+  const ref = createRegistryRef(config);
+  const watcher = startCatalogWatcher(config, ref, {
+    intervalMs: parseInt(process.env.REGISTRY_MCP_WATCH_INTERVAL_MS ?? '30000', 10),
+    onReload: ({ from, to }) => {
+      process.stdout.write(
+        JSON.stringify({
+          kind: 'registry-mcp.catalog.reloaded',
+          from_mtime_ms: from,
+          to_mtime_ms: to,
+          new_entry_count: ref.current.list().length,
+        }) + '\n',
+      );
+    },
+  });
+
   const app = buildApp({
     config,
-    registry,
-    embeddingsLoaded,
+    registryRef: ref,
+    embeddingsLoaded: ref.embeddingsLoaded,
     audit: (e) => {
       process.stdout.write(
         JSON.stringify({ kind: 'registry-mcp.tool', ...e, tenant: e.tenant.sub }) + '\n',
       );
     },
   });
+
   await app.listen({ host: config.host, port: config.port });
   app.log.info(
-    `registry-mcp listening on ${config.host}:${config.port} — catalog=${registry.list().length} SDKs, embeddings=${embeddingsLoaded ? 'loaded' : 'absent'}`,
+    `registry-mcp listening on ${config.host}:${config.port} — catalog=${ref.current.list().length} SDKs, embeddings=${ref.embeddingsLoaded ? 'loaded' : 'absent'}, hot-reload=${watcher ? 'on' : 'off'}`,
   );
 }
 

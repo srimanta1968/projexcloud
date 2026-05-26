@@ -13,6 +13,7 @@ import {
 import type { Registry } from '@projexlight/sdk-registry';
 import { READ_TOOLS, dispatchTool } from '@projexlight/registry-mcp-local/dist/tools';
 import type { TenantContext } from './auth';
+import type { RegistryRef } from './catalogSource';
 
 const SERVER_NAME = 'projex-registry-mcp-hosted';
 const SERVER_VERSION = '0.1.0';
@@ -26,11 +27,21 @@ export interface AuditSink {
   }): void;
 }
 
-export function buildMcpServer(opts: {
-  registry: Registry;
+export interface BuildMcpServerOpts {
   tenant: TenantContext;
   audit?: AuditSink;
-}): Server {
+  /** Either pin one Registry for the session, or hand a ref so hot-reloads land mid-session. */
+  registry?: Registry;
+  registryRef?: RegistryRef;
+}
+
+export function buildMcpServer(opts: BuildMcpServerOpts): Server {
+  if (!opts.registry && !opts.registryRef) {
+    throw new Error('buildMcpServer requires either registry or registryRef');
+  }
+  const resolveRegistry = (): Registry =>
+    opts.registryRef ? opts.registryRef.current : (opts.registry as Registry);
+
   const server = new Server(
     { name: SERVER_NAME, version: SERVER_VERSION },
     { capabilities: { tools: {} } },
@@ -43,7 +54,7 @@ export function buildMcpServer(opts: {
   server.setRequestHandler(CallToolRequestSchema, async (req) => {
     const { name, arguments: args } = req.params;
     const startedAt = Date.now();
-    const result = await dispatchTool(name, args ?? {}, opts.registry);
+    const result = await dispatchTool(name, args ?? {}, resolveRegistry());
     opts.audit?.({
       tenant: opts.tenant,
       tool: name,

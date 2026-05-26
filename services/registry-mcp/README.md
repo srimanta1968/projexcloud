@@ -29,8 +29,25 @@ REGISTRY_MCP_EMBEDDINGS_BIN       optional — path to registry.embeddings.bin
 REGISTRY_MCP_EMBEDDINGS_META      optional — path to registry.embeddings.meta.json
 REGISTRY_MCP_AUTH_MODE            "jwt" (default) | "disabled"
 REGISTRY_MCP_RATE_LIMIT           default 120 — per-tenant calls/minute
+REGISTRY_MCP_WATCH_INTERVAL_MS    default 30000 — catalog hot-reload poll interval (≤0 disables)
 JWT_SECRET                        REQUIRED for jwt mode (six-layer claim shape)
 ```
+
+## Catalog hot-reload
+
+The service polls `REGISTRY_MCP_CATALOG_PATH` and swaps the in-memory
+Registry whenever the file's mtime advances. Open SSE sessions pick up
+the new catalog on their next CallTool — no reconnect required.
+
+Failed reloads (corrupt file, missing embeddings) are non-fatal: the
+previous Registry keeps serving traffic and the failure is logged
+through the `onReload` sink. Operators can deploy a fresh catalog by
+atomically replacing the file (rsync, S3 sync into a mounted volume,
+or a CI step that writes via `tee + mv`).
+
+Health endpoint reports `catalog_reload_count`, `catalog_loaded_at`,
+and `catalog_source_mtime_ms` so you can verify a deploy landed
+without tailing logs.
 
 ## Auth
 

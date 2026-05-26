@@ -6,10 +6,14 @@ import type { RegistryMcpConfig } from './config';
 import { AuthError, extractTenantContext, type TenantContext } from './auth';
 import { buildMcpServer, type AuditSink } from './mcpHandler';
 import { createInProcessRateLimiter, type RateLimiter } from './rateLimit';
+import type { RegistryRef } from './catalogSource';
 
 export interface AppDeps {
   config: RegistryMcpConfig;
-  registry: Registry;
+  /** Pin one Registry for the app's lifetime (no hot-reload). */
+  registry?: Registry;
+  /** Ref handed by createRegistryRef + startCatalogWatcher (hot-reload). */
+  registryRef?: RegistryRef;
   embeddingsLoaded: boolean;
   audit?: AuditSink;
   rateLimiter?: RateLimiter;
@@ -25,17 +29,26 @@ const MESSAGES_PATH = '/mcp/messages';
 const HEALTH_PATH = '/healthz';
 
 export function buildApp(deps: AppDeps): FastifyInstance {
+  if (!deps.registry && !deps.registryRef) {
+    throw new Error('AppDeps requires registry or registryRef');
+  }
   const app = Fastify({ logger: { level: process.env.LOG_LEVEL ?? 'info' } });
   const limiter = deps.rateLimiter ?? createInProcessRateLimiter(deps.config.rateLimitPerTenantPerMin);
   const sessions = new Map<string, SessionEntry>();
+
+  const currentRegistry = (): Registry =>
+    deps.registryRef ? deps.registryRef.current : (deps.registry as Registry);
 
   app.register(cors, { origin: true, credentials: true });
 
   app.get(HEALTH_PATH, async () => ({
     status: 'ok',
-    catalog_entries: deps.registry.list().length,
-    embeddings_loaded: deps.embeddingsLoaded,
+    catalog_entries: currentRegistry().list().length,
+    embeddings_loaded: deps.registryRef?.embeddingsLoaded ?? deps.embeddingsLoaded,
     sessions: sessions.size,
+    catalog_reload_count: deps.registryRef?.reloadCount ?? 0,
+    catalog_loaded_at: deps.registryRef?.lastLoadedAt ?? null,
+    catalog_source_mtime_ms: deps.registryRef?.lastSourceMtimeMs ?? null,
   }));
 
   app.get(SSE_PATH, async (req: FastifyRequest, reply: FastifyReply) => {
@@ -55,7 +68,11 @@ export function buildApp(deps: AppDeps): FastifyInstance {
     }
 
     const transport = new SSEServerTransport(MESSAGES_PATH, reply.raw);
-    const server = buildMcpServer({ registry: deps.registry, tenant, audit: deps.audit });
+    const server = buildMcpServer(
+      deps.registryRef
+        ? { registryRef: deps.registryRef, tenant, audit: deps.audit }
+        : { registry: deps.registry as Registry, tenant, audit: deps.audit },
+    );
     await server.connect(transport);
     sessions.set(transport.sessionId, { transport, tenant });
     req.raw.on('close', () => {
