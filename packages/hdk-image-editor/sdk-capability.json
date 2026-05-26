@@ -1,0 +1,84 @@
+{
+  "name": "@projexlight/hdk-image-editor",
+  "version": "1.0.0",
+  "schema_version": "1.0",
+  "summary": "On-device image editor for ProjexCloud's HDK (Hardware Development Kit) — JS bindings for native crop / rotate / annotate / mask / redact operations on iOS, Android, and desktop Electron. PII redaction (face detection + blur) runs locally so bystander images never leave the device. Output blobs get registered into sdk-evidence with the derivation chain intact.",
+  "tags": ["hdk", "image", "redaction", "mobile", "native-bindings", "p5"],
+  "provides": {
+    "endpoints": [
+      { "method": "GET", "path": "/api/hdk/image-editor/capabilities", "description": "Returns supported ops (crop / rotate / annotate / mask / redact-faces / redact-text) per platform. Used by clients to feature-detect before invoking native bindings." }
+    ],
+    "events": [
+      { "name": "hdk.image-editor.applied.v1",      "retention_class": "regulated",  "conflict_policy": "event-sourcing", "description": "An editing op was applied to a source image. Carries op_kind + source_evidence_id + derived_evidence_id for the chain-of-custody trail." },
+      { "name": "hdk.image-editor.redaction-fired.v1", "retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "PII redaction op fired (face / text / license-plate). Carries detector model + count_redacted." },
+      { "name": "hdk.image-editor.capability-probed.v1", "retention_class": "operational", "conflict_policy": "lww",       "description": "Client probed capabilities; useful for adoption telemetry." }
+    ],
+    "models": [],
+    "hooks": [
+      { "name": "applyOp",        "description": "Universal entry — { source_blob, op_kind, params } → { derived_blob, derivation_metadata }. Op happens on-device via native binding." },
+      { "name": "redactFaces",    "description": "Convenience wrapper around applyOp({ op_kind: 'redact-faces' }) using the on-device face-detection model." },
+      { "name": "redactText",     "description": "OCR + blur for license plates, ID numbers, badges. Tenant policy can require this on capture for certain workflows." },
+      { "name": "registerDerivation","description": "After an op, register the derived blob as a sdk-evidence variant; preserves the derivation chain end-to-end." }
+    ],
+    "ui_components": [
+      { "name": "ImageEditorCanvas", "description": "Native-rendered canvas with op palette; consumes applyOp + redactFaces. Themed via @projexlight/design-system." }
+    ]
+  },
+  "consumes": {
+    "events": [],
+    "infra": ["native-bindings-ios", "native-bindings-android", "native-bindings-electron", "sdk-evidence"],
+    "config_keys": ["HDK_FACE_DETECTION_MODEL", "HDK_OCR_MODEL", "HDK_REDACTION_DEFAULT_BLUR_RADIUS"]
+  },
+  "scenarios": [
+    {
+      "id": "claim-photo-redact",
+      "title": "Insurance claim photo: redact bystander faces on-device",
+      "when_to_use": "Claim photo includes bystanders not party to the claim; redact before the image leaves the device so it never lands on a remote server with unredacted PII.",
+      "example_code": "import { redactFaces, registerDerivation } from '@projexlight/hdk-image-editor';\nconst result = await redactFaces({ source_blob_id });\nconst variant = await registerDerivation({\n  source_evidence_id, derivation_kind: 'face-redacted',\n  derived_blob: result.derived_blob,\n  detector_metadata: result.detector_metadata,\n});",
+      "expected_outcome": "Derived blob with faces blurred. Emits hdk.image-editor.applied.v1 + .redaction-fired.v1. sdk-evidence holds the variant linked to the source — adjudication can replay the original-vs-redacted comparison."
+    },
+    {
+      "id": "license-plate-strip",
+      "title": "Field tech captures a vehicle photo; license plate auto-stripped",
+      "when_to_use": "Field-service / fleet tenants whose policy disallows storing plates. Capture-time op runs before the photo enters the evidence chain.",
+      "example_code": "import { redactText, registerDerivation } from '@projexlight/hdk-image-editor';\nconst result = await redactText({ source_blob_id, target_pattern: 'license-plate' });\nawait registerDerivation({ source_evidence_id, derivation_kind: 'plate-redacted', ...result });",
+      "expected_outcome": "Plate region blurred. Tenant policy violation refused (return error to the UI) if the user tries to skip redaction on a flow where it's required."
+    },
+    {
+      "id": "annotate-with-arrows",
+      "title": "Adjuster annotates a damage photo with arrows + circles",
+      "when_to_use": "Pre-decision adjudication: senior reviewer marks specific damage areas before assigning a claim band.",
+      "example_code": "import { applyOp } from '@projexlight/hdk-image-editor';\nconst annotated = await applyOp({\n  source_blob_id,\n  op_kind: 'annotate',\n  params: { shapes: [{ kind: 'arrow', from: [120, 80], to: [200, 240] }] },\n});",
+      "expected_outcome": "Returns annotated derived blob. Annotation flattened into the image so the trail can't be edited later. Audit chain shows actor.persona + the shape params."
+    },
+    {
+      "id": "rotate-and-crop",
+      "title": "User uploads a sideways scan; auto-rotate + crop to content",
+      "when_to_use": "Document-heavy flows where camera orientation produces awkward source files. Rotate + crop on-device before upload to save bandwidth + storage.",
+      "example_code": "import { applyOp } from '@projexlight/hdk-image-editor';\nconst clean = await applyOp({ source_blob_id, op_kind: 'auto-rotate-crop' });",
+      "expected_outcome": "Returns the rotated + cropped blob. Source preserved; the rotation/crop is reversible via the derivation metadata for legal review."
+    },
+    {
+      "id": "feature-detect-before-use",
+      "title": "Client checks capabilities before offering an op in the UI",
+      "when_to_use": "Cross-platform UI: not every device supports every op (e.g. license-plate OCR may be desktop-only). UI calls the capabilities endpoint to feature-detect.",
+      "example_code": "const r = await fetch('/api/hdk/image-editor/capabilities', { headers: { Authorization: 'Bearer ' + jwt } });\nconst { ops } = (await r.json()).data;\nif (ops.includes('redact-text')) showPlateStripButton();",
+      "expected_outcome": "Returns the ops array. Tenant-wide feature-flagging via sdk-feature-flags can further restrict which ops are surfaced in the UI."
+    }
+  ],
+  "compliance_posture": {
+    "regimes": ["GDPR-Art-25-privacy-by-design", "HIPAA-Privacy-Rule-de-identification", "Illinois-BIPA-biometric-data", "EU-AI-Act-Annex-IV-logging"],
+    "notes": "On-device redaction is the GDPR Art-25 + HIPAA de-identification lever — un-redacted images never leave the device for workflows that require it. Face-detector model is local; no biometric template is persisted (BIPA-friendly). Capability probe + applied events satisfy AI Act per-op logging."
+  },
+  "pool_placement": "app",
+  "pricing_skus": [
+    { "sku": "hdk.image-editor.op",       "mode": "metered", "unit_description": "per op applied on a source (rotate / crop / annotate / redact)" },
+    { "sku": "hdk.image-editor.redaction","mode": "metered", "unit_description": "per redaction op (free in healthcare / finserv packs)" }
+  ],
+  "no_endpoints": false,
+  "links": {
+    "readme": "packages/hdk-image-editor/README.md",
+    "source": "packages/hdk-image-editor/src/",
+    "prd_section": "P5-Engagement-Connectors §6"
+  }
+}
