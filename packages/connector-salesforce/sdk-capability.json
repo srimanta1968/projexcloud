@@ -1,0 +1,93 @@
+{
+  "name": "@projexlight/connector-salesforce",
+  "version": "1.0.0",
+  "schema_version": "1.0",
+  "summary": "Bidirectional Salesforce connector for ProjexCloud: OAuth install + bind ProjexCloud entities (lead, contact, account, opportunity) to their SF counterparts, run scheduled syncs in both directions, ingest SF Platform Events via webhook. Foundation for any revops blueprint that wants 'system of record' parity between ProjexCloud + the tenant's Salesforce org.",
+  "tags": ["connector", "salesforce", "crm", "revops", "oauth", "p6b"],
+  "provides": {
+    "endpoints": [],
+    "events": [
+      { "name": "connector-salesforce.install.created.v1",   "retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "Tenant completed SF OAuth + the connector recorded their org." },
+      { "name": "connector-salesforce.binding.created.v1",   "retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "Entity binding registered (ProjexCloud type ↔ SF object + sync direction)." },
+      { "name": "connector-salesforce.sync.completed.v1",    "retention_class": "operational","conflict_policy": "event-sourcing", "description": "Per-sync-run summary: rows_pulled, rows_pushed, conflicts." },
+      { "name": "connector-salesforce.sync.failed.v1",       "retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "Sync run failed; carries error class + which entity." },
+      { "name": "connector-salesforce.webhook.received.v1",  "retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "Inbound SF Platform Event committed for projection." }
+    ],
+    "models": [
+      { "schema": "connector_salesforce", "table": "sf_account",     "description": "Cached SF Account row (read-through cache; full row is in SF)." },
+      { "schema": "connector_salesforce", "table": "sf_contact",     "description": "Cached SF Contact row." },
+      { "schema": "connector_salesforce", "table": "sf_lead",        "description": "Cached SF Lead row." },
+      { "schema": "connector_salesforce", "table": "sf_opportunity", "description": "Cached SF Opportunity row." }
+    ],
+    "hooks": [
+      { "name": "installConnector",   "description": "Begin OAuth flow; on callback, store refresh token in sdk-secrets + record the SF org." },
+      { "name": "registerBinding",    "description": "Wire a ProjexCloud entity type to its SF counterpart + sync direction (push / pull / merge)." },
+      { "name": "runSyncNow",         "description": "Force a sync run for one binding; useful after the customer fixes a permission gap." },
+      { "name": "handleWebhook",      "description": "Verify + ingest a SF Platform Event payload (called from the webhook receiver route)." },
+      { "name": "startScheduler",     "description": "Background worker that drives scheduled syncs + token refresh." }
+    ],
+    "ui_components": []
+  },
+  "consumes": {
+    "events": [
+      { "name": "tenant.offboarded.v1",        "from": "@projexlight/sdk-tenant-lifecycle" },
+      { "name": "secrets.secret.rotated.v1",   "from": "@projexlight/sdk-secrets" }
+    ],
+    "infra": ["postgres", "sdk-secrets", "sdk-webhook"],
+    "config_keys": ["SF_API_VERSION", "SF_SYNC_DEFAULT_CADENCE_MIN", "SF_WEBHOOK_VERIFY_KEY"]
+  },
+  "scenarios": [
+    {
+      "id": "install-via-oauth",
+      "title": "Tenant admin clicks 'Connect Salesforce' → OAuth + install",
+      "when_to_use": "First-time setup. The admin signs in via SF; we exchange the auth-code for a refresh token + store it in sdk-secrets.",
+      "example_code": "import { installConnector } from '@projexlight/connector-salesforce';\nconst { install_id } = await installConnector({\n  tenant_id, sf_org_id, auth_code,\n  redirect_uri: 'https://app.projexcloud.com/connect/salesforce/callback',\n});",
+      "expected_outcome": "Install row written; refresh token vault-stored. Emits .install.created.v1. Connector page shows green health dot."
+    },
+    {
+      "id": "register-lead-binding",
+      "title": "Push ProjexCloud lead-scores into SF Lead records",
+      "when_to_use": "RevOps workflow: lead-scoring computed in ProjexCloud pushes back to SF Lead.Lead_Score__c every 15 min.",
+      "example_code": "import { registerBinding } from '@projexlight/connector-salesforce';\nawait registerBinding({\n  install_id, projex_entity: 'sdk-lead-scoring.lead_score',\n  sf_object: 'Lead', sf_field_map: { score: 'Lead_Score__c' },\n  direction: 'push', cadence_min: 15,\n});",
+      "expected_outcome": "Binding row + scheduler tick. Sync runs every 15 min push fresh scores; conflicts (e.g. SF row deleted) land in sync_run with the error class."
+    },
+    {
+      "id": "force-resync",
+      "title": "After fixing a permission gap, force-resync now",
+      "when_to_use": "SF admin granted the API user write access to a custom field; we want the next sync to happen immediately not at the next scheduled tick.",
+      "example_code": "import { runSyncNow } from '@projexlight/connector-salesforce';\nconst { sync_run_id } = await runSyncNow({ binding_id });",
+      "expected_outcome": "Sync run executes; result emitted via .sync.completed.v1 or .sync.failed.v1."
+    },
+    {
+      "id": "ingest-platform-event",
+      "title": "SF Platform Event 'OpportunityClosedWon' → ProjexCloud action",
+      "when_to_use": "Inbound webhook for real-time signals. SF fires a Platform Event when Opp closes; we ingest + emit .webhook.received.v1 so downstream SDKs (sdk-billing, sdk-notification) react instantly.",
+      "example_code": "import { handleWebhook } from '@projexlight/connector-salesforce';\nawait handleWebhook({\n  tenant_id, signature, body, event_type: 'OpportunityClosedWon',\n});",
+      "expected_outcome": "Payload signature verified; event committed + emitted. Downstream consumers fan out within seconds (no polling latency)."
+    },
+    {
+      "id": "rotate-refresh-token",
+      "title": "Reactive: re-validate after secrets rotation",
+      "when_to_use": "secrets.secret.rotated.v1 fires for the SF refresh-token secret; the connector re-tests connectivity before relying on it.",
+      "example_code": "subscribeEvents('secrets.secret.rotated.v1', async (e) => {\n  const installs = await findInstallsUsingSecret({ secret_ref: e.payload.ref });\n  for (const i of installs) await reTestSfConnection({ install_id: i.id });\n});",
+      "expected_outcome": "Each install probed; failures disable the install + page ops."
+    }
+  ],
+  "compliance_posture": {
+    "regimes": ["SOC2-CC6.7-third-party", "GDPR-Art-28-processor-contract", "Salesforce-Shield-PII", "EU-Data-Residency"],
+    "notes": "OAuth refresh token always vault-wrapped (never logged or persisted in plain). EU tenants pin to SF EU instances; sync direction respects the customer's Shield-PII field-level encryption settings. Webhook signature verification mandatory; replay-window enforced to defeat replay attacks."
+  },
+  "pool_placement": "app",
+  "pricing_skus": [
+    { "sku": "connector-salesforce.install",      "mode": "flat",    "unit_description": "per active install per month" },
+    { "sku": "connector-salesforce.sync.run",     "mode": "metered", "unit_description": "per scheduled sync run" },
+    { "sku": "connector-salesforce.rows.synced",  "mode": "metered", "unit_description": "per row pushed or pulled" },
+    { "sku": "connector-salesforce.webhook",      "mode": "metered", "unit_description": "per ingested webhook event" }
+  ],
+  "no_endpoints": true,
+  "links": {
+    "readme": "packages/connector-salesforce/README.md",
+    "source": "packages/connector-salesforce/src/",
+    "prd_section": "P6B-Connectors §1"
+  }
+}

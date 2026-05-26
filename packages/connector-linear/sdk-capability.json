@@ -1,0 +1,91 @@
+{
+  "name": "@projexlight/connector-linear",
+  "version": "1.0.0",
+  "schema_version": "1.0",
+  "summary": "Linear connector: OAuth install + bidirectional issue / project sync, real-time webhooks. The lighter-weight alternative to connector-jira for tenants that run Linear; same composition pattern with sdk-workflow + sdk-projection. Optimized for Linear's GraphQL-only API.",
+  "tags": ["connector", "linear", "issue-tracking", "engineering", "oauth"],
+  "provides": {
+    "endpoints": [],
+    "events": [
+      { "name": "connector-linear.install.created.v1",  "retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "Linear OAuth complete." },
+      { "name": "connector-linear.binding.created.v1",  "retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "Entity binding registered." },
+      { "name": "connector-linear.sync.completed.v1",   "retention_class": "operational","conflict_policy": "event-sourcing", "description": "Sync run summary." },
+      { "name": "connector-linear.sync.failed.v1",      "retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "Sync run failed." },
+      { "name": "connector-linear.webhook.received.v1", "retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "Linear webhook ingested." }
+    ],
+    "models": [
+      { "schema": "connector_linear", "table": "linear_issue",   "description": "Cached Linear issue row." },
+      { "schema": "connector_linear", "table": "linear_project", "description": "Cached Linear project row." }
+    ],
+    "hooks": [
+      { "name": "installConnector", "description": "OAuth install." },
+      { "name": "registerBinding",  "description": "Bind ProjexCloud entity → Linear issue type." },
+      { "name": "runSyncNow",       "description": "Force a sync." },
+      { "name": "handleWebhook",    "description": "Process inbound Linear webhook." },
+      { "name": "startScheduler",   "description": "Background sync." }
+    ],
+    "ui_components": []
+  },
+  "consumes": {
+    "events": [
+      { "name": "workflow.run.started.v1", "from": "@projexlight/sdk-workflow" },
+      { "name": "tenant.offboarded.v1",     "from": "@projexlight/sdk-tenant-lifecycle" }
+    ],
+    "infra": ["postgres", "sdk-secrets", "sdk-webhook"],
+    "config_keys": ["LINEAR_API_ENDPOINT", "LINEAR_SYNC_DEFAULT_CADENCE_MIN", "LINEAR_WEBHOOK_SIGNATURE_VERIFY"]
+  },
+  "scenarios": [
+    {
+      "id": "install-linear",
+      "title": "Tenant installs Linear connector",
+      "when_to_use": "Admin grants OAuth scopes; we store refresh token + record the workspace.",
+      "example_code": "import { installConnector } from '@projexlight/connector-linear';\nconst { install_id } = await installConnector({ tenant_id, auth_code });",
+      "expected_outcome": "Install row + vault-wrapped refresh token. Emits .install.created.v1."
+    },
+    {
+      "id": "task-to-issue",
+      "title": "Workflow task creates a Linear issue",
+      "when_to_use": "Bind 'engineering-tasks' → Linear team's default issue type; new tasks appear in Linear automatically.",
+      "example_code": "subscribeEvents('workflow.run.started.v1', async (e) => {\n  await createLinearIssue({ tenant_id: e.tenant_id, team_id, title: e.payload.title });\n});",
+      "expected_outcome": "Issue created; Linear identifier stored on the task."
+    },
+    {
+      "id": "project-pull",
+      "title": "Daily pull of project state",
+      "when_to_use": "Hydrate connector_linear.linear_project so the ProjexCloud roadmap dashboard reflects Linear.",
+      "example_code": "import { registerBinding } from '@projexlight/connector-linear';\nawait registerBinding({\n  install_id, projex_entity: 'sdk-projection.project',\n  linear_object: 'Project', direction: 'pull', cadence_min: 60,\n});",
+      "expected_outcome": "Hourly pull keeps projects fresh."
+    },
+    {
+      "id": "webhook-issue-update",
+      "title": "Linear webhook → ProjexCloud task transition",
+      "when_to_use": "Inbound webhook on issue update; we transition the linked ProjexCloud task to match.",
+      "example_code": "import { handleWebhook } from '@projexlight/connector-linear';\nawait handleWebhook({ tenant_id, signature, body });",
+      "expected_outcome": "Linked task transitions; emits .webhook.received.v1."
+    },
+    {
+      "id": "graphql-bulk-pull",
+      "title": "Initial bulk-pull uses GraphQL pagination",
+      "when_to_use": "First-time install needs to backfill the cache; the scheduler does a paginated GraphQL walk to avoid rate-limit headaches.",
+      "example_code": "// Sync runner uses GraphQL `first: 50` + endCursor pagination automatically.",
+      "expected_outcome": "Cache hydrated; subsequent syncs only fetch deltas via Linear's syncTime filter."
+    }
+  ],
+  "compliance_posture": {
+    "regimes": ["SOC2-CC6.7-third-party", "GDPR-Art-28", "Linear-SOC2"],
+    "notes": "Refresh tokens vault-wrapped. Linear's signing-secret verification mandatory on webhooks."
+  },
+  "pool_placement": "app",
+  "pricing_skus": [
+    { "sku": "connector-linear.install",     "mode": "flat",    "unit_description": "per active workspace per month" },
+    { "sku": "connector-linear.sync.run",    "mode": "metered", "unit_description": "per sync run" },
+    { "sku": "connector-linear.rows.synced", "mode": "metered", "unit_description": "per issue / project synced" },
+    { "sku": "connector-linear.webhook",     "mode": "metered", "unit_description": "per ingested webhook" }
+  ],
+  "no_endpoints": true,
+  "links": {
+    "readme": "packages/connector-linear/README.md",
+    "source": "packages/connector-linear/src/",
+    "prd_section": "P6B-Connectors §5"
+  }
+}

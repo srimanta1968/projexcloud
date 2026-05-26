@@ -1,0 +1,94 @@
+{
+  "name": "@projexlight/connector-github",
+  "version": "1.0.0",
+  "schema_version": "1.0",
+  "summary": "GitHub App connector: install at org or repo scope, sync repos / issues / PRs, ingest GitHub webhooks for real-time PR + CI signals. The dev-ops integration backbone — pair with connector-linear/jira for end-to-end engineering workflows or with sdk-workflow for compliance gates on merge.",
+  "tags": ["connector", "github", "engineering", "ci-cd", "github-app"],
+  "provides": {
+    "endpoints": [],
+    "events": [
+      { "name": "connector-github.installation.created.v1", "retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "GitHub App installed at org / user scope." },
+      { "name": "connector-github.repo.synced.v1",          "retention_class": "operational","conflict_policy": "event-sourcing", "description": "Repo metadata cached." },
+      { "name": "connector-github.issue.opened.v1",         "retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "Inbound issue event." },
+      { "name": "connector-github.pr.opened.v1",            "retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "Inbound PR opened event." },
+      { "name": "connector-github.pr.merged.v1",            "retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "Inbound PR merged event." },
+      { "name": "connector-github.check.completed.v1",      "retention_class": "operational","conflict_policy": "event-sourcing", "description": "CI check completed event (success/failure)." }
+    ],
+    "models": [
+      { "schema": "connector_github", "table": "installation", "description": "Per-installation row: github_install_id, account_login, scope." },
+      { "schema": "connector_github", "table": "repo",         "description": "Per-repo metadata cache." },
+      { "schema": "connector_github", "table": "issue",        "description": "Cached issue row." },
+      { "schema": "connector_github", "table": "pr",           "description": "Cached PR row with check + review state." }
+    ],
+    "hooks": [
+      { "name": "registerInstallation","description": "Persist a GitHub App installation after the user installs from the marketplace." },
+      { "name": "syncRepos",           "description": "Sync repo list for an installation." },
+      { "name": "handleWebhook",       "description": "Process inbound GitHub webhook (issues, pull_request, check_run, push, etc.)." },
+      { "name": "openPr",              "description": "Open a PR programmatically (e.g. for a Renovate-style auto-update)." },
+      { "name": "startScheduler",      "description": "Background worker: re-syncs repo + check state for installations." }
+    ],
+    "ui_components": []
+  },
+  "consumes": {
+    "events": [
+      { "name": "workflow.run.started.v1", "from": "@projexlight/sdk-workflow" },
+      { "name": "tenant.offboarded.v1",     "from": "@projexlight/sdk-tenant-lifecycle" }
+    ],
+    "infra": ["postgres", "sdk-secrets", "sdk-webhook"],
+    "config_keys": ["GITHUB_APP_ID", "GITHUB_APP_PRIVATE_KEY_REF", "GITHUB_WEBHOOK_SECRET_REF", "GITHUB_API_BASE_URL"]
+  },
+  "scenarios": [
+    {
+      "id": "register-installation",
+      "title": "Customer installs the GitHub App at org scope",
+      "when_to_use": "User clicks 'Install' on the GitHub Marketplace listing; GitHub redirects with installation_id; we persist + back-fill repos.",
+      "example_code": "import { registerInstallation } from '@projexlight/connector-github';\nconst { install_row_id } = await registerInstallation({\n  tenant_id, github_install_id: 12345678, account_login: 'acme', scope: 'org',\n});",
+      "expected_outcome": "Installation row written + initial syncRepos kicked off. Emits .installation.created.v1."
+    },
+    {
+      "id": "pr-merged-triggers-deploy",
+      "title": "PR merged → kick off sdk-workflow deploy gate",
+      "when_to_use": "Inbound webhook on pull_request.closed with merged=true; we surface as .pr.merged.v1 which sdk-workflow consumes to start deploy approvals.",
+      "example_code": "import { handleWebhook } from '@projexlight/connector-github';\nawait handleWebhook({ tenant_id, signature, body, event_type: 'pull_request' });",
+      "expected_outcome": "PR cache updated; emits .pr.merged.v1. sdk-workflow advances the linked deploy workflow."
+    },
+    {
+      "id": "ci-check-fan-out",
+      "title": "Failed check posts to Slack + opens Linear issue",
+      "when_to_use": "Reactive on .check.completed.v1 with conclusion=failure — connector-slack posts to #eng-alerts + connector-linear opens an issue for triage.",
+      "example_code": "subscribeEvents('connector-github.check.completed.v1', async (e) => {\n  if (e.payload.conclusion !== 'failure') return;\n  await postToSlack({ ... });\n  await openLinearIssue({ ... });\n});",
+      "expected_outcome": "Alert + tracking issue created automatically. Both events show up in the audit chain alongside the original check event."
+    },
+    {
+      "id": "open-renovate-pr",
+      "title": "Auto-update PR opened programmatically",
+      "when_to_use": "Compliance workflow detects an outdated lockfile; opens a PR to update it.",
+      "example_code": "import { openPr } from '@projexlight/connector-github';\nconst { pr_number } = await openPr({\n  tenant_id, owner: 'acme', repo: 'webapp',\n  head: 'projex/lockfile-update', base: 'main',\n  title: 'chore: refresh lockfile (compliance)', body: '...',\n});",
+      "expected_outcome": "PR opened; PR row written. Subsequent merge/close events flow back through webhooks."
+    },
+    {
+      "id": "scheduler-resync-checks",
+      "title": "Scheduler re-syncs check state to backstop webhook drops",
+      "when_to_use": "GitHub occasionally rate-limits or drops webhooks; the scheduler refreshes the recent-PR check state every 15 min so stale UI never lingers.",
+      "example_code": "// driven by startScheduler — periodic refresh of recent PRs.",
+      "expected_outcome": "Stale checks rehydrated; emits .check.completed.v1 only for newly-final checks."
+    }
+  ],
+  "compliance_posture": {
+    "regimes": ["SOC2-CC6.7-third-party", "SOC2-CC8.1-change-mgmt", "GDPR-Art-28", "GitHub-Advanced-Security"],
+    "notes": "App private key vault-wrapped via sdk-secrets. Webhook HMAC-SHA256 signature verification mandatory. PR-merged audit chain satisfies SOX change-management requirement when paired with sdk-workflow + sdk-approval."
+  },
+  "pool_placement": "app",
+  "pricing_skus": [
+    { "sku": "connector-github.installation",   "mode": "flat",    "unit_description": "per active installation per month" },
+    { "sku": "connector-github.sync.repos",     "mode": "metered", "unit_description": "per repo synced" },
+    { "sku": "connector-github.webhook",        "mode": "metered", "unit_description": "per ingested webhook" },
+    { "sku": "connector-github.pr.open",        "mode": "metered", "unit_description": "per outbound PR opened" }
+  ],
+  "no_endpoints": true,
+  "links": {
+    "readme": "packages/connector-github/README.md",
+    "source": "packages/connector-github/src/",
+    "prd_section": "P6B-Connectors §8"
+  }
+}

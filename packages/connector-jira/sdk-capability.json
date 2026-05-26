@@ -1,0 +1,92 @@
+{
+  "name": "@projexlight/connector-jira",
+  "version": "1.0.0",
+  "schema_version": "1.0",
+  "summary": "Jira Cloud connector: OAuth install + bidirectional issue / sprint / board sync. Sit alongside sdk-workflow + sdk-approval so an internal ProjexCloud task transitions to a real Jira issue (and vice versa) without leaving either system. Foundation for engineering + IT ops blueprints.",
+  "tags": ["connector", "jira", "issue-tracking", "engineering", "oauth"],
+  "provides": {
+    "endpoints": [],
+    "events": [
+      { "name": "connector-jira.install.created.v1",   "retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "Tenant completed Jira OAuth." },
+      { "name": "connector-jira.binding.created.v1",   "retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "Entity binding registered (ProjexCloud task ↔ Jira issue type)." },
+      { "name": "connector-jira.sync.completed.v1",    "retention_class": "operational","conflict_policy": "event-sourcing", "description": "Per-sync-run summary." },
+      { "name": "connector-jira.sync.failed.v1",       "retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "Sync run failed." },
+      { "name": "connector-jira.webhook.received.v1",  "retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "Jira webhook ingested (issue_created, issue_updated, sprint_started, etc.)." }
+    ],
+    "models": [
+      { "schema": "connector_jira", "table": "jira_issue",  "description": "Cached Jira issue row." },
+      { "schema": "connector_jira", "table": "jira_sprint", "description": "Cached Jira sprint row." },
+      { "schema": "connector_jira", "table": "jira_board",  "description": "Cached Jira board row." }
+    ],
+    "hooks": [
+      { "name": "installConnector", "description": "OAuth install + refresh-token storage." },
+      { "name": "registerBinding",  "description": "Bind a ProjexCloud entity → Jira issue type." },
+      { "name": "runSyncNow",       "description": "Force a binding sync." },
+      { "name": "handleWebhook",    "description": "Process inbound Jira webhook (signed + replay-protected)." },
+      { "name": "startScheduler",   "description": "Background sync + token refresh." }
+    ],
+    "ui_components": []
+  },
+  "consumes": {
+    "events": [
+      { "name": "workflow.run.started.v1",  "from": "@projexlight/sdk-workflow" },
+      { "name": "tenant.offboarded.v1",      "from": "@projexlight/sdk-tenant-lifecycle" }
+    ],
+    "infra": ["postgres", "sdk-secrets", "sdk-webhook"],
+    "config_keys": ["JIRA_API_VERSION", "JIRA_SYNC_DEFAULT_CADENCE_MIN", "JIRA_WEBHOOK_SIGNATURE_VERIFY"]
+  },
+  "scenarios": [
+    {
+      "id": "install-jira-oauth",
+      "title": "Tenant connects their Jira Cloud site",
+      "when_to_use": "First install. Admin grants OAuth scopes; connector stores refresh token + records site_id.",
+      "example_code": "import { installConnector } from '@projexlight/connector-jira';\nconst { install_id } = await installConnector({\n  tenant_id, site_url: 'acme.atlassian.net', auth_code,\n});",
+      "expected_outcome": "Install row + vault-wrapped refresh token. Emits .install.created.v1."
+    },
+    {
+      "id": "task-to-jira-issue",
+      "title": "ProjexCloud task creates a Jira issue automatically",
+      "when_to_use": "Reactive on workflow.run.started.v1 — bind 'engineering-tasks' workflow → 'ACME / Story' issue type so engineering work shows up in their existing backlog.",
+      "example_code": "subscribeEvents('workflow.run.started.v1', async (e) => {\n  if (e.payload.workflow_id !== 'engineering-tasks') return;\n  await createJiraIssue({ tenant_id: e.tenant_id, project_key: 'ACME', issue_type: 'Story', summary: e.payload.title });\n});",
+      "expected_outcome": "Issue created in Jira; ID stored on the ProjexCloud task. Updates flow both ways via .webhook.received.v1."
+    },
+    {
+      "id": "sprint-pull",
+      "title": "Pull active sprint → ProjexCloud sprint dashboard",
+      "when_to_use": "Daily pull of sprint state so the ProjexCloud sprint dashboard reflects what's actually in Jira.",
+      "example_code": "import { registerBinding } from '@projexlight/connector-jira';\nawait registerBinding({\n  install_id, projex_entity: 'sdk-projection.sprint',\n  jira_object: 'Sprint', direction: 'pull', cadence_min: 60,\n});",
+      "expected_outcome": "Hourly pull hydrates jira_sprint + projects into sdk-projection.sprint."
+    },
+    {
+      "id": "webhook-issue-transition",
+      "title": "Jira issue transitions to 'Done' → close ProjexCloud task",
+      "when_to_use": "Webhook receives 'issue_updated' with new status 'Done'; we close the linked ProjexCloud task in lockstep.",
+      "example_code": "import { handleWebhook } from '@projexlight/connector-jira';\nawait handleWebhook({\n  tenant_id, signature, body, event_type: 'jira:issue_updated',\n});",
+      "expected_outcome": "Transition propagated; linked ProjexCloud task closes. Emits .webhook.received.v1 + downstream completion event."
+    },
+    {
+      "id": "scheduler-token-refresh",
+      "title": "Scheduler keeps the OAuth refresh chain alive",
+      "when_to_use": "Atlassian refresh tokens expire after 90 days of inactivity; scheduler refreshes weekly for installs with low traffic.",
+      "example_code": "// driven by startScheduler — periodic refresh for low-traffic installs.",
+      "expected_outcome": "Install row's expires_at advances; no tenant-visible action."
+    }
+  ],
+  "compliance_posture": {
+    "regimes": ["SOC2-CC6.7-third-party", "GDPR-Art-28", "Atlassian-Marketplace-Trust"],
+    "notes": "Refresh tokens vault-wrapped. Webhook signature verification mandatory. EU sites pinned to atlassian-eu endpoints for residency."
+  },
+  "pool_placement": "app",
+  "pricing_skus": [
+    { "sku": "connector-jira.install",     "mode": "flat",    "unit_description": "per active site per month" },
+    { "sku": "connector-jira.sync.run",    "mode": "metered", "unit_description": "per sync run" },
+    { "sku": "connector-jira.rows.synced", "mode": "metered", "unit_description": "per issue / sprint synced" },
+    { "sku": "connector-jira.webhook",     "mode": "metered", "unit_description": "per ingested webhook" }
+  ],
+  "no_endpoints": true,
+  "links": {
+    "readme": "packages/connector-jira/README.md",
+    "source": "packages/connector-jira/src/",
+    "prd_section": "P6B-Connectors §4"
+  }
+}

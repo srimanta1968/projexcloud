@@ -1,0 +1,92 @@
+{
+  "name": "@projexlight/connector-hubspot",
+  "version": "1.0.0",
+  "schema_version": "1.0",
+  "summary": "Bidirectional HubSpot connector: OAuth install + bind contacts / deals / companies to their ProjexCloud counterparts, push lead scores + engagement events back, ingest HubSpot Webhooks for real-time triggers. Sits next to connector-salesforce so a tenant on HubSpot gets the same RevOps story.",
+  "tags": ["connector", "hubspot", "crm", "revops", "oauth", "p6b"],
+  "provides": {
+    "endpoints": [],
+    "events": [
+      { "name": "connector-hubspot.install.created.v1",  "retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "Tenant completed HubSpot OAuth." },
+      { "name": "connector-hubspot.binding.created.v1",  "retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "Entity binding registered." },
+      { "name": "connector-hubspot.sync.completed.v1",   "retention_class": "operational","conflict_policy": "event-sourcing", "description": "Sync run summary." },
+      { "name": "connector-hubspot.sync.failed.v1",      "retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "Sync run failed." },
+      { "name": "connector-hubspot.webhook.received.v1", "retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "Inbound HubSpot Webhook committed." }
+    ],
+    "models": [
+      { "schema": "connector_hubspot", "table": "hubspot_contact", "description": "Cached HubSpot Contact row." },
+      { "schema": "connector_hubspot", "table": "hubspot_deal",    "description": "Cached HubSpot Deal row." },
+      { "schema": "connector_hubspot", "table": "hubspot_company", "description": "Cached HubSpot Company row." }
+    ],
+    "hooks": [
+      { "name": "installConnector", "description": "OAuth install + refresh-token storage." },
+      { "name": "registerBinding",  "description": "Wire a ProjexCloud entity → HubSpot object binding." },
+      { "name": "runSyncNow",       "description": "Force-run a binding's sync." },
+      { "name": "handleWebhook",    "description": "Verify + ingest a HubSpot Webhook payload." },
+      { "name": "startScheduler",   "description": "Background sync + token refresh worker." }
+    ],
+    "ui_components": []
+  },
+  "consumes": {
+    "events": [
+      { "name": "tenant.offboarded.v1",      "from": "@projexlight/sdk-tenant-lifecycle" },
+      { "name": "secrets.secret.rotated.v1", "from": "@projexlight/sdk-secrets" }
+    ],
+    "infra": ["postgres", "sdk-secrets", "sdk-webhook"],
+    "config_keys": ["HUBSPOT_API_VERSION", "HUBSPOT_SYNC_DEFAULT_CADENCE_MIN", "HUBSPOT_WEBHOOK_SIGNATURE_VERSION"]
+  },
+  "scenarios": [
+    {
+      "id": "install-oauth",
+      "title": "Tenant connects HubSpot via OAuth",
+      "when_to_use": "Admin clicks 'Connect HubSpot' on the connectors page; we exchange auth-code for refresh token + record the portal.",
+      "example_code": "import { installConnector } from '@projexlight/connector-hubspot';\nconst { install_id } = await installConnector({\n  tenant_id, hubspot_portal_id, auth_code,\n});",
+      "expected_outcome": "Install row + vault-wrapped refresh token. Emits .install.created.v1."
+    },
+    {
+      "id": "push-lead-score",
+      "title": "Push ProjexCloud lead-scores into HubSpot custom property",
+      "when_to_use": "RevOps wants lead-scores on every contact card. Bind sdk-lead-scoring → HubSpot Contact projex_lead_score custom property, refresh every 15 min.",
+      "example_code": "import { registerBinding } from '@projexlight/connector-hubspot';\nawait registerBinding({\n  install_id, projex_entity: 'sdk-lead-scoring.lead_score',\n  hubspot_object: 'Contact', hubspot_field_map: { score: 'projex_lead_score' },\n  direction: 'push', cadence_min: 15,\n});",
+      "expected_outcome": "Binding active; per-15-min sync pushes scores. Conflicts logged with rowcount in sync_run."
+    },
+    {
+      "id": "ingest-deal-created-webhook",
+      "title": "Inbound: 'deal.creation' webhook fires downstream",
+      "when_to_use": "HubSpot fires a webhook on every deal creation; sdk-notification + sdk-projection react instantly.",
+      "example_code": "import { handleWebhook } from '@projexlight/connector-hubspot';\nawait handleWebhook({\n  tenant_id, signature, body, event_type: 'deal.creation',\n});",
+      "expected_outcome": "Signature verified; event committed + emitted. Downstream consumers react within seconds."
+    },
+    {
+      "id": "pull-contact-changes",
+      "title": "Daily pull of HubSpot contact changes",
+      "when_to_use": "Daily delta sync for analytics — pulls every Contact modified since last sync into the read-through cache.",
+      "example_code": "import { registerBinding } from '@projexlight/connector-hubspot';\nawait registerBinding({\n  install_id, projex_entity: 'contact-cache',\n  hubspot_object: 'Contact', direction: 'pull', cadence_min: 1440,\n});",
+      "expected_outcome": "Binding row; pull sync hydrates connector_hubspot.hubspot_contact daily. sdk-analytics can join against it."
+    },
+    {
+      "id": "scheduler-token-refresh",
+      "title": "Scheduler keeps OAuth refresh tokens fresh",
+      "when_to_use": "OAuth refresh tokens expire if unused; the scheduler periodically refreshes so a quiet tenant doesn't end up with a dead install.",
+      "example_code": "// driven by startScheduler — refreshes installs that haven't synced in 24h.",
+      "expected_outcome": "Each install refreshed in the background; install row updates with new expires_at. No tenant-visible action needed."
+    }
+  ],
+  "compliance_posture": {
+    "regimes": ["SOC2-CC6.7-third-party", "GDPR-Art-28-processor-contract", "HubSpot-SOC2", "CCPA-Section-1798"],
+    "notes": "OAuth refresh tokens vault-wrapped. Webhook signatures use HubSpot's v3 signature scheme with timestamp replay-window protection. EU portals pinned to EU API endpoints for residency."
+  },
+  "pool_placement": "app",
+  "pricing_skus": [
+    { "sku": "connector-hubspot.install",     "mode": "flat",    "unit_description": "per active install per month" },
+    { "sku": "connector-hubspot.sync.run",    "mode": "metered", "unit_description": "per scheduled sync run" },
+    { "sku": "connector-hubspot.rows.synced", "mode": "metered", "unit_description": "per row synced" },
+    { "sku": "connector-hubspot.webhook",     "mode": "metered", "unit_description": "per ingested webhook" }
+  ],
+  "no_endpoints": true,
+  "links": {
+    "readme": "packages/connector-hubspot/README.md",
+    "source": "packages/connector-hubspot/src/",
+    "prd_section": "P6B-Connectors §2"
+  }
+}

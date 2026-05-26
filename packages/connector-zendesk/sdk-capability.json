@@ -1,0 +1,92 @@
+{
+  "name": "@projexlight/connector-zendesk",
+  "version": "1.0.0",
+  "schema_version": "1.0",
+  "summary": "Zendesk connector: OAuth install + ticket / macro / automation sync. Lets a ProjexCloud support workflow surface as Zendesk tickets (and vice versa) so customer-facing teams keep using the Zendesk UI while back-office automation runs through ProjexCloud SDKs.",
+  "tags": ["connector", "zendesk", "support", "tickets", "oauth"],
+  "provides": {
+    "endpoints": [],
+    "events": [
+      { "name": "connector-zendesk.install.created.v1",   "retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "Zendesk OAuth complete." },
+      { "name": "connector-zendesk.ticket.created.v1",    "retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "Ticket created in Zendesk from a ProjexCloud event." },
+      { "name": "connector-zendesk.ticket.updated.v1",    "retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "Inbound ticket update from Zendesk webhook." },
+      { "name": "connector-zendesk.sync.completed.v1",    "retention_class": "operational","conflict_policy": "event-sourcing", "description": "Sync run summary." },
+      { "name": "connector-zendesk.macro.invoked.v1",     "retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "Zendesk macro fired on a synced ticket; surfaced to sdk-workflow." }
+    ],
+    "models": [
+      { "schema": "connector_zendesk", "table": "zendesk_ticket",     "description": "Cached ticket row." },
+      { "schema": "connector_zendesk", "table": "zendesk_macro",      "description": "Macro definition mirror." },
+      { "schema": "connector_zendesk", "table": "zendesk_automation", "description": "Automation rule mirror." }
+    ],
+    "hooks": [
+      { "name": "installConnector", "description": "OAuth install + refresh-token storage." },
+      { "name": "createTicket",     "description": "Create a Zendesk ticket against a ProjexCloud entity." },
+      { "name": "handleWebhook",    "description": "Process inbound Zendesk webhook." },
+      { "name": "syncMacros",       "description": "Pull current macros + automations into the local cache." },
+      { "name": "startScheduler",   "description": "Background sync + token refresh." }
+    ],
+    "ui_components": []
+  },
+  "consumes": {
+    "events": [
+      { "name": "workflow.run.started.v1",     "from": "@projexlight/sdk-workflow" },
+      { "name": "tenant.offboarded.v1",         "from": "@projexlight/sdk-tenant-lifecycle" }
+    ],
+    "infra": ["postgres", "sdk-secrets", "sdk-webhook"],
+    "config_keys": ["ZENDESK_SUBDOMAIN", "ZENDESK_API_VERSION", "ZENDESK_WEBHOOK_SIGNATURE_VERIFY"]
+  },
+  "scenarios": [
+    {
+      "id": "install-zendesk",
+      "title": "Tenant connects their Zendesk subdomain",
+      "when_to_use": "Admin grants OAuth; we store refresh token + record the subdomain.",
+      "example_code": "import { installConnector } from '@projexlight/connector-zendesk';\nconst { install_id } = await installConnector({ tenant_id, subdomain: 'acme', auth_code });",
+      "expected_outcome": "Install row; vault-wrapped refresh token. Emits .install.created.v1."
+    },
+    {
+      "id": "create-ticket-from-workflow",
+      "title": "Failed sync creates a Zendesk ticket for the customer-success team",
+      "when_to_use": "When a connector sync fails repeatedly, we open a Zendesk ticket so CS has a tracked work item — not just a Slack notification.",
+      "example_code": "import { createTicket } from '@projexlight/connector-zendesk';\nawait createTicket({\n  tenant_id, subject: 'Salesforce sync failing for 2h',\n  description: '...',\n  requester_email: cs.email, priority: 'high',\n});",
+      "expected_outcome": "Ticket created; ID stored on the originating ProjexCloud entity. Emits .ticket.created.v1."
+    },
+    {
+      "id": "ticket-update-webhook",
+      "title": "Webhook propagates ticket status to ProjexCloud entity",
+      "when_to_use": "Inbound ticket update — status change, comment added; we mirror to the linked ProjexCloud row.",
+      "example_code": "import { handleWebhook } from '@projexlight/connector-zendesk';\nawait handleWebhook({ tenant_id, signature, body });",
+      "expected_outcome": "Mirror updated; emits .ticket.updated.v1."
+    },
+    {
+      "id": "sync-macros",
+      "title": "Daily macro sync mirrors automation rules",
+      "when_to_use": "Customer's Zendesk macros change; we sync nightly so a ProjexCloud workflow editor can reference them.",
+      "example_code": "import { syncMacros } from '@projexlight/connector-zendesk';\nawait syncMacros({ install_id });",
+      "expected_outcome": "Cache hydrated. .sync.completed.v1 emitted with row counts."
+    },
+    {
+      "id": "macro-fired-event",
+      "title": "Macro fires → sdk-workflow advances the linked workflow",
+      "when_to_use": "A Zendesk macro fires (e.g. 'mark resolved + email customer'); we surface it as an event so a ProjexCloud workflow can advance.",
+      "example_code": "subscribeEvents('connector-zendesk.macro.invoked.v1', async (e) => {\n  await advanceWorkflow({ workflow_id: e.payload.linked_workflow_id, signal: 'zendesk-macro' });\n});",
+      "expected_outcome": "Workflow advances on the macro signal; audit chain pins the macro ID."
+    }
+  ],
+  "compliance_posture": {
+    "regimes": ["SOC2-CC6.7-third-party", "GDPR-Art-28", "HIPAA-164.502-tickets", "Zendesk-Trust"],
+    "notes": "Refresh tokens vault-wrapped. Webhook signature verification mandatory. HIPAA tenants pin to Zendesk Enterprise + restrict ticket-body PII via the masking config."
+  },
+  "pool_placement": "app",
+  "pricing_skus": [
+    { "sku": "connector-zendesk.install",      "mode": "flat",    "unit_description": "per active subdomain per month" },
+    { "sku": "connector-zendesk.ticket.write", "mode": "metered", "unit_description": "per ticket created or updated outbound" },
+    { "sku": "connector-zendesk.webhook",      "mode": "metered", "unit_description": "per ingested webhook" },
+    { "sku": "connector-zendesk.macro.sync",   "mode": "metered", "unit_description": "per macro/automation sync run" }
+  ],
+  "no_endpoints": true,
+  "links": {
+    "readme": "packages/connector-zendesk/README.md",
+    "source": "packages/connector-zendesk/src/",
+    "prd_section": "P6B-Connectors §7"
+  }
+}

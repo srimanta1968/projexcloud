@@ -1,0 +1,96 @@
+{
+  "name": "@projexlight/connector-slack",
+  "version": "1.0.0",
+  "schema_version": "1.0",
+  "summary": "Slack workspace connector: install via OAuth, post to channels (with rate-aware queueing), receive slash commands + interactive components, and route Slack threads as conversation messages back to sdk-conversation. The canonical 'tell the team something happened' integration — sdk-notification routes Slack messages through here.",
+  "tags": ["connector", "slack", "notification", "chatops", "oauth"],
+  "provides": {
+    "endpoints": [
+      { "method": "POST", "path": "/api/connectors/slack/install",     "description": "Begin Slack OAuth install." },
+      { "method": "POST", "path": "/api/connectors/slack/events",      "description": "Receive Slack Events API payloads (mentions, messages, threads)." },
+      { "method": "POST", "path": "/api/connectors/slack/interactive", "description": "Receive interactive component callbacks (button clicks, modal submits)." }
+    ],
+    "events": [
+      { "name": "connector-slack.workspace.installed.v1",   "retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "Slack workspace OAuth complete." },
+      { "name": "connector-slack.message.sent.v1",          "retention_class": "operational","conflict_policy": "event-sourcing", "description": "Outbound message accepted by Slack." },
+      { "name": "connector-slack.message.failed.v1",        "retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "Outbound failed (rate limited / archived channel)." },
+      { "name": "connector-slack.interaction.received.v1",  "retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "User clicked an interactive component (button, modal submit)." },
+      { "name": "connector-slack.thread.routed.v1",         "retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "Inbound Slack thread routed as a conversation message to sdk-conversation." }
+    ],
+    "models": [
+      { "schema": "connector_slack", "table": "workspace",         "description": "Per-workspace row: team_id, team_name, bot_token_ref, installed_at." },
+      { "schema": "connector_slack", "table": "channel",           "description": "Per-channel row: channel_id, name, archived, last_message_at." },
+      { "schema": "connector_slack", "table": "message_outbound",  "description": "Per-sent-message row: channel, ts, status, retry_count." },
+      { "schema": "connector_slack", "table": "interaction",       "description": "Per-interaction row: kind, user_id, payload, processed_at." }
+    ],
+    "hooks": [
+      { "name": "installWorkspace",   "description": "OAuth install + bot-token storage." },
+      { "name": "postMessage",        "description": "Send a message to a channel. Rate-aware: queues when Slack rate-limits." },
+      { "name": "handleEvent",        "description": "Process inbound Slack Events API payload." },
+      { "name": "handleInteractive",  "description": "Process inbound interactive component callback." },
+      { "name": "startRetryWorker",   "description": "Background worker: retries rate-limited outbound messages." }
+    ],
+    "ui_components": []
+  },
+  "consumes": {
+    "events": [
+      { "name": "tenant.offboarded.v1",          "from": "@projexlight/sdk-tenant-lifecycle" },
+      { "name": "notification.message.sent.v1",  "from": "@projexlight/sdk-notification" }
+    ],
+    "infra": ["postgres", "sdk-secrets", "sdk-webhook"],
+    "config_keys": ["SLACK_RATE_LIMIT_PER_CHANNEL_PER_MIN", "SLACK_RETRY_MAX_ATTEMPTS", "SLACK_SIGNING_SECRET_REF"]
+  },
+  "scenarios": [
+    {
+      "id": "install-workspace",
+      "title": "Tenant admin installs the Slack app into their workspace",
+      "when_to_use": "First-time install via Slack OAuth; bot token stored vault-wrapped + scoped to the workspace.",
+      "example_code": "import { installWorkspace } from '@projexlight/connector-slack';\nconst { install_id, team_id } = await installWorkspace({\n  tenant_id, auth_code,\n});",
+      "expected_outcome": "Workspace row + bot-token vault-stored. Channels list discovered + cached."
+    },
+    {
+      "id": "post-alert-to-channel",
+      "title": "sdk-notification routes a 'storm declared' alert to #ops",
+      "when_to_use": "Reactive on notification.message.sent.v1 with channel: { kind: 'slack' } — connector formats + posts.",
+      "example_code": "import { postMessage } from '@projexlight/connector-slack';\nawait postMessage({\n  tenant_id, channel: '#ops',\n  text: '🚨 Storm declared: Cat-3 hurricane, 4,000 customers in scope',\n  blocks: [...],\n});",
+      "expected_outcome": "Message posted; emits .message.sent.v1. If Slack returns 429, queued + retried with backoff."
+    },
+    {
+      "id": "approve-via-button",
+      "title": "Operator clicks 'Approve' button in Slack → sdk-approval gate",
+      "when_to_use": "Interactive workflow — approval message sent to #compliance with Approve/Deny buttons; click flows into sdk-approval.",
+      "example_code": "import { handleInteractive } from '@projexlight/connector-slack';\nawait handleInteractive({\n  tenant_id, payload: req.body, // verified by Slack signature\n});",
+      "expected_outcome": "Interaction committed; emits .interaction.received.v1. sdk-approval picks it up + advances the approval workflow."
+    },
+    {
+      "id": "thread-as-conversation",
+      "title": "Inbound Slack thread bridges to sdk-conversation",
+      "when_to_use": "Customer asks a question in their shared Slack channel; we route it as a sdk-conversation message so support agents see it in the unified inbox.",
+      "example_code": "import { handleEvent } from '@projexlight/connector-slack';\nawait handleEvent({\n  tenant_id, event: { type: 'message', channel, thread_ts, user, text },\n});",
+      "expected_outcome": "Thread routed to sdk-conversation; emits .thread.routed.v1. Reply in the unified inbox flows back to the Slack thread."
+    },
+    {
+      "id": "retry-rate-limited",
+      "title": "Background worker retries rate-limited messages",
+      "when_to_use": "Slack rate-limits aggressively; the retry worker honors Retry-After headers + retries with exponential backoff.",
+      "example_code": "import { startRetryWorker } from '@projexlight/connector-slack';\nstartRetryWorker({ tenant_id, interval_sec: 30 });",
+      "expected_outcome": "Stale outbound messages re-attempted on their honor-after timestamp; emits .message.sent or .message.failed."
+    }
+  ],
+  "compliance_posture": {
+    "regimes": ["SOC2-CC6.7-third-party", "GDPR-Art-28", "Slack-Enterprise-Grid"],
+    "notes": "Bot tokens vault-wrapped. Signing-secret verification mandatory on inbound Events + Interactive endpoints; missing signature → 401. EU workspaces pin to EU API region."
+  },
+  "pool_placement": "app",
+  "pricing_skus": [
+    { "sku": "connector-slack.install",        "mode": "flat",    "unit_description": "per active workspace per month" },
+    { "sku": "connector-slack.message.post",   "mode": "metered", "unit_description": "per outbound message" },
+    { "sku": "connector-slack.interaction",    "mode": "metered", "unit_description": "per interaction received" },
+    { "sku": "connector-slack.thread.route",   "mode": "metered", "unit_description": "per thread routed to sdk-conversation" }
+  ],
+  "links": {
+    "readme": "packages/connector-slack/README.md",
+    "source": "packages/connector-slack/src/",
+    "prd_section": "P6B-Connectors §3"
+  }
+}
