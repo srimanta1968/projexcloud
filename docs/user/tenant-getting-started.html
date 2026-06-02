@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Tenant — Getting Started (Trial Workspace)</title>
+  <style>
+    :root {
+      --bg: #ffffff;
+      --fg: #1a1f2e;
+      --muted: #5a6573;
+      --accent: #1b2a44;
+      --border: #d3dbe8;
+      --soft: #f1f5fb;
+      --code-bg: #eef2f8;
+      --link: #1a4fc4;
+    }
+    * { box-sizing: border-box; }
+    body {
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      max-width: 880px;
+      margin: 0 auto;
+      padding: 32px 24px 80px;
+      background: var(--bg);
+      color: var(--fg);
+      line-height: 1.55;
+    }
+    header.page {
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 16px;
+      margin-bottom: 24px;
+    }
+    header.page h1 { margin: 0 0 8px; font-size: 28px; }
+    header.page .meta { color: var(--muted); font-size: 14px; }
+    header.page .meta code {
+      background: var(--code-bg);
+      padding: 1px 6px;
+      border-radius: 4px;
+      font-size: 13px;
+    }
+    .toolbar { display: flex; gap: 8px; margin: 16px 0 28px; }
+    .toolbar button {
+      background: var(--soft);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 6px 12px;
+      font-size: 13px;
+      cursor: pointer;
+      color: var(--accent);
+    }
+    .toolbar button:hover { background: #e3ebf6; }
+    details {
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      margin-bottom: 12px;
+      background: var(--bg);
+      overflow: hidden;
+    }
+    details[open] {
+      border-color: #b9c3d6;
+      box-shadow: 0 1px 3px rgba(27, 42, 68, 0.05);
+    }
+    summary {
+      list-style: none;
+      cursor: pointer;
+      padding: 14px 18px;
+      font-weight: 600;
+      font-size: 16px;
+      background: var(--soft);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      user-select: none;
+    }
+    summary::-webkit-details-marker { display: none; }
+    summary::before {
+      content: "▸";
+      color: var(--muted);
+      font-size: 12px;
+      transition: transform 0.15s ease;
+      display: inline-block;
+    }
+    details[open] > summary::before { transform: rotate(90deg); }
+    summary .num {
+      color: var(--muted);
+      font-weight: 500;
+      margin-right: 4px;
+      font-variant-numeric: tabular-nums;
+    }
+    .body {
+      padding: 16px 22px 22px;
+      border-top: 1px solid var(--border);
+    }
+    .body h3 {
+      margin: 18px 0 8px;
+      font-size: 15px;
+      color: var(--accent);
+    }
+    .body h3:first-child { margin-top: 0; }
+    .body p { margin: 8px 0; }
+    .body code {
+      background: var(--code-bg);
+      padding: 1px 5px;
+      border-radius: 3px;
+      font-size: 13px;
+      font-family: "SF Mono", Consolas, Menlo, monospace;
+    }
+    .body pre {
+      background: var(--code-bg);
+      padding: 12px 14px;
+      border-radius: 6px;
+      overflow-x: auto;
+      font-size: 13px;
+      font-family: "SF Mono", Consolas, Menlo, monospace;
+      margin: 10px 0;
+    }
+    .body pre code { background: transparent; padding: 0; }
+    .body ul, .body ol { padding-left: 22px; margin: 8px 0; }
+    .body li { margin: 4px 0; }
+    blockquote {
+      border-left: 3px solid var(--border);
+      margin: 12px 0;
+      padding: 4px 14px;
+      color: var(--muted);
+      font-size: 14px;
+      background: var(--soft);
+    }
+    .callout {
+      border-left: 3px solid #c79100;
+      background: #fdf6e3;
+      padding: 10px 14px;
+      margin: 12px 0;
+      border-radius: 4px;
+      font-size: 14px;
+    }
+    .callout.danger { border-left-color: #c12f1c; background: #fdecea; }
+    .callout.info { border-left-color: #1a4fc4; background: #ecf2fc; }
+    a { color: var(--link); }
+  </style>
+</head>
+<body>
+
+<header class="page">
+  <h1>Tenant — Getting Started (Trial Workspace)</h1>
+  <div class="meta">
+    <strong>Audience:</strong> the person who just signed up for a free ProjexCloud
+    trial — the first user of a brand-new tenant, automatically promoted to
+    tenant admin.<br />
+    <strong>Where you are:</strong> <code>http://localhost:3000</code> — the tenant workspace.<br />
+    <strong>Backed by:</strong> api-gateway on <code>http://localhost:3500</code> via <code>/api/*</code> routes,
+    authenticated with the six-layer JWT you just received.
+  </div>
+  <p style="margin-top:14px;color:var(--muted);font-size:14px;">
+    After signup you saw the welcome card with your Tenant ID, App ID, Org ID, and
+    Region. Those IDs are the six-layer scope on your JWT — every API call you
+    make is filtered through them, so you can only ever see your own tenant's
+    data. This guide walks a ~15-minute first-run path so you know the trial
+    works end-to-end.
+  </p>
+</header>
+
+<div class="toolbar">
+  <button onclick="document.querySelectorAll('details').forEach(d=>d.open=true)">Expand all</button>
+  <button onclick="document.querySelectorAll('details').forEach(d=>d.open=false)">Collapse all</button>
+</div>
+
+<details open>
+  <summary><span class="num">1.</span> Look at your workspace dashboard</summary>
+  <div class="body">
+    <p>Go to <code>http://localhost:3000/dashboard</code>. You should see:</p>
+    <ul>
+      <li><strong>Active session card</strong> — your email, Tenant ID, App ID, Org ID, and session expiry. This is your JWT decoded client-side (display only; the gateway re-verifies on every request).</li>
+      <li><strong>In-workspace tools</strong> — three tiles:
+        <ul>
+          <li><strong>Build with AI</strong> → <code>/build</code> — chat-driven app scaffolding from vertical blueprints (see §5).</li>
+          <li><strong>Audit ledger</strong> → <code>/admin/audit</code> — append + verify the tamper-evident chain.</li>
+          <li><strong>Key hierarchy</strong> → <code>/admin/keys</code> — read-only view of the vault key tiers.</li>
+        </ul>
+      </li>
+      <li><strong>Other consoles</strong> — external links to:
+        <ul>
+          <li><strong>Tenant Admin</strong> at <code>http://localhost:3200</code> (see §2).</li>
+          <li><strong>Platform Console</strong> at <code>http://localhost:3100</code> — operator-only; tenant credentials cannot sign in here.</li>
+        </ul>
+      </li>
+    </ul>
+    <div class="callout info">
+      If the dashboard kicks you back to <code>/login</code>, your JWT didn't land in localStorage.
+      Re-do the signup or <code>/login</code> flow and check browser devtools → Application → Local Storage
+      for the <code>projex_token</code> key.
+    </div>
+  </div>
+</details>
+
+<details>
+  <summary><span class="num">2.</span> Visit the Tenant Admin console</summary>
+  <div class="body">
+    <p>Click <strong>Tenant Admin</strong> on the dashboard, or open <code>http://localhost:3200</code> directly.
+    Sign in with the same credentials you used at signup. The sidebar includes:</p>
+    <ul>
+      <li><strong>Billing</strong> — live meter + invoices (empty for a fresh trial).</li>
+      <li><strong>Members</strong> — personas, roles, BUs.</li>
+      <li><strong>API keys</strong> — long-lived machine credentials.</li>
+      <li><strong>Webhooks</strong>, <strong>Connectors</strong>, <strong>Approvals</strong>, <strong>Consent</strong>, <strong>BYOK</strong>, <strong>MCP servers</strong>.</li>
+    </ul>
+    <p>The full reference is in <a href="./tenant-admin-guide.html">tenant-admin-guide.html</a>. For testing, the two highest-signal screens are <strong>Members</strong> and <strong>API keys</strong>.</p>
+
+    <h3>2a. Add a teammate (Members)</h3>
+    <ol>
+      <li><strong>Members</strong> → <strong>Add persona</strong>.</li>
+      <li>Kind: pick <code>human</code> for a test invite, or <code>service</code> for a machine identity.</li>
+      <li>Assign at least one role from the role catalogue.</li>
+      <li>Save.</li>
+    </ol>
+    <p>Watch the audit panel — a <code>member.added</code> entry should land within a second or two. That's <code>sdk-audit</code> writing to your tamper-evident ledger.</p>
+
+    <h3>2b. Issue an API key</h3>
+    <ol>
+      <li><strong>API keys</strong> → <strong>Issue key</strong>.</li>
+      <li>Pick a service persona (create one in 2a if needed).</li>
+      <li>Pick scopes (minimum privilege: <code>tenant.read</code> is enough for the call in §3).</li>
+      <li>(Optional) set an expiry.</li>
+      <li>Save and <strong>copy the secret immediately</strong> — it is shown once. ProjexCloud only stores a hash.</li>
+    </ol>
+    <p>Keep the secret in your clipboard for §3.</p>
+  </div>
+</details>
+
+<details>
+  <summary><span class="num">3.</span> Make a first authenticated API call</summary>
+  <div class="body">
+    <p>You can authenticate with either the JWT (from signup) or the API key (from §2b). The JWT is short-lived
+    (7 days by default — see <code>JWT_EXPIRES_IN</code> in <code>.env</code>); the API key is long-lived.</p>
+
+    <h3>With the JWT</h3>
+    <p>Grab your token from browser devtools → Application → Local Storage → <code>projex_token</code>, then:</p>
+    <pre><code>curl http://localhost:3500/api/userinfo `
+  -H "Authorization: Bearer &lt;paste-jwt-here&gt;"</code></pre>
+    <p>Expected: a JSON body with your <code>sub</code>, <code>email</code>, <code>tenant_id</code>, <code>app_id</code>, <code>org_id</code> —
+    the same scope your dashboard showed.</p>
+    <ul>
+      <li>A <strong>401</strong> means the JWT expired or didn't make it through.</li>
+      <li>A <strong>404</strong> means the api-gateway hasn't mounted <code>sdk-identity</code>'s routes (rebuild the SDK — see §7).</li>
+    </ul>
+
+    <h3>With the API key</h3>
+    <pre><code>curl http://localhost:3500/api/userinfo `
+  -H "Authorization: Bearer &lt;paste-api-key-here&gt;"</code></pre>
+    <p>If both work, your six-layer JWT pipeline is alive end-to-end:
+    signup → token mint → middleware verify → tenant-scoped response.</p>
+  </div>
+</details>
+
+<details>
+  <summary><span class="num">4.</span> Watch usage land on the meter</summary>
+  <div class="body">
+    <p>API calls are metered by <code>sdk-meter</code>. After the calls in §3:</p>
+    <ol>
+      <li>Tenant Admin → <strong>Billing</strong> → <strong>Live meter</strong>.</li>
+      <li>Wait ~60s (the meter refreshes on that cadence).</li>
+      <li>You should see at least one row — usually an <code>identity.userinfo</code> SKU with a small request count.</li>
+    </ol>
+    <div class="callout">
+      If the meter is empty, the call bypassed metering — most often because Redis isn't enabled
+      (see <code>REDIS_ENABLED</code> in <code>.env</code>; the soft-cap path requires it).
+    </div>
+  </div>
+</details>
+
+<details>
+  <summary><span class="num">5.</span> Try the AI scaffolding flow (<code>/build</code>)</summary>
+  <div class="body">
+    <p>Back in the workspace, go to <code>http://localhost:3000/build</code>. This is the cloud agent surface — it
+    takes a natural-language project description, matches it against the vertical blueprint catalogue
+    (<em>Field-service dispatch</em>, <em>Insurance claims intake</em>, <em>B2B SaaS analytics</em>,
+    <em>Healthcare patient portal</em>, <em>RevOps CRM</em>), and scaffolds a starter workspace inside your
+    tenant's pool.</p>
+
+    <p>Try a prompt like:</p>
+    <blockquote><em>"I want a small lead-scoring app for my SaaS sales team."</em></blockquote>
+
+    <p>Expected flow: blueprint match → 2–3 clarifying questions → scaffold plan. The full deploy step
+    ("hand me a URL in 5 minutes") requires the cloud builder to be running; in a local dev environment
+    you may see the plan but not a deployed app.</p>
+
+    <div class="callout">
+      <strong>Note on scope:</strong> <code>/build</code> is the most ambitious part of the product. If it errors out,
+      it's the most likely thing to be half-wired in a fresh dev environment — not a fault of your signup.
+    </div>
+  </div>
+</details>
+
+<details>
+  <summary><span class="num">6.</span> Optional: audit ledger and key hierarchy</summary>
+  <div class="body">
+    <p>These are read-only views that confirm the platform's compliance plumbing is working for your tenant.</p>
+    <ul>
+      <li><strong>Audit ledger</strong> (<code>/admin/audit</code>) — append a manual entry, then click <strong>Verify chain</strong>
+      to confirm the hash chain is unbroken. Every admin-side action (member add, API key issue, etc.) appends here.</li>
+      <li><strong>Key hierarchy</strong> (<code>/admin/keys</code>) — visualises the four-tier vault hierarchy
+      (Platform KEK → Tenant KEK → DEKs → Per-resource keys). In a fresh trial only the top tiers are
+      populated; per-resource keys appear as you encrypt data through <code>sdk-vault</code>.</li>
+    </ul>
+  </div>
+</details>
+
+<details>
+  <summary><span class="num">7.</span> Troubleshooting</summary>
+  <div class="body">
+    <h3>Signup returned 404 on <code>/api/auth/signup-tenant</code></h3>
+    <p>The <code>@projexlight/sdk-identity</code> package's <code>dist/</code> is stale (was built before
+    <code>signup-tenant</code> was added). Rebuild and restart:</p>
+    <pre><code>pnpm --filter @projexlight/sdk-identity build
+# then stop and restart `pnpm dev`</code></pre>
+    <p>Same pattern applies to any other route registered in an SDK but not in the gateway's own <code>src/</code>.</p>
+
+    <h3><code>http://localhost:3200</code> shows "site can't be reached"</h3>
+    <p>The tenant-admin app isn't running. Either <code>pnpm dev</code> didn't start it (turbo runs every <code>dev</code>
+    script in parallel — check the terminal output for compile errors), or you can start it on its own:</p>
+    <pre><code>pnpm --filter tenant-admin dev</code></pre>
+    <p>Same pattern for the other apps: <code>tenant-workspace</code>, <code>projexcloud-admin</code>, <code>@projexlight/api-gateway</code>.</p>
+
+    <h3><code>http://localhost:3100</code> (Platform Console) refuses to sign in</h3>
+    <p>This console is for ProjexCloud platform staff, not tenant users. It requires
+    <code>ADMIN_OPS_TOKEN</code> (set in <code>.env</code>). Your tenant credentials will not work here — by design.</p>
+
+    <h3>The dashboard keeps redirecting to <code>/login</code></h3>
+    <p>Either your JWT expired, or it didn't land in localStorage. Sign in again at <code>/login</code>
+    (not <code>/signup</code> — that creates a <em>new</em> tenant). If sign-in succeeds but the dashboard still
+    redirects, check that <code>projex_token</code> is present in Local Storage and that
+    <code>NEXT_PUBLIC_API_BASE</code> points at the right gateway (<code>http://localhost:3500</code> by default).</p>
+
+    <h3>"JWT signature invalid" on <code>/api/userinfo</code></h3>
+    <p>The gateway's <code>JWT_SECRET</code> changed between when the token was minted and when it's being verified.
+    Sign in again to mint a fresh token, or restore the previous <code>JWT_SECRET</code> value in <code>.env</code>.</p>
+  </div>
+</details>
+
+<details>
+  <summary><span class="num">8.</span> Where to go next</summary>
+  <div class="body">
+    <ul>
+      <li><strong>Daily operations</strong> of your tenant → <a href="./tenant-admin-guide.html">tenant-admin-guide.html</a>.</li>
+      <li><strong>Platform-level operations</strong> (mostly for ProjexCloud staff, not tenants) → <a href="./platform-admin-guide.html">platform-admin-guide.html</a>.</li>
+      <li><strong>Architectural roadmap</strong> for the SDK capability registry, MCP, vertical packs, and the local CLI flow → <a href="./Next-steps.md">Next-steps.md</a>.</li>
+      <li><strong>Identity model</strong> (six-layer JWT, persona vs subject vs alias, federation, SCIM, SAML) → P2 docs under <code>docs/v3.1/</code>.</li>
+    </ul>
+  </div>
+</details>
+
+</body>
+</html>
