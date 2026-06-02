@@ -41,7 +41,6 @@ export function MarketingFooter(): JSX.Element {
           <div style={COL_TITLE}>For Developers</div>
           <a href="/docs/user/tenant-getting-started.html" style={COL_LINK}>Getting started</a>
           <a href="/docs/user/tenant-admin-guide.html"     style={COL_LINK}>Tenant admin guide</a>
-          <a href="/docs/v3.1/Architecture-v3.1.html"      style={COL_LINK}>Architecture</a>
         </div>
         <div>
           <div style={COL_TITLE}>Company</div>
