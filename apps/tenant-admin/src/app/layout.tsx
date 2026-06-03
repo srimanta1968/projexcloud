@@ -25,6 +25,7 @@ export default function RootLayout({ children }: { children: ReactNode }): JSX.E
             <a href="/connectors" style={LINK}>Connectors</a>
             <a href="/consent" style={LINK}>Consent</a>
             <a href="/ai/mcp-servers" style={LINK}>AI</a>
+            <a href="/ai/providers" style={LINK}>AI Providers</a>
             <a href="/byok" style={LINK}>BYOK</a>
             <a href="/help" style={LINK}>Help</a>
           </nav>

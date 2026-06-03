@@ -1,0 +1,41 @@
+{
+  "name": "Meter SKU switch on BYOK completion (FR-BYOK-9 / AC-4)",
+  "endpoint": "internal://sdk-ai-gateway/completionService.emitCompletionEvent",
+  "method": "INTERNAL_FUNCTION",
+  "requiresAuth": false,
+  "expectedStatus": 200,
+  "taskId": "b6a5b58a-62e2-405c-a422-79dafa0c6813",
+  "sprintId": "8ef1d09e-dd8e-4daf-8d03-54dcd9f812f8",
+  "featureId": "bbc13bd1-d812-4e28-9bdc-2f8253bf8c22",
+  "epicId": "76ec75df-cf40-4336-b591-42019674d864",
+  "priority": 15,
+  "testability": "manual",
+  "skipReason": "Effect is observable in the audit ledger payload (credential_source field) and the persisted ai_gateway.completion.billed_cost (0 for BYOK). Covered by integration test referenced in PRD AC-4.",
+  "testCases": [
+    {
+      "name": "Tenant credential completion stamps credential_source=tenant and bills 0 markup",
+      "payload": {
+        "scenario": "tenant_credential",
+        "expected_audit_payload_field": "credential_source=tenant",
+        "expected_billed_cost": 0,
+        "expected_token_sku_emitted": false,
+        "expected_governance_sku_emitted": true
+      },
+      "expectedStatus": 200,
+      "expectedResponse": { "success": true }
+    },
+    {
+      "name": "Platform credential completion stamps credential_source=platform and bills with margin",
+      "payload": {
+        "scenario": "platform_credential",
+        "expected_audit_payload_field": "credential_source=platform",
+        "expected_billed_cost_gt": 0,
+        "expected_token_sku_emitted": true,
+        "expected_governance_sku_emitted": true
+      },
+      "expectedStatus": 200,
+      "expectedResponse": { "success": true }
+    }
+  ],
+  "expectedResponse": { "success": true }
+}

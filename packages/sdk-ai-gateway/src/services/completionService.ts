@@ -39,18 +39,144 @@ import { resolveLocalProvider } from './localProviderResolver';
 
 const PROVIDER_MARGIN_PCT = parseFloat(process.env.AI_GATEWAY_MARGIN_PCT ?? '15');
 
-interface ProviderRow {
+export type CredentialSource = 'tenant' | 'platform';
+
+export interface ProviderRow {
   provider_id: ProviderId;
   credential_envelope: Buffer;
   status: 'active' | 'degraded' | 'disabled';
+  credential_source: CredentialSource;
+  binding_id?: string;
+  model_allowlist?: string[] | null;
 }
 
-async function loadProviderRow(provider_id: ProviderId): Promise<ProviderRow | null> {
-  return dataService.one<ProviderRow>(
+/**
+ * In-process resolver cache for tenant↔provider lookups. Bounded TTL because
+ * bind/rotate/revoke fires audit events but does not (yet) broadcast a
+ * cache-invalidation message — the 60s window is the worst-case staleness.
+ */
+interface CacheEntry {
+  row: ProviderRow;
+  expires_at: number;
+}
+const RESOLVER_CACHE_TTL_MS = 60_000;
+const resolverCache = new Map<string, CacheEntry>();
+
+function cacheKey(tenant_id: string | null | undefined, provider_id: ProviderId): string {
+  return `${tenant_id ?? '__platform__'}::${provider_id}`;
+}
+
+function cacheGet(key: string): ProviderRow | null {
+  const hit = resolverCache.get(key);
+  if (!hit) return null;
+  if (hit.expires_at < Date.now()) {
+    resolverCache.delete(key);
+    return null;
+  }
+  return hit.row;
+}
+
+function cachePut(key: string, row: ProviderRow): void {
+  resolverCache.set(key, { row, expires_at: Date.now() + RESOLVER_CACHE_TTL_MS });
+}
+
+/**
+ * Invalidate the resolver cache for a (tenant, provider) pair. Called from
+ * tenantCredentialService on bind/rotate/revoke so the next completion sees
+ * the change immediately.
+ */
+export function invalidateProviderCache(tenant_id: string, provider_id: ProviderId): void {
+  resolverCache.delete(cacheKey(tenant_id, provider_id));
+}
+
+interface TenantCredentialRow {
+  binding_id: string;
+  credential_envelope: Buffer;
+  model_allowlist: string[] | null;
+}
+
+/**
+ * Resolve the credential to use for a given (tenant, provider, model) tuple.
+ *
+ * Resolution order per docs/v3.1/prd/Tenant-BYOK-AI-Keys.md FR-BYOK-2:
+ *   1. Active row in ai_gateway.tenant_provider_credential for (tenant, provider).
+ *      If model_allowlist is non-null and the requested model is not in it,
+ *      treat as no tenant credential and fall through (FR-BYOK-6).
+ *   2. Platform row in ai_gateway.provider for the provider.
+ *
+ * Returns null if neither exists or the platform row is disabled.
+ */
+async function loadProviderRow(
+  tenant_id: string | null | undefined,
+  provider_id: ProviderId,
+  model?: string,
+): Promise<ProviderRow | null> {
+  // Model-allowlist gating defeats cache reuse across different models, so
+  // we only cache when no model is supplied OR no tenant binding exists.
+  const key = cacheKey(tenant_id, provider_id);
+  const cached = cacheGet(key);
+  if (cached) {
+    if (
+      cached.credential_source === 'tenant' &&
+      cached.model_allowlist &&
+      model &&
+      !cached.model_allowlist.includes(model)
+    ) {
+      // Fall through to platform — but don't poison the cache with a
+      // model-dependent answer. Continue to fresh resolution below.
+    } else {
+      return cached;
+    }
+  }
+
+  if (tenant_id) {
+    const tenantRow = await dataService.one<TenantCredentialRow>(
+      `SELECT binding_id, credential_envelope, model_allowlist
+         FROM ai_gateway.tenant_provider_credential
+         WHERE tenant_id = $1 AND provider_id = $2 AND status = 'active'`,
+      [tenant_id, provider_id],
+    );
+    if (tenantRow) {
+      const allowlist = tenantRow.model_allowlist;
+      const modelAllowed = !allowlist || (model ? allowlist.includes(model) : true);
+      if (modelAllowed) {
+        const row: ProviderRow = {
+          provider_id,
+          credential_envelope: tenantRow.credential_envelope,
+          status: 'active',
+          credential_source: 'tenant',
+          binding_id: tenantRow.binding_id,
+          model_allowlist: allowlist,
+        };
+        cachePut(key, row);
+        return row;
+      }
+      // model not in allowlist → fall through to platform without caching
+      // (the answer is model-dependent).
+    }
+  }
+
+  const platformRow = await dataService.one<{
+    provider_id: ProviderId;
+    credential_envelope: Buffer;
+    status: 'active' | 'degraded' | 'disabled';
+  }>(
     `SELECT provider_id, credential_envelope, status
        FROM ai_gateway.provider WHERE provider_id = $1`,
     [provider_id],
   );
+  if (!platformRow) return null;
+
+  const row: ProviderRow = {
+    provider_id: platformRow.provider_id,
+    credential_envelope: platformRow.credential_envelope,
+    status: platformRow.status,
+    credential_source: 'platform',
+  };
+  // Cache only when we either had no tenant_id or the platform fallback is
+  // the right answer regardless of model — i.e. no tenant binding existed.
+  cachePut(key, row);
+  return row;
 }
 
 interface SelectedRoute {
@@ -168,6 +294,7 @@ async function emitCompletionEvent(input: {
   selected: SelectedRoute;
   result: ProviderCompletionResult;
   billed_cost: number;
+  credential_source: CredentialSource;
   completion_id: string;
   event_type: 'ai-gateway.complete.v1' | 'ai-gateway.stream.v1';
 }): Promise<void> {
@@ -189,6 +316,10 @@ async function emitCompletionEvent(input: {
         tokens_out: input.result.tokens_out,
         provider_cost: input.result.provider_cost,
         billed_cost: input.billed_cost,
+        // FR-BYOK-9 / AC-4: stamped so the meter ingest worker emits the
+        // governance SKU only for tenant credential calls (suppresses the
+        // ai-gateway.tokens.* markup line).
+        credential_source: input.credential_source,
         finish_reason: input.result.finish_reason,
         trace_id: input.ctx.trace_id,
       },
@@ -214,7 +345,7 @@ export async function complete(
   await ensureKillSwitchClear(ctx);
 
   const selected = await selectRoute(ctx, request);
-  const providerRow = await loadProviderRow(selected.provider_id);
+  const providerRow = await loadProviderRow(ctx.tenant_id, selected.provider_id, selected.model);
   if (!providerRow || providerRow.status === 'disabled') {
     throw new Error(`[ai-gateway] provider ${selected.provider_id} not available`);
   }
@@ -238,7 +369,14 @@ export async function complete(
   }
 
   const latency_ms = Date.now() - startedAt;
-  const billed_cost = computeBilled(result.provider_cost);
+  // FR-BYOK-9: when the tenant brings their own provider key, the token cost
+  // is on their provider invoice — we bill only the governance SKU. The
+  // billed_cost on the completion row stays at zero, and the meter ingest
+  // worker (reading credential_source from the audit payload) emits only
+  // ai-gateway.completion.governance for these calls.
+  const billed_cost = providerRow.credential_source === 'tenant'
+    ? 0
+    : computeBilled(result.provider_cost);
 
   await persistCompletion({
     completion_id: completionId,
@@ -254,6 +392,7 @@ export async function complete(
     selected,
     result,
     billed_cost,
+    credential_source: providerRow.credential_source,
     completion_id: completionId,
     event_type: 'ai-gateway.complete.v1',
   });
@@ -288,7 +427,7 @@ export async function* stream(
   await ensureKillSwitchClear(ctx);
 
   const selected = await selectRoute(ctx, request);
-  const providerRow = await loadProviderRow(selected.provider_id);
+  const providerRow = await loadProviderRow(ctx.tenant_id, selected.provider_id, selected.model);
   if (!providerRow || providerRow.status === 'disabled') {
     throw new Error(`[ai-gateway] provider ${selected.provider_id} not available`);
   }
@@ -324,7 +463,10 @@ export async function* stream(
   // Streaming providers usually report cost out-of-band; approximate from
   // a static rate per million tokens until a per-stream cost hook lands.
   const approxProviderCost = (tokensSoFar / 1_000_000) * 1.0; // $1/M tokens default
-  const billed_cost = computeBilled(approxProviderCost);
+  // FR-BYOK-9: zero token markup for BYOK streams; governance SKU only.
+  const billed_cost = providerRow.credential_source === 'tenant'
+    ? 0
+    : computeBilled(approxProviderCost);
 
   const synthetic: ProviderCompletionResult = {
     output: outputAccum,
@@ -349,6 +491,7 @@ export async function* stream(
     selected,
     result: synthetic,
     billed_cost,
+    credential_source: providerRow.credential_source,
     completion_id: completionId,
     event_type: 'ai-gateway.stream.v1',
   });

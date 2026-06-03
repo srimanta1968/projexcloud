@@ -455,7 +455,51 @@ export const EVENT_TYPE_REGISTRY: Record<string, EventTypeMetadata> = {
   'active-active.profile.activated.v1':       { event_type: 'active-active.profile.activated.v1',       retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
   'active-active.failover.drill.v1':          { event_type: 'active-active.failover.drill.v1',          retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
   'active-active.tier.downgraded.v1':         { event_type: 'active-active.tier.downgraded.v1',         retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+
+  /* ============================================================
+   * P6A extension — Tenant-BYOK for AI Provider Keys.
+   * Per docs/v3.1/prd/Tenant-BYOK-AI-Keys.md §5.1 FR-BYOK-3..5.
+   * Regulated retention so the customer-managed credential lifecycle
+   * is auditor-replayable for SOC2 / HIPAA / FedRAMP.
+   * ============================================================ */
+  'ai_gateway.tenant_credential.bound.v1':    { event_type: 'ai_gateway.tenant_credential.bound.v1',    retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+  'ai_gateway.tenant_credential.rotated.v1':  { event_type: 'ai_gateway.tenant_credential.rotated.v1',  retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+  'ai_gateway.tenant_credential.revoked.v1':  { event_type: 'ai_gateway.tenant_credential.revoked.v1',  retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
 };
+
+/* ============================================================
+ * Typed payloads for ai_gateway.tenant_credential.* events.
+ * Producers (sdk-ai-gateway/tenantCredentialService) must shape
+ * the audit `payload` to one of these — last_4 only, never raw key.
+ * ============================================================ */
+export interface AiGatewayTenantCredentialBoundPayload {
+  binding_id: string;
+  tenant_id: string;
+  provider_id: 'anthropic' | 'openai' | 'bedrock' | 'gemini';
+  last_4: string;
+  actor_id: string;
+  bound_at: string;
+  model_allowlist?: string[];
+  fallback_on_error?: boolean;
+}
+
+export interface AiGatewayTenantCredentialRotatedPayload {
+  binding_id: string;
+  tenant_id: string;
+  provider_id: 'anthropic' | 'openai' | 'bedrock' | 'gemini';
+  last_4: string;
+  actor_id: string;
+  rotated_at: string;
+}
+
+export interface AiGatewayTenantCredentialRevokedPayload {
+  binding_id: string;
+  tenant_id: string;
+  provider_id: 'anthropic' | 'openai' | 'bedrock' | 'gemini';
+  actor_id: string;
+  reason: string;
+  revoked_at: string;
+}
 
 export type RegisteredEventType = keyof typeof EVENT_TYPE_REGISTRY;
 
