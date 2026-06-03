@@ -68,7 +68,7 @@ export default function BuildPage(): JSX.Element {
   const [phase, setPhase] = useState<Phase>('idle');
   const [intent, setIntent] = useState('');
   const [plan, setPlan] = useState<BuildPlan | null>(null);
-  const [meta, setMeta] = useState<{ catalog_size: number } | null>(null);
+  const [meta, setMeta] = useState<{ catalog_size: number; provider?: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -87,7 +87,7 @@ export default function BuildPage(): JSX.Element {
         headers: { 'content-type': 'application/json', authorization: `Bearer ${getToken() ?? ''}` },
         body: JSON.stringify({ intent }),
       });
-      const body = (await res.json()) as { plan?: BuildPlan; meta?: { catalog_size: number }; error?: string };
+      const body = (await res.json()) as { plan?: BuildPlan; meta?: { catalog_size: number; provider?: string }; error?: string };
       if (!res.ok) {
         setError(body.error ?? `plan failed: ${res.status}`);
         setPhase('error');
@@ -155,7 +155,7 @@ export default function BuildPage(): JSX.Element {
               {phase === 'planning' ? 'Composing plan…' : 'Generate plan →'}
             </button>
             <span style={{ fontSize: 12, color: '#7a8597' }}>
-              Powered by Claude · audit logging coming in v2
+              Powered by {meta?.provider === 'openai' ? 'OpenAI' : meta?.provider === 'anthropic' ? 'Claude' : 'OpenAI / Claude (auto-select)'} · audit logging coming in v2
             </span>
           </div>
         </form>

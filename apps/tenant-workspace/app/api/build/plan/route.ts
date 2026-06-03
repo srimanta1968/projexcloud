@@ -60,11 +60,14 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   }
 
   let plan: BuildPlan;
+  let provider: string;
   try {
-    plan = await generateBuildPlan({ intent, catalog });
+    const result = await generateBuildPlan({ intent, catalog });
+    plan = result.plan;
+    provider = result.provider;
   } catch (err) {
     const msg = (err as Error).message;
-    const status = msg.includes('ANTHROPIC_API_KEY') ? 503 : 502;
+    const status = msg.includes('No LLM provider') || msg.includes('API_KEY is not set') ? 503 : 502;
     return NextResponse.json({ error: msg }, { status });
   }
 
@@ -72,6 +75,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     plan,
     meta: {
       catalog_size: catalog.length,
+      provider,
       audit_status: 'deferred-v2',
     },
   });
