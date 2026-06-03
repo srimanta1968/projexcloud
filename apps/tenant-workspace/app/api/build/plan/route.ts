@@ -17,7 +17,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { loadCatalog } from '../../../../lib/build/sdkCatalog';
+import { loadCatalogWithMeta } from '../../../../lib/build/sdkCatalog';
 import { generateBuildPlan, type BuildPlan } from '../../../../lib/build/planLlm';
 
 // Force node runtime — we read files from disk and need the ANTHROPIC_API_KEY env.
@@ -39,8 +39,11 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   }
 
   let catalog;
+  let packagesDir = '';
   try {
-    catalog = loadCatalog();
+    const res = loadCatalogWithMeta();
+    catalog = res.catalog;
+    packagesDir = res.packagesDir;
   } catch (err) {
     return NextResponse.json(
       { error: 'failed to load SDK catalog: ' + (err as Error).message },
@@ -49,7 +52,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   }
   if (catalog.length === 0) {
     return NextResponse.json(
-      { error: 'no SDK manifests found under packages/*; cannot plan' },
+      {
+        error: `no SDK manifests found at ${packagesDir} (tried PROJEXCLOUD_PACKAGES_DIR env, cwd/packages, cwd/../../packages). cwd=${process.cwd()}`,
+      },
       { status: 500 },
     );
   }

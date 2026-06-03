@@ -18,8 +18,38 @@ export interface CatalogSdk {
   capabilities: string[];
 }
 
-const REPO_ROOT = path.resolve(__dirname, '../../../../');
-const PACKAGES_DIR = path.join(REPO_ROOT, 'packages');
+/**
+ * Resolve the monorepo `packages/` directory regardless of where Next was
+ * launched from. We can't trust __dirname — at runtime in Next dev, route
+ * handlers live in .next/server/... not in apps/tenant-workspace/lib/build/.
+ * Try a few candidates in order (repo root, parent of apps/, etc.) and pick
+ * the first one that actually contains sdk-capability.json files.
+ */
+function resolvePackagesDir(): string {
+  const cwd = process.cwd();
+  const candidates = [
+    path.resolve(cwd, 'packages'),                    // started from repo root
+    path.resolve(cwd, '..', '..', 'packages'),        // started from apps/tenant-workspace
+    path.resolve(cwd, '..', 'packages'),              // started from apps/ (rare)
+    process.env.PROJEXCLOUD_PACKAGES_DIR ?? '',       // explicit override
+  ].filter(Boolean);
+
+  for (const candidate of candidates) {
+    if (!fs.existsSync(candidate)) continue;
+    try {
+      const entries = fs.readdirSync(candidate, { withFileTypes: true });
+      const hasManifest = entries.some(
+        (d) => d.isDirectory() && fs.existsSync(path.join(candidate, d.name, 'sdk-capability.json')),
+      );
+      if (hasManifest) return candidate;
+    } catch {
+      // fallthrough
+    }
+  }
+  return candidates[0]; // best-effort even if empty, so the error message names a real path
+}
+
+const PACKAGES_DIR = resolvePackagesDir();
 
 interface RawManifest {
   name?: string;
@@ -59,10 +89,24 @@ function trim(manifest: RawManifest): CatalogSdk | null {
 
 let _catalog: CatalogSdk[] | null = null;
 
+export interface CatalogLoadResult {
+  catalog: CatalogSdk[];
+  packagesDir: string;
+}
+
 export function loadCatalog(): CatalogSdk[] {
-  if (_catalog) return _catalog;
+  return loadCatalogWithMeta().catalog;
+}
+
+export function loadCatalogWithMeta(): CatalogLoadResult {
+  if (_catalog) return { catalog: _catalog, packagesDir: PACKAGES_DIR };
   const out: CatalogSdk[] = [];
   try {
+    if (!fs.existsSync(PACKAGES_DIR)) {
+      console.error(`[sdkCatalog] packages dir not found: ${PACKAGES_DIR}`);
+      _catalog = out;
+      return { catalog: out, packagesDir: PACKAGES_DIR };
+    }
     const pkgDirs = fs.readdirSync(PACKAGES_DIR, { withFileTypes: true });
     for (const dirent of pkgDirs) {
       if (!dirent.isDirectory()) continue;
@@ -81,7 +125,8 @@ export function loadCatalog(): CatalogSdk[] {
   }
   out.sort((a, b) => a.name.localeCompare(b.name));
   _catalog = out;
-  return out;
+  console.log(`[sdkCatalog] loaded ${out.length} manifests from ${PACKAGES_DIR}`);
+  return { catalog: out, packagesDir: PACKAGES_DIR };
 }
 
 /** Render the catalog as a compact YAML-ish prompt block. */
