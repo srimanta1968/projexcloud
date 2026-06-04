@@ -1,4 +1,14 @@
 import Link from 'next/link';
+import {
+  PageHeader,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@projexlight/design-system';
+import { StatusBadge } from '../../components/StatusBadge';
 
 interface CatalogRow {
   catalog_id: string;
@@ -27,67 +37,58 @@ async function fetchCatalogs(): Promise<CatalogRow[]> {
   }
 }
 
-function statusColor(status: string): string {
-  switch (status) {
-    case 'active':
-      return '#0d8a3d';
-    case 'draft':
-      return '#a36500';
-    case 'retired':
-      return '#7a7a7a';
-    default:
-      return '#000';
-  }
-}
-
 export default async function PricingCatalogsPage(): Promise<JSX.Element> {
   const catalogs = await fetchCatalogs();
   return (
     <div>
-      <h1>Pricing catalogs</h1>
-      <p style={{ color: '#5a6573' }}>
-        Versioned rate cards consumed by the meter gate. Each catalog is immutable once
-        retired; create a new version to roll prices forward. Sample defaults were seeded
-        by migration <code>005_p7_skus.sql</code>; override here per the doctrine.
-      </p>
-      <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: 16 }}>
-        <thead style={{ textAlign: 'left', borderBottom: '1px solid #d7dce4' }}>
-          <tr>
-            <th style={{ padding: 8 }}>Catalog</th>
-            <th style={{ padding: 8 }}>Version</th>
-            <th style={{ padding: 8 }}>Status</th>
-            <th style={{ padding: 8 }}>Effective From</th>
-            <th style={{ padding: 8 }}>Rates</th>
-            <th style={{ padding: 8 }}>Created by</th>
-          </tr>
-        </thead>
-        <tbody>
-          {catalogs.length === 0 && (
-            <tr>
-              <td colSpan={6} style={{ padding: 12, color: '#9aa3b2' }}>
-                No catalogs visible. Make sure the gateway is up and ADMIN_OPS_TOKEN is set
-                in this app&apos;s env.
-              </td>
-            </tr>
-          )}
-          {catalogs.map((c) => (
-            <tr key={c.catalog_id} style={{ borderBottom: '1px solid #eef0f4' }}>
-              <td style={{ padding: 8, fontFamily: 'monospace' }}>
-                <Link href={`/pricing-catalogs/${encodeURIComponent(c.catalog_id)}`}>
-                  {c.catalog_id}
-                </Link>
-              </td>
-              <td style={{ padding: 8 }}>{c.version}</td>
-              <td style={{ padding: 8, color: statusColor(c.status), fontWeight: 600 }}>
-                {c.status}
-              </td>
-              <td style={{ padding: 8 }}>{new Date(c.effective_from).toLocaleString()}</td>
-              <td style={{ padding: 8 }}>{c.rate_count}</td>
-              <td style={{ padding: 8, color: '#5a6573' }}>{c.created_by}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+      <PageHeader
+        title="Pricing catalogs"
+        description={
+          <>
+            Versioned rate cards consumed by the meter gate. Each catalog is immutable once
+            retired; create a new version to roll prices forward. Sample defaults were seeded
+            by migration <code>005_p7_skus.sql</code>; override here per the doctrine.
+          </>
+        }
+      />
+      <div className="rounded-lg border">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Catalog</TableHead>
+              <TableHead>Version</TableHead>
+              <TableHead>Status</TableHead>
+              <TableHead>Effective From</TableHead>
+              <TableHead>Rates</TableHead>
+              <TableHead>Created by</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {catalogs.length === 0 && (
+              <TableRow>
+                <TableCell colSpan={6} className="text-muted-foreground">
+                  No catalogs visible. Make sure the gateway is up and ADMIN_OPS_TOKEN is set
+                  in this app&apos;s env.
+                </TableCell>
+              </TableRow>
+            )}
+            {catalogs.map((c) => (
+              <TableRow key={c.catalog_id}>
+                <TableCell className="font-mono text-xs">
+                  <Link href={`/pricing-catalogs/${encodeURIComponent(c.catalog_id)}`} className="text-primary hover:underline">
+                    {c.catalog_id}
+                  </Link>
+                </TableCell>
+                <TableCell>{c.version}</TableCell>
+                <TableCell><StatusBadge status={c.status} /></TableCell>
+                <TableCell>{new Date(c.effective_from).toLocaleString()}</TableCell>
+                <TableCell>{c.rate_count}</TableCell>
+                <TableCell className="text-muted-foreground">{c.created_by}</TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
     </div>
   );
 }

@@ -2,6 +2,7 @@
 
 import { useState, FormEvent, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import { Badge, Button, Card, Textarea, cn } from '@projexlight/design-system';
 import { getToken } from '../../lib/apiClient';
 
 /**
@@ -38,37 +39,56 @@ interface BuildPlan {
   complexity: Complexity;
 }
 
-const SHELL: React.CSSProperties = { maxWidth: 920, margin: '0 auto', padding: '40px 24px', fontFamily: 'system-ui, sans-serif', color: '#1b2a44' };
-const CARD: React.CSSProperties = { background: '#fff', border: '1px solid #d7dce4', borderRadius: 10, padding: 22, marginBottom: 16 };
-const SOFT_CARD: React.CSSProperties = { ...CARD, background: '#f8fafd' };
+interface RetrievalMeta {
+  retriever: string;
+  retrieved: number;
+  candidates: number;
+  foundation_injected: string[];
+  dependency_added: string[];
+}
 
-const BADGE: React.CSSProperties = {
-  display: 'inline-block', fontSize: 11, fontWeight: 600,
-  padding: '3px 10px', borderRadius: 999, marginRight: 8,
-  textTransform: 'uppercase', letterSpacing: '0.05em',
+interface PlanMeta {
+  catalog_size: number;
+  provider?: string;
+  retrieval?: RetrievalMeta;
+}
+
+const PILL = 'border uppercase tracking-wide';
+
+const PACK_BADGE: Record<VerticalPack, string> = {
+  general: 'bg-blue-50 text-blue-700 border-blue-200',
+  healthcare: 'bg-green-50 text-green-700 border-green-200',
+  finserv: 'bg-amber-50 text-amber-700 border-amber-200',
+  publicSector: 'bg-violet-50 text-violet-700 border-violet-200',
+  fieldService: 'bg-orange-50 text-orange-700 border-orange-200',
+  revops: 'bg-pink-50 text-pink-700 border-pink-200',
 };
 
-const PACK_COLORS: Record<VerticalPack, { bg: string; fg: string; border: string }> = {
-  general:      { bg: '#ecf2fc', fg: '#1a4fc4', border: '#b9c3d6' },
-  healthcare:   { bg: '#e8f5e9', fg: '#0d8a3d', border: '#9bcfa3' },
-  finserv:      { bg: '#fdf6e3', fg: '#9a6e00', border: '#e3c47b' },
-  publicSector: { bg: '#f3eafe', fg: '#5a2cb8', border: '#c9b3e8' },
-  fieldService: { bg: '#fff0e6', fg: '#b35900', border: '#e8b884' },
-  revops:       { bg: '#fde8f2', fg: '#a31872', border: '#e8a3c5' },
+const COMPLEXITY_BADGE: Record<Complexity, string> = {
+  small: 'bg-green-50 text-green-700 border-green-200',
+  medium: 'bg-amber-50 text-amber-700 border-amber-200',
+  large: 'bg-red-50 text-red-700 border-red-200',
 };
 
-const COMPLEXITY_COLORS: Record<Complexity, { bg: string; fg: string; border: string }> = {
-  small:  { bg: '#e8f5e9', fg: '#0d8a3d', border: '#9bcfa3' },
-  medium: { bg: '#fdf6e3', fg: '#9a6e00', border: '#e3c47b' },
-  large:  { bg: '#fdecea', fg: '#a31818', border: '#e8a3a3' },
+const SOURCE_BADGE: Record<'foundation' | 'dependency', { label: string; cls: string }> = {
+  foundation: { label: 'Foundation · AIM', cls: 'bg-violet-50 text-violet-700 border-violet-200' },
+  dependency: { label: 'Prerequisite', cls: 'bg-blue-50 text-blue-700 border-blue-200' },
 };
+
+/** Why a recommended SDK is in the plan, derived from the retrieval meta. */
+function sdkSource(name: string, retrieval?: RetrievalMeta): 'foundation' | 'dependency' | null {
+  if (!retrieval) return null;
+  if (retrieval.foundation_injected.includes(name)) return 'foundation';
+  if (retrieval.dependency_added.includes(name)) return 'dependency';
+  return null;
+}
 
 export default function BuildPage(): JSX.Element {
   const router = useRouter();
   const [phase, setPhase] = useState<Phase>('idle');
   const [intent, setIntent] = useState('');
   const [plan, setPlan] = useState<BuildPlan | null>(null);
-  const [meta, setMeta] = useState<{ catalog_size: number; provider?: string } | null>(null);
+  const [meta, setMeta] = useState<PlanMeta | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -87,7 +107,7 @@ export default function BuildPage(): JSX.Element {
         headers: { 'content-type': 'application/json', authorization: `Bearer ${getToken() ?? ''}` },
         body: JSON.stringify({ intent }),
       });
-      const body = (await res.json()) as { plan?: BuildPlan; meta?: { catalog_size: number; provider?: string }; error?: string };
+      const body = (await res.json()) as { plan?: BuildPlan; meta?: PlanMeta; error?: string };
       if (!res.ok) {
         setError(body.error ?? `plan failed: ${res.status}`);
         setPhase('error');
@@ -115,163 +135,165 @@ export default function BuildPage(): JSX.Element {
   }
 
   return (
-    <main style={SHELL}>
-      <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
-        <h1 style={{ margin: 0, fontSize: 30, letterSpacing: '-0.01em' }}>Build with AI</h1>
-        <button
-          onClick={() => router.push('/dashboard')}
-          style={{ background: '#f3f5f8', border: '1px solid #d7dce4', padding: '8px 16px', borderRadius: 6, cursor: 'pointer', fontSize: 13, color: '#1b2a44' }}>
-          ← Dashboard
-        </button>
+    <main className="mx-auto max-w-4xl px-6 py-10">
+      <header className="mb-6 flex items-center justify-between">
+        <h1 className="text-3xl font-bold tracking-tight">Build with AI</h1>
+        <Button variant="secondary" size="sm" onClick={() => router.push('/dashboard')}>← Dashboard</Button>
       </header>
 
-      <p style={{ color: '#5a6573', marginBottom: 24, lineHeight: 1.6, maxWidth: 720 }}>
-        Describe the app you want to build. The planner scans all{' '}
-        {meta?.catalog_size ?? '88+'} SDKs in the ProjexCloud catalog and tells
-        you which to wire in, what you still need to write yourself, and a few
-        clarifying questions if your description is ambiguous. Works for any
-        domain — accounting, dispatch, claims, CRM, anything composable from
-        the catalog.
+      <p className="mb-6 max-w-2xl leading-relaxed text-muted-foreground">
+        Describe the app you want to build. The planner semantically searches all{' '}
+        {meta?.catalog_size ?? '88+'} SDKs in the ProjexCloud catalog, always
+        includes the identity/AIM foundation (login, personas, tenancy,
+        permissions) and any prerequisites, then tells you which SDKs to wire in
+        and what you still need to write yourself. Works for any domain —
+        accounting, dispatch, claims, CRM, anything composable from the catalog.
       </p>
 
       {(phase === 'idle' || phase === 'planning' || phase === 'error') && (
-        <form onSubmit={submitIntent} style={CARD}>
-          <label style={{ display: 'block', marginBottom: 8, fontWeight: 600, fontSize: 15 }}>
-            What do you want to build?
-          </label>
-          <textarea
-            value={intent}
-            onChange={(e) => setIntent(e.target.value)}
-            disabled={phase === 'planning'}
-            placeholder={'e.g. "A financial accounting app with chart of accounts, journal entries, AR/AP, and monthly close." Or: "Dispatch field technicians to repair appointments based on availability + skill." Or: "A patient portal where clinicians can review consent before sending care messages."'}
-            rows={5}
-            style={{ width: '100%', padding: 12, border: '1px solid #d7dce4', borderRadius: 6, fontFamily: 'inherit', fontSize: 14, resize: 'vertical', boxSizing: 'border-box' }}
-          />
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 14 }}>
-            <button
-              type="submit"
-              disabled={phase === 'planning' || !intent.trim()}
-              style={{ background: phase === 'planning' ? '#5a6573' : '#0b1220', color: '#fff', padding: '10px 24px', border: 'none', borderRadius: 6, fontSize: 14, fontWeight: 600, cursor: phase === 'planning' ? 'wait' : 'pointer' }}>
-              {phase === 'planning' ? 'Composing plan…' : 'Generate plan →'}
-            </button>
-            <span style={{ fontSize: 12, color: '#7a8597' }}>
-              Powered by {meta?.provider === 'openai' ? 'OpenAI' : meta?.provider === 'anthropic' ? 'Claude' : 'OpenAI / Claude (auto-select)'} · audit logging coming in v2
-            </span>
-          </div>
-        </form>
+        <Card className="p-6">
+          <form onSubmit={submitIntent}>
+            <label className="mb-2 block text-[15px] font-semibold">What do you want to build?</label>
+            <Textarea
+              value={intent}
+              onChange={(e) => setIntent(e.target.value)}
+              disabled={phase === 'planning'}
+              placeholder={'e.g. "A financial accounting app with chart of accounts, journal entries, AR/AP, and monthly close." Or: "Dispatch field technicians to repair appointments based on availability + skill." Or: "A patient portal where clinicians can review consent before sending care messages."'}
+              rows={5}
+              className="resize-y"
+            />
+            <div className="mt-3.5 flex items-center justify-between">
+              <Button type="submit" disabled={phase === 'planning' || !intent.trim()}>
+                {phase === 'planning' ? 'Composing plan…' : 'Generate plan →'}
+              </Button>
+              <span className="text-xs text-muted-foreground">
+                Powered by {meta?.provider === 'openai' ? 'OpenAI' : meta?.provider === 'anthropic' ? 'Claude' : 'OpenAI / Claude (auto-select)'} · audit logging coming in v2
+              </span>
+            </div>
+          </form>
+        </Card>
       )}
 
       {phase === 'planning' && (
-        <div style={{ ...SOFT_CARD, fontSize: 14, color: '#5a6573' }}>
+        <Card className="mt-4 bg-muted p-5 text-sm text-muted-foreground">
           Scanning the {meta?.catalog_size ?? 88}-SDK catalog and composing your plan. Usually 10–25 seconds.
-        </div>
+        </Card>
       )}
 
       {phase === 'done' && plan && (
         <>
-          <div style={CARD}>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 14 }}>
-              <span style={{ ...BADGE, background: PACK_COLORS[plan.vertical_pack]?.bg ?? '#ecf2fc', color: PACK_COLORS[plan.vertical_pack]?.fg ?? '#1a4fc4', border: `1px solid ${PACK_COLORS[plan.vertical_pack]?.border ?? '#b9c3d6'}` }}>
-                {plan.vertical_pack}
-              </span>
-              <span style={{ ...BADGE, background: COMPLEXITY_COLORS[plan.complexity]?.bg ?? '#ecf2fc', color: COMPLEXITY_COLORS[plan.complexity]?.fg ?? '#1a4fc4', border: `1px solid ${COMPLEXITY_COLORS[plan.complexity]?.border ?? '#b9c3d6'}` }}>
-                {plan.complexity}
-              </span>
-              <span style={{ ...BADGE, background: '#f8fafd', color: '#5a6573', border: '1px solid #d7dce4' }}>
-                {plan.recommended_sdks.length} SDKs
-              </span>
+          <Card className="mt-4 p-5">
+            <div className="mb-3.5 flex flex-wrap gap-2">
+              <Badge className={cn(PILL, PACK_BADGE[plan.vertical_pack] ?? PACK_BADGE.general)}>{plan.vertical_pack}</Badge>
+              <Badge className={cn(PILL, COMPLEXITY_BADGE[plan.complexity] ?? COMPLEXITY_BADGE.medium)}>{plan.complexity}</Badge>
+              <Badge variant="outline" className={cn(PILL, 'bg-muted text-muted-foreground')}>{plan.recommended_sdks.length} SDKs</Badge>
             </div>
-            <p style={{ margin: 0, fontSize: 15, lineHeight: 1.7 }}>{plan.summary}</p>
-          </div>
+            <p className="text-[15px] leading-relaxed">{plan.summary}</p>
+          </Card>
 
-          <h2 style={{ fontSize: 20, marginTop: 28, marginBottom: 12 }}>
-            Recommended SDKs <span style={{ color: '#7a8597', fontSize: 14, fontWeight: 400 }}>({plan.recommended_sdks.length})</span>
+          {meta?.retrieval && (
+            <Card className="mt-4 bg-muted p-5 text-[13px] text-muted-foreground">
+              <div className="mb-1.5 font-semibold text-foreground">How these were found</div>
+              <div className="leading-relaxed">
+                {meta.retrieval.retriever === 'embedding' ? 'Semantic search' : 'Keyword search'} over the{' '}
+                {meta.catalog_size}-SDK catalog returned <b>{meta.retrieval.retrieved}</b> domain match
+                {meta.retrieval.retrieved === 1 ? '' : 'es'}, then the planner added the foundation and
+                prerequisite SDKs below — <b>{meta.retrieval.candidates}</b> candidates in total were
+                considered before composing the plan.
+                {meta.retrieval.foundation_injected.length > 0 && (
+                  <div className="mt-2">
+                    <Badge className={cn(PILL, SOURCE_BADGE.foundation.cls, 'mr-2')}>Foundation · AIM</Badge>
+                    auto-included so you don&apos;t rebuild auth:{' '}
+                    <code className="text-xs">{meta.retrieval.foundation_injected.join(', ')}</code>
+                  </div>
+                )}
+                {meta.retrieval.dependency_added.length > 0 && (
+                  <div className="mt-1.5">
+                    <Badge className={cn(PILL, SOURCE_BADGE.dependency.cls, 'mr-2')}>Prerequisite</Badge>
+                    pulled in via the SDK dependency graph:{' '}
+                    <code className="text-xs">{meta.retrieval.dependency_added.join(', ')}</code>
+                  </div>
+                )}
+              </div>
+            </Card>
+          )}
+
+          <h2 className="mb-3 mt-7 text-xl font-semibold">
+            Recommended SDKs <span className="text-sm font-normal text-muted-foreground">({plan.recommended_sdks.length})</span>
           </h2>
-          <div style={CARD}>
+          <Card className="p-5">
             {plan.recommended_sdks.length === 0 ? (
-              <div style={{ color: '#7a8597', fontSize: 14 }}>
+              <div className="text-sm text-muted-foreground">
                 The planner did not recommend any SDKs — your app may be too custom to compose from the existing catalog. See the custom work section below.
               </div>
             ) : (
-              <ul style={{ margin: 0, paddingLeft: 0, listStyle: 'none' }}>
-                {plan.recommended_sdks.map((sdk) => (
-                  <li key={sdk.name} style={{ padding: '12px 0', borderBottom: '1px solid #eef1f6' }}>
-                    <code style={{ fontFamily: 'ui-monospace, monospace', fontSize: 14, fontWeight: 600, color: '#1b2a44' }}>
-                      {sdk.name}
-                    </code>
-                    <div style={{ marginTop: 4, fontSize: 14, color: '#5a6573', lineHeight: 1.55 }}>
-                      {sdk.why}
-                    </div>
-                  </li>
-                ))}
+              <ul className="divide-y">
+                {plan.recommended_sdks.map((sdk) => {
+                  const src = sdkSource(sdk.name, meta?.retrieval);
+                  return (
+                    <li key={sdk.name} className="py-3 first:pt-0 last:pb-0">
+                      <code className="font-mono text-sm font-semibold text-foreground">{sdk.name}</code>
+                      {src && <Badge className={cn(PILL, SOURCE_BADGE[src].cls, 'ml-2')}>{SOURCE_BADGE[src].label}</Badge>}
+                      <div className="mt-1 text-sm leading-relaxed text-muted-foreground">{sdk.why}</div>
+                    </li>
+                  );
+                })}
               </ul>
             )}
-          </div>
+          </Card>
 
           {plan.custom_work.length > 0 && (
             <>
-              <h2 style={{ fontSize: 20, marginTop: 28, marginBottom: 12 }}>
-                You&apos;ll need to build <span style={{ color: '#7a8597', fontSize: 14, fontWeight: 400 }}>({plan.custom_work.length})</span>
+              <h2 className="mb-3 mt-7 text-xl font-semibold">
+                You&apos;ll need to build <span className="text-sm font-normal text-muted-foreground">({plan.custom_work.length})</span>
               </h2>
-              <div style={CARD}>
-                <ul style={{ margin: 0, paddingLeft: 22, lineHeight: 1.8, fontSize: 14, color: '#1b2a44' }}>
+              <Card className="p-5">
+                <ul className="list-disc space-y-1 pl-5 text-sm leading-relaxed">
                   {plan.custom_work.map((item, i) => <li key={i}>{item}</li>)}
                 </ul>
-              </div>
+              </Card>
             </>
           )}
 
           {plan.clarifying_questions.length > 0 && (
             <>
-              <h2 style={{ fontSize: 20, marginTop: 28, marginBottom: 12 }}>
-                Questions to refine the plan
-              </h2>
-              <div style={CARD}>
-                <ul style={{ margin: 0, paddingLeft: 22, lineHeight: 1.8, fontSize: 14, color: '#1b2a44' }}>
+              <h2 className="mb-3 mt-7 text-xl font-semibold">Questions to refine the plan</h2>
+              <Card className="p-5">
+                <ul className="list-disc space-y-1 pl-5 text-sm leading-relaxed">
                   {plan.clarifying_questions.map((q, i) => <li key={i}>{q}</li>)}
                 </ul>
-                <p style={{ marginTop: 14, fontSize: 13, color: '#7a8597' }}>
+                <p className="mt-3.5 text-[13px] text-muted-foreground">
                   Tip: answer these in the prompt and regenerate for a tighter plan.
                 </p>
-              </div>
+              </Card>
             </>
           )}
 
-          <div style={{ display: 'flex', gap: 8, marginTop: 24 }}>
-            <button
-              onClick={reset}
-              style={{ background: '#0b1220', color: '#fff', padding: '10px 22px', border: 'none', borderRadius: 6, fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>
-              Plan another
-            </button>
-            <button
-              onClick={() => {
-                setPhase('idle');
-                // keep intent so the user can edit it
-              }}
-              style={{ background: '#f3f5f8', border: '1px solid #d7dce4', padding: '10px 22px', borderRadius: 6, fontSize: 14, cursor: 'pointer', color: '#1b2a44' }}>
-              Edit prompt &amp; regenerate
-            </button>
-            <button
+          <div className="mt-6 flex flex-wrap gap-2">
+            <Button onClick={reset}>Plan another</Button>
+            <Button variant="secondary" onClick={() => setPhase('idle')}>Edit prompt &amp; regenerate</Button>
+            <Button
+              variant="secondary"
               onClick={() => {
                 const payload = JSON.stringify(plan, null, 2);
                 navigator.clipboard.writeText(payload).catch(() => undefined);
               }}
-              style={{ background: '#f3f5f8', border: '1px solid #d7dce4', padding: '10px 22px', borderRadius: 6, fontSize: 14, cursor: 'pointer', color: '#1b2a44' }}>
+            >
               Copy plan as JSON
-            </button>
+            </Button>
           </div>
         </>
       )}
 
       {phase === 'error' && error && (
-        <div style={{ ...CARD, background: '#fdecea', borderColor: '#f1b9b9' }}>
-          <div style={{ fontWeight: 600, marginBottom: 4, color: '#a31818' }}>Plan failed</div>
-          <div style={{ fontSize: 14, color: '#5a4a08', wordBreak: 'break-word' }}>{error}</div>
-          <p style={{ marginTop: 10, fontSize: 13, color: '#7a8597' }}>
+        <Card className="mt-4 border-destructive/40 bg-destructive/10 p-5">
+          <div className="mb-1 font-semibold text-destructive">Plan failed</div>
+          <div className="break-words text-sm">{error}</div>
+          <p className="mt-2.5 text-[13px] text-muted-foreground">
             Common causes: <code>ANTHROPIC_API_KEY</code> not loaded in the dev server&apos;s env,
             request timeout, or rate limit. Try again or check the server logs.
           </p>
-        </div>
+        </Card>
       )}
     </main>
   );

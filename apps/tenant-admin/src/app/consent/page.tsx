@@ -1,4 +1,16 @@
 import { revalidatePath } from 'next/cache';
+import {
+  Button,
+  Input,
+  PageHeader,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@projexlight/design-system';
+import { StatusBadge } from '../../components/StatusBadge';
 
 interface PurposeRow {
   purpose_id: string;
@@ -68,73 +80,80 @@ export default async function ConsentPage({
   const [purposes, receipts] = await Promise.all([fetchPurposes(), fetchReceipts(searchParams)]);
   return (
     <div>
-      <h1>Consent</h1>
-      <p style={{ color: '#5a6573' }}>Consent purposes registered for this tenant + receipts granted under each.</p>
+      <PageHeader title="Consent" description="Consent purposes registered for this tenant + receipts granted under each." />
 
-      <h2 style={{ marginTop: 16 }}>Purposes</h2>
-      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14 }}>
-        <thead style={{ textAlign: 'left', borderBottom: '1px solid #d7dce4' }}>
-          <tr>
-            <th style={{ padding: 8 }}>Purpose</th>
-            <th style={{ padding: 8 }}>Name</th>
-            <th style={{ padding: 8 }}>Description</th>
-            <th style={{ padding: 8 }}>Retention</th>
-            <th style={{ padding: 8 }}>Jurisdictions</th>
-          </tr>
-        </thead>
-        <tbody>
-          {purposes.length === 0 && <tr><td colSpan={5} style={{ padding: 12, color: '#9aa3b2' }}>No purposes registered.</td></tr>}
-          {purposes.map((p) => (
-            <tr key={p.purpose_id} style={{ borderBottom: '1px solid #eef0f4' }}>
-              <td style={{ padding: 8, fontFamily: 'monospace', fontSize: 11 }}>{p.purpose_id}</td>
-              <td style={{ padding: 8 }}>{p.name}</td>
-              <td style={{ padding: 8, fontSize: 12, color: '#5a6573' }}>{p.description ?? '—'}</td>
-              <td style={{ padding: 8 }}>{p.retention_class}</td>
-              <td style={{ padding: 8, fontSize: 12 }}>{p.jurisdictions?.join(', ') ?? '—'}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+      <h2 className="mb-3 text-lg font-semibold">Purposes</h2>
+      <div className="mb-6 rounded-lg border">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Purpose</TableHead>
+              <TableHead>Name</TableHead>
+              <TableHead>Description</TableHead>
+              <TableHead>Retention</TableHead>
+              <TableHead>Jurisdictions</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {purposes.length === 0 && (
+              <TableRow><TableCell colSpan={5} className="text-muted-foreground">No purposes registered.</TableCell></TableRow>
+            )}
+            {purposes.map((p) => (
+              <TableRow key={p.purpose_id}>
+                <TableCell className="font-mono text-[11px]">{p.purpose_id}</TableCell>
+                <TableCell>{p.name}</TableCell>
+                <TableCell className="text-xs text-muted-foreground">{p.description ?? '—'}</TableCell>
+                <TableCell>{p.retention_class}</TableCell>
+                <TableCell className="text-xs">{p.jurisdictions?.join(', ') ?? '—'}</TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
 
-      <h2 style={{ marginTop: 24 }}>Receipts</h2>
-      <form method="get" style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
-        <input name="subject_persona_id" defaultValue={searchParams.subject_persona_id} placeholder="subject persona_id" style={{ padding: 4, width: 280 }} />
-        <input name="purpose_id" defaultValue={searchParams.purpose_id} placeholder="purpose_id" style={{ padding: 4, width: 240 }} />
-        <button type="submit" style={{ padding: '4px 12px' }}>Filter</button>
+      <h2 className="mb-3 text-lg font-semibold">Receipts</h2>
+      <form method="get" className="mb-3 flex flex-wrap gap-2">
+        <Input name="subject_persona_id" defaultValue={searchParams.subject_persona_id} placeholder="subject persona_id" className="w-72" />
+        <Input name="purpose_id" defaultValue={searchParams.purpose_id} placeholder="purpose_id" className="w-60" />
+        <Button type="submit">Filter</Button>
       </form>
-      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14 }}>
-        <thead style={{ textAlign: 'left', borderBottom: '1px solid #d7dce4' }}>
-          <tr>
-            <th style={{ padding: 8 }}>Receipt</th>
-            <th style={{ padding: 8 }}>Subject</th>
-            <th style={{ padding: 8 }}>Purpose</th>
-            <th style={{ padding: 8 }}>Status</th>
-            <th style={{ padding: 8 }}>Granted</th>
-            <th style={{ padding: 8 }}></th>
-          </tr>
-        </thead>
-        <tbody>
-          {receipts.length === 0 && <tr><td colSpan={6} style={{ padding: 12, color: '#9aa3b2' }}>No receipts.</td></tr>}
-          {receipts.map((r) => (
-            <tr key={r.receipt_id} style={{ borderBottom: '1px solid #eef0f4' }}>
-              <td style={{ padding: 8, fontFamily: 'monospace', fontSize: 11 }}>{r.receipt_id}</td>
-              <td style={{ padding: 8, fontFamily: 'monospace', fontSize: 11 }}>{r.subject_persona_id}</td>
-              <td style={{ padding: 8, fontSize: 12 }}>{r.purpose_id}</td>
-              <td style={{ padding: 8, color: r.status === 'granted' ? '#0d8a3d' : '#a31818', fontWeight: 600 }}>{r.status}</td>
-              <td style={{ padding: 8, fontSize: 12, color: '#5a6573' }}>{new Date(r.granted_at).toLocaleString()}</td>
-              <td style={{ padding: 8 }}>
-                {r.status === 'granted' && (
-                  <form action={revokeAction} style={{ display: 'flex', gap: 4 }}>
-                    <input type="hidden" name="receipt_id" value={r.receipt_id} />
-                    <input name="reason" placeholder="reason" required minLength={4} style={{ padding: 2, width: 140 }} />
-                    <button type="submit" style={{ padding: '2px 8px', color: '#a31818' }}>Revoke</button>
-                  </form>
-                )}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+      <div className="rounded-lg border">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Receipt</TableHead>
+              <TableHead>Subject</TableHead>
+              <TableHead>Purpose</TableHead>
+              <TableHead>Status</TableHead>
+              <TableHead>Granted</TableHead>
+              <TableHead></TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {receipts.length === 0 && (
+              <TableRow><TableCell colSpan={6} className="text-muted-foreground">No receipts.</TableCell></TableRow>
+            )}
+            {receipts.map((r) => (
+              <TableRow key={r.receipt_id}>
+                <TableCell className="font-mono text-[11px]">{r.receipt_id}</TableCell>
+                <TableCell className="font-mono text-[11px]">{r.subject_persona_id}</TableCell>
+                <TableCell className="text-xs">{r.purpose_id}</TableCell>
+                <TableCell><StatusBadge status={r.status} /></TableCell>
+                <TableCell className="text-xs text-muted-foreground">{new Date(r.granted_at).toLocaleString()}</TableCell>
+                <TableCell>
+                  {r.status === 'granted' && (
+                    <form action={revokeAction} className="flex items-center gap-2">
+                      <input type="hidden" name="receipt_id" value={r.receipt_id} />
+                      <Input name="reason" placeholder="reason" required minLength={4} className="h-8 w-36" />
+                      <Button type="submit" size="sm" variant="ghost" className="text-destructive hover:text-destructive">Revoke</Button>
+                    </form>
+                  )}
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
     </div>
   );
 }

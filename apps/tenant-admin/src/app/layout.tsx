@@ -1,38 +1,46 @@
 import type { Metadata } from 'next';
 import type { ReactNode } from 'react';
+import Link from 'next/link';
+import '@projexlight/design-system/styles.css';
 
 export const metadata: Metadata = {
   title: 'Tenant Admin',
   description: 'Tenant operator console — billing, members, webhooks, approvals.',
 };
 
-const LINK: React.CSSProperties = { color: '#f0f3f9', textDecoration: 'none' };
+const NAV = [
+  { href: '/', label: 'Home' },
+  { href: '/billing', label: 'Billing' },
+  { href: '/members', label: 'Members' },
+  { href: '/api-keys', label: 'API keys' },
+  { href: '/webhooks', label: 'Webhooks' },
+  { href: '/approvals', label: 'Approvals' },
+  { href: '/connectors', label: 'Connectors' },
+  { href: '/consent', label: 'Consent' },
+  { href: '/ai/mcp-servers', label: 'AI' },
+  { href: '/ai/providers', label: 'AI Providers' },
+  { href: '/byok', label: 'BYOK' },
+  { href: '/help', label: 'Help' },
+];
 
 export default function RootLayout({ children }: { children: ReactNode }): JSX.Element {
   return (
     <html lang="en">
-      <body style={{ fontFamily: 'system-ui, sans-serif', margin: 0 }}>
-        <header style={{ background: '#1b2a44', color: '#f0f3f9', padding: '12px 20px', display: 'flex', alignItems: 'center', gap: 24 }}>
-          <a href="/" style={{ ...LINK, fontWeight: 700 }}>Tenant Admin</a>
-          <span style={{ opacity: 0.6 }}>Tenant operator console</span>
-          <nav style={{ marginLeft: 'auto', display: 'flex', gap: 16, fontSize: 14 }}>
-            <a href="/" style={LINK}>Home</a>
-            <a href="/billing" style={LINK}>Billing</a>
-            <a href="/members" style={LINK}>Members</a>
-            <a href="/api-keys" style={LINK}>API keys</a>
-            <a href="/webhooks" style={LINK}>Webhooks</a>
-            <a href="/approvals" style={LINK}>Approvals</a>
-            <a href="/connectors" style={LINK}>Connectors</a>
-            <a href="/consent" style={LINK}>Consent</a>
-            <a href="/ai/mcp-servers" style={LINK}>AI</a>
-            <a href="/ai/providers" style={LINK}>AI Providers</a>
-            <a href="/byok" style={LINK}>BYOK</a>
-            <a href="/help" style={LINK}>Help</a>
+      <body>
+        <header className="flex flex-wrap items-center gap-x-6 gap-y-2 bg-foreground px-5 py-3 text-background">
+          <Link href="/" className="font-bold">Tenant Admin</Link>
+          <span className="opacity-60">Tenant operator console</span>
+          <nav className="ml-auto flex flex-wrap gap-4 text-sm">
+            {NAV.map((n) => (
+              <Link key={n.href} href={n.href} className="text-background/90 hover:text-background">
+                {n.label}
+              </Link>
+            ))}
           </nav>
         </header>
-        <main style={{ padding: 24 }}>
-          <a href="/" style={{ fontSize: 13, color: '#5a6573', textDecoration: 'none' }}>← Console home</a>
-          <div style={{ marginTop: 12 }}>{children}</div>
+        <main className="p-6">
+          <Link href="/" className="text-[13px] text-muted-foreground hover:text-foreground">← Console home</Link>
+          <div className="mt-3">{children}</div>
         </main>
       </body>
     </html>

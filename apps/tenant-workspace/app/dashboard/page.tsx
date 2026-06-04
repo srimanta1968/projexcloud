@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { Button, Card } from '@projexlight/design-system';
 import { getToken } from '../../lib/apiClient';
 import { logoutUser } from '../../services/authApi';
 
@@ -30,20 +31,23 @@ function decode(token: string): DecodedClaims | null {
 }
 
 const TILES = [
-  { href: '/build',       label: 'Build with AI', desc: 'Compose a vertical app from blueprints via chat' },
-  { href: '/admin/audit', label: 'Audit ledger',  desc: 'Append + verify the tamper-evident chain' },
-  { href: '/admin/keys',  label: 'Key hierarchy', desc: 'Vault key tiers + status' },
+  { href: '/build', label: 'Build with AI', desc: 'Compose a vertical app from blueprints via chat' },
+  { href: '/admin/audit', label: 'Audit ledger', desc: 'Append + verify the tamper-evident chain' },
+  { href: '/admin/keys', label: 'Key hierarchy', desc: 'Vault key tiers + status' },
 ];
 
 const EXTERNAL = [
-  { href: 'http://localhost:3200',         label: 'Tenant Admin',  desc: 'Members, billing, connectors, BYOK' },
-  { href: 'http://localhost:3100',         label: 'Platform Console', desc: 'Operator-only (requires ADMIN_OPS_TOKEN)' },
+  { href: 'http://localhost:3200', label: 'Tenant Admin', desc: 'Members, billing, connectors, BYOK' },
+  { href: 'http://localhost:3100', label: 'Platform Console', desc: 'Operator-only (requires ADMIN_OPS_TOKEN)' },
 ];
 
-const CARD: React.CSSProperties = {
-  display: 'block', padding: 16, background: '#f3f5f8', borderRadius: 8,
-  textDecoration: 'none', color: 'inherit', border: '1px solid #d7dce4',
-};
+function ClaimRow({ label, children }: { label: string; children: React.ReactNode }): JSX.Element {
+  return (
+    <div>
+      <span className="inline-block w-24 text-muted-foreground">{label}</span> {children}
+    </div>
+  );
+}
 
 /**
  * /dashboard — post-login landing. Shows the current persona's six-layer
@@ -72,52 +76,48 @@ export default function DashboardPage(): JSX.Element {
 
   if (!token) {
     return (
-      <main style={{ maxWidth: 640, margin: '0 auto', padding: '40px 24px', fontFamily: 'system-ui, sans-serif' }}>
-        <p style={{ color: '#5a6573' }}>Checking session…</p>
+      <main className="mx-auto max-w-2xl px-6 py-10">
+        <p className="text-muted-foreground">Checking session…</p>
       </main>
     );
   }
 
   return (
-    <main style={{ maxWidth: 880, margin: '0 auto', padding: '40px 24px', fontFamily: 'system-ui, sans-serif' }}>
-      <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
-        <h1 style={{ margin: 0 }}>Workspace</h1>
-        <button
-          onClick={handleLogout}
-          style={{ background: '#f3f5f8', border: '1px solid #d7dce4', padding: '6px 14px', borderRadius: 6, cursor: 'pointer', fontSize: 13 }}>
-          Sign out
-        </button>
+    <main className="mx-auto max-w-4xl px-6 py-10">
+      <header className="mb-6 flex items-center justify-between">
+        <h1 className="text-2xl font-bold tracking-tight">Workspace</h1>
+        <Button variant="secondary" size="sm" onClick={handleLogout}>Sign out</Button>
       </header>
 
-      <section style={{ background: '#f1f5fb', border: '1px solid #d3dbe8', borderRadius: 8, padding: 16, marginBottom: 28, fontSize: 14 }}>
-        <strong style={{ display: 'block', marginBottom: 8 }}>Active session</strong>
-        <div><span style={{ color: '#5a6573', width: 90, display: 'inline-block' }}>Email:</span> {claims?.email ?? '(unknown)'}</div>
-        <div><span style={{ color: '#5a6573', width: 90, display: 'inline-block' }}>Tenant ID:</span> <code>{claims?.tenant_id ?? '(none)'}</code></div>
-        <div><span style={{ color: '#5a6573', width: 90, display: 'inline-block' }}>App ID:</span> <code>{claims?.app_id ?? '(none)'}</code></div>
-        <div><span style={{ color: '#5a6573', width: 90, display: 'inline-block' }}>Org ID:</span> <code>{claims?.org_id ?? '(none)'}</code></div>
+      <Card className="mb-7 bg-muted p-4 text-sm">
+        <strong className="mb-2 block">Active session</strong>
+        <ClaimRow label="Email:">{claims?.email ?? '(unknown)'}</ClaimRow>
+        <ClaimRow label="Tenant ID:"><code>{claims?.tenant_id ?? '(none)'}</code></ClaimRow>
+        <ClaimRow label="App ID:"><code>{claims?.app_id ?? '(none)'}</code></ClaimRow>
+        <ClaimRow label="Org ID:"><code>{claims?.org_id ?? '(none)'}</code></ClaimRow>
         {claims?.exp && (
-          <div style={{ marginTop: 6, color: '#7a8597', fontSize: 12 }}>
+          <div className="mt-1.5 text-xs text-muted-foreground">
             Session expires: {new Date(claims.exp * 1000).toLocaleString()}
           </div>
         )}
-      </section>
+      </Card>
 
-      <h2 style={{ fontSize: 18, marginBottom: 12 }}>In-workspace tools</h2>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 12, marginBottom: 28 }}>
+      <h2 className="mb-3 text-lg font-semibold">In-workspace tools</h2>
+      <div className="mb-7 grid grid-cols-[repeat(auto-fit,minmax(240px,1fr))] gap-3">
         {TILES.map((t) => (
-          <Link key={t.href} href={t.href} style={CARD}>
-            <div style={{ fontWeight: 600, marginBottom: 4 }}>{t.label}</div>
-            <div style={{ fontSize: 13, color: '#5a6573' }}>{t.desc}</div>
+          <Link key={t.href} href={t.href} className="block rounded-lg border bg-muted p-4 transition-colors hover:bg-accent">
+            <div className="mb-1 font-semibold">{t.label}</div>
+            <div className="text-sm text-muted-foreground">{t.desc}</div>
           </Link>
         ))}
       </div>
 
-      <h2 style={{ fontSize: 18, marginBottom: 12 }}>Other consoles</h2>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 12 }}>
+      <h2 className="mb-3 text-lg font-semibold">Other consoles</h2>
+      <div className="grid grid-cols-[repeat(auto-fit,minmax(240px,1fr))] gap-3">
         {EXTERNAL.map((t) => (
-          <a key={t.href} href={t.href} target="_blank" rel="noreferrer" style={CARD}>
-            <div style={{ fontWeight: 600, marginBottom: 4 }}>{t.label} ↗</div>
-            <div style={{ fontSize: 13, color: '#5a6573' }}>{t.desc}</div>
+          <a key={t.href} href={t.href} target="_blank" rel="noreferrer" className="block rounded-lg border bg-muted p-4 transition-colors hover:bg-accent">
+            <div className="mb-1 font-semibold">{t.label} ↗</div>
+            <div className="text-sm text-muted-foreground">{t.desc}</div>
           </a>
         ))}
       </div>

@@ -1,5 +1,20 @@
 import { revalidatePath } from 'next/cache';
 import { cookies } from 'next/headers';
+import {
+  Alert,
+  Button,
+  Card,
+  Field,
+  Input,
+  PageHeader,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@projexlight/design-system';
+import { StatusBadge } from '../../components/StatusBadge';
 
 interface KeyRow {
   key_id: string;
@@ -65,61 +80,68 @@ export default async function ApiKeysPage(): Promise<JSX.Element> {
   }
   return (
     <div>
-      <h1>API keys</h1>
-      <p style={{ color: '#5a6573' }}>Issue, view, and revoke API keys for this tenant.</p>
+      <PageHeader title="API keys" description="Issue, view, and revoke API keys for this tenant." />
 
       {issuedPlaintext && (
-        <div style={{ background: '#e7f4ea', border: '1px solid #5dd39e', padding: 12, marginTop: 12, borderRadius: 6 }}>
+        <Alert variant="success" className="mb-4">
           <strong>Save this key now — it won&apos;t be shown again.</strong>
-          <div style={{ fontFamily: 'monospace', marginTop: 6, wordBreak: 'break-all' }}>{issuedPlaintext}</div>
-          <div style={{ fontSize: 12, color: '#5a6573', marginTop: 4 }}>key_id: {issuedId}</div>
-        </div>
+          <div className="mt-1.5 break-all font-mono">{issuedPlaintext}</div>
+          <div className="mt-1 text-xs text-muted-foreground">key_id: {issuedId}</div>
+        </Alert>
       )}
 
-      <section style={{ marginTop: 24, padding: 16, border: '1px solid #d7dce4', borderRadius: 8, maxWidth: 640 }}>
-        <h2 style={{ marginTop: 0 }}>Issue new key</h2>
-        <form action={issueKey} style={{ display: 'grid', gap: 12 }}>
-          <label>Name <input name="name" required style={{ display: 'block', width: '100%', padding: 6 }} /></label>
-          <label>Scope <input name="scope" required style={{ display: 'block', width: '100%', padding: 6 }} placeholder="read:*, write:engagement" /></label>
-          <button type="submit" style={{ padding: '8px 16px', background: '#1b2a44', color: 'white', border: 'none', borderRadius: 4 }}>Issue</button>
+      <Card className="mb-6 max-w-xl p-5">
+        <h2 className="mb-4 text-lg font-semibold">Issue new key</h2>
+        <form action={issueKey} className="grid gap-3.5">
+          <Field label="Name" htmlFor="name">
+            <Input id="name" name="name" required />
+          </Field>
+          <Field label="Scope" htmlFor="scope">
+            <Input id="scope" name="scope" required placeholder="read:*, write:engagement" />
+          </Field>
+          <Button type="submit" className="justify-self-start">Issue</Button>
         </form>
-      </section>
+      </Card>
 
-      <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: 24, fontSize: 14 }}>
-        <thead style={{ textAlign: 'left', borderBottom: '1px solid #d7dce4' }}>
-          <tr>
-            <th style={{ padding: 8 }}>Key</th>
-            <th style={{ padding: 8 }}>Name</th>
-            <th style={{ padding: 8 }}>Scope</th>
-            <th style={{ padding: 8 }}>Status</th>
-            <th style={{ padding: 8 }}>Issued</th>
-            <th style={{ padding: 8 }}>Last used</th>
-            <th style={{ padding: 8 }}></th>
-          </tr>
-        </thead>
-        <tbody>
-          {keys.length === 0 && <tr><td colSpan={7} style={{ padding: 12, color: '#9aa3b2' }}>No keys.</td></tr>}
-          {keys.map((k) => (
-            <tr key={k.key_id} style={{ borderBottom: '1px solid #eef0f4' }}>
-              <td style={{ padding: 8, fontFamily: 'monospace', fontSize: 11 }}>{k.key_id}</td>
-              <td style={{ padding: 8 }}>{k.name}</td>
-              <td style={{ padding: 8, fontSize: 12 }}>{k.scope}</td>
-              <td style={{ padding: 8, color: k.status === 'active' ? '#0d8a3d' : '#a31818', fontWeight: 600 }}>{k.status}</td>
-              <td style={{ padding: 8, fontSize: 12, color: '#5a6573' }}>{new Date(k.issued_at).toLocaleString()}</td>
-              <td style={{ padding: 8, fontSize: 12, color: '#5a6573' }}>{k.last_used_at ? new Date(k.last_used_at).toLocaleString() : '—'}</td>
-              <td style={{ padding: 8 }}>
-                {k.status === 'active' && (
-                  <form action={revokeKey} style={{ display: 'flex', gap: 4 }}>
-                    <input type="hidden" name="key_id" value={k.key_id} />
-                    <input name="reason" placeholder="reason" required minLength={4} style={{ padding: 2, width: 140 }} />
-                    <button type="submit" style={{ padding: '2px 8px', color: '#a31818' }}>Revoke</button>
-                  </form>
-                )}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+      <div className="rounded-lg border">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Key</TableHead>
+              <TableHead>Name</TableHead>
+              <TableHead>Scope</TableHead>
+              <TableHead>Status</TableHead>
+              <TableHead>Issued</TableHead>
+              <TableHead>Last used</TableHead>
+              <TableHead></TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {keys.length === 0 && (
+              <TableRow><TableCell colSpan={7} className="text-muted-foreground">No keys.</TableCell></TableRow>
+            )}
+            {keys.map((k) => (
+              <TableRow key={k.key_id}>
+                <TableCell className="font-mono text-[11px]">{k.key_id}</TableCell>
+                <TableCell>{k.name}</TableCell>
+                <TableCell className="text-xs">{k.scope}</TableCell>
+                <TableCell><StatusBadge status={k.status} /></TableCell>
+                <TableCell className="text-xs text-muted-foreground">{new Date(k.issued_at).toLocaleString()}</TableCell>
+                <TableCell className="text-xs text-muted-foreground">{k.last_used_at ? new Date(k.last_used_at).toLocaleString() : '—'}</TableCell>
+                <TableCell>
+                  {k.status === 'active' && (
+                    <form action={revokeKey} className="flex items-center gap-2">
+                      <input type="hidden" name="key_id" value={k.key_id} />
+                      <Input name="reason" placeholder="reason" required minLength={4} className="h-8 w-36" />
+                      <Button type="submit" size="sm" variant="ghost" className="text-destructive hover:text-destructive">Revoke</Button>
+                    </form>
+                  )}
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
     </div>
   );
 }

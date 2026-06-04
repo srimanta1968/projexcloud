@@ -1,31 +1,7 @@
 import Link from 'next/link';
+import { Badge, Button } from '@projexlight/design-system';
 import { MarketingHeader } from '../../components/MarketingHeader';
 import { MarketingFooter } from '../../components/MarketingFooter';
-
-const WRAP: React.CSSProperties = { fontFamily: 'system-ui, sans-serif', color: '#1b2a44', background: '#fff', minHeight: '100vh' };
-const CONTAINER: React.CSSProperties = { maxWidth: 980, margin: '0 auto', padding: '0 32px' };
-
-const PAGE_HERO: React.CSSProperties = { padding: '72px 32px 32px', textAlign: 'center', background: 'linear-gradient(180deg, #fff 0%, #f5f9ff 100%)' };
-const H1: React.CSSProperties = { fontSize: 44, fontWeight: 700, letterSpacing: '-0.02em', margin: '0 auto 12px', maxWidth: 720 };
-const SUB: React.CSSProperties = { fontSize: 18, color: '#5a6573', maxWidth: 680, margin: '0 auto 0', lineHeight: 1.55 };
-
-const SECTION: React.CSSProperties = { padding: '56px 32px', borderTop: '1px solid #eef1f6' };
-const SECTION_HEAD: React.CSSProperties = { display: 'grid', gridTemplateColumns: '180px 1fr', gap: 24, marginBottom: 24, alignItems: 'baseline' };
-const SECTION_TAG: React.CSSProperties = { fontSize: 13, fontWeight: 600, color: '#1a4fc4', textTransform: 'uppercase', letterSpacing: '0.06em' };
-const SECTION_TITLE: React.CSSProperties = { fontSize: 28, fontWeight: 700, letterSpacing: '-0.01em', margin: 0 };
-const SECTION_BODY: React.CSSProperties = { fontSize: 15, color: '#1b2a44', lineHeight: 1.65, marginLeft: 204 };
-const SECTION_BULLETS: React.CSSProperties = { marginLeft: 204, marginTop: 16, paddingLeft: 18, fontSize: 14, color: '#1b2a44', lineHeight: 1.7 };
-
-const BADGE: React.CSSProperties = {
-  display: 'inline-block', fontSize: 11, fontWeight: 600,
-  background: '#fdf6e3', color: '#9a6e00', padding: '2px 8px',
-  borderRadius: 999, marginLeft: 8, verticalAlign: 'middle',
-  border: '1px solid #e3c47b', textTransform: 'uppercase', letterSpacing: '0.04em',
-};
-
-const CTA_ROW: React.CSSProperties = { display: 'flex', gap: 12, justifyContent: 'center', marginTop: 24 };
-const CTA_PRIMARY: React.CSSProperties = { background: '#0b1220', color: '#fff', padding: '12px 24px', borderRadius: 6, textDecoration: 'none', fontSize: 15, fontWeight: 600 };
-const CTA_SECONDARY: React.CSSProperties = { background: '#fff', color: '#0b1220', padding: '12px 24px', borderRadius: 6, textDecoration: 'none', fontSize: 15, fontWeight: 500, border: '1px solid #d7dce4' };
 
 interface Feature {
   tag: string;
@@ -118,46 +94,44 @@ const FEATURES: Feature[] = [
 
 export default function FeaturesPage(): JSX.Element {
   return (
-    <div style={WRAP}>
+    <div className="min-h-screen bg-background text-foreground">
       <MarketingHeader />
 
-      <section style={PAGE_HERO}>
-        <h1 style={H1}>Features</h1>
-        <p style={SUB}>
+      <section className="bg-gradient-to-b from-background to-muted px-8 pb-8 pt-[72px] text-center">
+        <h1 className="mx-auto mb-3 max-w-2xl text-4xl font-bold tracking-tight">Features</h1>
+        <p className="mx-auto max-w-xl text-lg leading-relaxed text-muted-foreground">
           Everything you need to ship multi-tenant SaaS without rebuilding the
           plumbing every quarter. Pick what you use; the rest is opt-in.
         </p>
       </section>
 
       {FEATURES.map((f) => (
-        <section key={f.tag} style={SECTION}>
-          <div style={{ ...CONTAINER }}>
-            <div style={SECTION_HEAD}>
-              <div style={SECTION_TAG}>{f.tag}</div>
-              <h2 style={SECTION_TITLE}>
+        <section key={f.tag} className="border-t px-8 py-14">
+          <div className="mx-auto grid max-w-4xl gap-x-6 gap-y-4 md:grid-cols-[180px_1fr]">
+            <div className="text-xs font-semibold uppercase tracking-wider text-brand">{f.tag}</div>
+            <div>
+              <h2 className="flex flex-wrap items-center gap-2 text-2xl font-bold tracking-tight">
                 {f.title}
-                {f.badge && <span style={BADGE}>{f.badge}</span>}
+                {f.badge && <Badge variant="warning">{f.badge}</Badge>}
               </h2>
+              <p className="mt-4 text-[15px] leading-relaxed">{f.body}</p>
+              <ul className="mt-4 list-disc space-y-1 pl-5 text-sm leading-relaxed">
+                {f.bullets.map((b, i) => <li key={i}>{b}</li>)}
+              </ul>
             </div>
-            <p style={SECTION_BODY}>{f.body}</p>
-            <ul style={SECTION_BULLETS}>
-              {f.bullets.map((b, i) => <li key={i}>{b}</li>)}
-            </ul>
           </div>
         </section>
       ))}
 
-      <section style={{ padding: '64px 32px', background: '#f5f9ff', textAlign: 'center' }}>
-        <h2 style={{ fontSize: 28, fontWeight: 700, letterSpacing: '-0.01em', marginBottom: 12 }}>
-          Ready to try it?
-        </h2>
-        <p style={{ fontSize: 16, color: '#5a6573', maxWidth: 600, margin: '0 auto 8px' }}>
-          14-day free trial, no credit card. See <Link href="/pricing">pricing</Link>{' '}
-          or read <a href="/docs/user/tenant-getting-started.html">getting started</a>.
+      <section className="bg-muted px-8 py-16 text-center">
+        <h2 className="mb-3 text-2xl font-bold tracking-tight">Ready to try it?</h2>
+        <p className="mx-auto mb-2 max-w-xl text-base text-muted-foreground">
+          14-day free trial, no credit card. See <Link href="/pricing" className="text-primary underline">pricing</Link>{' '}
+          or read <a href="/docs/user/tenant-getting-started.html" className="text-primary underline">getting started</a>.
         </p>
-        <div style={CTA_ROW}>
-          <Link href="/signup"   style={CTA_PRIMARY}>Start free trial</Link>
-          <Link href="/security" style={CTA_SECONDARY}>Security &amp; compliance</Link>
+        <div className="mt-6 flex justify-center gap-3">
+          <Button asChild><Link href="/signup">Start free trial</Link></Button>
+          <Button asChild variant="secondary"><Link href="/security">Security &amp; compliance</Link></Button>
         </div>
       </section>
 

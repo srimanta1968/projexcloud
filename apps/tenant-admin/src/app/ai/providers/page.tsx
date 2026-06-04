@@ -1,4 +1,19 @@
 import { revalidatePath } from 'next/cache';
+import {
+  Alert,
+  Button,
+  Card,
+  Field,
+  Input,
+  Label,
+  Select,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@projexlight/design-system';
 
 /**
  * Tenant-BYOK for AI Provider Keys — admin surface (FR-BYOK-10..14).
@@ -19,9 +34,9 @@ type ProviderId = 'anthropic' | 'openai' | 'bedrock' | 'gemini';
 
 const PROVIDERS: Array<{ id: ProviderId; name: string }> = [
   { id: 'anthropic', name: 'Anthropic (Claude)' },
-  { id: 'openai',    name: 'OpenAI (GPT-4o)' },
-  { id: 'bedrock',   name: 'AWS Bedrock' },
-  { id: 'gemini',    name: 'Google Gemini' },
+  { id: 'openai', name: 'OpenAI (GPT-4o)' },
+  { id: 'bedrock', name: 'AWS Bedrock' },
+  { id: 'gemini', name: 'Google Gemini' },
 ];
 
 interface BindingRow {
@@ -111,166 +126,120 @@ async function revokeAction(formData: FormData): Promise<void> {
   revalidatePath('/ai/providers');
 }
 
-const BANNER: React.CSSProperties = {
-  background: '#ecf2fc',
-  border: '1px solid #b9c3d6',
-  borderLeft: '3px solid #1a4fc4',
-  padding: '12px 14px',
-  borderRadius: 4,
-  fontSize: 14,
-  marginBottom: 20,
-  color: '#1b2a44',
-};
-
-const SECTION: React.CSSProperties = {
-  marginTop: 16,
-  padding: 16,
-  border: '1px solid #d7dce4',
-  borderRadius: 8,
-};
-
-const LABEL: React.CSSProperties = { display: 'block', marginBottom: 4, fontSize: 13, color: '#5a6573' };
-const INPUT: React.CSSProperties = { display: 'block', width: '100%', padding: 6, marginBottom: 12, boxSizing: 'border-box' };
-
 export default async function AiProvidersPage(): Promise<JSX.Element> {
   const bindings = await fetchBindings();
   return (
     <div>
-      <h1>AI Provider Keys (BYOK)</h1>
-      <p style={{ color: '#5a6573', maxWidth: 760 }}>
+      <h1 className="text-2xl font-bold tracking-tight">AI Provider Keys (BYOK)</h1>
+      <p className="mb-4 mt-1 max-w-2xl text-sm text-muted-foreground">
         Bring your own LLM provider keys. When a tenant credential is bound, the
         AI Gateway routes that tenant&apos;s completions through your key and
         suppresses our token-cost SKU — you pay your provider directly, and
         ProjexCloud bills only the governance per-call SKU.
       </p>
 
-      <div style={BANNER}>
+      <Alert variant="info" className="mb-5 border-l-[3px] border-l-brand">
         <strong>Billing note.</strong> When using your own provider key,
         ProjexCloud bills only the gateway governance SKU. Token costs go to
         your provider invoice. Revoking the binding immediately falls future
         completions back to the platform key (governance + token markup).
-      </div>
+      </Alert>
 
       {!TENANT_ID && (
-        <div style={{ background: '#fff4d6', border: '1px solid #e3c47b', padding: 12, borderRadius: 4, marginBottom: 20 }}>
+        <Alert variant="warning" className="mb-5">
           Set <code>TENANT_ADMIN_TENANT_ID</code> in this app&apos;s env to view your bindings.
-        </div>
+        </Alert>
       )}
 
-      <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: 12, fontSize: 14 }}>
-        <thead>
-          <tr style={{ background: '#f1f5fb', textAlign: 'left' }}>
-            <th style={{ padding: 8, borderBottom: '1px solid #d3dbe8' }}>Provider</th>
-            <th style={{ padding: 8, borderBottom: '1px solid #d3dbe8' }}>Source</th>
-            <th style={{ padding: 8, borderBottom: '1px solid #d3dbe8' }}>Last 4</th>
-            <th style={{ padding: 8, borderBottom: '1px solid #d3dbe8' }}>Bound at</th>
-            <th style={{ padding: 8, borderBottom: '1px solid #d3dbe8' }}>Allowlist</th>
-          </tr>
-        </thead>
-        <tbody>
-          {PROVIDERS.map((p) => {
-            const active = activeBindingFor(bindings, p.id);
-            return (
-              <tr key={p.id}>
-                <td style={{ padding: 8, borderBottom: '1px solid #eef1f6' }}>{p.name}</td>
-                <td style={{ padding: 8, borderBottom: '1px solid #eef1f6' }}>
-                  {active ? (
-                    <span style={{ color: '#0d8a3d', fontWeight: 600 }}>tenant binding</span>
-                  ) : (
-                    <span style={{ color: '#5a6573' }}>platform fallback</span>
-                  )}
-                </td>
-                <td style={{ padding: 8, borderBottom: '1px solid #eef1f6', fontFamily: 'monospace' }}>
-                  {active ? `…${active.last_4}` : '—'}
-                </td>
-                <td style={{ padding: 8, borderBottom: '1px solid #eef1f6' }}>
-                  {active ? new Date(active.bound_at).toLocaleString() : '—'}
-                </td>
-                <td style={{ padding: 8, borderBottom: '1px solid #eef1f6', fontSize: 13 }}>
-                  {active?.model_allowlist?.join(', ') ?? <em style={{ color: '#7a8597' }}>all models</em>}
-                </td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
+      <div className="rounded-lg border">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Provider</TableHead>
+              <TableHead>Source</TableHead>
+              <TableHead>Last 4</TableHead>
+              <TableHead>Bound at</TableHead>
+              <TableHead>Allowlist</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {PROVIDERS.map((p) => {
+              const active = activeBindingFor(bindings, p.id);
+              return (
+                <TableRow key={p.id}>
+                  <TableCell>{p.name}</TableCell>
+                  <TableCell>
+                    {active ? (
+                      <span className="font-semibold text-success">tenant binding</span>
+                    ) : (
+                      <span className="text-muted-foreground">platform fallback</span>
+                    )}
+                  </TableCell>
+                  <TableCell className="font-mono">{active ? `…${active.last_4}` : '—'}</TableCell>
+                  <TableCell>{active ? new Date(active.bound_at).toLocaleString() : '—'}</TableCell>
+                  <TableCell className="text-xs">
+                    {active?.model_allowlist?.join(', ') ?? <em className="text-muted-foreground">all models</em>}
+                  </TableCell>
+                </TableRow>
+              );
+            })}
+          </TableBody>
+        </Table>
+      </div>
 
-      {/* Bind / rotate / revoke forms */}
       {TENANT_ID && (
         <>
-          <section style={SECTION}>
-            <h2 style={{ marginTop: 0, fontSize: 16 }}>Bind a key</h2>
-            <p style={{ color: '#5a6573', fontSize: 13, marginTop: 4 }}>
+          <Card className="mt-4 max-w-2xl p-5">
+            <h2 className="text-base font-semibold">Bind a key</h2>
+            <p className="mb-4 mt-1 text-[13px] text-muted-foreground">
               Existing active bindings for the same provider are revoked atomically when a new bind succeeds.
             </p>
-            <form action={bindAction} style={{ maxWidth: 560 }}>
-              <label style={LABEL}>Provider</label>
-              <select name="provider_id" required style={INPUT} defaultValue="openai">
-                {PROVIDERS.map((p) => (
-                  <option key={p.id} value={p.id}>{p.name}</option>
-                ))}
-              </select>
-
-              <label style={LABEL}>Raw API key (write-only; only last 4 displayed after save)</label>
-              <input name="raw_key" type="password" required minLength={8} autoComplete="off" style={INPUT} />
-
-              <label style={LABEL}>Model allowlist (comma-separated, leave blank for all)</label>
-              <input name="model_allowlist" type="text" placeholder="gpt-4o, gpt-4o-mini" style={INPUT} />
-
-              <label style={{ fontSize: 13, display: 'flex', alignItems: 'center', gap: 6, marginBottom: 12 }}>
-                <input type="checkbox" name="fallback_on_error" defaultChecked />
+            <form action={bindAction} className="flex flex-col gap-3.5">
+              <Field label="Provider" htmlFor="provider_id">
+                <Select id="provider_id" name="provider_id" required defaultValue="openai">
+                  {PROVIDERS.map((p) => (
+                    <option key={p.id} value={p.id}>{p.name}</option>
+                  ))}
+                </Select>
+              </Field>
+              <Field label="Raw API key (write-only; only last 4 displayed after save)" htmlFor="raw_key">
+                <Input id="raw_key" name="raw_key" type="password" required minLength={8} autoComplete="off" />
+              </Field>
+              <Field label="Model allowlist (comma-separated, leave blank for all)" htmlFor="model_allowlist">
+                <Input id="model_allowlist" name="model_allowlist" type="text" placeholder="gpt-4o, gpt-4o-mini" />
+              </Field>
+              <Label className="flex items-center gap-2">
+                <input type="checkbox" name="fallback_on_error" defaultChecked className="h-4 w-4" />
                 Fall back to platform credential on provider errors
-              </label>
-
-              <button type="submit" style={{ padding: '8px 16px', background: '#1b2a44', color: 'white', border: 'none', borderRadius: 4 }}>
-                Bind key
-              </button>
+              </Label>
+              <Button type="submit" className="justify-self-start self-start">Bind key</Button>
             </form>
-          </section>
+          </Card>
 
           {bindings.filter((b) => b.status === 'active').map((b) => (
-            <section key={b.binding_id} style={{ ...SECTION, background: '#fafbfd' }}>
-              <h3 style={{ marginTop: 0, fontSize: 15 }}>
+            <Card key={b.binding_id} className="mt-4 max-w-2xl bg-muted p-5">
+              <h3 className="text-[15px] font-semibold">
                 {b.provider_id} — <code>{b.binding_id}</code>
               </h3>
 
-              <form action={rotateAction} style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 12 }}>
+              <form action={rotateAction} className="mt-3 flex items-center gap-2">
                 <input type="hidden" name="binding_id" value={b.binding_id} />
-                <input
-                  name="raw_key"
-                  type="password"
-                  placeholder="new raw key"
-                  required
-                  minLength={8}
-                  autoComplete="off"
-                  style={{ flex: 1, padding: 6 }}
-                />
-                <button type="submit" style={{ padding: '6px 14px', background: '#1a4fc4', color: 'white', border: 'none', borderRadius: 4 }}>
-                  Rotate
-                </button>
+                <Input name="raw_key" type="password" placeholder="new raw key" required minLength={8} autoComplete="off" className="flex-1" />
+                <Button type="submit" className="bg-brand text-brand-foreground hover:bg-brand/90">Rotate</Button>
               </form>
 
-              <form action={revokeAction} style={{ padding: 10, background: '#fff5f5', border: '1px solid #e3a8a8', borderRadius: 4 }}>
+              <form action={revokeAction} className="mt-3 rounded-md border border-destructive/40 bg-destructive/5 p-3">
                 <input type="hidden" name="binding_id" value={b.binding_id} />
-                <p style={{ marginTop: 0, color: '#a31818', fontSize: 13 }}>
+                <p className="mb-2 text-[13px] text-destructive">
                   <strong>Danger zone.</strong> Revoking falls future completions back to the platform credential
                   (and the token-cost SKU starts billing again). Type a reason ≥ 6 characters to confirm.
                 </p>
-                <div style={{ display: 'flex', gap: 8 }}>
-                  <input
-                    name="reason"
-                    type="text"
-                    placeholder="reason (required, min 6 chars)"
-                    required
-                    minLength={6}
-                    style={{ flex: 1, padding: 6 }}
-                  />
-                  <button type="submit" style={{ padding: '6px 14px', background: '#a31818', color: 'white', border: 'none', borderRadius: 4 }}>
-                    Revoke
-                  </button>
+                <div className="flex gap-2">
+                  <Input name="reason" type="text" placeholder="reason (required, min 6 chars)" required minLength={6} className="flex-1" />
+                  <Button type="submit" variant="danger">Revoke</Button>
                 </div>
               </form>
-            </section>
+            </Card>
           ))}
         </>
       )}

@@ -1,4 +1,17 @@
 import { revalidatePath } from 'next/cache';
+import {
+  Alert,
+  Button,
+  Input,
+  PageHeader,
+  Select,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@projexlight/design-system';
 
 interface RouteRow {
   route_id: string;
@@ -64,68 +77,76 @@ export default async function ApprovalsPage(): Promise<JSX.Element> {
   const [routes, pending] = await Promise.all([fetchRoutes(), fetchMyPending()]);
   return (
     <div>
-      <h1>Approvals</h1>
+      <PageHeader title="Approvals" description="Decisions assigned to you and the approval routes configured for this tenant." />
 
-      <h2>My pending decisions</h2>
+      <h2 className="mb-3 text-lg font-semibold">My pending decisions</h2>
       {!SELF_PERSONA && (
-        <div style={{ background: '#fff4d6', border: '1px solid #e3c47b', padding: 8, marginBottom: 12, fontSize: 13 }}>
+        <Alert variant="warning" className="mb-3">
           Set <code>TENANT_ADMIN_PERSONA_ID</code> to see decisions assigned to you.
-        </div>
+        </Alert>
       )}
-      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14 }}>
-        <thead style={{ textAlign: 'left', borderBottom: '1px solid #d7dce4' }}>
-          <tr>
-            <th style={{ padding: 8 }}>Request</th>
-            <th style={{ padding: 8 }}>Subject</th>
-            <th style={{ padding: 8 }}>Created</th>
-            <th style={{ padding: 8 }}>Decide</th>
-          </tr>
-        </thead>
-        <tbody>
-          {pending.length === 0 && <tr><td colSpan={4} style={{ padding: 12, color: '#9aa3b2' }}>No pending decisions.</td></tr>}
-          {pending.map((r) => (
-            <tr key={r.request_id} style={{ borderBottom: '1px solid #eef0f4' }}>
-              <td style={{ padding: 8, fontFamily: 'monospace', fontSize: 11 }}>{r.request_id}</td>
-              <td style={{ padding: 8, fontFamily: 'monospace', fontSize: 12 }}>{r.subject_ref}</td>
-              <td style={{ padding: 8, fontSize: 12, color: '#5a6573' }}>{new Date(r.created_at).toLocaleString()}</td>
-              <td style={{ padding: 8 }}>
-                <form action={decideAction} style={{ display: 'flex', gap: 4 }}>
-                  <input type="hidden" name="request_id" value={r.request_id} />
-                  <select name="decision" style={{ padding: 4 }}>
-                    <option value="approved">approve</option>
-                    <option value="rejected">reject</option>
-                  </select>
-                  <input name="comment" placeholder="comment" required minLength={4} style={{ padding: 4, width: 240 }} />
-                  <button type="submit" style={{ padding: '4px 12px' }}>Decide</button>
-                </form>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+      <div className="mb-6 rounded-lg border">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Request</TableHead>
+              <TableHead>Subject</TableHead>
+              <TableHead>Created</TableHead>
+              <TableHead>Decide</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {pending.length === 0 && (
+              <TableRow><TableCell colSpan={4} className="text-muted-foreground">No pending decisions.</TableCell></TableRow>
+            )}
+            {pending.map((r) => (
+              <TableRow key={r.request_id}>
+                <TableCell className="font-mono text-[11px]">{r.request_id}</TableCell>
+                <TableCell className="font-mono text-xs">{r.subject_ref}</TableCell>
+                <TableCell className="text-xs text-muted-foreground">{new Date(r.created_at).toLocaleString()}</TableCell>
+                <TableCell>
+                  <form action={decideAction} className="flex items-center gap-2">
+                    <input type="hidden" name="request_id" value={r.request_id} />
+                    <Select name="decision" className="h-8 w-28">
+                      <option value="approved">approve</option>
+                      <option value="rejected">reject</option>
+                    </Select>
+                    <Input name="comment" placeholder="comment" required minLength={4} className="h-8 w-60" />
+                    <Button type="submit" size="sm">Decide</Button>
+                  </form>
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
 
-      <h2 style={{ marginTop: 24 }}>Routes</h2>
-      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14 }}>
-        <thead style={{ textAlign: 'left', borderBottom: '1px solid #d7dce4' }}>
-          <tr>
-            <th style={{ padding: 8 }}>Route</th>
-            <th style={{ padding: 8 }}>Name</th>
-            <th style={{ padding: 8, textAlign: 'right' }}>SLA (min)</th>
-            <th style={{ padding: 8 }}>Created</th>
-          </tr>
-        </thead>
-        <tbody>
-          {routes.length === 0 && <tr><td colSpan={4} style={{ padding: 12, color: '#9aa3b2' }}>No routes.</td></tr>}
-          {routes.map((r) => (
-            <tr key={r.route_id} style={{ borderBottom: '1px solid #eef0f4' }}>
-              <td style={{ padding: 8, fontFamily: 'monospace', fontSize: 11 }}>{r.route_id}</td>
-              <td style={{ padding: 8 }}>{r.name}</td>
-              <td style={{ padding: 8, textAlign: 'right' }}>{r.sla_minutes}</td>
-              <td style={{ padding: 8, fontSize: 12, color: '#5a6573' }}>{new Date(r.created_at).toLocaleString()}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+      <h2 className="mb-3 text-lg font-semibold">Routes</h2>
+      <div className="rounded-lg border">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Route</TableHead>
+              <TableHead>Name</TableHead>
+              <TableHead className="text-right">SLA (min)</TableHead>
+              <TableHead>Created</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {routes.length === 0 && (
+              <TableRow><TableCell colSpan={4} className="text-muted-foreground">No routes.</TableCell></TableRow>
+            )}
+            {routes.map((r) => (
+              <TableRow key={r.route_id}>
+                <TableCell className="font-mono text-[11px]">{r.route_id}</TableCell>
+                <TableCell>{r.name}</TableCell>
+                <TableCell className="text-right tabular-nums">{r.sla_minutes}</TableCell>
+                <TableCell className="text-xs text-muted-foreground">{new Date(r.created_at).toLocaleString()}</TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
     </div>
   );
 }

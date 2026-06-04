@@ -1,14 +1,12 @@
 'use client';
 
 import { FormEvent, useState } from 'react';
+import { Button, Field, Input } from '@projexlight/design-system';
 import { loginUser, type LoginResponse } from '../services/authApi';
 
 export interface LoginFormProps {
   onSuccess?: (result: LoginResponse) => void;
 }
-
-const FIELD: React.CSSProperties = { display: 'flex', flexDirection: 'column', gap: 4, marginBottom: 14 };
-const INPUT: React.CSSProperties = { padding: '8px 10px', border: '1px solid #d7dce4', borderRadius: 6, fontSize: 14 };
 
 /**
  * Email + password sign-in. Six-layer JWT comes back tenant-scoped; we
@@ -38,42 +36,24 @@ export default function LoginForm({ onSuccess }: LoginFormProps): JSX.Element {
   };
 
   return (
-    <form onSubmit={handleSubmit}>
-      <label style={FIELD}>
-        <span>Email</span>
-        <input
-          style={INPUT} type="email" required autoComplete="email"
+    <form onSubmit={handleSubmit} className="flex flex-col gap-3.5">
+      <Field label="Email" htmlFor="login-email">
+        <Input
+          id="login-email" type="email" required autoComplete="email"
           value={email} onChange={(e) => setEmail(e.target.value)} />
-      </label>
+      </Field>
 
-      <label style={FIELD}>
-        <span>Password</span>
-        <input
-          style={INPUT} type="password" required autoComplete="current-password"
+      <Field label="Password" htmlFor="login-password">
+        <Input
+          id="login-password" type="password" required autoComplete="current-password"
           value={password} onChange={(e) => setPassword(e.target.value)} />
-      </label>
+      </Field>
 
-      {error && (
-        <div style={{ color: '#b00020', fontSize: 13, marginBottom: 12 }}>{error}</div>
-      )}
+      {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
 
-      <button
-        type="submit"
-        disabled={submitting}
-        style={{
-          background: submitting ? '#5a6573' : '#0b1220',
-          color: '#fff',
-          padding: '10px 20px',
-          borderRadius: 6,
-          border: 'none',
-          fontSize: 15,
-          fontWeight: 600,
-          cursor: submitting ? 'wait' : 'pointer',
-          width: '100%',
-        }}
-      >
+      <Button type="submit" disabled={submitting} className="w-full">
         {submitting ? 'Signing in…' : 'Sign in'}
-      </button>
+      </Button>
     </form>
   );
 }

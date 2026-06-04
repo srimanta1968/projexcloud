@@ -1,38 +1,46 @@
 import type { Metadata } from 'next';
 import type { ReactNode } from 'react';
+import Link from 'next/link';
+import '@projexlight/design-system/styles.css';
 
 export const metadata: Metadata = {
   title: 'ProjexCloud Admin',
   description: 'Platform operator console — tenants, pools, catalogs, gates.',
 };
 
-const LINK: React.CSSProperties = { color: '#e9eef7', textDecoration: 'none' };
+const NAV = [
+  { href: '/', label: 'Home' },
+  { href: '/tenants', label: 'Tenants' },
+  { href: '/pools', label: 'Pools' },
+  { href: '/pricing-catalogs', label: 'Pricing' },
+  { href: '/invoices', label: 'Invoices' },
+  { href: '/webhooks', label: 'Webhooks' },
+  { href: '/approvals', label: 'Approvals' },
+  { href: '/audit', label: 'Audit' },
+  { href: '/sovereign-regions', label: 'Sovereign' },
+  { href: '/onprem-installs', label: 'On-Prem' },
+  { href: '/active-active', label: 'Active-Active' },
+  { href: '/help', label: 'Help' },
+];
 
 export default function RootLayout({ children }: { children: ReactNode }): JSX.Element {
   return (
     <html lang="en">
-      <body style={{ fontFamily: 'system-ui, sans-serif', margin: 0 }}>
-        <header style={{ background: '#0b1220', color: '#e9eef7', padding: '12px 20px', display: 'flex', alignItems: 'center', gap: 24, flexWrap: 'wrap' }}>
-          <a href="/" style={{ ...LINK, fontWeight: 700 }}>ProjexCloud Admin</a>
-          <span style={{ opacity: 0.6 }}>Platform operator console</span>
-          <nav style={{ marginLeft: 'auto', display: 'flex', gap: 14, fontSize: 14, flexWrap: 'wrap' }}>
-            <a href="/" style={LINK}>Home</a>
-            <a href="/tenants" style={LINK}>Tenants</a>
-            <a href="/pools" style={LINK}>Pools</a>
-            <a href="/pricing-catalogs" style={LINK}>Pricing</a>
-            <a href="/invoices" style={LINK}>Invoices</a>
-            <a href="/webhooks" style={LINK}>Webhooks</a>
-            <a href="/approvals" style={LINK}>Approvals</a>
-            <a href="/audit" style={LINK}>Audit</a>
-            <a href="/sovereign-regions" style={LINK}>Sovereign</a>
-            <a href="/onprem-installs" style={LINK}>On-Prem</a>
-            <a href="/active-active" style={LINK}>Active-Active</a>
-            <a href="/help" style={LINK}>Help</a>
+      <body>
+        <header className="flex flex-wrap items-center gap-x-6 gap-y-2 bg-primary px-5 py-3 text-primary-foreground">
+          <Link href="/" className="font-bold">ProjexCloud Admin</Link>
+          <span className="opacity-60">Platform operator console</span>
+          <nav className="ml-auto flex flex-wrap gap-3.5 text-sm">
+            {NAV.map((n) => (
+              <Link key={n.href} href={n.href} className="text-primary-foreground/90 hover:text-primary-foreground">
+                {n.label}
+              </Link>
+            ))}
           </nav>
         </header>
-        <main style={{ padding: 24 }}>
-          <a href="/" style={{ fontSize: 13, color: '#5a6573', textDecoration: 'none' }}>← Console home</a>
-          <div style={{ marginTop: 12 }}>{children}</div>
+        <main className="p-6">
+          <Link href="/" className="text-[13px] text-muted-foreground hover:text-foreground">← Console home</Link>
+          <div className="mt-3">{children}</div>
         </main>
       </body>
     </html>

@@ -1,4 +1,6 @@
 import { revalidatePath } from 'next/cache';
+import { Alert, Button, Card, Field, Input, PageHeader, Select } from '@projexlight/design-system';
+import { StatusBadge } from '../../components/StatusBadge';
 
 interface BindingRow {
   binding_id: string;
@@ -76,96 +78,82 @@ async function revokeAction(formData: FormData): Promise<void> {
   revalidatePath('/byok');
 }
 
-function statusColor(status: string): string {
-  switch (status) {
-    case 'active': return '#0d8a3d';
-    case 'revoking': return '#a36500';
-    case 'revoked': return '#a31818';
-    case 'degraded': return '#a31818';
-    default: return '#000';
-  }
-}
-
 export default async function ByokPage(): Promise<JSX.Element> {
   const binding = await fetchBinding();
   return (
     <div>
-      <h1>BYOK / CMEK</h1>
-      <p style={{ color: '#5a6573', maxWidth: 760 }}>
-        Bring-your-own-key (P8 Variant A). Your CMK wraps the Tenant Key.
-        Revoking the grant on your CMK renders this tenant&apos;s data undecryptable
-        within {binding?.sla_revoke_propagation_seconds ?? 30}s — this is intentional and
-        cannot be undone without re-binding.
-      </p>
+      <PageHeader
+        title="BYOK / CMEK"
+        description={
+          <>
+            Bring-your-own-key (P8 Variant A). Your CMK wraps the Tenant Key.
+            Revoking the grant on your CMK renders this tenant&apos;s data undecryptable
+            within {binding?.sla_revoke_propagation_seconds ?? 30}s — this is intentional and
+            cannot be undone without re-binding.
+          </>
+        }
+      />
 
       {!TENANT_ID && (
-        <div style={{ background: '#fff4d6', border: '1px solid #e3c47b', padding: 12, borderRadius: 4 }}>
+        <Alert variant="warning">
           Set <code>TENANT_ADMIN_TENANT_ID</code> in this app&apos;s env to view your binding.
-        </div>
+        </Alert>
       )}
 
       {binding && (
-        <section style={{ marginTop: 24, padding: 16, border: '1px solid #d7dce4', borderRadius: 8 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <h2 style={{ margin: 0 }}>Active binding</h2>
-            <span style={{ color: statusColor(binding.grant_status), fontWeight: 600 }}>
-              {binding.grant_status}
-            </span>
+        <Card className="p-5">
+          <div className="flex items-center justify-between">
+            <h2 className="text-lg font-semibold">Active binding</h2>
+            <StatusBadge status={binding.grant_status} />
           </div>
-          <dl style={{ display: 'grid', gridTemplateColumns: '160px 1fr', gap: '6px 12px', marginTop: 12, fontSize: 14 }}>
-            <dt style={{ color: '#5a6573' }}>Binding ID</dt><dd style={{ margin: 0, fontFamily: 'monospace' }}>{binding.binding_id}</dd>
-            <dt style={{ color: '#5a6573' }}>Provider</dt><dd style={{ margin: 0 }}>{binding.provider}</dd>
-            <dt style={{ color: '#5a6573' }}>Customer key ARN</dt><dd style={{ margin: 0, fontFamily: 'monospace', wordBreak: 'break-all' }}>{binding.customer_kms_key_arn}</dd>
-            <dt style={{ color: '#5a6573' }}>Tenant key ID</dt><dd style={{ margin: 0, fontFamily: 'monospace' }}>{binding.tenant_key_id}</dd>
-            <dt style={{ color: '#5a6573' }}>Bound at</dt><dd style={{ margin: 0 }}>{new Date(binding.bound_at).toLocaleString()}</dd>
-            <dt style={{ color: '#5a6573' }}>Revoke SLA</dt><dd style={{ margin: 0 }}>{binding.sla_revoke_propagation_seconds}s</dd>
-            <dt style={{ color: '#5a6573' }}>SIEM endpoint</dt><dd style={{ margin: 0 }}>{binding.siem_forwarder_endpoint ?? <em>not configured</em>}</dd>
+          <dl className="mt-3 grid grid-cols-[160px_1fr] gap-x-3 gap-y-1.5 text-sm">
+            <dt className="text-muted-foreground">Binding ID</dt><dd className="m-0 font-mono">{binding.binding_id}</dd>
+            <dt className="text-muted-foreground">Provider</dt><dd className="m-0">{binding.provider}</dd>
+            <dt className="text-muted-foreground">Customer key ARN</dt><dd className="m-0 break-all font-mono">{binding.customer_kms_key_arn}</dd>
+            <dt className="text-muted-foreground">Tenant key ID</dt><dd className="m-0 font-mono">{binding.tenant_key_id}</dd>
+            <dt className="text-muted-foreground">Bound at</dt><dd className="m-0">{new Date(binding.bound_at).toLocaleString()}</dd>
+            <dt className="text-muted-foreground">Revoke SLA</dt><dd className="m-0">{binding.sla_revoke_propagation_seconds}s</dd>
+            <dt className="text-muted-foreground">SIEM endpoint</dt><dd className="m-0">{binding.siem_forwarder_endpoint ?? <em>not configured</em>}</dd>
           </dl>
 
           {binding.grant_status === 'active' && (
-            <form action={revokeAction} style={{ marginTop: 16, padding: 12, background: '#fff5f5', border: '1px solid #e3a8a8', borderRadius: 4 }}>
+            <form action={revokeAction} className="mt-4 rounded-md border border-destructive/40 bg-destructive/5 p-3">
               <input type="hidden" name="binding_id" value={binding.binding_id} />
-              <p style={{ marginTop: 0, color: '#a31818' }}>
+              <p className="mb-2 text-destructive">
                 <strong>Danger zone.</strong> Revoking will render all tenant data undecryptable. Confirm by typing a reason:
               </p>
-              <input name="reason" placeholder="reason (required)" style={{ width: '60%', padding: 6 }} required minLength={6} />
-              <button type="submit" style={{ marginLeft: 8, padding: '6px 16px', background: '#a31818', color: 'white', border: 'none', borderRadius: 4 }}>
-                Revoke CMK binding
-              </button>
+              <div className="flex gap-2">
+                <Input name="reason" placeholder="reason (required)" required minLength={6} className="flex-1" />
+                <Button type="submit" variant="danger">Revoke CMK binding</Button>
+              </div>
             </form>
           )}
-        </section>
+        </Card>
       )}
 
       {!binding && TENANT_ID && (
-        <section style={{ marginTop: 24, padding: 16, border: '1px solid #d7dce4', borderRadius: 8 }}>
-          <h2 style={{ marginTop: 0 }}>Bind a customer-managed key</h2>
-          <form action={bindCmkAction} style={{ display: 'grid', gap: 12, maxWidth: 640 }}>
-            <label>
-              Provider
-              <select name="provider" required style={{ display: 'block', width: '100%', padding: 6, marginTop: 4 }}>
+        <Card className="max-w-2xl p-5">
+          <h2 className="mb-4 text-lg font-semibold">Bind a customer-managed key</h2>
+          <form action={bindCmkAction} className="flex flex-col gap-3.5">
+            <Field label="Provider" htmlFor="provider">
+              <Select id="provider" name="provider" required>
                 <option value="aws-kms">AWS KMS</option>
                 <option value="gcp-kms">GCP KMS</option>
                 <option value="hsm-pkcs11">HSM (PKCS#11)</option>
-              </select>
-            </label>
-            <label>
-              Customer KMS key ARN / handle
-              <input name="customer_kms_key_arn" required style={{ display: 'block', width: '100%', padding: 6, marginTop: 4 }} />
-            </label>
-            <label>
-              Tenant Key ID (existing platform key to wrap)
-              <input name="tenant_key_id" required style={{ display: 'block', width: '100%', padding: 6, marginTop: 4 }} />
-            </label>
-            <label>
-              SIEM forwarder endpoint (optional)
-              <input name="siem_forwarder_endpoint" placeholder="https://siem.example.com/ingest" style={{ display: 'block', width: '100%', padding: 6, marginTop: 4 }} />
-            </label>
-            <button type="submit" style={{ padding: '8px 16px', background: '#1b2a44', color: 'white', border: 'none', borderRadius: 4 }}>
-              Bind CMK
-            </button>
+              </Select>
+            </Field>
+            <Field label="Customer KMS key ARN / handle" htmlFor="customer_kms_key_arn">
+              <Input id="customer_kms_key_arn" name="customer_kms_key_arn" required />
+            </Field>
+            <Field label="Tenant Key ID (existing platform key to wrap)" htmlFor="tenant_key_id">
+              <Input id="tenant_key_id" name="tenant_key_id" required />
+            </Field>
+            <Field label="SIEM forwarder endpoint (optional)" htmlFor="siem_forwarder_endpoint">
+              <Input id="siem_forwarder_endpoint" name="siem_forwarder_endpoint" placeholder="https://siem.example.com/ingest" />
+            </Field>
+            <Button type="submit" className="justify-self-start self-start">Bind CMK</Button>
           </form>
-        </section>
+        </Card>
       )}
     </div>
   );

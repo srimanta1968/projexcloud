@@ -1,4 +1,18 @@
 import { revalidatePath } from 'next/cache';
+import {
+  Button,
+  Card,
+  Field,
+  Input,
+  PageHeader,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@projexlight/design-system';
+import { StatusBadge } from '../../components/StatusBadge';
 
 interface EndpointRow {
   endpoint_id: string;
@@ -55,69 +69,79 @@ export default async function WebhooksPage(): Promise<JSX.Element> {
   const [endpoints, dlq] = await Promise.all([fetchEndpoints(), fetchDlq()]);
   return (
     <div>
-      <h1>Webhooks</h1>
+      <PageHeader title="Webhooks" description="Register outbound endpoints and inspect the dead-letter queue." />
 
-      <section style={{ marginTop: 16, padding: 16, border: '1px solid #d7dce4', borderRadius: 8, maxWidth: 720 }}>
-        <h2 style={{ marginTop: 0 }}>Register endpoint</h2>
-        <form action={registerAction} style={{ display: 'grid', gap: 12 }}>
-          <label>URL (https://…) <input name="url" required type="url" style={{ display: 'block', width: '100%', padding: 6 }} /></label>
-          <label>Signing key ref <input name="signing_key_ref" required style={{ display: 'block', width: '100%', padding: 6 }} placeholder="vault:hmac/webhook-default" /></label>
-          <button type="submit" style={{ padding: '8px 16px', background: '#1b2a44', color: 'white', border: 'none', borderRadius: 4 }}>Register</button>
+      <Card className="mb-6 max-w-2xl p-5">
+        <h2 className="mb-4 text-lg font-semibold">Register endpoint</h2>
+        <form action={registerAction} className="grid gap-3.5">
+          <Field label="URL (https://…)" htmlFor="url">
+            <Input id="url" name="url" required type="url" />
+          </Field>
+          <Field label="Signing key ref" htmlFor="signing_key_ref">
+            <Input id="signing_key_ref" name="signing_key_ref" required placeholder="vault:hmac/webhook-default" />
+          </Field>
+          <Button type="submit" className="justify-self-start">Register</Button>
         </form>
-        <p style={{ fontSize: 12, color: '#5a6573', marginTop: 8 }}>
+        <p className="mt-3 text-xs text-muted-foreground">
           On-prem strict-mode tenants: only in-cluster URLs accepted (FR-ONP-6).
         </p>
-      </section>
+      </Card>
 
-      <h2 style={{ marginTop: 24 }}>Endpoints</h2>
-      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14 }}>
-        <thead style={{ textAlign: 'left', borderBottom: '1px solid #d7dce4' }}>
-          <tr>
-            <th style={{ padding: 8 }}>Endpoint</th>
-            <th style={{ padding: 8 }}>URL</th>
-            <th style={{ padding: 8 }}>Status</th>
-            <th style={{ padding: 8, textAlign: 'right' }}>Failures</th>
-            <th style={{ padding: 8 }}>Last success</th>
-          </tr>
-        </thead>
-        <tbody>
-          {endpoints.length === 0 && <tr><td colSpan={5} style={{ padding: 12, color: '#9aa3b2' }}>No endpoints.</td></tr>}
-          {endpoints.map((e) => (
-            <tr key={e.endpoint_id} style={{ borderBottom: '1px solid #eef0f4' }}>
-              <td style={{ padding: 8, fontFamily: 'monospace', fontSize: 11 }}>{e.endpoint_id}</td>
-              <td style={{ padding: 8, fontSize: 12, wordBreak: 'break-all' }}>{e.url}</td>
-              <td style={{ padding: 8 }}>{e.status}</td>
-              <td style={{ padding: 8, textAlign: 'right' }}>{e.failure_streak}</td>
-              <td style={{ padding: 8, fontSize: 12, color: '#5a6573' }}>
-                {e.last_success_at ? new Date(e.last_success_at).toLocaleString() : '—'}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+      <h2 className="mb-3 text-lg font-semibold">Endpoints</h2>
+      <div className="mb-6 rounded-lg border">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Endpoint</TableHead>
+              <TableHead>URL</TableHead>
+              <TableHead>Status</TableHead>
+              <TableHead className="text-right">Failures</TableHead>
+              <TableHead>Last success</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {endpoints.length === 0 && (
+              <TableRow><TableCell colSpan={5} className="text-muted-foreground">No endpoints.</TableCell></TableRow>
+            )}
+            {endpoints.map((e) => (
+              <TableRow key={e.endpoint_id}>
+                <TableCell className="font-mono text-[11px]">{e.endpoint_id}</TableCell>
+                <TableCell className="break-all text-xs">{e.url}</TableCell>
+                <TableCell><StatusBadge status={e.status} /></TableCell>
+                <TableCell className="text-right tabular-nums">{e.failure_streak}</TableCell>
+                <TableCell className="text-xs text-muted-foreground">{e.last_success_at ? new Date(e.last_success_at).toLocaleString() : '—'}</TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
 
-      <h2 style={{ marginTop: 24 }}>DLQ</h2>
-      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14 }}>
-        <thead style={{ textAlign: 'left', borderBottom: '1px solid #d7dce4' }}>
-          <tr>
-            <th style={{ padding: 8 }}>Delivery</th>
-            <th style={{ padding: 8 }}>Event type</th>
-            <th style={{ padding: 8, textAlign: 'right' }}>Attempts</th>
-            <th style={{ padding: 8 }}>Failed at</th>
-          </tr>
-        </thead>
-        <tbody>
-          {dlq.length === 0 && <tr><td colSpan={4} style={{ padding: 12, color: '#9aa3b2' }}>DLQ empty.</td></tr>}
-          {dlq.map((d) => (
-            <tr key={d.delivery_id} style={{ borderBottom: '1px solid #eef0f4' }}>
-              <td style={{ padding: 8, fontFamily: 'monospace', fontSize: 11 }}>{d.delivery_id}</td>
-              <td style={{ padding: 8, fontFamily: 'monospace', fontSize: 12 }}>{d.event_type}</td>
-              <td style={{ padding: 8, textAlign: 'right' }}>{d.attempts}</td>
-              <td style={{ padding: 8, fontSize: 12, color: '#5a6573' }}>{new Date(d.failed_at).toLocaleString()}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+      <h2 className="mb-3 text-lg font-semibold">DLQ</h2>
+      <div className="rounded-lg border">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Delivery</TableHead>
+              <TableHead>Event type</TableHead>
+              <TableHead className="text-right">Attempts</TableHead>
+              <TableHead>Failed at</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {dlq.length === 0 && (
+              <TableRow><TableCell colSpan={4} className="text-muted-foreground">DLQ empty.</TableCell></TableRow>
+            )}
+            {dlq.map((d) => (
+              <TableRow key={d.delivery_id}>
+                <TableCell className="font-mono text-[11px]">{d.delivery_id}</TableCell>
+                <TableCell className="font-mono text-xs">{d.event_type}</TableCell>
+                <TableCell className="text-right tabular-nums">{d.attempts}</TableCell>
+                <TableCell className="text-xs text-muted-foreground">{new Date(d.failed_at).toLocaleString()}</TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
     </div>
   );
 }

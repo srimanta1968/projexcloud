@@ -1,4 +1,15 @@
 import { revalidatePath } from 'next/cache';
+import {
+  Button,
+  Input,
+  PageHeader,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@projexlight/design-system';
 
 interface EntryRow {
   entry_id: string;
@@ -48,49 +59,53 @@ export default async function AuditPage({
   const entries = await fetchEntries(searchParams);
   return (
     <div>
-      <h1>Audit hash-chain browser</h1>
-      <p style={{ color: '#5a6573' }}>Filter and verify the per-tenant audit chain. Gap or hash-mismatch returns the failing seq.</p>
+      <PageHeader
+        title="Audit hash-chain browser"
+        description="Filter and verify the per-tenant audit chain. Gap or hash-mismatch returns the failing seq."
+      />
 
-      <form method="get" style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 16, flexWrap: 'wrap' }}>
-        <input name="tenant_id" defaultValue={searchParams.tenant_id} placeholder="tenant_id (UUID)" style={{ padding: 4, width: 320 }} />
-        <input name="actor_id" defaultValue={searchParams.actor_id} placeholder="actor_id" style={{ padding: 4, width: 200 }} />
-        <input name="from" type="datetime-local" defaultValue={searchParams.from} style={{ padding: 4 }} />
-        <input name="to" type="datetime-local" defaultValue={searchParams.to} style={{ padding: 4 }} />
-        <button type="submit" style={{ padding: '4px 12px' }}>Filter</button>
+      <form method="get" className="mb-3 flex flex-wrap items-center gap-2">
+        <Input name="tenant_id" defaultValue={searchParams.tenant_id} placeholder="tenant_id (UUID)" className="w-80" />
+        <Input name="actor_id" defaultValue={searchParams.actor_id} placeholder="actor_id" className="w-52" />
+        <Input name="from" type="datetime-local" defaultValue={searchParams.from} className="w-auto" />
+        <Input name="to" type="datetime-local" defaultValue={searchParams.to} className="w-auto" />
+        <Button type="submit">Filter</Button>
       </form>
 
       {searchParams.tenant_id && (
-        <form action={verifyAction} style={{ marginTop: 12 }}>
+        <form action={verifyAction} className="mb-4">
           <input type="hidden" name="tenant_id" value={searchParams.tenant_id} />
-          <button type="submit" style={{ padding: '6px 16px', background: '#0b1220', color: 'white', border: 'none', borderRadius: 4 }}>
-            Verify chain for this tenant
-          </button>
+          <Button type="submit">Verify chain for this tenant</Button>
         </form>
       )}
 
-      <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: 16, fontSize: 13 }}>
-        <thead style={{ textAlign: 'left', borderBottom: '1px solid #d7dce4' }}>
-          <tr>
-            <th style={{ padding: 6 }}>Entry</th>
-            <th style={{ padding: 6, textAlign: 'right' }}>Seq</th>
-            <th style={{ padding: 6 }}>When</th>
-            <th style={{ padding: 6 }}>Actor</th>
-            <th style={{ padding: 6 }}>Action</th>
-          </tr>
-        </thead>
-        <tbody>
-          {entries.length === 0 && <tr><td colSpan={5} style={{ padding: 12, color: '#9aa3b2' }}>No entries match.</td></tr>}
-          {entries.map((e) => (
-            <tr key={e.entry_id} style={{ borderBottom: '1px solid #eef0f4' }}>
-              <td style={{ padding: 6, fontFamily: 'monospace', fontSize: 11 }}>{e.entry_id}</td>
-              <td style={{ padding: 6, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{e.seq}</td>
-              <td style={{ padding: 6, color: '#5a6573' }}>{new Date(e.occurred_at).toLocaleString()}</td>
-              <td style={{ padding: 6, fontSize: 12 }}>{e.actor_kind}:{e.actor_id}</td>
-              <td style={{ padding: 6, fontFamily: 'monospace', fontSize: 12 }}>{e.action}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+      <div className="rounded-lg border">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Entry</TableHead>
+              <TableHead className="text-right">Seq</TableHead>
+              <TableHead>When</TableHead>
+              <TableHead>Actor</TableHead>
+              <TableHead>Action</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {entries.length === 0 && (
+              <TableRow><TableCell colSpan={5} className="text-muted-foreground">No entries match.</TableCell></TableRow>
+            )}
+            {entries.map((e) => (
+              <TableRow key={e.entry_id}>
+                <TableCell className="font-mono text-[11px]">{e.entry_id}</TableCell>
+                <TableCell className="text-right tabular-nums">{e.seq}</TableCell>
+                <TableCell className="text-muted-foreground">{new Date(e.occurred_at).toLocaleString()}</TableCell>
+                <TableCell className="text-xs">{e.actor_kind}:{e.actor_id}</TableCell>
+                <TableCell className="font-mono text-xs">{e.action}</TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
     </div>
   );
 }

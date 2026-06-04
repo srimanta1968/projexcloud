@@ -42,6 +42,8 @@ loadRootEnv();
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
+  // The design-system package ships TS source; Next transpiles it in-app.
+  transpilePackages: ['@projexlight/design-system'],
 };
 
 module.exports = nextConfig;

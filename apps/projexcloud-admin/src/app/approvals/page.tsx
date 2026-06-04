@@ -1,4 +1,13 @@
 import Link from 'next/link';
+import {
+  PageHeader,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@projexlight/design-system';
 
 interface RouteRow {
   route_id: string;
@@ -23,33 +32,37 @@ export default async function ApprovalsPage(): Promise<JSX.Element> {
   const routes = await fetchRoutes();
   return (
     <div>
-      <h1>Approval routes</h1>
-      <p style={{ color: '#5a6573' }}>
-        Cross-tenant view. See <Link href="/approvals/breaches">SLA breaches</Link> for stuck requests.
-      </p>
-      <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: 16 }}>
-        <thead style={{ textAlign: 'left', borderBottom: '1px solid #d7dce4' }}>
-          <tr>
-            <th style={{ padding: 8 }}>Route</th>
-            <th style={{ padding: 8 }}>Tenant</th>
-            <th style={{ padding: 8 }}>Name</th>
-            <th style={{ padding: 8, textAlign: 'right' }}>SLA (min)</th>
-            <th style={{ padding: 8 }}>Created</th>
-          </tr>
-        </thead>
-        <tbody>
-          {routes.length === 0 && <tr><td colSpan={5} style={{ padding: 12, color: '#9aa3b2' }}>No routes registered.</td></tr>}
-          {routes.map((r) => (
-            <tr key={r.route_id} style={{ borderBottom: '1px solid #eef0f4' }}>
-              <td style={{ padding: 8, fontFamily: 'monospace', fontSize: 12 }}>{r.route_id}</td>
-              <td style={{ padding: 8, fontFamily: 'monospace', fontSize: 12 }}>{r.tenant_id}</td>
-              <td style={{ padding: 8 }}>{r.name}</td>
-              <td style={{ padding: 8, textAlign: 'right' }}>{r.sla_minutes}</td>
-              <td style={{ padding: 8, fontSize: 12, color: '#5a6573' }}>{new Date(r.created_at).toLocaleString()}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+      <PageHeader
+        title="Approval routes"
+        description={<>Cross-tenant view. See <Link href="/approvals/breaches" className="text-primary underline">SLA breaches</Link> for stuck requests.</>}
+      />
+      <div className="rounded-lg border">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Route</TableHead>
+              <TableHead>Tenant</TableHead>
+              <TableHead>Name</TableHead>
+              <TableHead className="text-right">SLA (min)</TableHead>
+              <TableHead>Created</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {routes.length === 0 && (
+              <TableRow><TableCell colSpan={5} className="text-muted-foreground">No routes registered.</TableCell></TableRow>
+            )}
+            {routes.map((r) => (
+              <TableRow key={r.route_id}>
+                <TableCell className="font-mono text-xs">{r.route_id}</TableCell>
+                <TableCell className="font-mono text-xs">{r.tenant_id}</TableCell>
+                <TableCell>{r.name}</TableCell>
+                <TableCell className="text-right tabular-nums">{r.sla_minutes}</TableCell>
+                <TableCell className="text-xs text-muted-foreground">{new Date(r.created_at).toLocaleString()}</TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
     </div>
   );
 }
