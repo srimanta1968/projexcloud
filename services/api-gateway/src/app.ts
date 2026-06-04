@@ -240,6 +240,7 @@ import { migrationsDir as connectorSnowflakeMigrations } from '@projexlight/conn
 // P9.2 — global SDK catalog RAG store (Epic A). Auto-migrates catalog.* and
 // (best-effort) syncs manifests → pgvector for the build planner + registry MCP.
 import { migrationsDir as catalogIndexMigrations, syncCatalog } from '@projexlight/sdk-catalog-index';
+import { registerIngestRoutes, migrationsDir as ingestMigrations } from '@projexlight/sdk-ingest';
 
 // P7 / Wave 7 — Field + Evidence + Hyperscale. Closes G10 (federation
 // runtime) + G11 (Iceberg lakehouse). 8 new SDKs + 1 new service.
@@ -447,6 +448,10 @@ app.register(diagnosticTelemetryServer.registerRoutes);
 
 // P7 §5.4 / AC-3 — lead scoring + next-best-action surface.
 app.register(leadScoringServer.registerRoutes);
+
+// P9.2 / Epic B — ETL batch front door: POST /api/ingest/:entity/batch.
+// Plain sync registrar (not a Fastify plugin), so call it with the root app.
+registerIngestRoutes(app);
 
 // P7 FR-DSP-3 — route optimization HTTP endpoint.
 app.post<{
@@ -804,6 +809,8 @@ const start = async (): Promise<void> => {
       { sdk: 'sdk-onprem',              dir: onpremMigrations },
       // P9.2 — global SDK catalog store (lands last; references no other schema).
       { sdk: 'sdk-catalog-index',       dir: catalogIndexMigrations },
+      // P9.2 / Epic B — ETL ingest landing table (ingest.record).
+      { sdk: 'sdk-ingest',              dir: ingestMigrations },
     ]);
 
     // P9.2 — incremental catalog sync (Epic A, TK-3461). OPT-IN: embedding the
