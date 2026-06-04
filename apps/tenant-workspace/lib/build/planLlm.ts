@@ -1,22 +1,24 @@
-import type { CatalogSdk } from './sdkCatalog';
-import { renderCatalogForPrompt } from './sdkCatalog';
+import type { Candidate } from './resolve';
 
 /**
- * Calls an LLM with a structured-output prompt that asks for an SDK
- * composition plan given the tenant's intent + the full SDK catalog.
+ * Compose stage of Planner v2.
+ *
+ * v1 pasted the entire ~90-SDK catalog into one prompt and let the model pick
+ * (it returned ~3, dropped auth, and cost ~18k tokens). v2 receives only the
+ * RESOLVED CANDIDATE SET (retrieval hits + injected foundation tier +
+ * dependency closure) and asks the model to compose a plan that includes every
+ * contributing candidate and splits SDK reuse from custom UI work.
+ *
+ * The generation provider is swappable behind selectProvider()/callOpenAi/
+ * callAnthropic. Retrieval (which SDKs are candidates) is decided upstream by
+ * the local retriever + resolvers, so swapping the generation provider never
+ * changes which SDKs surface — only the prose.
  *
  * Provider selection (in order):
- *   1. BUILD_PLAN_PROVIDER env var (explicit override: 'openai' | 'anthropic')
- *   2. OPENAI_API_KEY if set (default — OpenAI's JSON mode is more reliable
- *      than asking Claude nicely to return JSON)
+ *   1. BUILD_PLAN_PROVIDER env var (explicit 'openai' | 'anthropic')
+ *   2. OPENAI_API_KEY if set (OpenAI JSON mode is the more reliable default)
  *   3. ANTHROPIC_API_KEY if set
  *   4. throws — caller surfaces the error to the user
- *
- * v1 design choice: bypass sdk-ai-gateway. The gateway adds metering, audit,
- * and PII redaction — all valuable, but it requires the api-gateway to be
- * running and a full AgentContext. For a tenant-side helper that should
- * work even when the platform half is down, a direct call is the right
- * shape. Migration to sdk-ai-gateway is a one-function swap here.
  */
 
 export type VerticalPack = 'general' | 'healthcare' | 'finserv' | 'publicSector' | 'fieldService' | 'revops';
@@ -36,16 +38,18 @@ export interface BuildPlan {
   complexity: Complexity;
 }
 
-const SYSTEM_PROMPT = `You are an SDK composition advisor for ProjexCloud, a multi-tenant SaaS platform with ~88 production SDKs covering identity, billing, audit, AI, dispatch, encryption, vertical packs, and more.
+const SYSTEM_PROMPT = `You are an SDK composition advisor for ProjexCloud, a multi-tenant SaaS platform with ~90 production SDKs covering identity, billing, audit, AI, dispatch, encryption, vertical packs, and more.
 
-Given a tenant's natural-language app description plus the full SDK catalog, return a structured plan that:
-1. Recommends specific SDKs from the catalog that solve part of the problem (with a one-line rationale per SDK).
-2. Lists the custom work the tenant must still implement themselves (concise bullet points — what the SDKs DON'T cover).
+You are given a tenant's natural-language app description plus a PRE-SELECTED CANDIDATE SET of SDKs. The candidates were chosen by semantic retrieval, then augmented with the platform's foundation identity/AIM tier and with dependency prerequisites. Each candidate is labelled with WHY it is present (retrieval | foundation | dependency).
+
+Return a structured plan that:
+1. Recommends the candidate SDKs that genuinely contribute to this app, with a one-line rationale per SDK. INCLUDE EVERY foundation and dependency candidate that the app needs — a multi-user app must use the identity/AIM SDKs (login, personas, tenancy, permissions) rather than rebuilding auth. Only drop a candidate if it is clearly irrelevant, and do not invent SDKs outside the candidate set.
+2. Lists the custom work the tenant must still implement themselves. IMPORTANT: ProjexCloud ships the auth SDKs but NOT prebuilt login/admin UI — so when the app needs sign-in or administration, list the "login page UI (wired to the identity SDK's login endpoint)" and "admin page UI (calling the persona/rebac permission endpoints)" here as custom work, distinct from the auth SDKs you recommend.
 3. Offers 0-3 clarifying questions ONLY when the description is ambiguous; leave empty otherwise.
 4. Classifies the vertical pack and overall complexity.
 5. Provides a one-paragraph executive summary.
 
-CRITICAL: Only recommend SDKs that appear in the provided catalog. Use exact names with the @projexlight/ prefix. Do not invent SDKs.
+Use exact SDK names with the @projexlight/ prefix.
 
 Respond with STRICT JSON matching this schema:
 {
@@ -57,8 +61,20 @@ Respond with STRICT JSON matching this schema:
   "complexity": "small" | "medium" | "large"
 }`;
 
-function buildUserPrompt(intent: string, catalog: CatalogSdk[]): string {
-  return `The tenant wants to build:\n\n"${intent}"\n\nAvailable SDKs (${catalog.length} total):\n\n${renderCatalogForPrompt(catalog)}\n\nReturn the JSON plan now.`;
+/** Render one candidate (with provenance + endpoints) for the compose prompt. */
+function renderCandidate(c: Candidate): string {
+  const tier = c.sdk.tier === 'foundation' ? ' (FOUNDATION)' : '';
+  const why = c.reason ? `\n    included_because: ${c.reason}` : '';
+  const eps = c.sdk.endpoints.length
+    ? `\n    endpoints: ${c.sdk.endpoints.slice(0, 6).map((e) => `${e.method} ${e.path}${e.kind !== 'query' ? ` [${e.kind}]` : ''}`).join(', ')}`
+    : '';
+  return `- name: ${c.sdk.name}${tier} [source=${c.source}]\n    summary: ${c.sdk.summary}${why}${eps}`;
+}
+
+function buildUserPrompt(intent: string, candidates: Candidate[]): string {
+  return `The tenant wants to build:\n\n"${intent}"\n\nCandidate SDKs (${candidates.length}) — recommend from these:\n\n${candidates
+    .map(renderCandidate)
+    .join('\n')}\n\nReturn the JSON plan now.`;
 }
 
 function tryParseJson(raw: string): BuildPlan | null {
@@ -79,107 +95,107 @@ function tryParseJson(raw: string): BuildPlan | null {
 
 type Provider = 'openai' | 'anthropic';
 
-function selectProvider(): Provider {
+/**
+ * Generation adapter (TK-3474). The compose-step LLM is hidden behind this
+ * interface so the provider is swappable (config / new vendor / local model)
+ * without touching the planner. Retrieval stays on the local bge-small model,
+ * so swapping the generation provider never changes which SDKs are discovered —
+ * only the prose. `complete()` returns raw text; the planner parses it.
+ */
+export interface GenerationProvider {
+  readonly name: Provider;
+  complete(system: string, user: string): Promise<string>;
+}
+
+class OpenAiProvider implements GenerationProvider {
+  readonly name = 'openai' as const;
+  private url = 'https://api.openai.com/v1/chat/completions';
+  private model = process.env.BUILD_PLAN_OPENAI_MODEL ?? 'gpt-4o-mini';
+
+  async complete(system: string, user: string): Promise<string> {
+    const apiKey = process.env.OPENAI_API_KEY;
+    if (!apiKey) throw new Error('OPENAI_API_KEY is not set');
+    const res = await fetch(this.url, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${apiKey}` },
+      body: JSON.stringify({
+        model: this.model,
+        response_format: { type: 'json_object' },
+        messages: [
+          { role: 'system', content: system },
+          { role: 'user', content: user },
+        ],
+        temperature: 0.4,
+        max_tokens: 2048,
+      }),
+      signal: AbortSignal.timeout(60_000),
+    });
+    if (!res.ok) {
+      const errText = await res.text().catch(() => '');
+      throw new Error(`openai call failed: ${res.status} ${errText.slice(0, 400)}`);
+    }
+    const body = (await res.json()) as { choices?: Array<{ message?: { content?: string } }> };
+    const text = body.choices?.[0]?.message?.content;
+    if (!text) throw new Error('openai returned no message content');
+    return text;
+  }
+}
+
+class AnthropicProvider implements GenerationProvider {
+  readonly name = 'anthropic' as const;
+  private url = 'https://api.anthropic.com/v1/messages';
+  private model = process.env.BUILD_PLAN_ANTHROPIC_MODEL ?? 'claude-sonnet-4-6';
+
+  async complete(system: string, user: string): Promise<string> {
+    const apiKey = process.env.ANTHROPIC_API_KEY;
+    if (!apiKey) throw new Error('ANTHROPIC_API_KEY is not set');
+    const res = await fetch(this.url, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
+      body: JSON.stringify({
+        model: this.model,
+        max_tokens: 2048,
+        system,
+        messages: [{ role: 'user', content: user }],
+      }),
+      signal: AbortSignal.timeout(60_000),
+    });
+    if (!res.ok) {
+      const errText = await res.text().catch(() => '');
+      throw new Error(`anthropic call failed: ${res.status} ${errText.slice(0, 400)}`);
+    }
+    const body = (await res.json()) as { content?: Array<{ type: string; text?: string }> };
+    const text = body.content?.find((c) => c.type === 'text')?.text;
+    if (!text) throw new Error('anthropic returned no text content');
+    return text;
+  }
+}
+
+/**
+ * Provider selection (in order):
+ *   1. BUILD_PLAN_PROVIDER (explicit 'openai' | 'anthropic')
+ *   2. OPENAI_API_KEY if set (OpenAI JSON mode is the more reliable default)
+ *   3. ANTHROPIC_API_KEY if set
+ *   4. throws
+ */
+export function selectGenerationProvider(): GenerationProvider {
   const explicit = (process.env.BUILD_PLAN_PROVIDER ?? '').toLowerCase();
-  if (explicit === 'openai' || explicit === 'anthropic') return explicit;
-  if (process.env.OPENAI_API_KEY) return 'openai';
-  if (process.env.ANTHROPIC_API_KEY) return 'anthropic';
+  if (explicit === 'openai') return new OpenAiProvider();
+  if (explicit === 'anthropic') return new AnthropicProvider();
+  if (process.env.OPENAI_API_KEY) return new OpenAiProvider();
+  if (process.env.ANTHROPIC_API_KEY) return new AnthropicProvider();
   throw new Error('No LLM provider configured: set OPENAI_API_KEY or ANTHROPIC_API_KEY');
-}
-
-// ─── OpenAI ────────────────────────────────────────────────────────────
-const OPENAI_URL = 'https://api.openai.com/v1/chat/completions';
-const OPENAI_DEFAULT_MODEL = process.env.BUILD_PLAN_OPENAI_MODEL ?? 'gpt-4o-mini';
-
-interface OpenAiResponse {
-  choices?: Array<{ message?: { content?: string } }>;
-}
-
-async function callOpenAi(intent: string, catalog: CatalogSdk[]): Promise<BuildPlan> {
-  const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) throw new Error('OPENAI_API_KEY is not set');
-
-  const res = await fetch(OPENAI_URL, {
-    method: 'POST',
-    headers: {
-      'content-type': 'application/json',
-      authorization: `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({
-      model: OPENAI_DEFAULT_MODEL,
-      response_format: { type: 'json_object' },
-      messages: [
-        { role: 'system', content: SYSTEM_PROMPT },
-        { role: 'user',   content: buildUserPrompt(intent, catalog) },
-      ],
-      temperature: 0.4,
-      max_tokens: 2048,
-    }),
-    signal: AbortSignal.timeout(60_000),
-  });
-
-  if (!res.ok) {
-    const errText = await res.text().catch(() => '');
-    throw new Error(`openai call failed: ${res.status} ${errText.slice(0, 400)}`);
-  }
-
-  const body = (await res.json()) as OpenAiResponse;
-  const text = body.choices?.[0]?.message?.content;
-  if (!text) throw new Error('openai returned no message content');
-  const plan = tryParseJson(text);
-  if (!plan) throw new Error('openai response was not valid JSON: ' + text.slice(0, 200));
-  return plan;
-}
-
-// ─── Anthropic ─────────────────────────────────────────────────────────
-const ANTHROPIC_URL = 'https://api.anthropic.com/v1/messages';
-const ANTHROPIC_DEFAULT_MODEL = process.env.BUILD_PLAN_ANTHROPIC_MODEL ?? 'claude-sonnet-4-6';
-
-interface AnthropicResponse {
-  content?: Array<{ type: string; text?: string }>;
-}
-
-async function callAnthropic(intent: string, catalog: CatalogSdk[]): Promise<BuildPlan> {
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) throw new Error('ANTHROPIC_API_KEY is not set');
-
-  const res = await fetch(ANTHROPIC_URL, {
-    method: 'POST',
-    headers: {
-      'content-type': 'application/json',
-      'x-api-key': apiKey,
-      'anthropic-version': '2023-06-01',
-    },
-    body: JSON.stringify({
-      model: ANTHROPIC_DEFAULT_MODEL,
-      max_tokens: 2048,
-      system: SYSTEM_PROMPT,
-      messages: [{ role: 'user', content: buildUserPrompt(intent, catalog) }],
-    }),
-    signal: AbortSignal.timeout(60_000),
-  });
-
-  if (!res.ok) {
-    const errText = await res.text().catch(() => '');
-    throw new Error(`anthropic call failed: ${res.status} ${errText.slice(0, 400)}`);
-  }
-
-  const body = (await res.json()) as AnthropicResponse;
-  const text = body.content?.find((c) => c.type === 'text')?.text;
-  if (!text) throw new Error('anthropic returned no text content');
-  const plan = tryParseJson(text);
-  if (!plan) throw new Error('anthropic response was not valid JSON: ' + text.slice(0, 200));
-  return plan;
 }
 
 // ─── Public entrypoint ─────────────────────────────────────────────────
 export async function generateBuildPlan(input: {
   intent: string;
-  catalog: CatalogSdk[];
+  candidates: Candidate[];
+  provider?: GenerationProvider;
 }): Promise<{ plan: BuildPlan; provider: Provider }> {
-  const provider = selectProvider();
-  const plan = provider === 'openai'
-    ? await callOpenAi(input.intent, input.catalog)
-    : await callAnthropic(input.intent, input.catalog);
-  return { plan, provider };
+  const provider = input.provider ?? selectGenerationProvider();
+  const text = await provider.complete(SYSTEM_PROMPT, buildUserPrompt(input.intent, input.candidates));
+  const plan = tryParseJson(text);
+  if (!plan) throw new Error(`${provider.name} response was not valid JSON: ` + text.slice(0, 200));
+  return { plan, provider: provider.name };
 }

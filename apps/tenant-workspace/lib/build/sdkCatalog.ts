@@ -2,20 +2,41 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 /**
- * Loads + trims every sdk-capability.json manifest in the monorepo
- * into a compact catalog the LLM can reason about. Trimmed shape stays
- * under ~200 tokens per SDK so the full catalog fits comfortably in any
- * frontier model's context window.
+ * Loads + trims every sdk-capability.json manifest in the monorepo into a
+ * catalog the planner reasons about.
  *
- * Loaded ONCE at module init — manifests change when the dev rebuilds,
- * not per-request.
+ * Planner v2 (P9.2): the catalog is no longer streamed wholesale into one LLM
+ * prompt. Instead it feeds a retrieve-then-compose pipeline (see retriever.ts
+ * + resolve.ts), so we capture the extra structure those stages need:
+ *   - tier            — 'foundation' when the manifest carries the
+ *                       `foundation` tag (identity/persona/tenant/rebac/…),
+ *                       which the foundation-tier resolver always injects.
+ *   - endpoints[]     — method/path/kind, so a plan can cite concrete APIs and
+ *                       so ingest endpoints stay discoverable.
+ *   - providesEvents  — event names this SDK emits.
+ *   - consumesEvents  — event names this SDK consumes; the dependency-closure
+ *                       resolver walks consumes→provides to pull prerequisites.
+ *
+ * Loaded ONCE at module init — manifests change when the dev rebuilds, not
+ * per-request.
  */
+
+export interface CatalogEndpoint {
+  method: string;
+  path: string;
+  /** ingest | bulk | query | mutation | webhook (defaults to 'query'). */
+  kind: string;
+}
 
 export interface CatalogSdk {
   name: string;
   summary: string;
   tags: string[];
+  tier: 'foundation' | 'domain';
   capabilities: string[];
+  endpoints: CatalogEndpoint[];
+  providesEvents: string[];
+  consumesEvents: string[];
 }
 
 /**
@@ -51,20 +72,31 @@ function resolvePackagesDir(): string {
 
 const PACKAGES_DIR = resolvePackagesDir();
 
+/** Absolute path to the resolved monorepo packages/ dir (used by the embedding retriever). */
+export function getPackagesDir(): string {
+  return PACKAGES_DIR;
+}
+
 interface RawManifest {
   name?: string;
   summary?: string;
   tags?: string[];
   provides?: {
-    endpoints?: Array<{ method?: string; path?: string; description?: string }>;
+    endpoints?: Array<{ method?: string; path?: string; description?: string; kind?: string }>;
     hooks?: Array<{ name?: string; description?: string }>;
     ui_components?: Array<{ name?: string; description?: string }>;
+    events?: Array<{ name?: string }>;
+  };
+  consumes?: {
     events?: Array<{ name?: string }>;
   };
 }
 
 function trim(manifest: RawManifest): CatalogSdk | null {
   if (!manifest.name || !manifest.summary) return null;
+  const tags = manifest.tags ?? [];
+
+  const endpoints: CatalogEndpoint[] = [];
   const capabilities: string[] = [];
 
   for (const hook of manifest.provides?.hooks ?? []) {
@@ -72,6 +104,11 @@ function trim(manifest: RawManifest): CatalogSdk | null {
   }
   for (const endpoint of manifest.provides?.endpoints ?? []) {
     if (endpoint.method && endpoint.path) {
+      endpoints.push({
+        method: endpoint.method,
+        path: endpoint.path,
+        kind: endpoint.kind ?? 'query',
+      });
       capabilities.push(`${endpoint.method} ${endpoint.path}`);
     }
   }
@@ -79,11 +116,22 @@ function trim(manifest: RawManifest): CatalogSdk | null {
     if (ui.name) capabilities.push(`ui:${ui.name}`);
   }
 
+  const providesEvents = (manifest.provides?.events ?? [])
+    .map((e) => e.name)
+    .filter((n): n is string => Boolean(n));
+  const consumesEvents = (manifest.consumes?.events ?? [])
+    .map((e) => e.name)
+    .filter((n): n is string => Boolean(n));
+
   return {
     name: manifest.name,
     summary: manifest.summary,
-    tags: manifest.tags ?? [],
+    tags,
+    tier: tags.includes('foundation') ? 'foundation' : 'domain',
     capabilities: capabilities.slice(0, 10), // cap to avoid runaway tokens
+    endpoints: endpoints.slice(0, 20),
+    providesEvents,
+    consumesEvents,
   };
 }
 
@@ -129,13 +177,14 @@ export function loadCatalogWithMeta(): CatalogLoadResult {
   return { catalog: out, packagesDir: PACKAGES_DIR };
 }
 
-/** Render the catalog as a compact YAML-ish prompt block. */
+/** Render a single SDK as a compact YAML-ish prompt block (used by the compose step). */
+export function renderSdkForPrompt(sdk: CatalogSdk): string {
+  const tags = sdk.tags.length ? ` [${sdk.tags.join(', ')}]` : '';
+  const caps = sdk.capabilities.length ? `\n    capabilities: ${sdk.capabilities.join(', ')}` : '';
+  return `- name: ${sdk.name}${tags}\n    summary: ${sdk.summary}${caps}`;
+}
+
+/** Render a list of SDKs as a compact prompt block. */
 export function renderCatalogForPrompt(catalog: CatalogSdk[]): string {
-  return catalog
-    .map((sdk) => {
-      const tags = sdk.tags.length ? ` [${sdk.tags.join(', ')}]` : '';
-      const caps = sdk.capabilities.length ? `\n    capabilities: ${sdk.capabilities.join(', ')}` : '';
-      return `- name: ${sdk.name}${tags}\n    summary: ${sdk.summary}${caps}`;
-    })
-    .join('\n');
+  return catalog.map(renderSdkForPrompt).join('\n');
 }

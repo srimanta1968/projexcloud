@@ -237,6 +237,9 @@ import {
 } from '@projexlight/sdk-lineage';
 import { migrationsDir as semanticMigrations }         from '@projexlight/sdk-semantic';
 import { migrationsDir as connectorSnowflakeMigrations } from '@projexlight/connector-snowflake';
+// P9.2 — global SDK catalog RAG store (Epic A). Auto-migrates catalog.* and
+// (best-effort) syncs manifests → pgvector for the build planner + registry MCP.
+import { migrationsDir as catalogIndexMigrations, syncCatalog } from '@projexlight/sdk-catalog-index';
 
 // P7 / Wave 7 — Field + Evidence + Hyperscale. Closes G10 (federation
 // runtime) + G11 (Iceberg lakehouse). 8 new SDKs + 1 new service.
@@ -799,7 +802,26 @@ const start = async (): Promise<void> => {
       //   3. sdk-sovereign + sdk-onprem are net-new packages.
       { sdk: 'sdk-sovereign',           dir: sovereignMigrations },
       { sdk: 'sdk-onprem',              dir: onpremMigrations },
+      // P9.2 — global SDK catalog store (lands last; references no other schema).
+      { sdk: 'sdk-catalog-index',       dir: catalogIndexMigrations },
     ]);
+
+    // P9.2 — incremental catalog sync (Epic A, TK-3461). OPT-IN: embedding the
+    // full catalog loads the bge-small ONNX model and is a one-time/CI job, not
+    // something every gateway instance should do on boot. Enable with
+    // CATALOG_SYNC_ON_BOOT=true (e.g. on a single migrator instance). The
+    // catalog.* tables are always migrated above regardless. Best-effort: a
+    // failure never blocks boot (the build planner falls back to the file index).
+    if (process.env.CATALOG_SYNC_ON_BOOT === 'true') {
+      try {
+        const summary = await syncCatalog({ repoRoot: process.env.PROJEXCLOUD_REPO_ROOT });
+        console.log(
+          `[api-gateway] catalog sync: ${summary.changed} changed, ${summary.skipped} unchanged (v${summary.version})`,
+        );
+      } catch (err) {
+        console.warn('[api-gateway] catalog sync skipped:', (err as Error).message);
+      }
+    }
 
     // P6A — AC-6 hard gate: probe vector namespace isolation before agents
     // can mint tokens. If any namespace has cross-tenant rows, throw and

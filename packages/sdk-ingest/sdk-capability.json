@@ -1,0 +1,90 @@
+{
+  "name": "@projexlight/sdk-ingest",
+  "version": "1.0.0",
+  "schema_version": "1.0",
+  "summary": "ETL batch front door (P9.2 / Epic B). Exposes POST /api/ingest/:entity/batch so external tools and ETL agents can import records into a ProjexCloud app with a documented envelope { entity, mode: upsert|insert, idempotency_key, records[] }. Lands rows idempotently in ingest.record, records provenance via sdk-lineage and an append-only entry via sdk-audit. This is the first-class import path connectors (sync-only) never provided; discoverable via the registry as kind='ingest'.",
+  "tags": ["ingest", "etl", "import", "bulk", "batch", "p9"],
+  "provides": {
+    "endpoints": [
+      {
+        "method": "POST",
+        "path": "/api/ingest/:entity/batch",
+        "kind": "ingest",
+        "auth_scopes": ["ingest:write"],
+        "request_schema": {
+          "type": "object",
+          "required": ["entity", "idempotency_key", "records"],
+          "properties": {
+            "entity": { "type": "string", "description": "Target entity, e.g. customer." },
+            "mode": { "type": "string", "enum": ["upsert", "insert"], "default": "upsert" },
+            "idempotency_key": { "type": "string", "description": "Batch key; re-running upserts rather than duplicating." },
+            "records": { "type": "array", "items": { "type": "object" }, "minItems": 1 }
+          }
+        },
+        "response_schema": {
+          "type": "object",
+          "properties": {
+            "entity": { "type": "string" },
+            "imported": { "type": "integer" },
+            "skipped": { "type": "integer" },
+            "errors": { "type": "array", "items": { "type": "object" } }
+          }
+        },
+        "description": "Bulk import records for an entity. Idempotent on (entity, idempotency_key, external_id). Returns per-batch import counts + per-record errors."
+      }
+    ],
+    "events": [
+      { "name": "ingest.batch.completed.v1", "retention_class": "operational", "conflict_policy": "lww", "description": "An ingest batch finished; carries entity + imported/skipped counts + idempotency_key." }
+    ],
+    "models": [
+      { "schema": "ingest", "table": "record", "description": "ETL landing table: external records keyed idempotently by (entity, idempotency_key, external_id), payload as jsonb." }
+    ],
+    "hooks": [
+      { "name": "ingestBatch", "description": "Service entry: validate envelope, upsert/insert records idempotently, fire lineage + audit hooks." },
+      { "name": "registerIngestRoutes", "description": "Mount POST /api/ingest/:entity/batch on the gateway fastify instance." },
+      { "name": "setIngestHooks", "description": "Wire sdk-lineage provenance + sdk-audit trail (called by the gateway at boot)." }
+    ],
+    "ui_components": []
+  },
+  "consumes": {
+    "events": [],
+    "infra": ["postgres"],
+    "config_keys": ["INGEST_POOL"]
+  },
+  "scenarios": [
+    {
+      "id": "etl-import-customers",
+      "title": "ETL agent imports customer records",
+      "when_to_use": "An external system or ETL agent needs to push a batch of customer rows into a ProjexCloud app.",
+      "example_code": "await fetch('/api/ingest/customer/batch', {\n  method: 'POST',\n  headers: { Authorization: `Bearer ${token}` },\n  body: JSON.stringify({ entity: 'customer', mode: 'upsert', idempotency_key: batchId, records })\n});",
+      "expected_outcome": "Records land in ingest.record idempotently; response gives imported/skipped counts; ingest.batch.completed.v1 emitted; lineage + audit recorded."
+    },
+    {
+      "id": "idempotent-replay",
+      "title": "Safe batch replay",
+      "when_to_use": "A network failure means the ETL job retries the same batch.",
+      "example_code": "// Re-POST the identical batch with the SAME idempotency_key.",
+      "expected_outcome": "upsert mode updates the existing rows instead of duplicating; imported reflects rows touched."
+    },
+    {
+      "id": "discover-via-registry",
+      "title": "Agent discovers the ingest target",
+      "when_to_use": "A coding/ETL agent asks the registry where to import an entity.",
+      "example_code": "// projex_registry_get_ingest_targets('customer')\n// → { sdk_name: '@projexlight/sdk-ingest', method: 'POST', path: '/api/ingest/:entity/batch', auth_scopes: ['ingest:write'], request_schema }",
+      "expected_outcome": "The agent gets the endpoint + payload contract and calls it without guessing."
+    }
+  ],
+  "compliance_posture": {
+    "regimes": ["SOC2-CC7.2-Data-Integrity", "GDPR-Art-30-Records-of-Processing"],
+    "notes": "Every batch is provenance-tracked (sdk-lineage source→entity) and audited (sdk-audit append-only), so imported data is traceable end-to-end. Idempotency keys prevent duplicate-on-retry."
+  },
+  "pool_placement": "app",
+  "pricing_skus": [
+    { "sku": "ingest.batch", "mode": "metered", "unit_description": "per record imported via the batch endpoint" }
+  ],
+  "links": {
+    "readme": "packages/sdk-ingest/README.md",
+    "source": "packages/sdk-ingest/src/",
+    "prd_section": "P9-SDK-Discoverability-AI-Builder §14.2 (ingest dimension)"
+  }
+}

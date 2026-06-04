@@ -38,3 +38,6 @@ export type {
   VectorBackend,
   VectorRecord,
 } from './services/backends';
+
+// Production pgvector backend (TK-3459) — wire via setVectorBackend(new PgvectorBackend()).
+export { PgvectorBackend } from './services/pgvectorBackend';
