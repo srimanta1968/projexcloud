@@ -451,7 +451,9 @@ app.register(leadScoringServer.registerRoutes);
 
 // P9.2 / Epic B — ETL batch front door: POST /api/ingest/:entity/batch.
 // Plain sync registrar (not a Fastify plugin), so call it with the root app.
-registerIngestRoutes(app);
+// Fastify's overloaded `post` doesn't structurally satisfy sdk-ingest's minimal
+// RouteApp signature, but the call is correct at runtime — cast to satisfy tsc.
+registerIngestRoutes(app as unknown as Parameters<typeof registerIngestRoutes>[0]);
 
 // P7 FR-DSP-3 — route optimization HTTP endpoint.
 app.post<{
