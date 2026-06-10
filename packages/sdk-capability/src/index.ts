@@ -16,3 +16,4 @@
 export * from './types';
 export { validateManifest, diffManifests, type ValidationResult } from './validator';
 export { runLints } from './lint';
+export { zodToJsonSchema, type JsonSchema } from './zodToJsonSchema';

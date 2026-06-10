@@ -11,6 +11,17 @@
 
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
+import {
+  Button,
+  Card,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@projexlight/design-system';
+import { StatusBadge } from '../../../components/StatusBadge';
 
 interface ServerRow {
   registration_id: string;
@@ -21,12 +32,6 @@ interface ServerRow {
   allowed_agent_ids: string[];
   created_at: string;
 }
-
-const STATUS_PILL: Record<ServerRow['status'], string> = {
-  active: 'bg-green-100 text-green-800 ring-green-300',
-  degraded: 'bg-yellow-100 text-yellow-800 ring-yellow-300',
-  disabled: 'bg-zinc-100 text-zinc-600 ring-zinc-300',
-};
 
 async function fetchServers(tenantId: string): Promise<ServerRow[]> {
   const apiBase = process.env.NEXT_PUBLIC_API_BASE ?? '';
@@ -63,78 +68,66 @@ export default function McpServersPage(): JSX.Element {
   }, [tenantId]);
 
   return (
-    <main className="mx-auto max-w-5xl px-6 py-8">
-      <div className="mb-6 flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold text-zinc-900">MCP Servers</h1>
-          <p className="mt-1 text-sm text-zinc-500">
+    <main className="mx-auto max-w-5xl">
+      <div className="mb-6 flex items-start justify-between gap-4">
+        <div className="space-y-1">
+          <h1 className="text-2xl font-bold tracking-tight">MCP Servers</h1>
+          <p className="max-w-2xl text-sm text-muted-foreground">
             External Model Context Protocol servers registered for this tenant.
             Agents reach Slack, Snowflake, Jira and other tools through these.
           </p>
         </div>
-        <Link
-          href="/ai/mcp-servers/new"
-          className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-500"
-        >
-          Register MCP server
-        </Link>
+        <Button asChild size="sm">
+          <Link href="/ai/mcp-servers/new">Register MCP server</Link>
+        </Button>
       </div>
 
-      {loading && <p className="text-sm text-zinc-500">Loading…</p>}
+      {loading && <p className="text-sm text-muted-foreground">Loading…</p>}
       {error && (
-        <p className="rounded-md bg-red-50 px-4 py-2 text-sm text-red-700">Error: {error}</p>
+        <p className="rounded-md bg-destructive/10 px-4 py-2 text-sm text-destructive">Error: {error}</p>
       )}
 
       {!loading && !error && rows.length === 0 && (
-        <div className="rounded-lg border border-dashed border-zinc-300 px-8 py-12 text-center">
-          <h2 className="text-base font-semibold text-zinc-900">No MCP servers registered</h2>
-          <p className="mt-2 text-sm text-zinc-500">
+        <Card className="border-dashed px-8 py-12 text-center">
+          <h2 className="text-base font-semibold">No MCP servers registered</h2>
+          <p className="mx-auto mt-2 text-sm text-muted-foreground">
             Register your first MCP server to let agents reach external systems.
           </p>
-          <Link
-            href="/ai/mcp-servers/new"
-            className="mt-4 inline-block rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-500"
-          >
-            Register your first server
-          </Link>
-        </div>
+          <Button asChild className="mt-4">
+            <Link href="/ai/mcp-servers/new">Register your first server</Link>
+          </Button>
+        </Card>
       )}
 
       {!loading && !error && rows.length > 0 && (
-        <table className="w-full border-collapse text-sm">
-          <thead className="text-left text-xs uppercase tracking-wide text-zinc-500">
-            <tr>
-              <th className="px-3 py-2">Name</th>
-              <th className="px-3 py-2">Transport</th>
-              <th className="px-3 py-2">Endpoint</th>
-              <th className="px-3 py-2">Status</th>
-              <th className="px-3 py-2">Allowed agents</th>
-              <th className="px-3 py-2">Created</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((s) => (
-              <tr key={s.registration_id} className="border-t border-zinc-200">
-                <td className="px-3 py-3 font-medium text-zinc-900">{s.display_name}</td>
-                <td className="px-3 py-3 uppercase text-zinc-600">{s.transport}</td>
-                <td className="px-3 py-3 font-mono text-xs text-zinc-600">{s.endpoint_url}</td>
-                <td className="px-3 py-3">
-                  <span
-                    className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ring-1 ring-inset ${STATUS_PILL[s.status]}`}
-                  >
-                    {s.status}
-                  </span>
-                </td>
-                <td className="px-3 py-3 text-xs text-zinc-600">
-                  {s.allowed_agent_ids.length === 0 ? '—' : `${s.allowed_agent_ids.length} agent(s)`}
-                </td>
-                <td className="px-3 py-3 text-xs text-zinc-500">
-                  {new Date(s.created_at).toLocaleString()}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <div className="rounded-lg border">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Name</TableHead>
+                <TableHead>Transport</TableHead>
+                <TableHead>Endpoint</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead>Allowed agents</TableHead>
+                <TableHead>Created</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {rows.map((s) => (
+                <TableRow key={s.registration_id}>
+                  <TableCell className="font-medium">{s.display_name}</TableCell>
+                  <TableCell className="uppercase text-muted-foreground">{s.transport}</TableCell>
+                  <TableCell className="font-mono text-xs text-muted-foreground">{s.endpoint_url}</TableCell>
+                  <TableCell><StatusBadge status={s.status} /></TableCell>
+                  <TableCell className="text-xs text-muted-foreground">
+                    {s.allowed_agent_ids.length === 0 ? '—' : `${s.allowed_agent_ids.length} agent(s)`}
+                  </TableCell>
+                  <TableCell className="text-xs text-muted-foreground">{new Date(s.created_at).toLocaleString()}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
       )}
     </main>
   );

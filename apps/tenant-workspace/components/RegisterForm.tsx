@@ -1,14 +1,12 @@
 'use client';
 
 import { FormEvent, useState } from 'react';
+import { Button, Field, Input } from '@projexlight/design-system';
 import { registerUser } from '../services/authApi';
 
 export interface RegisterFormProps {
   onSuccess?: (userId: string, email: string) => void;
 }
-
-const FIELD: React.CSSProperties = { display: 'flex', flexDirection: 'column', gap: 4, marginBottom: 14 };
-const INPUT: React.CSSProperties = { padding: '8px 10px', border: '1px solid #d7dce4', borderRadius: 6, fontSize: 14 };
 
 /**
  * Register form: email + password + confirm. On submit it calls
@@ -48,69 +46,30 @@ export default function RegisterForm({ onSuccess }: RegisterFormProps): JSX.Elem
   };
 
   return (
-    <form onSubmit={handleSubmit} aria-label="Register">
-      <label style={FIELD} htmlFor="register-email">
-        <span><strong>Email</strong></span>
-        <input
-          id="register-email"
-          type="email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          required
-          autoComplete="email"
-          style={INPUT}
-        />
-      </label>
+    <form onSubmit={handleSubmit} aria-label="Register" className="flex flex-col gap-3.5">
+      <Field label="Email" htmlFor="register-email">
+        <Input
+          id="register-email" type="email" required autoComplete="email"
+          value={email} onChange={(e) => setEmail(e.target.value)} />
+      </Field>
 
-      <label style={FIELD} htmlFor="register-password">
-        <span><strong>Password</strong></span>
-        <input
-          id="register-password"
-          type="password"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          required
-          minLength={8}
-          autoComplete="new-password"
-          style={INPUT}
-        />
-        <small style={{ color: '#7a8597' }}>Minimum 8 characters.</small>
-      </label>
+      <Field label="Password" htmlFor="register-password" hint="Minimum 8 characters.">
+        <Input
+          id="register-password" type="password" required minLength={8} autoComplete="new-password"
+          value={password} onChange={(e) => setPassword(e.target.value)} />
+      </Field>
 
-      <label style={FIELD} htmlFor="register-confirm">
-        <span><strong>Confirm password</strong></span>
-        <input
-          id="register-confirm"
-          type="password"
-          value={confirm}
-          onChange={(e) => setConfirm(e.target.value)}
-          required
-          autoComplete="new-password"
-          style={INPUT}
-        />
-      </label>
+      <Field label="Confirm password" htmlFor="register-confirm">
+        <Input
+          id="register-confirm" type="password" required autoComplete="new-password"
+          value={confirm} onChange={(e) => setConfirm(e.target.value)} />
+      </Field>
 
-      {error && (
-        <p role="alert" style={{ color: '#c12f1c', fontSize: 14, marginBottom: 12 }}>{error}</p>
-      )}
+      {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
 
-      <button
-        type="submit"
-        disabled={submitting}
-        style={{
-          background: submitting ? '#5a6573' : '#0b1220',
-          color: '#fff',
-          padding: '10px 20px',
-          borderRadius: 6,
-          border: 'none',
-          fontSize: 15,
-          fontWeight: 600,
-          cursor: submitting ? 'wait' : 'pointer',
-          width: '100%',
-        }}
-      >
+      <Button type="submit" disabled={submitting} className="w-full">
         {submitting ? 'Creating account…' : 'Create account'}
-      </button>
+      </Button>
     </form>
   );
 }

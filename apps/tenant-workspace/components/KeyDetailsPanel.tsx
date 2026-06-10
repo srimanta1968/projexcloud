@@ -1,5 +1,6 @@
 'use client';
 
+import { Card } from '@projexlight/design-system';
 import { KeyNode } from './KeyHierarchyTree';
 
 export interface KeyDetailsPanelProps {
@@ -23,32 +24,41 @@ const TIER_NAMES: Record<number, string> = {
  */
 export default function KeyDetailsPanel({ node }: KeyDetailsPanelProps): JSX.Element {
   if (!node) {
-    return <aside aria-label="Key details"><p>Select a key to see its metadata.</p></aside>;
+    return (
+      <aside aria-label="Key details">
+        <Card className="p-4 text-sm text-muted-foreground">Select a key to see its metadata.</Card>
+      </aside>
+    );
   }
   const tags = node.tags ?? {};
+  const rows: Array<[string, React.ReactNode]> = [
+    ['Tier', `T${node.tier} — ${TIER_NAMES[node.tier] ?? 'Unknown'}`],
+    ['Status', node.status],
+    ['Purpose', node.purpose ?? '—'],
+    ['Owner', node.owner ?? '—'],
+    ['Parent key', node.parent_key_id ?? '(root)'],
+    [
+      'Tags',
+      Object.keys(tags).length === 0
+        ? '—'
+        : Object.entries(tags).map(([k, v]) => (
+            <span key={k} className="mr-2 font-mono text-xs">{k}={v}</span>
+          )),
+    ],
+  ];
   return (
     <aside aria-label="Key details" data-key-id={node.id}>
-      <h2>{node.alias}</h2>
-      <dl>
-        <dt>Tier</dt>
-        <dd>T{node.tier} — {TIER_NAMES[node.tier] ?? 'Unknown'}</dd>
-        <dt>Status</dt>
-        <dd>{node.status}</dd>
-        <dt>Purpose</dt>
-        <dd>{node.purpose ?? '—'}</dd>
-        <dt>Owner</dt>
-        <dd>{node.owner ?? '—'}</dd>
-        <dt>Parent key</dt>
-        <dd>{node.parent_key_id ?? '(root)'}</dd>
-        <dt>Tags</dt>
-        <dd>
-          {Object.keys(tags).length === 0
-            ? '—'
-            : Object.entries(tags).map(([k, v]) => (
-                <span key={k} style={{ marginRight: 8 }}>{k}={v}</span>
-              ))}
-        </dd>
-      </dl>
+      <Card className="p-4">
+        <h2 className="mb-3 text-lg font-semibold">{node.alias}</h2>
+        <dl className="space-y-2 text-sm">
+          {rows.map(([label, value]) => (
+            <div key={label} className="grid grid-cols-[110px_1fr] gap-2">
+              <dt className="text-muted-foreground">{label}</dt>
+              <dd>{value}</dd>
+            </div>
+          ))}
+        </dl>
+      </Card>
     </aside>
   );
 }

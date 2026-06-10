@@ -109,6 +109,30 @@ export const READ_TOOLS: ToolDefinition[] = [
     },
   },
   {
+    name: 'projex_registry_get_endpoint',
+    description:
+      'Get the full contract for one endpoint: method, path, kind, description, and (when the manifest declares them) request_schema / response_schema JSON Schemas + auth_scopes. Call this before hitting a ProjexCloud API so you send the correct payload instead of guessing.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        sdk_name: { type: 'string', description: 'Fully-qualified SDK name, e.g. @projexlight/sdk-billing.' },
+        path: { type: 'string', description: 'Endpoint path to look up, e.g. /api/billing/invoices/generate.' },
+      },
+      required: ['sdk_name', 'path'],
+    },
+  },
+  {
+    name: 'projex_registry_get_ingest_targets',
+    description:
+      'List ingest/bulk endpoints across the catalog — where external data can be imported — with their payload schema + auth scopes. Optionally filter by an entity term (matched against the endpoint path). Use this to discover where an ETL job should push records and with what payload.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        entity: { type: 'string', description: 'Optional entity term to filter ingest paths, e.g. "customer".' },
+      },
+    },
+  },
+  {
     name: 'projex_registry_scaffold',
     description:
       'Generate a starter app scaffold (package.json, tsconfig, src/integrations/* per SDK, tests, README, CLAUDE.md) that composes the given SDKs. Returns a tree of { path, contents } — caller writes the files. Unknown SDKs are filtered with warnings.',
@@ -195,6 +219,48 @@ export async function dispatchTool(
         if (!sdk_name) return err('sdk_name is required');
         if (!registry.get(sdk_name)) return err(`unknown sdk: ${sdk_name}`);
         return ok({ sdk_name, compatible: registry.findCompatibleSdks(sdk_name) });
+      }
+
+      case 'projex_registry_get_endpoint': {
+        const sdk_name = String(args.sdk_name ?? '');
+        const path = String(args.path ?? '');
+        if (!sdk_name || !path) return err('sdk_name and path are required');
+        const entry = registry.get(sdk_name);
+        if (!entry) return err(`unknown sdk: ${sdk_name}`);
+        const ep = entry.manifest.provides.endpoints.find((e) => e.path === path);
+        if (!ep) return err(`no endpoint "${path}" on ${sdk_name}`);
+        return ok({
+          sdk_name,
+          method: ep.method,
+          path: ep.path,
+          kind: ep.kind ?? 'query',
+          description: ep.description ?? null,
+          request_schema: ep.request_schema ?? null,
+          response_schema: ep.response_schema ?? null,
+          auth_scopes: ep.auth_scopes ?? [],
+        });
+      }
+
+      case 'projex_registry_get_ingest_targets': {
+        const entity = typeof args.entity === 'string' ? args.entity.toLowerCase() : null;
+        const targets: unknown[] = [];
+        for (const entry of registry.list()) {
+          for (const ep of entry.manifest.provides.endpoints) {
+            const kind = ep.kind ?? 'query';
+            if (kind !== 'ingest' && kind !== 'bulk') continue;
+            if (entity && !ep.path.toLowerCase().includes(entity)) continue;
+            targets.push({
+              sdk_name: entry.manifest.name,
+              method: ep.method,
+              path: ep.path,
+              kind,
+              description: ep.description ?? null,
+              request_schema: ep.request_schema ?? null,
+              auth_scopes: ep.auth_scopes ?? [],
+            });
+          }
+        }
+        return ok({ entity: entity ?? null, count: targets.length, targets });
       }
 
       case 'projex_registry_list_blueprints': {

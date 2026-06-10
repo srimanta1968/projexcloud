@@ -37,6 +37,7 @@ const CONFLICT_POLICIES: ConflictPolicy[] = [
 ];
 
 const HTTP_METHODS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'] as const;
+const ENDPOINT_KINDS = ['ingest', 'bulk', 'query', 'mutation', 'webhook'] as const;
 
 const SUPPORTED_SCHEMA_VERSIONS: SchemaVersion[] = ['1.0'];
 
@@ -181,6 +182,22 @@ function validateProvides(p: Record<string, unknown>): string[] {
       }
       if (typeof ep.path !== 'string' || ep.path.length === 0) {
         errs.push(`provides.endpoints[${i}].path must be a non-empty string`);
+      }
+      // P9.2 / Epic B — optional payload contract + classification.
+      if (ep.kind !== undefined && !ENDPOINT_KINDS.includes(ep.kind as (typeof ENDPOINT_KINDS)[number])) {
+        errs.push(`provides.endpoints[${i}].kind must be one of: ${ENDPOINT_KINDS.join(', ')}`);
+      }
+      if (ep.request_schema !== undefined && !isObject(ep.request_schema)) {
+        errs.push(`provides.endpoints[${i}].request_schema must be a JSON Schema object`);
+      }
+      if (ep.response_schema !== undefined && !isObject(ep.response_schema)) {
+        errs.push(`provides.endpoints[${i}].response_schema must be a JSON Schema object`);
+      }
+      if (
+        ep.auth_scopes !== undefined &&
+        (!Array.isArray(ep.auth_scopes) || !ep.auth_scopes.every((s) => typeof s === 'string'))
+      ) {
+        errs.push(`provides.endpoints[${i}].auth_scopes must be an array of strings`);
       }
     }
   }

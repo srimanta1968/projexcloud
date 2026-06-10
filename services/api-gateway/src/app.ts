@@ -237,6 +237,10 @@ import {
 } from '@projexlight/sdk-lineage';
 import { migrationsDir as semanticMigrations }         from '@projexlight/sdk-semantic';
 import { migrationsDir as connectorSnowflakeMigrations } from '@projexlight/connector-snowflake';
+// P9.2 — global SDK catalog RAG store (Epic A). Auto-migrates catalog.* and
+// (best-effort) syncs manifests → pgvector for the build planner + registry MCP.
+import { migrationsDir as catalogIndexMigrations, syncCatalog } from '@projexlight/sdk-catalog-index';
+import { registerIngestRoutes, migrationsDir as ingestMigrations } from '@projexlight/sdk-ingest';
 
 // P7 / Wave 7 — Field + Evidence + Hyperscale. Closes G10 (federation
 // runtime) + G11 (Iceberg lakehouse). 8 new SDKs + 1 new service.
@@ -444,6 +448,12 @@ app.register(diagnosticTelemetryServer.registerRoutes);
 
 // P7 §5.4 / AC-3 — lead scoring + next-best-action surface.
 app.register(leadScoringServer.registerRoutes);
+
+// P9.2 / Epic B — ETL batch front door: POST /api/ingest/:entity/batch.
+// Plain sync registrar (not a Fastify plugin), so call it with the root app.
+// Fastify's overloaded `post` doesn't structurally satisfy sdk-ingest's minimal
+// RouteApp signature, but the call is correct at runtime — cast to satisfy tsc.
+registerIngestRoutes(app as unknown as Parameters<typeof registerIngestRoutes>[0]);
 
 // P7 FR-DSP-3 — route optimization HTTP endpoint.
 app.post<{
@@ -799,7 +809,28 @@ const start = async (): Promise<void> => {
       //   3. sdk-sovereign + sdk-onprem are net-new packages.
       { sdk: 'sdk-sovereign',           dir: sovereignMigrations },
       { sdk: 'sdk-onprem',              dir: onpremMigrations },
+      // P9.2 — global SDK catalog store (lands last; references no other schema).
+      { sdk: 'sdk-catalog-index',       dir: catalogIndexMigrations },
+      // P9.2 / Epic B — ETL ingest landing table (ingest.record).
+      { sdk: 'sdk-ingest',              dir: ingestMigrations },
     ]);
+
+    // P9.2 — incremental catalog sync (Epic A, TK-3461). OPT-IN: embedding the
+    // full catalog loads the bge-small ONNX model and is a one-time/CI job, not
+    // something every gateway instance should do on boot. Enable with
+    // CATALOG_SYNC_ON_BOOT=true (e.g. on a single migrator instance). The
+    // catalog.* tables are always migrated above regardless. Best-effort: a
+    // failure never blocks boot (the build planner falls back to the file index).
+    if (process.env.CATALOG_SYNC_ON_BOOT === 'true') {
+      try {
+        const summary = await syncCatalog({ repoRoot: process.env.PROJEXCLOUD_REPO_ROOT });
+        console.log(
+          `[api-gateway] catalog sync: ${summary.changed} changed, ${summary.skipped} unchanged (v${summary.version})`,
+        );
+      } catch (err) {
+        console.warn('[api-gateway] catalog sync skipped:', (err as Error).message);
+      }
+    }
 
     // P6A — AC-6 hard gate: probe vector namespace isolation before agents
     // can mint tokens. If any namespace has cross-tenant rows, throw and

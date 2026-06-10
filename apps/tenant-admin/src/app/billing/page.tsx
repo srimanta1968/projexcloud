@@ -1,3 +1,15 @@
+import {
+  Alert,
+  Card,
+  PageHeader,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@projexlight/design-system';
+
 interface LiveMeter {
   subtotal: number;
   current_period_start: string;
@@ -27,49 +39,51 @@ export default async function BillingPage(): Promise<JSX.Element> {
 
   return (
     <div>
-      <h1>Billing</h1>
-      <p style={{ color: '#5a6573' }}>
-        Live meter — current period accrual updated within ≈60s of meter ingest (FR-BIL-7).
-      </p>
+      <PageHeader
+        title="Billing"
+        description="Live meter — current period accrual updated within ≈60s of meter ingest (FR-BIL-7)."
+      />
 
       {!meter && (
-        <div style={{ padding: 12, background: '#fff3cd', borderRadius: 6, marginTop: 16 }}>
+        <Alert variant="warning">
           Gateway unreachable or tenant has no current-period usage.
-        </div>
+        </Alert>
       )}
 
       {meter && (
         <>
-          <div style={{ marginTop: 16, display: 'flex', gap: 24 }}>
-            <div>
-              <div style={{ fontSize: 12, color: '#5a6573' }}>Subtotal (since {meter.current_period_start})</div>
-              <div style={{ fontSize: 32, fontWeight: 700 }}>${meter.subtotal.toFixed(2)}</div>
-            </div>
-            <div>
-              <div style={{ fontSize: 12, color: '#5a6573' }}>Meter lag</div>
-              <div style={{ fontSize: 32, fontWeight: 700 }}>{meter.lag_ms}ms</div>
-            </div>
+          <div className="mt-2 flex gap-4">
+            <Card className="flex-1 p-5">
+              <div className="text-xs text-muted-foreground">Subtotal (since {meter.current_period_start})</div>
+              <div className="text-3xl font-bold">${meter.subtotal.toFixed(2)}</div>
+            </Card>
+            <Card className="flex-1 p-5">
+              <div className="text-xs text-muted-foreground">Meter lag</div>
+              <div className="text-3xl font-bold">{meter.lag_ms}ms</div>
+            </Card>
           </div>
 
-          <h2 style={{ marginTop: 32 }}>By SKU</h2>
-          <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: 8 }}>
-            <thead style={{ textAlign: 'left', borderBottom: '1px solid #d7dce4' }}>
-              <tr>
-                <th style={{ padding: 8 }}>SKU</th>
-                <th style={{ padding: 8 }}>Units</th>
-                <th style={{ padding: 8 }}>Amount</th>
-              </tr>
-            </thead>
-            <tbody>
-              {Object.entries(meter.by_sku).map(([sku, v]) => (
-                <tr key={sku} style={{ borderBottom: '1px solid #eef0f4' }}>
-                  <td style={{ padding: 8, fontFamily: 'monospace' }}>{sku}</td>
-                  <td style={{ padding: 8 }}>{v.units}</td>
-                  <td style={{ padding: 8 }}>${v.amount.toFixed(4)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <h2 className="mb-3 mt-8 text-lg font-semibold">By SKU</h2>
+          <div className="rounded-lg border">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>SKU</TableHead>
+                  <TableHead>Units</TableHead>
+                  <TableHead>Amount</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {Object.entries(meter.by_sku).map(([sku, v]) => (
+                  <TableRow key={sku}>
+                    <TableCell className="font-mono text-xs">{sku}</TableCell>
+                    <TableCell className="tabular-nums">{v.units}</TableCell>
+                    <TableCell className="tabular-nums">${v.amount.toFixed(4)}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
         </>
       )}
     </div>

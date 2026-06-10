@@ -1,6 +1,7 @@
 'use client';
 
 import { FormEvent, useState } from 'react';
+import { Button, Card, Field, Input, Textarea } from '@projexlight/design-system';
 import { AuditEntry, appendAuditEntry } from '../services/auditApi';
 
 export interface AuditEntryFormProps {
@@ -43,30 +44,30 @@ export default function AuditEntryForm({ onAppended }: AuditEntryFormProps): JSX
   };
 
   return (
-    <form onSubmit={handleSubmit} aria-label="Append audit entry">
-      <div>
-        <label htmlFor="audit-event-type">Event type</label>
-        <input
-          id="audit-event-type"
-          type="text"
-          value={eventType}
-          onChange={(e) => setEventType(e.target.value)}
-          required
-        />
-      </div>
-      <div>
-        <label htmlFor="audit-payload">Payload (JSON)</label>
-        <textarea
-          id="audit-payload"
-          value={payloadText}
-          onChange={(e) => setPayloadText(e.target.value)}
-          rows={5}
-        />
-      </div>
-      {error && <p role="alert">{error}</p>}
-      <button type="submit" disabled={submitting}>
-        {submitting ? 'Appending...' : 'Append entry'}
-      </button>
-    </form>
+    <Card className="p-5">
+      <form onSubmit={handleSubmit} aria-label="Append audit entry" className="flex max-w-xl flex-col gap-3.5">
+        <Field label="Event type" htmlFor="audit-event-type">
+          <Input
+            id="audit-event-type"
+            type="text"
+            value={eventType}
+            onChange={(e) => setEventType(e.target.value)}
+            required
+          />
+        </Field>
+        <Field label="Payload (JSON)" htmlFor="audit-payload" error={error ?? undefined}>
+          <Textarea
+            id="audit-payload"
+            value={payloadText}
+            onChange={(e) => setPayloadText(e.target.value)}
+            rows={5}
+            className="font-mono"
+          />
+        </Field>
+        <Button type="submit" disabled={submitting} className="self-start">
+          {submitting ? 'Appending...' : 'Append entry'}
+        </Button>
+      </form>
+    </Card>
   );
 }

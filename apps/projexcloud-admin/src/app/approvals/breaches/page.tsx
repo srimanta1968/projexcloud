@@ -1,5 +1,17 @@
 import { revalidatePath } from 'next/cache';
 import Link from 'next/link';
+import {
+  Button,
+  Input,
+  PageHeader,
+  Select,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@projexlight/design-system';
 
 interface BreachRow {
   request_id: string;
@@ -48,42 +60,49 @@ export default async function BreachesPage(): Promise<JSX.Element> {
   const rows = await fetchBreaches();
   return (
     <div>
-      <Link href="/approvals">← Routes</Link>
-      <h1>SLA breaches</h1>
-      <p style={{ color: '#5a6573' }}>Pending requests past their SLA. Operator override requires a written reason.</p>
-      <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: 16, fontSize: 14 }}>
-        <thead style={{ textAlign: 'left', borderBottom: '1px solid #d7dce4' }}>
-          <tr>
-            <th style={{ padding: 8 }}>Request</th>
-            <th style={{ padding: 8 }}>Subject</th>
-            <th style={{ padding: 8, textAlign: 'right' }}>Elapsed (min)</th>
-            <th style={{ padding: 8, textAlign: 'right' }}>SLA</th>
-            <th style={{ padding: 8 }}>Override</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.length === 0 && <tr><td colSpan={5} style={{ padding: 12, color: '#9aa3b2' }}>No SLA breaches. 🎉</td></tr>}
-          {rows.map((r) => (
-            <tr key={r.request_id} style={{ borderBottom: '1px solid #eef0f4' }}>
-              <td style={{ padding: 8, fontFamily: 'monospace', fontSize: 12 }}>{r.request_id}</td>
-              <td style={{ padding: 8, fontFamily: 'monospace', fontSize: 12 }}>{r.subject_ref}</td>
-              <td style={{ padding: 8, textAlign: 'right', color: '#a31818', fontWeight: 600 }}>{Math.round(r.elapsed_minutes)}</td>
-              <td style={{ padding: 8, textAlign: 'right' }}>{r.sla_minutes}</td>
-              <td style={{ padding: 8 }}>
-                <form action={overrideAction} style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
-                  <input type="hidden" name="request_id" value={r.request_id} />
-                  <select name="decision" style={{ padding: 4 }}>
-                    <option value="approved">approve</option>
-                    <option value="rejected">reject</option>
-                  </select>
-                  <input name="reason" placeholder="reason" required minLength={4} style={{ padding: 4, width: 200 }} />
-                  <button type="submit" style={{ padding: '4px 10px' }}>Override</button>
-                </form>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+      <Link href="/approvals" className="text-sm text-primary hover:underline">← Routes</Link>
+      <PageHeader
+        className="mt-2"
+        title="SLA breaches"
+        description="Pending requests past their SLA. Operator override requires a written reason."
+      />
+      <div className="rounded-lg border">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Request</TableHead>
+              <TableHead>Subject</TableHead>
+              <TableHead className="text-right">Elapsed (min)</TableHead>
+              <TableHead className="text-right">SLA</TableHead>
+              <TableHead>Override</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {rows.length === 0 && (
+              <TableRow><TableCell colSpan={5} className="text-muted-foreground">No SLA breaches. 🎉</TableCell></TableRow>
+            )}
+            {rows.map((r) => (
+              <TableRow key={r.request_id}>
+                <TableCell className="font-mono text-xs">{r.request_id}</TableCell>
+                <TableCell className="font-mono text-xs">{r.subject_ref}</TableCell>
+                <TableCell className="text-right font-semibold tabular-nums text-destructive">{Math.round(r.elapsed_minutes)}</TableCell>
+                <TableCell className="text-right tabular-nums">{r.sla_minutes}</TableCell>
+                <TableCell>
+                  <form action={overrideAction} className="flex items-center gap-2">
+                    <input type="hidden" name="request_id" value={r.request_id} />
+                    <Select name="decision" className="h-8 w-28">
+                      <option value="approved">approve</option>
+                      <option value="rejected">reject</option>
+                    </Select>
+                    <Input name="reason" placeholder="reason" required minLength={4} className="h-8 w-52" />
+                    <Button type="submit" size="sm">Override</Button>
+                  </form>
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
     </div>
   );
 }

@@ -24,13 +24,13 @@ export default function KeysAdminPage(): JSX.Element {
   const [selected, setSelected] = useState<KeyNode | null>(null);
 
   return (
-    <main>
-      <h1>7-Tier Key Hierarchy</h1>
-      <div style={{ display: 'flex', gap: 24 }}>
-        <section style={{ flex: 2 }}>
+    <main className="mx-auto max-w-5xl px-6 py-10">
+      <h1 className="mb-6 text-2xl font-bold tracking-tight">7-Tier Key Hierarchy</h1>
+      <div className="flex flex-col gap-6 md:flex-row">
+        <section className="md:flex-[2]">
           <KeyHierarchyTree keys={SEED} onSelect={setSelected} />
         </section>
-        <section style={{ flex: 1 }}>
+        <section className="md:flex-1">
           <KeyDetailsPanel node={selected} />
         </section>
       </div>

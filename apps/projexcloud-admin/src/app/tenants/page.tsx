@@ -1,4 +1,14 @@
 import Link from 'next/link';
+import {
+  Button,
+  PageHeader,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@projexlight/design-system';
 
 interface TenantRow {
   tenant_id: string;
@@ -31,52 +41,49 @@ export default async function TenantsPage(): Promise<JSX.Element> {
   const tenants = await fetchTenants();
   return (
     <div>
-      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between' }}>
-        <h1 style={{ margin: 0 }}>Tenants</h1>
-        <Link
-          href="/tenants/new"
-          style={{
-            background: '#0b1220', color: '#fff', padding: '8px 14px',
-            borderRadius: 6, textDecoration: 'none', fontSize: 14,
-          }}
-        >
-          + New tenant
-        </Link>
+      <PageHeader
+        title="Tenants"
+        description="Lifecycle state per tenant. Each row links to per-tenant actions (suspend, reinstate, offboard) under the Tenant Lifecycle SDK."
+        actions={
+          <Button asChild size="sm">
+            <Link href="/tenants/new">+ New tenant</Link>
+          </Button>
+        }
+      />
+      <div className="rounded-lg border">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Tenant ID</TableHead>
+              <TableHead>Display name</TableHead>
+              <TableHead>App</TableHead>
+              <TableHead>Region</TableHead>
+              <TableHead>Tier</TableHead>
+              <TableHead>Status</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {tenants.length === 0 && (
+              <TableRow>
+                <TableCell colSpan={6} className="text-muted-foreground">
+                  No tenants yet. Click <strong>+ New tenant</strong> to provision the first one.
+                  If you expected rows, check that the gateway is reachable at <code>{process.env.NEXT_PUBLIC_GATEWAY_URL}</code> and that <code>ADMIN_OPS_TOKEN</code> matches between the gateway and this app.
+                </TableCell>
+              </TableRow>
+            )}
+            {tenants.map((t) => (
+              <TableRow key={t.tenant_id}>
+                <TableCell className="font-mono text-xs">{t.tenant_id}</TableCell>
+                <TableCell>{t.display_name}</TableCell>
+                <TableCell className="font-mono text-xs">{t.app_id}</TableCell>
+                <TableCell>{t.region}</TableCell>
+                <TableCell>{t.isolation_tier}</TableCell>
+                <TableCell>{t.status}</TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
       </div>
-      <p style={{ color: '#5a6573' }}>
-        Lifecycle state per tenant. Each row links to per-tenant actions
-        (suspend, reinstate, offboard) under the Tenant Lifecycle SDK.
-      </p>
-      <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: 16 }}>
-        <thead style={{ textAlign: 'left', borderBottom: '1px solid #d7dce4' }}>
-          <tr>
-            <th style={{ padding: 8 }}>Tenant ID</th>
-            <th style={{ padding: 8 }}>Display name</th>
-            <th style={{ padding: 8 }}>App</th>
-            <th style={{ padding: 8 }}>Region</th>
-            <th style={{ padding: 8 }}>Tier</th>
-            <th style={{ padding: 8 }}>Status</th>
-          </tr>
-        </thead>
-        <tbody>
-          {tenants.length === 0 && (
-            <tr><td colSpan={6} style={{ padding: 12, color: '#9aa3b2' }}>
-              No tenants yet. Click <strong>+ New tenant</strong> to provision the first one.
-              If you expected rows, check that the gateway is reachable at <code>{process.env.NEXT_PUBLIC_GATEWAY_URL}</code> and that <code>ADMIN_OPS_TOKEN</code> matches between the gateway and this app.
-            </td></tr>
-          )}
-          {tenants.map((t) => (
-            <tr key={t.tenant_id} style={{ borderBottom: '1px solid #eef0f4' }}>
-              <td style={{ padding: 8, fontFamily: 'monospace', fontSize: 12 }}>{t.tenant_id}</td>
-              <td style={{ padding: 8 }}>{t.display_name}</td>
-              <td style={{ padding: 8, fontFamily: 'monospace', fontSize: 12 }}>{t.app_id}</td>
-              <td style={{ padding: 8 }}>{t.region}</td>
-              <td style={{ padding: 8 }}>{t.isolation_tier}</td>
-              <td style={{ padding: 8 }}>{t.status}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
     </div>
   );
 }

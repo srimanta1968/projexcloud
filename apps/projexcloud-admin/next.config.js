@@ -1,6 +1,7 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
+  transpilePackages: ['@projexlight/design-system'],
   // Gateway is the only backend the admin portal talks to. Override with
   // NEXT_PUBLIC_GATEWAY_URL in deploys.
   env: {

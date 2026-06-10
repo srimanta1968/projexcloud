@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { Button } from '@projexlight/design-system';
 
 export interface KeyNode {
   id: string;
@@ -51,29 +52,34 @@ function KeyRow({
   return (
     <li>
       <div
-        style={{ paddingLeft: depth * 16, display: 'flex', gap: 8, alignItems: 'center' }}
+        className="flex items-center gap-2 rounded-md py-1.5 text-sm hover:bg-muted"
+        style={{ paddingLeft: depth * 16 + 4 }}
         data-key-id={node.id}
         data-tier={node.tier}
         data-status={node.status}
       >
-        {hasChildren && (
+        {hasChildren ? (
           <button
             type="button"
             aria-label={open ? 'Collapse' : 'Expand'}
             onClick={() => setOpen(!open)}
+            className="flex h-5 w-5 items-center justify-center rounded border text-muted-foreground hover:bg-accent"
           >
             {open ? '−' : '+'}
           </button>
+        ) : (
+          <span className="inline-block w-5" />
         )}
         <span>
-          <strong>T{node.tier}</strong> {TIER_NAMES[node.tier] ?? 'Unknown'} —{' '}
-          <span style={shredded ? { textDecoration: 'line-through' } : undefined}>{node.alias}</span>
-          {' '}<small>({node.status})</small>
+          <span className="font-mono text-xs font-semibold text-muted-foreground">T{node.tier}</span>{' '}
+          {TIER_NAMES[node.tier] ?? 'Unknown'} —{' '}
+          <span className={shredded ? 'line-through' : 'font-medium'}>{node.alias}</span>{' '}
+          <span className="text-xs text-muted-foreground">({node.status})</span>
         </span>
         {onSelect && (
-          <button type="button" onClick={() => onSelect(node)}>
+          <Button type="button" variant="ghost" size="sm" className="ml-auto h-7" onClick={() => onSelect(node)}>
             Details
-          </button>
+          </Button>
         )}
       </div>
       {hasChildren && open && (
@@ -94,10 +100,10 @@ function KeyRow({
 export default function KeyHierarchyTree({ keys, onSelect }: KeyHierarchyTreeProps): JSX.Element {
   const roots = buildChildren(keys, null);
   if (roots.length === 0) {
-    return <p>No keys configured yet.</p>;
+    return <p className="text-sm text-muted-foreground">No keys configured yet.</p>;
   }
   return (
-    <ul aria-label="Key hierarchy">
+    <ul aria-label="Key hierarchy" className="rounded-lg border bg-card p-3">
       {roots.map((root) => (
         <KeyRow key={root.id} node={root} keys={keys} depth={0} onSelect={onSelect} />
       ))}

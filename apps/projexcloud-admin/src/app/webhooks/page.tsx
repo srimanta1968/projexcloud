@@ -1,4 +1,15 @@
 import Link from 'next/link';
+import {
+  Badge,
+  PageHeader,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+  cn,
+} from '@projexlight/design-system';
 
 interface EndpointRow {
   endpoint_id: string;
@@ -25,33 +36,44 @@ export default async function WebhooksPage(): Promise<JSX.Element> {
   const endpoints = await fetchEndpoints();
   return (
     <div>
-      <h1>Webhooks</h1>
-      <p style={{ color: '#5a6573' }}>
-        Cross-tenant endpoint view. Use the <Link href="/webhooks/dlq">DLQ</Link> page to replay failed deliveries.
-      </p>
-      <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: 16 }}>
-        <thead style={{ textAlign: 'left', borderBottom: '1px solid #d7dce4' }}>
-          <tr>
-            <th style={{ padding: 8 }}>Endpoint</th>
-            <th style={{ padding: 8 }}>Tenant</th>
-            <th style={{ padding: 8 }}>URL</th>
-            <th style={{ padding: 8 }}>Status</th>
-            <th style={{ padding: 8, textAlign: 'right' }}>Fail streak</th>
-          </tr>
-        </thead>
-        <tbody>
-          {endpoints.length === 0 && <tr><td colSpan={5} style={{ padding: 12, color: '#9aa3b2' }}>No endpoints.</td></tr>}
-          {endpoints.map((e) => (
-            <tr key={e.endpoint_id} style={{ borderBottom: '1px solid #eef0f4' }}>
-              <td style={{ padding: 8, fontFamily: 'monospace', fontSize: 12 }}>{e.endpoint_id}</td>
-              <td style={{ padding: 8, fontFamily: 'monospace', fontSize: 12 }}>{e.tenant_id}</td>
-              <td style={{ padding: 8, fontSize: 12, wordBreak: 'break-all' }}>{e.url}</td>
-              <td style={{ padding: 8, color: e.status === 'active' ? '#0d8a3d' : '#a31818', fontWeight: 600 }}>{e.status}</td>
-              <td style={{ padding: 8, textAlign: 'right' }}>{e.failure_streak}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+      <PageHeader
+        title="Webhooks"
+        description={<>Cross-tenant endpoint view. Use the <Link href="/webhooks/dlq" className="text-primary underline">DLQ</Link> page to replay failed deliveries.</>}
+      />
+      <div className="rounded-lg border">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Endpoint</TableHead>
+              <TableHead>Tenant</TableHead>
+              <TableHead>URL</TableHead>
+              <TableHead>Status</TableHead>
+              <TableHead className="text-right">Fail streak</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {endpoints.length === 0 && (
+              <TableRow><TableCell colSpan={5} className="text-muted-foreground">No endpoints.</TableCell></TableRow>
+            )}
+            {endpoints.map((e) => (
+              <TableRow key={e.endpoint_id}>
+                <TableCell className="font-mono text-xs">{e.endpoint_id}</TableCell>
+                <TableCell className="font-mono text-xs">{e.tenant_id}</TableCell>
+                <TableCell className="break-all text-xs">{e.url}</TableCell>
+                <TableCell>
+                  <Badge
+                    variant="outline"
+                    className={cn('uppercase tracking-wide', e.status === 'active' ? 'bg-green-50 text-green-700 border-green-200' : 'bg-red-50 text-red-700 border-red-200')}
+                  >
+                    {e.status}
+                  </Badge>
+                </TableCell>
+                <TableCell className="text-right tabular-nums">{e.failure_streak}</TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
     </div>
   );
 }

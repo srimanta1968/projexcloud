@@ -17,8 +17,8 @@ export default function LogoutPage(): JSX.Element {
   }, [router]);
 
   return (
-    <main style={{ maxWidth: 640, margin: '0 auto', padding: '60px 24px', fontFamily: 'system-ui, sans-serif' }}>
-      <p style={{ color: '#5a6573' }}>Signing you out…</p>
+    <main className="mx-auto max-w-2xl px-6 py-16">
+      <p className="text-muted-foreground">Signing you out…</p>
     </main>
   );
 }

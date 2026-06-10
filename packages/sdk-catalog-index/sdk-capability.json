@@ -1,0 +1,67 @@
+{
+  "name": "@projexlight/sdk-catalog-index",
+  "version": "1.0.0",
+  "schema_version": "1.0",
+  "summary": "Global SDK catalog RAG store (P9.2 / Epic A). Auto-migrates the catalog.* schema (Postgres + pgvector, global-catalog pool), then incrementally syncs every sdk-capability.json into catalog.sdk / catalog.endpoint / catalog.embedding — embedding natural-language cards with the local bge-small model. Backs the Build-with-AI planner's retrieve-then-compose pipeline and the registry MCP's semantic search, get_endpoint, and get_ingest_targets surfaces. Source of truth for SDK discovery; the file-based registry index is the offline/CLI mirror.",
+  "tags": ["catalog", "registry", "rag", "pgvector", "discovery", "embeddings", "p9", "foundation"],
+  "provides": {
+    "endpoints": [],
+    "events": [
+      { "name": "catalog.synced.v1", "retention_class": "operational", "conflict_policy": "lww", "description": "An incremental catalog sync completed; carries the new catalog version and the count of changed SDKs. Registry MCP hot-indexes reload on this." }
+    ],
+    "models": [
+      { "schema": "catalog", "table": "sdk", "description": "One row per published SDK: summary, tags, tier (foundation|domain), pool_placement, content_hash for incremental sync." },
+      { "schema": "catalog", "table": "endpoint", "description": "One row per endpoint: method/path/kind plus the Epic B request_schema/response_schema/auth_scopes payload contract." },
+      { "schema": "catalog", "table": "embedding", "description": "bge-small (384-dim) vectors for each sdk/endpoint/scenario/ingest card; HNSW cosine index for the retrieve hot path." }
+    ],
+    "hooks": [
+      { "name": "syncCatalog", "description": "Scan manifests, content-hash diff, upsert + re-embed only changed SDKs. Idempotent; runs in the api-gateway boot sequence after runMigrations()." },
+      { "name": "searchCatalog", "description": "Semantic search over catalog.embedding (optionally restricted to a ref_kind such as 'ingest'); aggregates to the best score per SDK." },
+      { "name": "getEndpoint", "description": "Fetch the full payload contract (method/path/kind/request_schema/response_schema/auth_scopes) for an SDK endpoint." },
+      { "name": "getIngestTargets", "description": "List ingest/bulk endpoints (optionally filtered by an entity term) so ETL agents can discover where to push external data and with what payload." }
+    ],
+    "ui_components": []
+  },
+  "consumes": {
+    "events": [],
+    "infra": ["postgres", "pgvector"],
+    "config_keys": ["PROJEXCLOUD_REPO_ROOT", "CATALOG_POOL"]
+  },
+  "scenarios": [
+    {
+      "id": "boot-auto-migrate-and-sync",
+      "title": "Auto-create the catalog store and sync manifests on deploy",
+      "when_to_use": "api-gateway boot. Tables must exist and be populated before the build planner serves its first request — no manual SQL.",
+      "example_code": "import { runMigrations } from '@projexlight/migration-runner';\nimport { migrationsDir, syncCatalog } from '@projexlight/sdk-catalog-index';\nawait runMigrations([{ sdk: 'sdk-catalog-index', dir: migrationsDir }]);\nconst summary = await syncCatalog({ repoRoot: process.env.PROJEXCLOUD_REPO_ROOT });\nconsole.log(`catalog v${summary.version}: ${summary.changed} changed`);",
+      "expected_outcome": "catalog.* tables exist; changed SDKs are upserted and re-embedded; unchanged SDKs skipped by content_hash; the catalog version bumps when anything changed."
+    },
+    {
+      "id": "retrieve-then-compose",
+      "title": "Semantic retrieve for the Build-with-AI planner",
+      "when_to_use": "The /api/build/plan pipeline: embed the tenant intent, retrieve the top-K candidate SDKs from the store, then compose a plan from candidates only.",
+      "example_code": "import { embed, searchCatalog } from '@projexlight/sdk-catalog-index';\nconst qv = await embed('financial accounting system');\nconst hits = await searchCatalog(qv, 12);\n// hits: [{ sdk_name, score }] — best score per SDK",
+      "expected_outcome": "Returns the most relevant SDKs by cosine similarity over catalog.embedding, replacing the old full-catalog LLM dump."
+    },
+    {
+      "id": "etl-ingest-discovery",
+      "title": "An ETL agent discovers where to import data",
+      "when_to_use": "An ETL/custom agent needs to push external records into a ProjexCloud app and must find the ingest endpoint + payload contract.",
+      "example_code": "import { searchCatalog, getIngestTargets, embed } from '@projexlight/sdk-catalog-index';\nconst qv = await embed('import customer records');\nconst hits = await searchCatalog(qv, 5, { kind: 'ingest' });\nconst targets = await getIngestTargets('customer'); // endpoints + payload schema",
+      "expected_outcome": "Returns ingest/bulk endpoints with their request_schema and auth_scopes so the agent calls the documented API instead of guessing."
+    }
+  ],
+  "compliance_posture": {
+    "regimes": ["SOC2-CC8.1-Change-Management"],
+    "notes": "Catalog rows are denormalized COPIES of the sdk-capability.json manifests (source of truth in each package). Deterministic per (manifest, model): content_hash gates re-sync and the pinned embedding model prevents vector-space drift. No tenant data — global, public SDK metadata only."
+  },
+  "pool_placement": "global-catalog",
+  "pricing_skus": [
+    { "sku": "catalog.search", "mode": "metered", "unit_description": "per semantic search over the catalog (bge-small query embed + HNSW lookup)" }
+  ],
+  "no_endpoints": true,
+  "links": {
+    "readme": "packages/sdk-catalog-index/README.md",
+    "source": "packages/sdk-catalog-index/src/",
+    "prd_section": "P9-SDK-Discoverability-AI-Builder §14 (v3.2 RAG store)"
+  }
+}

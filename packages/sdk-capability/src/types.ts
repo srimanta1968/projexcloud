@@ -25,10 +25,25 @@ export type ConflictPolicy =
   | 'event-sourcing'
   | 'human-review';
 
+/**
+ * Endpoint classification (P9.2 / Epic B). Drives ingest discovery — an ETL
+ * agent can ask the registry for `kind: 'ingest'` endpoints. Defaults to
+ * 'query' when absent (backward-compatible).
+ */
+export type EndpointKind = 'ingest' | 'bulk' | 'query' | 'mutation' | 'webhook';
+
 export interface ManifestEndpoint {
   method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
   path: string;
   description?: string;
+  /** ingest | bulk | query | mutation | webhook. Defaults to 'query'. */
+  kind?: EndpointKind;
+  /** JSON Schema of the request body (P9.2 / Epic B — generated from Zod/TS types). */
+  request_schema?: Record<string, unknown>;
+  /** JSON Schema of the response body. */
+  response_schema?: Record<string, unknown>;
+  /** Permission scopes required to call this endpoint, e.g. ["billing:write"]. */
+  auth_scopes?: string[];
 }
 
 export interface ManifestEvent {

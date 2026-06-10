@@ -8,7 +8,8 @@
 | **Gates closed** | G13 (SDK Composability) · G14 (AI-Native App Builder) |
 | **Status** | DRAFT — pending review |
 | **Owner (DRI)** | Platform Architect (Layer 1+2) · Developer Experience Lead (Layer 4 CLI) · Tenant Product Lead (Layer 4 Cloud Agent) |
-| **Companion docs** | `../docs/v3.1/Architecture-v3.1.html` · `../docs/v3.1/SDK-Build-Plan-v3.1.html` · `../docs/v3.1/AgenticIntegration-v3.1.html` · `../docs/v3.1/ProjectStructure-v3.1.html` |
+| **Follow-on** | **`P9.2-SDK-Catalog-RAG-Ingest.md`** (IMPLEMENTED) — evolves the L2 registry into a Postgres+pgvector RAG store, rebuilds the `/build` planner as retrieve-then-compose with foundation-tier injection, and adds endpoint payload contracts + an ingest front door. Supersedes the file-dump planner path described here. |
+| **Companion docs** | `../docs/v3.1/Architecture-v3.1.html` · `../docs/v3.1/SDK-Build-Plan-v3.1.html` · `../docs/v3.1/AgenticIntegration-v3.1.html` · `../docs/v3.1/ProjectStructure-v3.1.html` · `../docs/v3.1/SDK-Discoverability-AI-Builder-v3.1.html` §14 |
 
 ---
 

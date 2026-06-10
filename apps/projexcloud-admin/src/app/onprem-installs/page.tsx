@@ -1,4 +1,5 @@
 import { revalidatePath } from 'next/cache';
+import { Button, Card, Field, Input, PageHeader, Select } from '@projexlight/design-system';
 
 async function registerInstallAction(formData: FormData): Promise<void> {
   'use server';
@@ -23,51 +24,58 @@ async function registerInstallAction(formData: FormData): Promise<void> {
 export default function OnPremInstallsPage(): JSX.Element {
   return (
     <div>
-      <h1>On-prem installs</h1>
-      <p style={{ color: '#5a6573', maxWidth: 760 }}>
-        P8 Variant C. Single-cluster Kubernetes distributions for banks / government / classified workloads.
-        Quarterly signed-bundle releases; local AI Gateway (Llama / Mistral via Ollama or vLLM); webhook outbound
-        restricted to in-cluster endpoints when <code>air_gap_mode=strict</code>; no phone-home telemetry.
-      </p>
+      <PageHeader
+        title="On-prem installs"
+        description={
+          <>
+            P8 Variant C. Single-cluster Kubernetes distributions for banks / government / classified workloads.
+            Quarterly signed-bundle releases; local AI Gateway (Llama / Mistral via Ollama or vLLM); webhook outbound
+            restricted to in-cluster endpoints when <code>air_gap_mode=strict</code>; no phone-home telemetry.
+          </>
+        }
+      />
 
-      <section style={{ marginTop: 24, padding: 16, border: '1px solid #d7dce4', borderRadius: 8, maxWidth: 720 }}>
-        <h2 style={{ marginTop: 0 }}>Register a new install</h2>
-        <form action={registerInstallAction} style={{ display: 'grid', gap: 12 }}>
-          <label>Customer ID <input name="customer_id" required style={{ display: 'block', width: '100%', padding: 6 }} /></label>
-          <label>Cluster name <input name="cluster_name" required style={{ display: 'block', width: '100%', padding: 6 }} /></label>
-          <label>
-            K8s distribution
-            <select name="k8s_distribution" required style={{ display: 'block', width: '100%', padding: 6 }}>
+      <Card className="max-w-2xl p-5">
+        <h2 className="mb-4 text-lg font-semibold">Register a new install</h2>
+        <form action={registerInstallAction} className="grid gap-3.5">
+          <Field label="Customer ID" htmlFor="customer_id">
+            <Input id="customer_id" name="customer_id" required />
+          </Field>
+          <Field label="Cluster name" htmlFor="cluster_name">
+            <Input id="cluster_name" name="cluster_name" required />
+          </Field>
+          <Field label="K8s distribution" htmlFor="k8s_distribution">
+            <Select id="k8s_distribution" name="k8s_distribution" required>
               <option value="vanilla">vanilla</option>
               <option value="openshift">openshift</option>
               <option value="rancher">rancher</option>
               <option value="tanzu">tanzu</option>
-            </select>
-          </label>
-          <label>Installed version (semver) <input name="installed_version" required style={{ display: 'block', width: '100%', padding: 6 }} placeholder="1.0.0" /></label>
-          <label>
-            Air-gap mode
-            <select name="air_gap_mode" required style={{ display: 'block', width: '100%', padding: 6 }}>
+            </Select>
+          </Field>
+          <Field label="Installed version (semver)" htmlFor="installed_version">
+            <Input id="installed_version" name="installed_version" required placeholder="1.0.0" />
+          </Field>
+          <Field label="Air-gap mode" htmlFor="air_gap_mode">
+            <Select id="air_gap_mode" name="air_gap_mode" required>
               <option value="strict">strict (no external, no phone-home)</option>
               <option value="diode-in">diode-in (one-way inbound)</option>
               <option value="diode-bidi">diode-bidi (one-way both)</option>
-            </select>
-          </label>
-          <label>
-            Billing mode
-            <select name="billing_mode" required style={{ display: 'block', width: '100%', padding: 6 }}>
+            </Select>
+          </Field>
+          <Field label="Billing mode" htmlFor="billing_mode">
+            <Select id="billing_mode" name="billing_mode" required>
               <option value="internal-report-only">internal-report-only</option>
               <option value="flat-fee">flat-fee</option>
               <option value="per-incident">per-incident</option>
-            </select>
-          </label>
-          <button type="submit" style={{ padding: '8px 16px', background: '#0b1220', color: 'white', border: 'none', borderRadius: 4 }}>Register install</button>
+            </Select>
+          </Field>
+          <Button type="submit" className="justify-self-start">Register install</Button>
         </form>
-        <p style={{ marginTop: 16, color: '#5a6573', fontSize: 13 }}>
+        <p className="mt-4 text-[13px] text-muted-foreground">
           After registration, set the gateway env <code>ONPREM_INSTALL_ID</code> to the returned id so the cross-SDK
           hooks (local LLM resolver, webhook validator) activate.
         </p>
-      </section>
+      </Card>
     </div>
   );
 }

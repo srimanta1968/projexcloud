@@ -14,14 +14,14 @@ export default function AuditAdminPage(): JSX.Element {
   const [entries, setEntries] = useState<AuditEntry[]>([]);
 
   return (
-    <main>
-      <h1>Append-only Audit Chain</h1>
-      <section>
-        <h2>Append new entry</h2>
+    <main className="mx-auto max-w-4xl px-6 py-10">
+      <h1 className="mb-6 text-2xl font-bold tracking-tight">Append-only Audit Chain</h1>
+      <section className="mb-8">
+        <h2 className="mb-3 text-lg font-semibold">Append new entry</h2>
         <AuditEntryForm onAppended={(entry) => setEntries((prev) => [entry, ...prev])} />
       </section>
       <section>
-        <h2>Ledger</h2>
+        <h2 className="mb-3 text-lg font-semibold">Ledger</h2>
         <AuditLedgerList entries={entries} />
       </section>
     </main>

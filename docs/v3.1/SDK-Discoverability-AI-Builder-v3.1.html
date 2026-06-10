@@ -104,6 +104,7 @@
     <a href="#flows">End-to-End Flows</a>
     <a href="#cohabitation">MCP Cohabitation</a>
     <a href="#security">Security &amp; Guardrails</a>
+    <a href="#v32">v3.2 · RAG &amp; Planner v2</a>
     <a href="#glossary">Glossary</a>
   </div>
 </nav>
@@ -133,6 +134,17 @@
     with zero prior knowledge, how the hosted/local MCP split balances latency against
     authority, and how a non-developer's natural-language prompt is funneled into the same
     substrate. Diagrams are normative; prose explains intent.
+  </div>
+  <div class="changelog" style="border-left-color: var(--purple); margin-top:14px;">
+    <b style="color:var(--purple);">v3.2 revision (2026-06-03)</b> — Adds <a href="#v32" style="color:var(--accent-2);">§14</a>:
+    the registry (L2) evolves from a build-time file artifact into an <b>auto-populated Postgres +
+    pgvector RAG store</b>; the <code>/build</code> planner moves from a single "stuff all ~90 SDKs
+    into one prompt" call to a <b>retrieve-then-compose</b> pipeline with a <b>foundation-tier +
+    dependency-closure resolver</b> (so identity/AIM always surfaces); manifests gain
+    <b>per-endpoint payload schemas</b> and an <b>ingest capability dimension</b> for ETL agents.
+    Retrieval embeddings stay on the local <code>bge-small</code> model, so a generation-LLM
+    provider change never breaks discovery. §1–§13 describe the original P9 design; §14 is the
+    P9.2 delta that supersedes the file-dump path.
   </div>
 </header>
 
@@ -1205,9 +1217,265 @@ delegated to ProjexCloud SDKs.
 </ul>
 </section>
 
+<!-- ============================================================ -->
+<section id="v32">
+<h2>14 · v3.2 (P9.2) — RAG Catalog Store, Payload Contracts &amp; Planner v2</h2>
+
+<p>
+The original L2 registry (§5) is a <i>build-time file artifact</i>: a normalized
+<code>registry.catalog.json</code> plus an <code>embeddings.bin</code>, scanned once and shipped.
+The first tenant-facing planner at <code>/build</code> took the cheapest possible shortcut on top
+of it — it loaded <b>all ~90 manifests, trimmed them, and pasted the entire catalog into one
+LLM prompt</b>, then trusted the model to pick. Three problems surfaced in production:
+</p>
+
+<div class="grid cols-3">
+  <div class="card">
+    <div class="label">Problem 1 · Recall</div>
+    <div class="title">"Always 3 SDKs"</div>
+    <div class="body">No retrieval, no ranking, no minimum. A small model facing 90 flat options
+      returns the 3 most obvious and stops. Foundation concerns the user never typed —
+      <b>identity, AIM, tenancy</b> — silently drop into "you'll need to build."</div>
+  </div>
+  <div class="card">
+    <div class="label">Problem 2 · Cost</div>
+    <div class="title">~18k tokens / plan</div>
+    <div class="body">The whole catalog ships on every request. Token spend scales with the SDK
+      count, not with the query — and grows every time a new SDK is published.</div>
+  </div>
+  <div class="card">
+    <div class="label">Problem 3 · Fragility</div>
+    <div class="title">Provider-coupled</div>
+    <div class="body">Discovery quality rode on whichever frontier model was wired in. A provider
+      deprecation or model swap silently changed which SDKs surfaced.</div>
+  </div>
+</div>
+
+<div class="callout purple">
+  <b>The v3.2 principle — separate the two model jobs.</b> <b>Retrieval</b> (which SDK/endpoint is
+  relevant) runs entirely on the local, in-process <code>bge-small-en-v1.5</code> model and is
+  stored as <code>vector(384)</code> rows in Postgres — it is the <i>stable contract</i> and never
+  calls an external API. <b>Generation</b> (compose the prose plan, explain trade-offs) is a
+  swappable LLM that only ever sees the already-retrieved top-K. Swap the generation provider any
+  day; retrieval is untouched. This is what makes discovery durable.
+</div>
+
+<h3>14.1 — L2 evolves into a Postgres + pgvector RAG store</h3>
+
+<p>
+The catalog stops being only a file and becomes an <b>auto-populated, auto-refreshed table</b> in
+the <code>global-catalog</code> pool (SDK manifests are identical for every tenant, so this is
+global state — <i>not</i> per-tenant <code>rag.*</code> corpus). The existing
+<code>migration-runner</code> auto-creates the schema on boot (no manual SQL), and a sync job
+reuses the <code>sdk-registry</code> scanner to keep it fresh.
+</p>
+
+<div class="diagram-wrap">
+<div class="mermaid">
+flowchart TB
+  subgraph BUILD["Deploy / boot time — auto-populate &amp; keep fresh"]
+    MAN["packages/*/sdk-capability.json<br/>+ payload schemas (NEW)<br/>+ endpoint.kind (NEW)"]
+    SYNC["catalog-sync job<br/>(reuses sdk-registry scanner)"]
+    MIG["migration-runner<br/>auto-creates catalog.* on boot"]
+    EMB["bge-small-en-v1.5<br/>(local ONNX, in-process)"]
+    MAN -- "content-hash diff:<br/>only changed SDKs" --> SYNC
+    MIG --> DB
+    SYNC -- "upsert rows" --> DB
+    SYNC -- "embed NL cards" --> EMB
+    EMB -- "vector(384)" --> DB
+  end
+  subgraph DB["catalog schema · global-catalog pool"]
+    T1[("catalog.sdk")]
+    T2[("catalog.endpoint<br/>request_schema · kind · auth_scopes")]
+    T3[("catalog.embedding<br/>vector(384) + HNSW")]
+  end
+  classDef b fill:#1a2234,stroke:#5dd39e,color:#e6ecf5;
+  classDef d fill:#1a2234,stroke:#c9a86a,color:#e6ecf5;
+  class MAN,SYNC,MIG,EMB b;
+  class T1,T2,T3 d;
+</div>
+<div class="caption">Figure 14.1 — The catalog as a self-refreshing RAG store. The file artifact
+  (§5) remains the offline/CLI source; Postgres becomes the hosted source-of-truth + freshness
+  signal. Embeddings are computed by the local model, never an external API.</div>
+</div>
+
+<pre><code>-- catalog schema · global-catalog pool · auto-created by migration-runner
+CREATE TABLE catalog.sdk (
+  name           text PRIMARY KEY,          -- @projexlight/sdk-billing
+  summary        text NOT NULL,
+  tags           text[] NOT NULL DEFAULT '{}',
+  tier           text,                       -- 'foundation' | 'domain'  (drives §14.3 injection)
+  content_hash   text NOT NULL,              -- sha256(manifest) -> skip unchanged on resync
+  updated_at     timestamptz NOT NULL DEFAULT now()
+);
+CREATE TABLE catalog.endpoint (
+  id             uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  sdk_name       text NOT NULL REFERENCES catalog.sdk(name) ON DELETE CASCADE,
+  method         text NOT NULL,
+  path           text NOT NULL,
+  kind           text NOT NULL DEFAULT 'query',  -- NEW: ingest|bulk|query|mutation|webhook
+  request_schema  jsonb,                          -- NEW: JSON Schema of the body
+  response_schema jsonb,                          -- NEW
+  auth_scopes    text[] DEFAULT '{}',             -- NEW: e.g. {billing:write}
+  UNIQUE (sdk_name, method, path)
+);
+CREATE TABLE catalog.embedding (
+  ref_kind   text NOT NULL,                  -- 'sdk' | 'endpoint' | 'scenario' | 'ingest'
+  ref_id     text NOT NULL,
+  card       text NOT NULL,                  -- the NL text that was embedded
+  embedding  vector(384) NOT NULL            -- bge-small space; SEPARATE from the 1536 template
+);
+CREATE INDEX ON catalog.embedding USING hnsw (embedding vector_cosine_ops);</code></pre>
+
+<div class="callout blue">
+  <b>Hybrid, not "everything in the vector DB."</b> A natural-language <i>card</i> per SDK /
+  endpoint / scenario is embedded for <b>discovery</b>; the <b>exact JSON Schema</b> is fetched
+  relationally by <code>(sdk, path)</code> for <b>correctness</b>. Semantic search finds the
+  endpoint; the relational row hands over the precise payload contract. An agent never
+  reconstructs a body from a fuzzy hit. Reuses the already-built <code>VectorBackend</code>
+  interface in <code>sdk-knowledge-rag</code> via a new <code>PgvectorBackend</code>.
+</div>
+
+<h3>14.2 — Closing the two gaps: payload contracts &amp; the ingest dimension</h3>
+
+<div class="grid cols-2">
+  <div class="card">
+    <div class="label">Gap A · Payloads</div>
+    <div class="title">request / response schemas</div>
+    <div class="body">Manifest endpoints were <code>{method, path, description}</code> — an agent
+      saw the endpoint existed but had to guess the body. A build step now emits
+      <code>request_schema</code>/<code>response_schema</code> from each SDK's existing Zod/TS
+      types into the manifest and the <code>catalog.endpoint</code> row. New MCP tool
+      <code>get_endpoint(sdk, path)</code> returns method + path + payload + auth scope.</div>
+  </div>
+  <div class="card">
+    <div class="label">Gap B · Ingest</div>
+    <div class="title">endpoint.kind + ETL discovery</div>
+    <div class="body">Connectors did event-driven <i>sync</i>, never bulk import; nothing tagged
+      "external data lands here." Endpoints now carry <code>kind: ingest|bulk|…</code>; a
+      first-class <code>sdk-ingest</code> exposes
+      <code>POST /api/ingest/:entity/batch</code> (idempotent upsert envelope) backed by
+      <code>sdk-lineage</code> + <code>sdk-audit</code>. New tools
+      <code>search_sdks(kind=ingest)</code> and <code>get_ingest_targets(entity)</code> answer an
+      ETL agent's "where do I push customer records, with what payload?"</div>
+  </div>
+</div>
+
+<h3>14.3 — Planner v2: retrieve-then-compose + foundation-tier + dependency closure</h3>
+
+<p>
+The <code>/build</code> planner is rebuilt as a pipeline. Crucially, semantic retrieval alone is
+<i>insufficient</i> for cross-cutting concerns: a user who types <i>"a financial accounting
+system"</i> never says "login," so the embedding of the intent is nowhere near the embedding of
+<code>sdk-identity</code>. Two deterministic resolvers run <i>between</i> retrieve and compose to
+guarantee the auth/AIM foundation always surfaces.
+</p>
+
+<div class="diagram-wrap">
+<div class="mermaid">
+flowchart LR
+  Q["intent:<br/>'financial accounting system'"] --> E["embed locally<br/>bge-small ~5ms"]
+  E --> R["pgvector HNSW<br/>top-K domain SDKs (~5ms)"]
+  R --> F["Foundation-tier inject<br/>identity · persona/AIM · tenant · rebac<br/>(tier='foundation', regardless of score)"]
+  F --> D["Dependency-closure expand<br/>walk manifest consumes/events<br/>(billing -> needs identity/tenant)"]
+  D --> C["Generation LLM composes<br/>from K only · ~3-4k tokens<br/>'include every candidate; justify omissions'"]
+  C --> O["Plan:<br/>Recommended SDKs (8-12) +<br/>Custom work (login PAGE, admin PAGE)"]
+  classDef s fill:#1a2234,stroke:#6aa9ff,color:#e6ecf5;
+  classDef g fill:#1a2234,stroke:#b88dff,color:#e6ecf5;
+  class Q,E,R,C,O s;
+  class F,D g;
+</div>
+<div class="caption">Figure 14.2 — Retrieve → inject foundation → expand dependencies → compose.
+  The two purple stages are why a plan for "accounting" reliably includes identity/AIM rather
+  than burying it under custom work.</div>
+</div>
+
+<div class="grid cols-2">
+  <div class="card">
+    <div class="label">Resolver 1</div>
+    <div class="title">Foundation-tier injection</div>
+    <div class="body">Every multi-user app needs the identity baseline. SDKs tagged
+      <code>tier='foundation'</code> (<code>sdk-identity</code>, <code>sdk-persona</code> = AIM,
+      <code>sdk-tenant</code>, <code>sdk-rebac</code>) are merged into the candidate set
+      <i>regardless of semantic score</i>, then deduped. The data already exists — these SDKs
+      already carry the <code>foundation</code> tag.</div>
+  </div>
+  <div class="card">
+    <div class="label">Resolver 2</div>
+    <div class="title">Dependency closure</div>
+    <div class="body">After retrieval picks domain SDKs, walk the manifest
+      <code>consumes</code>/event graph (e.g. <code>tenant.created.v1</code> is consumed by 10+
+      SDKs; <code>persona.role.assigned.v1</code> → <code>sdk-rebac</code>) to pull prerequisites.
+      Billing in → identity/persona/tenant dragged in with it.</div>
+  </div>
+</div>
+
+<div class="callout green">
+  <b>UI honesty.</b> The auth SDKs ship <i>no</i> prebuilt login/admin UI (every
+  <code>ui_components</code> is empty). Planner v2 splits the output: it <b>recommends the auth
+  SDKs</b> (wire to <code>/api/auth/login</code>, <code>/api/personas/resolve</code>,
+  <code>rebac.check</code>) and lists the <b>login page and admin page UI</b> under custom work —
+  so the agent uses the platform's AIM instead of rebuilding identity, badly.
+</div>
+
+<h3>14.4 — The agent hot path: no-latency tiers</h3>
+
+<p>
+An interactive coding agent must never round-trip to Postgres per query. The store is the
+durable source-of-truth and freshness signal; the <i>hot path</i> is an in-process index.
+</p>
+
+<table>
+  <thead><tr><th>Tier</th><th>Serves</th><th>Latency</th><th>Backed by</th></tr></thead>
+  <tbody>
+    <tr><td><b>Tier 0 · in-process index</b></td><td>Every <code>search</code> the agent issues
+      (local MCP / hosted MCP keep catalog + 384-dim vectors resident)</td><td>sub-ms, zero
+      network</td><td>cache artifact + in-memory HNSW</td></tr>
+    <tr><td><b>Tier 1 · Postgres source</b></td><td>Durability, multi-instance freshness; MCP
+      instances reload their index on a <code>catalog.sdk</code> version bump /
+      <code>LISTEN</code></td><td>off the hot path</td><td>pgvector store (§14.1)</td></tr>
+    <tr><td><b>Exact fetch</b></td><td><code>get_manifest</code> / <code>get_endpoint</code> —
+      payload schema + auth scope</td><td>keyed lookup</td><td>relational rows</td></tr>
+  </tbody>
+</table>
+
+<p style="margin-top:6px;"><b>Vectors for "which," relational for "exact payload," in-memory for
+  "fast," Postgres for "fresh + shared."</b></p>
+
+<h3>14.5 — Build phases (maps to the P9.2 delivery epics)</h3>
+
+<table>
+  <thead><tr><th>Epic</th><th>Deliverable</th><th>Reuses</th><th>New</th></tr></thead>
+  <tbody>
+    <tr><td><b>A · RAG Catalog Store</b></td><td><code>catalog.*</code> schema + pgvector +
+      <code>PgvectorBackend</code> + auto-sync job + shared bge-small embedder</td>
+      <td>migration-runner · sdk-registry scanner · sdk-knowledge-rag VectorBackend</td>
+      <td>schema, sync job, 1 backend class</td></tr>
+    <tr><td><b>B · Manifest Contracts</b></td><td>endpoint <code>request_schema</code>/
+      <code>response_schema</code> + <code>kind</code> classifier + <code>sdk-ingest</code> batch
+      endpoint</td><td>sdk-capability schema · sdk-lineage · sdk-audit</td>
+      <td>schema fields, Zod→JSONSchema build step, ingest SDK</td></tr>
+    <tr><td><b>C · Planner v2</b></td><td>retrieve-then-compose <code>/api/build/plan</code> +
+      foundation-tier &amp; dependency-closure resolver + provider-agnostic generation adapter +
+      <code>/build</code> UI split</td><td>the new store · foundation tags</td>
+      <td>pipeline, 2 resolvers, adapter, UI</td></tr>
+    <tr><td><b>D · Agent Discovery Surface</b></td><td>MCP tools <code>get_endpoint</code>,
+      <code>search(kind=ingest)</code>, <code>get_ingest_targets</code> + in-memory hot index
+      reload + ETL agent flow</td><td>registry-mcp-local</td><td>3 tools, reload hook, example</td></tr>
+  </tbody>
+</table>
+
+<div class="callout teal">
+  <b>What this preserves.</b> §1–§13 stand: manifests, the four handshakes, hosted/local MCP split,
+  blueprints, CLI, guardrails. v3.2 changes <i>where the catalog lives</i> (file → file + pg store),
+  <i>how the planner reasons</i> (dump → retrieve-then-compose), and <i>what a manifest carries</i>
+  (adds payloads + ingest). Phases A–D are tracked in Projexlight as the P9.2 epics.
+</div>
+</section>
+
 <footer style="margin-top:64px; padding-top:24px; border-top:1px solid var(--line); color: var(--muted); font-size:12.5px;">
   <div><b>ProjexCloud · v3.1 · P9 architectural companion</b></div>
-  <div style="margin-top:6px;">Living document — kept in sync with <code>prd/P9-SDK-Discoverability-AI-Builder.md</code>. Open questions Q-1..Q-11 are locked as of 2026-05-25; this doc reflects those decisions.</div>
+  <div style="margin-top:6px;">Living document — kept in sync with <code>prd/P9-SDK-Discoverability-AI-Builder.md</code>. Open questions Q-1..Q-11 are locked as of 2026-05-25; §1–§13 reflect those decisions. §14 captures the v3.2 (P9.2) revision of 2026-06-03 — RAG catalog store, payload contracts, and Planner v2 — tracked as the P9.2 epics in Projexlight.</div>
 </footer>
 
 </div>

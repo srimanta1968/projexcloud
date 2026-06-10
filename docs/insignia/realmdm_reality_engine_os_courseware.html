@@ -1,0 +1,1381 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>RealMDM Reality Engine OS — Doctrine, Data Science, Architecture & Build Guide</title>
+<style>
+  :root{
+    --bg:#05070b;
+    --bg2:#0b1020;
+    --panel:#0d1428;
+    --panel2:#111b35;
+    --ink:#eef6ff;
+    --muted:#9db0c8;
+    --soft:#6e7f98;
+    --line:rgba(149,180,255,.18);
+    --line2:rgba(255,255,255,.08);
+    --blue:#2f80ff;
+    --cyan:#42e8ff;
+    --green:#51f6a6;
+    --gold:#f5c76b;
+    --orange:#ff9a48;
+    --pink:#ff4fd8;
+    --red:#ff5c7c;
+    --purple:#9a7cff;
+    --white:#ffffff;
+    --shadow: 0 24px 80px rgba(0,0,0,.45);
+    --radius:22px;
+    --radius2:14px;
+    --code:#070b14;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{
+    margin:0;
+    color:var(--ink);
+    background:
+      radial-gradient(circle at 18% -8%, rgba(47,128,255,.35), transparent 34rem),
+      radial-gradient(circle at 80% 5%, rgba(255,79,216,.18), transparent 30rem),
+      linear-gradient(180deg,#04060a 0%,#07101e 45%,#05070b 100%);
+    font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    line-height:1.58;
+  }
+  a{color:var(--cyan);text-decoration:none}
+  a:hover{text-decoration:underline}
+  .app{display:grid;grid-template-columns:310px 1fr;min-height:100vh}
+  aside{
+    position:sticky;top:0;height:100vh;overflow:auto;z-index:20;
+    padding:20px 16px;
+    background:linear-gradient(180deg,rgba(6,12,24,.96),rgba(6,9,16,.92));
+    border-right:1px solid var(--line);
+    backdrop-filter:blur(18px);
+  }
+  .brand{display:flex;align-items:center;gap:12px;margin-bottom:18px;padding:12px;border:1px solid var(--line);border-radius:18px;background:rgba(255,255,255,.035)}
+  .mark{width:42px;height:42px;border-radius:13px;display:grid;place-items:center;background:linear-gradient(135deg,var(--blue),#06172e 55%,var(--gold));box-shadow:0 0 30px rgba(47,128,255,.35)}
+  .mark svg{width:25px;height:25px}
+  .brand h1{font-size:14px;line-height:1.1;margin:0;text-transform:uppercase;letter-spacing:.13em}
+  .brand p{font-size:11px;margin:4px 0 0;color:var(--muted)}
+  .search{display:flex;gap:8px;margin:12px 0 14px}
+  .search input{width:100%;background:rgba(255,255,255,.055);border:1px solid var(--line);border-radius:12px;color:var(--ink);padding:10px 12px;outline:none}
+  .search input:focus{border-color:rgba(66,232,255,.6);box-shadow:0 0 0 3px rgba(66,232,255,.08)}
+  .toc{display:flex;flex-direction:column;gap:4px}
+  .toc a{display:block;padding:8px 10px;border-radius:11px;color:var(--muted);font-size:12px;border:1px solid transparent}
+  .toc a:hover,.toc a.active{color:var(--ink);background:rgba(47,128,255,.12);border-color:rgba(66,232,255,.16);text-decoration:none}
+  .toc .part{margin-top:12px;padding:8px 10px;font-size:10px;color:var(--gold);letter-spacing:.16em;text-transform:uppercase;border-top:1px solid var(--line)}
+  .side-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:18px}
+  button,.button{cursor:pointer;border:1px solid var(--line);border-radius:12px;background:rgba(255,255,255,.04);color:var(--ink);padding:10px 12px;font-weight:700;font-size:12px}
+  button:hover,.button:hover{border-color:rgba(66,232,255,.4);background:rgba(66,232,255,.08);text-decoration:none}
+  main{min-width:0}
+  .hero{position:relative;overflow:hidden;min-height:100vh;padding:72px clamp(28px,5vw,78px) 52px;border-bottom:1px solid var(--line)}
+  .hero:before{content:"";position:absolute;inset:0;background-image:linear-gradient(rgba(255,255,255,.035) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.035) 1px,transparent 1px);background-size:42px 42px;mask-image:linear-gradient(180deg,rgba(0,0,0,.55),transparent 80%);pointer-events:none}
+  .hero-inner{position:relative;max-width:1280px;margin:0 auto;display:grid;grid-template-columns:1.05fr .95fr;gap:34px;align-items:center}
+  .eyebrow{display:inline-flex;align-items:center;gap:9px;border:1px solid var(--line);border-radius:999px;padding:7px 12px;color:var(--gold);font-size:11px;text-transform:uppercase;letter-spacing:.16em;background:rgba(255,255,255,.035)}
+  .dot{width:8px;height:8px;border-radius:999px;background:var(--green);box-shadow:0 0 18px var(--green)}
+  .hero h2{font-size:clamp(44px,6vw,88px);line-height:.92;letter-spacing:-.06em;margin:22px 0 20px;max-width:920px}
+  .hero h2 span{background:linear-gradient(90deg,var(--ink),var(--cyan),var(--gold));-webkit-background-clip:text;background-clip:text;color:transparent}
+  .hero .lead{font-size:clamp(18px,2vw,24px);max-width:860px;color:#d7e7ff;line-height:1.45}
+  .hero .sublead{font-size:15px;color:var(--muted);max-width:780px}
+  .hero-actions{display:flex;flex-wrap:wrap;gap:12px;margin:24px 0 0}
+  .primary{background:linear-gradient(135deg,var(--blue),#115adf);border-color:rgba(255,255,255,.14);box-shadow:0 18px 52px rgba(47,128,255,.26)}
+  .secondary{background:rgba(255,255,255,.055)}
+  .hero-card{border:1px solid var(--line);background:linear-gradient(180deg,rgba(17,27,53,.82),rgba(7,11,20,.86));border-radius:28px;padding:20px;box-shadow:var(--shadow)}
+  .hero-card h3{margin:0 0 12px;font-size:16px;color:var(--cyan);letter-spacing:.08em;text-transform:uppercase}
+  .console{background:#03060b;border:1px solid rgba(81,246,166,.25);border-radius:16px;padding:14px 15px;font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,"Liberation Mono",monospace;font-size:12px;color:#bfffdc;overflow:auto;box-shadow:inset 0 0 24px rgba(81,246,166,.04)}
+  .console .prompt{color:var(--green)}
+  .console .warn{color:var(--gold)}
+  .console .cyan{color:var(--cyan)}
+  .metrics{display:grid;grid-template-columns:repeat(2,1fr);gap:12px;margin-top:14px}
+  .metric{border:1px solid var(--line);border-radius:16px;padding:14px;background:rgba(255,255,255,.04)}
+  .metric b{display:block;font-size:22px;color:var(--ink);line-height:1}
+  .metric span{display:block;margin-top:6px;color:var(--muted);font-size:12px}
+  section.chapter{padding:62px clamp(24px,5vw,74px);border-bottom:1px solid var(--line2);max-width:1420px;margin:0 auto}
+  .chapter-header{display:grid;grid-template-columns:minmax(0,1fr) 260px;gap:24px;align-items:start;margin-bottom:26px}
+  .chapter h2{font-size:clamp(30px,3.5vw,54px);line-height:1.02;letter-spacing:-.04em;margin:0 0 14px}
+  .chapter h3{font-size:24px;margin:34px 0 12px;line-height:1.2;color:#f8fbff}
+  .chapter h4{font-size:16px;margin:22px 0 8px;color:var(--cyan);letter-spacing:.02em}
+  .kicker{font-size:12px;text-transform:uppercase;letter-spacing:.16em;color:var(--gold);font-weight:800;margin-bottom:10px}
+  .summary-card{border:1px solid var(--line);border-radius:18px;padding:14px;background:rgba(245,199,107,.055);color:#f7e6be;font-size:13px}
+  p{color:#d7e2f3;margin:10px 0 16px}
+  .muted{color:var(--muted)}
+  .small{font-size:13px;color:var(--muted)}
+  .grid-2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px}
+  .grid-3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}
+  .grid-4{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}
+  .card{border:1px solid var(--line);border-radius:var(--radius);background:linear-gradient(180deg,rgba(17,27,53,.7),rgba(8,12,22,.82));padding:20px;box-shadow:0 14px 40px rgba(0,0,0,.18)}
+  .card.compact{padding:15px;border-radius:16px}
+  .card h4,.card h3{margin-top:0}
+  .callout{border:1px solid rgba(245,199,107,.28);background:linear-gradient(135deg,rgba(245,199,107,.12),rgba(47,128,255,.06));border-radius:18px;padding:18px;margin:18px 0}
+  .danger{border-color:rgba(255,92,124,.3);background:rgba(255,92,124,.08)}
+  .success{border-color:rgba(81,246,166,.28);background:rgba(81,246,166,.07)}
+  .info{border-color:rgba(66,232,255,.28);background:rgba(66,232,255,.07)}
+  .split{display:grid;grid-template-columns:1fr 1fr;gap:18px;align-items:stretch}
+  .pill{display:inline-flex;align-items:center;gap:8px;padding:5px 9px;border:1px solid var(--line);border-radius:999px;font-size:11px;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);margin:3px 4px 3px 0;background:rgba(255,255,255,.035)}
+  .pill.blue{color:#cfe8ff;border-color:rgba(47,128,255,.28);background:rgba(47,128,255,.1)}
+  .pill.green{color:#d4ffe9;border-color:rgba(81,246,166,.28);background:rgba(81,246,166,.08)}
+  .pill.gold{color:#ffe6a4;border-color:rgba(245,199,107,.32);background:rgba(245,199,107,.08)}
+  .pill.red{color:#ffd4dc;border-color:rgba(255,92,124,.28);background:rgba(255,92,124,.08)}
+  ul,ol{color:#d7e2f3;padding-left:22px}
+  li{margin:7px 0}
+  .table-wrap{overflow:auto;border:1px solid var(--line);border-radius:16px;margin:16px 0;background:rgba(255,255,255,.025)}
+  table{border-collapse:collapse;width:100%;min-width:760px}
+  th,td{padding:12px 14px;border-bottom:1px solid var(--line2);vertical-align:top;text-align:left;font-size:13px}
+  th{color:var(--gold);text-transform:uppercase;letter-spacing:.09em;font-size:11px;background:rgba(255,255,255,.04)}
+  tr:last-child td{border-bottom:0}
+  code{font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,"Liberation Mono",monospace;color:#bfffdc;background:rgba(81,246,166,.08);padding:.12rem .28rem;border-radius:5px}
+  pre{position:relative;background:var(--code);border:1px solid rgba(81,246,166,.18);border-radius:18px;padding:18px;overflow:auto;color:#d8ffe8;font-size:12px;line-height:1.55;box-shadow:inset 0 0 24px rgba(81,246,166,.035)}
+  .copy{position:absolute;right:10px;top:10px;padding:5px 8px;font-size:10px;border-radius:8px;background:rgba(255,255,255,.08)}
+  details{border:1px solid var(--line);border-radius:16px;background:rgba(255,255,255,.035);padding:0;margin:12px 0}
+  summary{cursor:pointer;padding:14px 16px;font-weight:800;color:var(--ink)}
+  details .detail-body{padding:0 16px 16px}
+  .diagram{border:1px solid rgba(66,232,255,.16);background:radial-gradient(circle at 20% 20%,rgba(66,232,255,.06),transparent 30%),rgba(255,255,255,.025);border-radius:20px;padding:16px;margin:18px 0;overflow:hidden}
+  svg{max-width:100%;height:auto;display:block}
+  .caption{font-size:12px;color:var(--muted);margin-top:8px}
+  .label{font-size:12px;fill:#e7f2ff;font-weight:700;letter-spacing:.02em}
+  .sublabel{font-size:10px;fill:#9db0c8}
+  .svg-box{fill:#0e1830;stroke:#315a96;stroke-width:1.2;rx:12}
+  .svg-blue{fill:#123c7b;stroke:#2f80ff}
+  .svg-gold{fill:#4a3513;stroke:#f5c76b}
+  .svg-green{fill:#0e4029;stroke:#51f6a6}
+  .svg-red{fill:#401018;stroke:#ff5c7c}
+  .svg-pink{fill:#3a1641;stroke:#ff4fd8}
+  .arrow{stroke:#8cc8ff;stroke-width:2;marker-end:url(#arrow)}
+  .arrow-gold{stroke:#f5c76b;stroke-width:2;marker-end:url(#arrowGold)}
+  .arrow-green{stroke:#51f6a6;stroke-width:2;marker-end:url(#arrowGreen)}
+  .timeline{position:relative;margin:22px 0;padding-left:22px;border-left:1px solid rgba(66,232,255,.32)}
+  .timeline .item{position:relative;margin:0 0 18px;padding:14px 16px;border:1px solid var(--line);border-radius:15px;background:rgba(255,255,255,.035)}
+  .timeline .item:before{content:"";position:absolute;left:-28px;top:22px;width:12px;height:12px;border-radius:50%;background:var(--cyan);box-shadow:0 0 16px var(--cyan)}
+  .stake{display:grid;grid-template-columns:90px 1fr;gap:12px;align-items:start}
+  .avatar{width:54px;height:54px;border-radius:18px;display:grid;place-items:center;background:linear-gradient(135deg,rgba(47,128,255,.35),rgba(245,199,107,.15));border:1px solid var(--line);font-weight:900;color:var(--ink)}
+  .checklist li{list-style:none;position:relative;padding-left:26px}
+  .checklist li:before{content:"✓";position:absolute;left:0;color:var(--green);font-weight:900}
+  .warning-list li:before{content:"⚠";color:var(--gold)}
+  .course-box{border-left:3px solid var(--gold);padding:10px 14px;margin:14px 0;background:rgba(245,199,107,.06);border-radius:0 14px 14px 0}
+  .quiz{border:1px dashed rgba(245,199,107,.35);border-radius:16px;padding:16px;background:rgba(245,199,107,.05)}
+  .footer{padding:48px clamp(24px,5vw,74px);color:var(--muted);background:#04060a;border-top:1px solid var(--line)}
+  .progress{position:fixed;left:0;right:0;top:0;height:4px;background:rgba(255,255,255,.06);z-index:99}
+  .progress span{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--blue),var(--cyan),var(--gold))}
+  .mobilebar{display:none;position:sticky;top:0;z-index:50;background:rgba(5,7,11,.94);backdrop-filter:blur(16px);border-bottom:1px solid var(--line);padding:10px 14px;align-items:center;justify-content:space-between}
+  .hidden{display:none!important}
+  @media (max-width:1100px){
+    .app{display:block}
+    aside{display:none;position:fixed;inset:0;height:auto;z-index:100;width:86%;max-width:360px}
+    aside.open{display:block}
+    .mobilebar{display:flex}
+    .hero-inner,.chapter-header,.grid-2,.grid-3,.grid-4,.split{grid-template-columns:1fr}
+    .hero{padding-top:36px;min-height:auto}
+    .metrics{grid-template-columns:1fr}
+  }
+  @media print{
+    body{background:white;color:#111;font-size:12px}
+    aside,.mobilebar,.hero-actions,.progress,.copy{display:none!important}
+    .app{display:block}
+    .hero,section.chapter{padding:24px;border-bottom:1px solid #ddd;max-width:none}
+    .hero h2,.chapter h2,.chapter h3{color:#111}
+    p,li,td,th,.small,.muted{color:#111}
+    .card,.callout,.diagram,details,.table-wrap,pre{box-shadow:none;background:white;color:#111;border-color:#ccc}
+    code{background:#f5f5f5;color:#111}
+    pre{white-space:pre-wrap;color:#111}
+  }
+</style>
+</head>
+<body>
+<div class="progress"><span id="progressbar"></span></div>
+<div class="mobilebar"><button id="openNav">☰ Course Map</button><b>RealMDM Reality Engine OS</b><button onclick="window.print()">Print</button></div>
+<div class="app">
+<aside id="nav">
+  <div class="brand">
+    <div class="mark" aria-hidden="true">
+      <svg viewBox="0 0 64 64"><path fill="white" d="M32 5l22 12v30L32 59 10 47V17L32 5zm0 7L17 20v23l15 8 15-8V20l-15-8z"/><path fill="#42e8ff" d="M32 18l11 6v16l-11 6-11-6V24l11-6z"/></svg>
+    </div>
+    <div><h1>RealMDM<br/>Reality Engine OS</h1><p>Doctrine → Architecture → Build</p></div>
+  </div>
+  <div class="search"><input id="search" placeholder="Search courseware…" /></div>
+  <nav class="toc" id="toc"></nav>
+  <div class="side-actions">
+    <button onclick="window.print()">Print / PDF</button>
+    <button id="expandAll">Expand</button>
+  </div>
+</aside>
+<main>
+
+<header class="hero" id="top" data-title="Start">
+  <div class="hero-inner">
+    <div>
+      <div class="eyebrow"><span class="dot"></span> Self-contained courseware and reference architecture</div>
+      <h2>RealMDM: <span>The Reality Engine OS</span></h2>
+      <p class="lead">A conceptual, data-science and engineering masterclass for building a universal identity, consent, policy and master-data operating system that separates what is <b>pure</b> from what is <b>derived</b>, without collapsing context into a brittle Golden Record.</p>
+      <p class="sublead">This is designed for deep-thinking founders, architects, data scientists, privacy leaders, spiritual-philosophical readers, and relatively new engineers who need enough clarity to build the first production implementation.</p>
+      <div class="hero-actions">
+        <a class="button primary" href="#ch0">Begin the course</a>
+        <a class="button secondary" href="#blueprint">Jump to build blueprint</a>
+        <a class="button secondary" href="#migration">Migrate from Supabase / tables</a>
+      </div>
+    </div>
+    <div class="hero-card">
+      <h3>Operating thesis</h3>
+      <div class="console" aria-label="terminal style summary">
+        <div><span class="prompt">reality-engine$</span> inspect person:john</div>
+        <div>pure_entity: <span class="cyan">Person#P-7F3A</span></div>
+        <div>contexts: HR.employee, CRM.customer, GOV.citizen, CLINICAL.patient</div>
+        <div>canonical rule: <span class="warn">employee_id is not identity</span></div>
+        <div>relationship: EMPLOYED_BY is a contract, not a column</div>
+        <div>transition: candidate → employee requires portal + evidence + consent + policy</div>
+        <div>truth: current_state = projection(replay(reality_log))</div>
+      </div>
+      <div class="metrics">
+        <div class="metric"><b>7</b><span>constitutional axioms</span></div>
+        <div class="metric"><b>3</b><span>planes: reality, secure data, governance</span></div>
+        <div class="metric"><b>4</b><span>engineering gates</span></div>
+        <div class="metric"><b>∞</b><span>contexts without identity collapse</span></div>
+      </div>
+    </div>
+  </div>
+</header>
+
+<section class="chapter" id="ch0" data-part="Part 0 — Orientation" data-title="What this document is">
+  <div class="chapter-header">
+    <div>
+      <div class="kicker">Part 0 — Orientation</div>
+      <h2>What this document is, and why it must start before engineering</h2>
+      <p>This document is not a commentary on an existing PDF collection. It is a self-contained paper, course, and engineering guide. It starts from first principles, explains conventional Master Data Management and identity, shows why the older cost-benefit tradeoffs were reasonable, and then argues that the AI-and-compute era allows us to solve the problem closer to how it should have been solved conceptually.</p>
+    </div>
+    <div class="summary-card">Target reader: someone who may only know how to create <code>person</code> and <code>employee</code> tables, but must now build an enterprise-grade identity and meaning operating system.</div>
+  </div>
+  <div class="diagram">
+    <svg viewBox="0 0 1100 310" role="img" aria-label="course map diagram">
+      <defs><marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto"><path d="M0,0 L0,6 L9,3 z" fill="#8cc8ff"/></marker></defs>
+      <rect x="30" y="70" width="170" height="105" class="svg-box"/><text x="115" y="112" text-anchor="middle" class="label">Concept</text><text x="115" y="135" text-anchor="middle" class="sublabel">Satya / Maya</text><text x="115" y="154" text-anchor="middle" class="sublabel">pure vs derived</text>
+      <rect x="245" y="70" width="170" height="105" class="svg-box"/><text x="330" y="112" text-anchor="middle" class="label">Conventional MDM</text><text x="330" y="135" text-anchor="middle" class="sublabel">golden records</text><text x="330" y="154" text-anchor="middle" class="sublabel">match / merge</text>
+      <rect x="460" y="70" width="170" height="105" class="svg-blue"/><text x="545" y="112" text-anchor="middle" class="label">Reality Engine</text><text x="545" y="135" text-anchor="middle" class="sublabel">identity + graph + log</text><text x="545" y="154" text-anchor="middle" class="sublabel">portals + policy</text>
+      <rect x="675" y="70" width="170" height="105" class="svg-green"/><text x="760" y="112" text-anchor="middle" class="label">Build Guide</text><text x="760" y="135" text-anchor="middle" class="sublabel">schemas, APIs</text><text x="760" y="154" text-anchor="middle" class="sublabel">services, tests</text>
+      <rect x="890" y="70" width="170" height="105" class="svg-gold"/><text x="975" y="112" text-anchor="middle" class="label">Migration</text><text x="975" y="135" text-anchor="middle" class="sublabel">Supabase/table</text><text x="975" y="154" text-anchor="middle" class="sublabel">to RealMDM</text>
+      <path class="arrow" d="M205 122 H238"/><path class="arrow" d="M420 122 H453"/><path class="arrow" d="M635 122 H668"/><path class="arrow" d="M850 122 H883"/>
+      <text x="550" y="245" text-anchor="middle" fill="#9db0c8" font-size="18">The paper moves from why identity is philosophically hard → why old MDM was reasonable → why AI-era reality demands a new OS → how to build it.</text>
+    </svg>
+    <div class="caption">Figure 0.1 — The document is structured as a course and implementation sidecar, not as an assumed-context memo.</div>
+  </div>
+  <div class="grid-3">
+    <div class="card"><h4>For doctrine readers</h4><p>It explains why spiritual-philosophical language is not decoration. It provides precision: the world of roles, labels and names is real in effect, but not the same as the pure entity.</p></div>
+    <div class="card"><h4>For architects</h4><p>It specifies how the doctrine becomes a reference architecture: three planes, relationship contracts, event logs, portals, secure tokenization and graph projections.</p></div>
+    <div class="card"><h4>For engineers</h4><p>It provides schemas, APIs, workflow pseudocode, migration steps, domain packs and gate-based validation so the system can actually be built.</p></div>
+  </div>
+</section>
+
+<section class="chapter" id="ch1" data-part="Part 1 — The problem" data-title="What MDM and identity really are">
+  <div class="chapter-header">
+    <div>
+      <div class="kicker">Part 1 — The problem</div>
+      <h2>What MDM and identity really are</h2>
+      <p>Master Data Management is often described as “keeping customer, product, supplier, employee and location data clean.” That description is too small. At enterprise depth, MDM is the discipline of deciding what the organization believes exists, how it knows that thing exists, what different domains are allowed to call it, and what must happen when its meaning changes.</p>
+    </div>
+    <div class="summary-card">Beginner translation: MDM is not just a table of people. It is the memory and naming system of the enterprise.</div>
+  </div>
+  <div class="split">
+    <div class="card">
+      <h3>Master data vs other data</h3>
+      <div class="table-wrap"><table><thead><tr><th>Data type</th><th>Examples</th><th>Question it answers</th><th>RealMDM treatment</th></tr></thead><tbody>
+        <tr><td>Master data</td><td>Person, organization, address, device, document, product</td><td>What exists?</td><td>Potentially pure entity or stable contract</td></tr>
+        <tr><td>Reference data</td><td>Country code, currency, industry type, status vocabulary</td><td>What vocabulary do we use?</td><td>Taxonomy and controlled semantics</td></tr>
+        <tr><td>Transactional data</td><td>Orders, invoices, clicks, claims, course attempts</td><td>What happened operationally?</td><td>Usually outside RealMDM; linked by canonical IDs</td></tr>
+        <tr><td>Analytical data</td><td>Scores, segments, aggregates, predictions</td><td>What can we infer?</td><td>Derived projection with provenance and expiry</td></tr>
+        <tr><td>Evidence data</td><td>Passport scan, offer letter, consent receipt, audit proof</td><td>Why do we believe this?</td><td>Document/evidence universe with hashes and vault references</td></tr>
+      </tbody></table></div>
+    </div>
+    <div class="card">
+      <h3>Why identity is not trivial</h3>
+      <p>A junior implementation may create:</p>
+<pre><button class="copy">copy</button><code>create table person (
+  id uuid primary key,
+  name text,
+  email text unique
+);
+
+create table employee (
+  id uuid primary key,
+  person_id uuid references person(id),
+  employee_id text unique,
+  department text
+);</code></pre>
+      <p>This is fine for a small app. It fails when the same human appears as a patient, customer, contractor, citizen, guardian, applicant, employee and alumni across tenants, jurisdictions and consent boundaries.</p>
+    </div>
+  </div>
+  <div class="callout info"><b>Identity is deep because identifiers are often contextual.</b> Employee ID, customer number, patient MRN, student roll number, Aadhaar, SSN, passport, email, phone and device UUID may all feel canonical inside a system. But most are handles, roles, credentials, or evidence, not the person itself.</div>
+  <div class="diagram">
+    <svg viewBox="0 0 1100 360" role="img" aria-label="identity layer complexity diagram">
+      <defs><marker id="arrow2" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto"><path d="M0,0 L0,6 L9,3 z" fill="#8cc8ff"/></marker></defs>
+      <circle cx="550" cy="175" r="58" fill="#123c7b" stroke="#42e8ff" stroke-width="2"/><text x="550" y="170" text-anchor="middle" class="label">Pure</text><text x="550" y="190" text-anchor="middle" class="label">Person</text>
+      <g>
+        <rect x="80" y="55" width="190" height="70" class="svg-box"/><text x="175" y="85" text-anchor="middle" class="label">HR</text><text x="175" y="106" text-anchor="middle" class="sublabel">employee_id</text>
+        <rect x="80" y="220" width="190" height="70" class="svg-box"/><text x="175" y="250" text-anchor="middle" class="label">Healthcare</text><text x="175" y="271" text-anchor="middle" class="sublabel">MRN / patient</text>
+        <rect x="825" y="55" width="190" height="70" class="svg-box"/><text x="920" y="85" text-anchor="middle" class="label">Government</text><text x="920" y="106" text-anchor="middle" class="sublabel">citizen / license</text>
+        <rect x="825" y="220" width="190" height="70" class="svg-box"/><text x="920" y="250" text-anchor="middle" class="label">Commerce</text><text x="920" y="271" text-anchor="middle" class="sublabel">customer / account</text>
+      </g>
+      <path d="M270 90 C360 105, 430 130, 492 160" stroke="#8cc8ff" stroke-width="2" fill="none" marker-end="url(#arrow2)"/>
+      <path d="M270 255 C370 235, 430 210, 492 190" stroke="#8cc8ff" stroke-width="2" fill="none" marker-end="url(#arrow2)"/>
+      <path d="M825 90 C735 105, 670 130, 608 160" stroke="#f5c76b" stroke-width="2" fill="none" marker-end="url(#arrowGold)"/>
+      <path d="M825 255 C725 235, 670 210, 608 190" stroke="#f5c76b" stroke-width="2" fill="none" marker-end="url(#arrowGold)"/>
+      <text x="550" y="325" text-anchor="middle" fill="#9db0c8" font-size="16">Each domain believes its identifier is “the key.” RealMDM treats each as contextual evidence or role linkage unless it survives Neti Neti.</text>
+    </svg>
+    <div class="caption">Figure 1.1 — Employee ID, patient MRN and citizen number are meaningful, but meaning is not the same as pure identity.</div>
+  </div>
+</section>
+
+<section class="chapter" id="ch2" data-part="Part 1 — The problem" data-title="Conventional MDM and data science">
+  <div class="chapter-header">
+    <div>
+      <div class="kicker">Conventional MDM</div>
+      <h2>The conventional data-science approach: why it was reasonable, and where it stops</h2>
+      <p>Traditional MDM was not foolish. It emerged under real constraints: expensive compute, slow storage, limited graph tooling, batch ETL, human stewardship, and organizations that could tolerate overnight reconciliation. The tradeoff was: collapse complexity into a survivorship rule, because the alternative was computationally expensive and organizationally hard.</p>
+    </div>
+    <div class="summary-card">The old approach was a cost-optimized compromise, not an ontological truth.</div>
+  </div>
+  <div class="grid-3">
+    <div class="card"><h4>Step 1 — Standardize</h4><p>Normalize names, addresses, phone numbers, emails, dates and source codes. Use USPS-like address standardization, E.164 phone normalization, case folding, transliteration and tokenization.</p></div>
+    <div class="card"><h4>Step 2 — Match</h4><p>Use deterministic keys, fuzzy string similarity, phonetics, blocking, probabilistic models, household/address clustering and domain rules to propose duplicates.</p></div>
+    <div class="card"><h4>Step 3 — Merge / link</h4><p>Either merge into a golden record or maintain a registry/crosswalk. Apply survivorship rules: trusted source wins, latest update wins, verified source wins.</p></div>
+  </div>
+  <h3>Classic MDM styles</h3>
+  <div class="table-wrap"><table><thead><tr><th>Style</th><th>What it did well</th><th>Why it existed</th><th>Where RealMDM changes it</th></tr></thead><tbody>
+    <tr><td>Registry</td><td>Link records without moving data</td><td>Low disruption, fast adoption</td><td>Becomes Universal Identity Plane and crosswalk fabric</td></tr>
+    <tr><td>Consolidation</td><td>Create reporting view</td><td>Useful for analytics and executive dashboards</td><td>Becomes observer projection, not “truth itself”</td></tr>
+    <tr><td>Coexistence</td><td>Allow sources and hub to synchronize</td><td>Practical for enterprise politics</td><td>Becomes domain galaxies with governed contracts</td></tr>
+    <tr><td>Centralization</td><td>Single hub controls updates</td><td>Highest consistency but hardest change management</td><td>Reserved only for pure entities, laws, contracts, consent and evidence</td></tr>
+  </tbody></table></div>
+  <div class="diagram">
+    <svg viewBox="0 0 1100 390" role="img" aria-label="conventional MDM pipeline diagram">
+      <rect x="50" y="40" width="170" height="70" class="svg-box"/><text x="135" y="70" text-anchor="middle" class="label">Sources</text><text x="135" y="92" text-anchor="middle" class="sublabel">ERP CRM HRIS EHR</text>
+      <rect x="270" y="40" width="170" height="70" class="svg-box"/><text x="355" y="70" text-anchor="middle" class="label">Standardize</text><text x="355" y="92" text-anchor="middle" class="sublabel">clean + normalize</text>
+      <rect x="490" y="40" width="170" height="70" class="svg-box"/><text x="575" y="70" text-anchor="middle" class="label">Match</text><text x="575" y="92" text-anchor="middle" class="sublabel">rules + scores</text>
+      <rect x="710" y="40" width="170" height="70" class="svg-red"/><text x="795" y="70" text-anchor="middle" class="label">Survive</text><text x="795" y="92" text-anchor="middle" class="sublabel">winner attributes</text>
+      <rect x="930" y="40" width="130" height="70" class="svg-gold"/><text x="995" y="70" text-anchor="middle" class="label">Golden</text><text x="995" y="92" text-anchor="middle" class="sublabel">Record</text>
+      <path class="arrow" d="M225 75 H263"/><path class="arrow" d="M445 75 H483"/><path class="arrow" d="M665 75 H703"/><path class="arrow" d="M885 75 H923"/>
+      <rect x="95" y="210" width="910" height="110" fill="rgba(255,92,124,.08)" stroke="rgba(255,92,124,.35)" rx="18"/>
+      <text x="550" y="246" text-anchor="middle" fill="#ffd4dc" font-size="20" font-weight="700">The hidden loss</text>
+      <text x="550" y="278" text-anchor="middle" fill="#d7e2f3" font-size="15">Survivorship decides which attribute wins, but often destroys why a value was true in one context and false in another.</text>
+      <text x="550" y="304" text-anchor="middle" fill="#d7e2f3" font-size="15">A shipping address, tax address, patient address and emergency address may all be true under different observers.</text>
+    </svg>
+    <div class="caption">Figure 2.1 — Conventional pipelines optimized for one operationally useful view, but often collapsed context.</div>
+  </div>
+  <details><summary>Data science details: how matching normally works</summary><div class="detail-body">
+    <p>Classic entity resolution uses blocking to avoid comparing every record to every other record. A blocking key might be normalized last name + postal code or phone area code + birth year. Candidate pairs then receive similarity scores: Jaro-Winkler for names, Levenshtein distance for strings, geospatial distance for addresses, token overlap for organizations, and supervised or semi-supervised models for final classification.</p>
+    <p>RealMDM does not throw this away. It preserves it inside the <b>Identity Resolution Service</b>, but it refuses to let match scores directly overwrite pure identity. Scores create claims, candidate links, evidence packages and steward cases.</p>
+  </div></details>
+</section>
+
+<section class="chapter" id="ch3" data-part="Part 1 — The problem" data-title="Why conventional MDM worked then">
+  <div class="chapter-header">
+    <div>
+      <div class="kicker">Historical fairness</div>
+      <h2>Why conventional MDM worked then</h2>
+      <p>Before criticizing Golden Record architecture, we must be fair. The conventional approach was a rational optimization under older realities. Compute was costly. Storage was costly. Graph traversals at enterprise scale were immature. AI reasoning was unavailable. Most organizations were batch-oriented, with human analysts manually reconciling exceptions.</p>
+    </div>
+    <div class="summary-card">A 20-year-old architecture should be judged by 20-year-old constraints, not by today’s compute and AI assumptions.</div>
+  </div>
+  <div class="grid-4">
+    <div class="card compact"><h4>Batch reality</h4><p>Nightly ETL was acceptable. Data was “good enough by morning.”</p></div>
+    <div class="card compact"><h4>Human stewardship</h4><p>Ambiguous identity decisions were routed to people and spreadsheets.</p></div>
+    <div class="card compact"><h4>Relational limits</h4><p>Rows and foreign keys were the dominant operational model.</p></div>
+    <div class="card compact"><h4>Cost discipline</h4><p>Storing every event forever or computing every context view was too expensive.</p></div>
+  </div>
+  <div class="callout success"><b>The old compromise:</b> reduce many contextual truths into one accepted operational view, because the organization could not afford to compute, store and govern all valid views at once.</div>
+  <div class="diagram">
+    <svg viewBox="0 0 1100 360" role="img" aria-label="cost compute timeline">
+      <line x1="90" y1="285" x2="1010" y2="285" stroke="#315a96" stroke-width="2"/><line x1="90" y1="70" x2="90" y2="285" stroke="#315a96" stroke-width="2"/>
+      <text x="90" y="320" text-anchor="middle" fill="#9db0c8">2000s</text><text x="360" y="320" text-anchor="middle" fill="#9db0c8">2010s</text><text x="650" y="320" text-anchor="middle" fill="#9db0c8">2020s</text><text x="950" y="320" text-anchor="middle" fill="#9db0c8">AI era</text>
+      <path d="M95 245 C260 230, 365 205, 500 170 C665 120, 780 95, 1000 75" fill="none" stroke="#42e8ff" stroke-width="4"/>
+      <path d="M95 110 C250 125, 390 150, 520 175 C700 205, 835 230, 1000 250" fill="none" stroke="#f5c76b" stroke-width="4"/>
+      <text x="675" y="103" fill="#42e8ff" font-size="15" font-weight="800">reasoning + compute capacity</text>
+      <text x="650" y="236" fill="#f5c76b" font-size="15" font-weight="800">cost of contextual computation</text>
+      <rect x="620" y="135" width="305" height="72" fill="rgba(81,246,166,.08)" stroke="rgba(81,246,166,.3)" rx="16"/>
+      <text x="773" y="166" text-anchor="middle" fill="#d4ffe9" font-size="15" font-weight="700">New feasible zone</text><text x="773" y="190" text-anchor="middle" fill="#9db0c8" font-size="12">context-preserving MDM becomes practical</text>
+    </svg>
+    <div class="caption">Figure 3.1 — When compute/reasoning capacity rises and the marginal cost of context falls, the old collapse-to-one-record tradeoff becomes less defensible.</div>
+  </div>
+</section>
+
+<section class="chapter" id="ch4" data-part="Part 1 — The problem" data-title="Why the problem has changed now">
+  <div class="chapter-header">
+    <div>
+      <div class="kicker">Why now</div>
+      <h2>Why the data explosion makes old identity thinking insufficient</h2>
+      <p>The enterprise is no longer a few systems with occasional synchronization. It is a system of systems: apps, tenants, business units, orgs, devices, agents, documents, models, workflows, consent receipts, data products and context-specific projections. The explosion is not just volume. It is an explosion of <b>meaning</b>.</p>
+    </div>
+    <div class="summary-card">The hard problem is no longer “which row is correct?” The hard problem is “correct for whom, for what purpose, at what time, under what consent, from which evidence?”</div>
+  </div>
+  <div class="grid-3">
+    <div class="card"><h4>AI agents execute work</h4><p>An AI agent that can change payroll, approve onboarding or access health data cannot rely on stale or flattened identity. It needs ground truth plus context-specific permissions.</p></div>
+    <div class="card"><h4>Privacy is contextual</h4><p>Data may be allowed for treatment, denied for marketing, masked for support, retained for audit and erased for ordinary processing. Policy is not a flag; it is a runtime decision.</p></div>
+    <div class="card"><h4>Meaning changes faster</h4><p>People become employees, contractors, alumni, customers, patients, guardians and devices owners across apps. Derived keys multiply faster than central teams can govern them manually.</p></div>
+  </div>
+  <div class="diagram">
+    <svg viewBox="0 0 1100 500" role="img" aria-label="context multiverse explosion">
+      <circle cx="550" cy="245" r="48" fill="#123c7b" stroke="#42e8ff" stroke-width="2"/><text x="550" y="242" text-anchor="middle" class="label">Pure</text><text x="550" y="262" text-anchor="middle" class="label">Entity</text>
+      <g fill="none" stroke-width="1.5" opacity=".85">
+        <ellipse cx="550" cy="245" rx="210" ry="75" stroke="#2f80ff" transform="rotate(0 550 245)"/>
+        <ellipse cx="550" cy="245" rx="210" ry="75" stroke="#42e8ff" transform="rotate(35 550 245)"/>
+        <ellipse cx="550" cy="245" rx="210" ry="75" stroke="#ff4fd8" transform="rotate(70 550 245)"/>
+        <ellipse cx="550" cy="245" rx="210" ry="75" stroke="#f5c76b" transform="rotate(110 550 245)"/>
+        <ellipse cx="550" cy="245" rx="210" ry="75" stroke="#51f6a6" transform="rotate(145 550 245)"/>
+      </g>
+      <g>
+        <rect x="80" y="70" width="170" height="58" class="svg-box"/><text x="165" y="104" text-anchor="middle" class="label">HR</text>
+        <rect x="850" y="70" width="170" height="58" class="svg-box"/><text x="935" y="104" text-anchor="middle" class="label">Healthcare</text>
+        <rect x="75" y="360" width="180" height="58" class="svg-box"/><text x="165" y="394" text-anchor="middle" class="label">Education</text>
+        <rect x="840" y="360" width="190" height="58" class="svg-box"/><text x="935" y="394" text-anchor="middle" class="label">Recruitment</text>
+        <rect x="455" y="35" width="190" height="58" class="svg-box"/><text x="550" y="69" text-anchor="middle" class="label">Devices</text>
+        <rect x="440" y="415" width="220" height="58" class="svg-box"/><text x="550" y="449" text-anchor="middle" class="label">Consent / Policy</text>
+      </g>
+      <text x="550" y="492" text-anchor="middle" fill="#9db0c8" font-size="15">Each orbit is a domain context. The center remains stable; the projections multiply.</text>
+    </svg>
+    <div class="caption">Figure 4.1 — The AI-era enterprise is a multiverse of valid context planes, not a single table.</div>
+  </div>
+</section>
+
+<section class="chapter" id="ch5" data-part="Part 2 — Conceptual foundation" data-title="Satya and Maya as engineering clarity">
+  <div class="chapter-header">
+    <div>
+      <div class="kicker">Conceptual foundation</div>
+      <h2>Satya and Maya: not spirituality as decoration, but ontology as engineering</h2>
+      <p>The spiritual-philosophical language matters because it gives the architecture a durable distinction: there is a difference between a thing, and a name-form projected onto that thing by context. The derived interpretation can be operationally real, legally significant and emotionally important, yet still not be the pure entity.</p>
+    </div>
+    <div class="summary-card">Employee is real. Citizen is real. Patient is real. But none of them is identical to the person.</div>
+  </div>
+  <div class="split">
+    <div class="card">
+      <h3>Rope and snake in data architecture</h3>
+      <p>At dusk, a rope can be perceived as a snake. The snake is not “nothing”; it causes real fear. But the rope is the substratum. In enterprise data, “employee,” “customer,” “patient,” “vendor,” “citizen,” “student,” and “user” are snakes: domain projections. The person, organization, location, document or physical object is the rope.</p>
+      <p>This metaphor prevents an engineering mistake: treating the domain role as the canonical foundation.</p>
+    </div>
+    <div class="card">
+      <h3>Neti Neti modeling</h3>
+      <p>Ask of every attribute: would the entity remain itself if this value changed?</p>
+      <ul class="checklist">
+        <li>Job title? Not pure. It is role/context.</li>
+        <li>Salary? Not pure. It belongs to an employment contract.</li>
+        <li>Employee ID? Not pure. It is assigned by HR.</li>
+        <li>Email? Usually not pure. It is a handle.</li>
+        <li>Address? Often a relationship to a location, with use and time.</li>
+        <li>Person continuity? Pure anchor.</li>
+      </ul>
+    </div>
+  </div>
+  <div class="diagram">
+    <svg viewBox="0 0 1100 420" role="img" aria-label="Satya Maya rope snake diagram">
+      <defs>
+        <linearGradient id="rope" x1="0" x2="1"><stop offset="0" stop-color="#f5c76b"/><stop offset="1" stop-color="#8b5b19"/></linearGradient>
+        <filter id="glow"><feGaussianBlur stdDeviation="4" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+      </defs>
+      <path d="M260 215 C330 135, 460 135, 530 215 C600 295, 730 295, 810 215" fill="none" stroke="url(#rope)" stroke-width="42" stroke-linecap="round"/>
+      <path d="M260 215 C330 135, 460 135, 530 215 C600 295, 730 295, 810 215" fill="none" stroke="rgba(255,255,255,.28)" stroke-width="3" stroke-dasharray="6 12"/>
+      <path d="M350 230 C430 160, 510 160, 610 245 C690 315, 765 275, 830 190" fill="none" stroke="rgba(81,246,166,.75)" stroke-width="26" stroke-linecap="round" filter="url(#glow)"/>
+      <circle cx="840" cy="184" r="22" fill="rgba(81,246,166,.4)" stroke="#51f6a6"/>
+      <text x="540" y="90" text-anchor="middle" fill="#f5c76b" font-size="24" font-weight="900">Satya: the rope / pure entity</text>
+      <text x="540" y="355" text-anchor="middle" fill="#d4ffe9" font-size="24" font-weight="900">Maya: the snake / contextual role</text>
+      <text x="540" y="390" text-anchor="middle" fill="#9db0c8" font-size="15">The role is operationally real, but it depends on the pure entity and the observer context.</text>
+    </svg>
+    <div class="caption">Figure 5.1 — The core doctrine is an ontology discipline: separate substratum from projection.</div>
+  </div>
+  <div class="callout"><b>Engineering consequence:</b> never let a derived, assigned or contextual identifier become the only canonical anchor. It may be the best source handle inside a domain, but RealMDM must maintain the ability to step above that domain.</div>
+</section>
+
+<section class="chapter" id="ch6" data-part="Part 2 — Conceptual foundation" data-title="The constitutional axioms">
+  <div class="chapter-header">
+    <div>
+      <div class="kicker">Doctrine → laws</div>
+      <h2>The 7 constitutional axioms of RealMDM</h2>
+      <p>The doctrine becomes useful only when it constrains engineering. The following axioms are non-negotiable. They are the line between a real Reality Engine and another MDM-themed database.</p>
+    </div>
+    <div class="summary-card">If a design violates these axioms, it may still be a good app, but it is not RealMDM.</div>
+  </div>
+  <div class="grid-2">
+    <div class="card"><h4>1. Identity is universal; meaning is contextual.</h4><p>A person can exist without being an employee. A company can exist without being a vendor. Meaning appears when a pure entity enters a domain context.</p></div>
+    <div class="card"><h4>2. Relationships are contracts, not columns.</h4><p><code>works_for</code> is not a foreign key. It has tenant, evidence, valid time, transaction time, confidence, policy and lifecycle.</p></div>
+    <div class="card"><h4>3. Time is a first-class dimension.</h4><p>Every fact has business-valid time and system-transaction time. Truth is time-indexed.</p></div>
+    <div class="card"><h4>4. State transitions must cross portals.</h4><p>No direct update from candidate to employee. A portal verifies identity, evidence, policy and consent before emitting a canonical event.</p></div>
+    <div class="card"><h4>5. AI is observer, not author.</h4><p>AI proposes, classifies and finds anomalies. It does not directly write Satya or the Reality Log.</p></div>
+    <div class="card"><h4>6. No transactional coupling.</h4><p>RealMDM is the system of meaning. It does not become the order database, clickstream lake or support ticket store.</p></div>
+    <div class="card"><h4>7. Safety over cleverness.</h4><p>Ambiguous merges must be reversible, reviewable and evidence-backed. A duplicate is safer than a false merge.</p></div>
+    <div class="card"><h4>Operational mantra</h4><p><b>AI proposes. Portals decide. Logs prove.</b><br/>This one sentence keeps the entire system from becoming a stochastic black box.</p></div>
+  </div>
+</section>
+
+<section class="chapter" id="ch7" data-part="Part 3 — Architecture" data-title="The RealMDM thesis">
+  <div class="chapter-header">
+    <div>
+      <div class="kicker">Reference architecture</div>
+      <h2>The RealMDM thesis: an OS for identity, meaning and governed transition</h2>
+      <p>RealMDM is not a replacement for every application. It is the control plane that lets every application keep its domain truth while anchoring that truth to pure identity, evidence, consent and policy.</p>
+    </div>
+    <div class="summary-card">Apps own transactions. RealMDM owns identity, context contracts, consent, policy subject graph, secure attributes and proof.</div>
+  </div>
+  <div class="diagram">
+    <svg viewBox="0 0 1120 520" role="img" aria-label="reality engine reference architecture">
+      <rect x="40" y="35" width="1040" height="75" fill="rgba(47,128,255,.12)" stroke="rgba(47,128,255,.45)" rx="18"/>
+      <text x="560" y="67" text-anchor="middle" fill="#eaf4ff" font-size="22" font-weight="900">Governance Plane</text><text x="560" y="92" text-anchor="middle" fill="#9db0c8" font-size="13">Portals • Policy • Consent • ABAC/ReBAC • Synchronous command gateway</text>
+      <rect x="40" y="155" width="1040" height="95" fill="rgba(81,246,166,.09)" stroke="rgba(81,246,166,.38)" rx="18"/>
+      <text x="560" y="189" text-anchor="middle" fill="#eafff4" font-size="22" font-weight="900">Secure Data Plane</text><text x="560" y="215" text-anchor="middle" fill="#9db0c8" font-size="13">SAS • Token vault • Envelope encryption • Crypto-shredding • Break-glass audit</text>
+      <rect x="40" y="300" width="1040" height="135" fill="rgba(245,199,107,.08)" stroke="rgba(245,199,107,.38)" rx="18"/>
+      <text x="560" y="334" text-anchor="middle" fill="#fff0c2" font-size="22" font-weight="900">Reality Plane</text><text x="560" y="360" text-anchor="middle" fill="#9db0c8" font-size="13">Universal identity • Relationship contracts • Reality log • Event sourcing • Durable workflows • Graph projections</text>
+      <g>
+        <rect x="90" y="458" width="125" height="36" class="svg-box"/><text x="152" y="481" text-anchor="middle" class="sublabel">HR</text>
+        <rect x="250" y="458" width="125" height="36" class="svg-box"/><text x="312" y="481" text-anchor="middle" class="sublabel">CRM</text>
+        <rect x="410" y="458" width="125" height="36" class="svg-box"/><text x="472" y="481" text-anchor="middle" class="sublabel">EHR</text>
+        <rect x="570" y="458" width="125" height="36" class="svg-box"/><text x="632" y="481" text-anchor="middle" class="sublabel">LMS</text>
+        <rect x="730" y="458" width="125" height="36" class="svg-box"/><text x="792" y="481" text-anchor="middle" class="sublabel">ATS</text>
+        <rect x="890" y="458" width="125" height="36" class="svg-box"/><text x="952" y="481" text-anchor="middle" class="sublabel">IoT</text>
+      </g>
+      <path class="arrow" d="M560 112 V150"/><path class="arrow-green" d="M560 252 V295"/><path class="arrow-gold" d="M560 438 V455"/>
+      <text x="1080" y="75" fill="#9db0c8" font-size="12" text-anchor="end">Law</text><text x="1080" y="205" fill="#9db0c8" font-size="12" text-anchor="end">Sensitivity</text><text x="1080" y="365" fill="#9db0c8" font-size="12" text-anchor="end">Truth</text>
+    </svg>
+    <div class="caption">Figure 7.1 — RealMDM is a three-plane operating system: law above sensitivity above truth.</div>
+  </div>
+  <div class="grid-3">
+    <div class="card"><h4>Pure entity plane</h4><p>Minimal anchors: person, organization, location, device, document, object. They do not contain role-heavy payloads.</p></div>
+    <div class="card"><h4>Relationship fabric</h4><p>Contract-grade edges connect entities to roles, tenants, addresses, documents, consents and domains.</p></div>
+    <div class="card"><h4>Domain projections</h4><p>Each app gets its optimized local view without forcing the whole enterprise into one universal schema.</p></div>
+  </div>
+</section>
+
+<section class="chapter" id="stakeholders" data-part="Part 3 — Architecture" data-title="Stakeholder perspectives">
+  <div class="chapter-header">
+    <div>
+      <div class="kicker">Stakeholder alignment</div>
+      <h2>What each stakeholder needs to understand</h2>
+      <p>RealMDM must be explainable to people with different fears. The CEO worries about strategic coherence. The engineer worries about tables and APIs. The CISO worries about blast radius. The data scientist worries about calibration and false merges. The regulator worries about purpose and proof.</p>
+    </div>
+    <div class="summary-card">A reference architecture fails if every stakeholder hears a different promise.</div>
+  </div>
+  <div class="grid-2">
+    <div class="card stake"><div class="avatar">CEO</div><div><h4>CEO / Founder</h4><p>This is not just cleaner records. It is the enterprise’s ability to remember relationships accurately while AI agents act at machine speed.</p></div></div>
+    <div class="card stake"><div class="avatar">CTO</div><div><h4>CTO / Architect</h4><p>The central technical bargain is explicit: shift complexity from politics and manual stewardship into durable workflows, graph contracts, policy-as-code and cryptographic controls.</p></div></div>
+    <div class="card stake"><div class="avatar">CDO</div><div><h4>Chief Data Officer</h4><p>Data quality is no longer a cleanup project. It becomes an emergent property of governed ingestion, relationship contracts and replayable provenance.</p></div></div>
+    <div class="card stake"><div class="avatar">CISO</div><div><h4>CISO / Privacy</h4><p>The blast radius shrinks because sensitive values live behind SAS, keys, purpose checks and audit trails. Domains see only what they are permitted to see.</p></div></div>
+    <div class="card stake"><div class="avatar">DS</div><div><h4>Data Scientist</h4><p>Entity resolution remains probabilistic, but the system distinguishes score from truth. Models create claims, not irreversible merges.</p></div></div>
+    <div class="card stake"><div class="avatar">ENG</div><div><h4>Fresh Engineer</h4><p>Do not make <code>employee_id</code> your identity anchor. Store it as a domain handle or relationship attribute linked to the pure person.</p></div></div>
+  </div>
+</section>
+
+<section class="chapter" id="model" data-part="Part 4 — Data model" data-title="Canonical data model">
+  <div class="chapter-header">
+    <div>
+      <div class="kicker">Implementation model</div>
+      <h2>Canonical data model: from pure entities to relationship contracts</h2>
+      <p>The minimal schema below is intentionally not a bloated enterprise database. It is a spine. Applications can keep their local data stores, but must link to canonical IDs and relationship contracts.</p>
+    </div>
+    <div class="summary-card">The model avoids putting role attributes on pure entities. That is the whole point.</div>
+  </div>
+  <h3>Core tables</h3>
+<pre><button class="copy">copy</button><code>-- Pure entity anchor. Sparse by design.
+create table universal_entity (
+  universal_id uuid primary key,
+  entity_type text not null check (entity_type in (
+    'PERSON','ORGANIZATION','LOCATION','ADDRESS','DEVICE','DOCUMENT','OBJECT'
+  )),
+  lifecycle_status text not null default 'ACTIVE',
+  created_at timestamptz not null default now(),
+  created_by text,
+  tenant_visibility text not null default 'GLOBAL_ANCHOR',
+  metadata jsonb not null default '{}'
+);
+
+-- Person profile is not the same as person identity.
+create table person_profile_claim (
+  claim_id uuid primary key,
+  universal_person_id uuid not null references universal_entity(universal_id),
+  claim_type text not null, -- DISPLAY_NAME, DOB, LANGUAGE, etc.
+  claim_value_token text, -- sensitive values should be tokenized
+  source_system text not null,
+  confidence numeric(5,4) not null default 1.0,
+  valid_from timestamptz,
+  valid_to timestamptz,
+  asserted_at timestamptz not null default now(),
+  status text not null default 'CLAIMED'
+);
+
+-- Handles are identifiers, not identities.
+create table identity_handle (
+  handle_id uuid primary key,
+  handle_type text not null, -- EMAIL, PHONE, EMPLOYEE_ID, MRN, GOV_ID, DEVICE_UUID
+  handle_value_hash text not null,
+  handle_value_token text, -- optional token/vault reference
+  namespace text not null, -- app_id/tenant/source namespace
+  jurisdiction text,
+  created_at timestamptz not null default now(),
+  unique(handle_type, handle_value_hash, namespace)
+);
+
+-- Source crosswalk preserves lineage.
+create table identity_crosswalk (
+  crosswalk_id uuid primary key,
+  source_system_id text not null,
+  source_record_id text not null,
+  source_entity_type text not null,
+  universal_id uuid not null references universal_entity(universal_id),
+  tenant_id text,
+  app_id text,
+  link_status text not null check (link_status in ('CANDIDATE','LINKED','REJECTED','SUPERSEDED')),
+  match_method text not null,
+  confidence numeric(5,4),
+  evidence_ref jsonb not null default '{}',
+  asserted_at timestamptz not null default now(),
+  unique(source_system_id, source_record_id, source_entity_type)
+);
+
+-- Relationship as first-class contract.
+create table relationship_contract (
+  contract_id uuid primary key,
+  relationship_type text not null, -- EMPLOYED_BY, RESIDES_AT, OWNS_DEVICE, CONSENTED_TO
+  subject_universal_id uuid not null references universal_entity(universal_id),
+  object_universal_id uuid references universal_entity(universal_id),
+  tenant_id text,
+  app_id text,
+  bu_id text,
+  org_id text,
+  purpose_code text,
+  valid_from timestamptz,
+  valid_to timestamptz,
+  transaction_from timestamptz not null default now(),
+  transaction_to timestamptz,
+  status text not null check (status in ('CLAIMED','VERIFIED','DISPUTED','REVOKED','EXPIRED')),
+  confidence numeric(5,4) not null default 1.0,
+  provenance_ref jsonb not null default '{}',
+  evidence_refs jsonb not null default '[]'
+);
+
+-- Consent is a relationship plus legal and purpose semantics.
+create table consent_grant (
+  consent_id uuid primary key,
+  subject_person_id uuid not null references universal_entity(universal_id),
+  actor_org_id uuid references universal_entity(universal_id),
+  tenant_id text,
+  app_id text,
+  purpose_code text not null,
+  data_category text not null,
+  lawful_basis text,
+  jurisdiction text,
+  valid_from timestamptz not null,
+  valid_until timestamptz,
+  revoked_at timestamptz,
+  evidence_document_id uuid,
+  status text not null default 'ACTIVE'
+);</code></pre>
+  <div class="diagram">
+    <svg viewBox="0 0 1120 520" role="img" aria-label="ER model diagram">
+      <rect x="430" y="40" width="260" height="70" class="svg-blue"/><text x="560" y="71" text-anchor="middle" class="label">universal_entity</text><text x="560" y="93" text-anchor="middle" class="sublabel">PERSON ORG LOCATION DEVICE DOC</text>
+      <rect x="80" y="170" width="260" height="90" class="svg-box"/><text x="210" y="204" text-anchor="middle" class="label">identity_handle</text><text x="210" y="228" text-anchor="middle" class="sublabel">email phone employee_id MRN</text>
+      <rect x="430" y="170" width="260" height="90" class="svg-green"/><text x="560" y="204" text-anchor="middle" class="label">relationship_contract</text><text x="560" y="228" text-anchor="middle" class="sublabel">subject object tenant time evidence</text>
+      <rect x="780" y="170" width="260" height="90" class="svg-box"/><text x="910" y="204" text-anchor="middle" class="label">identity_crosswalk</text><text x="910" y="228" text-anchor="middle" class="sublabel">source_id → universal_id</text>
+      <rect x="80" y="330" width="260" height="90" class="svg-gold"/><text x="210" y="364" text-anchor="middle" class="label">consent_grant</text><text x="210" y="388" text-anchor="middle" class="sublabel">purpose + basis + revocation</text>
+      <rect x="430" y="330" width="260" height="90" class="svg-pink"/><text x="560" y="364" text-anchor="middle" class="label">document_evidence</text><text x="560" y="388" text-anchor="middle" class="sublabel">hash + vault_ref + taxonomy</text>
+      <rect x="780" y="330" width="260" height="90" class="svg-red"/><text x="910" y="364" text-anchor="middle" class="label">secure_token_ref</text><text x="910" y="388" text-anchor="middle" class="sublabel">token + key_id + policy</text>
+      <path class="arrow" d="M430 78 H350 C310 78 300 165 300 170"/><path class="arrow" d="M560 112 V165"/><path class="arrow" d="M690 78 H770 C815 78 815 165 815 170"/>
+      <path class="arrow-gold" d="M430 222 H345"/><path class="arrow-green" d="M560 262 V326"/><path class="arrow" d="M690 222 H775"/><path class="arrow-gold" d="M340 375 H425"/><path class="arrow" d="M690 375 H775"/>
+    </svg>
+    <div class="caption">Figure 10.1 — The pure entity is small. Complexity lives in contracts, handles, evidence, consent and token references.</div>
+  </div>
+</section>
+
+<section class="chapter" id="address" data-part="Part 4 — Data model" data-title="Address, device and organization modeling">
+  <div class="chapter-header">
+    <div>
+      <div class="kicker">Beyond person</div>
+      <h2>Address, device and organization are also identity problems</h2>
+      <p>Person is not the only pure entity. Organization, location, address, device and document also require separation between stable anchor and contextual usage. A billing address is not the same as a location. A device UUID is not the same as a device trust posture. A company is not the same as a vendor relationship.</p>
+    </div>
+    <div class="summary-card">The doctrine generalizes: pure entity first, contextual usage second.</div>
+  </div>
+  <div class="grid-3">
+    <div class="card"><h4>Address</h4><p>Represent physical place with geospatial and jurisdiction anchors. Represent “billing,” “shipping,” “residential,” “facility,” or “jobsite” as relationships to that place.</p></div>
+    <div class="card"><h4>Device</h4><p>Represent physical/logical device as anchor. Represent enrollment, owner, tenant membership, trust posture and risk score as time-bound contracts.</p></div>
+    <div class="card"><h4>Organization</h4><p>Represent legal entity as pure organization. Vendor, client, partner, employer, school and provider are relationships, not the organization itself.</p></div>
+  </div>
+<pre><button class="copy">copy</button><code>create table address_resolution_claim (
+  claim_id uuid primary key,
+  universal_location_id uuid not null references universal_entity(universal_id),
+  normalized_address_hash text not null,
+  geohash text,
+  latitude_token text,
+  longitude_token text,
+  parcel_id text,
+  building_id text,
+  jurisdiction text,
+  confidence numeric(5,4),
+  source_system text,
+  asserted_at timestamptz not null default now()
+);
+
+-- Usage is contextual.
+-- Person P resides_at Location L from 2022-01-01 to 2024-08-01.
+-- Organization O bills_to Location L under tenant T.
+-- Jobsite J operates_at Location L for construction project X.</code></pre>
+</section>
+
+<section class="chapter" id="flows" data-part="Part 5 — Runtime" data-title="Portals and governed becoming">
+  <div class="chapter-header">
+    <div>
+      <div class="kicker">Runtime physics</div>
+      <h2>Portals: how entities become roles without corrupting identity</h2>
+      <p>A portal is the controlled boundary where a pure entity becomes meaningful in a domain. It is not just an API endpoint. It is a durable workflow that verifies identity, evidence, policy, consent and side effects before emitting a canonical event.</p>
+    </div>
+    <div class="summary-card">No direct writes to truth. Every meaningful state change crosses a portal.</div>
+  </div>
+  <div class="diagram">
+    <svg viewBox="0 0 1120 420" role="img" aria-label="person to employee portal flow">
+      <rect x="50" y="165" width="145" height="70" class="svg-blue"/><text x="122" y="195" text-anchor="middle" class="label">Person</text><text x="122" y="217" text-anchor="middle" class="sublabel">Pure Entity</text>
+      <rect x="250" y="70" width="150" height="60" class="svg-box"/><text x="325" y="105" text-anchor="middle" class="label">Identity</text>
+      <rect x="250" y="160" width="150" height="60" class="svg-box"/><text x="325" y="195" text-anchor="middle" class="label">Evidence</text>
+      <rect x="250" y="250" width="150" height="60" class="svg-box"/><text x="325" y="285" text-anchor="middle" class="label">Policy</text>
+      <rect x="470" y="130" width="210" height="140" class="svg-gold"/><text x="575" y="174" text-anchor="middle" class="label">Hiring Portal</text><text x="575" y="199" text-anchor="middle" class="sublabel">Temporal workflow</text><text x="575" y="219" text-anchor="middle" class="sublabel">deterministic gates</text>
+      <rect x="750" y="80" width="150" height="60" class="svg-green"/><text x="825" y="115" text-anchor="middle" class="label">Reality Log</text>
+      <rect x="750" y="180" width="150" height="60" class="svg-green"/><text x="825" y="215" text-anchor="middle" class="label">Contract</text>
+      <rect x="750" y="280" width="180" height="60" class="svg-pink"/><text x="840" y="315" text-anchor="middle" class="label">HR Projection</text>
+      <path class="arrow" d="M198 200 H243"/><path class="arrow" d="M405 100 C450 100 445 150 470 165"/><path class="arrow" d="M405 190 H463"/><path class="arrow" d="M405 280 C450 280 445 245 470 232"/><path class="arrow-gold" d="M685 165 C720 145 725 120 743 112"/><path class="arrow-green" d="M685 205 H743"/><path class="arrow" d="M685 240 C730 265 735 300 743 310"/>
+      <text x="560" y="370" text-anchor="middle" fill="#9db0c8" font-size="15">Person does not become employee by update statement; the employee projection is created by a verified relationship contract emitted by a portal.</text>
+    </svg>
+    <div class="caption">Figure 12.1 — Portal flow from pure person to HR employee context.</div>
+  </div>
+  <h3>Portal state machine</h3>
+<pre><button class="copy">copy</button><code>PORTAL_CANDIDATE_TO_EMPLOYEE
+
+S0 INIT
+  load portal definition, tenant, actor, request
+S1 IDENTITY_RESOLUTION
+  resolve or create universal_person
+  if ambiguous -> create steward case, wait for approval signal
+S2 EVIDENCE_GATE
+  require signed_offer, background_check, tax_form, consent_receipt
+  if missing -> create work packets, wait for evidence signals
+S3 POLICY_GATE
+  evaluate ABAC/ReBAC + purpose + tenant rules + consent
+  if denied -> terminal DENIED with reason
+S4 EXECUTION
+  write relationship_contract: EMPLOYED_BY
+  publish event: relationship.contract.verified
+  update HR projection
+S5 COMPLETED
+  emit audit receipt and command completion correlation_id
+S6 COMPENSATED
+  if side effect failed after partial execution, run explicit compensation</code></pre>
+  <details><summary>Developer rule: when to create a portal</summary><div class="detail-body"><p>Create a portal when a transition changes legal, operational, privacy or access meaning. Do not create a portal for every UI preference update unless it affects consent, notification rights, security, or cross-domain state.</p></div></details>
+</section>
+
+<section class="chapter" id="realitylog" data-part="Part 5 — Runtime" data-title="Reality Log and projections">
+  <div class="chapter-header">
+    <div>
+      <div class="kicker">Truth is history</div>
+      <h2>Reality Log: the cause behind current state</h2>
+      <p>In RealMDM, current state is not the deepest truth. Current state is a projection over events. The Reality Log preserves the causes: identity created, relationship claimed, evidence verified, consent withdrawn, key shredded, portal completed.</p>
+    </div>
+    <div class="summary-card">If you cannot replay it, audit it, and explain it, it is not truth-grade state.</div>
+  </div>
+<pre><button class="copy">copy</button><code>{
+  "event_id": "evt_01H...",
+  "event_type": "relationship.contract.verified",
+  "schema_version": 1,
+  "tenant_id": "tenant_acme_us",
+  "app_id": "hr_app",
+  "actor_subject_id": "svc_hiring_portal",
+  "subject_universal_id": "P-7F3A",
+  "object_universal_id": "ORG-ACME",
+  "contract_id": "C-EMP-8831",
+  "valid_time": "2026-06-09T09:00:00Z",
+  "transaction_time": "2026-06-09T09:00:03.217Z",
+  "policy_decision_id": "pd_1287",
+  "evidence_refs": ["doc_offer_hash", "doc_background_hash"],
+  "payload_token_ref": "tok_payload_91ab",
+  "previous_event_hash": "...",
+  "event_hash": "..."
+}</code></pre>
+  <div class="grid-2">
+    <div class="card"><h4>Projection principle</h4><p>Domain projections are caches of interpreted reality. If projection logic changes, replay the log. Do not rewrite history.</p></div>
+    <div class="card"><h4>Audit principle</h4><p>Audit is not a separate afterthought table. Audit is a first-class query over the causal history and policy decisions.</p></div>
+  </div>
+</section>
+
+<section class="chapter" id="secure" data-part="Part 6 — Security" data-title="Secure Data Plane and SAS">
+  <div class="chapter-header">
+    <div>
+      <div class="kicker">Sensitive data</div>
+      <h2>Secure Data Plane: privacy by physics, not promises</h2>
+      <p>The Reality Log wants immutability. Privacy law often requires revocation. The Secure Data Plane reconciles this by making the log immutable but the ability to render sensitive data revocable.</p>
+    </div>
+    <div class="summary-card">The log may remember that something happened. It does not need to retain readable PII forever.</div>
+  </div>
+  <div class="diagram">
+    <svg viewBox="0 0 1120 420" role="img" aria-label="secure data plane flow">
+      <rect x="60" y="70" width="160" height="70" class="svg-box"/><text x="140" y="100" text-anchor="middle" class="label">Application</text><text x="140" y="122" text-anchor="middle" class="sublabel">plain input</text>
+      <rect x="300" y="55" width="210" height="100" class="svg-green"/><text x="405" y="95" text-anchor="middle" class="label">SAS</text><text x="405" y="119" text-anchor="middle" class="sublabel">tokenize / reveal / shred</text>
+      <rect x="590" y="55" width="170" height="100" class="svg-gold"/><text x="675" y="95" text-anchor="middle" class="label">KMS / HSM</text><text x="675" y="119" text-anchor="middle" class="sublabel">KEK + DEK</text>
+      <rect x="840" y="55" width="200" height="100" class="svg-box"/><text x="940" y="95" text-anchor="middle" class="label">Token Vault</text><text x="940" y="119" text-anchor="middle" class="sublabel">token → encrypted blob</text>
+      <rect x="300" y="250" width="740" height="80" class="svg-blue"/><text x="670" y="282" text-anchor="middle" class="label">Reality Log</text><text x="670" y="306" text-anchor="middle" class="sublabel">stores tokenized/encrypted payloads, never raw sensitive values</text>
+      <path class="arrow" d="M225 105 H293"/><path class="arrow-green" d="M512 98 H583"/><path class="arrow-green" d="M763 105 H833"/><path class="arrow-gold" d="M405 158 V243"/><path class="arrow" d="M940 158 C940 210 760 230 700 248"/>
+      <text x="560" y="380" text-anchor="middle" fill="#9db0c8" font-size="15">Shredding destroys the key or vault mapping, creating Digital Ash without editing the immutable event log.</text>
+    </svg>
+    <div class="caption">Figure 14.1 — Sensitive data is intercepted and transformed before it enters the Reality Plane.</div>
+  </div>
+  <h3>SAS contract minimum</h3>
+<pre><button class="copy">copy</button><code>service SensitiveAccessService {
+  rpc Tokenize(TokenizeRequest) returns (TokenizeResponse);
+  rpc Reveal(RevealRequest) returns (RevealResponse);
+  rpc RotateKey(RotateKeyRequest) returns (RotateKeyResponse);
+  rpc Shred(ShredRequest) returns (ShredResponse);
+  rpc Audit(AuditRequest) returns (AuditResponse);
+}
+
+message RevealRequest {
+  string token = 1;
+  string requestor_service_id = 2; // SPIFFE/OIDC service identity
+  string subject_id = 3;
+  string tenant_id = 4;
+  string purpose_code = 5;         // PAYROLL, TREATMENT, SUPPORT, etc.
+  string justification_code = 6;
+  string audit_context = 7;        // trace/correlation id
+}</code></pre>
+  <h3>Tokenization modes</h3>
+  <div class="table-wrap"><table><thead><tr><th>Mode</th><th>Meaning</th><th>Use when</th><th>Tradeoff</th></tr></thead><tbody>
+    <tr><td>Mode A — Vaultless FPE</td><td>Token is ciphertext with same format</td><td>Legacy field must remain 16 digits, fixed alphabet, schema cannot change</td><td>Fast and compatible, but key rotation and small-domain risk need care</td></tr>
+    <tr><td>Mode B — Vaulted random token</td><td>Token is random reference to encrypted blob</td><td>Highest privacy, modern cloud apps, analytics, GDPR erasure</td><td>Requires high-performance vault, but best security and easy revocation</td></tr>
+  </tbody></table></div>
+  <h3>Revocation truth table</h3>
+  <div class="table-wrap"><table><thead><tr><th>KMS</th><th>Cache</th><th>Key state</th><th>Consent</th><th>Decision</th><th>Reason</th></tr></thead><tbody>
+    <tr><td>Reachable</td><td>Miss</td><td>Active</td><td>Valid</td><td>Allow</td><td>Fetch and cache DEK</td></tr>
+    <tr><td>Reachable</td><td>Hit</td><td>Active</td><td>Valid</td><td>Allow</td><td>Optimized path</td></tr>
+    <tr><td>Reachable</td><td>Hit</td><td>Revoked</td><td>Any</td><td>Deny immediately</td><td>KMS truth overrides cache TTL</td></tr>
+    <tr><td>Unreachable</td><td>Miss</td><td>Unknown</td><td>Any</td><td>Fail closed</td><td>No verified key, no reveal</td></tr>
+    <tr><td>Unreachable</td><td>Hit</td><td>Unknown</td><td>Valid</td><td>Allow until max_age</td><td>Resilience window only</td></tr>
+  </tbody></table></div>
+</section>
+
+<section class="chapter" id="policy" data-part="Part 6 — Security" data-title="Policy, consent, ABAC and ReBAC">
+  <div class="chapter-header">
+    <div>
+      <div class="kicker">Purpose as physics</div>
+      <h2>Policy and consent: access is a runtime relationship question</h2>
+      <p>Access control in RealMDM is not just “role = admin.” It combines subject attributes, resource sensitivity, relationship paths, consent, purpose, tenant, jurisdiction, device posture and time.</p>
+    </div>
+    <div class="summary-card">Who are you? What are you accessing? Why? Under which relationship? With whose consent?</div>
+  </div>
+<pre><button class="copy">copy</button><code>package realmdm.access
+
+default allow = false
+
+allow {
+  input.action == "reveal"
+  input.subject.assurance_level in {"MFA", "PHISH_RESISTANT"}
+  input.context.tenant_id == input.resource.tenant_id
+  purpose_allowed
+  consent_valid
+  relationship_allowed
+}
+
+purpose_allowed {
+  input.context.purpose in input.resource.allowed_purposes
+}
+
+consent_valid {
+  input.resource.data_category == "PAYROLL"  # lawful basis may be contract/legal obligation
+} else {
+  input.consent.status == "ACTIVE"
+  time.now_ns() < input.consent.valid_until_ns
+}
+
+relationship_allowed {
+  some rel
+  rel := input.relationships[_]
+  rel.type in {"EMPLOYED_BY", "TREATED_BY", "ASSIGNED_TO"}
+  rel.status == "VERIFIED"
+}</code></pre>
+  <div class="diagram">
+    <svg viewBox="0 0 1120 360" role="img" aria-label="policy decision diagram">
+      <rect x="60" y="80" width="165" height="70" class="svg-box"/><text x="142" y="110" text-anchor="middle" class="label">Subject</text><text x="142" y="132" text-anchor="middle" class="sublabel">user/service/device</text>
+      <rect x="60" y="215" width="165" height="70" class="svg-box"/><text x="142" y="245" text-anchor="middle" class="label">Context</text><text x="142" y="267" text-anchor="middle" class="sublabel">purpose/tenant/time</text>
+      <rect x="350" y="145" width="190" height="80" class="svg-gold"/><text x="445" y="180" text-anchor="middle" class="label">Policy Engine</text><text x="445" y="204" text-anchor="middle" class="sublabel">OPA / PDP</text>
+      <rect x="650" y="80" width="165" height="70" class="svg-green"/><text x="732" y="110" text-anchor="middle" class="label">Consent</text><text x="732" y="132" text-anchor="middle" class="sublabel">valid purpose</text>
+      <rect x="650" y="215" width="165" height="70" class="svg-green"/><text x="732" y="245" text-anchor="middle" class="label">Relationship</text><text x="732" y="267" text-anchor="middle" class="sublabel">graph path</text>
+      <rect x="900" y="145" width="160" height="80" class="svg-blue"/><text x="980" y="180" text-anchor="middle" class="label">Decision</text><text x="980" y="204" text-anchor="middle" class="sublabel">allow + obligations</text>
+      <path class="arrow" d="M230 115 C285 120 310 150 343 170"/><path class="arrow" d="M230 250 C285 245 310 220 343 202"/><path class="arrow-green" d="M545 170 C600 145 610 115 643 112"/><path class="arrow-green" d="M545 202 C600 225 610 248 643 252"/><path class="arrow" d="M817 115 C865 125 870 165 893 175"/><path class="arrow" d="M817 252 C865 242 870 205 893 195"/>
+    </svg>
+    <div class="caption">Figure 15.1 — Access is decided by policy plus consent plus graph relationship, not by a single role flag.</div>
+  </div>
+</section>
+
+<section class="chapter" id="ai" data-part="Part 7 — AI and data science" data-title="AI as observer">
+  <div class="chapter-header">
+    <div>
+      <div class="kicker">AI-native but deterministic</div>
+      <h2>AI as observer: entity resolution without stochastic truth corruption</h2>
+      <p>AI makes the multiverse practical because it can reason across graph neighborhoods, documents, language variants, addresses and ambiguous evidence. But AI must not directly author truth. It creates proposals with evidence. Portals decide whether those proposals become reality.</p>
+    </div>
+    <div class="summary-card">The goal is not “AI autopilot.” The goal is calibrated, reversible, evidence-grounded AI stewardship.</div>
+  </div>
+  <div class="diagram">
+    <svg viewBox="0 0 1120 460" role="img" aria-label="cascading cognition grid">
+      <rect x="450" y="30" width="220" height="58" class="svg-box"/><text x="560" y="65" text-anchor="middle" class="label">Incoming case</text>
+      <rect x="450" y="115" width="220" height="70" class="svg-green"/><text x="560" y="146" text-anchor="middle" class="label">Tier 1: SLM Scout</text><text x="560" y="167" text-anchor="middle" class="sublabel">fast / cheap / calibrated</text>
+      <path class="arrow-green" d="M560 90 V110"/>
+      <polygon points="560,215 650,265 560,315 470,265" fill="#4a3513" stroke="#f5c76b"/><text x="560" y="260" text-anchor="middle" class="label">ECE +</text><text x="560" y="280" text-anchor="middle" class="label">risk gate</text>
+      <path class="arrow-gold" d="M560 187 V210"/>
+      <rect x="125" y="235" width="220" height="70" class="svg-blue"/><text x="235" y="265" text-anchor="middle" class="label">Auto link</text><text x="235" y="287" text-anchor="middle" class="sublabel">only low-risk + high confidence</text>
+      <rect x="775" y="160" width="220" height="70" class="svg-box"/><text x="885" y="190" text-anchor="middle" class="label">Tier 2: LLM Judge</text><text x="885" y="212" text-anchor="middle" class="sublabel">ambiguous cases</text>
+      <rect x="775" y="300" width="220" height="70" class="svg-pink"/><text x="885" y="330" text-anchor="middle" class="label">Tier 3: Digital Jury</text><text x="885" y="352" text-anchor="middle" class="sublabel">clinical / legal / banking</text>
+      <rect x="450" y="365" width="220" height="70" class="svg-gold"/><text x="560" y="395" text-anchor="middle" class="label">Suggestion Plane</text><text x="560" y="417" text-anchor="middle" class="sublabel">proposal + evidence</text>
+      <path class="arrow-green" d="M470 265 H352"/><path class="arrow" d="M650 265 C705 250 728 205 768 195"/><path class="arrow" d="M885 232 V292"/><path class="arrow-gold" d="M775 335 C715 350 690 385 675 395"/><path class="arrow-gold" d="M345 270 C400 315 435 352 480 368"/>
+    </svg>
+    <div class="caption">Figure 16.1 — Cascading Cognition Grid: cheap models handle easy cases; ambiguous or high-risk cases escalate to stronger models or humans.</div>
+  </div>
+  <div class="grid-2">
+    <div class="card"><h4>Calibration over confidence</h4><p>Raw model confidence is not enough. The system tracks Expected Calibration Error and disables auto-merge when calibration drifts.</p></div>
+    <div class="card"><h4>Semantic entropy</h4><p>Ask the model multiple times. If meanings diverge, uncertainty is high even if any single answer sounded confident.</p></div>
+  </div>
+<pre><button class="copy">copy</button><code>def route_resolution_case(case):
+    result = slm_scout(case)
+    calibrated = calibrate(result.confidence, model="slm_scout", domain=case.domain)
+    entropy = semantic_entropy(lambda: slm_scout(case), samples=5)
+
+    if case.risk == "LOW" and calibrated > 0.98 and entropy < 0.10:
+        return create_suggestion(case, decision="AUTO_ELIGIBLE", tier="SLM")
+
+    if case.risk in {"PHI", "PCI", "LEGAL_IDENTITY"}:
+        jury = ensemble_vote(case, models=["rules", "graph_model", "frontier_llm"])
+        if jury.unanimous and jury.confidence > 0.99:
+            return create_suggestion(case, decision="JURY_ELIGIBLE", tier="JURY")
+        return create_human_steward_case(case, reason="jury dissent or low confidence")
+
+    judge = frontier_reasoner(case)
+    if judge.confidence > 0.98 and judge.evidence_count >= 2:
+        return create_suggestion(case, decision="LLM_ELIGIBLE", tier="LLM")
+
+    return create_human_steward_case(case, reason="ambiguous identity")</code></pre>
+</section>
+
+<section class="chapter" id="blueprint" data-part="Part 8 — Build blueprint" data-title="Developer build blueprint">
+  <div class="chapter-header">
+    <div>
+      <div class="kicker">Engineering masterclass</div>
+      <h2>Build blueprint: services, topics, APIs and repository structure</h2>
+      <p>This section is the implementation sidecar. A new engineer should be able to understand what to build first, what not to build, and how the pieces connect.</p>
+    </div>
+    <div class="summary-card">Build in wedges. Do not start by rebuilding the whole enterprise.</div>
+  </div>
+  <h3>Service map</h3>
+  <div class="table-wrap"><table><thead><tr><th>Service</th><th>Responsibility</th><th>Owns truth?</th><th>First endpoints/events</th></tr></thead><tbody>
+    <tr><td>identity-resolution-service</td><td>Resolve source identities to universal IDs</td><td>Claims only</td><td><code>/resolve</code>, <code>identity.resolved</code></td></tr>
+    <tr><td>relationship-service</td><td>Create/verify/revoke relationship contracts</td><td>Yes, through portals</td><td><code>/contracts</code>, <code>relationship.contract.claimed</code></td></tr>
+    <tr><td>portal-runner</td><td>Durable workflows for governed transitions</td><td>Commits canonical events</td><td><code>/portal-runs</code>, Temporal workflows</td></tr>
+    <tr><td>sas-secure-data-service</td><td>Tokenize, reveal, shred, rotate, audit</td><td>Owns sensitive rendering</td><td><code>/tokenize</code>, <code>/reveal</code>, <code>/shred</code></td></tr>
+    <tr><td>policy-service</td><td>OPA/PDP wrapper and policy versioning</td><td>Policy decisions</td><td><code>/decide</code>, <code>policy.decision.logged</code></td></tr>
+    <tr><td>projection-builder</td><td>Build read models from Reality Log</td><td>No, projections are rebuildable</td><td><code>projection.updated</code></td></tr>
+    <tr><td>steward-copilot</td><td>AI proposals and evidence summaries</td><td>No, suggestion plane only</td><td><code>steward.suggestion.created</code></td></tr>
+    <tr><td>audit-ledger-service</td><td>Tamper-evident audit and chain verification</td><td>Audit proof</td><td><code>/audit/events</code></td></tr>
+  </tbody></table></div>
+  <h3>Repository skeleton</h3>
+<pre><button class="copy">copy</button><code>realmdm/
+  apps/
+    admin-console/
+    steward-console/
+    docs-spa/
+  services/
+    identity-resolution-service/
+    relationship-service/
+    portal-runner/
+    sas-secure-data-service/
+    policy-service/
+    projection-builder/
+    steward-copilot/
+    audit-ledger-service/
+    migration-service/
+  packages/
+    contracts/          # OpenAPI, protobuf, event schemas
+    ontology/           # entity types, relationship types, taxonomy
+    policy/             # Rego policies + test cases
+    sdk-js/
+    sdk-python/
+  infra/
+    kafka/
+    temporal/
+    postgres/
+    graph/
+    vault-kms/
+    observability/
+  tests/
+    gates/
+      consistency-gate/
+      crypto-gate/
+      calibration-gate/
+      durability-gate/
+    fixtures/gold-standard-identity/
+  docs/
+    adr/
+    runbooks/
+    threat-models/</code></pre>
+  <h3>Event topics</h3>
+  <div class="grid-3">
+    <div class="card"><h4>Command topics</h4><p><code>portal.command.requested</code><br/><code>identity.resolve.requested</code><br/><code>securedata.shred.requested</code></p></div>
+    <div class="card"><h4>Reality topics</h4><p><code>universal.entity.created</code><br/><code>relationship.contract.verified</code><br/><code>consent.withdrawn</code></p></div>
+    <div class="card"><h4>Projection topics</h4><p><code>projection.hr.employee.updated</code><br/><code>projection.crm.customer.updated</code><br/><code>command.completed</code></p></div>
+  </div>
+  <h3>First build sequence</h3>
+  <ol>
+    <li>Create universal entity and identity handle tables.</li>
+    <li>Create crosswalk ingestion from one source system.</li>
+    <li>Build deterministic identity resolution and candidate-link generation.</li>
+    <li>Add Reality Log events and projection builder.</li>
+    <li>Add SAS tokenization before sensitive data hits the log.</li>
+    <li>Add one portal: Candidate → Employee or Lead → Customer.</li>
+    <li>Add policy check and audit receipt.</li>
+    <li>Add steward console for ambiguous links.</li>
+    <li>Only then add AI suggestions.</li>
+  </ol>
+</section>
+
+<section class="chapter" id="scaling" data-part="Part 8 — Build blueprint" data-title="Scale, sharding and NFRs">
+  <div class="chapter-header">
+    <div>
+      <div class="kicker">Production engineering</div>
+      <h2>Scale, sharding and non-functional requirements</h2>
+      <p>The reference architecture must be able to operate in multi-app, multi-tenant, multi-business-unit and multi-org deployments. Partition by legal and operational boundary first, then by entity hash.</p>
+    </div>
+    <div class="summary-card">The shard boundary is not just technical. It is a privacy, jurisdiction and blast-radius boundary.</div>
+  </div>
+  <div class="diagram">
+    <svg viewBox="0 0 1120 360" role="img" aria-label="sharding hierarchy">
+      <rect x="80" y="40" width="960" height="52" class="svg-blue"/><text x="560" y="73" text-anchor="middle" class="label">Region / Jurisdiction</text>
+      <rect x="150" y="118" width="820" height="52" class="svg-box"/><text x="560" y="151" text-anchor="middle" class="label">app_id</text>
+      <rect x="220" y="196" width="680" height="52" class="svg-green"/><text x="560" y="229" text-anchor="middle" class="label">tenant_id</text>
+      <rect x="290" y="274" width="540" height="52" class="svg-gold"/><text x="560" y="307" text-anchor="middle" class="label">org_id / bu_id / hash(universal_id)</text>
+      <path class="arrow" d="M560 94 V115"/><path class="arrow" d="M560 172 V193"/><path class="arrow" d="M560 250 V271"/>
+    </svg>
+    <div class="caption">Figure 19.1 — Sharding begins with jurisdiction and tenant boundaries, not just random hashing.</div>
+  </div>
+  <div class="table-wrap"><table><thead><tr><th>NFR</th><th>Target</th><th>Validation</th></tr></thead><tbody>
+    <tr><td>Ingestion throughput</td><td>50,000 events/sec synthetic baseline</td><td>Gate 1A load test with projection lag bound</td></tr>
+    <tr><td>Interactive RYOW</td><td>P99 &lt; 200ms for critical flows</td><td>Gate 1B read-write-read test</td></tr>
+    <tr><td>KMS request rate</td><td>&lt; 1% of naive, e.g. &lt; 500 RPS at 50k EPS</td><td>Crypto Gate traffic logs</td></tr>
+    <tr><td>Revocation</td><td>Fleet-wide effective within 60s SLO</td><td>Key revocation drill</td></tr>
+    <tr><td>Availability</td><td>99.99% for control plane</td><td>Multi-AZ + chaos testing</td></tr>
+    <tr><td>Replay repair</td><td>Projection rebuild under defined RTO</td><td>Replay/repair playbook</td></tr>
+  </tbody></table></div>
+</section>
+
+<section class="chapter" id="gates" data-part="Part 9 — Validation" data-title="Engineering gates">
+  <div class="chapter-header">
+    <div>
+      <div class="kicker">No hand-waving</div>
+      <h2>Engineering gates: how the doctrine proves itself</h2>
+      <p>The doctrine becomes credible only when it is falsifiable. These gates define whether the system is ready for production. No feature proceeds merely because code compiles.</p>
+    </div>
+    <div class="summary-card">A gate is a production barrier, not a slide.</div>
+  </div>
+  <div class="grid-2">
+    <div class="card"><h4>Gate 1 — Consistency</h4><p>Split into ingestion and interactive gates. Ingestion proves 50k EPS with backpressure. Interactive proves RYOW with 10k waiting connections on non-blocking gateway.</p></div>
+    <div class="card"><h4>Gate 2 — Crypto</h4><p>Proves KMS load reduction, revocation, Digital Ash and fail-closed behavior. Cache never overrides reachable KMS revocation truth.</p></div>
+    <div class="card"><h4>Gate 3 — Calibration</h4><p>Proves ECE &lt; 0.05 on domain identity tasks. Ambiguous cases must escalate; digital jury required for high-stakes merges.</p></div>
+    <div class="card"><h4>Gate 4 — Durability</h4><p>Proves Continue-As-New with atomic signal draining. No dropped address update, consent withdrawal, key revocation or state transition during reincarnation.</p></div>
+  </div>
+  <div class="diagram">
+    <svg viewBox="0 0 1120 420" role="img" aria-label="engineering gates">
+      <g>
+        <rect x="70" y="60" width="190" height="70" class="svg-blue"/><text x="165" y="92" text-anchor="middle" class="label">Coherence</text><text x="165" y="113" text-anchor="middle" class="sublabel">no split-brain</text>
+        <rect x="330" y="60" width="190" height="70" class="svg-gold"/><text x="425" y="92" text-anchor="middle" class="label">Compliance</text><text x="425" y="113" text-anchor="middle" class="sublabel">digital ash</text>
+        <rect x="590" y="60" width="190" height="70" class="svg-pink"/><text x="685" y="92" text-anchor="middle" class="label">Safety</text><text x="685" y="113" text-anchor="middle" class="sublabel">no false merge</text>
+        <rect x="850" y="60" width="190" height="70" class="svg-green"/><text x="945" y="92" text-anchor="middle" class="label">Durability</text><text x="945" y="113" text-anchor="middle" class="sublabel">no signal loss</text>
+      </g>
+      <g>
+        <rect x="70" y="235" width="190" height="80" class="svg-box"/><text x="165" y="268" text-anchor="middle" class="label">Gate 1</text><text x="165" y="291" text-anchor="middle" class="sublabel">load + RYOW</text>
+        <rect x="330" y="235" width="190" height="80" class="svg-box"/><text x="425" y="268" text-anchor="middle" class="label">Gate 2</text><text x="425" y="291" text-anchor="middle" class="sublabel">revocation</text>
+        <rect x="590" y="235" width="190" height="80" class="svg-box"/><text x="685" y="268" text-anchor="middle" class="label">Gate 3</text><text x="685" y="291" text-anchor="middle" class="sublabel">ECE + jury</text>
+        <rect x="850" y="235" width="190" height="80" class="svg-box"/><text x="945" y="268" text-anchor="middle" class="label">Gate 4</text><text x="945" y="291" text-anchor="middle" class="sublabel">reincarnation</text>
+      </g>
+      <path class="arrow" d="M165 133 V228"/><path class="arrow-gold" d="M425 133 V228"/><path class="arrow" d="M685 133 V228"/><path class="arrow-green" d="M945 133 V228"/>
+      <text x="560" y="375" text-anchor="middle" fill="#9db0c8" font-size="15">Each guarantee becomes a testable engineering gate.</text>
+    </svg>
+  </div>
+</section>
+
+<section class="chapter" id="migration" data-part="Part 10 — Migration" data-title="Migrating from a person/employee table or Supabase">
+  <div class="chapter-header">
+    <div>
+      <div class="kicker">Migration path</div>
+      <h2>How to migrate from a simple Supabase/person table to RealMDM</h2>
+      <p>You do not start by deleting your current tables. You wrap them, link them, and progressively move identity truth into RealMDM. The application can keep working while canonical identity improves underneath.</p>
+    </div>
+    <div class="summary-card">Start with a shadow registry, then add portals, then progressively retire direct writes.</div>
+  </div>
+  <h3>Typical starting point</h3>
+<pre><button class="copy">copy</button><code>-- Existing app schema
+create table person (
+  id uuid primary key,
+  name text,
+  email text unique,
+  phone text
+);
+
+create table employee (
+  id uuid primary key,
+  person_id uuid references person(id),
+  employee_id text unique,
+  department text,
+  title text,
+  status text
+);</code></pre>
+  <h3>Migration ladder</h3>
+  <div class="timeline">
+    <div class="item"><b>Step 0 — Freeze assumptions.</b><p>Write down which fields your app treats as identity. Mark them as pure, handle, role attribute, relationship attribute or evidence.</p></div>
+    <div class="item"><b>Step 1 — Add canonical ID sidecar.</b><p>Add <code>universal_person_id</code> nullable column to existing tables or maintain a crosswalk table.</p></div>
+    <div class="item"><b>Step 2 — Create shadow registry.</b><p>Ingest existing people and employees. Resolve deterministic matches by email/phone/source ID. Do not change app behavior yet.</p></div>
+    <div class="item"><b>Step 3 — Move sensitive data behind SAS.</b><p>Tokenize SSN, phone, email, DOB or secure attributes. Apps display via reveal with purpose-bound authorization.</p></div>
+    <div class="item"><b>Step 4 — Convert employee row into relationship.</b><p>Represent employment as <code>EMPLOYED_BY</code> contract with employee_id as domain handle/attribute.</p></div>
+    <div class="item"><b>Step 5 — Add portal for new hires.</b><p>Stop direct inserts into employee for new records. New employees must cross the hiring portal.</p></div>
+    <div class="item"><b>Step 6 — Build projection view.</b><p>Expose <code>hr_employee_view</code> so the app can read familiar shape while truth lives in contracts and events.</p></div>
+    <div class="item"><b>Step 7 — Retire legacy writes.</b><p>Once confidence is proven, make legacy table read-only or projection-only.</p></div>
+  </div>
+  <h3>Practical SQL sidecar</h3>
+<pre><button class="copy">copy</button><code>-- Add sidecar mapping without breaking existing app.
+create table mdm_person_crosswalk (
+  app_person_id uuid not null references person(id),
+  universal_person_id uuid not null,
+  link_status text not null default 'CANDIDATE',
+  match_method text,
+  confidence numeric(5,4),
+  evidence jsonb default '{}',
+  created_at timestamptz default now(),
+  primary key(app_person_id)
+);
+
+-- Add canonical ID column for gradual adoption.
+alter table person add column universal_person_id uuid;
+
+-- New app code reads canonical ID when available; old code still works.
+create view app_person_with_mdm as
+select p.*, coalesce(p.universal_person_id, x.universal_person_id) as canonical_person_id
+from person p
+left join mdm_person_crosswalk x on x.app_person_id = p.id
+where x.link_status is null or x.link_status in ('CANDIDATE','LINKED');</code></pre>
+  <div class="diagram">
+    <svg viewBox="0 0 1120 360" role="img" aria-label="migration ladder diagram">
+      <rect x="60" y="120" width="160" height="70" class="svg-red"/><text x="140" y="150" text-anchor="middle" class="label">Supabase</text><text x="140" y="172" text-anchor="middle" class="sublabel">person/employee</text>
+      <rect x="285" y="120" width="180" height="70" class="svg-box"/><text x="375" y="150" text-anchor="middle" class="label">Crosswalk</text><text x="375" y="172" text-anchor="middle" class="sublabel">source → universal</text>
+      <rect x="530" y="120" width="180" height="70" class="svg-blue"/><text x="620" y="150" text-anchor="middle" class="label">Shadow MDM</text><text x="620" y="172" text-anchor="middle" class="sublabel">read-only registry</text>
+      <rect x="775" y="120" width="180" height="70" class="svg-gold"/><text x="865" y="150" text-anchor="middle" class="label">Portals</text><text x="865" y="172" text-anchor="middle" class="sublabel">new writes</text>
+      <rect x="455" y="255" width="235" height="70" class="svg-green"/><text x="572" y="285" text-anchor="middle" class="label">Projection View</text><text x="572" y="307" text-anchor="middle" class="sublabel">same app shape, better truth</text>
+      <path class="arrow" d="M225 155 H278"/><path class="arrow" d="M470 155 H523"/><path class="arrow-gold" d="M715 155 H768"/><path class="arrow-green" d="M865 193 C810 250 710 285 695 290"/><path class="arrow-green" d="M620 193 V248"/><path class="arrow" d="M455 290 C310 285 210 230 150 194"/>
+    </svg>
+    <div class="caption">Figure 23.1 — Migration is a strangler pattern: link first, govern new writes, then replace legacy direct mutation.</div>
+  </div>
+</section>
+
+<section class="chapter" id="domainpacks" data-part="Part 10 — Migration" data-title="Domain packs and productization">
+  <div class="chapter-header">
+    <div>
+      <div class="kicker">Product model</div>
+      <h2>Domain packs: making the OS usable across construction, healthcare, education, HR and recruitment</h2>
+      <p>The core OS should be domain-agnostic. Domain packs provide schemas, relationship types, portals, policies and connectors for specific industries without changing the kernel.</p>
+    </div>
+    <div class="summary-card">The kernel is stable. Domain meaning is pluggable.</div>
+  </div>
+  <div class="grid-3">
+    <div class="card"><h4>HR pack</h4><p>Person → Candidate → Employee → Alumni. Evidence: offer letter, tax forms, background check. Policies: payroll, manager access, termination.</p></div>
+    <div class="card"><h4>Healthcare pack</h4><p>Person → Patient, Provider, Guardian. Evidence: consent, referral, clinical documents. Policies: treatment, payment, operations, break-glass.</p></div>
+    <div class="card"><h4>Education pack</h4><p>Person → Applicant, Student, Alumni, Guardian. Evidence: enrollment, transcript, consent. Policies: instructor/student relationship and FERPA-like boundaries.</p></div>
+    <div class="card"><h4>Construction pack</h4><p>Organization, worker, jobsite, device, asset, permit, location. Relationships: assigned_to_site, owns_asset, certified_for_task.</p></div>
+    <div class="card"><h4>Recruitment pack</h4><p>Candidate, recruiter, employer, job requisition, agency. Policies: purpose-bound screening and candidate consent.</p></div>
+    <div class="card"><h4>Finance / PCI pack</h4><p>Vaulted tokens, account roles, KYC evidence, strict revocation, audit-grade access, no plaintext export.</p></div>
+  </div>
+</section>
+
+<section class="chapter" id="ops" data-part="Part 11 — Operations" data-title="Operations doctrine">
+  <div class="chapter-header">
+    <div>
+      <div class="kicker">Run it safely</div>
+      <h2>Operations doctrine: runbooks, drills and observability</h2>
+      <p>The Reality Engine must be operable by an SRE team, not only by its inventors. If the team cannot replay, repair, revoke, observe and explain the system under stress, it is not production-ready.</p>
+    </div>
+    <div class="summary-card">No system is enterprise-grade until it has failure rituals.</div>
+  </div>
+  <div class="grid-3">
+    <div class="card"><h4>Replay/Repair Playbook</h4><p>Delete or quarantine a corrupted projection, select replay window, replay from Reality Log, compare checksums, publish recovery receipt.</p></div>
+    <div class="card"><h4>Key Revocation Drill</h4><p>Quarterly: revoke a production-like key, verify Digital Ash within 60 seconds, produce proof-of-destruction artifact.</p></div>
+    <div class="card"><h4>Chaos Regimen</h4><p>Kill Kafka broker, KMS endpoint, Temporal worker, graph node and SAS pod. Verify fail-closed, backpressure and workflow recovery.</p></div>
+  </div>
+  <h3>Observability events</h3>
+<pre><button class="copy">copy</button><code>metrics:
+  mdm_identity_resolution_latency_ms{method,tenant}
+  mdm_candidate_links_created_total{risk_level}
+  mdm_portal_run_duration_ms{portal,state}
+  mdm_projection_lag_ms{projection}
+  sas_reveal_denied_total{reason}
+  sas_kms_cache_hit_ratio{tenant}
+  sas_key_revocation_latency_ms{fleet}
+  ai_resolution_ece{model,domain}
+  temporal_continue_as_new_total{workflow}
+  temporal_signal_drain_duration_ms{workflow}
+
+logs:
+  policy.decision
+  securedata.reveal
+  securedata.shred
+  steward.suggestion
+  portal.transition
+  replay.repair.receipt</code></pre>
+</section>
+
+<section class="chapter" id="criticism" data-part="Part 12 — Criticism" data-title="Counterarguments and resolutions">
+  <div class="chapter-header">
+    <div>
+      <div class="kicker">Self-criticism</div>
+      <h2>Counterarguments: where critics are right, and how the design responds</h2>
+      <p>A doctrine should invite critique. The following objections are not weak objections; many are correct if the system is implemented naively. The architecture survives only because it turns each criticism into an explicit design gate.</p>
+    </div>
+    <div class="summary-card">Criticism is not opposition. It is how conceptual engineering becomes production engineering.</div>
+  </div>
+  <div class="table-wrap"><table><thead><tr><th>Criticism</th><th>Why it is partly right</th><th>Resolution</th></tr></thead><tbody>
+    <tr><td>“This is over-engineered.”</td><td>It is more complex than a CRUD app.</td><td>The complexity already exists in identity politics, manual stewardship, privacy exceptions and duplicated systems. RealMDM moves it into explicit, testable machinery.</td></tr>
+    <tr><td>“Quantum/spiritual language will alienate engineers.”</td><td>It will if used as mysticism or literal physics.</td><td>Use it as metaphor-bound ontology: pure vs derived, identity vs role, context vs substratum. Keep engineering gates concrete.</td></tr>
+    <tr><td>“Golden Record worked for decades.”</td><td>Yes, under batch, silo and cost constraints.</td><td>It was a rational compromise. AI-era context explosion makes the compromise more dangerous and less necessary.</td></tr>
+    <tr><td>“Event logs conflict with erasure.”</td><td>Naive immutable logs are privacy liabilities.</td><td>Secure Data Plane stores tokens/encrypted payloads; cryptographic erasure creates Digital Ash without rewriting history.</td></tr>
+    <tr><td>“AI will hallucinate identity.”</td><td>Uncontrolled AI will.</td><td>AI cannot write truth. Calibration gate, semantic entropy, digital jury and human review prevent stochastic corruption.</td></tr>
+    <tr><td>“Synchronous gateway will melt.”</td><td>Thread-blocking long polling will.</td><td>Reactive non-blocking gateway, backpressure, HTTP/2 multiplexing and separate ingestion vs interactive gates.</td></tr>
+    <tr><td>“Temporal histories overflow.”</td><td>Long-lived workflows can hit limits.</td><td>Durable Entity Pattern: generations, snapshots, Continue-As-New and atomic signal draining.</td></tr>
+    <tr><td>“Developers won’t adopt it.”</td><td>They will reject a big-bang rewrite.</td><td>Provide SDKs, projections that look like existing tables, and migration sidecars from current schemas.</td></tr>
+  </tbody></table></div>
+</section>
+
+<section class="chapter" id="patent" data-part="Part 13 — Research" data-title="Patentable and thought-leadership vectors">
+  <div class="chapter-header">
+    <div>
+      <div class="kicker">Research and novelty</div>
+      <h2>Potentially novel vectors worth formalizing</h2>
+      <p>The value is not merely in saying “use graph + event sourcing + AI.” The novelty lies in the integrated doctrine-to-runtime system: ontological separation, portalized becoming, cryptographic revocability, calibrated AI stewardship and gate-driven industrialization.</p>
+    </div>
+    <div class="summary-card">This section is not legal advice; it is a research and invention map.</div>
+  </div>
+  <div class="grid-2">
+    <div class="card"><h4>1. Satya/Maya identity kernel</h4><p>A generalized model for separating pure entity anchors from derived domain projections using Neti Neti classification and contract-grade relationships.</p></div>
+    <div class="card"><h4>2. Portalized state transition protocol</h4><p>A generalized mechanism where domain role creation requires evidence, consent, policy and durable execution before projection.</p></div>
+    <div class="card"><h4>3. Digital Ash for event-sourced MDM</h4><p>A secure data plane that reconciles immutable logs with erasure through tokenization, key hierarchy, revocation truth tables and proof-of-destruction receipts.</p></div>
+    <div class="card"><h4>4. Cascading Cognition Grid</h4><p>Identity resolution using calibrated confidence, semantic entropy, ensemble voting and risk-tiered AI routing, with AI confined to a suggestion plane.</p></div>
+    <div class="card"><h4>5. Durable Entity Pattern for master identity</h4><p>Long-lived master entities implemented as workflow generations with atomic signal draining and replayable event history.</p></div>
+    <div class="card"><h4>6. Migration sidecar pattern</h4><p>A progressive pathway from conventional application tables to universal identity without forcing immediate schema or domain rewrite.</p></div>
+  </div>
+</section>
+
+<section class="chapter" id="glossary" data-part="Appendix" data-title="Glossary and first 30 days">
+  <div class="chapter-header">
+    <div>
+      <div class="kicker">Appendix</div>
+      <h2>Glossary and first 30-day implementation plan</h2>
+      <p>Use this as the onboarding page for a new engineer joining the project.</p>
+    </div>
+    <div class="summary-card">The first month should produce a working shadow registry, not a complete platform.</div>
+  </div>
+  <div class="grid-2">
+    <div class="card"><h3>Glossary</h3>
+      <p><b>Pure Entity:</b> The stable anchor that persists through roles.</p>
+      <p><b>Domain Projection:</b> A context-specific view of a pure entity.</p>
+      <p><b>Relationship Contract:</b> A first-class relation with time, provenance and evidence.</p>
+      <p><b>Portal:</b> Durable workflow for governed becoming.</p>
+      <p><b>Reality Log:</b> Append-only event history from which state is projected.</p>
+      <p><b>Digital Ash:</b> Encrypted data rendered unrecoverable by key destruction.</p>
+      <p><b>Suggestion Plane:</b> AI output area that cannot directly mutate truth.</p>
+    </div>
+    <div class="card"><h3>First 30 days</h3>
+      <ol>
+        <li>Choose one source system and one entity type: person.</li>
+        <li>Create universal entity, identity handle and crosswalk tables.</li>
+        <li>Ingest a snapshot and produce candidate links.</li>
+        <li>Tokenize email/phone via SAS stub.</li>
+        <li>Publish identity events to a local log.</li>
+        <li>Build one projection: <code>resolved_person_view</code>.</li>
+        <li>Build a steward UI for ambiguous matches.</li>
+        <li>Write the first portal spec, but do not route production writes yet.</li>
+        <li>Run a mini Crypto Gate and Consistency Gate in dev.</li>
+      </ol>
+    </div>
+  </div>
+  <div class="callout success"><b>Final doctrine:</b> The future enterprise does not need a bigger Golden Record. It needs a Reality Engine that understands identity, meaning, evidence, consent, time and context as distinct but connected dimensions.</div>
+</section>
+
+<section class="chapter" id="sources" data-part="Appendix" data-title="Source lineage">
+  <div class="chapter-header">
+    <div>
+      <div class="kicker">Lineage</div>
+      <h2>Source lineage of the doctrine and engineering evolution</h2>
+      <p>This SPA consolidates the repeated doctrine, visual journey, architecture, executive overview, ARB critique and Section 2 industrialization refinements into one coherent courseware document.</p>
+    </div>
+    <div class="summary-card">The documents evolved from philosophy → architecture → review → industrialization gates.</div>
+  </div>
+  <div class="table-wrap"><table><thead><tr><th>Generation</th><th>Representative documents</th><th>What became canonical</th></tr></thead><tbody>
+    <tr><td>Concept seed</td><td>Research Restart: MDM Doctrine Prolog; Architecting Reality</td><td>Satya/Maya, Rope/Snake, social superposition, Reality First/Domains Second</td></tr>
+    <tr><td>Doctrine redraft</td><td>Redrafting MDM Doctrine From Scratch; Visual Journey</td><td>7 axioms, three planes, metaphor boundaries, why-now vector</td></tr>
+    <tr><td>Architecture</td><td>MDM Executive Overview; Comprehensive Implementation Architecture</td><td>Five primitives, relationship contracts, portals, Reality Log, domain packs</td></tr>
+    <tr><td>ARB critique</td><td>Critical Review; ARB Action Plan</td><td>Crash zones: KMS throttling, split-brain, AI calibration, workflow overflow</td></tr>
+    <tr><td>Industrialization</td><td>Section 2 Review and Improvement; Roadmap Drafting</td><td>Engineering gates, SAS, token modes, revocation truth table, NFRs</td></tr>
+  </tbody></table></div>
+</section>
+
+<footer class="footer">
+  <p><b>RealMDM Reality Engine OS</b> — self-contained SPA courseware, reference architecture and engineering sidecar.</p>
+  <p class="small">Design note: the interface uses a dark engineering dossier style with high-contrast blue, cyan, green and gold accents to keep the paper readable as both philosophical doctrine and production architecture.</p>
+</footer>
+
+</main>
+</div>
+<script>
+  const chapters = [...document.querySelectorAll('[data-title]')];
+  const toc = document.getElementById('toc');
+  let currentPart = '';
+  chapters.forEach(sec => {
+    const part = sec.getAttribute('data-part') || '';
+    if(part && part !== currentPart){
+      currentPart = part;
+      const div = document.createElement('div'); div.className='part'; div.textContent=part; toc.appendChild(div);
+    }
+    const a = document.createElement('a');
+    a.href = '#' + sec.id;
+    a.textContent = sec.getAttribute('data-title');
+    a.dataset.target = sec.id;
+    toc.appendChild(a);
+  });
+  const links = [...toc.querySelectorAll('a')];
+  const obs = new IntersectionObserver(entries => {
+    entries.forEach(entry => {
+      if(entry.isIntersecting){
+        links.forEach(l => l.classList.toggle('active', l.dataset.target === entry.target.id));
+      }
+    })
+  }, {rootMargin:'-35% 0px -60% 0px', threshold:0});
+  chapters.forEach(c => obs.observe(c));
+  window.addEventListener('scroll', () => {
+    const h = document.documentElement;
+    const pct = (h.scrollTop)/(h.scrollHeight-h.clientHeight)*100;
+    document.getElementById('progressbar').style.width = pct + '%';
+  });
+  document.getElementById('search').addEventListener('input', e => {
+    const q = e.target.value.toLowerCase().trim();
+    links.forEach(a => {
+      const sec = document.getElementById(a.dataset.target);
+      const text = (a.textContent + ' ' + sec.innerText).toLowerCase();
+      a.classList.toggle('hidden', q && !text.includes(q));
+    });
+  });
+  document.getElementById('openNav')?.addEventListener('click', () => document.getElementById('nav').classList.toggle('open'));
+  document.getElementById('expandAll')?.addEventListener('click', () => {
+    const ds = [...document.querySelectorAll('details')];
+    const allOpen = ds.every(d => d.open);
+    ds.forEach(d => d.open = !allOpen);
+  });
+  document.querySelectorAll('pre').forEach(pre => {
+    const btn = pre.querySelector('.copy');
+    if(btn){ btn.addEventListener('click', async () => {
+      const code = pre.innerText.replace(/^copy\n?/, '');
+      await navigator.clipboard.writeText(code);
+      btn.textContent = 'copied'; setTimeout(()=>btn.textContent='copy', 1200);
+    });}
+  });
+  document.addEventListener('click', e => {
+    if(e.target.closest('aside a') && window.innerWidth < 1100){ document.getElementById('nav').classList.remove('open'); }
+  });
+</script>
+</body>
+</html>

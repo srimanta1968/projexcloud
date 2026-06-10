@@ -15,6 +15,7 @@
 
 import { useRouter } from 'next/navigation';
 import { FormEvent, useState } from 'react';
+import { Alert, Button, Field, Input, Select } from '@projexlight/design-system';
 
 type Transport = 'http' | 'sse' | 'stdio';
 
@@ -71,114 +72,57 @@ export default function RegisterMcpServerPage(): JSX.Element {
   }
 
   return (
-    <main className="mx-auto max-w-2xl px-6 py-8">
-      <h1 className="text-2xl font-semibold text-zinc-900">Register MCP server</h1>
-      <p className="mt-1 text-sm text-zinc-500">
+    <main className="mx-auto max-w-2xl">
+      <h1 className="text-2xl font-bold tracking-tight">Register MCP server</h1>
+      <p className="mt-1 text-sm text-muted-foreground">
         On register, the runtime opens the transport and auto-discovers the
-        server's tools. Probe failures roll the registration back to
+        server&apos;s tools. Probe failures roll the registration back to
         <span className="font-mono"> disabled</span>.
       </p>
 
-      {error && (
-        <p className="mt-4 rounded-md bg-red-50 px-4 py-2 text-sm text-red-700">
-          {error}
-        </p>
-      )}
+      {error && <Alert variant="destructive" className="mt-4">{error}</Alert>}
 
-      <form onSubmit={handleSubmit} className="mt-6 space-y-5">
-        <div>
-          <label htmlFor="display_name" className="block text-sm font-medium text-zinc-900">
-            Display name
-          </label>
-          <input
-            id="display_name"
-            type="text"
-            required
-            value={displayName}
-            onChange={(e) => setDisplayName(e.target.value)}
-            className="mt-1 block w-full rounded-md border-zinc-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
-            placeholder="acme-slack"
-          />
-        </div>
+      <form onSubmit={handleSubmit} className="mt-6 flex flex-col gap-4">
+        <Field label="Display name" htmlFor="display_name">
+          <Input id="display_name" type="text" required value={displayName}
+            onChange={(e) => setDisplayName(e.target.value)} placeholder="acme-slack" />
+        </Field>
 
-        <div>
-          <label htmlFor="transport" className="block text-sm font-medium text-zinc-900">
-            Transport
-          </label>
-          <select
-            id="transport"
-            value={transport}
-            onChange={(e) => setTransport(e.target.value as Transport)}
-            className="mt-1 block w-full rounded-md border-zinc-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
-          >
+        <Field label="Transport" htmlFor="transport">
+          <Select id="transport" value={transport} onChange={(e) => setTransport(e.target.value as Transport)}>
             <option value="http">HTTP</option>
             <option value="sse" disabled>SSE (v1.1)</option>
             <option value="stdio" disabled>stdio (v1.1)</option>
-          </select>
-        </div>
+          </Select>
+        </Field>
 
-        <div>
-          <label htmlFor="endpoint_url" className="block text-sm font-medium text-zinc-900">
-            Endpoint URL
-          </label>
-          <input
-            id="endpoint_url"
-            type="url"
-            required
-            value={endpointUrl}
-            onChange={(e) => setEndpointUrl(e.target.value)}
-            className="mt-1 block w-full rounded-md border-zinc-300 px-3 py-2 font-mono text-xs shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
-            placeholder="https://slack-mcp.example.com"
-          />
-        </div>
+        <Field label="Endpoint URL" htmlFor="endpoint_url">
+          <Input id="endpoint_url" type="url" required value={endpointUrl}
+            onChange={(e) => setEndpointUrl(e.target.value)} className="font-mono text-xs"
+            placeholder="https://slack-mcp.example.com" />
+        </Field>
 
-        <div>
-          <label htmlFor="credential" className="block text-sm font-medium text-zinc-900">
-            Bearer credential
-          </label>
-          <input
-            id="credential"
-            type="password"
-            required
-            value={credential}
-            onChange={(e) => setCredential(e.target.value)}
-            className="mt-1 block w-full rounded-md border-zinc-300 px-3 py-2 font-mono text-xs shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
-            autoComplete="new-password"
-          />
-          <p className="mt-1 text-xs text-zinc-500">
-            Base64-encoded client-side, vault-wrapped server-side. Never logged.
-          </p>
-        </div>
+        <Field
+          label="Bearer credential"
+          htmlFor="credential"
+          hint="Base64-encoded client-side, vault-wrapped server-side. Never logged."
+        >
+          <Input id="credential" type="password" required value={credential}
+            onChange={(e) => setCredential(e.target.value)} className="font-mono text-xs"
+            autoComplete="new-password" />
+        </Field>
 
-        <div>
-          <label htmlFor="allowed_agents" className="block text-sm font-medium text-zinc-900">
-            Allowed agent IDs (comma-separated, optional)
-          </label>
-          <input
-            id="allowed_agents"
-            type="text"
-            value={allowedAgents}
-            onChange={(e) => setAllowedAgents(e.target.value)}
-            className="mt-1 block w-full rounded-md border-zinc-300 px-3 py-2 font-mono text-xs shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
-            placeholder="agent-uuid-1, agent-uuid-2"
-          />
-        </div>
+        <Field label="Allowed agent IDs (comma-separated, optional)" htmlFor="allowed_agents">
+          <Input id="allowed_agents" type="text" value={allowedAgents}
+            onChange={(e) => setAllowedAgents(e.target.value)} className="font-mono text-xs"
+            placeholder="agent-uuid-1, agent-uuid-2" />
+        </Field>
 
         <div className="flex justify-end gap-3">
-          <button
-            type="button"
-            onClick={() => router.back()}
-            className="rounded-md border border-zinc-300 bg-white px-4 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50"
-          >
-            Cancel
-          </button>
-          <button
-            type="submit"
-            disabled={submitting}
-            className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-500 disabled:opacity-50"
-          >
+          <Button type="button" variant="secondary" onClick={() => router.back()}>Cancel</Button>
+          <Button type="submit" disabled={submitting}>
             {submitting ? 'Registering…' : 'Register server'}
-          </button>
+          </Button>
         </div>
       </form>
     </main>

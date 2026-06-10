@@ -1,4 +1,17 @@
 import { revalidatePath } from 'next/cache';
+import {
+  Alert,
+  Button,
+  Input,
+  PageHeader,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@projexlight/design-system';
+import { StatusBadge } from '../../components/StatusBadge';
 
 interface MemberRow {
   persona_id: string;
@@ -50,53 +63,59 @@ export default async function MembersPage(): Promise<JSX.Element> {
   const members = await fetchMembers();
   return (
     <div>
-      <h1>Members</h1>
-      <p style={{ color: '#5a6573' }}>Personas in this tenant. Assign roles + BUs; deactivate to revoke access.</p>
+      <PageHeader
+        title="Members"
+        description="Personas in this tenant. Assign roles + BUs; deactivate to revoke access."
+      />
 
       {!TENANT_ID && (
-        <div style={{ background: '#fff4d6', border: '1px solid #e3c47b', padding: 12 }}>
+        <Alert variant="warning" className="mb-4">
           Set <code>TENANT_ADMIN_TENANT_ID</code> to view members.
-        </div>
+        </Alert>
       )}
 
-      <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: 16, fontSize: 14 }}>
-        <thead style={{ textAlign: 'left', borderBottom: '1px solid #d7dce4' }}>
-          <tr>
-            <th style={{ padding: 8 }}>Persona</th>
-            <th style={{ padding: 8 }}>Name</th>
-            <th style={{ padding: 8 }}>Role</th>
-            <th style={{ padding: 8 }}>BU</th>
-            <th style={{ padding: 8 }}>Status</th>
-            <th style={{ padding: 8 }}></th>
-          </tr>
-        </thead>
-        <tbody>
-          {members.length === 0 && <tr><td colSpan={6} style={{ padding: 12, color: '#9aa3b2' }}>No members.</td></tr>}
-          {members.map((m) => (
-            <tr key={m.persona_id} style={{ borderBottom: '1px solid #eef0f4' }}>
-              <td style={{ padding: 8, fontFamily: 'monospace', fontSize: 11 }}>{m.persona_id}</td>
-              <td style={{ padding: 8 }}>{m.display_name}</td>
-              <td style={{ padding: 8 }}>
-                <form action={updateRole}>
-                  <input type="hidden" name="persona_id" value={m.persona_id} />
-                  <input name="role" defaultValue={m.role ?? ''} placeholder="role" style={{ padding: 2, width: 140 }} />
-                  <button type="submit" style={{ marginLeft: 4, padding: '2px 8px' }}>Save</button>
-                </form>
-              </td>
-              <td style={{ padding: 8, color: '#5a6573' }}>{m.bu_id ?? '—'}</td>
-              <td style={{ padding: 8 }}>{m.status}</td>
-              <td style={{ padding: 8 }}>
-                {m.status === 'active' && (
-                  <form action={deactivateAction}>
+      <div className="rounded-lg border">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Persona</TableHead>
+              <TableHead>Name</TableHead>
+              <TableHead>Role</TableHead>
+              <TableHead>BU</TableHead>
+              <TableHead>Status</TableHead>
+              <TableHead></TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {members.length === 0 && (
+              <TableRow><TableCell colSpan={6} className="text-muted-foreground">No members.</TableCell></TableRow>
+            )}
+            {members.map((m) => (
+              <TableRow key={m.persona_id}>
+                <TableCell className="font-mono text-[11px]">{m.persona_id}</TableCell>
+                <TableCell>{m.display_name}</TableCell>
+                <TableCell>
+                  <form action={updateRole} className="flex items-center gap-2">
                     <input type="hidden" name="persona_id" value={m.persona_id} />
-                    <button type="submit" style={{ padding: '2px 8px', color: '#a31818' }}>Deactivate</button>
+                    <Input name="role" defaultValue={m.role ?? ''} placeholder="role" className="h-8 w-36" />
+                    <Button type="submit" size="sm" variant="secondary">Save</Button>
                   </form>
-                )}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+                </TableCell>
+                <TableCell className="text-muted-foreground">{m.bu_id ?? '—'}</TableCell>
+                <TableCell><StatusBadge status={m.status} /></TableCell>
+                <TableCell>
+                  {m.status === 'active' && (
+                    <form action={deactivateAction}>
+                      <input type="hidden" name="persona_id" value={m.persona_id} />
+                      <Button type="submit" size="sm" variant="ghost" className="text-destructive hover:text-destructive">Deactivate</Button>
+                    </form>
+                  )}
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
     </div>
   );
 }

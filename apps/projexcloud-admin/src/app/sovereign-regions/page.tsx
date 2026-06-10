@@ -1,4 +1,20 @@
 import { revalidatePath } from 'next/cache';
+import {
+  Button,
+  Card,
+  Field,
+  Input,
+  Label,
+  PageHeader,
+  Select,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@projexlight/design-system';
+import { StatusBadge } from '../../components/StatusBadge';
 
 interface RegionRow {
   region_id: string;
@@ -47,71 +63,80 @@ async function registerRegionAction(formData: FormData): Promise<void> {
   revalidatePath('/sovereign-regions');
 }
 
-function attestationColor(s: string): string {
-  return s === 'attested' ? '#0d8a3d' : s === 'in-progress' ? '#a36500' : '#a31818';
-}
-
 export default async function SovereignRegionsPage(): Promise<JSX.Element> {
   const regions = await fetchRegions();
   return (
     <div>
-      <h1>Sovereign regions</h1>
-      <p style={{ color: '#5a6573' }}>
-        P8 Variant B. Isolated regions (FedRAMP-High / IL5 / PIPL / EU sovereign / UAE TRD).
-        Pool Router federation manifest treats <code>terminal_federation=true</code> regions as terminal —
-        cross-region routes targeting them are refused with HTTP 451.
-      </p>
+      <PageHeader
+        title="Sovereign regions"
+        description={
+          <>
+            P8 Variant B. Isolated regions (FedRAMP-High / IL5 / PIPL / EU sovereign / UAE TRD).
+            Pool Router federation manifest treats <code>terminal_federation=true</code> regions as terminal —
+            cross-region routes targeting them are refused with HTTP 451.
+          </>
+        }
+      />
 
-      <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: 16 }}>
-        <thead style={{ textAlign: 'left', borderBottom: '1px solid #d7dce4' }}>
-          <tr>
-            <th style={{ padding: 8 }}>Region</th>
-            <th style={{ padding: 8 }}>Regime</th>
-            <th style={{ padding: 8 }}>Operator</th>
-            <th style={{ padding: 8 }}>Terminal</th>
-            <th style={{ padding: 8 }}>KMS</th>
-            <th style={{ padding: 8 }}>Attestation</th>
-            <th style={{ padding: 8 }}>Activated</th>
-          </tr>
-        </thead>
-        <tbody>
-          {regions.length === 0 && (
-            <tr><td colSpan={7} style={{ padding: 12, color: '#9aa3b2' }}>No regions registered. Add one below.</td></tr>
-          )}
-          {regions.map((r) => (
-            <tr key={r.region_id} style={{ borderBottom: '1px solid #eef0f4' }}>
-              <td style={{ padding: 8, fontFamily: 'monospace' }}>{r.region_id}</td>
-              <td style={{ padding: 8 }}>{r.regime}</td>
-              <td style={{ padding: 8 }}>{r.operator_partner}</td>
-              <td style={{ padding: 8 }}>{r.terminal_federation ? 'yes' : 'no'}</td>
-              <td style={{ padding: 8 }}>{r.kms_provider}</td>
-              <td style={{ padding: 8, color: attestationColor(r.attestation_state), fontWeight: 600 }}>{r.attestation_state}</td>
-              <td style={{ padding: 8, color: '#5a6573' }}>{new Date(r.activated_at).toLocaleString()}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+      <div className="rounded-lg border">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Region</TableHead>
+              <TableHead>Regime</TableHead>
+              <TableHead>Operator</TableHead>
+              <TableHead>Terminal</TableHead>
+              <TableHead>KMS</TableHead>
+              <TableHead>Attestation</TableHead>
+              <TableHead>Activated</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {regions.length === 0 && (
+              <TableRow><TableCell colSpan={7} className="text-muted-foreground">No regions registered. Add one below.</TableCell></TableRow>
+            )}
+            {regions.map((r) => (
+              <TableRow key={r.region_id}>
+                <TableCell className="font-mono text-xs">{r.region_id}</TableCell>
+                <TableCell>{r.regime}</TableCell>
+                <TableCell>{r.operator_partner}</TableCell>
+                <TableCell>{r.terminal_federation ? 'yes' : 'no'}</TableCell>
+                <TableCell>{r.kms_provider}</TableCell>
+                <TableCell><StatusBadge status={r.attestation_state} /></TableCell>
+                <TableCell className="text-muted-foreground">{new Date(r.activated_at).toLocaleString()}</TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
 
-      <section style={{ marginTop: 32, padding: 16, border: '1px solid #d7dce4', borderRadius: 8, maxWidth: 720 }}>
-        <h2 style={{ marginTop: 0 }}>Register a sovereign region</h2>
-        <form action={registerRegionAction} style={{ display: 'grid', gap: 12 }}>
-          <label>Region ID <input name="region_id" required style={{ display: 'block', width: '100%', padding: 6 }} placeholder="us-gov-east-1" /></label>
-          <label>
-            Regime
-            <select name="regime" required style={{ display: 'block', width: '100%', padding: 6 }}>
+      <Card className="mt-8 max-w-2xl p-5">
+        <h2 className="mb-4 text-lg font-semibold">Register a sovereign region</h2>
+        <form action={registerRegionAction} className="grid gap-3.5">
+          <Field label="Region ID" htmlFor="region_id">
+            <Input id="region_id" name="region_id" required placeholder="us-gov-east-1" />
+          </Field>
+          <Field label="Regime" htmlFor="regime">
+            <Select id="regime" name="regime" required>
               <option value="fedramp-high">FedRAMP-High</option>
               <option value="il5">IL5</option>
               <option value="pipl">PIPL (China)</option>
               <option value="eu-sovereign">EU sovereign</option>
               <option value="uae-trd">UAE TRD</option>
-            </select>
-          </label>
-          <label>Operator partner <input name="operator_partner" required style={{ display: 'block', width: '100%', padding: 6 }} /></label>
-          <label>KMS provider <input name="kms_provider" required style={{ display: 'block', width: '100%', padding: 6 }} /></label>
-          <label><input type="checkbox" name="terminal_federation" defaultChecked /> Terminal federation (refuse cross-region routes)</label>
-          <button type="submit" style={{ padding: '8px 16px', background: '#0b1220', color: 'white', border: 'none', borderRadius: 4 }}>Register region</button>
+            </Select>
+          </Field>
+          <Field label="Operator partner" htmlFor="operator_partner">
+            <Input id="operator_partner" name="operator_partner" required />
+          </Field>
+          <Field label="KMS provider" htmlFor="kms_provider">
+            <Input id="kms_provider" name="kms_provider" required />
+          </Field>
+          <Label className="flex items-center gap-2">
+            <input type="checkbox" name="terminal_federation" defaultChecked className="h-4 w-4" /> Terminal federation (refuse cross-region routes)
+          </Label>
+          <Button type="submit" className="justify-self-start">Register region</Button>
         </form>
-      </section>
+      </Card>
     </div>
   );
 }

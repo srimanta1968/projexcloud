@@ -1,4 +1,15 @@
 import Link from 'next/link';
+import {
+  Button,
+  Input,
+  PageHeader,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@projexlight/design-system';
 
 interface InvoiceRow {
   invoice_id: string;
@@ -38,43 +49,47 @@ export default async function InvoicesPage({
   const invoices = await fetchInvoices(searchParams);
   return (
     <div>
-      <h1>Invoices</h1>
-      <p style={{ color: '#5a6573' }}>Search per-tenant invoices; reprice / void from the detail view.</p>
+      <PageHeader
+        title="Invoices"
+        description="Search per-tenant invoices; reprice / void from the detail view."
+      />
 
-      <form method="get" style={{ display: 'flex', gap: 8, marginTop: 16, alignItems: 'center' }}>
-        <input name="tenant_id" defaultValue={searchParams.tenant_id} placeholder="tenant_id (UUID)" style={{ padding: 4, width: 320 }} />
-        <input name="from" type="date" defaultValue={searchParams.from} style={{ padding: 4 }} />
-        <input name="to" type="date" defaultValue={searchParams.to} style={{ padding: 4 }} />
-        <button type="submit" style={{ padding: '4px 12px' }}>Search</button>
+      <form method="get" className="mb-4 flex flex-wrap items-center gap-2">
+        <Input name="tenant_id" defaultValue={searchParams.tenant_id} placeholder="tenant_id (UUID)" className="w-80" />
+        <Input name="from" type="date" defaultValue={searchParams.from} className="w-auto" />
+        <Input name="to" type="date" defaultValue={searchParams.to} className="w-auto" />
+        <Button type="submit">Search</Button>
       </form>
 
-      <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: 16 }}>
-        <thead style={{ textAlign: 'left', borderBottom: '1px solid #d7dce4' }}>
-          <tr>
-            <th style={{ padding: 8 }}>Invoice</th>
-            <th style={{ padding: 8 }}>Tenant</th>
-            <th style={{ padding: 8 }}>Period</th>
-            <th style={{ padding: 8, textAlign: 'right' }}>Total</th>
-            <th style={{ padding: 8 }}>Status</th>
-          </tr>
-        </thead>
-        <tbody>
-          {invoices.length === 0 && <tr><td colSpan={5} style={{ padding: 12, color: '#9aa3b2' }}>No invoices match.</td></tr>}
-          {invoices.map((i) => (
-            <tr key={i.invoice_id} style={{ borderBottom: '1px solid #eef0f4' }}>
-              <td style={{ padding: 8, fontFamily: 'monospace' }}>
-                <Link href={`/invoices/${encodeURIComponent(i.invoice_id)}`}>{i.invoice_id}</Link>
-              </td>
-              <td style={{ padding: 8, fontFamily: 'monospace', fontSize: 12 }}>{i.tenant_id}</td>
-              <td style={{ padding: 8 }}>{i.period_start} → {i.period_end}</td>
-              <td style={{ padding: 8, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
-                {(i.total_cents / 100).toFixed(2)} {i.currency}
-              </td>
-              <td style={{ padding: 8 }}>{i.status}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+      <div className="rounded-lg border">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Invoice</TableHead>
+              <TableHead>Tenant</TableHead>
+              <TableHead>Period</TableHead>
+              <TableHead className="text-right">Total</TableHead>
+              <TableHead>Status</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {invoices.length === 0 && (
+              <TableRow><TableCell colSpan={5} className="text-muted-foreground">No invoices match.</TableCell></TableRow>
+            )}
+            {invoices.map((i) => (
+              <TableRow key={i.invoice_id}>
+                <TableCell className="font-mono">
+                  <Link href={`/invoices/${encodeURIComponent(i.invoice_id)}`} className="text-primary hover:underline">{i.invoice_id}</Link>
+                </TableCell>
+                <TableCell className="font-mono text-xs">{i.tenant_id}</TableCell>
+                <TableCell>{i.period_start} → {i.period_end}</TableCell>
+                <TableCell className="text-right tabular-nums">{(i.total_cents / 100).toFixed(2)} {i.currency}</TableCell>
+                <TableCell>{i.status}</TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
     </div>
   );
 }
