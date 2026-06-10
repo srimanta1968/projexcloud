@@ -15,10 +15,13 @@ import type { Candidate } from './resolve';
  * changes which SDKs surface — only the prose.
  *
  * Provider selection (in order):
- *   1. BUILD_PLAN_PROVIDER env var (explicit 'openai' | 'anthropic')
+ *   1. BUILD_PLAN_PROVIDER env var (explicit 'local' | 'openai' | 'anthropic')
  *   2. OPENAI_API_KEY if set (OpenAI JSON mode is the more reliable default)
  *   3. ANTHROPIC_API_KEY if set
  *   4. throws — caller surfaces the error to the user
+ *
+ * For a fully on-host plan (no cloud), set BUILD_PLAN_PROVIDER=local and run an
+ * OpenAI-compatible local server (Ollama by default) — see LocalProvider.
  */
 
 export type VerticalPack = 'general' | 'healthcare' | 'finserv' | 'publicSector' | 'fieldService' | 'revops';
@@ -93,7 +96,7 @@ function tryParseJson(raw: string): BuildPlan | null {
   }
 }
 
-type Provider = 'openai' | 'anthropic';
+type Provider = 'openai' | 'anthropic' | 'local';
 
 /**
  * Generation adapter (TK-3474). The compose-step LLM is hidden behind this
@@ -172,19 +175,77 @@ class AnthropicProvider implements GenerationProvider {
 }
 
 /**
+ * Local / self-hosted provider. Speaks the OpenAI chat-completions wire format,
+ * so it works with Ollama (default), LM Studio, llama.cpp's server, or vLLM —
+ * any OpenAI-compatible local endpoint. Nothing leaves the host.
+ *
+ *   BUILD_PLAN_PROVIDER=local                # select it
+ *   BUILD_PLAN_LOCAL_URL                      # default http://localhost:11434/v1/chat/completions (Ollama)
+ *   BUILD_PLAN_LOCAL_MODEL                    # default 'llama3.1' (must be pulled, e.g. `ollama pull llama3.1`)
+ *   BUILD_PLAN_LOCAL_API_KEY                  # optional; most local servers ignore it
+ *   BUILD_PLAN_LOCAL_TIMEOUT_MS               # default 120000 — CPU inference is slow
+ *
+ * Note: a small local model is weaker at the structured composition task than a
+ * frontier model, so plans may be lower quality / less reliable JSON. Retrieval
+ * stays on local bge-small regardless, so which SDKs are *found* is unchanged.
+ */
+class LocalProvider implements GenerationProvider {
+  readonly name = 'local' as const;
+  private url = process.env.BUILD_PLAN_LOCAL_URL ?? 'http://localhost:11434/v1/chat/completions';
+  private model = process.env.BUILD_PLAN_LOCAL_MODEL ?? 'llama3.1';
+
+  async complete(system: string, user: string): Promise<string> {
+    const timeoutMs = parseInt(process.env.BUILD_PLAN_LOCAL_TIMEOUT_MS ?? '120000', 10);
+    const apiKey = process.env.BUILD_PLAN_LOCAL_API_KEY ?? 'local';
+    const res = await fetch(this.url, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${apiKey}` },
+      body: JSON.stringify({
+        model: this.model,
+        // Honored by Ollama / vLLM OpenAI-compat; servers that don't support it
+        // ignore it, and tryParseJson() still extracts the JSON object.
+        response_format: { type: 'json_object' },
+        messages: [
+          { role: 'system', content: system },
+          { role: 'user', content: user },
+        ],
+        temperature: 0.4,
+        max_tokens: 2048,
+        stream: false,
+      }),
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+    if (!res.ok) {
+      const errText = await res.text().catch(() => '');
+      throw new Error(
+        `local llm call failed: ${res.status} ${errText.slice(0, 400)} (url=${this.url}, model=${this.model}). ` +
+          'Is your local server running and the model pulled?',
+      );
+    }
+    const body = (await res.json()) as { choices?: Array<{ message?: { content?: string } }> };
+    const text = body.choices?.[0]?.message?.content;
+    if (!text) throw new Error('local llm returned no message content');
+    return text;
+  }
+}
+
+/**
  * Provider selection (in order):
- *   1. BUILD_PLAN_PROVIDER (explicit 'openai' | 'anthropic')
+ *   1. BUILD_PLAN_PROVIDER (explicit 'local' | 'openai' | 'anthropic')
  *   2. OPENAI_API_KEY if set (OpenAI JSON mode is the more reliable default)
  *   3. ANTHROPIC_API_KEY if set
  *   4. throws
  */
 export function selectGenerationProvider(): GenerationProvider {
   const explicit = (process.env.BUILD_PLAN_PROVIDER ?? '').toLowerCase();
+  if (explicit === 'local') return new LocalProvider();
   if (explicit === 'openai') return new OpenAiProvider();
   if (explicit === 'anthropic') return new AnthropicProvider();
   if (process.env.OPENAI_API_KEY) return new OpenAiProvider();
   if (process.env.ANTHROPIC_API_KEY) return new AnthropicProvider();
-  throw new Error('No LLM provider configured: set OPENAI_API_KEY or ANTHROPIC_API_KEY');
+  throw new Error(
+    'No LLM provider configured: set BUILD_PLAN_PROVIDER=local (with a local OpenAI-compatible server), or OPENAI_API_KEY / ANTHROPIC_API_KEY',
+  );
 }
 
 // ─── Public entrypoint ─────────────────────────────────────────────────

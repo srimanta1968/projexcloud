@@ -1,0 +1,1136 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>RealMDM Developer Execution Blueprint — Comparative Strategy, Architecture & Build Plan</title>
+<style>
+:root{
+  --bg:#060a12;--bg2:#0b1220;--panel:#0f1928;--panel2:#121f32;--ink:#edf7ff;--muted:#a7bad0;--soft:#70859e;--line:rgba(128,180,255,.18);
+  --cyan:#52e6ff;--blue:#3987ff;--gold:#ffd16a;--green:#61e5a5;--red:#ff6c82;--violet:#b895ff;--orange:#ff9d61;
+  --shadow:0 24px 80px rgba(0,0,0,.45);--mono:ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;--sans:Inter,ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;
+}
+*{box-sizing:border-box} html{scroll-behavior:smooth} body{margin:0;background:radial-gradient(circle at 20% 0%,rgba(57,135,255,.15),transparent 34%),radial-gradient(circle at 88% 8%,rgba(82,230,255,.09),transparent 30%),linear-gradient(180deg,#060a12,#08101b 45%,#060a12);color:var(--ink);font-family:var(--sans);line-height:1.58}
+a{color:var(--cyan);text-decoration:none} a:hover{text-decoration:underline}.app{display:grid;grid-template-columns:310px minmax(0,1fr);min-height:100vh}.sidebar{position:sticky;top:0;height:100vh;overflow:auto;padding:22px 18px;border-right:1px solid var(--line);background:rgba(6,10,18,.82);backdrop-filter:blur(14px)}.brand{display:flex;gap:12px;align-items:center;margin-bottom:20px}.sig{width:40px;height:40px;border-radius:14px;background:linear-gradient(135deg,var(--blue),var(--cyan));box-shadow:0 0 30px rgba(82,230,255,.35)}.brand h1{font-size:15px;line-height:1.2;margin:0}.brand small{color:var(--muted)}.toc a{display:block;padding:9px 10px;margin:3px 0;border-radius:10px;color:var(--muted);font-size:13px}.toc a:hover,.toc a.active{background:rgba(82,230,255,.08);color:var(--ink);text-decoration:none}.main{min-width:0}.hero{padding:56px 56px 36px;border-bottom:1px solid var(--line);background:linear-gradient(180deg,rgba(18,31,50,.8),rgba(6,10,18,.1))}.kicker{display:inline-flex;gap:8px;align-items:center;font:700 12px/1 var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--gold);padding:8px 10px;border:1px solid rgba(255,209,106,.35);border-radius:999px;background:rgba(255,209,106,.07)}.hero h2{font-size:clamp(36px,6vw,72px);line-height:.96;margin:22px 0 18px;letter-spacing:-.055em}.hero p{font-size:20px;color:#c9d7e8;max-width:1050px}.hero-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-top:28px}.metric{padding:16px;border:1px solid var(--line);border-radius:18px;background:rgba(15,25,40,.72)}.metric b{display:block;color:var(--cyan);font-size:22px}.metric span{color:var(--muted);font-size:12px}.content{padding:28px 56px 80px}.section{margin:38px 0 64px}.section h2{font-size:36px;letter-spacing:-.03em;margin:0 0 10px}.section h3{font-size:24px;margin:30px 0 10px}.section h4{font-size:18px;margin:20px 0 8px;color:var(--gold)}.lead{font-size:19px;color:#cfe0f1;max-width:1100px}.note,.warning,.decision,.critique{border:1px solid var(--line);border-radius:18px;padding:18px 20px;background:rgba(15,25,40,.72);box-shadow:var(--shadow);margin:18px 0}.warning{border-color:rgba(255,108,130,.4);background:rgba(255,108,130,.06)}.decision{border-color:rgba(97,229,165,.35);background:rgba(97,229,165,.06)}.critique{border-color:rgba(255,209,106,.35);background:rgba(255,209,106,.06)}.grid2{display:grid;grid-template-columns:1fr 1fr;gap:18px}.grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:18px}.grid4{display:grid;grid-template-columns:repeat(4,1fr);gap:14px}.card{background:rgba(15,25,40,.78);border:1px solid var(--line);border-radius:20px;padding:18px;box-shadow:var(--shadow)}.card h4{margin-top:0}.tag{display:inline-block;font:700 11px/1 var(--mono);letter-spacing:.06em;text-transform:uppercase;padding:6px 8px;border-radius:999px;background:rgba(82,230,255,.1);color:var(--cyan);border:1px solid rgba(82,230,255,.2);margin:2px}.tag.red{background:rgba(255,108,130,.1);color:var(--red);border-color:rgba(255,108,130,.25)}.tag.gold{background:rgba(255,209,106,.1);color:var(--gold);border-color:rgba(255,209,106,.25)}.tag.green{background:rgba(97,229,165,.1);color:var(--green);border-color:rgba(97,229,165,.25)}
+table{border-collapse:separate;border-spacing:0;width:100%;margin:18px 0;border:1px solid var(--line);border-radius:16px;overflow:hidden;background:rgba(15,25,40,.62)}th,td{padding:13px 14px;border-bottom:1px solid var(--line);vertical-align:top}th{text-align:left;color:var(--gold);font-size:12px;letter-spacing:.08em;text-transform:uppercase;background:rgba(255,209,106,.06)}tr:last-child td{border-bottom:0}td{color:#d9e7f7}.codewrap{border:1px solid rgba(82,230,255,.22);border-radius:18px;overflow:hidden;background:#050912;margin:18px 0}.codebar{height:38px;display:flex;align-items:center;justify-content:space-between;padding:0 12px;background:rgba(82,230,255,.08);border-bottom:1px solid rgba(82,230,255,.16);font:700 12px var(--mono);color:var(--cyan)}.copy{border:1px solid rgba(82,230,255,.3);background:rgba(82,230,255,.1);color:var(--cyan);border-radius:8px;padding:5px 8px;cursor:pointer}pre{margin:0;overflow:auto;padding:16px 18px;max-height:560px}code{font:12.5px/1.5 var(--mono);color:#dbeeff}.diagram{border:1px solid var(--line);background:linear-gradient(180deg,rgba(18,31,50,.75),rgba(8,16,27,.72));border-radius:22px;padding:18px;margin:18px 0;box-shadow:var(--shadow)}.flow{display:flex;align-items:stretch;gap:10px;flex-wrap:wrap}.node{min-width:150px;flex:1;border:1px solid rgba(82,230,255,.22);border-radius:16px;padding:14px;background:rgba(82,230,255,.06);position:relative}.node strong{display:block;color:var(--ink)}.node small{color:var(--muted)}.arrow{align-self:center;color:var(--gold);font-size:24px}.plane{display:grid;grid-template-rows:repeat(3,auto);gap:14px}.plane-row{border-radius:20px;border:1px solid var(--line);padding:18px}.plane-row.gov{background:rgba(57,135,255,.10);border-color:rgba(57,135,255,.32)}.plane-row.sec{background:rgba(97,229,165,.08);border-color:rgba(97,229,165,.32)}.plane-row.real{background:rgba(255,209,106,.07);border-color:rgba(255,209,106,.26)}.erd{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}.entity{border:1px solid rgba(82,230,255,.22);border-radius:14px;background:rgba(6,10,18,.45);overflow:hidden}.entity h4{margin:0;padding:10px 12px;background:rgba(82,230,255,.08);color:var(--cyan);font-size:14px}.entity ul{margin:0;padding:12px 28px 14px;color:#cbd9e8;font-size:13px}.timeline{position:relative;margin:26px 0}.step{display:grid;grid-template-columns:160px 1fr;gap:18px;margin:14px 0}.step .phase{font:700 12px var(--mono);color:var(--gold);padding-top:4px}.step .body{border-left:2px solid rgba(82,230,255,.25);padding-left:18px}.swimlane{display:grid;grid-template-columns:180px repeat(5,1fr);border:1px solid var(--line);border-radius:16px;overflow:hidden}.swimlane div{padding:11px;border-right:1px solid var(--line);border-bottom:1px solid var(--line);font-size:13px}.swimlane div:nth-child(6n){border-right:0}.swimlane .head{background:rgba(255,209,106,.08);color:var(--gold);font-weight:800}.checklist li{margin:7px 0}.mini{font-size:13px;color:var(--muted)}.kbd{font-family:var(--mono);font-size:12px;border:1px solid var(--line);border-radius:7px;padding:2px 6px;background:rgba(255,255,255,.04)}.source-list li{margin:8px 0;color:#d7e6f6}.printbar{position:fixed;right:18px;bottom:18px;display:flex;gap:8px;z-index:20}.printbar button{background:linear-gradient(135deg,var(--blue),var(--cyan));border:0;color:#00121d;border-radius:999px;padding:10px 14px;font-weight:800;box-shadow:var(--shadow);cursor:pointer}@media(max-width:980px){.app{grid-template-columns:1fr}.sidebar{position:relative;height:auto}.hero,.content{padding-left:24px;padding-right:24px}.hero-grid,.grid2,.grid3,.grid4,.erd{grid-template-columns:1fr}.swimlane{grid-template-columns:1fr}.swimlane div{border-right:0}.step{grid-template-columns:1fr}}@media print{body{background:white;color:#111}.sidebar,.printbar,.copy{display:none}.app{display:block}.hero,.content{padding:20px}.card,.note,.diagram,.codewrap,table{box-shadow:none;break-inside:avoid}.section{break-inside:auto}a{color:#0645ad}.hero h2{font-size:42px} }
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar">
+    <div class="brand"><div class="sig"></div><div><h1>RealMDM Developer Blueprint</h1><small>Comparative strategy · architecture · implementation</small></div></div>
+    <nav class="toc" id="toc">
+      <a href="#orientation">00 · Orientation</a>
+      <a href="#comparison">01 · Us vs Them</a>
+      <a href="#synthesis">02 · Best-of-Both Strategy</a>
+      <a href="#refinements">03 · Optimizations to RealMDM</a>
+      <a href="#architecture">04 · Target Architecture</a>
+      <a href="#datamodel">05 · Data Model</a>
+      <a href="#services">06 · Core Services</a>
+      <a href="#apis">07 · APIs & Events</a>
+      <a href="#flows">08 · Critical Flows</a>
+      <a href="#ai">09 · AI / GraphRAG / MLOps</a>
+      <a href="#policy">10 · ABAC / Consent Integration</a>
+      <a href="#scale">11 · Billions-Scale Design</a>
+      <a href="#team">12 · 8-Person Team Plan</a>
+      <a href="#phases">13 · Gate-Driven Roadmap</a>
+      <a href="#migration">14 · Migration Path</a>
+      <a href="#testing">15 · Test & Ops Doctrine</a>
+      <a href="#criticism">16 · Counterarguments</a>
+      <a href="#developer-appendix">17 · Developer Appendix</a>
+      <a href="#sources">18 · Sources</a>
+    </nav>
+  </aside>
+  <main class="main">
+    <section class="hero" id="orientation">
+      <span class="kicker">RealMDM · Reality Engine OS · Developer Execution Version</span>
+      <h2>The Future MDM/Identity Kernel: Best-of-Industry + RealMDM Doctrine</h2>
+      <p>This SPA is a self-contained execution blueprint for an 8-person, AI-augmented engineering team building a billion-scale identity, master data, evidence, relationship, policy-context and projection platform. It compares the RealMDM approach against conventional MDM, modern data fabric/mesh, entity resolution, knowledge graph, data contract, governance and authorization trends, then converts the best combined strategy into developer-level architecture, schemas, services, APIs, workflows, test gates and rollout plans.</p>
+      <div class="hero-grid">
+        <div class="metric"><b>3 Planes</b><span>Reality · Secure Data · Governance</span></div>
+        <div class="metric"><b>4 Bridges</b><span>Crypto · Consistency · Intelligence · Durability</span></div>
+        <div class="metric"><b>8 Roles</b><span>Small team, AI-augmented execution</span></div>
+        <div class="metric"><b>Billions</b><span>Partitioned, evented, graph-projected scale</span></div>
+      </div>
+    </section>
+    <div class="content">
+
+<section class="section">
+  <h2>What this document assumes</h2>
+  <p class="lead">Consent management and ABAC are not rebuilt here. The design assumes an external Consent Management Platform (CMP) and an OPA-based ABAC shell. RealMDM becomes the identity, relationship, evidence, policy-context, projection, provenance and data-contract kernel that feeds those systems and enforces their decisions at runtime.</p>
+  <div class="decision"><b>Implementation thesis:</b> do not build a generic MDM hub. Build a <b>pure identity + relationship contract kernel</b>, use event-sourced portals for state changes, keep sensitive data behind SAS, project domain-specific read models, and let AI propose changes only through calibrated, audited, reversible workflows.</div>
+</section>
+
+<section class="section" id="comparison">
+  <h2>01 · Comparative MDM Approach: Us vs Them</h2>
+  <p class="lead">The strongest industry patterns are not wrong. Traditional MDM, data fabric, data mesh, CDPs, identity graphs, knowledge graphs, semantic layers, policy engines, lakehouse governance and data contracts each solve a part of the problem. The weakness is that each usually optimizes one plane while leaving identity, context, evidence, consent, policy, history or operational workflow under-modeled.</p>
+
+  <table>
+    <thead><tr><th>Approach</th><th>What it does well</th><th>Where it breaks</th><th>RealMDM stance</th></tr></thead>
+    <tbody>
+      <tr><td>Traditional MDM hub / Golden Record</td><td>Deduplication, stewardship workflow, survivorship, a trusted 360 view.</td><td>Collapses context. Treats a domain role as canonical truth. Hard to undo bad merges. Often batch-first.</td><td>Keep stewardship and data quality discipline, reject one universal business schema. Use pure identity + contextual projections.</td></tr>
+      <tr><td>Registry / Consolidation / Coexistence / Centralized styles</td><td>Useful migration styles and operational patterns.</td><td>Usually presented as mutually exclusive; enterprise reality needs all four at different layers.</td><td>Registry for crosswalks, consolidation for analytics projections, coexistence for domains, centralized only for pure entity governance.</td></tr>
+      <tr><td>CDP / customer identity graph</td><td>Fast stitching across customer touchpoints and marketing identities.</td><td>Usually customer-centric, not universal across HR, clinical, education, device, address, org, object.</td><td>Absorb identity-graph techniques but widen to all pure entities and all domain contracts.</td></tr>
+      <tr><td>IAM / CIAM / Auth systems</td><td>Authentication, user accounts, sessions, credentials, authorization hooks.</td><td>User account is not person; login identity is not enterprise reality.</td><td>RealMDM feeds IAM/CIAM with subject context; it does not confuse account_id with person_id.</td></tr>
+      <tr><td>Data Mesh</td><td>Domain ownership, data products, decentralized responsibility.</td><td>Without a shared identity kernel, domains become clean silos.</td><td>Adopt domain packs and data products; add universal identity, relationship contracts and portals.</td></tr>
+      <tr><td>Data Fabric / Catalog / Governance platforms</td><td>Metadata, lineage, discovery, observability, data quality.</td><td>Often descriptive rather than operational; knows about data, but does not govern becoming.</td><td>Use catalog/lineage standards; add runtime portals, event log, and relationship contracts.</td></tr>
+      <tr><td>Semantic layer / ontology / knowledge graph</td><td>Meaning, relationships, reasoning, graph queries.</td><td>Can become an academic graph without durable operational writes or PII controls.</td><td>Graph is a projection and reasoning plane, not the only source of truth. Reality Log + contracts remain authoritative.</td></tr>
+      <tr><td>GraphRAG / Agentic AI</td><td>Explains and reasons over complex context.</td><td>Hallucination, calibration drift, and hidden provenance risk.</td><td>AI proposes; portals decide; logs prove. No direct AI writes to Satya.</td></tr>
+      <tr><td>Lakehouse governance</td><td>Excellent analytics governance, catalogs, access control, data products.</td><td>Not usually the operational identity state machine for apps.</td><td>Lakehouse consumes RealMDM projections and lineage; not the MDM write kernel.</td></tr>
+      <tr><td>Policy-as-code / ReBAC / ABAC</td><td>Externalizes access decisions; can evaluate rich context.</td><td>Needs high-quality subject/resource/context data.</td><td>RealMDM is the context builder and relationship source. OPA/OpenFGA/Cedar-like systems can enforce.</td></tr>
+    </tbody>
+  </table>
+
+  <div class="diagram">
+    <h3>Pattern comparison visual</h3>
+    <div class="flow">
+      <div class="node"><strong>Legacy MDM</strong><small>Single mastered profile; survivorship.</small></div><div class="arrow">→</div>
+      <div class="node"><strong>Modern Trends</strong><small>Data mesh, fabric, graph, contracts, AI.</small></div><div class="arrow">→</div>
+      <div class="node"><strong>RealMDM</strong><small>Pure identity kernel + contextual contracts + governed transitions.</small></div><div class="arrow">→</div>
+      <div class="node"><strong>Reality Engine OS</strong><small>Developer platform for any domain and any context.</small></div>
+    </div>
+  </div>
+</section>
+
+<section class="section" id="synthesis">
+  <h2>02 · Best-of-Both Strategy</h2>
+  <p class="lead">The best strategy is not “replace the market with doctrine.” It is to use the doctrine to decide which market pattern belongs in which layer.</p>
+  <div class="grid3">
+    <div class="card"><span class="tag green">Keep</span><h4>Conventional MDM discipline</h4><p>Data quality, stewardship queues, survivorship rules, dedupe metrics, lineage, manual review and governed release gates remain essential.</p></div>
+    <div class="card"><span class="tag gold">Upgrade</span><h4>Entity resolution</h4><p>Move from static matching to deterministic + probabilistic + graph + calibrated AI + human adjudication. Store candidate links before verified truth.</p></div>
+    <div class="card"><span class="tag red">Reject</span><h4>Universal business schema</h4><p>Do not force HR, clinical, CRM, education and finance to share one overloaded “person” or “account” shape.</p></div>
+    <div class="card"><span class="tag green">Adopt</span><h4>Data contracts</h4><p>Every domain pack ships schemas, quality assertions, event contracts, privacy tags and policy expectations.</p></div>
+    <div class="card"><span class="tag green">Adopt</span><h4>Open lineage and provenance</h4><p>Every event, projection, model decision and portal run emits lineage metadata and can be replayed or audited.</p></div>
+    <div class="card"><span class="tag gold">Constrain</span><h4>Graph and AI</h4><p>Use graph and AI for reasoning, candidate generation and explanation. Keep the authoritative write path deterministic.</p></div>
+  </div>
+
+  <h3>Selected target pattern: Governed Contextual MDM</h3>
+  <table>
+    <thead><tr><th>Layer</th><th>Best external practice</th><th>RealMDM addition</th><th>Outcome</th></tr></thead>
+    <tbody>
+      <tr><td>Identity</td><td>Entity resolution, identity graph</td><td>Pure entity vs handle vs role classification</td><td>Person, organization, address, device and document are not confused with app IDs.</td></tr>
+      <tr><td>Meaning</td><td>Semantic layer, ontology, data contracts</td><td>Satya/Maya, relationship contracts, domain packs</td><td>Meaning is scoped to domain and tenant without losing coherence.</td></tr>
+      <tr><td>Change</td><td>Workflow orchestration, event sourcing</td><td>Portals as governed becoming</td><td>No state changes without evidence, policy, audit and replayability.</td></tr>
+      <tr><td>Privacy</td><td>Tokenization, encryption, KMS, privacy engineering</td><td>SAS + digital ash + revocation truth table</td><td>Immutable history and erasure can coexist.</td></tr>
+      <tr><td>AI</td><td>RAG, GraphRAG, MLOps</td><td>Cascading cognition grid + Digital Jury</td><td>AI helps scale stewardship without becoming truth-author.</td></tr>
+      <tr><td>Governance</td><td>OPA, ReBAC, workload identity, lineage</td><td>Policy Context Builder + contract graph</td><td>ABAC/ReBAC decisions receive trustworthy, purpose-scoped context.</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<section class="section" id="refinements">
+  <h2>03 · Optimizations and Changes to Add to RealMDM</h2>
+  <p class="lead">The research compendium suggests several refinements to the existing RealMDM doctrine. These improve buildability, interoperability, auditability, cost control and developer clarity.</p>
+  <div class="grid2">
+    <div class="card"><h4>1. Add a Contract Registry</h4><p>Every domain pack must publish schemas, event formats, quality tests, privacy tags, projection definitions and portal requirements. Use JSON Schema/Protobuf for data and SHACL-like constraints for graph semantics.</p></div>
+    <div class="card"><h4>2. Make graph a projection, not the only truth</h4><p>At billion scale, the graph is a reasoning/index plane. The authoritative write truth is the event log plus transactional contract store. Rebuild graph projections from log.</p></div>
+    <div class="card"><h4>3. Add Policy Context Builder</h4><p>OPA/ABAC engineers should not query 12 systems. RealMDM builds subject-resource-purpose-context documents and gives OPA a clean decision input.</p></div>
+    <div class="card"><h4>4. Add Consent Adapter only</h4><p>Do not rebuild consent. Store external consent decision references, cached signed decisions, validity windows and purpose/data-category bindings.</p></div>
+    <div class="card"><h4>5. Add Evidence/Claim taxonomy</h4><p>Every claim must point to evidence or provenance. Claim is not truth until verified by portal or steward. Evidence can expire, be revoked, or be jurisdiction-specific.</p></div>
+    <div class="card"><h4>6. Add Model Calibration Registry</h4><p>Entity resolution models must have model version, ECE, test corpus, drift thresholds, decision logs and automatic downgrade-to-human when calibration fails.</p></div>
+    <div class="card"><h4>7. Add deterministic cache rules</h4><p>Semantic caching is useful for documentation and non-sensitive reasoning, but forbidden for PII/PHI/PCI reveal. Sensitive caches must be key-scoped, tenant-scoped and token-versioned.</p></div>
+    <div class="card"><h4>8. Add Migration Adapters</h4><p>Provide ready adapters for Supabase/Postgres, Salesforce, Workday, Snowflake, FHIR/HL7, CSV/SFTP and Kafka CDC. Migration is product, not consulting only.</p></div>
+  </div>
+
+  <div class="decision"><b>Refined doctrine:</b> RealMDM is not “the one database.” It is the <b>control plane of identity, evidence, relationship contracts, provenance, policy context and governed projections</b>. Transactional apps keep domain transactions; RealMDM owns the meaning that lets those transactions be safely interpreted.</div>
+</section>
+
+<section class="section" id="architecture">
+  <h2>04 · Clear-Cut Target Architecture</h2>
+  <p class="lead">This architecture is optimized for Go core services, Kafka-compatible streaming, Temporal durable workflows, external CMP, OPA ABAC shell, graph reasoning, MLOps and cloud-native operations.</p>
+
+  <div class="diagram plane">
+    <div class="plane-row gov"><h3>Governance Plane</h3><p><b>Services:</b> Command Gateway, Portal Service, Policy Context Builder, OPA Adapter, Consent Adapter, Domain Pack Registry. <b>Purpose:</b> only governed portals can mutate reality.</p></div>
+    <div class="plane-row sec"><h3>Secure Data Plane</h3><p><b>Services:</b> Sensitive Access Service, Token Vault, KMS/HSM integration, Key Cache/CMM, Revocation Broadcaster. <b>Purpose:</b> sensitive data is tokenized, revealed only under policy, and crypto-shreddable.</p></div>
+    <div class="plane-row real"><h3>Reality Plane</h3><p><b>Services:</b> Identity Resolver, Relationship Contract Service, Event Log, Projection Consumers, Graph Projector, Audit Store, Temporal workflows. <b>Purpose:</b> immutable truth history, contract state, and domain projections.</p></div>
+  </div>
+
+  <h3>Runtime topology</h3>
+  <div class="diagram">
+    <div class="flow">
+      <div class="node"><strong>Apps / APIs</strong><small>HR, CRM, clinical, education, construction, device, address.</small></div><div class="arrow">→</div>
+      <div class="node"><strong>Command Gateway</strong><small>Go HTTP/gRPC, idempotency, RYOW, backpressure.</small></div><div class="arrow">→</div>
+      <div class="node"><strong>Portal Workflows</strong><small>Temporal Go SDK, durable evidence/policy/state transitions.</small></div><div class="arrow">→</div>
+      <div class="node"><strong>Kernel Stores</strong><small>Postgres/Cockroach/Scylla + Kafka + object store.</small></div><div class="arrow">→</div>
+      <div class="node"><strong>Projections</strong><small>Graph, search, cache, lakehouse, domain read models.</small></div>
+    </div>
+  </div>
+
+  <h3>Recommended stack by concern</h3>
+  <table>
+    <thead><tr><th>Concern</th><th>Primary recommendation</th><th>Alternatives</th><th>Decision rule</th></tr></thead>
+    <tbody>
+      <tr><td>Core services</td><td>Go + gRPC + protobuf + OpenTelemetry</td><td>Rust for highest safety, Java/Kotlin for enterprise teams</td><td>Use Go for fast execution, low memory, clear concurrency and strong cloud ecosystem.</td></tr>
+      <tr><td>Transactional kernel</td><td>Postgres/CockroachDB for early; Yugabyte/Cockroach/Spanner-like for global SQL</td><td>ScyllaDB/DynamoDB for ultra-high write KV patterns</td><td>Use SQL until scaling pain is real; split hot indexes to KV later.</td></tr>
+      <tr><td>Event log</td><td>Kafka-compatible platform with schema registry and tiered storage</td><td>Pulsar, Redpanda, cloud event bus</td><td>Kafka ecosystem wins for CDC, connectors, retention and hiring familiarity.</td></tr>
+      <tr><td>Workflow</td><td>Temporal</td><td>Cadence, durable functions, Step Functions for simple cloud workflows</td><td>Use Temporal for long-running, human-in-loop, retryable portals.</td></tr>
+      <tr><td>Graph</td><td>Neo4j for early product; Neptune/JanusGraph/TigerGraph for scale; graph projection can be polyglot</td><td>Memgraph, ArangoDB, RDF triple store</td><td>Do not make graph the only write truth. It is projection and reasoning index.</td></tr>
+      <tr><td>Vector</td><td>pgvector/Qdrant for early; Milvus/Zilliz for billion-vector scale</td><td>Weaviate, Pinecone, OpenSearch vectors</td><td>Vectors help candidate generation and evidence search, not sensitive reveal.</td></tr>
+      <tr><td>Policy</td><td>OPA sidecar/bundle for ABAC shell</td><td>Cedar, OpenFGA/SpiceDB for ReBAC, XACML legacy</td><td>OPA for ABAC now; optionally mirror relationship contracts into OpenFGA for high-scale ReBAC checks.</td></tr>
+      <tr><td>Consent</td><td>External CMP adapter</td><td>Custom consent registry only if required later</td><td>Store references/decisions, not legal authority, in RealMDM.</td></tr>
+      <tr><td>Lineage</td><td>OpenLineage events + catalog integration</td><td>DataHub/OpenMetadata-native lineage</td><td>Emit standard lineage from every pipeline, projection and model run.</td></tr>
+      <tr><td>Secrets/keys</td><td>Cloud KMS/HSM + Vault/transit + SAS</td><td>Fortanix/HSM appliance</td><td>SAS is only layer allowed to touch keys and plaintext.</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<section class="section" id="datamodel">
+  <h2>05 · Outline Data Model</h2>
+  <p class="lead">The data model separates pure entities, handles, evidence, contracts, crosswalks, portal runs, policy logs, and suggestions. It avoids the most common mistake: stuffing employee, patient, user, citizen, vendor and customer fields into one master row.</p>
+
+  <div class="diagram erd">
+    <div class="entity"><h4>universal_entity</h4><ul><li>entity_id</li><li>entity_type</li><li>home_region</li><li>lifecycle_status</li></ul></div>
+    <div class="entity"><h4>identity_handle</h4><ul><li>handle_type</li><li>namespace</li><li>normalized_hash</li><li>vaulted_token</li></ul></div>
+    <div class="entity"><h4>relationship_contract</h4><ul><li>subject_entity_id</li><li>object_entity_id</li><li>relationship_type</li><li>valid/transaction time</li></ul></div>
+    <div class="entity"><h4>evidence_artifact</h4><ul><li>artifact_type</li><li>content_hash</li><li>encrypted_ref</li><li>verification_status</li></ul></div>
+    <div class="entity"><h4>identity_crosswalk</h4><ul><li>source_system</li><li>source_record_id</li><li>entity_id</li><li>link_status</li></ul></div>
+    <div class="entity"><h4>portal_run</h4><ul><li>portal_type</li><li>subject_entity_id</li><li>correlation_id</li><li>state_snapshot</li></ul></div>
+  </div>
+
+  <h3>Kernel schema</h3>
+<div class="codewrap"><div class="codebar"><span>sql</span><button class="copy">copy</button></div><pre><code>-- RealMDM Kernel DDL v0.1
+-- Keep pure identity sparse. Store claims, handles, roles, and evidence separately.
+
+CREATE TYPE entity_type AS ENUM (&#x27;PERSON&#x27;,&#x27;ORGANIZATION&#x27;,&#x27;LOCATION&#x27;,&#x27;DOCUMENT&#x27;,&#x27;OBJECT&#x27;,&#x27;DEVICE&#x27;,&#x27;ADDRESS&#x27;);
+CREATE TYPE contract_status AS ENUM (&#x27;CLAIMED&#x27;,&#x27;VERIFIED&#x27;,&#x27;DISPUTED&#x27;,&#x27;REVOKED&#x27;,&#x27;EXPIRED&#x27;,&#x27;SUPERSEDED&#x27;);
+CREATE TYPE link_status AS ENUM (&#x27;CANDIDATE&#x27;,&#x27;LINKED&#x27;,&#x27;REJECTED&#x27;,&#x27;SUPERSEDED&#x27;,&#x27;POSSIBLE_SAME&#x27;);
+CREATE TYPE sensitivity AS ENUM (&#x27;PUBLIC&#x27;,&#x27;INTERNAL&#x27;,&#x27;CONFIDENTIAL&#x27;,&#x27;RESTRICTED&#x27;,&#x27;PHI&#x27;,&#x27;PII&#x27;,&#x27;PCI&#x27;);
+
+CREATE TABLE universal_entity (
+  entity_id             UUID PRIMARY KEY,
+  entity_type           entity_type NOT NULL,
+  home_region           TEXT NOT NULL,
+  lifecycle_status      TEXT NOT NULL DEFAULT &#x27;ACTIVE&#x27;,
+  display_label_token   TEXT NULL,              -- optional encrypted/vaulted display label token
+  created_at            TIMESTAMPTZ NOT NULL DEFAULT now(),
+  created_by            TEXT NOT NULL,
+  updated_at            TIMESTAMPTZ NOT NULL DEFAULT now(),
+  metadata              JSONB NOT NULL DEFAULT &#x27;{}&#x27;
+);
+
+CREATE TABLE identity_handle (
+  handle_id             UUID PRIMARY KEY,
+  handle_type           TEXT NOT NULL,           -- EMAIL, PHONE, GOV_ID, MRN, EMPLOYEE_ID, DEVICE_UUID, EXTERNAL_ID
+  namespace             TEXT NOT NULL,           -- app_id/tenant/source namespace, e.g. HR:ACME:WORKDAY
+  normalized_hash       BYTEA NOT NULL,           -- deterministic hash of normalized value; never store plaintext here
+  vaulted_token         TEXT NULL,               -- SAS token for reveal under policy
+  sensitivity           sensitivity NOT NULL DEFAULT &#x27;PII&#x27;,
+  valid_from            TIMESTAMPTZ NULL,
+  valid_to              TIMESTAMPTZ NULL,
+  created_at            TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE(handle_type, namespace, normalized_hash)
+);
+
+CREATE TABLE evidence_artifact (
+  artifact_id           UUID PRIMARY KEY,
+  artifact_type         TEXT NOT NULL,            -- PASSPORT, OFFER_LETTER, AADHAAR, ADDRESS_PROOF, DEVICE_ATTESTATION
+  content_hash          BYTEA NOT NULL,           -- hash of canonicalized artifact bytes
+  encrypted_object_ref  TEXT NOT NULL,            -- object store URI or vault ref, never public
+  issuer_entity_id      UUID NULL REFERENCES universal_entity(entity_id),
+  subject_entity_id     UUID NULL REFERENCES universal_entity(entity_id),
+  sensitivity           sensitivity NOT NULL DEFAULT &#x27;RESTRICTED&#x27;,
+  jurisdiction          TEXT NULL,
+  expires_at            TIMESTAMPTZ NULL,
+  verification_status   TEXT NOT NULL DEFAULT &#x27;CLAIMED&#x27;,
+  created_at            TIMESTAMPTZ NOT NULL DEFAULT now(),
+  metadata              JSONB NOT NULL DEFAULT &#x27;{}&#x27;
+);
+
+CREATE TABLE relationship_contract (
+  contract_id           UUID PRIMARY KEY,
+  subject_entity_id     UUID NOT NULL REFERENCES universal_entity(entity_id),
+  object_entity_id      UUID NULL REFERENCES universal_entity(entity_id),
+  relationship_type     TEXT NOT NULL,            -- EMPLOYED_BY, RESIDES_AT, OWNS_DEVICE, HAS_HANDLE, MEMBER_OF
+  domain                TEXT NOT NULL,            -- HR, CRM, CLINICAL, EDUCATION, CONSTRUCTION, PLATFORM
+  app_id                TEXT NOT NULL,
+  tenant_id             TEXT NOT NULL,
+  bu_id                 TEXT NULL,
+  org_id                TEXT NULL,
+  status                contract_status NOT NULL DEFAULT &#x27;CLAIMED&#x27;,
+  confidence            NUMERIC(5,4) NOT NULL DEFAULT 1.0,
+  valid_from            TIMESTAMPTZ NULL,          -- business time
+  valid_to              TIMESTAMPTZ NULL,
+  asserted_at           TIMESTAMPTZ NOT NULL DEFAULT now(), -- system time
+  retracted_at          TIMESTAMPTZ NULL,
+  provenance            JSONB NOT NULL DEFAULT &#x27;{}&#x27;,
+  evidence_refs         UUID[] NOT NULL DEFAULT &#x27;{}&#x27;,
+  policy_tags           TEXT[] NOT NULL DEFAULT &#x27;{}&#x27;,
+  version               BIGINT NOT NULL DEFAULT 1,
+  supersedes_contract_id UUID NULL REFERENCES relationship_contract(contract_id)
+);
+
+CREATE INDEX idx_contract_subject ON relationship_contract(subject_entity_id, relationship_type, tenant_id, status);
+CREATE INDEX idx_contract_object  ON relationship_contract(object_entity_id, relationship_type, tenant_id, status);
+CREATE INDEX idx_contract_time    ON relationship_contract(valid_from, valid_to, asserted_at);
+
+CREATE TABLE identity_crosswalk (
+  crosswalk_id          UUID PRIMARY KEY,
+  source_system_id      TEXT NOT NULL,
+  source_record_id      TEXT NOT NULL,
+  app_id                TEXT NOT NULL,
+  tenant_id             TEXT NOT NULL,
+  entity_id             UUID NOT NULL REFERENCES universal_entity(entity_id),
+  link_status           link_status NOT NULL,
+  match_method          TEXT NOT NULL,             -- DETERMINISTIC, PROBABILISTIC, GRAPH, HUMAN, AI_JURY
+  confidence            NUMERIC(5,4) NOT NULL,
+  match_rule_id         TEXT NULL,
+  model_version         TEXT NULL,
+  evidence_bundle       JSONB NOT NULL DEFAULT &#x27;{}&#x27;,
+  created_at            TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE(source_system_id, source_record_id, app_id, tenant_id)
+);
+
+CREATE TABLE steward_suggestion (
+  suggestion_id         UUID PRIMARY KEY,
+  suggestion_type       TEXT NOT NULL,             -- LINK, UNLINK, VERIFY_CONTRACT, REVOKE_CONTRACT
+  target_ref            JSONB NOT NULL,
+  proposed_by           TEXT NOT NULL,             -- model/service/human id
+  model_version         TEXT NULL,
+  calibrated_confidence NUMERIC(5,4) NOT NULL,
+  risk_score            INT NOT NULL,
+  explanation           TEXT NOT NULL,
+  evidence_refs         UUID[] NOT NULL DEFAULT &#x27;{}&#x27;,
+  status                TEXT NOT NULL DEFAULT &#x27;PENDING&#x27;, -- PENDING, APPROVED, REJECTED, EXPIRED
+  created_at            TIMESTAMPTZ NOT NULL DEFAULT now(),
+  decided_at            TIMESTAMPTZ NULL,
+  decided_by            TEXT NULL
+);
+
+CREATE TABLE portal_run (
+  portal_run_id         UUID PRIMARY KEY,
+  portal_type           TEXT NOT NULL,             -- CANDIDATE_TO_EMPLOYEE, LEAD_TO_CUSTOMER, PERSON_TO_PATIENT
+  subject_entity_id     UUID NOT NULL REFERENCES universal_entity(entity_id),
+  app_id                TEXT NOT NULL,
+  tenant_id             TEXT NOT NULL,
+  status                TEXT NOT NULL DEFAULT &#x27;INIT&#x27;,
+  correlation_id        TEXT NOT NULL UNIQUE,
+  idempotency_key       TEXT NOT NULL UNIQUE,
+  current_step          TEXT NOT NULL DEFAULT &#x27;INIT&#x27;,
+  state_snapshot        JSONB NOT NULL DEFAULT &#x27;{}&#x27;,
+  created_at            TIMESTAMPTZ NOT NULL DEFAULT now(),
+  completed_at          TIMESTAMPTZ NULL
+);
+
+CREATE TABLE policy_decision_log (
+  decision_id           UUID PRIMARY KEY,
+  actor_subject         TEXT NOT NULL,
+  action                TEXT NOT NULL,
+  resource_ref          JSONB NOT NULL,
+  purpose               TEXT NOT NULL,
+  app_id                TEXT NOT NULL,
+  tenant_id             TEXT NOT NULL,
+  consent_decision_ref  TEXT NULL,
+  opa_input_hash        BYTEA NOT NULL,
+  opa_result            JSONB NOT NULL,
+  result                TEXT NOT NULL,             -- ALLOW, DENY, ALLOW_WITH_OBLIGATIONS
+  created_at            TIMESTAMPTZ NOT NULL DEFAULT now()
+);</code></pre></div>
+
+  <h3>Identifier classification table</h3>
+  <table>
+    <thead><tr><th>Identifier</th><th>Classification</th><th>Why</th><th>Storage</th></tr></thead>
+    <tbody>
+      <tr><td>person_id / universal_entity_id</td><td>Pure identity anchor</td><td>Abstract continuity anchor across all domains.</td><td>universal_entity</td></tr>
+      <tr><td>employee_id</td><td>Domain handle / relationship attribute</td><td>Exists only while/where person is employee in HR context.</td><td>identity_handle + relationship_contract metadata</td></tr>
+      <tr><td>MRN / patient id</td><td>Domain handle</td><td>Issued by clinical tenant; not universal person.</td><td>identity_handle namespace=clinical tenant</td></tr>
+      <tr><td>citizen ID / Aadhaar / SSN / PAN</td><td>Evidence-backed sensitive handle</td><td>Government-issued proxy; highly sensitive; may change/be invalidated.</td><td>SAS token + evidence artifact + handle hash</td></tr>
+      <tr><td>device UUID</td><td>Object/device handle</td><td>May represent device, install, browser, or app instance depending on namespace.</td><td>universal_entity DEVICE + identity_handle</td></tr>
+      <tr><td>address id</td><td>Pure-ish location/address entity</td><td>Physical location can be pure; address string is label; residence is relationship.</td><td>universal_entity LOCATION/ADDRESS + contracts</td></tr>
+      <tr><td>org_id</td><td>Pure organization or tenant-scoped org context</td><td>Legal entity is pure; org admin boundary may be a domain role.</td><td>universal_entity ORGANIZATION + tenant/org contracts</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<section class="section" id="services">
+  <h2>06 · Core Services</h2>
+  <p class="lead">Build small, opinionated Go services with clear ownership. Avoid a mega-service. Each service has a bounded domain, data ownership, API, event output and SLO.</p>
+  <table>
+    <thead><tr><th>Service</th><th>Owner</th><th>Responsibilities</th><th>Must not do</th></tr></thead>
+    <tbody>
+      <tr><td>Command Gateway</td><td>Core Go + Cloud/SRE</td><td>Idempotency, authn, correlation, command routing, RYOW waits, backpressure.</td><td>Business matching, PII reveal, long workflows.</td></tr>
+      <tr><td>Identity Resolver</td><td>Core Go + AI ER</td><td>Resolve source records to pure entities using deterministic and calibrated candidate logic.</td><td>Auto-merge high-risk identity without steward/portal.</td></tr>
+      <tr><td>Relationship Contract Service</td><td>Core Go</td><td>Claim, verify, revoke, query bitemporal contracts.</td><td>Bypass policy or evidence requirements.</td></tr>
+      <tr><td>Portal Service</td><td>Core Go + Workflow</td><td>Run Temporal workflows for governed becoming.</td><td>Direct SQL state mutations outside idempotent activities.</td></tr>
+      <tr><td>Sensitive Access Service</td><td>Cloud/Security + Core Go</td><td>Tokenize, reveal, rotate, shred, audit. Only service touching plaintext/key material.</td><td>Permit semantic cache or plaintext caching.</td></tr>
+      <tr><td>Policy Context Builder</td><td>OPA/ABAC Engineer</td><td>Build OPA inputs from identity, relationship, consent and resource context.</td><td>Own consent policy itself.</td></tr>
+      <tr><td>Consent Adapter</td><td>OPA/ABAC Engineer</td><td>Query external CMP, cache signed short-lived decisions, publish consent-bound events.</td><td>Become system of record for consent.</td></tr>
+      <tr><td>Projection Engine</td><td>Pipeline Engineer</td><td>Consume events and build graph/search/cache/lakehouse/domain projections.</td><td>Become authority for writes.</td></tr>
+      <tr><td>Steward Copilot</td><td>AI/GraphRAG Engineer</td><td>Generate suggestions, explanations, candidate links, evidence summaries.</td><td>Write to universal_entity or relationship_contract directly.</td></tr>
+      <tr><td>Domain Pack Registry</td><td>Platform/DevEx</td><td>Store schemas, event contracts, portal templates, policy bundles, projection definitions.</td><td>Permit unversioned domain changes.</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<section class="section" id="apis">
+  <h2>07 · APIs, Events and Contracts</h2>
+  <p class="lead">Use protobuf/gRPC for internal service APIs, REST for external audit/admin endpoints, CloudEvents-compatible envelopes for event portability, and data contracts for domain packs.</p>
+
+  <h3>Protobuf service contracts</h3>
+<div class="codewrap"><div class="codebar"><span>protobuf</span><button class="copy">copy</button></div><pre><code>syntax = &quot;proto3&quot;;
+package realmdm.v1;
+
+service IdentityResolver {
+  rpc Resolve(ResolveRequest) returns (ResolveResponse);
+  rpc Link(LinkRequest) returns (LinkResponse);
+  rpc GetEntity(EntityRequest) returns (EntityResponse);
+}
+
+message ResolveRequest {
+  string app_id = 1;
+  string tenant_id = 2;
+  string source_system_id = 3;
+  string source_record_id = 4;
+  repeated EvidenceHandle handles = 5;
+  map&lt;string,string&gt; context = 6;
+  string requested_by = 7;       // SPIFFE ID or service principal
+  string purpose = 8;            // onboarding, care, payroll, marketing, support
+}
+
+message EvidenceHandle {
+  string handle_type = 1;        // EMAIL, PHONE, GOV_ID, EMPLOYEE_ID, MRN, DEVICE_UUID
+  string namespace = 2;          // scope in which the handle is meaningful
+  string normalized_hash = 3;    // base64; plaintext never enters resolver
+  string vaulted_token = 4;      // optional SAS token for permitted reveal
+  double confidence = 5;
+}
+
+message ResolveResponse {
+  string entity_id = 1;
+  string resolution_status = 2;  // EXACT, CANDIDATE, AMBIGUOUS, NEW_CREATED, DENIED
+  double confidence = 3;
+  repeated string candidate_entity_ids = 4;
+  string steward_case_id = 5;
+  repeated string obligations = 6;
+}
+
+service SensitiveAccessService {
+  rpc Tokenize(TokenizeRequest) returns (TokenizeResponse);
+  rpc Reveal(RevealRequest) returns (RevealResponse);
+  rpc Rotate(RotateRequest) returns (RotateResponse);
+  rpc Shred(ShredRequest) returns (ShredResponse);
+}
+
+message TokenizeRequest {
+  string tenant_id = 1;
+  string entity_id = 2;
+  string data_type = 3;          // SSN, AADHAAR, PAN, PASSPORT, EMAIL, CARD_PAN
+  bytes plaintext = 4;
+  string mode = 5;               // VAULTED_RANDOM_TOKEN or VAULTLESS_FPE
+  string purpose = 6;
+  map&lt;string,string&gt; audit_context = 7;
+}
+
+message RevealRequest {
+  string token = 1;
+  string requestor_service_id = 2; // SPIFFE ID
+  string purpose = 3;
+  string tenant_id = 4;
+  map&lt;string,string&gt; abac_context = 5;
+  string consent_decision_ref = 6;
+}
+
+service RelationshipContractService {
+  rpc Claim(ClaimContractRequest) returns (ContractResponse);
+  rpc Verify(VerifyContractRequest) returns (ContractResponse);
+  rpc Revoke(RevokeContractRequest) returns (ContractResponse);
+  rpc Query(ContractQuery) returns (ContractQueryResponse);
+}
+
+service PortalService {
+  rpc StartPortal(StartPortalRequest) returns (PortalRunResponse);
+  rpc SignalPortal(PortalSignalRequest) returns (PortalRunResponse);
+  rpc GetPortalStatus(PortalStatusRequest) returns (PortalRunResponse);
+}</code></pre></div>
+
+  <h3>CloudEvents-compatible canonical event</h3>
+<div class="codewrap"><div class="codebar"><span>json</span><button class="copy">copy</button></div><pre><code>{
+  &quot;specversion&quot;: &quot;1.0&quot;,
+  &quot;id&quot;: &quot;01JREALMDM8E1S6MG0KZ9S6Z&quot;,
+  &quot;type&quot;: &quot;realmdm.relationship.contract.verified.v1&quot;,
+  &quot;source&quot;: &quot;realmdm://portal/candidate-to-employee&quot;,
+  &quot;subject&quot;: &quot;entity/PERSON/3a8a9e54-...&quot;,
+  &quot;time&quot;: &quot;2026-06-09T05:00:00Z&quot;,
+  &quot;datacontenttype&quot;: &quot;application/json&quot;,
+  &quot;dataschema&quot;: &quot;https://schemas.realmdm.io/events/relationship.contract.verified.v1.json&quot;,
+  &quot;traceparent&quot;: &quot;00-...&quot;,
+  &quot;data&quot;: {
+    &quot;event_id&quot;: &quot;01JREALMDM8E1S6MG0KZ9S6Z&quot;,
+    &quot;entity_id&quot;: &quot;3a8a9e54-...&quot;,
+    &quot;contract_id&quot;: &quot;6ad9e0c7-...&quot;,
+    &quot;relationship_type&quot;: &quot;EMPLOYED_BY&quot;,
+    &quot;domain&quot;: &quot;HR&quot;,
+    &quot;app_id&quot;: &quot;workforce_app&quot;,
+    &quot;tenant_id&quot;: &quot;tenant_acme_us&quot;,
+    &quot;org_id&quot;: &quot;org_acme&quot;,
+    &quot;valid_from&quot;: &quot;2026-06-09T00:00:00Z&quot;,
+    &quot;valid_to&quot;: null,
+    &quot;confidence&quot;: 1.0,
+    &quot;evidence_refs&quot;: [&quot;artifact_offer_letter&quot;, &quot;artifact_background_check&quot;],
+    &quot;policy_decision_id&quot;: &quot;policy_decision_123&quot;,
+    &quot;consent_decision_ref&quot;: &quot;cmp:decision:789&quot;,
+    &quot;provenance&quot;: {
+      &quot;portal_run_id&quot;: &quot;portal_run_abc&quot;,
+      &quot;actor&quot;: &quot;spiffe://realmdm/governance/portal-service&quot;,
+      &quot;source_system&quot;: &quot;workday&quot;,
+      &quot;assertion_method&quot;: &quot;PORTAL_VERIFIED&quot;
+    }
+  }
+}</code></pre></div>
+
+  <h3>Domain Pack contract</h3>
+<div class="codewrap"><div class="codebar"><span>yaml</span><button class="copy">copy</button></div><pre><code>apiVersion: realmdm.io/v1
+kind: DomainPack
+metadata:
+  name: hr-core-v1
+  owner: workforce-platform
+spec:
+  domain: HR
+  purposeCodes:
+    - EMPLOYMENT_ONBOARDING
+    - PAYROLL
+    - ACCESS_PROVISIONING
+  projections:
+    - name: hr_employee_view
+      sourceEvents:
+        - realmdm.relationship.contract.verified.v1
+        - realmdm.relationship.contract.revoked.v1
+      requiredColumns:
+        - entity_id
+        - employee_contract_id
+        - employer_org_id
+        - status
+        - valid_from
+        - valid_to
+      forbiddenColumns:
+        - diagnosis
+        - marketing_segment
+        - raw_ssn
+  portals:
+    - name: candidate_to_employee
+      workflow: CandidateToEmployeeWorkflow
+      requiredEvidence:
+        - SIGNED_OFFER
+        - BACKGROUND_CHECK
+      requiredPolicies:
+        - hr.can_onboard_employee
+  quality:
+    - name: no_active_employee_without_verified_contract
+      expression: &quot;status == ACTIVE implies contract.status == VERIFIED&quot;
+  security:
+    sensitivity: PII
+    tokenizationMode: VAULTED_RANDOM_TOKEN
+    abacPolicyBundle: opa/hr-core-v1.rego</code></pre></div>
+</section>
+
+<section class="section" id="flows">
+  <h2>08 · Critical Developer Flows</h2>
+  <h3>Flow A: Source record ingestion</h3>
+  <div class="diagram"><div class="flow"><div class="node"><strong>Source CDC / API</strong><small>Supabase, Workday, Salesforce, FHIR, CSV</small></div><div class="arrow">→</div><div class="node"><strong>Ingestion Normalizer</strong><small>Normalize, hash, validate contract</small></div><div class="arrow">→</div><div class="node"><strong>SAS</strong><small>Tokenize sensitive values</small></div><div class="arrow">→</div><div class="node"><strong>Identity Resolver</strong><small>Exact → candidates → suggestion</small></div><div class="arrow">→</div><div class="node"><strong>Reality Log</strong><small>resolved/claimed events</small></div></div></div>
+
+  <h3>Flow B: Governed role creation</h3>
+  <div class="diagram"><div class="flow"><div class="node"><strong>Start Portal</strong><small>candidate_to_employee</small></div><div class="arrow">→</div><div class="node"><strong>Evidence Gate</strong><small>offer, background, eligibility</small></div><div class="arrow">→</div><div class="node"><strong>Consent + OPA</strong><small>purpose and ABAC</small></div><div class="arrow">→</div><div class="node"><strong>Contract Verify</strong><small>EMPLOYED_BY</small></div><div class="arrow">→</div><div class="node"><strong>Projections</strong><small>HR view, access context, graph</small></div></div></div>
+
+  <h3>Identity Resolver near-code</h3>
+<div class="codewrap"><div class="codebar"><span>go</span><button class="copy">copy</button></div><pre><code>func (s *ResolverService) Resolve(ctx context.Context, req *pb.ResolveRequest) (*pb.ResolveResponse, error) {
+    // 1. Policy shell: every resolution attempt must have a purpose and tenant.
+    decision, err := s.policy.Check(ctx, PolicyInput{
+        Actor: req.RequestedBy,
+        Action: &quot;identity.resolve&quot;,
+        Purpose: req.Purpose,
+        TenantID: req.TenantId,
+        Resource: &quot;universal_entity&quot;,
+    })
+    if err != nil || !decision.Allow {
+        return &amp;pb.ResolveResponse{ResolutionStatus: &quot;DENIED&quot;}, nil
+    }
+
+    // 2. Deterministic pass: only high-grade handles participate in auto-link.
+    hits := s.handleIndex.LookupExact(ctx, req.TenantId, req.Handles)
+    if hits.HasSingleHighAssuranceEntity() {
+        return s.linkOrReturn(ctx, req, hits.EntityID(), &quot;DETERMINISTIC&quot;, 0.999)
+    }
+
+    // 3. Candidate generation: fuzzy + graph + vector features, never final authority.
+    candidates := s.candidateGenerator.Generate(ctx, req)
+    features := s.featureBuilder.Build(req, candidates)
+
+    // 4. Calibrated model score: never trust raw model logits.
+    scored := s.model.Score(ctx, features)
+    calibrated := s.calibrator.Apply(scored)
+
+    // 5. Risk routing: PHI/PII/legal identity has stricter thresholds.
+    risk := s.riskScorer.Score(req, candidates, calibrated)
+    if calibrated.TopScore &gt; 0.985 &amp;&amp; risk.Level == &quot;LOW&quot; &amp;&amp; calibrated.ECE &lt;= 0.05 {
+        return s.linkOrReturn(ctx, req, calibrated.TopEntityID, &quot;CALIBRATED_AI_LOW_RISK&quot;, calibrated.TopScore)
+    }
+
+    // 6. Ambiguity goes to suggestion plane, not master tables.
+    suggestionID := s.steward.CreateSuggestion(ctx, StewardSuggestion{
+        Type: &quot;LINK_CANDIDATE&quot;,
+        Candidates: candidates,
+        Score: calibrated.TopScore,
+        Risk: risk,
+        Evidence: features.EvidenceRefs,
+        Explanation: calibrated.Explanation,
+    })
+    return &amp;pb.ResolveResponse{
+        ResolutionStatus: &quot;AMBIGUOUS&quot;,
+        Confidence: calibrated.TopScore,
+        CandidateEntityIds: candidates.IDs(),
+        StewardCaseId: suggestionID,
+    }, nil
+}</code></pre></div>
+
+  <h3>Temporal Portal near-code</h3>
+<div class="codewrap"><div class="codebar"><span>go</span><button class="copy">copy</button></div><pre><code>func CandidateToEmployeeWorkflow(ctx workflow.Context, input CandidateToEmployeeInput) error {
+    state := PortalState{Step: &quot;INIT&quot;, CorrelationID: input.CorrelationID}
+
+    // Step 1: Resolve identity
+    entityID, err := activities.ResolveIdentity(ctx, input.SourceEvidence)
+    if err != nil { return err }
+    state.SubjectEntityID = entityID
+    state.Step = &quot;IDENTITY_RESOLVED&quot;
+
+    // Step 2: Wait for evidence; Temporal can wait days without holding a thread.
+    var offer ArtifactRef
+    ok := workflow.AwaitWithTimeout(ctx, 14*24*time.Hour, func() bool {
+        return state.HasArtifact(&quot;SIGNED_OFFER&quot;) &amp;&amp; state.HasArtifact(&quot;BACKGROUND_CHECK&quot;)
+    })
+    if !ok {
+        activities.EmitEvent(ctx, &quot;portal.transition.expired&quot;, state)
+        return nil
+    }
+
+    // Step 3: Consent + ABAC shell. Consent is external CMP; OPA is external PDP shell.
+    policyResult, err := activities.CheckPolicy(ctx, PolicyCheck{
+        Actor: input.Actor,
+        Action: &quot;relationship.verify&quot;,
+        Purpose: &quot;EMPLOYMENT_ONBOARDING&quot;,
+        TenantID: input.TenantID,
+        Subject: entityID,
+        EvidenceRefs: state.EvidenceRefs,
+    })
+    if err != nil || !policyResult.Allow { return errors.New(&quot;policy denied&quot;) }
+
+    // Step 4: Idempotent contract write.
+    contractID, err := activities.VerifyRelationshipContract(ctx, VerifyContract{
+        SubjectEntityID: entityID,
+        ObjectEntityID: input.EmployerOrgID,
+        RelationshipType: &quot;EMPLOYED_BY&quot;,
+        Domain: &quot;HR&quot;,
+        AppID: input.AppID,
+        TenantID: input.TenantID,
+        EvidenceRefs: state.EvidenceRefs,
+        PolicyDecisionID: policyResult.DecisionID,
+        IdempotencyKey: input.IdempotencyKey + &quot;:verify-contract&quot;,
+    })
+    if err != nil { return err }
+
+    // Step 5: Emit event and wait for projection confirmation when RYOW is required.
+    activities.EmitEvent(ctx, &quot;realmdm.relationship.contract.verified.v1&quot;, contractID)
+    activities.NotifyCommandCompleted(ctx, input.CorrelationID)
+
+    // Step 6: Continue-as-new before history gets large.
+    if workflow.GetInfo(ctx).GetCurrentHistoryLength() &gt; 10000 {
+        drainSignals(ctx, &amp;state) // atomic signal draining before reincarnation
+        return workflow.NewContinueAsNewError(ctx, CandidateToEmployeeWorkflow, state.ToInput())
+    }
+    return nil
+}</code></pre></div>
+</section>
+
+<section class="section" id="ai">
+  <h2>09 · AI / Entity Resolution / GraphRAG / MLOps</h2>
+  <p class="lead">AI is not the master. AI is the scale amplifier for stewardship, evidence summarization, feature extraction, fuzzy matching, graph neighborhood reasoning and developer productivity.</p>
+  <div class="grid3">
+    <div class="card"><h4>Candidate generation</h4><p>Deterministic exact handles first. Then fuzzy string similarity, address/geohash matching, graph neighborhood, vector evidence search.</p></div>
+    <div class="card"><h4>Calibrated scoring</h4><p>Train ER model using labeled match/non-match pairs. Monitor Expected Calibration Error. Raw confidence is not trusted.</p></div>
+    <div class="card"><h4>Digital Jury</h4><p>For PHI/PII/legal identity merges, require agreement between deterministic rules, graph model and LLM judge or escalate to human.</p></div>
+    <div class="card"><h4>Suggestion plane</h4><p>All AI outputs write to steward_suggestion with evidence, explanation, risk, model version and replayable input hash.</p></div>
+    <div class="card"><h4>GraphRAG scope</h4><p>Use GraphRAG to answer why and what-if questions, not to mutate truth. Retrieve k-hop subgraphs and evidence, synthesize explanation.</p></div>
+    <div class="card"><h4>MLOps gates</h4><p>Every model release requires evaluation set, trap cases, drift monitor, rollback plan, ECE threshold and domain-specific approval.</p></div>
+  </div>
+
+  <h3>Entity resolution pipeline</h3>
+  <div class="diagram"><div class="flow"><div class="node"><strong>Exact rules</strong><small>SSO, verified email + phone, source ID</small></div><div class="arrow">→</div><div class="node"><strong>Candidate recall</strong><small>blocking keys, LSH, graph neighbors, vectors</small></div><div class="arrow">→</div><div class="node"><strong>Scoring</strong><small>features + calibrated model</small></div><div class="arrow">→</div><div class="node"><strong>Risk routing</strong><small>auto low-risk or steward</small></div><div class="arrow">→</div><div class="node"><strong>Portal commit</strong><small>link/verify event</small></div></div></div>
+
+  <table>
+    <thead><tr><th>Risk level</th><th>Example</th><th>Allowed automation</th><th>Gate</th></tr></thead>
+    <tbody>
+      <tr><td>Low</td><td>Same verified SSO subject in same tenant</td><td>Auto-link</td><td>confidence > .985, deterministic evidence</td></tr>
+      <tr><td>Medium</td><td>Name/email/phone fuzzy match across CRM and support</td><td>Suggest</td><td>human or domain steward approval</td></tr>
+      <tr><td>High</td><td>Legal ID, PHI, payroll, clinical MRN, financial identity</td><td>No single-model auto-commit</td><td>Digital Jury + human fallback</td></tr>
+      <tr><td>Critical</td><td>Merge two existing pure person entities</td><td>Never direct</td><td>Portal with reversible merge contract, legal audit, steward signoff</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<section class="section" id="policy">
+  <h2>10 · OPA ABAC Shell and Consent Integration</h2>
+  <p class="lead">OPA and the CMP remain outside authorities. RealMDM builds reliable context, enforces obligations at service boundaries, and records decisions as evidence.</p>
+  <h3>OPA Rego shell</h3>
+<div class="codewrap"><div class="codebar"><span>rego</span><button class="copy">copy</button></div><pre><code>package realmdm.abac
+
+default allow := false
+
+# Consent is external. This shell requires a signed decision from the CMP for purpose-bound access.
+valid_consent if {
+  input.consent.decision == &quot;ALLOW&quot;
+  input.consent.subject_entity_id == input.resource.owner_entity_id
+  input.consent.purpose == input.context.purpose
+  time.now_ns() &lt; input.consent.expires_at_ns
+}
+
+# Basic ABAC: actor attributes, resource sensitivity, tenant boundary, purpose.
+allow if {
+  input.actor.tenant_id == input.resource.tenant_id
+  input.action == &quot;relationship.read&quot;
+  input.resource.sensitivity in {&quot;PUBLIC&quot;, &quot;INTERNAL&quot;}
+}
+
+allow if {
+  input.actor.tenant_id == input.resource.tenant_id
+  input.action == &quot;sensitive.reveal&quot;
+  input.actor.assurance_level == &quot;MFA_STRONG&quot;
+  input.actor.device_trust in {&quot;MANAGED&quot;, &quot;ATTESTED&quot;}
+  input.context.purpose in {&quot;PAYROLL&quot;, &quot;CLINICAL_CARE&quot;, &quot;LEGAL_COMPLIANCE&quot;}
+  valid_consent
+}
+
+# Obligations are returned to enforcement points, not left to app interpretation.
+obligations := [&quot;audit&quot;, &quot;mask_except_last4&quot;, &quot;no_export&quot;] if {
+  allow
+  input.resource.sensitivity in {&quot;PII&quot;, &quot;PHI&quot;, &quot;PCI&quot;}
+}
+
+deny_reason := &quot;missing or invalid consent&quot; if not valid_consent</code></pre></div>
+
+  <h3>Policy Context Builder output</h3>
+  <table>
+    <thead><tr><th>Field</th><th>Producer</th><th>Notes</th></tr></thead>
+    <tbody>
+      <tr><td>actor</td><td>Gateway + workload identity</td><td>SPIFFE ID, user ID, org/admin roles, device trust, assurance.</td></tr>
+      <tr><td>resource</td><td>Contract service + projection registry</td><td>Owner entity, tenant, sensitivity, domain pack, policy tags.</td></tr>
+      <tr><td>relationship_context</td><td>Relationship graph projection</td><td>Is actor assigned, doctor-of, manager-of, employee-of, vendor-admin-of?</td></tr>
+      <tr><td>consent</td><td>External CMP adapter</td><td>Signed decision ref, purpose, data category, expiry, jurisdiction.</td></tr>
+      <tr><td>purpose</td><td>Client/API contract</td><td>Required on every sensitive read and portal run.</td></tr>
+      <tr><td>obligations</td><td>OPA result</td><td>Mask, audit, no export, time-bound reveal, watermarked response.</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<section class="section" id="scale">
+  <h2>11 · Billions-Scale Design</h2>
+  <p class="lead">At billion-scale, correctness and partitioning matter more than a single database choice. The architecture must tolerate multi-region partitioning, high write volume, graph projection lag, key revocation, model drift and domain isolation.</p>
+
+  <h3>Partitioning strategy</h3>
+  <table>
+    <thead><tr><th>Layer</th><th>Partition key</th><th>Why</th><th>Cross-partition approach</th></tr></thead>
+    <tbody>
+      <tr><td>Event topics</td><td>region + tenant_id + entity_id hash</td><td>Keeps entity event order and tenant isolation.</td><td>Global identity links use async reconciliation events.</td></tr>
+      <tr><td>Kernel DB</td><td>tenant_id/app_id + entity_id hash</td><td>Predictable hot-spot control.</td><td>Cross-tenant edges require explicit governance portal.</td></tr>
+      <tr><td>Token vault</td><td>tenant_id + key shard</td><td>Limits breach blast radius.</td><td>Never do global token lookups without tenant scope.</td></tr>
+      <tr><td>Graph projection</td><td>tenant/domain subgraph + global sparse identity graph</td><td>Most graph queries are local; global graph remains sparse.</td><td>Federated graph query for authorized global investigations.</td></tr>
+      <tr><td>Vector index</td><td>domain + sensitivity + tenant</td><td>Avoid semantic bleed across tenants or privacy contexts.</td><td>Only compare across scopes via portal-authorized job.</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Scale constraints</h3>
+  <div class="grid4">
+    <div class="card"><h4>Write path</h4><p>Append events, idempotent contract writes, outbox/CDC, partition-aware producer keys.</p></div>
+    <div class="card"><h4>Read path</h4><p>Use operational cache, graph projection, search projection and domain views. Never query full event history on user request.</p></div>
+    <div class="card"><h4>Crypto path</h4><p>Caching CMM reduces KMS load; revocation signal overrides TTL; fail-closed on KMS miss/down for empty cache.</p></div>
+    <div class="card"><h4>AI path</h4><p>Batch inference for candidate recall; online inference only for narrow, bounded requests; no AI in critical synchronous path unless cached/deterministic.</p></div>
+  </div>
+</section>
+
+<section class="section" id="team">
+  <h2>12 · 8-Person Cross-Functional Team Plan</h2>
+  <p class="lead">This plan assumes every engineer is AI-augmented with Codex/Claude Code-style tools and comfortable with RAG, GraphRAG, MLOps, workflow engines and cloud-native delivery. The important part is not headcount; it is clean ownership boundaries.</p>
+
+  <table>
+    <thead><tr><th>#</th><th>Role</th><th>Primary ownership</th><th>Why it matters</th></tr></thead>
+    <tbody>
+      <tr><td>1</td><td>Principal Architect / Tech Lead</td><td>Architecture decisions, ADRs, schema governance, cross-team integration, performance envelope.</td><td>Prevents elegant but incompatible subsystem designs.</td></tr>
+      <tr><td>2</td><td>Go Core Services Engineer</td><td>Identity Resolver, Relationship Contract Service, gRPC APIs, idempotency and kernel DB.</td><td>Builds the deterministic heart.</td></tr>
+      <tr><td>3</td><td>Workflow / Portal Engineer</td><td>Temporal workflows, portal definitions, work packets, continue-as-new, compensation.</td><td>Turns doctrine into durable state transitions.</td></tr>
+      <tr><td>4</td><td>Data Pipeline Engineer</td><td>Kafka topics, schema registry, CDC/Debezium, projection consumers, data contracts, OpenLineage.</td><td>Owns event reliability and projections.</td></tr>
+      <tr><td>5</td><td>AI Entity Resolution / MLOps Engineer</td><td>Feature store, candidate generation, model training, calibration, drift, Digital Jury.</td><td>Scales resolution without unsafe merges.</td></tr>
+      <tr><td>6</td><td>GraphRAG / Ontology Engineer</td><td>Graph schema, domain taxonomies, GraphRAG retrievers, semantic constraints, evidence reasoning.</td><td>Makes meaning queryable and auditable.</td></tr>
+      <tr><td>7</td><td>OPA/ABAC + Consent Integration Engineer</td><td>OPA bundles, policy context builder, CMP adapter, obligations, policy decision logs.</td><td>Ensures runtime access is purpose-bound and explainable.</td></tr>
+      <tr><td>8</td><td>Cloud/SRE/Security Engineer</td><td>KMS/Vault/SAS infrastructure, Kubernetes, observability, chaos tests, CI/CD, SLOs.</td><td>Keeps the Ferrari on the track.</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Swimlane by phase</h3>
+  <div class="swimlane">
+    <div class="head">Role</div><div class="head">P0</div><div class="head">P1</div><div class="head">P2</div><div class="head">P3</div><div class="head">P4</div>
+    <div>Architect</div><div>ADRs, domain kernel</div><div>contract gates</div><div>portal review</div><div>scale topology</div><div>productization</div>
+    <div>Go Core</div><div>API skeleton</div><div>resolver + contracts</div><div>portal activities</div><div>perf tuning</div><div>SDKs</div>
+    <div>Workflow</div><div>Temporal setup</div><div>portal runner</div><div>first portal</div><div>continue-as-new</div><div>domain packs</div>
+    <div>Pipeline</div><div>topics/schemas</div><div>CDC + outbox</div><div>projections</div><div>replay/repair</div><div>lakehouse exports</div>
+    <div>AI/MLOps</div><div>label spec</div><div>features</div><div>calibration</div><div>Digital Jury</div><div>auto-low-risk</div>
+    <div>Graph/Ontology</div><div>ontology v0</div><div>graph projection</div><div>GraphRAG</div><div>SHACL/tests</div><div>semantic SDK</div>
+    <div>OPA/Consent</div><div>policy model</div><div>CMP adapter</div><div>OPA shell</div><div>obligations</div><div>policy packs</div>
+    <div>SRE/Security</div><div>platform baseline</div><div>SAS/KMS</div><div>observability</div><div>chaos drills</div><div>multi-region</div>
+  </div>
+</section>
+
+<section class="section" id="phases">
+  <h2>13 · Phase-Wise Implementation Plan</h2>
+  <p class="lead">Use gate-driven phases. Calendar targets are useful, but a phase is not done until its gate is passed.</p>
+  <div class="timeline">
+    <div class="step"><div class="phase">P0 · Architecture Sprint</div><div class="body"><b>Output:</b> ADRs, canonical schemas, topic names, service contracts, domain pack v0, threat model, migration target. <b>Gate:</b> architecture review with all eight owners.</div></div>
+    <div class="step"><div class="phase">P1 · Secure Shadow Registry</div><div class="body"><b>Build:</b> SAS tokenize, KMS/Vault integration, identity_handle, crosswalk, ingestion adapters. <b>Gate:</b> Crypto Gate and 50k EPS ingestion with bounded KMS RPS.</div></div>
+    <div class="step"><div class="phase">P2 · Contract Kernel</div><div class="body"><b>Build:</b> relationship_contract, event log, CloudEvents, projection consumers, graph projection, OpenLineage. <b>Gate:</b> replay/repair can rebuild graph and domain view.</div></div>
+    <div class="step"><div class="phase">P3 · First Governed Portal</div><div class="body"><b>Build:</b> Temporal portal, OPA context builder, CMP adapter, RYOW command gateway. <b>Gate:</b> zero stale read after write in 10k interactive sessions.</div></div>
+    <div class="step"><div class="phase">P4 · AI Stewardship</div><div class="body"><b>Build:</b> candidate generation, features, calibration, suggestion plane, human review UX/API. <b>Gate:</b> ECE < .05; trap cases escalate.</div></div>
+    <div class="step"><div class="phase">P5 · Multi-Domain Packs</div><div class="body"><b>Build:</b> HR, CRM, clinical/education packs, data contracts, projection schemas, policy bundles. <b>Gate:</b> onboarding a new domain requires config + templates, not bespoke code.</div></div>
+    <div class="step"><div class="phase">P6 · Billion-Scale Hardening</div><div class="body"><b>Build:</b> partition manager, multi-region replication, graph federation, rate limits, chaos regimen. <b>Gate:</b> SLOs hold under synthetic thundering herd and KMS/Temporal/Kafka failures.</div></div>
+  </div>
+
+  <h3>Definition of Done per phase</h3>
+  <table>
+    <thead><tr><th>Gate</th><th>Acceptance criteria</th><th>Artifact</th></tr></thead>
+    <tbody>
+      <tr><td>Crypto</td><td>99%+ KMS offload, revoked key cannot reveal, revocation effective within 60s fleet-wide.</td><td>KMS logs, revocation drill, proof-of-destruction receipt.</td></tr>
+      <tr><td>Consistency</td><td>RYOW p99 under target, 0 stale reads in test, non-blocking gateway no thread starvation.</td><td>k6/Gatling report, latency histogram, gateway profile.</td></tr>
+      <tr><td>Calibration</td><td>ECE < .05, trap cases escalate, high-risk merges use Digital Jury.</td><td>model card, calibration plot, confusion matrix, drift alarm.</td></tr>
+      <tr><td>Durability</td><td>Continue-as-new with zero signal loss; replay rebuilds projection.</td><td>chaos logs, replay/repair runbook, Temporal history proof.</td></tr>
+      <tr><td>Policy</td><td>OPA decisions logged; CMP decisions referenced; obligations enforced by service.</td><td>policy bundle, decision log samples, negative test cases.</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<section class="section" id="migration">
+  <h2>14 · Migration Path from Supabase / Simple Tables</h2>
+  <p class="lead">Most teams start with a <span class="kbd">person</span> table and an <span class="kbd">employee</span> table. That is not wrong. It is just a local model. Migration to RealMDM should be incremental and reversible.</p>
+
+  <h3>Migration ladder</h3>
+  <div class="diagram"><div class="flow"><div class="node"><strong>0. App tables</strong><small>person, employee, address</small></div><div class="arrow">→</div><div class="node"><strong>1. Add IDs</strong><small>realmdm_entity_id, contract_id</small></div><div class="arrow">→</div><div class="node"><strong>2. Shadow ingest</strong><small>no writeback</small></div><div class="arrow">→</div><div class="node"><strong>3. Portal new writes</strong><small>old data still works</small></div><div class="arrow">→</div><div class="node"><strong>4. Cutover</strong><small>app uses projections</small></div></div></div>
+
+  <h3>Migration SQL sketch</h3>
+<div class="codewrap"><div class="codebar"><span>sql</span><button class="copy">copy</button></div><pre><code>-- From a naive Supabase-style table to RealMDM shadow registry
+-- Original anti-pattern:
+-- person(id, name, email, phone, employee_id, org_id, salary, address, status)
+
+-- Step 1: Keep app table intact. Add crosswalk and RealMDM IDs.
+ALTER TABLE app_person ADD COLUMN realmdm_entity_id UUID NULL;
+ALTER TABLE app_employee ADD COLUMN realmdm_contract_id UUID NULL;
+
+-- Step 2: Backfill handles into RealMDM via ingestion job, not direct SQL writes.
+-- For each row: tokenize email/phone, hash normalized values, call IdentityResolver.Resolve.
+
+-- Step 3: Replace application joins with RealMDM crosswalk joins.
+CREATE VIEW app_employee_resolved AS
+SELECT e.*, p.realmdm_entity_id, e.realmdm_contract_id
+FROM app_employee e
+JOIN app_person p ON p.id = e.person_id;
+
+-- Step 4: Portalize new writes.
+-- Disable direct creation of employee status after cutover.
+CREATE OR REPLACE FUNCTION prevent_direct_employee_activation()
+RETURNS trigger AS $$
+BEGIN
+  IF NEW.status = &#x27;ACTIVE&#x27; AND NEW.realmdm_contract_id IS NULL THEN
+    RAISE EXCEPTION &#x27;Use RealMDM candidate_to_employee portal&#x27;;
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;</code></pre></div>
+
+  <h3>Migration policy</h3>
+  <ul class="checklist">
+    <li><b>Do not delete old IDs.</b> Preserve source IDs as crosswalks forever unless legally required to shred sensitive data.</li>
+    <li><b>Do not mass-merge.</b> Produce candidate links first; verify only high-confidence deterministic cases.</li>
+    <li><b>Do not block application traffic.</b> Use shadow mode until projections are proven.</li>
+    <li><b>Portalize new writes before cleaning all history.</b> Stop new pollution while AI/humans clean old data.</li>
+    <li><b>Keep rollback.</b> Source systems continue operating until RealMDM gates pass.</li>
+  </ul>
+</section>
+
+<section class="section" id="testing">
+  <h2>15 · Test, Observability and Ops Doctrine</h2>
+  <p class="lead">RealMDM should be operated like a high-risk distributed system, not like a dashboard. Gates are production safety barriers.</p>
+
+  <h3>SLO baseline</h3>
+<div class="codewrap"><div class="codebar"><span>yaml</span><button class="copy">copy</button></div><pre><code># Minimal observability SLO checklist
+slo:
+  ingestion_eps_p95: 50000
+  interactive_ryow_p99_ms: 200
+  kms_rps_at_50k_eps: 500
+  projection_lag_p99_seconds: 5
+  reveal_denied_on_revoked_key: 100_percent
+  temporal_signal_loss: 0
+  duplicate_false_merge_rate_critical: 0
+alerts:
+  - name: projection_lag_high
+    condition: projection_lag_p99_seconds &gt; 5 for 5m
+  - name: ece_drift
+    condition: model_ece &gt; 0.05 for 1h
+  - name: kms_revoked_but_cache_hit
+    condition: revoked_key_reveal_attempts &gt; 0
+  - name: policy_denied_spike
+    condition: deny_rate_delta &gt; 3x baseline
+  - name: portal_stuck
+    condition: portal_run_age &gt; portal_sla &amp;&amp; status not in [COMPLETED, COMPENSATED]</code></pre></div>
+
+  <h3>Mandatory drills</h3>
+  <div class="grid3">
+    <div class="card"><h4>Key revocation drill</h4><p>Destroy or disable test DEK; prove every service denies reveal and audit receives proof within SLO.</p></div>
+    <div class="card"><h4>Projection replay drill</h4><p>Drop a projection DB; rebuild from Reality Log; verify counts, checksums and lineage.</p></div>
+    <div class="card"><h4>Temporal reincarnation drill</h4><p>Inject signals during continue-as-new; prove zero signal loss and chain-of-custody across generations.</p></div>
+    <div class="card"><h4>OPA negative tests</h4><p>Try wrong purpose, stale consent, wrong tenant, unmanaged device, weak assurance; all must fail closed.</p></div>
+    <div class="card"><h4>Model drift drill</h4><p>Force ECE drift above threshold; auto-merge must disable and route to human review.</p></div>
+    <div class="card"><h4>Thundering herd</h4><p>Run 50k EPS ingestion and 10k RYOW sessions; system backpressures instead of crashing.</p></div>
+  </div>
+</section>
+
+<section class="section" id="criticism">
+  <h2>16 · Counterarguments, Criticism and Resolution</h2>
+  <table>
+    <thead><tr><th>Criticism</th><th>Why it is partly right</th><th>Resolution in this blueprint</th></tr></thead>
+    <tbody>
+      <tr><td>“This is too complex.”</td><td>It is more complex than a CRUD table.</td><td>The complexity already exists in identity, privacy, policy and context. This design makes it explicit, testable and owned.</td></tr>
+      <tr><td>“Graph databases do not scale as the system of record.”</td><td>For some billion-edge workloads, graph OLTP can be difficult.</td><td>Graph is projection/reasoning index. Authoritative writes live in event log + contract store.</td></tr>
+      <tr><td>“Event sourcing conflicts with right to erasure.”</td><td>Raw PII in immutable logs is unacceptable.</td><td>SAS tokenization + crypto-shredding; log stores encrypted/tokenized payloads only.</td></tr>
+      <tr><td>“AI will hallucinate merges.”</td><td>Yes, if AI writes to truth directly.</td><td>AI writes suggestions only; portals decide; Digital Jury/human gate for high risk.</td></tr>
+      <tr><td>“RYOW gateway will melt under load.”</td><td>Thread-per-request implementation would fail.</td><td>Non-blocking gateway, bounded wait, HTTP/2, backpressure, separate ingestion vs interactive gates.</td></tr>
+      <tr><td>“A universal person is philosophically nice but operationally vague.”</td><td>Pure entity without handles is useless.</td><td>Identity handles and evidence artifacts are first-class resources linked to pure entity.</td></tr>
+      <tr><td>“Consent and ABAC will sprawl.”</td><td>They often do when every app implements its own logic.</td><td>External CMP + OPA shell; RealMDM standardizes policy context and decision logs.</td></tr>
+      <tr><td>“Migration will be impossible.”</td><td>Big bang would fail.</td><td>Shadow registry, crosswalks, portalize new writes, projections, then cutover domain-by-domain.</td></tr>
+    </tbody>
+  </table>
+  <div class="critique"><b>Final position:</b> RealMDM is not “anti-conventional MDM.” It is the next layer above it: a doctrine-backed, engineering-gated identity and meaning control plane that uses modern computation, graph reasoning, event history, AI stewardship, policy-as-code and privacy engineering to solve the tradeoffs older systems had to accept.</div>
+</section>
+
+
+<section class="section" id="developer-appendix">
+  <h2>Developer Appendix · Repo, Topics, Service Skeletons and Tickets</h2>
+  <p class="lead">This appendix converts the architecture into day-one engineering scaffolding. The team should be able to create repositories, tickets, stubs, tests and service boundaries directly from this section.</p>
+
+  <h3>Recommended monorepo layout</h3>
+  <div class="codewrap"><div class="codebar"><span>repo tree</span><button class="copy">copy</button></div><pre><code>realmdm/
+  cmd/
+    gateway/                 # command gateway main
+    identity-resolver/       # resolver gRPC service
+    contract-service/        # relationship contract service
+    portal-worker/           # Temporal worker processes
+    projection-worker/       # Kafka consumers -&gt; projections
+    sas/                     # sensitive access service
+    policy-context/          # OPA/CMP context builder
+    steward-copilot/         # AI suggestion service API wrapper
+  internal/
+    authn/                   # mTLS, SPIFFE, JWT verification
+    idempotency/             # idempotency ledger middleware
+    tenant/                  # tenant/app/bu/org scoping
+    kerneldb/                # SQL repository layer
+    events/                  # CloudEvents producer/consumer
+    contracts/               # protobuf generated + validators
+    sasclient/               # SAS client, never direct KMS outside SAS
+    policy/                  # OPA client and decision log writer
+    consent/                 # external CMP adapter
+    telemetry/               # OTel tracing, metrics, structured logs
+  domainpacks/
+    hr-core-v1/
+      domainpack.yaml
+      schemas/
+      events/
+      projections/
+      policies/
+      portals/
+    crm-core-v1/
+  ml/
+    entity_resolution/
+      features.py
+      train.py
+      calibrate.py
+      evaluate_trap_cases.py
+      model_card.md
+  infra/
+    helm/
+    terraform/
+    k6/
+    dashboards/
+  docs/
+    adr/
+    runbooks/
+    threat-models/</code></pre></div>
+
+  <h3>Topic taxonomy</h3>
+  <div class="codewrap"><div class="codebar"><span>text</span><button class="copy">copy</button></div><pre><code># Topic naming rule: realmdm.&lt;plane&gt;.&lt;domain&gt;.&lt;entity|process&gt;.&lt;event&gt;.v&lt;major&gt;
+realmdm.reality.identity.entity.created.v1
+realmdm.reality.identity.handle.claimed.v1
+realmdm.reality.identity.crosswalk.linked.v1
+realmdm.reality.relationship.contract.claimed.v1
+realmdm.reality.relationship.contract.verified.v1
+realmdm.reality.relationship.contract.revoked.v1
+realmdm.governance.portal.transition.started.v1
+realmdm.governance.portal.transition.completed.v1
+realmdm.governance.policy.decision.logged.v1
+realmdm.secure.sas.token.created.v1
+realmdm.secure.sas.key.revoked.v1
+realmdm.secure.sas.key.shredded.v1
+realmdm.ai.steward.suggestion.created.v1
+realmdm.ai.steward.suggestion.decided.v1
+
+# Partition keys
+# identity.*: region|tenant_id|entity_id
+# relationship.*: region|tenant_id|subject_entity_id
+# portal.*: region|tenant_id|portal_run_id
+# sas.*: region|tenant_id|token_id or key_id</code></pre></div>
+
+  <h3>SAS Reveal near-code with Revocation Truth Table enforcement</h3>
+  <div class="codewrap"><div class="codebar"><span>go</span><button class="copy">copy</button></div><pre><code>func (s *SensitiveAccessService) Reveal(ctx context.Context, req *pb.RevealRequest) (*pb.RevealResponse, error) {
+    // 1. Workload identity. Only authenticated services call SAS.
+    principal, err := s.authn.RequireSPIFFE(ctx, req.RequestorServiceId)
+    if err != nil { return nil, status.Error(codes.Unauthenticated, &quot;missing workload identity&quot;) }
+
+    // 2. Vault lookup. Token is opaque; never infer data from token format.
+    meta, err := s.vault.Lookup(ctx, req.TenantId, req.Token)
+    if errors.Is(err, ErrNotFound) { return nil, Deny(&quot;VAULT_MISS&quot;) }
+
+    // 3. Policy and consent decision before crypto.
+    pdp, err := s.policy.CheckReveal(ctx, RevealPolicyInput{
+        Principal: principal,
+        Purpose: req.Purpose,
+        TenantID: req.TenantId,
+        DataType: meta.DataType,
+        OwnerEntityID: meta.OwnerEntityID,
+        ConsentDecisionRef: req.ConsentDecisionRef,
+        Context: req.AbacContext,
+    })
+    s.audit.RecordAttempt(ctx, req, pdp)
+    if err != nil || !pdp.Allow { return nil, Deny(&quot;DENY_POLICY_OR_CONSENT&quot;) }
+
+    // 4. Revocation truth table: reachable KMS revoked always overrides cache.
+    keyStatus, reachable := s.kms.Status(ctx, meta.KeyID)
+    if reachable &amp;&amp; (keyStatus == Disabled || keyStatus == Deleted || keyStatus == PendingDeletion) {
+        s.cache.Flush(meta.KeyID)
+        return nil, Deny(&quot;KEY_REVOKED&quot;)
+    }
+    if !reachable &amp;&amp; !s.cache.Has(meta.KeyID) {
+        return nil, status.Error(codes.Unavailable, &quot;KMS_DOWN_FAIL_CLOSED&quot;)
+    }
+
+    // 5. Decrypt using cached or KMS-unwrapped DEK. Plaintext is never cached.
+    dek, err := s.keyCache.GetOrLoad(ctx, meta.KeyID, meta.EncryptedDEK)
+    if err != nil { return nil, status.Error(codes.Unavailable, &quot;KEY_UNAVAILABLE&quot;) }
+    plaintext, err := s.crypto.Decrypt(dek, meta.Ciphertext, meta.AAD())
+    if err != nil { return nil, status.Error(codes.PermissionDenied, &quot;DECRYPT_FAILED&quot;) }
+
+    // 6. Obligations applied before returning.
+    plaintext = ApplyObligations(plaintext, pdp.Obligations)
+    s.audit.RecordReveal(ctx, req, meta, pdp)
+    return &amp;pb.RevealResponse{Plaintext: plaintext, Obligations: pdp.Obligations}, nil
+}</code></pre></div>
+
+  <h3>Projection consumer near-code</h3>
+  <div class="codewrap"><div class="codebar"><span>go</span><button class="copy">copy</button></div><pre><code>func (w *ProjectionWorker) HandleEvent(ctx context.Context, ev cloudevents.Event) error {
+    // Idempotency: projection consumers are at-least-once; writes must be idempotent.
+    if w.seen.AlreadyProcessed(ctx, ev.ID()) { return nil }
+
+    switch ev.Type() {
+    case &quot;realmdm.relationship.contract.verified.v1&quot;:
+        var data ContractVerified
+        if err := ev.DataAs(&amp;data); err != nil { return err }
+
+        // Graph projection: creates edge or reified node.
+        if err := w.graph.UpsertRelationshipContract(ctx, data); err != nil { return err }
+
+        // Domain read model: HR projection receives only HR-safe fields.
+        if data.Domain == &quot;HR&quot; {
+            if err := w.hrProjection.UpsertEmployeeView(ctx, data); err != nil { return err }
+        }
+
+        // OpenLineage emission for traceability.
+        w.lineage.Emit(ctx, LineageEventFromCloudEvent(ev, &quot;projection-worker&quot;))
+
+    case &quot;realmdm.secure.sas.key.revoked.v1&quot;:
+        var data KeyRevoked
+        if err := ev.DataAs(&amp;data); err != nil { return err }
+        w.cache.InvalidateKey(data.KeyID)
+    }
+
+    return w.seen.MarkProcessed(ctx, ev.ID())
+}</code></pre></div>
+
+  <h3>RYOW k6 test sketch</h3>
+  <div class="codewrap"><div class="codebar"><span>javascript</span><button class="copy">copy</button></div><pre><code>import http from &#x27;k6/http&#x27;;
+import { check, sleep } from &#x27;k6&#x27;;
+
+export const options = {
+  scenarios: {
+    interactive_ryow: {
+      executor: &#x27;constant-vus&#x27;,
+      vus: 10000,
+      duration: &#x27;10m&#x27;
+    }
+  },
+  thresholds: {
+    http_req_duration: [&#x27;p(99)&lt;200&#x27;],
+    checks: [&#x27;rate==1.0&#x27;]
+  }
+};
+
+export default function () {
+  const id = `${__VU}-${Date.now()}`;
+  const payload = JSON.stringify({ correlation_id: id, command: &#x27;UPDATE_HANDLE&#x27;, value: `user-${id}@example.test` });
+  const res = http.post(&#x27;https://gateway.realmdm.test/commands&#x27;, payload, { headers: {&#x27;Content-Type&#x27;:&#x27;application/json&#x27;} });
+  check(res, { &#x27;write confirmed&#x27;: r =&gt; r.status === 200 });
+
+  const read = http.get(`https://gateway.realmdm.test/entities/by-correlation/${id}`);
+  check(read, { &#x27;read-your-own-write&#x27;: r =&gt; r.status === 200 &amp;&amp; r.body.includes(id) });
+  sleep(1);
+}</code></pre></div>
+
+  <h3>First backlog: cut into tickets immediately</h3>
+  <div class="codewrap"><div class="codebar"><span>text</span><button class="copy">copy</button></div><pre><code>P0.TL.01  Create ADR-001: graph is projection, event log + contract store are authoritative.
+P0.TL.02  Create ADR-002: external CMP and OPA shell integration boundaries.
+P0.DE.01  Define CloudEvents envelope and topic naming policy.
+P0.GO.01  Generate protobuf stubs for IdentityResolver, SAS, ContractService, PortalService.
+P1.SRE.01 Provision dev KMS/Vault, per-tenant key namespace, audit bucket.
+P1.GO.02  Build SAS Tokenize/Reveals with fake KMS, then cloud KMS.
+P1.DE.02  Build Supabase/Postgres CDC ingestion adapter and dead-letter queues.
+P1.AI.01  Define labeled pair schema for entity resolution training and trap cases.
+P2.GO.03  Implement relationship_contract CRUD with bitemporal query support.
+P2.DE.03  Implement projection-worker with idempotency and OpenLineage emission.
+P2.GR.01  Build initial graph projection schema and 5 core Cypher/Gremlin queries.
+P3.WF.01  Implement candidate_to_employee Temporal workflow and idempotent activities.
+P3.OPA.01 Build Policy Context Builder and OPA bundle for sensitive.reveal and relationship.verify.
+P3.SRE.02 Run RYOW gateway load test and backpressure profile.
+P4.AI.02  Train baseline ER model, calibration layer, ECE dashboard.
+P4.GR.02  Build GraphRAG suggestion explainer that writes steward_suggestion only.
+P4.TL.03  Security review: prove AI cannot write to kernel tables.
+P5.ALL.01 Domain pack authoring for HR, CRM, clinical skeleton.
+P6.SRE.03 Multi-region rehearsal, projection replay, key revocation, Temporal signal chaos.</code></pre></div>
+</section>
+
+<section class="section" id="sources">
+  <h2>17 · Source Map and Standards Anchors</h2>
+  <p class="lead">This build plan is aligned with the internal RealMDM doctrine and current external patterns/standards. Use these sources as architectural anchors, not as copy-paste product mandates.</p>
+  <ul class="source-list">
+    <li>Internal doctrine: Satya/Maya, Neti Neti, Relationship Contracts, Portals, Reality Log, AI Proposes / Portals Decide / Logs Prove.</li>
+    <li>Internal industrialization: Crypto, Consistency, Calibration and Durability Gates; SAS; Revocation Truth Table; Wedge Strategy.</li>
+    <li>MDM baseline: IBM, Informatica, Reltio and Profisee definitions, implementation styles and AI/graph movement.</li>
+    <li>Zero Trust and cryptographic erasure: NIST SP 800-207, NIST SP 800-88.</li>
+    <li>Policy and authorization: OPA, OpenFGA/Zanzibar, SPIFFE/SPIRE workload identity.</li>
+    <li>Eventing and lineage: CloudEvents, Kafka tiered storage, Debezium Outbox, OpenLineage.</li>
+    <li>Semantic quality: W3C PROV-O and SHACL.</li>
+    <li>Workflow and AI: Temporal durable execution, GraphRAG, vector databases, calibration/MLOps.</li>
+  </ul>
+</section>
+
+    </div>
+  </main>
+</div>
+<div class="printbar"><button onclick="window.print()">Print / Save PDF</button><button onclick="location.hash='orientation'">Top</button></div>
+<script>
+const links=[...document.querySelectorAll('.toc a')];
+const sections=links.map(a=>document.querySelector(a.getAttribute('href'))).filter(Boolean);
+const obs=new IntersectionObserver(entries=>{entries.forEach(e=>{if(e.isIntersecting){links.forEach(a=>a.classList.toggle('active',a.getAttribute('href')==='#'+e.target.id));}})},{rootMargin:'-30% 0px -60% 0px',threshold:.01});
+sections.forEach(s=>obs.observe(s));
+document.querySelectorAll('.copy').forEach(btn=>btn.addEventListener('click',async()=>{const code=btn.closest('.codewrap').querySelector('code').innerText; await navigator.clipboard.writeText(code); const old=btn.innerText; btn.innerText='copied'; setTimeout(()=>btn.innerText=old,1200);}));
+</script>
+</body>
+</html>

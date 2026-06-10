@@ -167,7 +167,7 @@ export default function BuildPage(): JSX.Element {
                 {phase === 'planning' ? 'Composing plan…' : 'Generate plan →'}
               </Button>
               <span className="text-xs text-muted-foreground">
-                Powered by {meta?.provider === 'openai' ? 'OpenAI' : meta?.provider === 'anthropic' ? 'Claude' : 'OpenAI / Claude (auto-select)'} · audit logging coming in v2
+                Powered by {meta?.provider === 'openai' ? 'OpenAI' : meta?.provider === 'anthropic' ? 'Claude' : meta?.provider === 'local' ? 'Local LLM (on-host)' : 'OpenAI / Claude (auto-select)'} · audit logging coming in v2
               </span>
             </div>
           </form>

@@ -1,0 +1,309 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>ProjexCloud v3.1 — Implementation vs. Design &amp; Insignia Capability Reality Report</title>
+<style>
+  :root {
+    --bg:#0b0f17; --panel:#121826; --panel-2:#1a2234; --line:#243049;
+    --text:#e6ecf5; --muted:#8a98b3; --accent:#c9a86a; --accent-2:#6aa9ff;
+    --teal:#2dd4bf; --green:#5dd39e; --red:#ff6b6b; --yellow:#f5c451; --purple:#b88dff; --code-bg:#0f1422;
+  }
+  * { box-sizing:border-box; }
+  html,body { background:var(--bg); color:var(--text); font-family:ui-sans-serif,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",sans-serif; margin:0; padding:0; line-height:1.6; }
+  .page { max-width:1180px; margin:0 auto; padding:56px 32px 96px; }
+  header.cover { border-bottom:1px solid var(--line); padding-bottom:32px; margin-bottom:40px; }
+  header.cover .eyebrow { color:var(--accent); letter-spacing:0.18em; text-transform:uppercase; font-size:12px; font-weight:700; }
+  header.cover h1 { font-size:40px; line-height:1.15; margin:12px 0 10px; letter-spacing:-0.02em; }
+  header.cover .sub { color:var(--muted); font-size:16px; max-width:880px; }
+  header.cover .meta { display:flex; gap:22px; flex-wrap:wrap; margin-top:22px; color:var(--muted); font-size:13px; }
+  header.cover .meta b { color:var(--text); font-weight:600; }
+  h2 { font-size:25px; letter-spacing:-0.01em; margin:52px 0 16px; padding-bottom:8px; border-bottom:1px solid var(--line); scroll-margin-top:20px; }
+  h3 { font-size:18px; margin:28px 0 10px; color:var(--accent-2); }
+  h4 { font-size:12px; margin:18px 0 8px; color:var(--accent); text-transform:uppercase; letter-spacing:0.12em; }
+  p { color:#c8d1e3; }
+  a { color:var(--accent-2); }
+  strong { color:#fff; }
+  em { color:var(--muted); }
+  hr { border:0; border-top:1px solid var(--line); margin:30px 0; }
+  ul,ol { color:#c8d1e3; padding-left:22px; }
+  li { margin:5px 0; }
+  blockquote { margin:18px 0; background:var(--panel-2); border-left:3px solid var(--accent); border-radius:0 10px 10px 0; padding:14px 18px; color:#d6deef; font-size:14.5px; }
+  blockquote strong { color:var(--accent); }
+  .tablewrap { overflow-x:auto; margin:14px 0; border:1px solid var(--line); border-radius:12px; }
+  table { width:100%; border-collapse:collapse; font-size:13.5px; }
+  th,td { text-align:left; padding:10px 13px; border-bottom:1px solid var(--line); vertical-align:top; }
+  th { color:var(--muted); font-weight:600; font-size:11.5px; text-transform:uppercase; letter-spacing:0.07em; background:var(--panel); }
+  tr:last-child td { border-bottom:0; }
+  tbody tr:nth-child(even) { background:rgba(255,255,255,0.015); }
+  code { font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; background:var(--code-bg); border:1px solid var(--line); border-radius:5px; padding:1px 6px; font-size:12.5px; color:#e6c98a; }
+  .pill { display:inline-block; padding:2px 9px; border-radius:999px; font-size:11px; font-weight:600; border:1px solid var(--line); white-space:nowrap; }
+  .pill.green { color:var(--green); border-color:rgba(93,211,158,0.4); background:rgba(93,211,158,0.08); }
+  .pill.yellow { color:var(--yellow); border-color:rgba(245,196,81,0.4); background:rgba(245,196,81,0.08); }
+  .pill.red { color:var(--red); border-color:rgba(255,107,107,0.4); background:rgba(255,107,107,0.08); }
+  .toc { background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:16px 20px; margin:8px 0 8px; }
+  .toc b { color:var(--accent); font-size:11px; text-transform:uppercase; letter-spacing:0.14em; }
+  .toc ol { margin:10px 0 0; columns:2; column-gap:32px; font-size:13.5px; }
+  @media (max-width:760px){ .toc ol{columns:1;} header.cover h1{font-size:30px;} }
+</style>
+</head>
+<body>
+<div class="page">
+<header class="cover">
+  <div class="eyebrow">Insignia · Engineering Reality Check</div>
+  <h1>ProjexCloud v3.1 — Implementation vs. Design &amp; Insignia Capability Reality Report</h1>
+  <div class="sub">Capability-by-capability comparison of what is implemented and works, what is partial, and what cannot yet be claimed — across the ProjexCloud v3.1 design, the RealMDM / Reality Engine OS vision, and the Insignia Cybersecurity Capability Deck.</div>
+  <div class="meta">
+    <span><b>Prepared</b> · 2026-06-09</span>
+    <span><b>Repo / branch</b> · ProjexCloud @ p7/field-evidence-hyperscale</span>
+    <span><b>Basis</b> · Static code + design-doc review (not runtime-verified)</span>
+  </div>
+</header>
+<p><strong>Prepared:</strong> 2026-06-09 <strong>Repo / branch reviewed:</strong> <code>ProjexCloud</code> @ <code>p7/field-evidence-hyperscale</code> <strong>Author:</strong> Engineering review (static code + design-doc analysis)</p>
+<hr/>
+<h2>0. How to read this report</h2>
+<p>This report compares <strong>three things</strong> and tells you, capability by capability, <strong>what is real and works, what is partial, and what will not work / cannot honestly be claimed yet</strong>:</p>
+<ol>
+<li>**ProjexCloud v3.1 *design*** — <code>docs/v3.1/Architecture-v3.1.html</code>, <code>TechStack</code>, <code>ProjectStructure</code>, <code>SDK-Build-Plan</code>, <code>AgenticIntegration</code>, <code>AIM-Identity-Model</code>, and the PRD set <code>docs/v3.1/prd/P1…P9.2 + Tenant-BYOK</code>.</li>
+<li><strong>The RealMDM / "Reality Engine OS" + "Developer MDM" vision</strong> — <code>docs/insignia/realmdm_reality_engine_os_courseware.html</code> and <code>docs/insignia/Developer MDM.html</code>.</li>
+<li><strong>The Insignia Cybersecurity Capability Deck v1.2</strong> — <code>docs/insignia/Insignia_Cybersecurity_Capability_Deck V1.2.pptx</code> (32 slides), whose <strong>Technical Due-Diligence Addendum</strong> (slides 24–31) describes the exact zero-trust / identity / lineage / AI-security / PAM patterns this report scores against.</li>
+</ol>
+<blockquote><strong>Basis &amp; limits of this assessment.</strong> Verdicts below are from <strong>static review</strong> of source, DB migrations, exports and tests — *not* from running the full monorepo, executing the integration/chaos suites, or load-testing the stated SLOs. The working tree currently has <strong>uncommitted changes</strong> and the most recent commits are build/<code>tsc</code> fixes (<code>af90efd</code>, <code>23bfb35</code>, <code>16ab821</code>), so "implemented" means *code-complete and structurally sound per inspection*, not "verified green in CI." Where a claim depends on runtime behaviour or external credentials, it is flagged.</blockquote>
+<hr/>
+<h2>1. Executive summary</h2>
+<p><strong>The honest headline:</strong> ProjexCloud is a <strong>genuinely substantial platform</strong> — roughly <strong>48 of ~58 reviewed packages/services/apps are substantially implemented</strong> with real Postgres migrations, hash-chained ledgers, working services (150–450 LOC each), and three real Next.js operator/tenant apps. It is <strong>not</strong> vapourware or scaffolding.</p>
+<p><strong>But</strong> the Insignia deck and the RealMDM courseware describe the architecture in <strong>named-vendor, zero-trust-mesh terms</strong> (SPIFFE/SPIRE, Envoy PEP, Cilium, OPA/Cedar, OpenLineage, OCSF/Merkle, Temporal, Neo4j) that ProjexCloud **mostly does <em>not</em> use literally**. ProjexCloud implements the <em>same control objectives</em> with <strong>application-layer equivalents</strong> (JWT 6-layer claims, Postgres RLS + app-layer Pool Router, a custom IQL→Cedar-*shaped* evaluator, SHA-256 prev-hash audit chains, its own lineage graph). For an <strong>outcome/control conversation</strong> that is fine and defensible. For a <strong>due-diligence buyer who reads slide 25 literally and asks "show me the SPIFFE SVIDs / the OPA bundle / the OpenLineage events"</strong>, the answer is "we achieve that objective differently" — which must be said <em>before</em> the demo, not during it.</p>
+<p><strong>Three things that will trip a literal reading of the deck:</strong></p>
+<div class="tablewrap"><table>
+<thead><tr><th>Deck/courseware claim</th><th>Implementation reality</th><th>Verdict</th></tr></thead>
+<tbody>
+<tr><td>Zero-trust <strong>mTLS mesh</strong> with <strong>SPIFFE/SPIRE workload identity</strong>, <strong>Envoy PEP</strong>, <strong>Cilium</strong> (slides 15, 25)</td><td><strong>Not present.</strong> Service-to-service is JWT + API keys; tenant isolation is Postgres RLS + an app-layer Pool Router. Only mTLS use is outbound webhook client-certs (<code>sdk-webhook/mtlsAgent.ts</code>).</td><td><strong>Won't match a literal claim</strong> — reframe as app-layer zero-trust.</td></tr>
+<tr><td><strong>OPA / Cedar</strong> policy engine (slides 16, 25, 28; RealMDM "OPA sidecar/bundle")</td><td>Custom **IQL parser → "Cedar-*shaped* term" → hand-rolled <code>evaluateCedar()</code>**. Intentionally Cedar-compatible *shape*; <strong>not</strong> the Cedar/OPA runtime.</td><td><strong>Partial</strong> — real ABAC, not the named engine.</td></tr>
+<tr><td><strong>OpenLineage</strong> events + <strong>OCSF</strong> evidence ledger (slides 25, 26)</td><td><code>sdk-lineage</code> uses its <strong>own</strong> node/edge model (no OpenLineage emitter found); <code>sdk-audit</code>/<code>sdk-meter</code>/<code>sdk-evidence</code> use <strong>SHA-256 prev-hash chains</strong> (tamper-evident hash chain, not a full Merkle tree, not OCSF schema).</td><td><strong>Partial</strong> — equivalent integrity, non-standard format.</td></tr>
+</tbody></table></div>
+<p><strong>Connectors are demo-stubbed.</strong> Slack, Salesforce, M365, GitHub etc. have correct tool *schemas*, audit events and graceful "not configured" degradation, but the actual third-party HTTP calls return <code>{ ok: true, stub: true }</code> and <code>sync()</code> returns <code>records_synced: 0</code> with "deferred" notes. <strong>Do not demo a live external sync.</strong></p>
+<hr/>
+<h2>2. The three source visions, in one paragraph each</h2>
+<ul>
+<li><strong>ProjexCloud v3.1 (the build):</strong> A multi-tenant, pool-isolated SaaS spine. Six-layer identity (Master Person → App Identity → Tenant Membership → Persona → Encounter → Relationship), ABAC+ReBAC, consent, a 7-tier crypto-shred vault, append-only audit, metering/billing, an AI gateway + agent-isolation runtime (capability tokens, execution TTL, deterministic replay, sandboxed per-tenant vector memory), RAG, semantic/ontology services, and an AI-native "build planner." Delivered in phases P1–P9.2; P7 (field/evidence/hyperscale) and P8 (deployment variants) are the current frontier.</li>
+<li><strong>RealMDM "Reality Engine OS" courseware + "Developer MDM":</strong> A *doctrine-first* MDM control plane (Satya/Maya: pure entity vs. contextual role; "no Golden Record," relationships-as-contracts, event-sourced Reality Log, AI-as-observer-only, Cascading Cognition Grid SLM→LLM→Digital Jury). Prescribes <strong>Go + gRPC + Temporal + Kafka + Neo4j + OPA + OpenLineage + SAS tokenization + crypto-shred ("Digital Ash")</strong>. This is an <strong>architecture/courseware/build-guide</strong>, not the ProjexCloud codebase — ProjexCloud is a <strong>conceptual cousin</strong> built on a <strong>different stack</strong> (TypeScript/Postgres/Fastify, not Go/gRPC/Temporal/Neo4j).</li>
+<li><strong>Insignia Cybersecurity Capability Deck:</strong> A <strong>sales/capability deck</strong> for security staff-aug → consulting pods. Its value to this comparison is the <strong>due-diligence addendum</strong>, which advertises reference patterns (zero-trust evidence fabric, telemetry/lineage/audit evidence model, AI-prompt-to-proof, MDM+ABAC+consent+DLP gate, PAM/vault). ProjexCloud is plausibly the <strong>"sanitized internal architecture synthesis"</strong> those slides are abstracted from.</li>
+</ul>
+<hr/>
+<h2>3. Capability-by-capability scorecard (Insignia deck families → ProjexCloud)</h2>
+<p>Legend: <strong><span class="pill green">✅ Works</span> Works</strong> (implemented, demoable per static review) · <strong><span class="pill yellow">🟡 Partial</span> Partial</strong> (works with caveats / scaffolded / deferred) · <strong><span class="pill red">🔴 Gap</span> Gap</strong> (claimed in deck/design, not implemented / won't match literal claim).</p>
+<h3>3.1 Zero-Trust / workload identity / policy enforcement (deck slides 15, 25)</h3>
+<div class="tablewrap"><table>
+<thead><tr><th>Element</th><th>Status</th><th>Notes</th></tr></thead>
+<tbody>
+<tr><td>Identity-bound access, default-deny, per-request authz</td><td><span class="pill green">✅ Works</span></td><td>JWT 6-layer claims; every read via <code>resolveIdentityContext()</code>; lint bans direct identity imports.</td></tr>
+<tr><td>Tenant isolation / lateral-movement reduction</td><td><span class="pill green">✅ Works</span></td><td>Postgres RLS per tenant + app-layer <strong>Pool Router</strong>; cross-pool reads lint-banned except 4 sanctioned patterns. <code>sdk-pool-router</code> is A-tier (route cache, Redis broadcast, active-active).</td></tr>
+<tr><td><strong>SPIFFE/SPIRE workload identity, mTLS service mesh, Envoy PEP, Cilium</strong></td><td><span class="pill red">🔴 Gap</span></td><td><strong>Not implemented.</strong> No mesh, no SVIDs, no Envoy/Cilium. Achieved-differently (JWT/API-keys/RLS). The slide-25 diagram has <strong>no 1:1 code counterpart</strong>.</td></tr>
+<tr><td>OPA/Cedar PDP</td><td><span class="pill yellow">🟡 Partial</span></td><td><code>sdk-policy</code>: real IQL→Cedar-*shaped* evaluator; <strong>not</strong> OPA/Cedar runtime (see §3.2).</td></tr>
+</tbody></table></div>
+<h3>3.2 IAM / ABAC / ReBAC + MDM golden record + Consent (deck slide 16; RealMDM core)</h3>
+<div class="tablewrap"><table>
+<thead><tr><th>Element</th><th>Status</th><th>Notes</th></tr></thead>
+<tbody>
+<tr><td>OIDC/SAML/SCIM federation, MFA, sessions, impersonation</td><td><span class="pill green">✅ Works</span></td><td><code>sdk-identity</code> A-tier (2 migrations, SAML adapter, federation, credential/alias hashing).</td></tr>
+<tr><td>ABAC engine</td><td><span class="pill green">✅ Works</span>/<span class="pill yellow">🟡 Partial</span></td><td>Real attribute-based eval with versioned precompiled bundles; engine is <strong>custom (IQL→Cedar-shape)</strong>, not OPA/Cedar. Control objective met; named engine not used.</td></tr>
+<tr><td>ReBAC (relationship graph, bounded traversal)</td><td><span class="pill green">✅ Works</span></td><td><code>sdk-rebac</code> A-tier: BFS traversal, depth/visit budget, reachability cache, cross-tenant edges.</td></tr>
+<tr><td><strong>MDM "golden record" / identity resolution</strong></td><td><span class="pill green">✅ Works</span> (ProjexCloud model) / <span class="pill yellow">🟡 Partial</span> (vs RealMDM)</td><td><code>sdk-identity-resolver</code> resolves a flattened identity context across the 6-layer MDM tables with hot/cold projection + live fallback. <strong>But</strong> this is ProjexCloud's *deterministic* canonical-ID model — it does <strong>not</strong> implement RealMDM's <strong>probabilistic/graph/AI-jury entity resolution, calibration (ECE&lt;0.05), or claims-not-merges</strong> doctrine. If a buyer expects *RealMDM-style fuzzy resolution*, that is a <strong>gap</strong>.</td></tr>
+<tr><td>Consent / purpose-of-use + cross-border</td><td><span class="pill green">✅ Works</span></td><td><code>sdk-consent</code> A-tier: purpose registry, grant/revoke, cross-border check, receipts.</td></tr>
+<tr><td>Identity projection (sub-ms reads)</td><td><span class="pill green">✅ Works</span></td><td><code>sdk-projection</code> + <code>identity-projector</code> service: event-driven + TTL refresh, Redis mirror. (SLO p99≤0.5ms is <strong>stated, not load-verified here</strong>.)</td></tr>
+</tbody></table></div>
+<h3>3.3 AI security &amp; agentic governance (deck slides 18, 27)</h3>
+<div class="tablewrap"><table>
+<thead><tr><th>Element</th><th>Status</th><th>Notes</th></tr></thead>
+<tbody>
+<tr><td>Agent isolation: capability tokens, execution TTL, deterministic replay, sandboxed memory</td><td><span class="pill green">✅ Works</span></td><td><code>sdk-agent-runtime</code> A-tier — all four primitives present with HMAC-signed tokens, TTL enforcer, content-addressed replay, per-tenant vector-namespace isolation + cross-tenant leakage CI test. <strong>Strongest match to the deck.</strong></td></tr>
+<tr><td>Multi-provider AI gateway + PII redaction + per-tenant routing/budget</td><td><span class="pill green">✅ Works</span></td><td><code>sdk-ai-gateway</code> A-tier (OpenAI/Anthropic/Bedrock/Gemini adapters, circuit breaker, Langfuse).</td></tr>
+<tr><td>RAG with policy-filtered retrieval, per-tenant corpora</td><td><span class="pill green">✅ Works</span></td><td><code>sdk-knowledge-rag</code> A-tier (pgvector, per-tenant namespace, policy overlay at retrieval).</td></tr>
+<tr><td>Tenant BYOK AI keys (vaulted, rotate/revoke, audited)</td><td><span class="pill green">✅ Works</span></td><td>Implemented per Tenant-BYOK PRD; admin UI write-only.</td></tr>
+<tr><td>Prompt registry / RAG-corpus *classification* / AI-DLP / eval-drift gates</td><td><span class="pill yellow">🟡 Partial</span>/<span class="pill red">🔴 Gap</span></td><td>Tool allowlists + metering + audit exist. A <strong>formal prompt registry, RAG-corpus sensitivity classification, AI-DLP egress scanning, and eval/drift harness</strong> (deck slide 27 "eval/guardrail shadow+canary") are <strong>largely design-level / not found as shipped services.</strong></td></tr>
+<tr><td>MCP bridge (consume + expose MCP tools)</td><td><span class="pill yellow">🟡 Partial</span></td><td><code>sdk-mcp-bridge</code> partial — registration/invocation skeleton + audit wiring, transport/schema-validation <strong>deferred (TK-3293/94/95)</strong>. <code>registry-mcp</code> service itself is A-tier.</td></tr>
+</tbody></table></div>
+<h3>3.4 Telemetry / lineage / audit evidence (deck slides 25, 26)</h3>
+<div class="tablewrap"><table>
+<thead><tr><th>Element</th><th>Status</th><th>Notes</th></tr></thead>
+<tbody>
+<tr><td>Append-only tamper-evident audit ledger + nightly verify + customer export</td><td><span class="pill green">✅ Works</span></td><td><code>sdk-audit</code> A-tier: SHA-256 prev-hash chain, retention classes, verifier, signed export.</td></tr>
+<tr><td>Cross-system trace (one trace_id across identity/consent/routing/meter/lineage)</td><td><span class="pill green">✅ Works</span></td><td><code>sdk-trace</code> A-tier (ClickHouse-backed timeline, signed export).</td></tr>
+<tr><td>Metering ledger (zero-loss)</td><td><span class="pill green">✅ Works</span></td><td><code>sdk-meter</code> + <code>meter-collector</code> A-tier (Kafka→ClickHouse+Postgres dual-write, hash-chained).</td></tr>
+<tr><td>Field-level lineage / derivation chain</td><td><span class="pill green">✅ Works</span> (own model) / <span class="pill yellow">🟡 Partial</span> (vs deck)</td><td><code>sdk-lineage</code> + <code>lineage-projector</code> A-tier (emit, BFS chain, cross-pool→Iceberg).</td></tr>
+<tr><td><strong>OpenLineage event format</strong></td><td><span class="pill red">🔴 Gap</span></td><td><strong>No OpenLineage emitter found.</strong> Lineage uses a proprietary node/edge schema. Equivalent capability, <strong>non-standard wire format</strong>.</td></tr>
+<tr><td><strong>OCSF event schema / Merkle-tree evidence root</strong></td><td><span class="pill yellow">🟡 Partial</span></td><td>Integrity via <strong>SHA-256 prev-hash chains</strong> (a hash chain, *not* a Merkle tree; *not* OCSF-formatted). "Tamper-evident" <span class="pill green">✅ Works</span>; "OCSF/Merkle" as literally drawn on slide 26 ❌.</td></tr>
+<tr><td><code>business_reason</code> / <code>consent_grant_id</code> / <code>policy_bundle_hash</code> on every event</td><td><span class="pill yellow">🟡 Partial</span></td><td>Audit events carry actor/action/resource/tenant/trace; full slide-26 evidence-field set (<code>business_reason</code>, <code>policy_bundle_hash</code>, signed root) is <strong>partially</strong> present — verify field coverage before claiming.</td></tr>
+</tbody></table></div>
+<h3>3.5 PAM / Vault / secrets / privileged operations (deck slide 17, 29)</h3>
+<div class="tablewrap"><table>
+<thead><tr><th>Element</th><th>Status</th><th>Notes</th></tr></thead>
+<tbody>
+<tr><td>Multi-tier KMS-backed vault, key issue/rotate/<strong>crypto-shred</strong></td><td><span class="pill green">✅ Works</span></td><td><code>sdk-vault</code> A-tier (3 migrations, AWS/GCP/HSM providers, rotation scheduler, BYOK, SIEM forwarder). 7-tier key hierarchy + shred-as-erasure.</td></tr>
+<tr><td>BYOK / CMEK (customer CMK wraps tenant key; revoke→undecryptable)</td><td><span class="pill green">✅ Works</span></td><td>Implemented (P8).</td></tr>
+<tr><td>Scoped, time-bounded, consent-gated, loudly-audited <strong>impersonation</strong></td><td><span class="pill green">✅ Works</span></td><td>Per PRD design + audit wiring (30-min TTL, certificate-of-action).</td></tr>
+<tr><td><strong>PAM proper: JIT credential broker, break-glass workflow, privileged session capture (SSH/RDP/DB/K8s), CyberArk/Vault-class</strong></td><td><span class="pill red">🔴 Gap</span></td><td><strong>Not a product feature.</strong> <code>sdk-secrets</code> is an <strong>in-process catalog + KMS wrapper with no persistence/rotation/versioning</strong> (B-tier). The deck's PAM/POM capability (slide 17/29) is an **Insignia *consulting* capability**, not a ProjexCloud module. Do not present ProjexCloud as a PAM tool.</td></tr>
+</tbody></table></div>
+<h3>3.6 Data protection / DLP / classification / data-rights (deck slides 13, 28)</h3>
+<div class="tablewrap"><table>
+<thead><tr><th>Element</th><th>Status</th><th>Notes</th></tr></thead>
+<tbody>
+<tr><td>DSAR (access/erasure/rectification/etc.) + cross-pool fan-out + certificate</td><td><span class="pill green">✅ Works</span></td><td><code>sdk-data-rights</code> A-tier (lifecycle, residency registry, reconciliation, cert issuance).</td></tr>
+<tr><td>Per-field envelope encryption of sensitive bands (PAN/Aadhaar/SSN…)</td><td><span class="pill green">✅ Works</span></td><td>Vault + Profile per-field shred.</td></tr>
+<tr><td>Evidence chain-of-custody capture (GPS/IMU/device/consent stamping)</td><td><span class="pill yellow">🟡 Partial</span></td><td><code>sdk-evidence</code> partial — capture intake + chain verifier shipped; <strong>legal-export + retention-shredder are stubs (P7 deferred)</strong>.</td></tr>
+<tr><td><strong>Microsoft Purview / DLP tuning / sensitivity-label classification / insider-risk</strong></td><td><span class="pill red">🔴 Gap</span></td><td><strong>Not in product</strong> — this is an Insignia *services* capability (slide 13). ProjexCloud has no content-aware DLP scanner or Purview integration.</td></tr>
+</tbody></table></div>
+<hr/>
+<h2>4. What is implemented and works (A-tier — safe to demo, per static review)</h2>
+<p><strong>Identity / access / privacy spine (the crown jewels):</strong> <code>sdk-identity</code>, <code>sdk-identity-resolver</code>, <code>sdk-rebac</code>, <code>sdk-policy</code>, <code>sdk-persona</code>, <code>sdk-tenant</code>, <code>sdk-tenant-lifecycle</code>, <code>sdk-consent</code>, <code>sdk-data-rights</code>, <code>sdk-projection</code>, <code>sdk-api-keys</code>.</p>
+<p><strong>Crypto / evidence / metering:</strong> <code>sdk-vault</code> (incl. BYOK), <code>sdk-audit</code>, <code>sdk-trace</code>, <code>sdk-lineage</code>, <code>sdk-meter</code>, <code>sdk-diagnostic-telemetry</code>.</p>
+<p><strong>AI platform:</strong> <code>sdk-ai-gateway</code>, <code>sdk-agent-runtime</code> (the four isolation primitives), <code>sdk-knowledge-rag</code>, <code>sdk-semantic</code> (ontology/intent/SemanticPolicy, deterministic — no LLM dependency in v1), <code>sdk-catalog-index</code>, <code>sdk-registry</code>, <code>sdk-capability</code>, <code>sdk-conversation</code>, <code>sdk-parsing</code>, <code>sdk-search</code>, <code>sdk-ingest</code>.</p>
+<p><strong>Isolation / scale:</strong> <code>sdk-pool-router</code> (active-active aware).</p>
+<p><strong>Services:</strong> <code>api-gateway</code> (wires 15+ SDK migration chains, Kafka/Redis/ClickHouse, BYOK, SIEM), <code>identity-projector</code>, <code>lineage-projector</code> (Iceberg via Nessie/Glue backends), <code>meter-collector</code>, <code>semantic-service</code>, <code>registry-mcp</code>, <code>pool-federation-runtime</code>.</p>
+<p><strong>Apps (real Next.js, real pages calling the gateway):</strong></p>
+<ul>
+<li><code>projexcloud-admin</code> — ~18 operator pages (tenants, pools, pricing, invoices, webhooks, approvals, audit, sovereign-regions, onprem-installs, active-active).</li>
+<li><code>tenant-admin</code> — ~13 pages (billing, members, API keys, webhooks, approvals, connectors, consent, AI/MCP-servers, BYOK).</li>
+<li><code>tenant-workspace</code> — ~15 pages incl. the <strong><code>/build</code> AI planner</strong>: real semantic retrieval over the ~88-SDK catalog, vertical-pack classification (healthcare/finserv/publicSector/fieldService/revops), foundation-SDK auto-injection, dependency closure. <strong>Caveat:</strong> the planner's generation step needs a real LLM key (<code>anthropic</code>/<code>openai</code>); with none it falls back to <code>local</code>/keyword — demo with a key configured.</li>
+</ul>
+<hr/>
+<h2>5. What is partial / scaffolded (B-tier — works with caveats; do not over-claim)</h2>
+<div class="tablewrap"><table>
+<thead><tr><th>Package</th><th>What's real</th><th>What's missing / deferred</th></tr></thead>
+<tbody>
+<tr><td><code>sdk-evidence</code></td><td>Capture intake (259 LOC), chain verifier/appender, seal guard</td><td><strong>Legal-export generator + retention-shredder are stubs</strong> (P7 follow-up)</td></tr>
+<tr><td><code>sdk-secrets</code></td><td>KMS provider plumbing, in-memory catalog, envelope wrap/unwrap</td><td><strong>No persistence, no rotation, no versioning</strong> — not a credential store of record</td></tr>
+<tr><td><code>sdk-mcp-bridge</code></td><td>Registration/invocation skeleton + audit wiring</td><td><strong>Transport probe + schema validation deferred (TK-3293/94/95)</strong></td></tr>
+<tr><td><code>sdk-taxonomy</code></td><td>Tables + lookup</td><td><strong>Activation endpoints deferred (TK-3292)</strong></td></tr>
+<tr><td><code>sdk-sovereign</code></td><td>1 migration + region-registry/attestation/leak-detector <strong>stubs</strong></td><td>Real registry/bundle-apply/attestation-watcher deferred (Y-P8-5/6)</td></tr>
+<tr><td><code>sdk-onprem</code></td><td>1 migration + install/bundle/billing <strong>stubs</strong></td><td>No K8s execution layer; deferred (Y-P8-8/9/10)</td></tr>
+<tr><td><code>sdk-storm</code></td><td>Provider-chain interface (NOAA/DTN/WU)</td><td><strong>Real weather-API HTTP calls stubbed</strong> (P7 follow-up)</td></tr>
+<tr><td><code>connector-slack</code> / <code>-salesforce</code> / <code>-microsoft365</code> / <code>-github</code></td><td>Correct tool schemas, audit events, graceful "not configured" degradation</td><td><strong>All third-party HTTP calls return <code>{ stub: true }</code>; <code>sync()</code> → <code>records_synced: 0</code>.</strong> No live external integration.</td></tr>
+</tbody></table></div>
+<p><strong>No fully-empty (C-tier) packages were found</strong> — every reviewed package has at least a migration and real service logic. The B-tier items are <strong>intentional phase gates</strong> (P7/P8 / TK tasks), not abandoned code.</p>
+<hr/>
+<h2>6. What will NOT work / cannot be claimed yet (the "stop" list)</h2>
+<ol>
+<li>**Zero-trust *mesh* as drawn (slide 25/15).** No SPIFFE/SPIRE, no Envoy PEP, no Cilium, no mTLS service mesh. If asked to "show the SVID / the mesh policy," there is nothing to show. *Claim the <strong>control objective</strong> (identity-bound, default-deny, audited), not the <strong>vendor pattern</strong>.*</li>
+<li><strong>OPA/Cedar engine.</strong> The policy engine is a bespoke IQL→Cedar-shape evaluator. Don't say "we run OPA/Cedar." Say "ABAC/ReBAC with a Cedar-compatible policy shape."</li>
+<li><strong>OpenLineage / OCSF / Merkle-tree</strong> wire formats. We have *equivalent* tamper-evident hash chains and a lineage graph, but <strong>not</strong> those named standards. Don't put OpenLineage/OCSF on a slide for *this* codebase.</li>
+<li><strong>PAM / privileged-session brokering (CyberArk-class).</strong> Not a product capability. <code>sdk-secrets</code> won't back it. This is an <strong>Insignia consulting</strong> offering only.</li>
+<li><strong>Microsoft Purview / content-aware DLP / insider-risk.</strong> Not in product. Consulting capability only.</li>
+<li><strong>RealMDM-style probabilistic/AI-jury entity resolution + calibration.</strong> ProjexCloud's resolver is deterministic canonical-ID; it does <strong>not</strong> implement the courseware's fuzzy-match + ECE-calibration + claims-not-merges machinery.</li>
+<li><strong>Live external connector syncs (Slack/SFDC/M365/GitHub).</strong> Stubbed — will return success-shaped no-ops. Never demo as a live integration.</li>
+<li><strong>Stated SLOs (p99 latency, 50k EPS zero-loss, 10M-edge ReBAC, sub-ms projection, 60s fleet-wide revocation).</strong> These are <strong>design targets in PRDs/exit-gates</strong>; this review did <strong>not</strong> load-test them. Treat as "designed-for," not "measured."</li>
+<li><strong>On-prem / sovereign deployment variants (P8).</strong> Largely scaffolded (<code>sdk-onprem</code>, <code>sdk-sovereign</code> B-tier). BYOK/CMEK in <code>sdk-vault</code> is real; the surrounding install/attestation tooling is not.</li>
+<li><strong>"Builds green" is unverified.</strong> Recent commits are <code>tsc</code>/build fixes and the tree is dirty. Run <code>pnpm -w build</code> + the isolation/chaos test suites before any technical due-diligence session.</li>
+</ol>
+<hr/>
+<h2>7. ProjexCloud ↔ RealMDM / Developer MDM alignment</h2>
+<p><strong>Where they rhyme (concept parity, different stack):</strong></p>
+<ul>
+<li>Layered identity vs. "pure entity / contextual role" (Satya/Maya) — ProjexCloud's Master Person + Persona is the same instinct.</li>
+<li>Consent as purpose-bound + cross-border — both have it.</li>
+<li>Crypto-shred erasure ("Digital Ash") — <code>sdk-vault</code> shred ≈ RealMDM key-destruction proof.</li>
+<li>Event/lineage backbone, AI-as-governed-actor — ProjexCloud's agent-isolation runtime is a *stronger, shipped* version of "AI is observer, not author."</li>
+<li>ABAC + relationship contracts — ProjexCloud's ABAC+ReBAC maps to RealMDM's OPA + relationship-contracts.</li>
+</ul>
+<p><strong>Where they diverge (do not conflate the two in a pitch):</strong></p>
+<ul>
+<li><strong>Stack:</strong> RealMDM prescribes <strong>Go/gRPC/Temporal/Kafka/Neo4j/OPA/OpenLineage</strong>; ProjexCloud is <strong>TypeScript/Fastify/Postgres/Drizzle/ClickHouse/pgvector</strong> with a bespoke policy + lineage layer. They are <strong>different implementations of similar ideas</strong>, not the same system.</li>
+<li><strong>Entity resolution:</strong> RealMDM's centerpiece (probabilistic + graph + AI-jury + calibration, "no Golden Record," event-sourced Reality Log) is <strong>not</strong> how ProjexCloud resolves identity. ProjexCloud is deterministic/canonical.</li>
+<li><strong>Temporal/durable portals &amp; Neo4j graph-of-truth:</strong> not present in ProjexCloud.</li>
+</ul>
+<blockquote>If RealMDM is the <strong>product being sold/spec'd to a client</strong>, ProjexCloud is a <strong>partial reference implementation of the governance + secure-data + AI-isolation planes</strong>, missing the <strong>probabilistic identity-resolution + Temporal-portal + graph</strong> core. Scope any "we already built RealMDM" claim accordingly.</blockquote>
+<hr/>
+<h2>8. ProjexCloud ↔ Insignia capability inventory (extra · common · missing)</h2>
+<p>The Insignia deck is a <strong>cybersecurity-services</strong> deck — it only frames capability through a security lens (vuln-mgmt, AppSec, DLP, GRC, zero-trust, IAM/ABAC/consent, PAM, AI-security, detection/telemetry). ProjexCloud is a <strong>product platform</strong>, so it carries a large body of <strong>business/operational/AI SDKs the deck never mentions</strong> — these are exactly the capabilities a <em>customer</em> buys, not a security pod. This section inventories the three buckets and marks what we would have to <strong>build/extend</strong> to also satisfy the security-specific items the deck claims.</p>
+<h3>8.1 ProjexCloud has, Insignia deck does <strong>not</strong> mention (our extra value to customers)</h3>
+<p>These ship in the product (maturity per §4–§5) and are customer-facing differentiators the security deck is silent on. Maturity: <strong><span class="pill green">✅ Works</span></strong> substantially implemented · <strong><span class="pill yellow">🟡 Partial</span></strong> partial/scaffolded.</p>
+<div class="tablewrap"><table>
+<thead><tr><th>Domain</th><th>ProjexCloud SDKs / modules</th><th>Customer value the Insignia deck doesn't cover</th><th>Maturity</th></tr></thead>
+<tbody>
+<tr><td><strong>Engagement &amp; CRM</strong></td><td><code>sdk-engagement</code>, <code>sdk-crm</code>, <code>sdk-campaign</code>, <code>sdk-social</code>, <code>sdk-lead-scoring</code>, <code>sdk-recommendation</code></td><td>Built-in customer engagement, CRM, campaigns, lead scoring, recommendations — a *business* platform, not just controls</td><td><span class="pill yellow">🟡 Partial</span> (crm/engagement core; campaign/social/lead-scoring lighter)</td></tr>
+<tr><td><strong>Content &amp; conversation</strong></td><td><code>sdk-content</code>, <code>sdk-conversation</code>, <code>sdk-notification</code></td><td>CMS, multi-channel conversation (RAG-grounded), consent-gated notifications</td><td><span class="pill green">✅ Works</span> content/conversation/notification</td></tr>
+<tr><td><strong>Service &amp; field ops</strong></td><td><code>sdk-service-request</code>, <code>sdk-dispatch</code>, <code>sdk-assignment</code>, <code>sdk-event</code>, <code>sdk-storm</code>, <code>sdk-diagnostic-telemetry</code></td><td>Field-service request → dispatch → assignment; event/ticketing; weather/storm triggers; device crash/health telemetry</td><td><span class="pill green">✅ Works</span> event/diagnostic; <span class="pill yellow">🟡 Partial</span> dispatch/assignment/storm</td></tr>
+<tr><td><strong>Field capture (HDK)</strong></td><td><code>hdk-camera</code>, <code>hdk-map</code>, <code>hdk-scanner</code>, <code>hdk-measure</code>, <code>hdk-watermark</code>, <code>hdk-image-editor</code>, <code>hdk-video-editor</code></td><td>Evidence-grade mobile capture (GPS/IMU/device-stamped), measurement, watermarking — unique to field/insurance/healthcare verticals</td><td><span class="pill yellow">🟡 Partial</span> (capture core; measure/watermark P7)</td></tr>
+<tr><td><strong>Commerce &amp; billing</strong></td><td><code>sdk-billing</code>, <code>sdk-payment</code>, <code>sdk-meter</code></td><td>Usage metering, PCI-tokenized payments, invoicing, soft/hard quota caps — monetization the deck never touches</td><td><span class="pill green">✅ Works</span> meter/billing; payment tokenization core</td></tr>
+<tr><td><strong>Workflow &amp; automation</strong></td><td><code>sdk-workflow</code>, <code>sdk-approval</code>, <code>sdk-webhook</code></td><td>Durable workflow, human-approval routing, outbound webhooks (incl. mTLS client-cert delivery)</td><td><span class="pill green">✅ Works</span> approval/webhook; <span class="pill yellow">🟡 Partial</span> workflow</td></tr>
+<tr><td><strong>AI-native build &amp; discovery</strong></td><td><code>sdk-registry</code>, <code>sdk-catalog-index</code>, <code>sdk-capability</code>, <code>sdk-semantic</code>, <code>/build</code> planner, <code>sdk-agent-runtime</code>, <code>sdk-knowledge-rag</code>, <code>sdk-mcp-bridge</code></td><td><strong>AI app-builder</strong>: agents discover ~88 SDKs via RAG and compose apps; ontology/intent planner; MCP exposure. No equivalent anywhere in the deck</td><td><span class="pill green">✅ Works</span> registry/catalog/semantic/agent-runtime/rag; <span class="pill yellow">🟡 Partial</span> mcp-bridge</td></tr>
+<tr><td><strong>Document AI</strong></td><td><code>sdk-parsing</code>, <code>sdk-taxonomy</code>, <code>sdk-ingest</code>, <code>sdk-search</code>, <code>sdk-analytics</code></td><td>8-stage OCR→classify→extract→validate pipeline; ETL ingest front-door; ABAC-filtered search; analytics rollups</td><td><span class="pill green">✅ Works</span> parsing/ingest/search; <span class="pill yellow">🟡 Partial</span> taxonomy/analytics</td></tr>
+<tr><td><strong>Multi-tenant SaaS infra</strong></td><td><code>sdk-tenant</code>, <code>sdk-tenant-lifecycle</code>, <code>sdk-pool-router</code>, <code>sdk-feature-flags</code>, <code>sdk-profile</code>, <code>sdk-persona</code>, <code>sdk-projection</code>, <code>sdk-geo</code>, <code>sdk-device</code></td><td>Recursive sub-tenants/resellers, pool isolation, active-active routing, feature flags, sub-ms identity projection — the *platform plumbing* a buyer inherits free</td><td><span class="pill green">✅ Works</span> tenant/pool-router/projection/persona/profile</td></tr>
+<tr><td><strong>Connectors</strong></td><td><code>connector-*</code> (Salesforce, M365, Slack, Jira, Linear, Zendesk, HubSpot, Zoom, GitHub, Snowflake, GWorkspace)</td><td>11 pre-built integration surfaces (schemas + audit + graceful degradation)</td><td><span class="pill yellow">🟡 Partial</span> (schemas real, live HTTP sync stubbed — see §5)</td></tr>
+<tr><td><strong>Deployment variants</strong></td><td><code>sdk-sovereign</code>, <code>sdk-onprem</code>, BYOK in <code>sdk-vault</code></td><td>BYOK/CMEK <span class="pill green">✅ Works</span>; sovereign/on-prem/air-gapped packaging</td><td><span class="pill green">✅ Works</span> BYOK; <span class="pill yellow">🟡 Partial</span> sovereign/onprem</td></tr>
+</tbody></table></div>
+<blockquote><strong>Takeaway:</strong> to a customer, the *real* ProjexCloud advantage over a security-services engagement is everything in this table — a working multi-tenant product spine with engagement, commerce, field-ops, document-AI, and an AI app-builder. The Insignia deck sells *people and assessments*; ProjexCloud is *running software*.</blockquote>
+<h3>8.2 Common to both (ProjexCloud product capability ⟷ Insignia security pattern)</h3>
+<p>Where ProjexCloud already implements the control the deck advertises (objective met; see §3 for any vendor-naming caveats).</p>
+<div class="tablewrap"><table>
+<thead><tr><th>Capability</th><th>Insignia deck reference</th><th>ProjexCloud SDK(s)</th><th>Notes</th></tr></thead>
+<tbody>
+<tr><td>Identity / OIDC / SAML / SCIM / MFA / impersonation</td><td>IAM (slide 16)</td><td><code>sdk-identity</code></td><td><span class="pill green">✅ Works</span></td></tr>
+<tr><td>ABAC + ReBAC authorization</td><td>ABAC/OPA (16, 25, 28)</td><td><code>sdk-policy</code>, <code>sdk-rebac</code></td><td><span class="pill green">✅ Works</span> control; <span class="pill yellow">🟡 Partial</span> engine is Cedar-*shape*, not OPA/Cedar</td></tr>
+<tr><td>Consent / purpose-of-use / cross-border</td><td>CMP / consent (16, 28)</td><td><code>sdk-consent</code></td><td><span class="pill green">✅ Works</span></td></tr>
+<tr><td>MDM canonical identity / golden record</td><td>MDM (16, 28)</td><td><code>sdk-identity-resolver</code></td><td><span class="pill green">✅ Works</span> deterministic; not RealMDM probabilistic</td></tr>
+<tr><td>Tamper-evident audit ledger + customer export</td><td>Audit evidence (26, 31)</td><td><code>sdk-audit</code></td><td><span class="pill green">✅ Works</span> hash-chain (not OCSF/Merkle)</td></tr>
+<tr><td>Lineage / derivation chain</td><td>OpenLineage (25, 26)</td><td><code>sdk-lineage</code>, <code>lineage-projector</code></td><td><span class="pill green">✅ Works</span> own model (not OpenLineage format)</td></tr>
+<tr><td>Cross-system trace</td><td>Telemetry (25, 26)</td><td><code>sdk-trace</code></td><td><span class="pill green">✅ Works</span></td></tr>
+<tr><td>Multi-tier vault + crypto-shred + BYOK/CMEK</td><td>Vault/secrets (17, 29)</td><td><code>sdk-vault</code></td><td><span class="pill green">✅ Works</span></td></tr>
+<tr><td>Data-rights / DSAR / erasure / certificate</td><td>Privacy (28, 30)</td><td><code>sdk-data-rights</code></td><td><span class="pill green">✅ Works</span></td></tr>
+<tr><td>AI security: agent isolation, tool allowlists, per-tenant memory, BYOK keys</td><td>AI security (18, 27)</td><td><code>sdk-agent-runtime</code>, <code>sdk-ai-gateway</code>, <code>sdk-knowledge-rag</code></td><td><span class="pill green">✅ Works</span> <strong>strongest match</strong></td></tr>
+<tr><td>SIEM export of security events</td><td>Detection/telemetry (7, 17)</td><td><code>sdk-vault</code> SIEM forwarder (Splunk/Elastic/Sumo)</td><td><span class="pill yellow">🟡 Partial</span> vault-event forwarding only, not full detection</td></tr>
+</tbody></table></div>
+<h3>8.3 Insignia deck claims, ProjexCloud does <strong>not</strong> have — and what we'd extend to match</h3>
+<p>These are the security-specific capabilities the deck advertises that have <strong>no product counterpart</strong> today. Each row marks the <strong>extension target</strong> (existing SDK to grow, or a <strong>new</strong> package) and rough effort. "Effort" is relative engineering size, not a commitment.</p>
+<div class="tablewrap"><table>
+<thead><tr><th>Missing capability</th><th>Insignia deck ref</th><th>Why it's missing</th><th>Extension target in ProjexCloud</th><th>Effort</th></tr></thead>
+<tbody>
+<tr><td><strong>Zero-trust service mesh</strong> (SPIFFE/SPIRE workload identity, Envoy PEP, Cilium, mTLS mesh)</td><td>slides 15, 25</td><td>App-layer auth (JWT+RLS+Pool Router) used instead; no mesh</td><td><strong>Infra, not SDK</strong> — adopt SPIRE + Envoy/Linkerd + Cilium at the deployment layer; issue SVIDs to services; keep app-layer authz on top</td><td><strong>L</strong> (platform/infra program)</td></tr>
+<tr><td><strong>Real OPA/Cedar policy engine</strong></td><td>16, 25, 28</td><td><code>sdk-policy</code> is a custom IQL→Cedar-*shape* evaluator</td><td><strong>Extend <code>sdk-policy</code></strong>: emit real Cedar (or compile to OPA Rego) and run the genuine <code>cedar-policy</code>/OPA evaluator behind the same interface</td><td><strong>M</strong></td></tr>
+<tr><td><strong>OpenLineage / OCSF standard formats</strong></td><td>25, 26</td><td><code>sdk-lineage</code>/<code>sdk-audit</code> use proprietary schemas</td><td><strong>Extend <code>sdk-lineage</code></strong> (OpenLineage event emitter/adapter) + <strong><code>sdk-audit</code></strong> (OCSF-formatted export + Merkle-tree root option)</td><td><strong>S–M</strong> (translation adapters)</td></tr>
+<tr><td><strong>PAM / privileged-ops</strong> (JIT credential broker, break-glass, SSH/RDP/DB/K8s session capture, CyberArk-class)</td><td>17, 29</td><td><code>sdk-secrets</code> is only a KMS wrapper (no persistence/rotation)</td><td><strong>New <code>sdk-pam</code></strong> (or major <code>sdk-secrets</code> rebuild): credential vault of record, JIT issuance, break-glass workflow via <code>sdk-approval</code>, session recording + SIEM link</td><td><strong>L</strong></td></tr>
+<tr><td><strong>Content-aware DLP / Microsoft Purview / sensitivity labels / insider-risk</strong></td><td>13, 28</td><td>No content scanner or Purview integration</td><td><strong>New <code>sdk-dlp</code></strong> + <strong><code>connector-purview</code></strong>: classification engine, sensitivity labels feeding ABAC tags, egress scanning, insider-risk signals</td><td><strong>L</strong></td></tr>
+<tr><td><strong>Vulnerability management</strong> (Tenable/Qualys/Rapid7 ingest, risk-based prioritization, SLA dashboards)</td><td>11</td><td>Not a product domain</td><td><strong>New <code>sdk-vuln</code></strong> + scanner connectors; reuse <code>sdk-meter</code>/<code>sdk-search</code>/dashboards</td><td><strong>M–L</strong></td></tr>
+<tr><td><strong>AppSec / Secure-SDLC</strong> (SAST/DAST/SCA triage, SBOM, signed provenance, container admission, CI/CD gates)</td><td>12</td><td>Not a product domain</td><td><strong>New <code>sdk-appsec</code></strong> + CI/CD policy gates; tie SBOM/provenance into <code>sdk-audit</code> evidence</td><td><strong>M–L</strong></td></tr>
+<tr><td><strong>GRC tooling integration</strong> (AuditBoard / SAI360 / ServiceNow GRC, control libraries, evidence workflows)</td><td>14</td><td>No GRC workflow layer</td><td><strong>New <code>sdk-grc</code></strong> + connectors; map controls to existing <code>sdk-audit</code> evidence export</td><td><strong>M</strong></td></tr>
+<tr><td><strong>Detection engineering / SIEM-XDR</strong> (alert tuning, use-cases, runbooks)</td><td>7, 10</td><td>Only vault-event SIEM forwarding</td><td><strong>Extend SIEM forwarder → <code>sdk-detection</code></strong>: route audit/trace/meter streams to SIEM/XDR with detection rules</td><td><strong>M</strong></td></tr>
+<tr><td><strong>AI-security governance gaps</strong>: formal <strong>prompt registry</strong>, <strong>RAG-corpus sensitivity classification</strong>, <strong>AI-DLP egress scanning</strong>, <strong>eval/drift harness</strong> (shadow/canary), model cards (NIST AI RMF)</td><td>18, 27, 30</td><td>Partial — tool allowlists/metering/audit exist; the rest is design-level</td><td><strong>Extend <code>sdk-ai-gateway</code></strong> (prompt registry + AI-DLP egress) + <strong><code>sdk-knowledge-rag</code></strong> (corpus classification) + <strong>new <code>sdk-ai-eval</code></strong> (eval/drift/calibration, model cards)</td><td><strong>M</strong></td></tr>
+<tr><td><strong>Probabilistic / AI-jury entity resolution + calibration</strong> (RealMDM-style)</td><td>RealMDM courseware</td><td>ProjexCloud resolver is deterministic</td><td><strong>Extend <code>sdk-identity-resolver</code></strong>: probabilistic + graph + calibrated-AI matching, claims-not-merges, ECE monitoring</td><td><strong>L</strong></td></tr>
+</tbody></table></div>
+<blockquote><strong>Reading guide for the team:</strong> rows marked <strong>S/M</strong> are *adapters and extensions of existing SDKs* (cheap, high-credibility — do these first when a deal needs the literal claim). Rows marked <strong>L</strong> are *new product surfaces or infra programs* (PAM, DLP, vuln-mgmt, AppSec, zero-trust mesh) — these are genuinely <strong>Insignia consulting territory</strong>, and the honest position is "we partner/consult for these, we don't ship them yet."</blockquote>
+<hr/>
+<h2>9. Recommendations</h2>
+<p><strong>Safe to claim now (with the demo caveats above):</strong></p>
+<ul>
+<li>Multi-tenant identity/ABAC/ReBAC/consent spine; 7-tier crypto-shred vault + BYOK; append-only hash-chained audit + DSAR + certificate-of-shred; cross-system trace + metering; <strong>agent-isolation runtime (capability tokens / TTL / replay / sandboxed memory)</strong> — this last is the <strong>single most differentiated, demoable asset</strong> and aligns precisely with deck slide 27.</li>
+</ul>
+<p><strong>Reframe before claiming (objective, not vendor):</strong></p>
+<ul>
+<li>Zero-trust → "app-layer zero-trust (JWT + RLS + Pool Router)," not "SPIFFE/Envoy mesh."</li>
+<li>Policy → "ABAC/ReBAC, Cedar-compatible policy shape," not "OPA/Cedar."</li>
+<li>Evidence → "tamper-evident hash-chained audit + lineage graph," not "OCSF/OpenLineage/Merkle."</li>
+</ul>
+<p><strong>Close before a technical due-diligence demo (priority order):</strong></p>
+<ol>
+<li>Get <code>pnpm -w build</code> + the agent-isolation/chaos suites <strong>green</strong>; capture the output as evidence.</li>
+<li>Pick <strong>one</strong> connector and make it a <strong>real</strong> integration end-to-end (kills the "it's all stubs" risk).</li>
+<li>Add the missing slide-26 evidence fields (<code>business_reason</code>, <code>policy_bundle_hash</code>, signed root) to audit events if you want to claim the full evidence model.</li>
+<li>Decide the <strong>OpenLineage/OCSF</strong> question: either add a translation/export adapter (cheap, high-credibility) or remove those standards from the deck for this codebase.</li>
+<li>Land the deferred <code>sdk-evidence</code> legal-export + retention-shredder if "chain-of-custody / legal export" will be claimed.</li>
+</ol>
+<p><strong>Keep clearly separated in messaging:</strong></p>
+<ul>
+<li>**Insignia *consulting* capabilities** (PAM, Purview/DLP, vuln-mgmt, GRC, pen-test) — *services*, not ProjexCloud features.</li>
+<li>**ProjexCloud *product* capabilities** — the identity/AI/evidence spine above.</li>
+<li><strong>RealMDM</strong> — a *different, more ambitious* MDM product/spec that ProjexCloud only partially realizes.</li>
+</ul>
+<hr/>
+<h2>10. Appendix — package maturity index (static review)</h2>
+<p><strong>A-tier (substantially implemented):</strong> sdk-identity, sdk-identity-resolver, sdk-rebac, sdk-policy, sdk-persona, sdk-tenant, sdk-tenant-lifecycle, sdk-consent, sdk-data-rights, sdk-audit, sdk-lineage, sdk-trace, sdk-vault, sdk-api-keys, sdk-event, sdk-diagnostic-telemetry, sdk-meter, sdk-ai-gateway, sdk-agent-runtime, sdk-knowledge-rag, sdk-semantic, sdk-catalog-index, sdk-registry, sdk-capability, sdk-search, sdk-projection, sdk-profile, sdk-parsing, sdk-media, sdk-content, sdk-conversation, sdk-pool-router, sdk-ingest; services: api-gateway, identity-projector, lineage-projector, meter-collector, semantic-service, registry-mcp, pool-federation-runtime; apps: projexcloud-admin, tenant-admin, tenant-workspace.</p>
+<p><strong>B-tier (partial / phase-gated):</strong> sdk-evidence, sdk-secrets, sdk-mcp-bridge, sdk-taxonomy, sdk-sovereign, sdk-onprem, sdk-storm, connector-slack, connector-salesforce, connector-microsoft365, connector-github.</p>
+<p><strong>C-tier (empty stub):</strong> none found.</p>
+<p><strong>Not individually re-verified in this pass</strong> (assumed per design): the remaining ~10 connectors (jira/linear/zendesk/hubspot/zoom/gworkspace/snowflake/salesforce-bulk), hdk-* capture modules (camera/map/scanner/measure/watermark/image-editor/video-editor), sdk-billing/payment/notification/workflow/approval/webhook/campaign/crm/engagement/social/recommendation/analytics/geo/device/feature-flags/dispatch/assignment/lead-scoring/onprem runtime, and the clickhouse/kafka/redis runtime packages. These should be spot-checked before any claim that depends on them.</p>
+<hr/>
+<p><em>End of report. This is an engineering reality-check intended to keep product claims defensible in front of a technical buyer or auditor; it is deliberately conservative where runtime behaviour was not executed.</em></p>
+
+</div>
+</body>
+</html>
