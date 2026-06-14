@@ -22,6 +22,7 @@ module.exports = [
       '@projexlight/oc-7-zod-schema-required': 'warn',
       '@projexlight/oc-9-no-direct-kms': 'error',
       '@projexlight/oc-10-event-envelope-shape': 'warn',
+      '@projexlight/oc-11-obligation-enforcement-required': 'error',
     },
   },
 ];
