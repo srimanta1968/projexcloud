@@ -335,6 +335,7 @@ import { server as hdkCameraServer }      from '@projexlight/hdk-camera';
 import { server as hdkMapServer }         from '@projexlight/hdk-map';
 import { config } from './config';
 import { eventRegistryRoutes } from './routes/events';
+import { obligationEnforcementPlugin } from './plugins/obligationEnforcement';
 
 /**
  * api-gateway — the prototype service binary that hosts every SDK's server
@@ -350,6 +351,10 @@ app.register(cors, {
   origin: config.corsOrigin,
   credentials: true,
 });
+// P10/E1 — central obligation enforcement (mask/filter) for governed reads.
+// Registered before route surfaces so its preSerialization hook covers every
+// handler that attaches req.governedObligations from a policy decision.
+app.register(obligationEnforcementPlugin);
 // P7 FR-DSP-2 — WebSocket plugin for dispatch live updates.
 app.register(websocket);
 
