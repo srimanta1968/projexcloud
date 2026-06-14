@@ -40,6 +40,11 @@ export interface PolicyRecord {
   status: PolicyStatus;
   created_at: Date;
   updated_at: Date;
+  /**
+   * P10/E1: obligations this bundle attaches to an ALLOW decision. Optional —
+   * a bundle without obligations yields plain allow/deny (pre-P10 behaviour).
+   */
+  obligations?: Obligations | null;
 }
 
 export interface AttributeFetcherRecord {
@@ -74,6 +79,8 @@ export interface CreatePolicyInput {
   name: string;
   iql_source: string;
   version: string;
+  /** P10/E1: optional obligations attached to ALLOW decisions of this bundle. */
+  obligations?: Obligations;
 }
 
 export interface EvaluatePolicyInput {

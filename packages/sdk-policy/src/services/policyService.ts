@@ -23,16 +23,17 @@ export async function createPolicy(input: CreatePolicyInput, actor_id = 'system'
   const ast = parseIQL(input.iql_source);
   const cedar = compileToCedar(ast);
   const rows = await dataService.rows<PolicyRecord>(
-    `INSERT INTO policy.policy (tenant_id, name, iql_source, cedar_compiled, version)
-     VALUES ($1, $2, $3, $4::jsonb, $5)
+    `INSERT INTO policy.policy (tenant_id, name, iql_source, cedar_compiled, version, obligations)
+     VALUES ($1, $2, $3, $4::jsonb, $5, $6::jsonb)
      RETURNING policy_id, tenant_id, name, iql_source, cedar_compiled,
-               version, status, created_at, updated_at`,
+               version, status, created_at, updated_at, obligations`,
     [
       input.tenant_id ?? null,
       input.name,
       input.iql_source,
       JSON.stringify(cedar),
       input.version,
+      input.obligations ? JSON.stringify(input.obligations) : null,
     ],
   );
   const policy = rows[0];
@@ -46,7 +47,7 @@ export async function createPolicy(input: CreatePolicyInput, actor_id = 'system'
 export async function getPolicy(policy_id: string): Promise<PolicyRecord | null> {
   return dataService.one<PolicyRecord>(
     `SELECT policy_id, tenant_id, name, iql_source, cedar_compiled,
-            version, status, created_at, updated_at
+            version, status, created_at, updated_at, obligations
        FROM policy.policy WHERE policy_id = $1`,
     [policy_id],
   );
@@ -82,16 +83,20 @@ export async function evaluatePolicy(input: EvaluatePolicyInput): Promise<Evalua
     : `Policy ${policy.name}@${policy.version} did not match the conditions`;
 
   const layers_used = layersTouchedByContext(ctx);
+  // P10/E1: obligations only attach to an ALLOW; a DENY (or an obligation-free
+  // bundle) yields the pre-P10 allow/deny result with no obligations field.
+  const obligations = allowed && policy.obligations ? policy.obligations : undefined;
   const result: Omit<EvaluatePolicyResult, 'cached'> = {
     decision: allowed ? 'ALLOW' : 'DENY',
     reason,
     layers_used,
     projection_version,
+    ...(obligations ? { obligations } : {}),
   };
 
   await dataService.query(
-    `INSERT INTO policy.decision (policy_id, subject_id, target_id, decision, reason, layers_used, projection_version)
-     VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+    `INSERT INTO policy.decision (policy_id, subject_id, target_id, decision, reason, layers_used, projection_version, obligations)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb)`,
     [
       input.policy_id,
       input.subject_id,
@@ -100,6 +105,7 @@ export async function evaluatePolicy(input: EvaluatePolicyInput): Promise<Evalua
       result.reason,
       layers_used,
       projection_version,
+      obligations ? JSON.stringify(obligations) : null,
     ],
   );
 
@@ -119,6 +125,9 @@ export async function evaluatePolicy(input: EvaluatePolicyInput): Promise<Evalua
       reason: result.reason,
       layers_used: result.layers_used,
       projection_version,
+      // P10/E1: surface obligations in the audit chain so policy observability
+      // can see what mask/filter/audit_level/ttl was enforced per decision.
+      obligations: obligations ?? null,
     },
     pool_index: POOL_INDEX,
     actor_kind: 'service',
