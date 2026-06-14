@@ -2,6 +2,8 @@
  * TypeScript model mirroring policy.* tables per P2 §8.
  */
 
+import type { Obligations } from '@projexlight/contracts';
+
 export type PolicyStatus = 'draft' | 'active' | 'deprecated' | 'retired';
 export type AttributeFetcherSource = 'mdm' | 'projection' | 'inline';
 export type DecisionOutcome = 'ALLOW' | 'DENY';
@@ -59,6 +61,12 @@ export interface DecisionRecord {
   layers_used: string[];
   projection_version: number;
   decided_at: Date;
+  /**
+   * P10/E1: obligations attached to this decision (mask/filter/audit/ttl),
+   * persisted so policy observability can replay what was enforced. Optional —
+   * absent for pre-P10 decisions.
+   */
+  obligations?: Obligations | null;
 }
 
 export interface CreatePolicyInput {
@@ -81,4 +89,10 @@ export interface EvaluatePolicyResult {
   layers_used: string[];
   projection_version: number;
   cached: boolean;
+  /**
+   * P10/E1: optional obligations the caller MUST enforce server-side before
+   * serializing results (mask_fields, row_filter, audit_level, ttl_seconds).
+   * Absent obligations preserve today's allow/deny behaviour exactly.
+   */
+  obligations?: Obligations;
 }

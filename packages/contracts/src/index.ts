@@ -11,6 +11,7 @@ export * from './p6a-agent';
 export * from './p6b-knowledge';
 export * from './p7-field';
 export * from './p8-deployment';
+export * from './p10-security';
 export * from './tool-manifest';
 export * from './trace-context';
 
