@@ -554,7 +554,7 @@ app.get<{
 // services verify this token (requirePrincipalToken) instead of trusting
 // forwarded user headers (closes the confused-deputy class, Scenario 5).
 // ─────────────────────────────────────────────────────────────────────
-app.post<{ Body: { audience?: string; ttl_seconds?: number } }>(
+app.post<{ Body: { audience?: string; ttl_seconds?: number; purpose?: string } }>(
   '/api/principal-token',
   { preHandler: requireAuth },
   async (req, reply) => {
@@ -570,7 +570,7 @@ app.post<{ Body: { audience?: string; ttl_seconds?: number } }>(
       // Prefer the full resolved IdentityContext; fall back to the verified
       // six-layer JWT claims when app/tenant aren't bound yet (both are
       // server-resolved identity, never request input).
-      const principal =
+      const resolved =
         auth.app_id && auth.tenant_id
           ? await resolveIdentityContext({
               person_id: auth.sub,
@@ -587,6 +587,16 @@ app.post<{ Body: { audience?: string; ttl_seconds?: number } }>(
               effective_role_closure: [],
               projection_version: auth.projection_version ?? 0,
             };
+      // P10/E9 — capture device posture + network zone at the gateway and
+      // thread the requested purpose into the principal.
+      const headerStr = (v: unknown): string | undefined =>
+        typeof v === 'string' && v.length > 0 ? v : undefined;
+      const principal = {
+        ...resolved,
+        device_trust: headerStr(req.headers['x-device-trust']),
+        network_zone: headerStr(req.headers['x-network-zone']),
+        purpose: req.body?.purpose,
+      };
       const token = await mintPrincipalToken(principal, {
         audience,
         ttlSeconds: req.body?.ttl_seconds,

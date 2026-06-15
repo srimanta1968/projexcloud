@@ -27,6 +27,10 @@ export interface ResolvedPrincipal {
   effective_scopes?: string[];
   effective_role_closure?: string[];
   projection_version?: number;
+  /** P10/E9: gateway-captured context, optional. */
+  device_trust?: string;
+  network_zone?: string;
+  purpose?: string;
 }
 
 export interface MintPrincipalTokenOptions {
@@ -78,6 +82,9 @@ export async function mintPrincipalToken(
     scopes: principal.effective_scopes ?? [],
     roles: principal.effective_role_closure ?? [],
     projection_version: principal.projection_version ?? 0,
+    ...(principal.device_trust ? { device_trust: principal.device_trust } : {}),
+    ...(principal.network_zone ? { network_zone: principal.network_zone } : {}),
+    ...(principal.purpose ? { purpose: principal.purpose } : {}),
     ...(opts.actorKind ? { act: { kind: opts.actorKind } } : {}),
     kid: key.kid,
   };

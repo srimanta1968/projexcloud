@@ -85,6 +85,12 @@ export interface PrincipalTokenClaims {
   /** effective_role_closure from the resolved context. */
   roles?: string[];
   projection_version?: number;
+  /** P10/E9: device posture trust captured at the gateway (optional). */
+  device_trust?: string;
+  /** P10/E9: network zone captured at the gateway (optional). */
+  network_zone?: string;
+  /** P10/E9: requested purpose threaded into the token (optional). */
+  purpose?: string;
   /** Actor kind (e.g. human/service/agent/support_impersonator) for break-glass + impersonation audit. */
   act?: { kind: string };
   /** Standard JWT timing/identity claims (populated by the signer). */
