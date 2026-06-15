@@ -17,6 +17,7 @@ import oc8 from './rules/oc-8-rls-on-tenant-tables';
 import oc9 from './rules/oc-9-no-direct-kms';
 import oc10 from './rules/oc-10-event-envelope-shape';
 import oc11 from './rules/oc-11-obligation-enforcement-required';
+import oc12 from './rules/oc-12-resource-registered-required';
 
 export const rules = {
   'oc-1-meter-decorator-required': oc1,
@@ -30,6 +31,7 @@ export const rules = {
   'oc-9-no-direct-kms': oc9,
   'oc-10-event-envelope-shape': oc10,
   'oc-11-obligation-enforcement-required': oc11,
+  'oc-12-resource-registered-required': oc12,
 };
 
 export const configs = {
@@ -46,6 +48,7 @@ export const configs = {
       '@projexlight/lint-rules/oc-9-no-direct-kms': 'error',
       '@projexlight/lint-rules/oc-10-event-envelope-shape': 'warn',
       '@projexlight/lint-rules/oc-11-obligation-enforcement-required': 'error',
+      '@projexlight/lint-rules/oc-12-resource-registered-required': 'error',
     },
   },
 };

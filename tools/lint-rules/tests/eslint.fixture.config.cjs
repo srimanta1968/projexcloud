@@ -23,6 +23,7 @@ module.exports = [
       '@projexlight/oc-9-no-direct-kms': 'error',
       '@projexlight/oc-10-event-envelope-shape': 'warn',
       '@projexlight/oc-11-obligation-enforcement-required': 'error',
+      '@projexlight/oc-12-resource-registered-required': 'error',
     },
   },
 ];

@@ -474,6 +474,8 @@ export const EVENT_TYPE_REGISTRY: Record<string, EventTypeMetadata> = {
   'security.principal_token.key_rotated.v1':  { event_type: 'security.principal_token.key_rotated.v1',  retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
   'security.break_glass.granted.v1':          { event_type: 'security.break_glass.granted.v1',          retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
   'security.break_glass.used.v1':             { event_type: 'security.break_glass.used.v1',             retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+  // E5 resource ownership registry — operational retention for GitOps audit.
+  'resource_registry.quarantined.v1':         { event_type: 'resource_registry.quarantined.v1',         retention_class: 'operational', conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
 };
 
 /* ============================================================

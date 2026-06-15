@@ -67,6 +67,10 @@ import {
   mintPrincipalToken,
   startPrincipalKeyRotation,
 } from '@projexlight/sdk-principal-token';
+import {
+  migrationsDir as resourceRegistryMigrations,
+  server as resourceRegistryServer,
+} from '@projexlight/sdk-resource-registry';
 import { requireAuth } from '@projexlight/sdk-identity';
 import { resolveIdentityContext } from '@projexlight/sdk-identity-resolver';
 import { emitEvent } from '@projexlight/sdk-audit';
@@ -383,6 +387,8 @@ app.register(consentServer.registerRoutes);
 app.register(policyServer.registerRoutes);
 app.register(rebacServer.registerRoutes);
 app.register(apiKeysServer.registerRoutes);
+// P10/E5 — resource ownership registry read/register API.
+app.register(resourceRegistryServer.registerRoutes);
 
 // P3 / Wave 3 — Canonical Entities + Privacy Ops + HDK Foundation.
 app.register(profileServer.registerRoutes);
@@ -767,6 +773,7 @@ const start = async (): Promise<void> => {
       { sdk: 'sdk-consent', dir: consentMigrations },
       { sdk: 'sdk-policy', dir: policyMigrations },
       { sdk: 'sdk-principal-token', dir: principalTokenMigrations },
+      { sdk: 'sdk-resource-registry', dir: resourceRegistryMigrations },
       { sdk: 'sdk-rebac', dir: rebacMigrations },
       { sdk: 'sdk-api-keys', dir: apiKeysMigrations },
       { sdk: 'sdk-projection', dir: projectionMigrations },
