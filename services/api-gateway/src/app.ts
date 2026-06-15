@@ -186,7 +186,7 @@ import {
 import '@projexlight/connector-slack';
 import { migrationsDir as profileMigrations, server as profileServer } from '@projexlight/sdk-profile';
 import { migrationsDir as personaMigrations, server as personaServer } from '@projexlight/sdk-persona';
-import { server as resolverServer } from '@projexlight/sdk-identity-resolver';
+import { server as resolverServer, migrationsDir as resolverMigrations } from '@projexlight/sdk-identity-resolver';
 import {
   migrationsDir as dataRightsMigrations,
   server as dataRightsServer,
@@ -794,6 +794,7 @@ const start = async (): Promise<void> => {
       { sdk: 'sdk-device', dir: deviceMigrations },
       { sdk: 'sdk-feature-flags', dir: featureFlagsMigrations },
       { sdk: 'sdk-data-rights', dir: dataRightsMigrations },
+      { sdk: 'sdk-identity-resolver', dir: resolverMigrations },
       { sdk: 'hdk-sync', dir: hdkSyncMigrations },
       { sdk: 'hdk-foundation', dir: hdkFoundationMigrations },
       // P4 — Operational + Billing

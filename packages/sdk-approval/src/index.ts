@@ -1,5 +1,6 @@
 export * as server from './server';
 export * as types from './models/approval.model';
+export type { Decision } from './models/approval.model';
 export { migrationsDir } from './db';
 export {
   createRoute,

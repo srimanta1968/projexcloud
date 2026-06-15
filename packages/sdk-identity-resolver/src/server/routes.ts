@@ -1,6 +1,16 @@
 import { FastifyInstance } from 'fastify';
 import { requireAuth } from '@projexlight/sdk-identity';
+import type { Decision } from '@projexlight/sdk-approval';
 import { explain, resolveIdentityContext } from '../services/resolverService';
+import {
+  adjudicateCandidate,
+  enqueueStewardReview,
+  getEmpiMetrics,
+  mergeRecords,
+  queryCandidateLinksByBand,
+  unmergeRecords,
+  type ConfidenceBand,
+} from '../services/empiService';
 
 /**
  * Resolver HTTP surface. Most callers should use the in-process
@@ -43,5 +53,128 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
       tenant_id: body.tenant_id,
     });
     return reply.code(200).send({ data: { provenance: explain(ctx, body.attribute) } });
+  });
+
+  // ── P10/E6 — Healthcare EMPI / probabilistic MDM ─────────────────────────
+  const personaOf = (req: { auth?: { primary_persona_id?: string | null; sub?: string } }): string =>
+    req.auth?.primary_persona_id ?? req.auth?.sub ?? '';
+
+  // GET /api/empi/candidate-links?band=high|medium|low&status=open — query by band.
+  app.get<{ Querystring: { band?: ConfidenceBand; status?: string; min?: string; max?: string; limit?: string } }>(
+    '/api/empi/candidate-links',
+    { preHandler: requireAuth },
+    async (req, reply) => {
+      const q = req.query ?? {};
+      try {
+        const links = await queryCandidateLinksByBand({
+          band: q.band,
+          status: q.status as 'open' | 'merged' | 'rejected' | 'superseded' | undefined,
+          min: q.min ? parseFloat(q.min) : undefined,
+          max: q.max ? parseFloat(q.max) : undefined,
+          limit: q.limit ? parseInt(q.limit, 10) : undefined,
+        });
+        return reply.code(200).send({ data: { candidate_links: links } });
+      } catch (err) {
+        req.log.error(err);
+        if (!reply.sent) reply.code(500).send({ error: 'InternalError' });
+      }
+    },
+  );
+
+  // POST /api/empi/candidate-links/:link_id/steward-review — queue for steward.
+  app.post<{ Params: { link_id: string }; Body: { route_id?: string; tenant_id?: string } }>(
+    '/api/empi/candidate-links/:link_id/steward-review',
+    { preHandler: requireAuth },
+    async (req, reply) => {
+      const b = req.body ?? {};
+      const tenant_id = b.tenant_id ?? req.auth?.tenant_id ?? '';
+      if (!b.route_id || !tenant_id) {
+        return reply.code(400).send({ error: 'ValidationError', details: ['route_id, tenant_id are required'] });
+      }
+      try {
+        const result = await enqueueStewardReview(req.params.link_id, {
+          tenant_id,
+          route_id: b.route_id,
+          steward_persona_id: personaOf(req),
+        });
+        return reply.code(201).send({ data: result });
+      } catch (err) {
+        req.log.error(err);
+        if (!reply.sent) reply.code(500).send({ error: 'InternalError', details: [(err as Error).message] });
+      }
+    },
+  );
+
+  // POST /api/empi/candidate-links/:link_id/adjudicate — steward decision.
+  app.post<{ Params: { link_id: string }; Body: { step_id?: string; decision?: Decision; reason?: string } }>(
+    '/api/empi/candidate-links/:link_id/adjudicate',
+    { preHandler: requireAuth },
+    async (req, reply) => {
+      const b = req.body ?? {};
+      if (!b.step_id || (b.decision !== 'approve' && b.decision !== 'reject')) {
+        return reply.code(400).send({ error: 'ValidationError', details: ['step_id and decision (approve|reject) are required'] });
+      }
+      try {
+        const result = await adjudicateCandidate(req.params.link_id, b.step_id, personaOf(req), b.decision, b.reason);
+        return reply.code(200).send({ data: result });
+      } catch (err) {
+        req.log.error(err);
+        if (!reply.sent) reply.code(500).send({ error: 'InternalError', details: [(err as Error).message] });
+      }
+    },
+  );
+
+  // POST /api/empi/merges — direct reversible merge (steward/ops).
+  app.post<{ Body: { surviving_person_id?: string; merged_person_id?: string; link_id?: string; reason?: string } }>(
+    '/api/empi/merges',
+    { preHandler: requireAuth },
+    async (req, reply) => {
+      const b = req.body ?? {};
+      if (!b.surviving_person_id || !b.merged_person_id) {
+        return reply.code(400).send({ error: 'ValidationError', details: ['surviving_person_id, merged_person_id are required'] });
+      }
+      try {
+        const merge = await mergeRecords({
+          surviving_person_id: b.surviving_person_id,
+          merged_person_id: b.merged_person_id,
+          link_id: b.link_id,
+          decided_by: personaOf(req),
+          reason: b.reason,
+        });
+        return reply.code(201).send({ data: { merge } });
+      } catch (err) {
+        req.log.error(err);
+        if (!reply.sent) reply.code(500).send({ error: 'InternalError', details: [(err as Error).message] });
+      }
+    },
+  );
+
+  // POST /api/empi/merges/:merge_id/unmerge — compensating reversal.
+  app.post<{ Params: { merge_id: string }; Body: { reason?: string } }>(
+    '/api/empi/merges/:merge_id/unmerge',
+    { preHandler: requireAuth },
+    async (req, reply) => {
+      try {
+        const compensation = await unmergeRecords(req.params.merge_id, {
+          decided_by: personaOf(req),
+          reason: req.body?.reason,
+        });
+        return reply.code(200).send({ data: { merge: compensation } });
+      } catch (err) {
+        req.log.error(err);
+        if (!reply.sent) reply.code(500).send({ error: 'InternalError', details: [(err as Error).message] });
+      }
+    },
+  );
+
+  // GET /api/empi/metrics — calibration (ECE) + unresolved/reversal metrics.
+  app.get('/api/empi/metrics', { preHandler: requireAuth }, async (req, reply) => {
+    try {
+      const metrics = await getEmpiMetrics();
+      return reply.code(200).send({ data: { metrics } });
+    } catch (err) {
+      req.log.error(err);
+      if (!reply.sent) reply.code(500).send({ error: 'InternalError' });
+    }
   });
 }
