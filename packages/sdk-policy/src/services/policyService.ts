@@ -64,6 +64,17 @@ export async function getPolicy(policy_id: string): Promise<PolicyRecord | null>
  * inject the current version into the context.
  */
 export async function evaluatePolicy(input: EvaluatePolicyInput): Promise<EvaluatePolicyResult> {
+  try {
+    return await evaluatePolicyCore(input);
+  } catch (err) {
+    // A genuine "policy not found" is a 404, not evaluator degradation.
+    if (/not found/i.test((err as Error).message)) throw err;
+    // P10/E4: fail-closed on evaluator unavailability (DB/cache/cedar error).
+    return failClosedDecision(input, err as Error);
+  }
+}
+
+async function evaluatePolicyCore(input: EvaluatePolicyInput): Promise<EvaluatePolicyResult> {
   const policy = await getPolicy(input.policy_id);
   if (!policy) throw new Error(`Policy ${input.policy_id} not found`);
 
@@ -184,6 +195,72 @@ export async function emitPolicyUpdated(policy: PolicyRecord, actor_id: string):
     subject_kind: 'policy',
     subject_id: policy.policy_id,
   });
+}
+
+/**
+ * P10/E4: produces a fail-closed decision when the evaluator is unavailable.
+ * Sensitive (default) classes DENY; low-risk classes may serve a short-TTL
+ * cached decision if one exists. Every degraded decision is audited best-effort.
+ */
+async function failClosedDecision(input: EvaluatePolicyInput, err: Error): Promise<EvaluatePolicyResult> {
+  const ctx = (input.context ?? {}) as Record<string, unknown>;
+  const projection_version = typeof ctx.projection_version === 'number' ? ctx.projection_version : 0;
+  const resourceClass = input.resource_class ?? 'sensitive';
+
+  let result: EvaluatePolicyResult;
+  if (resourceClass === 'low_risk') {
+    const cached = await getCached(
+      input.policy_id,
+      input.subject_id,
+      input.target_id,
+      projection_version,
+    ).catch(() => null);
+    result = cached
+      ? { ...cached, cached: true, degraded: true }
+      : {
+          decision: 'DENY',
+          reason: `evaluator_unavailable: no cached low-risk decision (${err.message})`,
+          layers_used: [],
+          projection_version,
+          cached: false,
+          degraded: true,
+        };
+  } else {
+    result = {
+      decision: 'DENY',
+      reason: `evaluator_unavailable: fail-closed for sensitive resource (${err.message})`,
+      layers_used: [],
+      projection_version,
+      cached: false,
+      degraded: true,
+    };
+  }
+
+  // Best-effort degraded-decision audit — never throw from the fail-closed path.
+  try {
+    await emitEvent({
+      event_type: 'policy.evaluated.v1',
+      payload: {
+        policy_id: input.policy_id,
+        subject_id: input.subject_id,
+        target_id: input.target_id ?? null,
+        decision: result.decision,
+        reason: result.reason,
+        degraded: true,
+        resource_class: resourceClass,
+        error: err.message,
+      },
+      pool_index: POOL_INDEX,
+      actor_kind: 'service',
+      actor_id: 'sdk-policy.evaluate.failclosed',
+      tenant_id: null,
+      subject_kind: 'persona',
+      subject_id: input.subject_id,
+    });
+  } catch {
+    // swallow — degraded audit is best-effort and must not mask the denial
+  }
+  return result;
 }
 
 function layersTouchedByContext(ctx: Record<string, unknown>): string[] {

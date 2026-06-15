@@ -97,6 +97,12 @@ export function validateEvaluatePolicy(body: unknown): ValidationResult<Evaluate
     errors.push('purpose is required when purpose_bound is true');
   }
 
+  // P10/E4: optional resource risk class for fail-closed behaviour.
+  const resource_class =
+    b.resource_class === 'low_risk' || b.resource_class === 'sensitive'
+      ? (b.resource_class as 'low_risk' | 'sensitive')
+      : undefined;
+
   if (errors.length > 0) return { ok: false, errors };
   return {
     ok: true,
@@ -108,6 +114,7 @@ export function validateEvaluatePolicy(body: unknown): ValidationResult<Evaluate
       ...(purpose ? { purpose } : {}),
       ...(purpose_bound ? { purpose_bound } : {}),
       ...(consent_receipts ? { consent_receipts } : {}),
+      ...(resource_class ? { resource_class } : {}),
     },
   };
 }

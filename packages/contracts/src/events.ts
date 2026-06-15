@@ -472,6 +472,8 @@ export const EVENT_TYPE_REGISTRY: Record<string, EventTypeMetadata> = {
    * key lifecycle and emergency-access trail are auditor-replayable.
    * ============================================================ */
   'security.principal_token.key_rotated.v1':  { event_type: 'security.principal_token.key_rotated.v1',  retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+  'security.break_glass.granted.v1':          { event_type: 'security.break_glass.granted.v1',          retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+  'security.break_glass.used.v1':             { event_type: 'security.break_glass.used.v1',             retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
 };
 
 /* ============================================================

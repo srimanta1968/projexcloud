@@ -104,6 +104,12 @@ export interface EvaluatePolicyInput {
    * resolver from sdk-consent). Keeps sdk-policy decoupled from sdk-consent.
    */
   consent_receipts?: ConsentReceiptInput[];
+  /**
+   * P10/E4: risk class of the target resource. On evaluator unavailability a
+   * 'sensitive' (default when omitted) class fails closed (DENY); a 'low_risk'
+   * class may serve a short-TTL cached decision. Safe-by-default.
+   */
+  resource_class?: 'sensitive' | 'low_risk';
 }
 
 export interface EvaluatePolicyResult {
@@ -118,4 +124,10 @@ export interface EvaluatePolicyResult {
    * Absent obligations preserve today's allow/deny behaviour exactly.
    */
   obligations?: Obligations;
+  /**
+   * P10/E4: true when this decision was produced under evaluator degradation
+   * (fail-closed DENY for a sensitive class, or a short-TTL cached decision
+   * served for a low-risk class during an outage). Always audited.
+   */
+  degraded?: boolean;
 }
