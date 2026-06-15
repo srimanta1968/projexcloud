@@ -72,8 +72,14 @@ import {
   server as resourceRegistryServer,
 } from '@projexlight/sdk-resource-registry';
 import { requireAuth } from '@projexlight/sdk-identity';
-import { resolveIdentityContext } from '@projexlight/sdk-identity-resolver';
-import { emitEvent } from '@projexlight/sdk-audit';
+import { resolveIdentityContext, getEmpiMetrics } from '@projexlight/sdk-identity-resolver';
+import { emitEvent, addEmitTap } from '@projexlight/sdk-audit';
+import {
+  registry as metricsRegistry,
+  recordMdmMetrics,
+  recordConsentCheck,
+  runDetections,
+} from '@projexlight/telemetry';
 import { migrationsDir as rebacMigrations, server as rebacServer } from '@projexlight/sdk-rebac';
 import { migrationsDir as apiKeysMigrations, server as apiKeysServer } from '@projexlight/sdk-api-keys';
 import { migrationsDir as projectionMigrations } from '@projexlight/sdk-projection';
@@ -372,6 +378,33 @@ app.register(websocket);
 
 app.get('/health', async (): Promise<{ status: string; service: string; timestamp: string }> => {
   return { status: 'ok', service: config.appName, timestamp: new Date().toISOString() };
+});
+
+// P10/E8 — Prometheus scrape endpoint. Refreshes MDM gauges from the EMPI
+// service on each scrape, then renders the full registry (8-type taxonomy).
+const httpDuration = metricsRegistry.histogram(
+  'http_request_duration_seconds',
+  'HTTP request duration in seconds',
+  'service',
+);
+app.addHook('onResponse', async (req, reply) => {
+  try {
+    httpDuration.observe(
+      { method: req.method, status_class: `${Math.floor(reply.statusCode / 100)}xx` },
+      reply.elapsedTime / 1000,
+    );
+  } catch {
+    // metrics must never affect responses
+  }
+});
+app.get('/metrics', async (_req, reply) => {
+  try {
+    recordMdmMetrics(await getEmpiMetrics());
+  } catch {
+    // best-effort: MDM gauges refresh on the next scrape
+  }
+  reply.header('Content-Type', 'text/plain; version=0.0.4');
+  return metricsRegistry.render();
 });
 
 // Mount each SDK's server surface and shared registry routes.
@@ -1259,7 +1292,28 @@ const start = async (): Promise<void> => {
     } catch (err) {
       console.warn('[api-gateway] BYOK real KMS adapter wiring failed:', (err as Error).message);
     }
-    setSiemForwarder(installAutoSiemForwarder());
+    const siemForwarder = installAutoSiemForwarder();
+    setSiemForwarder(siemForwarder);
+    // P10/E8 — run security detection rules over the audit stream and route
+    // matches to SIEM/XDR via the vault forwarder; also record consent metrics.
+    addEmitTap((e) => {
+      void runDetections(
+        {
+          event_type: e.event_type,
+          actor_id: e.actor_id,
+          tenant_id: e.tenant_id ?? null,
+          subject_id: e.subject_id ?? undefined,
+          payload: (e.payload ?? {}) as Record<string, unknown>,
+        },
+        siemForwarder as unknown as Parameters<typeof runDetections>[1],
+      );
+      if (e.event_type === 'policy.evaluated.v1') {
+        const p = (e.payload ?? {}) as Record<string, unknown>;
+        if (typeof p.purpose === 'string') {
+          recordConsentCheck(p.purpose, p.consent_satisfied === true, null);
+        }
+      }
+    });
     if (config.redis.enabled) {
       void installByokInvalidator().catch((err) =>
         console.warn('[api-gateway] BYOK invalidator subscribe failed:', (err as Error).message),

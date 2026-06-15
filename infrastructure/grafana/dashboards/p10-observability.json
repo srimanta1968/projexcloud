@@ -1,0 +1,76 @@
+{
+  "__comment": "P10/E8 — ProjexCloud observability dashboard grouped by the 8-type taxonomy (infra, service, security, data, MDM, policy, consent, audit). Scrapes the api-gateway /metrics endpoint; every metric carries a `taxonomy` label so panels filter by type. Provisioned via infrastructure/grafana/provisioning.",
+  "title": "ProjexCloud P10 — Observability Taxonomy",
+  "uid": "projexcloud-p10-observability",
+  "schemaVersion": 39,
+  "tags": ["projexcloud", "p10", "observability"],
+  "templating": {
+    "list": [
+      {
+        "name": "taxonomy",
+        "type": "custom",
+        "query": "infra,service,security,data,mdm,policy,consent,audit",
+        "current": { "text": "All", "value": "$__all" },
+        "includeAll": true
+      }
+    ]
+  },
+  "panels": [
+    { "type": "row", "title": "1 · Infra", "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 } },
+    {
+      "type": "timeseries", "title": "Process / runtime metrics (taxonomy=infra)",
+      "targets": [{ "expr": "{taxonomy=\"infra\"}" }], "gridPos": { "h": 7, "w": 24, "x": 0, "y": 1 }
+    },
+    { "type": "row", "title": "2 · Service", "gridPos": { "h": 1, "w": 24, "x": 0, "y": 8 } },
+    {
+      "type": "timeseries", "title": "HTTP request duration p95 (taxonomy=service)",
+      "targets": [{ "expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket[5m])) by (le, method))" }],
+      "gridPos": { "h": 7, "w": 12, "x": 0, "y": 9 }
+    },
+    {
+      "type": "timeseries", "title": "HTTP request rate by status class",
+      "targets": [{ "expr": "sum(rate(http_request_duration_seconds_count[5m])) by (status_class)" }],
+      "gridPos": { "h": 7, "w": 12, "x": 12, "y": 9 }
+    },
+    { "type": "row", "title": "3 · Security", "gridPos": { "h": 1, "w": 24, "x": 0, "y": 16 } },
+    {
+      "type": "timeseries", "title": "Security detections by rule + severity (taxonomy=security)",
+      "targets": [{ "expr": "sum(rate(security_detections_total[5m])) by (rule, severity)" }],
+      "gridPos": { "h": 7, "w": 24, "x": 0, "y": 17 }
+    },
+    { "type": "row", "title": "4 · Data", "gridPos": { "h": 1, "w": 24, "x": 0, "y": 24 } },
+    {
+      "type": "timeseries", "title": "Data-plane metrics (taxonomy=data)",
+      "targets": [{ "expr": "{taxonomy=\"data\"}" }], "gridPos": { "h": 7, "w": 24, "x": 0, "y": 25 }
+    },
+    { "type": "row", "title": "5 · MDM (EMPI)", "gridPos": { "h": 1, "w": 24, "x": 0, "y": 32 } },
+    {
+      "type": "stat", "title": "Unresolved candidate links",
+      "targets": [{ "expr": "mdm_unresolved_candidate_links" }], "gridPos": { "h": 6, "w": 8, "x": 0, "y": 33 }
+    },
+    {
+      "type": "stat", "title": "Merge reversals",
+      "targets": [{ "expr": "mdm_merge_reversals_total" }], "gridPos": { "h": 6, "w": 8, "x": 8, "y": 33 }
+    },
+    {
+      "type": "gauge", "title": "Match calibration (ECE)",
+      "targets": [{ "expr": "mdm_calibration_ece" }], "gridPos": { "h": 6, "w": 8, "x": 16, "y": 33 }
+    },
+    { "type": "row", "title": "6 · Policy", "gridPos": { "h": 1, "w": 24, "x": 0, "y": 39 } },
+    {
+      "type": "timeseries", "title": "Policy decisions / fail-closed (taxonomy=policy)",
+      "targets": [{ "expr": "{taxonomy=\"policy\"}" }], "gridPos": { "h": 7, "w": 24, "x": 0, "y": 40 }
+    },
+    { "type": "row", "title": "7 · Consent", "gridPos": { "h": 1, "w": 24, "x": 0, "y": 47 } },
+    {
+      "type": "timeseries", "title": "Consent checks by purpose + outcome (taxonomy=consent)",
+      "targets": [{ "expr": "sum(rate(consent_checks_total[5m])) by (purpose, granted)" }],
+      "gridPos": { "h": 7, "w": 24, "x": 0, "y": 48 }
+    },
+    { "type": "row", "title": "8 · Audit", "gridPos": { "h": 1, "w": 24, "x": 0, "y": 55 } },
+    {
+      "type": "timeseries", "title": "Audit chain / verifier metrics (taxonomy=audit)",
+      "targets": [{ "expr": "{taxonomy=\"audit\"}" }], "gridPos": { "h": 7, "w": 24, "x": 0, "y": 56 }
+    }
+  ]
+}

@@ -1,0 +1,17 @@
+# P10/E8 — Prometheus scrape config for ProjexCloud.
+# The api-gateway exposes the 8-type observability taxonomy at /metrics
+# (text exposition format). Grafana dashboards in
+# infrastructure/grafana/dashboards/ group panels by the `taxonomy` label.
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: projexcloud-api-gateway
+    metrics_path: /metrics
+    static_configs:
+      - targets:
+          - api-gateway:3000
+        labels:
+          service: api-gateway
+          platform: projexcloud
