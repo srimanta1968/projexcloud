@@ -465,6 +465,13 @@ export const EVENT_TYPE_REGISTRY: Record<string, EventTypeMetadata> = {
   'ai_gateway.tenant_credential.bound.v1':    { event_type: 'ai_gateway.tenant_credential.bound.v1',    retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
   'ai_gateway.tenant_credential.rotated.v1':  { event_type: 'ai_gateway.tenant_credential.rotated.v1',  retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
   'ai_gateway.tenant_credential.revoked.v1':  { event_type: 'ai_gateway.tenant_credential.revoked.v1',  retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+
+  /* ============================================================
+   * P10 — Security & Governance hardening (Architecture v3.2 §11A).
+   * E2 principal token · E4 break-glass. Regulated retention so the
+   * key lifecycle and emergency-access trail are auditor-replayable.
+   * ============================================================ */
+  'security.principal_token.key_rotated.v1':  { event_type: 'security.principal_token.key_rotated.v1',  retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
 };
 
 /* ============================================================

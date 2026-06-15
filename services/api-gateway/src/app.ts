@@ -62,6 +62,14 @@ import { server as secretsServer } from '@projexlight/sdk-secrets';
 import { migrationsDir as tenantMigrations, server as tenantServer, createTenant as tenantCreate, listTenants as tenantList } from '@projexlight/sdk-tenant';
 import { migrationsDir as consentMigrations, server as consentServer } from '@projexlight/sdk-consent';
 import { migrationsDir as policyMigrations, server as policyServer } from '@projexlight/sdk-policy';
+import {
+  migrationsDir as principalTokenMigrations,
+  mintPrincipalToken,
+  startPrincipalKeyRotation,
+} from '@projexlight/sdk-principal-token';
+import { requireAuth } from '@projexlight/sdk-identity';
+import { resolveIdentityContext } from '@projexlight/sdk-identity-resolver';
+import { emitEvent } from '@projexlight/sdk-audit';
 import { migrationsDir as rebacMigrations, server as rebacServer } from '@projexlight/sdk-rebac';
 import { migrationsDir as apiKeysMigrations, server as apiKeysServer } from '@projexlight/sdk-api-keys';
 import { migrationsDir as projectionMigrations } from '@projexlight/sdk-projection';
@@ -533,6 +541,60 @@ app.get<{
 });
 
 // ─────────────────────────────────────────────────────────────────────
+// P10/E2 — POST /api/principal-token: mint an audience-bound, short-TTL
+// platform principal token from the SERVER-RESOLVED identity context. All
+// claims derive from the verified JWT / resolved IdentityContext — never from
+// request input (the only caller value is the target audience). Downstream
+// services verify this token (requirePrincipalToken) instead of trusting
+// forwarded user headers (closes the confused-deputy class, Scenario 5).
+// ─────────────────────────────────────────────────────────────────────
+app.post<{ Body: { audience?: string; ttl_seconds?: number } }>(
+  '/api/principal-token',
+  { preHandler: requireAuth },
+  async (req, reply) => {
+    const auth = req.auth;
+    if (!auth?.sub) {
+      return reply.code(401).send({ error: 'Unauthorized' });
+    }
+    const audience = req.body?.audience;
+    if (!audience) {
+      return reply.code(400).send({ error: 'ValidationError', details: ['audience is required'] });
+    }
+    try {
+      // Prefer the full resolved IdentityContext; fall back to the verified
+      // six-layer JWT claims when app/tenant aren't bound yet (both are
+      // server-resolved identity, never request input).
+      const principal =
+        auth.app_id && auth.tenant_id
+          ? await resolveIdentityContext({
+              person_id: auth.sub,
+              app_id: auth.app_id,
+              tenant_id: auth.tenant_id,
+            })
+          : {
+              person_id: auth.sub,
+              app_id: auth.app_id ?? '',
+              tenant_id: auth.tenant_id ?? '',
+              all_persona_ids: auth.all_persona_ids ?? [],
+              primary_persona_id: auth.primary_persona_id ?? null,
+              effective_scopes: [],
+              effective_role_closure: [],
+              projection_version: auth.projection_version ?? 0,
+            };
+      const token = await mintPrincipalToken(principal, {
+        audience,
+        ttlSeconds: req.body?.ttl_seconds,
+        actorKind: auth.actor?.kind,
+      });
+      return reply.code(201).send({ data: { token, audience, sub: principal.person_id } });
+    } catch (err) {
+      req.log.error(err);
+      return reply.code(500).send({ error: (err as Error).message });
+    }
+  },
+);
+
+// ─────────────────────────────────────────────────────────────────────
 // Admin-token-guarded tenant provisioning (used by projexcloud-admin
 // portal). Wraps sdk-tenant service functions so operators don't need
 // a tenant-scoped JWT.
@@ -704,6 +766,7 @@ const start = async (): Promise<void> => {
       { sdk: 'sdk-tenant', dir: tenantMigrations },
       { sdk: 'sdk-consent', dir: consentMigrations },
       { sdk: 'sdk-policy', dir: policyMigrations },
+      { sdk: 'sdk-principal-token', dir: principalTokenMigrations },
       { sdk: 'sdk-rebac', dir: rebacMigrations },
       { sdk: 'sdk-api-keys', dir: apiKeysMigrations },
       { sdk: 'sdk-projection', dir: projectionMigrations },
@@ -898,6 +961,32 @@ const start = async (): Promise<void> => {
       enabled: process.env.AGENT_SIGNING_KEY_ROTATION_ENABLED !== 'false',
     });
     app.addHook('onClose', async () => signingKeyRotationHandle.stop());
+
+    // P10/E2 — principal-token signing-key rotation. The signing secret is
+    // wrapped at rest by a vault-sourced key (PRINCIPAL_TOKEN_WRAP_KEY,
+    // provisioned from sdk-vault). Rotation retires the old key with a
+    // TTL-overlap window so in-flight short-TTL tokens stay verifiable, and
+    // emits an audited security.principal_token.key_rotated.v1 event.
+    const principalKeyRotationHandle = startPrincipalKeyRotation({
+      enabled: process.env.PRINCIPAL_TOKEN_KEY_ROTATION_ENABLED !== 'false',
+      intervalMs: parseInt(
+        process.env.PRINCIPAL_TOKEN_KEY_ROTATION_INTERVAL_MS || String(24 * 60 * 60 * 1000),
+        10,
+      ),
+      onRotate: async (kid) => {
+        await emitEvent({
+          event_type: 'security.principal_token.key_rotated.v1',
+          payload: { kid },
+          pool_index: 'admin',
+          actor_kind: 'service',
+          actor_id: 'api-gateway.principal-token',
+          tenant_id: null,
+          subject_kind: 'signing_key',
+          subject_id: kid,
+        });
+      },
+    });
+    app.addHook('onClose', async () => principalKeyRotationHandle.stop());
 
     // P7 G11 — Iceberg backend wiring. Env-driven: ICEBERG_BACKEND_DRIVER ∈
     // {nessie, glue, none}, ICEBERG_BACKEND_BASE_URL, ICEBERG_BACKEND_TOKEN.

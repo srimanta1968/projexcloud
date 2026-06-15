@@ -53,3 +53,44 @@ export interface Obligations {
    */
   ttl_seconds?: number;
 }
+
+/* ============================================================
+ * E2 · Platform principal token (Architecture v3.2 §11A.4 · P17)
+ * ============================================================ */
+
+/**
+ * Claims carried by the minted, audience-bound platform principal token. The
+ * gateway mints this from the SERVER-RESOLVED IdentityContext after auth;
+ * downstream services verify it (iss/aud/exp/signature) instead of trusting
+ * forwarded user headers — closing the confused-deputy class (critique
+ * Scenario 5). Every claim derives only from verified identity, never request
+ * input.
+ */
+export interface PrincipalTokenClaims {
+  /** Issuer — the gateway. Verified downstream. */
+  iss: string;
+  /** Audience — the target service this token is bound to. Verified downstream. */
+  aud: string;
+  /** Subject — the resolved person_id. */
+  sub: string;
+  app_id: string;
+  tenant_id: string;
+  bu_id?: string | null;
+  root_tenant_id?: string | null;
+  /** all_persona_ids from the resolved context. */
+  personas: string[];
+  primary_persona_id?: string | null;
+  /** effective_scopes from the resolved context. */
+  scopes: string[];
+  /** effective_role_closure from the resolved context. */
+  roles?: string[];
+  projection_version?: number;
+  /** Actor kind (e.g. human/service/agent/support_impersonator) for break-glass + impersonation audit. */
+  act?: { kind: string };
+  /** Standard JWT timing/identity claims (populated by the signer). */
+  iat?: number;
+  exp?: number;
+  jti?: string;
+  /** Key id of the signing key — lets verifiers pick the right key during rotation overlap. */
+  kid?: string;
+}
