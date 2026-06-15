@@ -1,5 +1,6 @@
 import { dataService } from '@projexlight/db-runtime';
 import { emitEvent } from '@projexlight/sdk-audit';
+import { CONSENT_ABSENT_REASON, hasActiveConsent } from '@projexlight/contracts';
 import { compileToCedar, evaluateCedar, parseIQL } from './iqlParser';
 import { getCached, setCached } from './precompCache';
 
@@ -69,20 +70,35 @@ export async function evaluatePolicy(input: EvaluatePolicyInput): Promise<Evalua
   const ctx = (input.context ?? {}) as Record<string, unknown>;
   const projection_version = typeof ctx.projection_version === 'number' ? ctx.projection_version : 0;
 
-  const cached = await getCached(input.policy_id, input.subject_id, input.target_id, projection_version);
+  // P10/E3: purpose-bound evaluations skip the precomp cache so consent
+  // revocation/expiry take effect on the very next decision (live, never stale).
+  const purposeBound = input.purpose_bound === true;
+  const cached = purposeBound
+    ? null
+    : await getCached(input.policy_id, input.subject_id, input.target_id, projection_version);
   if (cached) {
     return cached;
   }
 
-  const allowed = evaluateCedar(
+  const policyAllows = evaluateCedar(
     policy.cedar_compiled as ReturnType<typeof compileToCedar>,
     ctx,
   );
-  const reason = allowed
-    ? `Policy ${policy.name}@${policy.version} permits the access`
-    : `Policy ${policy.name}@${policy.version} did not match the conditions`;
+
+  // P10/E3: consent gating. For a purpose-bound resource a valid consent
+  // receipt is REQUIRED; absent/expired/revoked consent fails closed (DENY)
+  // regardless of the policy verdict, with a distinct auditable reason code.
+  const consentSatisfied =
+    !purposeBound || hasActiveConsent(input.consent_receipts, input.purpose ?? '');
+  const allowed = policyAllows && consentSatisfied;
+  const reason = !consentSatisfied
+    ? `${CONSENT_ABSENT_REASON}: no active consent for purpose '${input.purpose ?? '(unspecified)'}'`
+    : allowed
+      ? `Policy ${policy.name}@${policy.version} permits the access`
+      : `Policy ${policy.name}@${policy.version} did not match the conditions`;
 
   const layers_used = layersTouchedByContext(ctx);
+  if (purposeBound) layers_used.push('consent');
   // P10/E1: obligations only attach to an ALLOW; a DENY (or an obligation-free
   // bundle) yields the pre-P10 allow/deny result with no obligations field.
   const obligations = allowed && policy.obligations ? policy.obligations : undefined;
@@ -109,7 +125,10 @@ export async function evaluatePolicy(input: EvaluatePolicyInput): Promise<Evalua
     ],
   );
 
-  await setCached(input.policy_id, input.subject_id, input.target_id, projection_version, result);
+  // Never cache purpose-bound decisions — consent state is live (E3).
+  if (!purposeBound) {
+    await setCached(input.policy_id, input.subject_id, input.target_id, projection_version, result);
+  }
 
   // FR-POL-3: fan-out sampled decisions to sdk-audit. Best-effort; never
   // blocks the evaluator hot path (emitEvent swallows failures).
@@ -128,6 +147,11 @@ export async function evaluatePolicy(input: EvaluatePolicyInput): Promise<Evalua
       // P10/E1: surface obligations in the audit chain so policy observability
       // can see what mask/filter/audit_level/ttl was enforced per decision.
       obligations: obligations ?? null,
+      // P10/E3: surface the consent gate so consent observability can see the
+      // purpose and whether a consent-derived denial occurred.
+      purpose: input.purpose ?? null,
+      purpose_bound: purposeBound,
+      consent_satisfied: consentSatisfied,
     },
     pool_index: POOL_INDEX,
     actor_kind: 'service',

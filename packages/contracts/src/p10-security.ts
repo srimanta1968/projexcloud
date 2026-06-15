@@ -94,3 +94,43 @@ export interface PrincipalTokenClaims {
   /** Key id of the signing key — lets verifiers pick the right key during rotation overlap. */
   kid?: string;
 }
+
+/* ============================================================
+ * E3 · Consent-gated authorization (Architecture v3.2 §11A.5 · P18)
+ * ============================================================ */
+
+/**
+ * Minimal consent-receipt shape the policy evaluator reasons over. The gateway
+ * / resolver supplies the subject's active receipts (from sdk-consent) so
+ * sdk-policy can fail closed on purpose-bound resources without importing
+ * sdk-consent. ISO 8601 timestamps.
+ */
+export interface ConsentReceiptInput {
+  purpose_id: string;
+  granted_at?: string | null;
+  expires_at?: string | null;
+  revoked_at?: string | null;
+}
+
+/** Distinct, auditable reason code for a consent-derived denial. */
+export const CONSENT_ABSENT_REASON = 'consent_absent';
+
+/**
+ * True iff a receipt for `purpose` is present, not revoked, and not expired at
+ * `now`. Used by the consent-gated PDP path; revocation/expiry take effect on
+ * the next evaluation (live), never cached.
+ */
+export function hasActiveConsent(
+  receipts: ConsentReceiptInput[] | undefined | null,
+  purpose: string,
+  now: number = 0,
+): boolean {
+  if (!receipts || !purpose) return false;
+  const ts = now || Date.parse(new Date().toISOString());
+  return receipts.some((r) => {
+    if (r.purpose_id !== purpose) return false;
+    if (r.revoked_at) return false;
+    if (r.expires_at && Date.parse(r.expires_at) <= ts) return false;
+    return true;
+  });
+}

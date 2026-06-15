@@ -12,6 +12,12 @@ export type LegalBasis =
 
 export type ReplayStatus = 'pending' | 'replayed' | 'failed';
 
+/**
+ * P10/E3: purpose category. `hipaa_tpo` = HIPAA Treatment/Payment/Operations
+ * (+research/marketing); `part2_substance_use` = 42 CFR Part 2 segmented data.
+ */
+export type PurposeCategory = 'general' | 'hipaa_tpo' | 'part2_substance_use';
+
 export interface PurposeRecord {
   purpose_id: string;
   app_id: string;
@@ -19,6 +25,10 @@ export interface PurposeRecord {
   legal_basis: LegalBasis;
   default_jurisdictions: string[];
   created_at: Date;
+  /** P10/E3: taxonomy category (default 'general'). */
+  category?: PurposeCategory;
+  /** P10/E3: true for 42 CFR Part 2 substance-use purposes (segmented consent). */
+  segmented?: boolean;
 }
 
 export interface ReceiptRecord {
@@ -52,6 +62,10 @@ export interface RegisterPurposeInput {
   description: string;
   legal_basis: LegalBasis;
   default_jurisdictions?: string[];
+  /** P10/E3: taxonomy category (default 'general'). */
+  category?: PurposeCategory;
+  /** P10/E3: 42 CFR Part 2 segmented consent (default false). */
+  segmented?: boolean;
 }
 
 export interface GrantConsentInput {

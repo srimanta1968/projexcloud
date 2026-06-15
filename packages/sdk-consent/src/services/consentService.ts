@@ -45,15 +45,17 @@ function evidenceHash(input: GrantConsentInput, granted_at: Date): Buffer {
  */
 export async function registerPurpose(input: RegisterPurposeInput): Promise<PurposeRecord> {
   const rows = await dataService.rows<PurposeRecord>(
-    `INSERT INTO consent.purpose (purpose_id, app_id, description, legal_basis, default_jurisdictions)
-     VALUES ($1, $2, $3, $4, $5)
-     RETURNING purpose_id, app_id, description, legal_basis, default_jurisdictions, created_at`,
+    `INSERT INTO consent.purpose (purpose_id, app_id, description, legal_basis, default_jurisdictions, category, segmented)
+     VALUES ($1, $2, $3, $4, $5, $6, $7)
+     RETURNING purpose_id, app_id, description, legal_basis, default_jurisdictions, created_at, category, segmented`,
     [
       input.purpose_id,
       input.app_id,
       input.description,
       input.legal_basis,
       input.default_jurisdictions ?? [],
+      input.category ?? 'general',
+      input.segmented ?? false,
     ],
   );
   const purpose = rows[0];

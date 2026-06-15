@@ -2,7 +2,7 @@
  * TypeScript model mirroring policy.* tables per P2 §8.
  */
 
-import type { Obligations } from '@projexlight/contracts';
+import type { ConsentReceiptInput, Obligations } from '@projexlight/contracts';
 
 export type PolicyStatus = 'draft' | 'active' | 'deprecated' | 'retired';
 export type AttributeFetcherSource = 'mdm' | 'projection' | 'inline';
@@ -88,6 +88,22 @@ export interface EvaluatePolicyInput {
   subject_id: string;
   target_id?: string;
   context?: Record<string, unknown>;
+  /**
+   * P10/E3: the purpose the access is being made for (e.g. a HIPAA TPO code).
+   * Threaded into the decision so consent gating can apply.
+   */
+  purpose?: string;
+  /**
+   * P10/E3: marks the target as a purpose-bound resource. When true, a valid
+   * consent receipt for `purpose` is REQUIRED — absent/expired/revoked consent
+   * fails closed (DENY, reason=consent_absent) regardless of the policy verdict.
+   */
+  purpose_bound?: boolean;
+  /**
+   * P10/E3: the subject's active consent receipts (supplied by the gateway /
+   * resolver from sdk-consent). Keeps sdk-policy decoupled from sdk-consent.
+   */
+  consent_receipts?: ConsentReceiptInput[];
 }
 
 export interface EvaluatePolicyResult {

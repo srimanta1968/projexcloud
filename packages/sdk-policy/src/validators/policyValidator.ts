@@ -87,6 +87,27 @@ export function validateEvaluatePolicy(body: unknown): ValidationResult<Evaluate
   if (!policy_id) errors.push('policy_id is required');
   if (!subject_id) errors.push('subject_id is required');
 
+  // P10/E3: optional consent-gating inputs.
+  const purpose = typeof b.purpose === 'string' ? b.purpose : undefined;
+  const purpose_bound = b.purpose_bound === true;
+  const consent_receipts = Array.isArray(b.consent_receipts)
+    ? (b.consent_receipts as EvaluatePolicyInput['consent_receipts'])
+    : undefined;
+  if (purpose_bound && !purpose) {
+    errors.push('purpose is required when purpose_bound is true');
+  }
+
   if (errors.length > 0) return { ok: false, errors };
-  return { ok: true, value: { policy_id, subject_id, target_id, context } };
+  return {
+    ok: true,
+    value: {
+      policy_id,
+      subject_id,
+      target_id,
+      context,
+      ...(purpose ? { purpose } : {}),
+      ...(purpose_bound ? { purpose_bound } : {}),
+      ...(consent_receipts ? { consent_receipts } : {}),
+    },
+  };
 }
