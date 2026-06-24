@@ -1,46 +1,149 @@
-# ProjexCloud Sovereign Region — Helm values (P8 Variant B starter).
+# ProjexCloud — Helm values (P8 Variant B sovereign starter, full topology).
 #
-# Operators override per-region in their own values.{region}.yaml. The
-# defaults below assume the strictest posture (no internet egress, no
-# cross-region routes, terminal federation, in-cluster registry).
+# Operators override per-region in their own values.{region}.yaml. Defaults
+# assume the strictest posture (no internet egress, no cross-region routes,
+# terminal federation, in-cluster registry). The api-gateway runs all SDK
+# migrations on first boot; the worker/projector services and discovery (MCP)
+# run from the SAME image with a per-service command override ("build once").
 #
 # Required overrides: region_id, regime, operator_partner, image.registry,
 # *PoolDsn (from terraform outputs), kmsProvider.
 
-# Sovereign region identity — written to sovereign.region_config on first boot.
+# ── Sovereign region identity — written to sovereign.region_config on boot ──
 region_id: ""               # e.g. "us-gov-east-1"
 regime: ""                  # fedramp-high | il5 | pipl | eu-sovereign | uae-trd
 operator_partner: ""        # "msp-name"
-terminalFederation: true    # FR-SOV-2 — Pool Router treats this as terminal.
+terminalFederation: true    # FR-SOV-2 — Pool Router treats this region as terminal.
 
-# Postgres pool DSNs — supplied by terraform outputs.
+# ── Postgres pool DSNs — supplied by terraform outputs (set {} in main.tf) ──
 adminPoolDsn: ""
 appPoolDsn: ""
 evidencePoolDsn: ""
 
-# KMS — must be a region-resident provider.
+# ── KMS — must be a region-resident provider ──
 kmsProvider: ""             # e.g. "aws-kms-govcloud", "tencent-kms", "ovh-kms"
 
-# Container image — operator points at their in-region OCI registry.
+# ── Platform container image (one image, many services) ──
 image:
   registry: "in-region-registry.local"
-  repository: "projexcloud/api-gateway"
+  repository: "projexcloud/platform"   # built once; contains all services' dist
   tag: "1.0.0"
   pullPolicy: IfNotPresent
 
-# Replica count.
-replicaCount: 3
+# ── Shared, non-secret runtime config (rendered into a ConfigMap) ──
+config:
+  NODE_ENV: "production"
+  LOG_LEVEL: "info"
+  REDIS_ENABLED: "true"
+  KAFKA_ENABLED: "true"
+  CLICKHOUSE_ENABLED: "true"
+  USAGE_EVENTS_TOPIC: "usage.events.v1"
 
-# Resource requests.
-resources:
-  requests:
-    cpu: "1"
-    memory: "2Gi"
-  limits:
-    cpu: "4"
-    memory: "8Gi"
+# ── Secrets (rendered into a Secret). Prefer an external secret store /
+#    existingSecret in real deployments; these are the keys the gateway reads. ──
+secrets:
+  existingSecret: ""        # if set, use this Secret instead of the values below
+  ADMIN_OPS_TOKEN: ""       # openssl rand -hex 32
+  JWT_SECRET: ""            # openssl rand -hex 32
 
-# Sovereign network policies — enforce no egress beyond the region.
+# ── Default resources/scaling applied to every service unless overridden ──
+defaults:
+  replicas: 2
+  autoscaling:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 6
+    targetCPUUtilizationPercentage: 70
+  resources:
+    requests: { cpu: "250m", memory: "512Mi" }
+    limits:   { cpu: "1",    memory: "2Gi" }
+
+# ── Services. kind: http (gets a Service + HPA) | worker (no Service). ──
+#    command is the entrypoint inside the shared image. Per-service overrides
+#    (replicas/autoscaling/resources/port) fall back to .defaults above.
+services:
+  api-gateway:
+    enabled: true
+    kind: http
+    port: 3000
+    command: ["node", "services/api-gateway/dist/app.js"]
+    replicas: 3
+    resources:
+      requests: { cpu: "1",  memory: "2Gi" }
+      limits:   { cpu: "4",  memory: "8Gi" }
+    autoscaling: { enabled: true, minReplicas: 3, maxReplicas: 12, targetCPUUtilizationPercentage: 65 }
+    ingress:
+      enabled: true           # the only public surface
+      path: /
+  registry-mcp:
+    enabled: true
+    kind: http
+    port: 3600
+    command: ["node", "services/registry-mcp/dist/index.js"]
+    env:
+      REGISTRY_MCP_CATALOG_PATH: "/app/packages/sdk-registry/dist/registry.catalog.json"
+      REGISTRY_MCP_EMBEDDINGS_BIN: "/app/packages/sdk-registry/dist/registry.embeddings.bin"
+      REGISTRY_MCP_EMBEDDINGS_META: "/app/packages/sdk-registry/dist/registry.embeddings.meta.json"
+      HF_HOME: "/app/.hf-cache"
+  semantic-service:
+    enabled: true
+    kind: http
+    port: 8082
+    command: ["node", "services/semantic-service/dist/index.js"]
+  lineage-projector:
+    enabled: true
+    kind: http
+    port: 8081
+    command: ["node", "services/lineage-projector/dist/index.js"]
+  pool-federation-runtime:
+    enabled: true
+    kind: http
+    port: 8083
+    command: ["node", "services/pool-federation-runtime/dist/index.js"]
+  identity-projector:
+    enabled: true
+    kind: worker
+    command: ["node", "services/identity-projector/dist/index.js"]
+    autoscaling: { enabled: false }
+    replicas: 1
+  meter-collector:
+    enabled: true
+    kind: worker
+    command: ["node", "services/meter-collector/dist/index.js"]
+    autoscaling: { enabled: false }
+    replicas: 1
+
+# ── In-cluster infra (sovereign deployments keep everything in-region). Set
+#    enabled:false and point *_HOST config at managed endpoints to externalize. ──
+redis:
+  enabled: true
+  image: "redis:7-alpine"
+  port: 6379
+  storage: "8Gi"
+  resources:
+    requests: { cpu: "100m", memory: "256Mi" }
+    limits:   { cpu: "1",    memory: "1Gi" }
+
+kafka:
+  enabled: true
+  image: "apache/kafka:3.8.0"
+  port: 9092
+  storage: "20Gi"
+  resources:
+    requests: { cpu: "500m", memory: "1Gi" }
+    limits:   { cpu: "2",    memory: "4Gi" }
+
+clickhouse:
+  enabled: true
+  image: "clickhouse/clickhouse-server:24-alpine"
+  httpPort: 8123
+  nativePort: 9000
+  storage: "50Gi"
+  resources:
+    requests: { cpu: "500m", memory: "1Gi" }
+    limits:   { cpu: "4",    memory: "8Gi" }
+
+# ── Sovereign network policies — enforce no egress beyond the region ──
 networkPolicies:
   enabled: true
   allowEgressInternet: false      # phone-home blocked at L3 (FR-SOV-2)
@@ -48,23 +151,33 @@ networkPolicies:
   allowDns:
     - "kube-dns.kube-system.svc.cluster.local"
 
-# Service account + RBAC — operator-managed.
+# ── Ingress (front door for api-gateway). Operator supplies class + TLS. ──
+ingress:
+  enabled: true
+  className: ""
+  host: ""                  # e.g. "app.us-gov-east-1.example.gov"
+  annotations: {}
+  tls:
+    enabled: true
+    secretName: "projexcloud-tls"
+
+# ── Service account + RBAC — operator-managed ──
 serviceAccount:
   create: true
   annotations: {}
 
-# Audit + leak monitor.
+# ── Audit + leak monitor ──
 audit:
   retentionDays: 2555             # 7y for FedRAMP / IL5 / PIPL.
 leakMonitor:
   enabled: true                    # Y-P8-6 detector consumes Cilium events.
   ciliumIntegration: true
 
-# Disable phone-home telemetry (Y-P8-9).
+# ── Disable phone-home telemetry (Y-P8-9) ──
 telemetry:
   phoneHome: false
 
-# AI Gateway local models (typical sovereign workloads use local-only).
+# ── AI Gateway local models (typical sovereign workloads use local-only) ──
 aiGateway:
   localModelsOnly: true
   models:

@@ -99,6 +99,12 @@ pre{background:#0b0f14;border:1px solid var(--line);border-radius:8px;padding:10
 .muted{color:var(--muted)}
 .tag{display:inline-block;background:#21262d;border:1px solid var(--line);border-radius:6px;padding:1px 7px;font-size:11px;margin:1px}
 .manual{color:#d29922}
+.kv .k.ok{color:#3fb950}.kv .k.err{color:#f85149}
+.note{color:var(--muted);font-size:11px;margin-top:3px}
+.wavebadge{font-size:11px;color:#fff;background:#1f6feb;border-radius:20px;padding:1px 9px;margin-left:8px}
+.planlink{display:inline-block;background:#10261a;border:1px solid #2d8a4e;color:#3fb950;border-radius:8px;padding:6px 12px;margin-top:10px;font-weight:600}
+.planlink:hover{text-decoration:none;background:#15311f}
+code{background:#0b0f14;border:1px solid var(--line);border-radius:5px;padding:0 4px;font-family:ui-monospace,Consolas,monospace}
 """
 
 def render_api(method, endpoint, rows):
@@ -121,7 +127,9 @@ def render_api(method, endpoint, rows):
     scs = scenarios.get(fid, []) or []
     sc_html = " ".join(f'<a class="tag" href="{url(s.get("short_id",""))}">{esc(s.get("short_id",""))} · {esc(s.get("title",""))}</a>' for s in scs) or '<span class="muted">—</span>'
     parts.append('<div class="kv">')
-    parts.append(f'<div class="k">SDK / service</div><div><b>{esc(r0.get("sdk",""))}</b></div>')
+    wbadge = (f'<a class="wavebadge" href="test-plan.html">W{esc(r0.get("testWave"))} · test wave</a>'
+              if r0.get("testWave") is not None else "")
+    parts.append(f'<div class="k">SDK / service</div><div><b>{esc(r0.get("sdk",""))}</b>{wbadge}</div>')
     parts.append(f'<div class="k">Epic</div><div>{epic_link}</div>')
     parts.append(f'<div class="k">Feature</div><div>{feat_link}</div>')
     parts.append(f'<div class="k">Scenario(s)</div><div>{sc_html}</div>')
@@ -138,12 +146,27 @@ def render_api(method, endpoint, rows):
     # per test case
     for r in rows:
         title = r.get("case") or "request"
-        parts.append(f'<div style="margin-top:12px"><b>{esc(title)}</b> '
+        parts.append(f'<div style="margin-top:14px"><b>{esc(title)}</b> '
                      f'<span class="muted">→ expects HTTP {esc(r.get("expectedStatus",""))}</span></div>')
         parts.append('<div class="kv">')
         parts.append(f'<div class="k">Path params</div><div>{code_block(r.get("pathParams"))}</div>')
-        parts.append(f'<div class="k">Payload</div><div>{code_block(r.get("payload"))}</div>')
-        parts.append(f'<div class="k">Expected result</div><div>{code_block(r.get("expectedResponse"))}</div>')
+        parts.append(f'<div class="k">Payload (template)</div><div>{code_block(r.get("payload"))}</div>')
+        if r.get("exampleRequest"):
+            parts.append(f'<div class="k">Example request</div><div>{code_block(r.get("exampleRequest"))}</div>')
+        # Expected output: illustrative example body QA should assert (standard envelope).
+        parts.append(f'<div class="k ok">Expected output ✓</div>'
+                     f'<div>{code_block(r.get("exampleResponse"))}'
+                     f'<div class="note">Illustrative — standard <code>{{success,data}}</code> '
+                     f'envelope derived from the request contract; assert shape + HTTP '
+                     f'{esc(r.get("expectedStatus",""))}.</div></div>')
+        if r.get("exampleError"):
+            ee = r.get("exampleError")
+            parts.append(f'<div class="k err">On error</div>'
+                         f'<div>{code_block(ee.get("body") if isinstance(ee,dict) else ee)}'
+                         f'<div class="note">e.g. HTTP {esc(ee.get("http","")) if isinstance(ee,dict) else ""}</div></div>')
+        # original runner assertion (minimal), kept for traceability
+        if r.get("expectedResponse"):
+            parts.append(f'<div class="k">Runner assertion</div><div>{code_block(r.get("expectedResponse"))}</div>')
         parts.append('</div>')
     parts.append('</div></details>')
     return "".join(parts)
@@ -173,7 +196,9 @@ P.append('<div class="hero"><h1>ProjexCloud — API Reference</h1>'
          f'<div class="stat"><b>{total_apis}</b><span>documented APIs</span></div>'
          f'<div class="stat"><b>{len(apis)}</b><span>test cases</span></div>'
          f'<div class="stat"><b>{len(documented_epics)} / {len(epic_by_id)}</b><span>epics with APIs</span></div>'
-         '</div></div>')
+         '</div>'
+         '<a class="planlink" href="test-plan.html">▶ QA Test Plan — dependency-ordered test waves &amp; what to test first ↗</a>'
+         '</div>')
 
 # epic index
 P.append('<h2 class="sdk" id="epics">Epic index (34)</h2>')

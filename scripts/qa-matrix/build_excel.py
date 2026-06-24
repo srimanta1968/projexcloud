@@ -169,11 +169,21 @@ for eid in sorted(by_epic, key=lambda x: epics.get(x, {}).get("short_id", "ZZ"))
 ws2.freeze_panes = "A2"
 ws2.auto_filter.ref = f"A1:{get_column_letter(len(ICOLS))}{ws2.max_row}"
 
-out = os.path.join(ROOT, "tests", "QA-Test-Matrix.xlsx")
-try:
-    wb.save(out)
-except PermissionError:
-    out = os.path.join(ROOT, "tests", "QA-Test-Matrix-latest.xlsx")
-    wb.save(out)
-    print("NOTE: QA-Test-Matrix.xlsx was locked (open in Excel?) — wrote to QA-Test-Matrix-latest.xlsx instead.")
+candidates = [
+    os.path.join(ROOT, "tests", "QA-Test-Matrix.xlsx"),
+    os.path.join(ROOT, "tests", "QA-Test-Matrix-latest.xlsx"),
+    os.path.join(ROOT, "tests", "QA-Test-Matrix-sprint2.xlsx"),
+]
+out = None
+for cand in candidates:
+    try:
+        wb.save(cand)
+        out = cand
+        break
+    except PermissionError:
+        continue
+if out is None:
+    raise SystemExit("All QA-Test-Matrix*.xlsx targets are locked — close them in Excel and re-run.")
+if out != candidates[0]:
+    print(f"NOTE: {os.path.basename(candidates[0])} was locked (open in Excel?) — wrote to {os.path.basename(out)} instead.")
 print(f"wrote {out}  |  matrix rows={len(apis_sorted)}  features={len(features)}  epics={len(epics)}")

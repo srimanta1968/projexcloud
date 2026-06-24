@@ -132,7 +132,7 @@ const TOOLS = [
         taskType: {
           type: 'string',
           description: 'Type of task (api_endpoint, frontend, database, etc.)',
-          enum: ['api_endpoint', 'frontend', 'backend', 'database', 'service', 'ui_component', 'testing']
+          enum: ['api_endpoint', 'frontend', 'backend', 'database', 'service_layer', 'ui_component', 'testing']
         },
         projectPath: {
           type: 'string',
@@ -826,7 +826,7 @@ const TOOLS = [
         },
         task_type: {
           type: 'string',
-          enum: ['api_endpoint', 'frontend', 'backend', 'database', 'service', 'testing', 'development'],
+          enum: ['api_endpoint', 'frontend', 'backend', 'database', 'service_layer', 'testing', 'development'],
           description: 'Type of task'
         },
         feature_id: {
@@ -1084,7 +1084,7 @@ const TOOLS = [
               description: { type: 'string', description: 'Task description' },
               task_type: {
                 type: 'string',
-                enum: ['api_endpoint', 'frontend', 'backend', 'database', 'service', 'testing', 'development'],
+                enum: ['api_endpoint', 'frontend', 'backend', 'database', 'service_layer', 'testing', 'development'],
                 description: 'Type of task'
               },
               feature_id: { type: 'string', description: 'UUID of parent feature' },

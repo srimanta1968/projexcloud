@@ -5,10 +5,32 @@ receive as part of the signed quarterly sovereign bundle.
 
 ## Layout
 
-- `terraform/main.tf` — pool family + Helm release; per-cloud blocks in
+- `terraform/main.tf` — pool family + Helm release. `terraform/providers.tf`
+  holds the provider config; per-cloud overrides go in
   `terraform/main.{aws,azure,gcp,ovh,tencent}.tf` (operator-supplied).
+- `terraform/modules/` — the data tier the pool family instantiates (AWS
+  reference impls; adapt per cloud, keep the documented outputs):
+  - `postgres-pool/` — Aurora PostgreSQL writer + readers, KMS-encrypted →
+    output `dsn`. Used for the admin/app/evidence pools.
+  - `vector-store/` — pgvector Postgres instance → output `endpoint`/`dsn`.
+  - `iceberg-warehouse/` — S3 + Glue Iceberg lakehouse → output `endpoint`;
+    rejects cross-region replication (FR-SOV-1) via a variable validation.
 - `helm/projexcloud/Chart.yaml` — chart metadata.
-- `helm/projexcloud/values.yaml` — strictest-posture defaults.
+- `helm/projexcloud/values.yaml` — strictest-posture defaults + full service
+  topology + in-cluster Redis/Kafka/ClickHouse.
+- `helm/projexcloud/templates/` — renders the full topology from a single
+  platform image (per-service `command` override): a Deployment per service
+  (api-gateway, registry-mcp discovery, semantic, lineage/identity/meter/
+  pool-federation workers), Services + HPAs for the HTTP ones, StatefulSets for
+  Redis/Kafka/ClickHouse, ConfigMap/Secret/ServiceAccount, Ingress (api-gateway),
+  and the sovereign egress NetworkPolicy.
+
+## Validation
+
+- `helm lint` + `helm template` pass (renders ~28 objects across all services).
+- `terraform fmt -recursive` passes (root + 3 modules parse). Full
+  `terraform validate`/`plan` requires the AWS provider + region credentials in
+  the operator's environment.
 
 ## Deployment sequence
 

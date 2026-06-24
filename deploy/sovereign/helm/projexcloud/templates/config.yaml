@@ -1,0 +1,28 @@
+{{- $fullname := include "projexcloud.fullname" . -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ $fullname }}-config
+  labels:
+    {{- include "projexcloud.labels" . | nindent 4 }}
+data:
+  {{- range $k, $v := .Values.config }}
+  {{ $k }}: {{ $v | quote }}
+  {{- end }}
+  # Sovereign region context (written to sovereign.region_config on boot).
+  REGION_ID: {{ .Values.region_id | quote }}
+  REGIME: {{ .Values.regime | quote }}
+  OPERATOR_PARTNER: {{ .Values.operator_partner | quote }}
+  TERMINAL_FEDERATION: {{ .Values.terminalFederation | quote }}
+  KMS_PROVIDER: {{ .Values.kmsProvider | quote }}
+  ONPREM_AIR_GAP_MODE: {{ ternary "strict" "off" (not .Values.networkPolicies.allowEgressInternet) | quote }}
+  {{- if .Values.redis.enabled }}
+  REDIS_HOST: {{ $fullname }}-redis
+  REDIS_PORT: {{ .Values.redis.port | quote }}
+  {{- end }}
+  {{- if .Values.kafka.enabled }}
+  KAFKA_BROKERS: {{ printf "%s-kafka:%v" $fullname .Values.kafka.port | quote }}
+  {{- end }}
+  {{- if .Values.clickhouse.enabled }}
+  CLICKHOUSE_URL: {{ printf "http://%s-clickhouse:%v" $fullname .Values.clickhouse.httpPort | quote }}
+  {{- end }}

@@ -15,9 +15,10 @@
 terraform {
   required_version = ">= 1.6.0"
   required_providers {
-    aws = { source = "hashicorp/aws", version = "~> 5.30" }
-    helm = { source = "hashicorp/helm", version = "~> 2.12" }
+    aws        = { source = "hashicorp/aws", version = "~> 5.30" }
+    helm       = { source = "hashicorp/helm", version = "~> 2.12" }
     kubernetes = { source = "hashicorp/kubernetes", version = "~> 2.25" }
+    random     = { source = "hashicorp/random", version = "~> 3.6" }
   }
 }
 
@@ -70,7 +71,7 @@ module "admin_pool" {
   source              = "./modules/postgres-pool"
   pool_kind           = "admin"
   region_id           = var.region_id
-  instance_count      = 3   # primary + 2 replicas (one for sync)
+  instance_count      = 3 # primary + 2 replicas (one for sync)
   synchronous_replica = true
   storage_encrypted   = true
   kms_provider        = var.kms_provider
@@ -87,12 +88,12 @@ module "app_pool" {
 }
 
 module "evidence_pool" {
-  source              = "./modules/postgres-pool"
-  pool_kind           = "evidence"
-  region_id           = var.region_id
-  instance_count      = 3
-  storage_encrypted   = true
-  kms_provider        = var.kms_provider
+  source            = "./modules/postgres-pool"
+  pool_kind         = "evidence"
+  region_id         = var.region_id
+  instance_count    = 3
+  storage_encrypted = true
+  kms_provider      = var.kms_provider
   # Evidence rows are append-only + immutable; sync replica enforces audit.
   synchronous_replica = true
 }
@@ -115,13 +116,22 @@ module "warehouse" {
 # Outputs — consumed by the helm release below and by the operator runbook
 # -----------------------------------------------------------------------------
 
-output "region_id"        { value = var.region_id }
-output "regime"           { value = var.regime }
+output "region_id" { value = var.region_id }
+output "regime" { value = var.regime }
 output "operator_partner" { value = var.operator_partner }
-output "admin_pool_dsn"   { value = module.admin_pool.dsn   sensitive = true }
-output "app_pool_dsn"     { value = module.app_pool.dsn     sensitive = true }
-output "evidence_pool_dsn" { value = module.evidence_pool.dsn sensitive = true }
-output "vector_endpoint"  { value = module.vector_store.endpoint }
+output "admin_pool_dsn" {
+  value     = module.admin_pool.dsn
+  sensitive = true
+}
+output "app_pool_dsn" {
+  value     = module.app_pool.dsn
+  sensitive = true
+}
+output "evidence_pool_dsn" {
+  value     = module.evidence_pool.dsn
+  sensitive = true
+}
+output "vector_endpoint" { value = module.vector_store.endpoint }
 output "warehouse_endpoint" { value = module.warehouse.endpoint }
 
 # -----------------------------------------------------------------------------
@@ -139,16 +149,47 @@ resource "helm_release" "projexcloud" {
     file("${path.module}/../helm/projexcloud/values.yaml"),
   ]
 
-  set { name = "region_id"          value = var.region_id }
-  set { name = "regime"             value = var.regime }
-  set { name = "operator_partner"   value = var.operator_partner }
-  set { name = "terminalFederation" value = var.terminal_federation }
-  set { name = "adminPoolDsn"       value = module.admin_pool.dsn }
-  set { name = "appPoolDsn"         value = module.app_pool.dsn }
-  set { name = "evidencePoolDsn"    value = module.evidence_pool.dsn }
-  set { name = "kmsProvider"        value = var.kms_provider }
+  set {
+    name  = "region_id"
+    value = var.region_id
+  }
+  set {
+    name  = "regime"
+    value = var.regime
+  }
+  set {
+    name  = "operator_partner"
+    value = var.operator_partner
+  }
+  set {
+    name  = "terminalFederation"
+    value = var.terminal_federation
+  }
+  set {
+    name  = "kmsProvider"
+    value = var.kms_provider
+  }
+  # Pool DSNs are secrets — pass via set_sensitive so they aren't logged.
+  set_sensitive {
+    name  = "adminPoolDsn"
+    value = module.admin_pool.dsn
+  }
+  set_sensitive {
+    name  = "appPoolDsn"
+    value = module.app_pool.dsn
+  }
+  set_sensitive {
+    name  = "evidencePoolDsn"
+    value = module.evidence_pool.dsn
+  }
 
   # Sovereign isolation: refuse any phone-home / cross-region NetworkPolicy.
-  set { name = "networkPolicies.allowEgressInternet" value = "false" }
-  set { name = "networkPolicies.allowCrossRegion"    value = "false" }
+  set {
+    name  = "networkPolicies.allowEgressInternet"
+    value = "false"
+  }
+  set {
+    name  = "networkPolicies.allowCrossRegion"
+    value = "false"
+  }
 }

@@ -29,6 +29,54 @@ PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 PROJECT_NAME=$(basename "$PROJECT_ROOT")
 CONFIG_FILE="$SCRIPT_DIR/mcp-config.json"
 
+#===============================================================================
+# Shared registry location (single source of truth, cross-OS)
+#===============================================================================
+# The registered_projects.json lives in the user's hidden home folder
+# (~/.projexlight) and is mounted into BOTH the Dev and Test MCP containers at a
+# fixed path (/registry). This block resolves that folder in a Docker-mountable
+# form and exposes the host JSON path for local jq/grep operations.
+
+# Host registry DIR in Docker-mountable form: C:/Users/me/.projexlight (Win) or
+# /home/me/.projexlight (*nix). Works on Linux, macOS, Git-Bash/MSYS, WSL.
+get_registry_host_dir() {
+    local home="${HOME:-}"
+    if [ -z "$home" ] && [ -n "${USERPROFILE:-}" ]; then
+        home="${USERPROFILE//\\//}"
+        if [[ "$home" =~ ^([A-Za-z]):(.*)$ ]]; then
+            home="/${BASH_REMATCH[1],,}${BASH_REMATCH[2]}"
+        fi
+    fi
+    local dir="$home/.projexlight"
+    mkdir -p "$dir" 2>/dev/null || true
+    # Git-Bash/MSYS: /c/Users/.. -> C:/Users/.. for Docker Desktop bind mounts
+    if [[ "$dir" =~ ^/([a-z])/(.*) ]]; then
+        echo "${BASH_REMATCH[1]^}:/${BASH_REMATCH[2]}"
+    else
+        echo "$dir"
+    fi
+}
+
+# Ensure PROJEX_REGISTRY_DIR_HOST is present/fresh in the given .env (so both
+# compose files bind-mount the shared registry). Default: this script's .env.
+ensure_registry_env() {
+    local env_file="${1:-$SCRIPT_DIR/.env}"
+    local host_dir; host_dir="$(get_registry_host_dir)"
+    touch "$env_file" 2>/dev/null || true
+    if grep -q '^PROJEX_REGISTRY_DIR_HOST=' "$env_file" 2>/dev/null; then
+        if [[ "$OSTYPE" == "darwin"* ]]; then
+            sed -i '' "s#^PROJEX_REGISTRY_DIR_HOST=.*#PROJEX_REGISTRY_DIR_HOST=$host_dir#" "$env_file"
+        else
+            sed -i "s#^PROJEX_REGISTRY_DIR_HOST=.*#PROJEX_REGISTRY_DIR_HOST=$host_dir#" "$env_file"
+        fi
+    else
+        printf '\n# Shared project registry host dir (single source of truth)\nPROJEX_REGISTRY_DIR_HOST=%s\n' "$host_dir" >> "$env_file"
+    fi
+}
+
+# The shared registry JSON on the host, for local jq/grep reads.
+REGISTRY_FILE="$(get_registry_host_dir)/registered_projects.json"
+
 # Container names
 DEV_MCP_CONTAINER="projexlight-dev-mcp"
 TEST_MCP_CONTAINER="projexlight-test-mcp"
@@ -252,7 +300,7 @@ check_credential_sync() {
 _overwrite_persisted_apikey_and_restart() {
     local project_id="$1"
     local new_api_key="$2"
-    local persisted_file="$SCRIPT_DIR/feedback/registered_projects.json"
+    local persisted_file="$REGISTRY_FILE"
 
     if [ ! -f "$persisted_file" ]; then
         warn "Persisted projects file not found at $persisted_file"
@@ -403,7 +451,7 @@ get_owner_env_dir() {
 
 # Setup local .env for project path mappings before starting containers
 # This ensures PROJECT_PATH_MAPPINGS is set correctly for the MCP server
-# Registration data is stored in feedback/registered_projects.json by MCP server
+# Registration data is stored in the shared registry (~/.projexlight) by MCP server
 create_local_registration() {
     local is_owner="${1:-false}"
     local unix_path=$(get_unix_project_path)
@@ -413,9 +461,9 @@ create_local_registration() {
         log "Setting up path mappings for owner project..."
         update_path_mappings "$unix_path" "/workspace" "$SCRIPT_DIR/.env"
     else
-        # Find next available additional slot by checking feedback/registered_projects.json
+        # Find next available additional slot from the shared registry
         local slot=1
-        local reg_file="$SCRIPT_DIR/feedback/registered_projects.json"
+        local reg_file="$REGISTRY_FILE"
 
         if [ -f "$reg_file" ] && command -v jq &> /dev/null; then
             # Count existing additional projects (those with containerPath containing /projects/additional)
@@ -434,8 +482,8 @@ create_local_registration() {
             echo -e "   • 3 additional projects connected to the same MCP"
             echo ""
             echo -e "${YELLOW}Currently registered additional projects:${NC}"
-            if [ -f "$SCRIPT_DIR/feedback/registered_projects.json" ] && command -v jq &> /dev/null; then
-                jq -r '.[] | select(.containerPath | startswith("/projects/additional")) | "   • \(.projectName) (\(.projectPath))"' "$SCRIPT_DIR/feedback/registered_projects.json" 2>/dev/null || echo "   (unable to list)"
+            if [ -f "$REGISTRY_FILE" ] && command -v jq &> /dev/null; then
+                jq -r '.[] | select(.containerPath | startswith("/projects/additional")) | "   • \(.projectName) (\(.projectPath))"' "$REGISTRY_FILE" 2>/dev/null || echo "   (unable to list)"
             fi
             echo ""
             echo -e "${BLUE}To free a slot, unregister an existing project at:${NC}"
@@ -551,38 +599,19 @@ update_additional_project_env() {
     log "Updated ADDITIONAL_PROJECT_${slot} in $(basename $(dirname "$env_file"))/.env"
 }
 
-# Check if this project is already registered in feedback/registered_projects.json
+# Check if this project is already registered in the shared registry.
 is_project_registered() {
     local unix_path=$(get_unix_project_path)
+    local check_file="$REGISTRY_FILE"
 
-    # Check local feedback directory first
-    local reg_file="$SCRIPT_DIR/feedback/registered_projects.json"
+    [ -f "$check_file" ] || return 1
 
-    # Also check the owner project's feedback directory (the authoritative copy)
-    local owner_dir
-    owner_dir=$(get_owner_env_dir 2>/dev/null)
-    local owner_reg_file=""
-    if [ -n "$owner_dir" ] && [ "$owner_dir" != "$SCRIPT_DIR" ]; then
-        owner_reg_file="$owner_dir/feedback/registered_projects.json"
+    # grep (not jq) by design: on Windows Git Bash / MSYS, bash rewrites Unix
+    # absolute paths (/c/Users/...) to C:/Users/... before passing them to a
+    # non-MSYS binary like jq, breaking the match. grep keeps the literal.
+    if grep -q "\"projectPath\": *\"$unix_path\"" "$check_file" 2>/dev/null; then
+        return 0
     fi
-
-    for check_file in "$reg_file" "$owner_reg_file"; do
-        if [ -z "$check_file" ] || [ ! -f "$check_file" ]; then
-            continue
-        fi
-
-        # IMPORTANT: on Windows Git Bash / MSYS, bash transparently rewrites
-        # any argument that looks like a Unix absolute path (e.g. /c/Users/...)
-        # to a Windows drive path (C:/Users/...) before handing it to a
-        # non-MSYS binary like jq. That mangling makes `--arg path "$unix_path"`
-        # arrive as a different string than the literal inside the JSON,
-        # so the match silently fails. Fall back to a grep (which is MSYS
-        # and doesn't get its stdin/args rewritten) — it's a perfectly
-        # adequate check for this specific shape of JSON.
-        if grep -q "\"projectPath\": *\"$unix_path\"" "$check_file" 2>/dev/null; then
-            return 0
-        fi
-    done
 
     return 1
 }
@@ -622,6 +651,10 @@ check_prerequisites() {
 
     # Load PROJEXLIGHT_API_URL from .env if not already set
     load_api_url_from_env
+
+    # Ensure the shared-registry host path is written into .env so both compose
+    # files bind-mount ~/.projexlight -> /registry (single source of truth).
+    ensure_registry_env
 
     # Check config expiry for this project
     check_config_expiry
@@ -1123,7 +1156,7 @@ register_project() {
     log "Registering project with MCP Server..."
 
     # Wait for MCP to be healthy with retries
-    local max_retries=30
+    local max_retries=75   # ~150s: tolerate >1min cold starts during self-heal
     local retry_count=0
     while ! check_dev_mcp; do
         retry_count=$((retry_count + 1))
@@ -1145,6 +1178,9 @@ register_project() {
     local api_key=""
     local sprint_id=""
     local db_config=""
+    local api_url=""
+    local environment=""
+    local expires_at=""
     if [ -f "$CONFIG_FILE" ]; then
         if command -v jq &> /dev/null; then
             project_id=$(jq -r '.projectId // ""' "$CONFIG_FILE" 2>/dev/null)
@@ -1155,15 +1191,36 @@ register_project() {
             sprint_id=$(jq -r '.sprintId // ""' "$CONFIG_FILE" 2>/dev/null)
             # Get full database config as JSON string
             db_config=$(jq -c '.databaseConfig // {}' "$CONFIG_FILE" 2>/dev/null)
+            # Per-project environment routing (dev/staging/prod own URL + expiry)
+            api_url=$(jq -r '.apiUrl // .platformApiUrl // ""' "$CONFIG_FILE" 2>/dev/null)
+            environment=$(jq -r '.environment // .activeEnvironment // "prod"' "$CONFIG_FILE" 2>/dev/null)
+            expires_at=$(jq -r '.expiresAt // ""' "$CONFIG_FILE" 2>/dev/null)
         fi
     fi
 
     if [ -z "$project_id" ]; then
-        project_id="$PROJECT_NAME"
+        error "Cannot register: no projectId found in $CONFIG_FILE."
+        error "A valid project UUID is required (do NOT register under a folder name)."
+        return 1
     fi
 
     # Convert paths to Unix format for Docker compatibility
     local unix_project_path=$(get_unix_project_path)
+
+    # Guard: a guest must never register under the OWNER's projectId (mis-set
+    # mcp-config.json). The server also rejects this (400), but fail early + clearly.
+    if [ "$is_owner" != "true" ] && command -v jq &> /dev/null; then
+        local projects_json owner_id owner_path
+        projects_json=$(curl -sf "http://localhost:${DEV_MCP_PORT}/api/projects" 2>/dev/null || echo "")
+        owner_id=$(echo "$projects_json" | jq -r '.projects[]? | select(.isOwner==true) | .projectId' 2>/dev/null | head -1)
+        owner_path=$(echo "$projects_json" | jq -r '.projects[]? | select(.isOwner==true) | .projectPath' 2>/dev/null | head -1)
+        if [ -n "$owner_id" ] && [ "$owner_id" = "$project_id" ] && [ "$owner_path" != "$unix_project_path" ]; then
+            error "This project's id ($project_id) is the OWNER's id, but the path differs"
+            error "($unix_project_path vs owner $owner_path). A guest cannot register under the"
+            error "owner's id — fix this project's mcp-config.json / .projexlight/config.json projectId."
+            return 1
+        fi
+    fi
 
     log "Registering with Unix path: $unix_project_path"
     if [ -n "$api_key" ]; then
@@ -1175,8 +1232,10 @@ register_project() {
     # Try to register via API
     # If this is the owner project (first to create containers), mark it as such
     # IMPORTANT: Pass apiKey for multi-project credential routing
+    # NOTE: plain `-s` (not `-sf`) so we capture the server's error body (e.g. the
+    # 400 owner-id / project-limit messages) instead of swallowing it.
     local register_response
-    register_response=$(curl -sf -X POST "http://localhost:${DEV_MCP_PORT}/api/projects/register" \
+    register_response=$(curl -s -X POST "http://localhost:${DEV_MCP_PORT}/api/projects/register" \
         -H "Content-Type: application/json" \
         -d "{
             \"projectId\": \"$project_id\",
@@ -1186,22 +1245,30 @@ register_project() {
             \"databaseName\": \"$db_name\",
             \"databaseType\": \"$db_type\",
             \"apiKey\": \"$api_key\",
+            \"apiUrl\": \"$api_url\",
+            \"environment\": \"$environment\",
+            \"expiresAt\": \"$expires_at\",
             \"sprintId\": \"$sprint_id\",
             \"databaseConfig\": $db_config,
             \"isOwner\": $is_owner
         }" 2>&1) || true
 
-    if echo "$register_response" | grep -q "success\|registered\|already"; then
+    # Verify the registration actually landed by reading it back — do NOT trust the
+    # POST response alone (handles the health-before-registry-ready race + silent
+    # failures). This is the fix for "registered but not really in the owner registry".
+    if verify_project_registered "$project_id"; then
         if [ "$is_owner" = "true" ]; then
-            log "Project registered as OWNER (cannot be removed)"
+            log "Project registered as OWNER and verified in registry"
         else
-            log "Project registered successfully!"
+            log "Project registered and verified in registry"
         fi
         info "Unix path: $unix_project_path"
+        return 0
     else
-        warn "Could not auto-register project."
-        info "Please register manually at: http://localhost:${DEV_MCP_PORT}/projects"
-        info "Use Unix path: $unix_project_path"
+        error "Registration could NOT be verified for project $project_id"
+        info "Server response: $register_response"
+        info "Register manually at: http://localhost:${DEV_MCP_PORT}/projects (Unix path: $unix_project_path)"
+        return 1
     fi
 }
 
@@ -1317,13 +1384,23 @@ force_restart() {
 # If additional projects were registered but their ADDITIONAL_PROJECT_N entries
 # are missing from .env, their volumes won't be mounted and tools will fail.
 #
-# This function reads feedback/registered_projects.json (persisted on the
-# feedback volume) and rebuilds all ADDITIONAL_PROJECT_N + PROJECT_PATH_MAPPINGS
-# entries in the owner's .env BEFORE docker-compose up runs.
+# This function reads the shared registry (~/.projexlight/registered_projects.json)
+# and rebuilds all ADDITIONAL_PROJECT_N + PROJECT_PATH_MAPPINGS entries in the
+# owner's .env BEFORE docker-compose up runs.
 
 recover_env_from_registry() {
-    local reg_file="$SCRIPT_DIR/feedback/registered_projects.json"
-    local env_file="$SCRIPT_DIR/.env"
+    # Target dir = where the OWNER's .env + registry live (the .env the container
+    # actually reads). Defaults to the owner's mcp-server dir so a GUEST running
+    # setup-all updates the OWNER's .env — not its own (the previous bug). Callers
+    # may override (promote-self passes "$SCRIPT_DIR" after snapshotting the registry
+    # there so THIS project becomes the new owner).
+    local target_dir="${1:-}"
+    [ -z "$target_dir" ] && target_dir="$(get_owner_env_dir)"
+    [ -z "$target_dir" ] && target_dir="$SCRIPT_DIR"
+    # The registry is now the single shared file in ~/.projexlight; the owner's
+    # .env (read by BOTH the Dev and Test compose) is still where mounts are emitted.
+    local reg_file="$REGISTRY_FILE"
+    local env_file="$target_dir/.env"
 
     if [ ! -f "$reg_file" ] || [ ! -f "$env_file" ]; then
         return 0  # Nothing to recover
@@ -1417,6 +1494,61 @@ recover_env_from_registry() {
     log "Rebuilt multi-project .env from registry (${emitted} additional slot(s))"
 }
 
+# Re-derive .env from the registry (single source of truth) and recreate the MCP
+# containers so newly registered projects get mounted and the in-memory registry
+# is reloaded. Called AFTER registration so the new entry is included.
+reload_containers_from_registry() {
+    recover_env_from_registry
+    local owner_dir; owner_dir=$(get_owner_env_dir)
+    if [ -z "$owner_dir" ]; then
+        warn "Owner dir not found; cannot reload containers from registry"
+        return 1
+    fi
+    local cf; cf=$(docker inspect "$DEV_MCP_CONTAINER" \
+        --format='{{index .Config.Labels "com.docker.compose.project.config_files"}}' 2>/dev/null || echo "")
+    cf="${cf//\\//}"
+    if [ -n "$cf" ] && [ -f "$cf" ]; then
+        log "Reloading MCP containers from registry: $(basename "$cf")"
+        (cd "$owner_dir" && docker compose -f "$(basename "$cf")" up -d 2>/dev/null) || \
+        (cd "$owner_dir" && docker-compose -f "$(basename "$cf")" up -d 2>/dev/null) || \
+            { warn "Could not reload containers automatically"; return 1; }
+    else
+        warn "Compose file not found for $DEV_MCP_CONTAINER; reload containers manually"
+        return 1
+    fi
+    return 0
+}
+
+# Verify a project actually landed in the owner registry by reading it back from
+# the live server. Handles the "/health 200 before registry ready" race and silent
+# POST failures. Returns 0 if the projectId is present, 1 otherwise.
+verify_project_registered() {
+    local pid="$1" attempt
+    [ -z "$pid" ] && return 1
+    command -v jq &> /dev/null || return 0  # cannot verify without jq; don't block
+    for attempt in $(seq 1 10); do
+        if curl -sf "http://localhost:${DEV_MCP_PORT}/api/projects" 2>/dev/null \
+             | jq -e --arg pid "$pid" '.projects[]? | select(.projectId==$pid)' >/dev/null 2>&1; then
+            return 0
+        fi
+        sleep 2
+    done
+    return 1
+}
+
+# Is the currently-registered owner's project folder still present on disk?
+# Returns 0 (alive / unknown / no-owner) or 1 (owner registered but folder GONE).
+# Used to decide whether THIS project should promote itself to owner.
+is_owner_folder_alive() {
+    command -v jq &> /dev/null || return 0   # can't check → assume alive
+    local pj owner_path
+    pj=$(curl -sf "http://localhost:${DEV_MCP_PORT}/api/projects" 2>/dev/null || echo "")
+    owner_path=$(echo "$pj" | jq -r '.projects[]? | select(.isOwner==true) | .projectPath' 2>/dev/null | head -1)
+    [ -z "$owner_path" ] && return 0         # no owner registered → first-owner flow handles it
+    [ -d "$owner_path" ] && return 0         # folder present → alive
+    return 1                                  # owner registered but folder gone
+}
+
 #===============================================================================
 # Main Setup Flow
 #===============================================================================
@@ -1463,7 +1595,10 @@ run_setup() {
 
         # First project auto-registers as OWNER via API (cannot be removed)
         log "Auto-registering first project as OWNER via API..."
-        register_project "true"
+        if ! register_project "true"; then
+            warn "Owner registration could not be verified — check the Dev MCP logs."
+            warn "Re-run ./setup-all.sh once the Dev MCP is fully ready."
+        fi
 
         # Auto-fix credential mismatches after registration
         echo ""
@@ -1473,55 +1608,11 @@ run_setup() {
         log "Existing MCP detected - reusing containers"
         echo ""
 
-        # Track whether we need to restart containers for new volume mounts
-        NEEDS_CONTAINER_RESTART=false
-
-        # Create local registration if not already registered
-        # This may update the owner's .env with new ADDITIONAL_PROJECT_N mounts
-        if ! is_project_registered; then
-            if ! create_local_registration "false"; then
-                # Project limit reached — ask user to unregister before continuing
-                echo ""
-                echo -e "${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-                echo -e "${YELLOW}Setup cannot continue until a slot is freed.${NC}"
-                echo -e "${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-                echo ""
-                echo -e "Steps to resolve:"
-                echo -e "  1. Open ${BLUE}http://localhost:${DEV_MCP_PORT}/projects${NC} in your browser"
-                echo -e "  2. Unregister a project you no longer need"
-                echo -e "  3. Re-run this script: ${GREEN}./setup-all.sh${NC}"
-                echo ""
-                exit 1
-            fi
-            echo ""
-        else
-            info "Project already registered locally"
-        fi
-
-        # Restart containers if owner's .env was updated with new volume mounts
-        # The container must be recreated for Docker to pick up the new mount
-        if [ "$NEEDS_CONTAINER_RESTART" = "true" ]; then
-            warn "New volume mount added - restarting containers to apply..."
-            local owner_dir
-            owner_dir=$(get_owner_env_dir)
-            if [ -n "$owner_dir" ]; then
-                # Find the docker-compose file that started the container
-                local compose_file
-                compose_file=$(docker inspect "$DEV_MCP_CONTAINER" \
-                    --format='{{index .Config.Labels "com.docker.compose.project.config_files"}}' 2>/dev/null || echo "")
-                compose_file="${compose_file//\\//}"
-
-                if [ -n "$compose_file" ] && [ -f "$compose_file" ]; then
-                    log "Recreating containers from: $compose_file"
-                    (cd "$owner_dir" && docker compose -f "$(basename "$compose_file")" up -d 2>/dev/null) || \
-                    (cd "$owner_dir" && docker-compose -f "$(basename "$compose_file")" up -d 2>/dev/null) || \
-                        warn "Could not restart containers automatically"
-                else
-                    warn "Could not find compose file - restart containers manually"
-                fi
-            fi
-            echo ""
-        elif ! check_dev_mcp || ! check_test_mcp; then
+        # Ensure the shared MCP containers are up. Do NOT pre-write .env here — the
+        # guest's mount is derived from registered_projects.json by
+        # recover_env_from_registry AFTER it is registered below, so the registry
+        # stays the single source of truth (no hand-written entries in the owner .env).
+        if ! check_dev_mcp || ! check_test_mcp; then
             warn "Containers not healthy - restarting..."
             "$SCRIPT_DIR/setup-dev-mcp.sh" restart 2>/dev/null || true
             "$SCRIPT_DIR/setup-test-mcp.sh" restart 2>/dev/null || true
@@ -1544,13 +1635,45 @@ run_setup() {
         install_hooks
         echo ""
 
-        # Prompt for registration
         info "MCP containers are shared with other projects"
-        info "Register this project at: http://localhost:${DEV_MCP_PORT}/projects"
         echo ""
 
-        # Try auto-registration via API (not as owner)
-        register_project "false"
+        if is_owner_folder_alive; then
+            # Normal guest path: register in the owner registry (read-back verified),
+            # then re-derive .env from the registry and reload so the guest mounts on
+            # THIS run. The server enforces the max-project limit (HTTP 400).
+            if ! register_project "false"; then
+                error "Guest registration failed/unverified — NOT marking setup complete."
+                error "If this is a project-slot limit, free one at http://localhost:${DEV_MCP_PORT}/projects, then re-run."
+                error "Otherwise fix the issue above (wrong projectId / expired key) and re-run ./setup-all.sh."
+                exit 1
+            fi
+            reload_containers_from_registry || warn "Container reload incomplete — re-run ./setup-all.sh."
+        else
+            # SELF-HEAL / promote-self: the registered owner's FOLDER is gone (owner
+            # deleted). The old owner's compose no longer exists, so recreate FROM THIS
+            # project so /workspace re-homes here; the server's startup reconciler then
+            # evicts the dead owner and marks THIS project owner.
+            warn "Registered owner folder is missing — self-healing: promoting THIS project to owner..."
+
+            # The shared registry in ~/.projexlight already holds the whole fleet
+            # and SURVIVES owner deletion (it no longer lives inside the owner's
+            # folder), so no snapshot-via-API dance is needed. Just rebuild THIS
+            # project's .env from the shared registry, drop the stale containers
+            # (launched from the deleted owner; the fixed container_name would
+            # clash), and recreate FROM THIS project via the canonical wrappers.
+            recover_env_from_registry "$SCRIPT_DIR"
+            docker rm -f "$DEV_MCP_CONTAINER" 2>/dev/null || true
+            docker rm -f "$TEST_MCP_CONTAINER" 2>/dev/null || true
+            setup_dev_mcp
+            setup_test_mcp
+            if ! register_project "true"; then
+                error "Self-heal FAILED: could not register THIS project as the new owner."
+                error "The current project's own token may be expired — refresh its CLI export"
+                error "(ProjexLight Portal > project > CLI Export) and re-run ./setup-all.sh."
+                exit 1
+            fi
+        fi
     fi
 
     # Auto-fix credential mismatches (checks config vs registered)

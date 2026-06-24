@@ -1,0 +1,43 @@
+{{- /*
+Sovereign isolation (FR-SOV-2). Default-deny egress, then allow only:
+  - intra-namespace traffic (services <-> in-cluster infra),
+  - DNS to the cluster resolver,
+  - (optionally) internet egress / cross-region, gated by values that
+    terraform main.tf sets to "false" for a sovereign region.
+*/ -}}
+{{- if .Values.networkPolicies.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "projexcloud.fullname" . }}-egress
+  labels:
+    {{- include "projexcloud.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/part-of: projexcloud
+  policyTypes:
+    - Egress
+  egress:
+    # Intra-namespace: app pods reach Postgres pools, Redis, Kafka, ClickHouse.
+    - to:
+        - podSelector: {}
+    # DNS resolution.
+    - to:
+        - namespaceSelector: {}
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    {{- if .Values.networkPolicies.allowEgressInternet }}
+    # Internet egress — DISABLED for sovereign regions (FR-SOV-2).
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            {{- if not .Values.networkPolicies.allowCrossRegion }}
+            except:
+              - 10.0.0.0/8
+            {{- end }}
+    {{- end }}
+{{- end }}

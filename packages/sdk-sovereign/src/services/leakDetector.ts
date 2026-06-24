@@ -50,12 +50,25 @@ export function getLeakDetector(): LeakDetector | null {
  * which also fires the regulated sovereign.leak.alert.v1 event.
  */
 export async function recordCandidate(c: AlertCandidate): Promise<void> {
-  await ingestLeakAlert({
-    region_id: c.region_id,
-    kind: c.kind,
-    severity: c.severity,
-    incident_ref: c.incident_ref ?? null,
-  });
+  try {
+    await ingestLeakAlert({
+      region_id: c.region_id,
+      kind: c.kind,
+      severity: c.severity,
+      incident_ref: c.incident_ref ?? null,
+    });
+  } catch (err) {
+    // A failed alert write must never crash the detector loop (and with it the
+    // gateway). The most common dev cause is the region not being provisioned in
+    // sovereign.region_config (FK violation) — the synthetic detector fires for a
+    // default region that may not exist. Log and continue; real regions always
+    // have a region_config row written on first boot.
+    console.warn(
+      `[leak-detector] dropped alert for region '${c.region_id}' (${c.kind}/${c.severity}): ${
+        (err as Error).message
+      }`,
+    );
+  }
 }
 
 /**

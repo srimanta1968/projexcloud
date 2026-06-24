@@ -1,0 +1,122 @@
+{{- /*
+One Deployment per enabled service (from .Values.services), all running the
+shared platform image with a per-service command override. http services also
+get a Service and (when autoscaling.enabled) an HPA. Per-service values fall
+back to .Values.defaults.
+*/ -}}
+{{- $root := . -}}
+{{- range $name, $svc := .Values.services }}
+{{- if $svc.enabled }}
+{{- $defaults := $root.Values.defaults }}
+{{- $autoscaling := $svc.autoscaling | default $defaults.autoscaling }}
+{{- $resources := $svc.resources | default $defaults.resources }}
+{{- $replicas := $svc.replicas | default $defaults.replicas }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "projexcloud.fullname" $root }}-{{ $name }}
+  labels:
+    {{- include "projexcloud.labels" $root | nindent 4 }}
+    app.kubernetes.io/component: {{ $svc.kind }}
+spec:
+  {{- if not $autoscaling.enabled }}
+  replicas: {{ $replicas }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "projexcloud.selectorLabels" (dict "root" $root "name" $name) | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "projexcloud.selectorLabels" (dict "root" $root "name" $name) | nindent 8 }}
+        app.kubernetes.io/component: {{ $svc.kind }}
+    spec:
+      serviceAccountName: {{ include "projexcloud.serviceAccountName" $root }}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+      containers:
+        - name: {{ $name }}
+          image: {{ include "projexcloud.image" $root }}
+          imagePullPolicy: {{ $root.Values.image.pullPolicy }}
+          command: {{ toJson $svc.command }}
+          {{- if $svc.port }}
+          ports:
+            - name: http
+              containerPort: {{ $svc.port }}
+          {{- end }}
+          envFrom:
+            - configMapRef:
+                name: {{ include "projexcloud.fullname" $root }}-config
+            - secretRef:
+                name: {{ include "projexcloud.secretName" $root }}
+          env:
+            {{- range $k, $v := ($svc.env | default dict) }}
+            - name: {{ $k }}
+              value: {{ $v | quote }}
+            {{- end }}
+          {{- if eq $svc.kind "http" }}
+          {{- if eq $name "registry-mcp" }}
+          readinessProbe:
+            httpGet: { path: /healthz, port: http }
+            initialDelaySeconds: 20
+            periodSeconds: 15
+          {{- else if eq $name "api-gateway" }}
+          readinessProbe:
+            httpGet: { path: /health, port: http }
+            initialDelaySeconds: 30
+            periodSeconds: 15
+            failureThreshold: 10
+          {{- else }}
+          readinessProbe:
+            tcpSocket: { port: http }
+            initialDelaySeconds: 15
+            periodSeconds: 15
+          {{- end }}
+          {{- end }}
+          resources:
+            {{- toYaml $resources | nindent 12 }}
+{{- if $svc.port }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "projexcloud.fullname" $root }}-{{ $name }}
+  labels:
+    {{- include "projexcloud.labels" $root | nindent 4 }}
+spec:
+  type: ClusterIP
+  selector:
+    {{- include "projexcloud.selectorLabels" (dict "root" $root "name" $name) | nindent 4 }}
+  ports:
+    - name: http
+      port: {{ $svc.port }}
+      targetPort: http
+{{- end }}
+{{- if $autoscaling.enabled }}
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ include "projexcloud.fullname" $root }}-{{ $name }}
+  labels:
+    {{- include "projexcloud.labels" $root | nindent 4 }}
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ include "projexcloud.fullname" $root }}-{{ $name }}
+  minReplicas: {{ $autoscaling.minReplicas }}
+  maxReplicas: {{ $autoscaling.maxReplicas }}
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: {{ $autoscaling.targetCPUUtilizationPercentage }}
+{{- end }}
+{{- end }}
+{{- end }}

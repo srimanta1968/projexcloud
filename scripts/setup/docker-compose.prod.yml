@@ -1,0 +1,134 @@
+# ProjexCloud — production single-host Compose stack.
+#
+# Brings up Postgres + Redis + the api-gateway (built from source) on one VM
+# (AWS EC2, DigitalOcean Droplet, or any Docker host). Kafka and ClickHouse are
+# OPT-IN profiles — the gateway degrades gracefully without them. For real
+# production you normally replace `postgres`/`redis` with a managed service
+# (RDS / ElastiCache / DO Managed DB) and keep only the `api-gateway` service;
+# see docs/setup/production-*.md.
+#
+# Usage:  scripts/setup/prod-setup.sh   (wraps the commands below)
+#   docker compose --env-file .env.prod -f scripts/setup/docker-compose.prod.yml up -d --build
+#
+# Profiles:
+#   (default)        postgres + redis + api-gateway
+#   --profile kafka  adds Kafka (KAFKA_ENABLED=true)
+#   --profile managed  api-gateway only (point DB_HOST/REDIS_HOST at managed services)
+
+name: projexcloud-prod
+
+services:
+  postgres:
+    # PostGIS + pgvector baked in (both required by SDK migrations on boot).
+    build:
+      context: ../..
+      dockerfile: scripts/setup/postgres.Dockerfile
+    image: projexcloud/postgres-pgvector:${IMAGE_TAG:-local}
+    container_name: projexcloud_pg
+    profiles: ["", "default", "selfhosted"]
+    environment:
+      POSTGRES_USER: ${DB_USER:-projex}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required in .env.prod}
+      POSTGRES_DB: ${DB_NAME:-projexcloud_db}
+      POSTGRES_INITDB_ARGS: "-E UTF8"
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-projex}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+    networks: [projex]
+    # Not published to the host by default — only the gateway reaches it on the
+    # private network. Uncomment to expose for psql/admin (firewall it!).
+    # ports: ["127.0.0.1:5432:5432"]
+
+  redis:
+    image: redis:7-alpine
+    container_name: projexcloud_redis
+    profiles: ["", "default", "selfhosted"]
+    command: ["redis-server", "--appendonly", "yes", "--requirepass", "${REDIS_PASSWORD:-}"]
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+    networks: [projex]
+
+  api-gateway:
+    build:
+      context: ../..
+      dockerfile: services/api-gateway/Dockerfile
+    image: projexcloud/api-gateway:${IMAGE_TAG:-local}
+    container_name: projexcloud_gateway
+    env_file:
+      - ${ENV_FILE:-../../.env.prod}
+    environment:
+      NODE_ENV: production
+      PORT: "3000"
+      # In the default self-hosted profile these point at the sibling
+      # containers; in the `managed` profile override them in .env.prod.
+      DB_HOST: ${DB_HOST:-postgres}
+      REDIS_HOST: ${REDIS_HOST:-redis}
+    ports:
+      - "${GATEWAY_PORT:-3000}:3000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+        required: false
+      redis:
+        condition: service_healthy
+        required: false
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s   # first boot runs all SDK migrations
+    restart: unless-stopped
+    networks: [projex]
+
+  # SDK discovery / MCP surface (intent -> SDK). OPT-IN: `--profile discovery`.
+  # The bge-small embedding model runs IN-PROCESS (no separate LLM server). It
+  # serves the prebuilt catalog + vector index baked into the image and fetches
+  # the ~33MB model once on first query, cached in the hf_cache volume.
+  registry-mcp:
+    build:
+      context: ../..
+      dockerfile: services/registry-mcp/Dockerfile
+    image: projexcloud/registry-mcp:${IMAGE_TAG:-local}
+    container_name: projexcloud_discovery
+    profiles: ["discovery"]
+    env_file:
+      - ${ENV_FILE:-../../.env.prod}
+    environment:
+      NODE_ENV: production
+      REGISTRY_MCP_PORT: "3600"
+      # Disable per-tenant JWT for an internal-only discovery service; keep
+      # 'jwt' (default) when exposing it. See docs/setup/local-llm-and-discovery.md
+      REGISTRY_MCP_AUTH_MODE: ${REGISTRY_MCP_AUTH_MODE:-disabled}
+    ports:
+      - "${DISCOVERY_PORT:-3600}:3600"
+    volumes:
+      - hf_cache:/app/.hf-cache   # persist the downloaded embedding model
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:3600/healthz"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 40s
+    restart: unless-stopped
+    networks: [projex]
+
+volumes:
+  pg_data:
+  redis_data:
+  hf_cache:
+
+networks:
+  projex:
+    driver: bridge

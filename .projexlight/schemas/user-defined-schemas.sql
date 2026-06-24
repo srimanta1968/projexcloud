@@ -10,11 +10,8 @@
 -- ========================================
 
 CREATE TABLE IF NOT EXISTS users (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  id _u_u_i_d _p_r_i_m_a_r_y _k_e_y VARCHAR(255),
-  email _v_a_r_c_h_a_r(255) _u_n_i_q_u_e _n_o_t _n_u_l_l VARCHAR(255),
-  password_hash _v_a_r_c_h_a_r(255) _n_o_t _n_u_l_l VARCHAR(255),
-  created_at _t_i_m_e_s_t_a_m_p _n_o_t _n_u_l_l _d_e_f_a_u_l_t now() TIMESTAMP WITH TIME ZONE,
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid()
+,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
@@ -22,11 +19,8 @@ CREATE TABLE IF NOT EXISTS users (
 COMMENT ON TABLE users IS 'Schema: ProjexCloud Schema - Entity: Users';
 
 CREATE TABLE IF NOT EXISTS keys (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  key_id _u_u_i_d _p_r_i_m_a_r_y _k_e_y VARCHAR(255),
-  tier _i_n_t_e_g_e_r _n_o_t _n_u_l_l VARCHAR(255),
-  parent_key_id _u_u_i_d UUID,
-  created_at _t_i_m_e_s_t_a_m_p _n_o_t _n_u_l_l _d_e_f_a_u_l_t now() TIMESTAMP WITH TIME ZONE,
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid()
+,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
@@ -34,14 +28,35 @@ CREATE TABLE IF NOT EXISTS keys (
 COMMENT ON TABLE keys IS 'Schema: ProjexCloud Schema - Entity: Keys';
 
 CREATE TABLE IF NOT EXISTS audit_ledger (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  entry_id _u_u_i_d _p_r_i_m_a_r_y _k_e_y VARCHAR(255),
-  payload _j_s_o_n_b _n_o_t _n_u_l_l VARCHAR(255),
-  prev_hash _v_a_r_c_h_a_r(128) VARCHAR(255),
-  entry_hash _v_a_r_c_h_a_r(128) _n_o_t _n_u_l_l VARCHAR(255),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid()
+,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
 COMMENT ON TABLE audit_ledger IS 'Schema: ProjexCloud Schema - Entity: Audit_ledger';
+
+CREATE TABLE IF NOT EXISTS schema_version (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  schema_hash VARCHAR(255),
+  version INTEGER DEFAULT 1,
+  applied_at TIMESTAMP WITH TIME ZONE DEFAULT 'NOW()',
+  source VARCHAR(255) DEFAULT 'INIT',
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+COMMENT ON TABLE schema_version IS 'Schema: ProjexCloud Schema - Entity: _schema_version';
+
+CREATE TABLE IF NOT EXISTS migrations (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  sdk TEXT,
+  filename TEXT,
+  sha256 TEXT,
+  applied_at VARCHAR(255) DEFAULT 'now()',
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+COMMENT ON TABLE migrations IS 'Schema: ProjexCloud Schema - Entity: _migrations';
 

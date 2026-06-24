@@ -21,7 +21,7 @@ COMPOSE_FILE="$SCRIPT_DIR/dev-mcp-compose.yml"
 CONTAINER_NAME="projexlight-dev-mcp"
 IMAGE_NAME="projexlight/projex-dev-mcp:latest"
 DEFAULT_PORT=8766
-HEALTH_CHECK_RETRIES=30
+HEALTH_CHECK_RETRIES=75   # ~150s: tolerate >1min cold starts during self-heal
 HEALTH_CHECK_INTERVAL=2
 
 # Colors
@@ -37,6 +37,43 @@ print_msg() {
     local msg=$2
     echo -e "${color}${msg}${NC}"
 }
+
+#===============================================================================
+# Shared registry location (single source of truth, cross-OS) — see setup-all.sh
+#===============================================================================
+get_registry_host_dir() {
+    local home="${HOME:-}"
+    if [ -z "$home" ] && [ -n "${USERPROFILE:-}" ]; then
+        home="${USERPROFILE//\\//}"
+        if [[ "$home" =~ ^([A-Za-z]):(.*)$ ]]; then
+            home="/${BASH_REMATCH[1],,}${BASH_REMATCH[2]}"
+        fi
+    fi
+    local dir="$home/.projexlight"
+    mkdir -p "$dir" 2>/dev/null || true
+    if [[ "$dir" =~ ^/([a-z])/(.*) ]]; then
+        echo "${BASH_REMATCH[1]^}:/${BASH_REMATCH[2]}"
+    else
+        echo "$dir"
+    fi
+}
+
+ensure_registry_env() {
+    local env_file="${1:-$SCRIPT_DIR/.env}"
+    local host_dir; host_dir="$(get_registry_host_dir)"
+    touch "$env_file" 2>/dev/null || true
+    if grep -q '^PROJEX_REGISTRY_DIR_HOST=' "$env_file" 2>/dev/null; then
+        if [[ "$OSTYPE" == "darwin"* ]]; then
+            sed -i '' "s#^PROJEX_REGISTRY_DIR_HOST=.*#PROJEX_REGISTRY_DIR_HOST=$host_dir#" "$env_file"
+        else
+            sed -i "s#^PROJEX_REGISTRY_DIR_HOST=.*#PROJEX_REGISTRY_DIR_HOST=$host_dir#" "$env_file"
+        fi
+    else
+        printf '\n# Shared project registry host dir (single source of truth)\nPROJEX_REGISTRY_DIR_HOST=%s\n' "$host_dir" >> "$env_file"
+    fi
+}
+
+REGISTRY_FILE="$(get_registry_host_dir)/registered_projects.json"
 
 check_prerequisites() {
     if ! command -v docker &> /dev/null; then
@@ -72,6 +109,10 @@ check_prerequisites() {
 
     # Create feedback directory if it doesn't exist
     mkdir -p "$SCRIPT_DIR/feedback" 2>/dev/null || true
+
+    # Ensure the shared-registry host path is in .env so the compose bind-mounts
+    # ~/.projexlight -> /registry (shared with the Test MCP).
+    ensure_registry_env
 
     # Load PROJEXLIGHT_API_URL from .env if not already set
     load_api_url_from_env
@@ -210,7 +251,51 @@ sync_credentials_if_needed() {
     fi
 
     if [ -z "$registered_api_key" ]; then
-        return 0  # Project not registered
+        # Project is NOT registered yet. Previously this returned early, so a guest
+        # set up via setup-dev-mcp.sh was never added to the owner registry and init
+        # silently fell back to the owner project. Register it now from THIS project's
+        # own config (never the owner's).
+        print_msg "$YELLOW" "[SYNC] Project not registered — registering new guest..."
+        local db_name db_type sprint_id db_config project_name unix_path api_url environment expires_at
+        db_name=$(jq -r '.databaseConfig.database // ""' "$SCRIPT_DIR/mcp-config.json" 2>/dev/null)
+        db_type=$(jq -r '.databaseConfig.type // ""' "$SCRIPT_DIR/mcp-config.json" 2>/dev/null)
+        sprint_id=$(jq -r '.sprintId // ""' "$SCRIPT_DIR/mcp-config.json" 2>/dev/null)
+        db_config=$(jq -c '.databaseConfig // {}' "$SCRIPT_DIR/mcp-config.json" 2>/dev/null)
+        api_url=$(jq -r '.apiUrl // .platformApiUrl // ""' "$SCRIPT_DIR/mcp-config.json" 2>/dev/null)
+        environment=$(jq -r '.environment // .activeEnvironment // "prod"' "$SCRIPT_DIR/mcp-config.json" 2>/dev/null)
+        expires_at=$(jq -r '.expiresAt // ""' "$SCRIPT_DIR/mcp-config.json" 2>/dev/null)
+        project_name=$(basename "$(dirname "$SCRIPT_DIR")")
+        unix_path=$(cd "$(dirname "$SCRIPT_DIR")" && pwd)
+        if [[ "$unix_path" =~ ^([A-Za-z]):(.*)$ ]]; then
+            local drive="${BASH_REMATCH[1]}" rest="${BASH_REMATCH[2]}"
+            rest="${rest//\\//}"
+            unix_path="/${drive,,}${rest}"
+        fi
+        curl -sf -X POST "http://localhost:${port}/api/projects/register" \
+            -H "Content-Type: application/json" \
+            -d "{
+                \"projectId\": \"$project_id\",
+                \"projectName\": \"$project_name\",
+                \"projectPath\": \"$unix_path\",
+                \"workspacePath\": \"$unix_path\",
+                \"databaseName\": \"$db_name\",
+                \"databaseType\": \"$db_type\",
+                \"apiKey\": \"$config_api_key\",
+                \"apiUrl\": \"$api_url\",
+                \"environment\": \"$environment\",
+                \"expiresAt\": \"$expires_at\",
+                \"sprintId\": \"$sprint_id\",
+                \"databaseConfig\": $db_config,
+                \"isOwner\": false
+            }" > /dev/null 2>&1 || true
+        if curl -sf "http://localhost:${port}/api/projects" 2>/dev/null \
+             | jq -e --arg pid "$project_id" '.projects[]? | select(.projectId==$pid)' >/dev/null 2>&1; then
+            print_msg "$GREEN" "[SYNC] New guest registered: ${project_id:0:8}..."
+            print_msg "$YELLOW" "[SYNC] NOTE: run ./setup-all.sh to mount this project's files into the container."
+        else
+            print_msg "$RED" "[SYNC] Could not register guest ${project_id:0:8}... — run ./setup-all.sh"
+        fi
+        return 0
     fi
 
     # Compare first 50 chars
@@ -230,7 +315,7 @@ sync_credentials_if_needed() {
 
         if [ "$delete_http" = "403" ]; then
             print_msg "$YELLOW" "[SYNC] Owner project — updating persisted apiKey directly"
-            local persisted_file="$SCRIPT_DIR/feedback/registered_projects.json"
+            local persisted_file="$REGISTRY_FILE"
             if [ -f "$persisted_file" ] && command -v jq &> /dev/null; then
                 cp "$persisted_file" "${persisted_file}.bak" 2>/dev/null || true
                 local tmp_file="${persisted_file}.tmp"
@@ -267,6 +352,9 @@ sync_credentials_if_needed() {
         local db_type=$(jq -r '.databaseConfig.type // ""' "$SCRIPT_DIR/mcp-config.json" 2>/dev/null)
         local sprint_id=$(jq -r '.sprintId // ""' "$SCRIPT_DIR/mcp-config.json" 2>/dev/null)
         local db_config=$(jq -c '.databaseConfig // {}' "$SCRIPT_DIR/mcp-config.json" 2>/dev/null)
+        local api_url=$(jq -r '.apiUrl // .platformApiUrl // ""' "$SCRIPT_DIR/mcp-config.json" 2>/dev/null)
+        local environment=$(jq -r '.environment // .activeEnvironment // "prod"' "$SCRIPT_DIR/mcp-config.json" 2>/dev/null)
+        local expires_at=$(jq -r '.expiresAt // ""' "$SCRIPT_DIR/mcp-config.json" 2>/dev/null)
         local project_name=$(basename "$(dirname "$SCRIPT_DIR")")
         local unix_path=$(cd "$(dirname "$SCRIPT_DIR")" && pwd)
 
@@ -288,6 +376,9 @@ sync_credentials_if_needed() {
                 \"databaseName\": \"$db_name\",
                 \"databaseType\": \"$db_type\",
                 \"apiKey\": \"$config_api_key\",
+                \"apiUrl\": \"$api_url\",
+                \"environment\": \"$environment\",
+                \"expiresAt\": \"$expires_at\",
                 \"sprintId\": \"$sprint_id\",
                 \"databaseConfig\": $db_config,
                 \"isOwner\": false

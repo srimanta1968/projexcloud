@@ -59,7 +59,7 @@ import {
   startSloAlarms,
 } from '@projexlight/sdk-meter';
 import { server as secretsServer } from '@projexlight/sdk-secrets';
-import { migrationsDir as tenantMigrations, server as tenantServer, createTenant as tenantCreate, listTenants as tenantList } from '@projexlight/sdk-tenant';
+import { migrationsDir as tenantMigrations, server as tenantServer, createTenant as tenantCreate, listTenants as tenantList, ensureApp as appEnsure } from '@projexlight/sdk-tenant';
 import { migrationsDir as consentMigrations, server as consentServer } from '@projexlight/sdk-consent';
 import { migrationsDir as policyMigrations, server as policyServer } from '@projexlight/sdk-policy';
 import {
@@ -702,6 +702,34 @@ app.post<{ Body: {
     return reply.code(500).send({ error: msg });
   }
 });
+
+// Provision the parent app (and its owning org) a tenant references via
+// tenant.app_id. Idempotent — returns the existing app if app_id already
+// exists. Without this there is no admin path to create the first app, so
+// POST /admin/tenants fails the tenant_app_id_fkey FK.
+app.post<{ Body: { app_id: string; display_name: string; org_name?: string } }>(
+  '/admin/apps',
+  async (req, reply) => {
+    if (!checkAdminToken(req, reply)) return;
+    const b = req.body ?? ({} as Record<string, never>);
+    if (!b.app_id || !b.display_name) {
+      return reply.code(400).send({
+        error: 'ValidationError',
+        details: ['app_id, display_name are required'],
+      });
+    }
+    try {
+      const app_record = await appEnsure({
+        app_id: b.app_id,
+        display_name: b.display_name,
+        org_name: b.org_name,
+      });
+      return reply.code(201).send({ data: { app: app_record } });
+    } catch (err) {
+      return reply.code(500).send({ error: (err as Error).message });
+    }
+  },
+);
 
 app.post<{
   Body: { lookback_hours?: number };

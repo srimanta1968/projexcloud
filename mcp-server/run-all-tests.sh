@@ -1405,8 +1405,32 @@ export RUN_UI_TESTS
 export RUN_API_TESTS
 export ENV_OVERRIDE
 
+# Self-heal the shared MCP if its owner project was deleted (one-shot, never loops).
+MCP_SERVER_URL="${MCP_SERVER_URL:-http://localhost:8766}"
+mcp_self_heal_for_tests() {
+    local resp code body
+    resp=$(curl -s -m 5 -w '\n%{http_code}' "${MCP_SERVER_URL}/health" 2>/dev/null)
+    code=$(printf '%s' "$resp" | tail -n1)
+    body=$(printf '%s' "$resp" | sed '$d')
+    [ "$code" = "200" ] && return 0
+    if [ -n "$PROJEXLIGHT_SELF_HEAL_ATTEMPTED" ]; then
+        echo "❌ MCP still unhealthy after a self-heal attempt — not retrying (no loop)."
+        return 1
+    fi
+    local reason="unreachable"; printf '%s' "$body" | grep -q '"selfHeal"' && reason="owner_deleted"
+    echo "⚠️  MCP unhealthy (${reason}) — attempting one-shot self-heal: cd mcp-server && ./setup-all.sh"
+    [ -x "${PROJECT_ROOT}/mcp-server/setup-all.sh" ] || { echo "   setup-all.sh not found here — skipping self-heal."; return 0; }
+    export PROJEXLIGHT_SELF_HEAL_ATTEMPTED=1
+    ( cd "${PROJECT_ROOT}/mcp-server" && ./setup-all.sh ) || true
+    code=$(curl -s -m 5 -o /dev/null -w '%{http_code}' "${MCP_SERVER_URL}/health" 2>/dev/null || echo 000)
+    [ "$code" = "200" ] && { echo "✅ Self-heal succeeded — MCP healthy."; return 0; }
+    echo "❌ Self-heal FAILED — the current project's token may be expired. Refresh its CLI export, then re-run."
+    return 1
+}
+
 # Main
 check_prerequisites
+mcp_self_heal_for_tests || exit 1
 
 # Ensure config exists and apply any --login-email / --login-password overrides.
 # ensure_test_config is a no-op if the file already exists.

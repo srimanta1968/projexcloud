@@ -21,7 +21,7 @@ COMPOSE_FILE="$SCRIPT_DIR/test-mcp-compose.yml"
 CONTAINER_NAME="projexlight-test-mcp"
 IMAGE_NAME="projexlight/projex-test-mcp:latest"
 DEFAULT_PORT=8000
-HEALTH_CHECK_RETRIES=30
+HEALTH_CHECK_RETRIES=75   # ~150s: tolerate >1min cold starts during self-heal
 HEALTH_CHECK_INTERVAL=2
 
 # Colors
@@ -37,6 +37,43 @@ print_msg() {
     local msg=$2
     echo -e "${color}${msg}${NC}"
 }
+
+#===============================================================================
+# Shared registry location (single source of truth, cross-OS) — see setup-all.sh
+#===============================================================================
+get_registry_host_dir() {
+    local home="${HOME:-}"
+    if [ -z "$home" ] && [ -n "${USERPROFILE:-}" ]; then
+        home="${USERPROFILE//\\//}"
+        if [[ "$home" =~ ^([A-Za-z]):(.*)$ ]]; then
+            home="/${BASH_REMATCH[1],,}${BASH_REMATCH[2]}"
+        fi
+    fi
+    local dir="$home/.projexlight"
+    mkdir -p "$dir" 2>/dev/null || true
+    if [[ "$dir" =~ ^/([a-z])/(.*) ]]; then
+        echo "${BASH_REMATCH[1]^}:/${BASH_REMATCH[2]}"
+    else
+        echo "$dir"
+    fi
+}
+
+ensure_registry_env() {
+    local env_file="${1:-$SCRIPT_DIR/.env}"
+    local host_dir; host_dir="$(get_registry_host_dir)"
+    touch "$env_file" 2>/dev/null || true
+    if grep -q '^PROJEX_REGISTRY_DIR_HOST=' "$env_file" 2>/dev/null; then
+        if [[ "$OSTYPE" == "darwin"* ]]; then
+            sed -i '' "s#^PROJEX_REGISTRY_DIR_HOST=.*#PROJEX_REGISTRY_DIR_HOST=$host_dir#" "$env_file"
+        else
+            sed -i "s#^PROJEX_REGISTRY_DIR_HOST=.*#PROJEX_REGISTRY_DIR_HOST=$host_dir#" "$env_file"
+        fi
+    else
+        printf '\n# Shared project registry host dir (single source of truth)\nPROJEX_REGISTRY_DIR_HOST=%s\n' "$host_dir" >> "$env_file"
+    fi
+}
+
+REGISTRY_FILE="$(get_registry_host_dir)/registered_projects.json"
 
 check_prerequisites() {
     if ! command -v docker &> /dev/null; then
@@ -72,6 +109,10 @@ check_prerequisites() {
 
     # Create feedback directory if it doesn't exist
     mkdir -p "$SCRIPT_DIR/feedback" 2>/dev/null || true
+
+    # Ensure the shared-registry host path is in .env so the Test compose
+    # bind-mounts ~/.projexlight -> /registry (same file the Dev MCP uses).
+    ensure_registry_env
 
     # Load PROJEXLIGHT_API_URL from .env if not already set
     load_api_url_from_env

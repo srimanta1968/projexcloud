@@ -1,0 +1,123 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Production Setup — DigitalOcean · ProjexCloud</title><style>
+:root{--bg:#0d1117;--panel:#161b22;--ink:#e6edf3;--muted:#8b949e;--line:#30363d;--accent:#58a6ff;--ok:#3fb950}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.65 -apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif}
+a{color:var(--accent);text-decoration:none}a:hover{text-decoration:underline}
+.layout{display:grid;grid-template-columns:280px 1fr;min-height:100vh}
+aside{position:sticky;top:0;align-self:start;height:100vh;overflow:auto;background:var(--panel);border-right:1px solid var(--line);padding:20px 16px}
+aside h1{font-size:15px;margin:0 0 2px}aside .sub{color:var(--muted);font-size:12px;margin-bottom:16px}
+aside h2{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin:16px 0 6px}
+aside a{display:block;padding:6px 10px;border-radius:6px;color:var(--ink);font-size:13px}
+aside a:hover{background:#21262d;text-decoration:none}
+aside a.active{background:#1f6feb;color:#fff}
+main{padding:30px 42px;max-width:960px}
+h1,h2,h3,h4{line-height:1.3}
+h1{font-size:26px;margin:0 0 18px;padding-bottom:10px;border-bottom:1px solid var(--line)}
+h2{font-size:20px;margin:30px 0 10px;padding-bottom:6px;border-bottom:1px solid var(--line)}
+h3{font-size:16px;margin:22px 0 8px}h4{font-size:14px;margin:18px 0 6px;color:var(--muted)}
+p{margin:10px 0}
+code{background:#0b0f14;border:1px solid var(--line);border-radius:5px;padding:1px 5px;font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:.88em}
+pre{background:#0b0f14;border:1px solid var(--line);border-radius:8px;padding:12px 14px;overflow:auto;margin:12px 0}
+pre code{background:none;border:0;padding:0;font-size:12.5px;line-height:1.55;color:#c9d1d9}
+table{border-collapse:collapse;width:100%;margin:14px 0;font-size:13.5px}
+th,td{border:1px solid var(--line);padding:8px 11px;text-align:left;vertical-align:top}
+th{background:#1c2330;color:var(--muted);font-weight:600}
+tr:nth-child(even) td{background:#11161d}
+blockquote{margin:12px 0;padding:8px 16px;border-left:3px solid var(--accent);background:#11161d;border-radius:0 8px 8px 0;color:#c9d1d9}
+ul{margin:10px 0;padding-left:22px}li{margin:4px 0}
+ul.task{list-style:none;padding-left:4px}ul.task li::before{content:"☐ ";color:var(--muted)}
+hr{border:0;border-top:1px solid var(--line);margin:24px 0}
+.crumb{color:var(--muted);font-size:12px;margin-bottom:14px}
+</style></head><body>
+<div class="layout">
+<aside><h1>ProjexCloud</h1><div class="sub">Setup &amp; Deployment</div>
+<h2>Guides</h2>
+<a class="" href="README.html">Overview / Index</a>
+<a class="" href="dev-environment.html">Developer Environment</a>
+<a class="" href="production-overview.html">Production — Overview</a>
+<a class="" href="production-aws-ec2.html">Production — AWS (EC2)</a>
+<a class="active" href="production-digitalocean.html">Production — DigitalOcean</a>
+<a class="" href="local-llm-and-discovery.html">Local LLM &amp; Discovery</a>
+<h2>Reference</h2>
+<a href="../v3.1/api_docs/index.html">API Reference ↗</a>
+<a href="../v3.1/api_docs/test-plan.html">QA Test Plan ↗</a>
+</aside>
+<main>
+<div class="crumb">docs / setup / production-digitalocean.html</div>
+<h1>Production Setup — DigitalOcean</h1>
+<p>Deploy ProjexCloud on DigitalOcean. Read <a href="./production-overview.html">production-overview.md</a> first — this guide only covers the <strong>DigitalOcean-specific manual steps</strong>; the app bootstrap is the same <code>scripts/setup/prod-setup.sh</code>.</p>
+<p>Target architecture (recommended <code>managed</code> mode):</p>
+<pre><code>DO DNS ─▶ DO Load Balancer (HTTPS, Let&#x27;s Encrypt) ─▶ Droplet (Docker: api-gateway)
+                                                  ├─▶ Managed PostgreSQL
+                                                  └─▶ Managed Redis</code></pre>
+<p>DigitalOcean has <strong>no managed Kafka</strong>. If you need the usage event stream, run a Kafka container (<code>prod-setup.sh --kafka</code> + <code>KAFKA_ENABLED=true</code>) or use a third-party broker. Most deployments leave <code>KAFKA_ENABLED=false</code>.</p>
+<h2>1. Managed databases (DO Control Panel → Databases)</h2>
+<h3>1a. Managed PostgreSQL (required)</h3>
+<ul><li>Engine <strong>PostgreSQL 16</strong>, plan sized to load (start 2 GB / 1 vCPU).</li><li>Create database <code>projexcloud_db</code> and a user <code>projex</code> (or use <code>doadmin</code>).</li><li>DO <strong>requires TLS</strong> → gateway sets <code>DB_SSL=true</code>.</li><li><strong>Trusted sources:</strong> add your Droplet so only it can connect (DO&#x27;s firewall</li></ul>
+<p>  for managed DBs). Note the <strong>private</strong> host/port from the connection details.</p>
+<ul><li>Automated daily backups + PITR are on by default — keep them.</li></ul>
+<h3>1b. Managed Redis (recommended)</h3>
+<ul><li>Redis 7. TLS + a generated password (→ <code>REDIS_PASSWORD</code>).</li><li>Add the Droplet to the DB&#x27;s <strong>trusted sources</strong>.</li><li>Use the <strong>private</strong> connection host.</li></ul>
+<blockquote>Use the <strong>VPC-private</strong> endpoints for both so DB/Redis traffic never leaves DigitalOcean&#x27;s network. Put the Droplet and databases in the <strong>same region + VPC</strong>.</blockquote>
+<h2>2. Droplet</h2>
+<ul><li>Image: <strong>Ubuntu 22.04 LTS</strong>.</li><li>Size: start <strong>4 GB / 2 vCPU</strong> (the image build compiles ~90 packages; for a</li></ul>
+<p>  smaller Droplet, build with GHCR/CI and pull instead — see §5).</p>
+<ul><li>Enable <strong>VPC networking</strong> (same VPC as the databases) and <strong>backups</strong>.</li><li>Add your SSH key.</li></ul>
+<p>Cloud Firewall (Networking → Firewalls), attached to the Droplet:</p>
+<ul><li>inbound <strong>443</strong> from anywhere (to the Load Balancer),</li><li>inbound <strong>3000</strong> <strong>from the Load Balancer only</strong> (or keep 3000 closed and let</li></ul>
+<p>  the LB reach it over the VPC),</p>
+<ul><li>inbound <strong>22</strong> from your admin IP,</li><li>outbound all.</li></ul>
+<p>Install Docker on the Droplet:</p>
+<pre><code>sudo apt-get update &amp;&amp; sudo apt-get install -y git
+curl -fsSL https://get.docker.com | sudo sh        # Docker Engine + compose plugin
+sudo usermod -aG docker $USER                       # re-login to take effect</code></pre>
+<h2>3. Deploy the app</h2>
+<pre><code>git clone &lt;your-projexcloud-repo-url&gt; &amp;&amp; cd ProjexCloud
+cp scripts/setup/.env.prod.example .env.prod
+$EDITOR .env.prod</code></pre>
+<p>Set in <code>.env.prod</code> (use the <strong>private</strong> managed endpoints):</p>
+<pre><code>DB_HOST=private-projexcloud-db-do-user-xxxx.b.db.ondigitalocean.com
+DB_PORT=25060                       # DO managed PG uses 25060, not 5432
+DB_NAME=projexcloud_db
+DB_USER=projex
+DB_PASSWORD=&lt;managed pg password&gt;
+DB_SSL=true
+REDIS_ENABLED=true
+REDIS_HOST=private-projex-redis-do-user-xxxx.b.db.ondigitalocean.com
+REDIS_PORT=25061                    # DO managed Redis port
+REDIS_PASSWORD=&lt;managed redis password&gt;
+KAFKA_ENABLED=false
+ADMIN_OPS_TOKEN=&lt;openssl rand -hex 32&gt;
+JWT_SECRET=&lt;openssl rand -hex 32&gt;
+CORS_ORIGIN=https://app.yourdomain.com
+GATEWAY_PORT=3000</code></pre>
+<blockquote>⚠ DigitalOcean managed Postgres listens on <strong>25060</strong> and Redis on <strong>25061</strong> — not the defaults. Copy the exact host/port from the DB&#x27;s &quot;Connection details&quot;.</blockquote>
+<p>Bootstrap (api-gateway only; DB/Redis are managed):</p>
+<pre><code>scripts/setup/prod-setup.sh --mode managed</code></pre>
+<p>It builds the image, starts the gateway, runs all SDK migrations against the managed Postgres, waits for <code>/health</code>, and seeds pricing catalogs + a first tenant.</p>
+<h2>4. Load Balancer + TLS</h2>
+<p><strong>Option A — DigitalOcean Load Balancer (recommended):</strong> 1. Create a <strong>Load Balancer</strong> in the same VPC/region; add the Droplet. 2. Forwarding rule: <strong>HTTPS 443 → HTTP 3000</strong> on the Droplet. 3. TLS: let DO manage a <strong>Let&#x27;s Encrypt</strong> cert for <code>app.yourdomain.com</code> (needs    the domain in DO DNS), or upload your own. 4. Health check: **HTTP, port 3000, path <code>/health</code>**. 5. DO DNS: point <code>app.yourdomain.com</code> at the Load Balancer.</p>
+<p><strong>Option B — Nginx + certbot on the Droplet</strong> (no LB): install Nginx, reverse proxy <code>https://app.yourdomain.com</code> → <code>http://127.0.0.1:3000</code>, and <code>certbot --nginx</code> for TLS. Keep port 3000 bound to localhost only.</p>
+<h2>5. (Optional) Build in CI / GHCR instead of on the Droplet</h2>
+<p>For a smaller Droplet, build the image in CI and pull it:</p>
+<pre><code># CI (GitHub Actions, etc.):
+docker build -f services/api-gateway/Dockerfile -t ghcr.io/&lt;org&gt;/projexcloud-api-gateway:$GIT_SHA .
+docker push ghcr.io/&lt;org&gt;/projexcloud-api-gateway:$GIT_SHA
+# Droplet: edit scripts/setup/docker-compose.prod.yml `image:` to the GHCR ref,
+# set IMAGE_TAG=$GIT_SHA in .env.prod, then:
+docker login ghcr.io
+docker compose --env-file .env.prod -f scripts/setup/docker-compose.prod.yml up -d</code></pre>
+<h2>6. DigitalOcean App Platform note</h2>
+<p>This guide uses a Droplet because ProjexCloud&#x27;s image builds the whole workspace and the gateway needs a persistent connection to managed DB/Redis — which maps cleanly to a Droplet + Docker. App Platform can run the prebuilt image (§5) as a service, but you must still attach the managed DB/Redis and set the same env; the Droplet path is the supported reference.</p>
+<h2>7. Upgrades, backups, rollback</h2>
+<ul><li><strong>Before each deploy:</strong> trigger a manual backup of the managed Postgres (or</li></ul>
+<p>  rely on the PITR window).</p>
+<ul><li><strong>Deploy:</strong> <code>git pull &amp;&amp; scripts/setup/prod-setup.sh --mode managed</code> (or GHCR</li></ul>
+<p>  <code>pull &amp;&amp; up -d</code>). New migrations apply automatically.</p>
+<ul><li><strong>Rollback:</strong> redeploy the previous image tag <strong>and</strong> restore the pre-deploy</li></ul>
+<p>  database backup — migrations are forward-only.</p>
+<h2>8. DigitalOcean-specific troubleshooting</h2>
+<table><thead><tr><th>Symptom</th><th>Likely cause</th></tr></thead><tbody><tr><td>Gateway can&#x27;t reach Postgres</td><td>Droplet not in the DB&#x27;s <strong>trusted sources</strong>; wrong port (<strong>25060</strong>); used the public instead of private host</td></tr><tr><td><code>DB_SSL</code>/certificate errors</td><td><code>DB_SSL=true</code> missing — DO managed PG mandates TLS</td></tr><tr><td>Redis connection refused</td><td>Port <strong>25061</strong>, Droplet not in Redis trusted sources, or <code>REDIS_PASSWORD</code> wrong</td></tr><tr><td>LB target unhealthy</td><td>health check must be HTTP <code>:3000</code> <code>/health</code>; first-boot migrations need time — the compose <code>start_period</code> covers this, but set the LB&#x27;s unhealthy threshold generously</td></tr><tr><td>Build killed (OOM) on a 2 GB Droplet</td><td>build in CI/GHCR and pull (§5), or resize the Droplet for the build</td></tr><tr><td>Need Kafka</td><td>DO has none — run <code>prod-setup.sh --kafka</code> with <code>KAFKA_ENABLED=true</code>, or point <code>KAFKA_BROKERS</code> at an external broker</td></tr></tbody></table>
+</main></div></body></html>

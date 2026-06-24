@@ -14,8 +14,22 @@
  *   - DATABASE_URL pointing at the admin pool
  */
 
-import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { readFileSync, existsSync } from 'node:fs';
+import { resolve, dirname } from 'node:path';
+import { createRequire } from 'node:module';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+
+// Populate process.env from the repo-root .env for keys not already set, so the
+// script has DB_* when run standalone (the gateway gets these via dotenv).
+function loadDotEnvInto(envPath) {
+  if (!existsSync(envPath)) return;
+  for (const line of readFileSync(envPath, 'utf-8').split('\n')) {
+    if (line.trim().startsWith('#')) continue;
+    const m = line.match(/^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)\s*$/);
+    if (!m) continue;
+    if (process.env[m[1]] === undefined) process.env[m[1]] = m[2].replace(/^["']|["']$/g, '');
+  }
+}
 
 function parseArgs() {
   const args = process.argv.slice(2);
@@ -62,7 +76,23 @@ async function main() {
   }
 
   // Lazy-import so dry-run works without a DB connection / built dist.
-  const meter = await import('@projexlight/sdk-meter');
+  // Resolve @projexlight/sdk-meter (and db-runtime) from the api-gateway's
+  // dependency tree so this script works no matter the cwd (not a root dep).
+  const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+  const reqFrom = createRequire(resolve(root, 'services/api-gateway/package.json'));
+  loadDotEnvInto(resolve(root, '.env'));
+  // sdk-meter talks to Postgres via db-runtime's pool; the gateway calls
+  // initPool() at boot, but this standalone script must initialise it itself.
+  const dbrt = await import(pathToFileURL(reqFrom.resolve('@projexlight/db-runtime')).href);
+  dbrt.initPool({
+    host: process.env.DB_HOST || 'localhost',
+    port: parseInt(process.env.DB_PORT || '5432', 10),
+    database: process.env.DB_NAME || 'projexcloud_db',
+    user: process.env.DB_USER || 'postgres',
+    password: process.env.DB_PASSWORD || 'postgres',
+    ssl: process.env.DB_SSL === 'true' ? { rejectUnauthorized: false } : false,
+  });
+  const meter = await import(pathToFileURL(reqFrom.resolve('@projexlight/sdk-meter')).href);
 
   // Ensure the catalog row exists. createCatalogVersion is idempotent on
   // (catalog_id, version); if a row exists with this version, it returns
@@ -114,7 +144,11 @@ async function main() {
   if (failed > 0) process.exit(2);
 }
 
-main().catch((err) => {
-  console.error('Fatal:', err.message);
-  process.exit(1);
-});
+// Explicit exit: db-runtime keeps pool connections open, which would otherwise
+// keep the event loop alive and hang the process after the work is done.
+main()
+  .then(() => process.exit(0))
+  .catch((err) => {
+    console.error('Fatal:', err.message);
+    process.exit(1);
+  });

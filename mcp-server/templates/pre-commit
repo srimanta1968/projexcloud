@@ -83,12 +83,50 @@ HAS_TODOS=false
 echo -e "${BLUE}🔍 ProjexLight Pre-Commit Duplicate Scan${NC}"
 echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 
-# Check if MCP server is running
-if ! curl -s "${MCP_SERVER_URL}/health" > /dev/null 2>&1; then
-    echo -e "${YELLOW}⚠️  MCP server not running at ${MCP_SERVER_URL}${NC}"
-    echo -e "${YELLOW}   Pre-commit scan skipped (graceful degradation)${NC}"
+# Self-heal an unhealthy MCP (e.g. the owner project's folder was deleted). Reads
+# /health; if it returns a selfHeal directive (HTTP 503) or is unreachable, runs
+# setup-all.sh from THIS project to recover, then re-checks.
+#   return 0 = healthy   1 = unhealthy and self-heal failed   2 = no setup script here
+mcp_self_heal() {
+    local resp code body
+    resp=$(curl -s -m 5 -w '\n%{http_code}' "${MCP_SERVER_URL}/health" 2>/dev/null)
+    code=$(printf '%s' "$resp" | tail -n1)
+    body=$(printf '%s' "$resp" | sed '$d')
+    [ "$code" = "200" ] && return 0
+    # LOOP GUARD: only ONE self-heal attempt per process tree. If setup-all already
+    # ran in this invocation (env flag set), do not health-check→setup again.
+    if [ -n "$PROJEXLIGHT_SELF_HEAL_ATTEMPTED" ]; then
+        echo -e "${RED}❌ MCP still unhealthy after a self-heal attempt — not retrying (no loop).${NC}"
+        return 1
+    fi
+    local reason="unreachable"
+    printf '%s' "$body" | grep -q '"selfHeal"' && reason="owner_deleted"
+    echo -e "${YELLOW}⚠️  MCP server unhealthy (${reason}) — attempting self-heal (one-shot): cd mcp-server && ./setup-all.sh${NC}"
+    if [ ! -x "${PROJECT_ROOT}/mcp-server/setup-all.sh" ]; then
+        return 2   # not set up in this folder — leave graceful degradation to the caller
+    fi
+    export PROJEXLIGHT_SELF_HEAL_ATTEMPTED=1   # mark before running so children never re-heal
+    ( cd "${PROJECT_ROOT}/mcp-server" && ./setup-all.sh ) || true
+    code=$(curl -s -m 5 -o /dev/null -w '%{http_code}' "${MCP_SERVER_URL}/health" 2>/dev/null || echo 000)
+    if [ "$code" = "200" ]; then
+        echo -e "${GREEN}✅ Self-heal succeeded — MCP healthy.${NC}"
+        return 0
+    fi
+    echo -e "${RED}❌ Self-heal FAILED — MCP still unhealthy.${NC}"
+    echo -e "${RED}   The current project's ProjexLight token may be expired, so it cannot become owner.${NC}"
+    echo -e "${RED}   Refresh this project's CLI export (Portal > project > CLI Export), then re-run:${NC}"
+    echo -e "${RED}     cd mcp-server && ./setup-all.sh${NC}"
+    return 1
+}
+
+# Check MCP health; self-heal if unhealthy (e.g. owner project deleted)
+mcp_self_heal; HEAL_RC=$?
+if [ "$HEAL_RC" = "2" ]; then
+    echo -e "${YELLOW}   MCP not set up in this folder — pre-commit scan skipped (graceful degradation)${NC}"
     echo -e "${YELLOW}   Start MCP server: cd mcp-server && ./setup-all.sh${NC}"
     exit 0
+elif [ "$HEAL_RC" != "0" ]; then
+    exit 1   # was unhealthy and self-heal failed → block with the error printed above
 fi
 
 echo -e "${GREEN}✓ MCP server is running${NC}"
