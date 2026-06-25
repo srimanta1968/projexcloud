@@ -1,6 +1,7 @@
 import { dataService } from '@projexlight/db-runtime';
 import { emitEvent } from '@projexlight/sdk-audit';
 import type {
+  AppRecord,
   BuRecord,
   CreateTenantInput,
   FiscalPeriodKind,
@@ -87,6 +88,51 @@ export async function createTenant(input: CreateTenantInput): Promise<TenantReco
     });
   }
   return tenant;
+}
+
+/* -------------------------------------------------------------------- app */
+
+export interface EnsureAppInput {
+  app_id: string;
+  display_name: string;
+  /** Owning org name; an org is created on first use and reused by name. */
+  org_name?: string;
+}
+
+/**
+ * Idempotently ensure a `tenant.app` (and its owning `tenant.org`) exist so a
+ * tenant can reference it (tenant.app_id FK). `tenant.app` has no admin
+ * provisioning path otherwise, which blocks first-tenant creation/seeding.
+ * Returns the existing app unchanged when `app_id` already exists.
+ */
+export async function ensureApp(input: EnsureAppInput): Promise<AppRecord> {
+  const existing = await dataService.one<AppRecord>(
+    `SELECT app_id, org_id, display_name, status, created_at
+       FROM tenant.app WHERE app_id = $1`,
+    [input.app_id],
+  );
+  if (existing) return existing;
+
+  const orgName = input.org_name ?? `${input.display_name} Org`;
+  let org = await dataService.one<{ org_id: string }>(
+    `SELECT org_id FROM tenant.org WHERE name = $1 LIMIT 1`,
+    [orgName],
+  );
+  if (!org) {
+    const created = await dataService.rows<{ org_id: string }>(
+      `INSERT INTO tenant.org (name) VALUES ($1) RETURNING org_id`,
+      [orgName],
+    );
+    org = created[0];
+  }
+
+  const rows = await dataService.rows<AppRecord>(
+    `INSERT INTO tenant.app (app_id, org_id, display_name)
+       VALUES ($1, $2, $3)
+     RETURNING app_id, org_id, display_name, status, created_at`,
+    [input.app_id, org.org_id, input.display_name],
+  );
+  return rows[0];
 }
 
 export async function listTenants(limit = 200): Promise<TenantRecord[]> {

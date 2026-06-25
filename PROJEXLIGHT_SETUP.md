@@ -1,4 +1,4 @@
-# Quick Prototype Sprint - ProjexLight
+# Sprint 2 - ProjexLight
 
 ## Prerequisites
 
@@ -74,8 +74,8 @@ Read .claude/instructions/bootstrap.md and start
 
 ## Project Info
 
-- **Sprint:** Quick Prototype Sprint
-- **Tasks:** 6
+- **Sprint:** Sprint 2
+- **Tasks:** 53
 - **CLI Tool:** claude
 
 ## Key Files

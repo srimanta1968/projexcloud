@@ -1,8 +1,18 @@
 import jwt, { SignOptions } from 'jsonwebtoken';
 import { dataService } from '@projexlight/db-runtime';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'change-me-in-prod';
-const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '7d';
+// Read these at call time, NOT at module load. The gateway loads .env via
+// dotenv inside its config module, which is imported AFTER sdk-identity — so a
+// module-load-time capture would miss JWT_SECRET from .env and silently fall
+// back to the insecure default (the cause of mass 401 "Invalid or expired
+// token" failures: the runner signs with the real .env secret, the gateway
+// verified with 'change-me-in-prod'). Lazy reads always see the loaded value.
+function jwtSecret(): string {
+  return process.env.JWT_SECRET || 'change-me-in-prod';
+}
+function jwtExpiresIn(): string {
+  return process.env.JWT_EXPIRES_IN || '7d';
+}
 
 export type ActorKind = 'human' | 'service' | 'agent' | 'support_impersonator';
 
@@ -43,8 +53,8 @@ export interface JwtPayload {
  * Signs a JWT with the configured secret and expiry.
  */
 export function signJwt(payload: JwtPayload | SixLayerJwtClaims): string {
-  const options: SignOptions = { expiresIn: JWT_EXPIRES_IN as SignOptions['expiresIn'] };
-  return jwt.sign(payload as object, JWT_SECRET, options);
+  const options: SignOptions = { expiresIn: jwtExpiresIn() as SignOptions['expiresIn'] };
+  return jwt.sign(payload as object, jwtSecret(), options);
 }
 
 /**
@@ -52,7 +62,7 @@ export function signJwt(payload: JwtPayload | SixLayerJwtClaims): string {
  * narrow to the layer they need.
  */
 export function verifyJwt(token: string): SixLayerJwtClaims {
-  return jwt.verify(token, JWT_SECRET) as SixLayerJwtClaims;
+  return jwt.verify(token, jwtSecret()) as SixLayerJwtClaims;
 }
 
 /**

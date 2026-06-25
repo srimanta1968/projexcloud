@@ -71,6 +71,13 @@ fi
 COMPOSE_FILE="$MCP_DIR/database-compose.yml"
 CONFIG_FILE="$MCP_DIR/mcp-config.json"
 
+# Host directory bind-mounted into the DB container at /data (PGDATA lives in /data/pgdata).
+# Data persists on the host, so it survives `docker rm` / container recreation.
+# Dev default: a local ./data dir under mcp-server. In prod (AWS EC2) export
+# DB_DATA_PATH=/data pointing at an EBS-mounted disk so storage can grow / be expanded
+# independently (resize the EBS volume, or add more EBS volumes via LVM under /data).
+DB_DATA_PATH="${DB_DATA_PATH:-$MCP_DIR/data}"
+
 # Determine init-scripts path (prefer project root, fallback to mcp-server)
 get_init_scripts_path() {
     # Check if project root has init-scripts with files
@@ -197,16 +204,17 @@ version: '3.8'
 
 services:
   postgres:
-    image: postgres:15-alpine
+    image: postgis/postgis:18-master
     container_name: projexlight-postgres
     environment:
       - POSTGRES_USER=${DB_USER}
       - POSTGRES_PASSWORD=${DB_PASS}
       - POSTGRES_DB=${DB_NAME}
+      - PGDATA=/data/pgdata
     ports:
       - "${DB_PORT:-5432}:5432"
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - ${DB_DATA_PATH}:/data
       - ${INIT_SCRIPTS_PATH}:/docker-entrypoint-initdb.d
     restart: unless-stopped
     healthcheck:
@@ -214,9 +222,6 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
-
-volumes:
-  postgres_data:
 EOF
 }
 
@@ -547,6 +552,9 @@ start_db() {
     # Create init-scripts directory
     mkdir -p "$MCP_DIR/init-scripts" 2>/dev/null || true
 
+    # Ensure the host data directory exists (bind-mounted to /data; persists across container deletion)
+    mkdir -p "$DB_DATA_PATH" 2>/dev/null || true
+
     cd "$MCP_DIR"
     $COMPOSE_CMD -f "$COMPOSE_FILE" up -d
 
@@ -661,6 +669,12 @@ reset_db() {
     log "Stopping and removing database..."
     cd "$MCP_DIR"
     $COMPOSE_CMD -f "$COMPOSE_FILE" down -v
+
+    # Data is bind-mounted to the host (not a named volume), so remove it explicitly
+    if [ -n "$DB_DATA_PATH" ] && [ -d "$DB_DATA_PATH" ]; then
+        log "Removing host data directory: $DB_DATA_PATH"
+        rm -rf "$DB_DATA_PATH"
+    fi
 
     log "Starting fresh database..."
     start_db

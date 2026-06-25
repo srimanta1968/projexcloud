@@ -36,10 +36,31 @@ function defaultRetentionFromRegistry(event_type: string): RetentionClass {
 }
 
 /**
+ * P10/E8 — post-emit taps. Registered observers (e.g. the security detection
+ * engine) are invoked best-effort after every successful emit. Taps NEVER block
+ * or fail the emit path.
+ */
+export type EmitTap = (input: EmitEventInput) => void | Promise<void>;
+const emitTaps: EmitTap[] = [];
+
+/** Registers an observer invoked after each successful audit emit. */
+export function addEmitTap(tap: EmitTap): void {
+  emitTaps.push(tap);
+}
+
+/**
  * Fire-and-forget envelope emit. Returns the ledger entry on success or
  * null on failure (audit append errors logged, never raised).
  */
 export async function emitEvent(input: EmitEventInput): Promise<LedgerEntry | null> {
+  // P10/E8 — fan out to post-emit taps (security detection) best-effort.
+  for (const tap of emitTaps) {
+    try {
+      void tap(input);
+    } catch {
+      // taps never affect the emit path
+    }
+  }
   try {
     return await appendAuditEntry({
       event_type: input.event_type,

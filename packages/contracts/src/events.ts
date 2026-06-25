@@ -465,6 +465,23 @@ export const EVENT_TYPE_REGISTRY: Record<string, EventTypeMetadata> = {
   'ai_gateway.tenant_credential.bound.v1':    { event_type: 'ai_gateway.tenant_credential.bound.v1',    retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
   'ai_gateway.tenant_credential.rotated.v1':  { event_type: 'ai_gateway.tenant_credential.rotated.v1',  retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
   'ai_gateway.tenant_credential.revoked.v1':  { event_type: 'ai_gateway.tenant_credential.revoked.v1',  retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+
+  /* ============================================================
+   * P10 — Security & Governance hardening (Architecture v3.2 §11A).
+   * E2 principal token · E4 break-glass. Regulated retention so the
+   * key lifecycle and emergency-access trail are auditor-replayable.
+   * ============================================================ */
+  'security.principal_token.key_rotated.v1':  { event_type: 'security.principal_token.key_rotated.v1',  retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+  'security.break_glass.granted.v1':          { event_type: 'security.break_glass.granted.v1',          retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+  'security.break_glass.used.v1':             { event_type: 'security.break_glass.used.v1',             retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+  // E5 resource ownership registry — operational retention for GitOps audit.
+  'resource_registry.quarantined.v1':         { event_type: 'resource_registry.quarantined.v1',         retention_class: 'operational', conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+  // E6 healthcare EMPI / probabilistic MDM — regulated (patient identity lineage).
+  'mdm.candidate_link.created.v1':            { event_type: 'mdm.candidate_link.created.v1',            retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+  'mdm.steward.decided.v1':                   { event_type: 'mdm.steward.decided.v1',                   retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+  'mdm.merge.performed.v1':                   { event_type: 'mdm.merge.performed.v1',                   retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+  'mdm.merge.reversed.v1':                    { event_type: 'mdm.merge.reversed.v1',                    retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+  'mdm.calibration.drift.v1':                 { event_type: 'mdm.calibration.drift.v1',                 retention_class: 'operational', conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
 };
 
 /* ============================================================

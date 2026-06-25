@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Projexlight Common Platform — Architecture v3.1 · Complete Edition</title>
+<title>Projexlight Common Platform — Architecture v3.2 · Complete Edition</title>
 <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
 <style>
   :root {
@@ -128,6 +128,7 @@
     <a href="#encryption">10 · Encryption</a>
     <a href="#metering">10A · Metering &amp; Billing</a>
     <a href="#access">11 · Access Mesh</a>
+    <a href="#control-planes">11A · Control Planes</a>
     <a href="#tenancy">12 · Tenancy</a>
     <a href="#workspace">13 · Workspace</a>
     <a href="#layered">14 · Layered View</a>
@@ -150,7 +151,7 @@
 <div class="page">
 
 <header class="cover">
-  <div class="eyebrow">Common Platform · Architecture · v3.1 · Complete Edition</div>
+  <div class="eyebrow">Common Platform · Architecture · v3.2 · Complete Edition</div>
   <h1>Projexlight Common Services, Agents, HDK &amp; AIM</h1>
   <p class="sub">The single canonical architecture: a shared horizontal platform — services, agents, contracts, design system, native SDK ecosystem (HDK), and the AIM (Application &amp; Identity Management) foundation — consumed by every vertical under <code>projex_verticals/</code>. Builds once. Multi-tenant. Multi-vertical. Multi-app. Multi-surface (web · mobile · kiosk). Petabyte-scale via <b>pool-based horizontal scaling (no sharding)</b>. Identity expressed as a <b>six-layer stack</b> — Master Person · App Identity · Tenant Membership · Persona · Encounter · Relationship — encrypted end-to-end and governed by a three-evaluator access mesh.</p>
   <div class="meta">
@@ -162,6 +163,9 @@
   </div>
   <div class="changelog">
     <b>v3.1 charter.</b> v3.1 is the <b>merged complete edition</b> — everything from v2 (HDK, the 29 Common services, 12 horizontal agents, three-pillar identity foundation, governance) integrated with v3 (pool-based scaling, six-layer identity stack, encounter and relationship primitives, ReBAC access mesh, encrypted identity end-to-end). Use this document as the single canonical platform reference. Earlier docs (<code>../Architecture.html</code> v1, <code>../Architecture-v2.html</code> v2, <code>../v3/Architecture-v3.html</code> v3) are retained as historical references; this file supersedes them in scope. New material introduced in v3 is marked <span class="new-tag">v3</span>; carried-forward v2 material is marked <span class="v2-tag">v2</span> where the distinction matters.
+  </div>
+  <div class="changelog" style="border-left-color:var(--green)">
+    <b>v3.2 delta.</b> v3.2 reconciles this architecture with the <b>platform-layer design discussion</b> (<code>gaps/Analyze1.md</code>) and its architectural critique (<code>gaps/Analyze2.md</code>), via the capability mapping in <code>../insignia/ProjexCloud-vs-Insignia-Reality-Report-v2.html</code>. It adds <b>§11A · Platform Control Planes &amp; Obligation-Based Authorization</b> and principles <b>P16–P18</b>: the eight-control-plane mapping, <b>obligation-bearing authorization</b> (decisions return mask/filter/audit/TTL, not just allow/deny), the <b>minted Platform Principal Token</b> (one signed internal identity, never trust forwarded headers), <b>consent as a gating decision input</b>, and a <b>fail-closed + break-glass</b> doctrine. It also records, explicitly, what is <b>deferred by design</b> (SPIFFE/mTLS service mesh, NATS/JetStream/Temporal, probabilistic MDM) and why. <b>§11A.10</b> records the provisional Healthcare (multi-source) resolution that promotes EMPI / consent-gating / obligations to <i>Required</i>, and <b>§11A.11</b> is the coverage map tying every analysis gap to its status and Projexlight implementation backlog (<b>P10 · E1–E9</b>, 53 tasks). <b>Status note:</b> v3.2 closes these gaps at the <i>design</i> level and schedules them as work — "designed &amp; backlogged" is not "shipped." New v3.2 material is marked <span class="new-tag">v3.2</span>.
   </div>
 </header>
 
@@ -344,6 +348,9 @@
     <div class="card"><div class="label">P13 <span class="new-tag">v3</span></div><div class="title">Identity entities are encrypted at rest, always</div><div class="body">Master Person rows, credentials, secure-data bands, encounter payloads, relationship metadata — all envelope-encrypted under a key tier appropriate to the layer. Plaintext identity columns are a CI-blocking lint failure.</div></div>
     <div class="card"><div class="label">P14 <span class="new-tag">v3</span></div><div class="title">Cross-pool data movement requires an explicit migration job</div><div class="body">Pool-to-pool tenant migration is an offline, audited, dual-write workflow — never an ad-hoc read. The Pool Router rejects any query that names a tenant whose pool is in MIGRATING state without a migration grant.</div></div>
     <div class="card"><div class="label">P15 <span class="new-tag">v3</span></div><div class="title">Tenant data never leaks across tenant memberships</div><div class="body">A person's data at Hospital A is isolated from their data at Hospital B even though both share <code>person_id</code>. Cross-tenant reads require an explicit Relationship + Consent receipt; the encryption layer enforces this.</div></div>
+    <div class="card"><div class="label">P16 <span class="new-tag">v3.2</span></div><div class="title">Decisions carry obligations, not just a verdict</div><div class="body">The access mesh returns <code>allow/deny</code> <b>plus</b> obligations — fields to mask, rows to filter, audit level, decision TTL. Enforcement is server-side; UI visibility is advisory only. A caller may never be the sole thing standing between a hidden field and the wire (see §11A.3).</div></div>
+    <div class="card"><div class="label">P17 <span class="new-tag">v3.2</span></div><div class="title">One minted internal principal; never trust forwarded headers</div><div class="body">After authentication the gateway mints a single signed, audience-bound <b>Platform Principal Token</b> from the resolved <code>IdentityContext</code>. Downstream services trust that token — not raw user-supplied headers or claims. Closes the confused-deputy class of attacks (see §11A.4).</div></div>
+    <div class="card"><div class="label">P18 <span class="new-tag">v3.2</span></div><div class="title">Consent gates the decision; absence fails closed</div><div class="body">For purpose-bound resources, a missing or revoked consent receipt is a <b>deny</b>, not a warning. Consent is a first-class input to the access decision — distinct from authorization (can-act) and from MDM (which-entity). See §11A.5.</div></div>
   </div>
 </section>
 
@@ -492,7 +499,7 @@ sequenceDiagram
     SYNC->>SYNC: t=12 wins (newer)
     SYNC->>AUD: record loser t=10 in audit
   else Merge Policy
-    SYNC->>SYNC: field-level merge; if collision → escalate
+    SYNC->>SYNC: field-level merge — if collision → escalate
     SYNC->>AUD: record per-field decisions
   else Event Sourcing
     SYNC->>SYNC: append both in causal order
@@ -1311,6 +1318,186 @@ sequenceDiagram
 
   <div class="callout red">
     <b>Anti-pattern.</b> "We need cross-hospital analytics so let's just share the schema across tenants." No. Cross-tenant analytics goes through the data warehouse, not the live tenant pools, and only over fields a per-tenant consent allows.
+  </div>
+</section>
+
+<!-- ============ PLATFORM CONTROL PLANES ============ -->
+<section id="control-planes">
+  <h2>11A · Platform Control Planes &amp; Obligation-Based Authorization <span class="new-tag">v3.2</span></h2>
+  <p>A platform-layer design discussion (<code>gaps/Analyze1.md</code>) and its architectural critique (<code>gaps/Analyze2.md</code>) proposed a platform of <b>eight explicit control planes</b> and warned against the failure mode of one flat "platform" carrying overlapping identity truth. v3.1 already realizes most of that model at the application layer; v3.2 makes the mapping explicit and commits to the handful of upgrades the critique correctly identifies as necessary. The full capability scoring lives in <code>../insignia/ProjexCloud-vs-Insignia-Reality-Report-v2.html</code>.</p>
+
+  <div class="callout blue">
+    <b>Doctrine.</b> ProjexCloud meets the eight-plane model with <b>application-layer equivalents</b>, not the named infra stack (no Supabase/Keycloak/SPIFFE/OPA-runtime). The objective — identity-bound, default-deny, consent-aware, fully audited — is met. v3.2 closes the four gaps where the <i>shape</i> of the mechanism mattered (obligations, minted principal, consent-as-input, fail-closed) and records the rest as <b>deferred by design</b>.
+  </div>
+
+  <h3>11A.1 · The eight planes → owning packages</h3>
+  <table>
+    <thead><tr><th>Control plane</th><th>Purpose</th><th>Owning packages / services</th><th>Status</th></tr></thead>
+    <tbody>
+      <tr><td><b>Trust</b></td><td>Prove who/what is calling</td><td><code>sdk-identity</code>, <code>sdk-api-keys</code>, <code>sdk-identity-resolver</code> (principal) <span class="muted">· service mesh deferred</span></td><td><span class="pill yellow">partial</span></td></tr>
+      <tr><td><b>Session / Edge</b></td><td>Authenticate, create session, map to principal</td><td><code>sdk-identity</code>, <code>api-gateway</code>, <code>sdk-projection</code>, <code>identity-projector</code></td><td><span class="pill green">works</span></td></tr>
+      <tr><td><b>Policy</b></td><td>Decide what is allowed</td><td><code>sdk-policy</code> (ABAC), <code>sdk-rebac</code>, Encounter Grants <span class="muted">· obligations added in §11A.3</span></td><td><span class="pill yellow">works → +obligations</span></td></tr>
+      <tr><td><b>Consent</b></td><td>Decide whether the purpose is permitted</td><td><code>sdk-consent</code>, <code>sdk-data-rights</code> <span class="muted">· wired into decision in §11A.5</span></td><td><span class="pill yellow">works → +gating</span></td></tr>
+      <tr><td><b>MDM / Real-Identity</b></td><td>Resolve real-world entities</td><td><code>sdk-identity-resolver</code> + six-layer tables (deterministic)</td><td><span class="pill green">works</span> <span class="muted">(probabilistic deferred)</span></td></tr>
+      <tr><td><b>Event &amp; Workflow</b></td><td>Make changes durable &amp; replayable</td><td><code>kafka-runtime</code>, <code>clickhouse-runtime</code>, <code>sdk-meter</code>, <code>sdk-event</code>, <code>sdk-workflow</code></td><td><span class="pill green">one Kafka log</span></td></tr>
+      <tr><td><b>Observability / Audit / Lineage</b></td><td>Know what happened, why, and what it touched</td><td><code>sdk-audit</code>, <code>sdk-trace</code>, <code>sdk-lineage</code>, <code>telemetry</code>, <code>sdk-diagnostic-telemetry</code></td><td><span class="pill green">evidence</span> <span class="pill yellow">portal partial</span></td></tr>
+      <tr><td><b>Developer Experience / Shell</b></td><td>Make app devs use the platform correctly by default</td><td>3 Next.js apps (App Shell), <code>api-gateway</code> (Gateway), 70+ <code>sdk-*</code>/<code>hdk-*</code> + <code>/build</code> planner (SDK)</td><td><span class="pill green">3 of 4</span> <span class="muted">(sidecar deferred)</span></td></tr>
+    </tbody>
+  </table>
+
+  <h3>11A.2 · The five-identities discipline</h3>
+  <div class="callout purple">
+    <b>One word, five meanings — kept separate.</b> The critique's central warning is that "identity" is overloaded. ProjexCloud's six-layer stack already enforces the split: <b>login identity</b> (App Identity · L2) ≠ <b>platform-subject identity</b> (the resolved <code>IdentityContext</code>) ≠ <b>master-data identity</b> (Master Person · L1). <b>Service identity</b> (which workload is calling) is the one ProjexCloud does <i>not</i> cryptographically establish today — that is the Trust-Plane / service-mesh deferral in §11A.6. No plane is permitted to pretend to be another: Session authenticates, Policy authorizes, Consent permits-by-purpose, MDM resolves entities.
+  </div>
+
+  <h3>11A.3 · Obligation-bearing authorization <span class="new-tag">v3.2</span> (P16)</h3>
+  <p>v3.1's access mesh returned a bare verdict. That leaves field masking and row filtering to every caller — the exact drift the critique flags (Scenario 7: "API allows, UI hides field, API still leaks it"). v3.2 extends the decision to carry <b>obligations</b> the gateway/service enforces server-side.</p>
+  <pre>// @projexlight/sdk-policy — EvaluatePolicyResult, v3.2
+export interface EvaluatePolicyResult {
+  decision: 'ALLOW' | 'DENY';
+  reason: string;
+  layers_used: string[];
+  projection_version: number;
+  cached: boolean;
+  obligations?: {                          // ← v3.2
+    mask_fields?: string[];                // e.g. ['ssn','profit_margin'] — redacted server-side
+    row_filter?: Record&lt;string, unknown&gt;;  // e.g. { tenant_id, region: ['US','EU'] }
+    audit_level?: 'standard' | 'sensitive_access';
+    ttl_seconds?: number;                  // decision cache lifetime
+  };
+}</pre>
+  <div class="callout green">
+    <b>OC-11 (new constraint).</b> Every read handler over governed data applies <code>obligations</code> through the shared enforcement helper before serialization; every mutation honors <code>audit_level</code>. <i>Lint-enforced:</i> a handler that reads an obligation-bearing decision but serializes the raw row is a CI failure. UI visibility is advisory; the wire is shaped by obligations.
+  </div>
+
+  <h3>11A.4 · The minted Platform Principal Token <span class="new-tag">v3.2</span> (P17)</h3>
+  <p>The resolved <code>IdentityContext</code> is already ProjexCloud's normalized subject identity. v3.2 has the gateway <b>mint a signed, short-TTL, audience-bound token</b> from it for east-west calls, so no downstream service ever trusts a forwarded header or a raw external claim.</p>
+  <pre>// Minted by api-gateway after resolveIdentityContext(); verified by every service
+{
+  "sub": "platform-principal:person:p_123",
+  "auth_assurance": "mfa",
+  "app_id": "healthcare", "tenant_id": "hospital-a", "bu_id": "...",
+  "root_tenant_id": "...", "reseller_id": "...",
+  "persona_ids": ["persona_doctor_..."],
+  "effective_scopes": ["chart:read"],
+  "aud": "platform-services",       // audience-bound — not replayable elsewhere
+  "iss": "projexcloud-gateway",
+  "exp": 900                         // short TTL; re-mint on refresh
+}</pre>
+  <p>Services verify <code>iss</code>/<code>aud</code>/<code>exp</code> and the signature, then read the principal — they never re-derive identity from user-supplied input. (When the service mesh of §11A.6 lands, this token rides on top of mTLS workload identity; until then it is the sole internal trust anchor.)</p>
+
+  <h3>11A.5 · Consent as a gating decision input <span class="new-tag">v3.2</span> (P18)</h3>
+  <p><code>sdk-consent</code> already owns purpose registry, grants, receipts, and cross-border checks, and active consents already surface in <code>IdentityContext.active_consents</code>. v3.2 wires that receipt into the access decision as a <b>first-class, purpose-gated input</b>: for a purpose-bound resource, a missing or revoked receipt is a <code>DENY</code> with reason <code>consent_absent</code> — it <b>fails closed</b>. Consent remains distinct from authorization: a doctor may be <i>authorized</i> to read a chart for treatment yet have <i>no consent</i> to use it for marketing.</p>
+
+  <h3>11A.6 · Fail-closed PDP &amp; audited break-glass <span class="new-tag">v3.2</span></h3>
+  <ul class="tight">
+    <li><b>Fail closed for sensitive classes.</b> If the policy evaluator is unavailable, sensitive-resource access denies; only low-risk decisions may serve from a short-TTL cache.</li>
+    <li><b>Explicit break-glass.</b> Emergency access is an audited path routed through <code>sdk-approval</code> (scoped, time-bounded, certificate-of-action), never a silent fallback. Every degraded decision is recorded with reason.</li>
+  </ul>
+
+  <h3>11A.7 · Deferred by design — and why</h3>
+  <div class="callout">
+    These are recorded so "deferred" is never mistaken for "missed." Each is optional <i>for ProjexCloud's stack and stage</i>; rationale and the facts that would flip each are in the Reality Report v2 §8.
+  </div>
+  <table>
+    <thead><tr><th>Deferred</th><th>Why it's optional today</th><th>Flips to necessary when…</th></tr></thead>
+    <tbody>
+      <tr><td><b>SPIFFE/SPIRE + mTLS service mesh + gRPC</b></td><td>App-layer zero-trust (minted principal + JWT + RLS + Pool Router + lint boundaries) is a legitimate architecture; a mesh is an infra program, not a missing feature.</td><td>Topology becomes many polyglot services on untrusted paths, or a buyer requires literal workload-identity attestation.</td></tr>
+      <tr><td><b>NATS/JetStream command bus + Temporal</b></td><td>One Kafka "reality log" is the disciplined choice; adding three infra systems multiplies ops burden without a concrete need.</td><td>A specific long-running durable saga or internal command/control pattern Kafka+HTTP can't serve cleanly appears.</td></tr>
+      <tr><td><b>Probabilistic / AI-jury / steward-gated MDM</b></td><td>ProjexCloud's job is deterministic canonical IDs within tenants; fuzzy cross-system resolution + calibration is a large product bet.</td><td>Resolving the same real-world person across independent systems ("is this the same patient?") becomes a committed use case.</td></tr>
+      <tr><td><b>Literal OPA/Cedar runtime · OpenLineage/OCSF formats</b></td><td>The Cedar-<i>shape</i> evaluator and hash-chained audit/lineage already meet the control objective.</td><td>A due-diligence buyer contractually requires the named engine or wire format — then add a translation/export adapter, don't re-platform.</td></tr>
+    </tbody>
+  </table>
+
+  <div class="callout teal">
+    <b>Deferred ≠ denied — and the risk is conditional, not zero.</b> Each row above carries <b>no material architectural risk <i>for the current target topology</i></b> — that is a statement about today's shape, not an absolute. A deferred item has a <b>lifecycle</b>: <span class="pill">Deferred</span> (no trigger in sight) → <span class="pill">Planned</span> (the expected multi-year topology makes the trigger likely, so it earns a roadmap slot and a thin abstraction seam <i>before</i> implementation) → <span class="pill">Required</span> (trigger fires; build now). Of the four, <b>service identity (SPIFFE/SPIRE)</b> is by far the most likely to graduate from Deferred to Planned as service count, cross-cluster, or multi-cloud deployment grows — which is exactly why §11A.9 adds the 3-year-horizon decision (D-3). Probabilistic MDM is next-most-likely (on a committed regulated vertical); the command bus and the literal OPA/Cedar runtime are the least likely to graduate without a very specific trigger.
+  </div>
+
+  <h3>11A.8 · Resource Ownership Registry <span class="new-tag">v3.2</span></h3>
+  <p>The most grounded concern in <code>gaps/Analyze1.md</code>: infrastructure resources — droplets, clusters, databases, buckets, registries, Kafka topics — get created and deleted with <b>no clear owner</b>. Without ownership, platform security and cost control are impossible. v3.2 makes ownership a hard precondition for provisioning, reconciled through GitOps.</p>
+  <pre>// platform.resource_registry — every provisioned resource has exactly one row
+{
+  "resource_id": "rds-hospital-a-app-pool-03",
+  "type": "postgres" | "k8s_cluster" | "bucket" | "kafka_topic" | "registry" | "vm" | "droplet",
+  "environment": "prod" | "staging" | "dev",
+  "owner": "person_id_of_accountable_human",
+  "team": "platform-data",
+  "repo": "git@…/infra-pools",
+  "terraform_module": "modules/app-pool",
+  "cloud_account": "aws-prod-2",
+  "cost_center": "CC-4471",
+  "data_classification": "restricted" | "confidential" | "internal" | "public",
+  "network_zone": "corp_vpn" | "public_edge" | "isolated",
+  "created_by": "…", "approved_by": "…",
+  "created_at": "2026-06-14T…", "expires_at": "2026-12-31T…" | null
+}</pre>
+  <div class="callout green">
+    <b>OC-12 (new constraint).</b> No infrastructure resource serves traffic until it has a <code>resource_registry</code> row with a non-null <code>owner</code> and <code>approved_by</code>. The GitOps reconciler (Terraform/OpenTofu state diff) <b>quarantines orphan resources</b> — anything live but unregistered, or registered but past <code>expires_at</code> — and raises an ownership alert. <i>Rule: no owner = no resource.</i> Break-glass provisioning routes through <code>sdk-approval</code> and back-fills the row within the audit window.
+  </div>
+  <p>This is an <b>operations/GitOps program</b>, not an application SDK — it sits beside the platform rather than inside it. A thin <code>sdk-resource-registry</code> read API can surface ownership to the admin app, but the source of truth is GitOps-managed infrastructure state.</p>
+
+  <h3>11A.9 · Open strategic decisions that gate the deferrals <span class="new-tag">v3.2</span></h3>
+  <p>The §11A.7 items are deferred not because they're hard but because <b>they depend on business decisions not yet made</b>. Recording them here makes each deferral a conscious "pending decision X," not an oversight. These are the decisions the Reality Report, <code>gaps/Analyze3.md</code>, and the <code>gaps/Analyze4.md</code> follow-up all leave open because engineering cannot answer them alone. <b>D-1</b> and <b>D-2</b> decide whether a deferred item becomes <i>Required</i>; <b>D-3</b> decides whether it should be promoted to <i>Planned</i> ahead of that trigger.</p>
+  <table>
+    <thead><tr><th>#</th><th>Decision (owner: product/leadership)</th><th>Options</th><th>What it unlocks / forces</th></tr></thead>
+    <tbody>
+      <tr><td><b>D-1</b></td><td>Which regulated verticals are committed for the next 2–3 quarters?</td><td>Healthcare · Insurance · FinServ · Real-estate · Internal-tooling-only</td><td>A committed regulated vertical makes <b>P18 consent-gating mandatory</b> and can make <b>probabilistic MDM</b> (§11A.7) a required capability rather than a deferred one. Internal-tooling-only keeps both optional.</td></tr>
+      <tr><td><b>D-2</b></td><td>What is the final runtime topology?</td><td><b>A:</b> Gateway → SDKs → DB (current). <b>B:</b> Gateway → 100+ microservices → service mesh.</td><td>Topology A keeps the minted Principal Token (§11A.4) as a sufficient internal trust anchor and leaves <b>SPIFFE/mTLS mesh · gRPC · NATS · Temporal</b> deferred. Topology B makes the <b>Trust-Plane service mesh</b> necessary, not optional.</td></tr>
+      <tr><td><b>D-3</b></td><td>What is the <i>expected 3-year</i> topology &amp; scale — independent of today's shape?</td><td><b>Small:</b> 10–20 services · single cloud · single region. <b>Large:</b> 200+ services · multi-region · multi-cloud · partner-hosted.</td><td>The <i>Small</i> answer keeps all four §11A.7 items <b>Deferred</b>. The <i>Large</i> answer promotes <b>service identity (SPIFFE/SPIRE)</b> from <b>Deferred → Planned</b> now — it earns a roadmap slot and an abstraction seam, even though implementation still waits on D-2. Architecture roadmaps should anticipate likely evolution, not just today's need.</td></tr>
+    </tbody>
+  </table>
+  <div class="callout blue">
+    <b>Build order, once decisions land.</b> Independent of D-1/D-2/D-3, the always-necessary upgrades ship first: <b>P16 obligations</b> (§11A.3, highest leverage), the <b>minted Principal Token</b> (§11A.4), <b>fail-closed + break-glass</b> (§11A.6), and the <b>resource registry</b> (§11A.8). <b>P18 consent-gating</b> ships the moment D-1 names a regulated vertical. Items the D-3 horizon marks <b>Planned</b> (most plausibly the service mesh) get a roadmap slot and a thin abstraction seam now; their <i>implementation</i> still waits on D-2. The mesh and probabilistic MDM become <b>Required</b> only on D-2 / D-1 respectively. This sequence moves six of the critique's ten stress-test scenarios green before any infra program starts.
+  </div>
+
+  <h3>11A.10 · D-1 provisional resolution — Healthcare vertical (multi-source patient data) <span class="new-tag">v3.2</span></h3>
+  <div class="callout purple">
+    <b>Status: provisional.</b> A healthcare client exists and a healthcare vertical is likely (not yet hard-committed). Recorded here so the roadmap reflects it; promote to firm on commit. The key scoping fact is settled: <b>patient records originate from multiple independent sources</b> (external hospitals / labs / HIEs / payers via HL7/FHIR) where the same real person arrives with no shared ID. That fact fires <b>D-1</b> and — because of multi-source — also makes probabilistic identity resolution (an EMPI) a genuine requirement, not a speculative one.
+  </div>
+  <table>
+    <thead><tr><th>Capability</th><th>State for the healthcare path</th><th>Driver</th></tr></thead>
+    <tbody>
+      <tr><td><b>Consent / purpose-of-use gating (P18)</b></td><td><span class="pill green">Required</span> — regulatory</td><td>HIPAA treatment/payment/operations model + <b>42 CFR Part 2</b> segmented consent for substance-use records.</td></tr>
+      <tr><td><b>Obligations / field-level masking (P16, OC-11)</b></td><td><span class="pill green">Required</span> — regulatory</td><td>HIPAA <b>"minimum necessary"</b> disclosure standard — server-side field masking + row filtering.</td></tr>
+      <tr><td><b>Probabilistic MDM / EMPI</b></td><td><span class="pill green">Required</span> (was Deferred)</td><td>Multi-source patient matching; duplicate/overlaid records are a patient-safety and billing-integrity hazard.</td></tr>
+      <tr><td><b>Minted Principal Token (P17) + audit attribution</b></td><td><span class="pill yellow">Strongly recommended</span></td><td>HIPAA Security Rule audit controls — clean "who accessed which PHI, why." Audit already exists (<code>sdk-audit</code>); token sharpens service-hop attribution.</td></tr>
+      <tr><td><b>Durable workflow (Temporal)</b></td><td><span class="pill yellow">Planned</span> — pending scoping</td><td>Graduates from Deferred only if prior-authorization / referral workflows (multi-day, stateful, human-in-loop) are in scope.</td></tr>
+      <tr><td><b>Service mesh (SPIFFE/SPIRE)</b></td><td><span class="pill">Still Deferred</span></td><td>Healthcare is a <i>regulatory</i> trigger (D-1), not a <i>topology</i> one. Moves only on D-2/D-3, not on a single client.</td></tr>
+      <tr><td><b>Literal OPA/Cedar runtime</b></td><td><span class="pill">Still Deferred</span></td><td>Auditors require explainability/consistency, not the engine name.</td></tr>
+    </tbody>
+  </table>
+  <h4>EMPI design note (extends <code>sdk-identity-resolver</code>)</h4>
+  <p>The EMPI is the one <b>large (L)</b> build and must be its own workstream — in healthcare a false merge exposes the wrong patient's PHI and a false split fragments a record, so it is regulated-grade. It adds, behind the existing resolver interface: deterministic + <b>probabilistic matching</b> (name · DOB · address · phone · external IDs), <b>confidence scores</b>, a <code>POSSIBLY_SAME</code> candidate-link state (never a forced merge), a <b>steward review queue</b> (<code>sdk-approval</code>-governed adjudication), <b>merge / unmerge as reversible compensating events</b> (no destructive deletes), and match-quality <b>calibration</b> monitoring. Downstream systems continue to store the canonical ID — they never carry raw identity truth.</p>
+  <div class="callout green">
+    <b>Already covered for HIPAA (no new build):</b> envelope encryption + 7-tier crypto-shred erasure (<code>sdk-vault</code>), DSAR / right-to-erasure + certificate (<code>sdk-data-rights</code>), consent receipts (<code>sdk-consent</code>), tamper-evident audit with retention classes (<code>sdk-audit</code>), per-field PHI encryption (<code>sdk-profile</code> + vault). The healthcare-specific <i>net-new</i> work is the three Required rows above (EMPI, consent-gating, obligations).
+  </div>
+
+  <h3>11A.11 · Coverage map — analysis gaps → status → backlog <span class="new-tag">v3.2</span></h3>
+  <p>Every concern raised across <code>gaps/Analyze1.md</code>…<code>Analyze4.md</code>, mapped to its current disposition. <b>Read honestly:</b> <span class="pill green">Shipped</span> = implemented in the 91-package build today; <span class="pill blue">Designed + Backlogged</span> = design committed here (v3.2) and scheduled as Projexlight work, <i>not yet merged code</i>; <span class="pill yellow">Deferred</span> = consciously deferred against a named decision (§11A.9).</p>
+  <table>
+    <thead><tr><th>Concern (source)</th><th>Status</th><th>Where / backlog</th></tr></thead>
+    <tbody>
+      <tr><td>Five-identity separation (A2)</td><td><span class="pill green">Shipped</span></td><td>Six-layer model §7 · §11A.2</td></tr>
+      <tr><td>Multi-tenant · pools · reseller hierarchy (A1/A2)</td><td><span class="pill green">Shipped</span></td><td>§8 · §12</td></tr>
+      <tr><td>ABAC + ReBAC central PDP (A2)</td><td><span class="pill green">Shipped</span></td><td>§11 access mesh</td></tr>
+      <tr><td>One event backbone — Kafka (A2)</td><td><span class="pill green">Shipped</span></td><td>§11A.1 · P2</td></tr>
+      <tr><td>Tamper-evident audit / trace / lineage (A2)</td><td><span class="pill green">Shipped</span></td><td><code>sdk-audit</code>/<code>sdk-trace</code>/<code>sdk-lineage</code></td></tr>
+      <tr><td>Obligations: mask / filter / TTL (A2/A3)</td><td><span class="pill blue">Designed + Backlogged</span></td><td>§11A.3 + OC-11 · <b>P10·E1</b> (TK-3499–3504)</td></tr>
+      <tr><td>Minted Platform Principal Token (A2/A3)</td><td><span class="pill blue">Designed + Backlogged</span></td><td>§11A.4 + P17 · <b>P10·E2</b> (TK-3505–3510)</td></tr>
+      <tr><td>Consent-gated authorization (A2/A3)</td><td><span class="pill blue">Designed + Backlogged</span></td><td>§11A.5 + P18 · <b>P10·E3</b> (TK-3511–3516)</td></tr>
+      <tr><td>Fail-closed PDP + break-glass (A2)</td><td><span class="pill blue">Designed + Backlogged</span></td><td>§11A.6 · <b>P10·E4</b> (TK-3517–3520)</td></tr>
+      <tr><td>Resource ownership registry (A1/A3)</td><td><span class="pill blue">Designed + Backlogged</span></td><td>§11A.8 + OC-12 · <b>P10·E5</b> (TK-3521–3524)</td></tr>
+      <tr><td>Probabilistic MDM / EMPI (A2/A3 + Healthcare)</td><td><span class="pill blue">Designed + Backlogged</span> <span class="muted">(Required)</span></td><td>§11A.10 · <b>P10·E6</b> (TK-3525–3534)</td></tr>
+      <tr><td>Non-breaking integration &amp; regression hardening</td><td><span class="pill blue">Designed + Backlogged</span></td><td><b>P10·E7</b> (TK-3535–3540)</td></tr>
+      <tr><td>Observability taxonomy + telemetry portal (A2 §3.11)</td><td><span class="pill blue">Designed + Backlogged</span></td><td>§11A.1 · <b>P10·E8</b> (TK-3541–3548)</td></tr>
+      <tr><td>Context fields: device / network-zone / purpose (report §7.10)</td><td><span class="pill blue">Designed + Backlogged</span></td><td><b>P10·E9</b> (TK-3549–3551)</td></tr>
+      <tr><td>Service mesh · SPIFFE/SPIRE · gRPC (A1/A2)</td><td><span class="pill yellow">Deferred</span></td><td>§11A.7/§11A.9 · gated on D-2/D-3</td></tr>
+      <tr><td>NATS/JetStream command bus + Temporal (A2)</td><td><span class="pill yellow">Deferred</span></td><td>§11A.7/§11A.9 · gated on D-2</td></tr>
+      <tr><td>Literal OPA/Cedar runtime · OpenLineage/OCSF (A2)</td><td><span class="pill yellow">Deferred</span></td><td>§11A.7 · optional, on customer requirement</td></tr>
+    </tbody>
+  </table>
+  <div class="callout">
+    <b>Bottom line.</b> Of everything raised across the four analyses, the platform is either <b>Shipped</b> (the identity/access/evidence/event spine), <b>Designed + Backlogged</b> as P10 work (the six platform-hardening gaps + healthcare EMPI + observability/context), or <b>Deferred by design</b> (mesh / command-bus / engine-swap) against an explicit decision. Nothing remains undocumented or unscheduled — but the blue rows are <i>committed work, not running code</i> until P10 lands and Epic E7 proves no existing SDK regressed.
   </div>
 </section>
 

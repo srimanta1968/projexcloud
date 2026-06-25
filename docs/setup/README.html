@@ -1,0 +1,68 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ProjexCloud Setup — Index · ProjexCloud</title><style>
+:root{--bg:#0d1117;--panel:#161b22;--ink:#e6edf3;--muted:#8b949e;--line:#30363d;--accent:#58a6ff;--ok:#3fb950}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.65 -apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif}
+a{color:var(--accent);text-decoration:none}a:hover{text-decoration:underline}
+.layout{display:grid;grid-template-columns:280px 1fr;min-height:100vh}
+aside{position:sticky;top:0;align-self:start;height:100vh;overflow:auto;background:var(--panel);border-right:1px solid var(--line);padding:20px 16px}
+aside h1{font-size:15px;margin:0 0 2px}aside .sub{color:var(--muted);font-size:12px;margin-bottom:16px}
+aside h2{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin:16px 0 6px}
+aside a{display:block;padding:6px 10px;border-radius:6px;color:var(--ink);font-size:13px}
+aside a:hover{background:#21262d;text-decoration:none}
+aside a.active{background:#1f6feb;color:#fff}
+main{padding:30px 42px;max-width:960px}
+h1,h2,h3,h4{line-height:1.3}
+h1{font-size:26px;margin:0 0 18px;padding-bottom:10px;border-bottom:1px solid var(--line)}
+h2{font-size:20px;margin:30px 0 10px;padding-bottom:6px;border-bottom:1px solid var(--line)}
+h3{font-size:16px;margin:22px 0 8px}h4{font-size:14px;margin:18px 0 6px;color:var(--muted)}
+p{margin:10px 0}
+code{background:#0b0f14;border:1px solid var(--line);border-radius:5px;padding:1px 5px;font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:.88em}
+pre{background:#0b0f14;border:1px solid var(--line);border-radius:8px;padding:12px 14px;overflow:auto;margin:12px 0}
+pre code{background:none;border:0;padding:0;font-size:12.5px;line-height:1.55;color:#c9d1d9}
+table{border-collapse:collapse;width:100%;margin:14px 0;font-size:13.5px}
+th,td{border:1px solid var(--line);padding:8px 11px;text-align:left;vertical-align:top}
+th{background:#1c2330;color:var(--muted);font-weight:600}
+tr:nth-child(even) td{background:#11161d}
+blockquote{margin:12px 0;padding:8px 16px;border-left:3px solid var(--accent);background:#11161d;border-radius:0 8px 8px 0;color:#c9d1d9}
+ul{margin:10px 0;padding-left:22px}li{margin:4px 0}
+ul.task{list-style:none;padding-left:4px}ul.task li::before{content:"☐ ";color:var(--muted)}
+hr{border:0;border-top:1px solid var(--line);margin:24px 0}
+.crumb{color:var(--muted);font-size:12px;margin-bottom:14px}
+</style></head><body>
+<div class="layout">
+<aside><h1>ProjexCloud</h1><div class="sub">Setup &amp; Deployment</div>
+<h2>Guides</h2>
+<a class="active" href="README.html">Overview / Index</a>
+<a class="" href="dev-environment.html">Developer Environment</a>
+<a class="" href="production-overview.html">Production — Overview</a>
+<a class="" href="production-aws-ec2.html">Production — AWS (EC2)</a>
+<a class="" href="production-digitalocean.html">Production — DigitalOcean</a>
+<a class="" href="local-llm-and-discovery.html">Local LLM &amp; Discovery</a>
+<h2>Reference</h2>
+<a href="../v3.1/api_docs/index.html">API Reference ↗</a>
+<a href="../v3.1/api_docs/test-plan.html">QA Test Plan ↗</a>
+</aside>
+<main>
+<div class="crumb">docs / setup / README.html</div>
+<h1>ProjexCloud — Setup Documentation</h1>
+<p>This folder is the entry point for standing up ProjexCloud, both for developers and for DevOps deploying to a cloud. It replaces the removed dev container.</p>
+<h2>What ProjexCloud is (the 60-second version)</h2>
+<p>A <strong>pnpm + turbo monorepo</strong> (Node 20). The runtime surface is a single Fastify service, **<code>services/api-gateway</code>** (port <code>3000</code>), that imports ~90 workspace SDKs and <strong>auto-runs every SDK&#x27;s database migration on boot, in dependency order</strong> — there is no manual SQL/migration step. Supporting services (projectors, semantic, meter-collector, pool-federation) are optional scale-out workers.</p>
+<table><thead><tr><th>Dependency</th><th>Required?</th><th>Default</th><th>Behaviour if absent</th></tr></thead><tbody><tr><td>PostgreSQL</td><td><strong>Yes</strong></td><td><code>localhost:5432</code></td><td>Gateway cannot start</td></tr><tr><td>Redis</td><td>Recommended</td><td>on (<code>REDIS_ENABLED</code>)</td><td>Falls back to in-memory route cache</td></tr><tr><td>Kafka</td><td>Optional</td><td>on (<code>KAFKA_ENABLED</code>)</td><td>Falls back to in-process event emitter</td></tr><tr><td>ClickHouse</td><td>Optional</td><td>off (<code>CLICKHOUSE_ENABLED</code>)</td><td>Trace/telemetry use Postgres mirror</td></tr><tr><td>OpenSearch</td><td>Optional</td><td>off</td><td><code>sdk-search</code> uses Postgres fallback</td></tr></tbody></table>
+<h2>Documents</h2>
+<table><thead><tr><th>Doc</th><th>Audience</th><th>Use it to…</th></tr></thead><tbody><tr><td><a href="./dev-environment.html">dev-environment.md</a></td><td>Developers</td><td>Run the full stack locally on Windows/macOS/Linux</td></tr><tr><td><a href="./production-overview.html">production-overview.md</a></td><td>DevOps</td><td>Understand the prod architecture, env, migrations, seeding, scaling &amp; security — <strong>read first</strong></td></tr><tr><td><a href="./production-aws-ec2.html">production-aws-ec2.md</a></td><td>DevOps (AWS)</td><td>Deploy on EC2 + RDS + ElastiCache (+ optional MSK)</td></tr><tr><td><a href="./production-digitalocean.html">production-digitalocean.md</a></td><td>DevOps (DigitalOcean)</td><td>Deploy on a Droplet + Managed Postgres + Managed Redis</td></tr><tr><td><a href="./local-llm-and-discovery.html">local-llm-and-discovery.md</a></td><td>Both</td><td>How the SDK-discovery embedding model (in-process, no container) and the optional on-prem LLM are set up in dev &amp; prod</td></tr></tbody></table>
+<blockquote>Kubernetes / sovereign-region deployments use the Helm + Terraform starter in [<code>deploy/sovereign/</code>](../../deploy/sovereign/README.md) — out of scope here.</blockquote>
+<h2>Scripts (all under [<code>scripts/setup/</code>](../../scripts/setup/))</h2>
+<table><thead><tr><th>Script</th><th>Purpose</th></tr></thead><tbody><tr><td><code>dev-setup.ps1</code> / <code>dev-setup.sh</code></td><td>One-shot <strong>developer</strong> bootstrap (prereqs → .env → Postgres → install → build → optional seed)</td></tr><tr><td><code>ensure-pg-extensions.sh</code> / <code>.ps1</code></td><td>Detect the Postgres container behind <code>DB_PORT</code> and <strong>auto-install pgvector + PostGIS</strong> if missing (aborts if it can&#x27;t). Run by <code>dev-setup</code>/<code>prod-setup</code>; usable standalone</td></tr><tr><td><code>postgres.Dockerfile</code></td><td>Bundled Postgres image with <strong>PostGIS + pgvector</strong> baked in (used by the dev and prod-selfhosted Compose stacks)</td></tr><tr><td><code>seed-dev-data.mjs</code></td><td>Idempotent <strong>data seed</strong>: pricing catalogs + a development tenant. Schema is auto-migrated by the gateway, so this only adds data</td></tr><tr><td><code>prod-setup.sh</code></td><td><strong>Production</strong> bootstrap on a Linux host (Docker Compose), cloud-agnostic</td></tr><tr><td><code>docker-compose.prod.yml</code></td><td>Production stack (api-gateway built from source + Postgres + Redis; Kafka/ClickHouse opt-in)</td></tr><tr><td><code>.env.prod.example</code></td><td>Production environment template</td></tr></tbody></table>
+<h3>Is there one script that builds the whole dev env with seed data?</h3>
+<p>Yes. From a clean checkout:</p>
+<pre><code># Windows (PowerShell)
+./scripts/setup/dev-setup.ps1 -Seed
+# macOS / Linux / WSL / Git Bash
+./scripts/setup/dev-setup.sh --seed</code></pre>
+<p>That single command checks prerequisites, writes <code>.env</code>, starts Postgres, installs and builds the workspace, boots the gateway (which migrates every SDK schema), then runs <code>seed-dev-data.mjs</code> for the baseline metadata and a dev tenant.</p>
+<h3>Is there a prod setup script per cloud?</h3>
+<p>There is <strong>one</strong> parameterized script, <code>prod-setup.sh</code>, that runs on any Linux VM (EC2, Droplet, bare VM). Cloud differences are <strong>managed-service and networking steps done outside the script</strong> (creating the VM, RDS/ElastiCache vs DO Managed DB/Redis, firewalls, TLS) — those are documented in each cloud-specific guide. Run <code>prod-setup.sh --mode managed</code> once the managed Postgres/Redis exist, or <code>--mode selfhosted</code> to run everything in containers on the one host.</p>
+</main></div></body></html>

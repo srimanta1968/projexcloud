@@ -1,0 +1,25 @@
+ProjexCloud sovereign region "{{ .Values.region_id | default "UNSET" }}" deployed ({{ .Values.regime | default "regime-unset" }}).
+
+Workloads (from the single platform image {{ include "projexcloud.image" . }}):
+{{- range $name, $svc := .Values.services }}
+{{- if $svc.enabled }}
+  - {{ $name }} ({{ $svc.kind }}{{ if $svc.port }}, :{{ $svc.port }}{{ end }})
+{{- end }}
+{{- end }}
+
+In-cluster infra: {{ if .Values.redis.enabled }}redis {{ end }}{{ if .Values.kafka.enabled }}kafka {{ end }}{{ if .Values.clickhouse.enabled }}clickhouse{{ end }}
+
+1. The api-gateway runs all SDK migrations on first boot — watch:
+     kubectl -n {{ .Release.Namespace }} logs -l app.kubernetes.io/name=api-gateway -f
+2. Health:
+{{- $gwPort := (index .Values.services "api-gateway").port }}
+     kubectl -n {{ .Release.Namespace }} port-forward svc/{{ include "projexcloud.fullname" . }}-api-gateway {{ $gwPort }}:{{ $gwPort }}
+     curl localhost:{{ $gwPort }}/health
+{{- if not .Values.networkPolicies.allowEgressInternet }}
+3. Sovereign isolation ACTIVE: internet egress + cross-region routes are blocked at L3 (FR-SOV-2).
+{{- end }}
+{{- if or (not .Values.adminPoolDsn) (not .Values.secrets.ADMIN_OPS_TOKEN) }}
+
+WARNING: adminPoolDsn and/or secrets.ADMIN_OPS_TOKEN are empty — set them via
+terraform outputs / your secret store before the gateway can start.
+{{- end }}

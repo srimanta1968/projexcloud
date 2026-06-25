@@ -2,6 +2,8 @@
  * TypeScript model mirroring policy.* tables per P2 §8.
  */
 
+import type { ConsentReceiptInput, Obligations } from '@projexlight/contracts';
+
 export type PolicyStatus = 'draft' | 'active' | 'deprecated' | 'retired';
 export type AttributeFetcherSource = 'mdm' | 'projection' | 'inline';
 export type DecisionOutcome = 'ALLOW' | 'DENY';
@@ -38,6 +40,11 @@ export interface PolicyRecord {
   status: PolicyStatus;
   created_at: Date;
   updated_at: Date;
+  /**
+   * P10/E1: obligations this bundle attaches to an ALLOW decision. Optional —
+   * a bundle without obligations yields plain allow/deny (pre-P10 behaviour).
+   */
+  obligations?: Obligations | null;
 }
 
 export interface AttributeFetcherRecord {
@@ -59,6 +66,12 @@ export interface DecisionRecord {
   layers_used: string[];
   projection_version: number;
   decided_at: Date;
+  /**
+   * P10/E1: obligations attached to this decision (mask/filter/audit/ttl),
+   * persisted so policy observability can replay what was enforced. Optional —
+   * absent for pre-P10 decisions.
+   */
+  obligations?: Obligations | null;
 }
 
 export interface CreatePolicyInput {
@@ -66,6 +79,8 @@ export interface CreatePolicyInput {
   name: string;
   iql_source: string;
   version: string;
+  /** P10/E1: optional obligations attached to ALLOW decisions of this bundle. */
+  obligations?: Obligations;
 }
 
 export interface EvaluatePolicyInput {
@@ -73,6 +88,28 @@ export interface EvaluatePolicyInput {
   subject_id: string;
   target_id?: string;
   context?: Record<string, unknown>;
+  /**
+   * P10/E3: the purpose the access is being made for (e.g. a HIPAA TPO code).
+   * Threaded into the decision so consent gating can apply.
+   */
+  purpose?: string;
+  /**
+   * P10/E3: marks the target as a purpose-bound resource. When true, a valid
+   * consent receipt for `purpose` is REQUIRED — absent/expired/revoked consent
+   * fails closed (DENY, reason=consent_absent) regardless of the policy verdict.
+   */
+  purpose_bound?: boolean;
+  /**
+   * P10/E3: the subject's active consent receipts (supplied by the gateway /
+   * resolver from sdk-consent). Keeps sdk-policy decoupled from sdk-consent.
+   */
+  consent_receipts?: ConsentReceiptInput[];
+  /**
+   * P10/E4: risk class of the target resource. On evaluator unavailability a
+   * 'sensitive' (default when omitted) class fails closed (DENY); a 'low_risk'
+   * class may serve a short-TTL cached decision. Safe-by-default.
+   */
+  resource_class?: 'sensitive' | 'low_risk';
 }
 
 export interface EvaluatePolicyResult {
@@ -81,4 +118,16 @@ export interface EvaluatePolicyResult {
   layers_used: string[];
   projection_version: number;
   cached: boolean;
+  /**
+   * P10/E1: optional obligations the caller MUST enforce server-side before
+   * serializing results (mask_fields, row_filter, audit_level, ttl_seconds).
+   * Absent obligations preserve today's allow/deny behaviour exactly.
+   */
+  obligations?: Obligations;
+  /**
+   * P10/E4: true when this decision was produced under evaluator degradation
+   * (fail-closed DENY for a sensitive class, or a short-TTL cached decision
+   * served for a low-risk class during an outage). Always audited.
+   */
+  degraded?: boolean;
 }

@@ -39,6 +39,22 @@ export interface IdentityContext {
   projection_version: number;
   resolved_at: string;
   source: 'redis-hot' | 'postgres-cold' | 'live-fallback';
+  /**
+   * P10/E9: device posture trust level captured at the gateway (e.g.
+   * 'trusted' | 'managed' | 'unmanaged' | 'unknown'). Additive/optional —
+   * policy and consent may condition on it; absent means unconditioned.
+   */
+  device_trust?: string;
+  /**
+   * P10/E9: network zone the request originated from (e.g. 'corp' | 'vpn' |
+   * 'public'). Captured at the gateway. Additive/optional.
+   */
+  network_zone?: string;
+  /**
+   * P10/E9: requested purpose for this access, threaded to the policy/consent
+   * decision input (consumed by E3 consent gating). Additive/optional.
+   */
+  purpose?: string;
 }
 
 export interface AttributeProvenance {

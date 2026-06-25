@@ -1,0 +1,441 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>ProjexCloud v3.1 — Platform Architecture Reality Report (v2): Meeting Vision vs. 91-SDK Implementation</title>
+<style>
+  :root {
+    --bg:#0b0f17; --panel:#121826; --panel-2:#1a2234; --line:#243049;
+    --text:#e6ecf5; --muted:#8a98b3; --accent:#c9a86a; --accent-2:#6aa9ff;
+    --teal:#2dd4bf; --green:#5dd39e; --red:#ff6b6b; --yellow:#f5c451; --purple:#b88dff; --code-bg:#0f1422;
+  }
+  * { box-sizing:border-box; }
+  html,body { background:var(--bg); color:var(--text); font-family:ui-sans-serif,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",sans-serif; margin:0; padding:0; line-height:1.6; }
+  .page { max-width:1180px; margin:0 auto; padding:56px 32px 96px; }
+  header.cover { border-bottom:1px solid var(--line); padding-bottom:32px; margin-bottom:40px; }
+  header.cover .eyebrow { color:var(--accent); letter-spacing:0.18em; text-transform:uppercase; font-size:12px; font-weight:700; }
+  header.cover h1 { font-size:38px; line-height:1.16; margin:12px 0 10px; letter-spacing:-0.02em; }
+  header.cover .sub { color:var(--muted); font-size:16px; max-width:900px; }
+  header.cover .meta { display:flex; gap:22px; flex-wrap:wrap; margin-top:22px; color:var(--muted); font-size:13px; }
+  header.cover .meta b { color:var(--text); font-weight:600; }
+  h2 { font-size:25px; letter-spacing:-0.01em; margin:52px 0 16px; padding-bottom:8px; border-bottom:1px solid var(--line); scroll-margin-top:20px; }
+  h3 { font-size:18px; margin:28px 0 10px; color:var(--accent-2); }
+  h4 { font-size:12px; margin:18px 0 8px; color:var(--accent); text-transform:uppercase; letter-spacing:0.12em; }
+  p { color:#c8d1e3; }
+  a { color:var(--accent-2); }
+  strong { color:#fff; }
+  em { color:var(--muted); }
+  hr { border:0; border-top:1px solid var(--line); margin:30px 0; }
+  ul,ol { color:#c8d1e3; padding-left:22px; }
+  li { margin:5px 0; }
+  blockquote { margin:18px 0; background:var(--panel-2); border-left:3px solid var(--accent); border-radius:0 10px 10px 0; padding:14px 18px; color:#d6deef; font-size:14.5px; }
+  blockquote strong { color:var(--accent); }
+  .tablewrap { overflow-x:auto; margin:14px 0; border:1px solid var(--line); border-radius:12px; }
+  table { width:100%; border-collapse:collapse; font-size:13.5px; }
+  th,td { text-align:left; padding:10px 13px; border-bottom:1px solid var(--line); vertical-align:top; }
+  th { color:var(--muted); font-weight:600; font-size:11.5px; text-transform:uppercase; letter-spacing:0.07em; background:var(--panel); }
+  tr:last-child td { border-bottom:0; }
+  tbody tr:nth-child(even) { background:rgba(255,255,255,0.015); }
+  code { font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; background:var(--code-bg); border:1px solid var(--line); border-radius:5px; padding:1px 6px; font-size:12.5px; color:#e6c98a; }
+  pre { background:var(--code-bg); border:1px solid var(--line); border-radius:10px; padding:14px 16px; overflow-x:auto; font-size:12.5px; color:#cfe0f5; }
+  pre code { background:none; border:0; padding:0; color:inherit; }
+  .pill { display:inline-block; padding:2px 9px; border-radius:999px; font-size:11px; font-weight:600; border:1px solid var(--line); white-space:nowrap; }
+  .pill.green { color:var(--green); border-color:rgba(93,211,158,0.4); background:rgba(93,211,158,0.08); }
+  .pill.yellow { color:var(--yellow); border-color:rgba(245,196,81,0.4); background:rgba(245,196,81,0.08); }
+  .pill.red { color:var(--red); border-color:rgba(255,107,107,0.4); background:rgba(255,107,107,0.08); }
+  .pill.blue { color:var(--accent-2); border-color:rgba(106,169,255,0.4); background:rgba(106,169,255,0.08); }
+  .toc { background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:16px 20px; margin:8px 0 8px; }
+  .toc b { color:var(--accent); font-size:11px; text-transform:uppercase; letter-spacing:0.14em; }
+  .toc ol { margin:10px 0 0; columns:2; column-gap:32px; font-size:13.5px; }
+  .scorecard { display:flex; gap:14px; flex-wrap:wrap; margin:18px 0; }
+  .scorecard .card { flex:1 1 150px; background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:14px 16px; }
+  .scorecard .card .n { font-size:30px; font-weight:700; letter-spacing:-0.02em; }
+  .scorecard .card .l { color:var(--muted); font-size:12px; text-transform:uppercase; letter-spacing:0.08em; margin-top:2px; }
+  .c-green{color:var(--green);} .c-yellow{color:var(--yellow);} .c-red{color:var(--red);} .c-blue{color:var(--accent-2);}
+  @media (max-width:760px){ .toc ol{columns:1;} header.cover h1{font-size:28px;} }
+</style>
+</head>
+<body>
+<div class="page">
+<header class="cover">
+  <div class="eyebrow">Platform Architecture · Engineering Reality Check · v2</div>
+  <h1>ProjexCloud v3.1 — Platform Architecture Reality Report (v2)</h1>
+  <div class="sub">Does the 91-package ProjexCloud build already answer the platform architecture proposed in the MDM / Consent / ABAC / Zero-Trust / Eventing design discussion (<code>Analyze1.md</code> + <code>Analyze2.md</code>)? Plane-by-plane: what is implemented, what is partial, what is genuinely missing — and exactly what we would build to close each gap.</div>
+  <div class="meta">
+    <span><b>Prepared</b> · 2026-06-14</span>
+    <span><b>Repo / branch</b> · ProjexCloud @ p7/field-evidence-hyperscale</span>
+    <span><b>Inputs</b> · docs/v3.1/gaps/Analyze1.md, Analyze2.md</span>
+    <span><b>Basis</b> · Static code + design-doc review (not runtime-verified)</span>
+  </div>
+</header>
+<p><strong>Supersedes / extends:</strong> <a href="ProjexCloud-vs-Insignia-Reality-Report.html"><code>ProjexCloud-vs-Insignia-Reality-Report.html</code></a> (v1, 2026-06-09, ProjexCloud vs Insignia deck + RealMDM). This v2 keeps that report's verdicts but re-scores the build against a <strong>different yardstick</strong>: the platform-architecture vision captured in the meeting notes (<code>Analyze1.md</code>) and the architectural critique of it (<code>Analyze2.md</code>).</p>
+<hr/>
+
+<div class="toc">
+  <b>Contents</b>
+  <ol>
+    <li>Status update (P10) — current support posture</li>
+    <li>How to read this report</li>
+    <li>The meeting's proposed architecture, in brief</li>
+    <li>The "five identities" discipline test</li>
+    <li>Plane-by-plane scorecard (the 8 control planes)</li>
+    <li>The 7 "change immediately" corrections → our status</li>
+    <li>The 10 stress-test scenarios → how ProjexCloud answers</li>
+    <li>What we are missing &amp; what to build (with effort)</li>
+    <li>Necessity verdict — what ProjexCloud needs vs. what's optional, and why</li>
+    <li>Open questions from the critique → already-answered vs still-open</li>
+    <li>Verdict &amp; recommended next step</li>
+    <li>Appendix — plane → SDK index</li>
+    <li>Disposition update — answering the Analyze3.md follow-up</li>
+  </ol>
+</div>
+
+<h2 id="status">0. Status update (P10) — current support posture <span class="pill blue">June 2026</span></h2>
+<p>This report was first written as a static reality check. Since then, the platform-architecture gaps it identified (and those raised across <code>gaps/Analyze1.md</code>…<code>Analyze4.md</code>) have been <strong>closed at the design level</strong> in <a href="../v3.1/Architecture-v3.1.html"><code>Architecture-v3.1.html</code> v3.2 §11A</a> and <strong>scheduled as implementation work</strong> in Projexlight (<strong>P10 · E1–E9 — 9 epics, 27 features, 53 tasks, TK-3499–TK-3551</strong>).</p>
+<blockquote><strong>The one honest caveat — "designed &amp; backlogged" is not "shipped."</strong> Everything marked <span class="pill green">🟢 Designed + Backlogged</span> below is a committed design plus a scheduled task list — <em>not yet merged code</em>. The capability-by-capability scorecards in §§3–7 still describe <strong>what actually runs today</strong>; do not present the blue rows as live in a demo until P10 lands and Epic <strong>E7</strong> (non-breaking regression) proves no existing SDK regressed. This report stays deliberately conservative on that distinction.</blockquote>
+<p>Legend: <span class="pill green">✅ Shipped</span> implemented in the 91-package build today · <span class="pill green">🟢 Designed + Backlogged</span> design committed (v3.2) + P10 tasks created, not yet shipped · <span class="pill blue">◻ Deferred</span> consciously deferred against a named decision (D-1/D-2/D-3).</p>
+<div class="tablewrap"><table>
+<thead><tr><th>Concern (source)</th><th>Status</th><th>Where / backlog</th></tr></thead>
+<tbody>
+<tr><td>Five-identity separation</td><td><span class="pill green">✅ Shipped</span></td><td>Six-layer model · report §3</td></tr>
+<tr><td>Multi-tenant · pools · reseller hierarchy</td><td><span class="pill green">✅ Shipped</span></td><td>§8.1</td></tr>
+<tr><td>ABAC + ReBAC central PDP</td><td><span class="pill green">✅ Shipped</span></td><td>§4.3</td></tr>
+<tr><td>One event backbone (Kafka)</td><td><span class="pill green">✅ Shipped</span></td><td>§4.6</td></tr>
+<tr><td>Tamper-evident audit / trace / lineage</td><td><span class="pill green">✅ Shipped</span></td><td>§4.7</td></tr>
+<tr><td>Obligations (mask / filter / TTL)</td><td><span class="pill green">🟢 Designed + Backlogged</span></td><td>Arch §11A.3 · <strong>P10·E1</strong> (TK-3499–3504)</td></tr>
+<tr><td>Minted Platform Principal Token</td><td><span class="pill green">🟢 Designed + Backlogged</span></td><td>Arch §11A.4 · <strong>P10·E2</strong> (TK-3505–3510)</td></tr>
+<tr><td>Consent-gated authorization</td><td><span class="pill green">🟢 Designed + Backlogged</span></td><td>Arch §11A.5 · <strong>P10·E3</strong> (TK-3511–3516)</td></tr>
+<tr><td>Fail-closed PDP + break-glass</td><td><span class="pill green">🟢 Designed + Backlogged</span></td><td>Arch §11A.6 · <strong>P10·E4</strong> (TK-3517–3520)</td></tr>
+<tr><td>Resource ownership registry</td><td><span class="pill green">🟢 Designed + Backlogged</span></td><td>Arch §11A.8 · <strong>P10·E5</strong> (TK-3521–3524)</td></tr>
+<tr><td>Probabilistic MDM / EMPI <span class="muted">(healthcare-Required)</span></td><td><span class="pill green">🟢 Designed + Backlogged</span></td><td>Arch §11A.10 · <strong>P10·E6</strong> (TK-3525–3534)</td></tr>
+<tr><td>Non-breaking integration &amp; regression hardening</td><td><span class="pill green">🟢 Designed + Backlogged</span></td><td><strong>P10·E7</strong> (TK-3535–3540)</td></tr>
+<tr><td>Observability taxonomy + telemetry portal</td><td><span class="pill green">🟢 Designed + Backlogged</span></td><td>§4.7 · <strong>P10·E8</strong> (TK-3541–3548)</td></tr>
+<tr><td>Context fields (device / network-zone / purpose)</td><td><span class="pill green">🟢 Designed + Backlogged</span></td><td>§7.10 · <strong>P10·E9</strong> (TK-3549–3551)</td></tr>
+<tr><td>Service mesh · SPIFFE/SPIRE · gRPC</td><td><span class="pill blue">◻ Deferred</span></td><td>§8.3 · gated on D-2/D-3</td></tr>
+<tr><td>NATS/JetStream command bus + Temporal</td><td><span class="pill blue">◻ Deferred</span></td><td>§8.3 · gated on D-2</td></tr>
+<tr><td>Literal OPA/Cedar runtime · OpenLineage/OCSF</td><td><span class="pill blue">◻ Deferred</span></td><td>§8.3 · optional, on customer requirement</td></tr>
+</tbody></table></div>
+<blockquote><strong>So: do we support everything the analyses discussed?</strong> At the <strong>design</strong> level — yes: every concern is now either Shipped, Designed + Backlogged (P10), or consciously Deferred. At the <strong>running-code</strong> level — the Shipped rows, plus whatever of P10 has merged. The §§3–11 scorecards below remain the source of truth for what is demoable <em>today</em>; this §0 is the forward view.</blockquote>
+<hr/>
+<h2 id="s0">1. How to read this report</h2>
+<p>The meeting (<code>Analyze1.md</code>) proposes a platform layer over infrastructure that unifies <strong>identity, consent, observability, secure service communication, and fine-grained access control</strong>. The critique (<code>Analyze2.md</code>) sharpens that into <strong>eight explicit control planes</strong>, a set of hard rules ("Supabase/Keycloak authenticate sessions; SPIFFE/mTLS authenticates services; OPA authorizes actions; Consent authorizes purpose; MDM resolves entities"), seven "change immediately" corrections, and ten failure-mode stress tests.</p>
+<p>This report asks, capability by capability: <strong>did we already build it in the 91-package monorepo, did we build something equivalent, or is it a real gap?</strong> Legend:</p>
+<ul>
+<li><span class="pill green">✅ Works</span> — implemented in ProjexCloud (per static review), achieving the same control objective, even if by a different mechanism than the meeting names.</li>
+<li><span class="pill yellow">🟡 Partial</span> — the building blocks exist but the specific shape the critique demands is incomplete or scaffolded.</li>
+<li><span class="pill red">🔴 Gap</span> — not present; would require new code or an infra program.</li>
+<li><span class="pill blue">�580 N/A</span> — the meeting names a specific vendor/stack (Supabase, Keycloak) that ProjexCloud deliberately does not use; we meet the role another way.</li>
+</ul>
+<blockquote><strong>Basis &amp; limits.</strong> Verdicts are from <strong>static review</strong> of source, migrations and models on branch <code>p7/field-evidence-hyperscale</code> — not from running the monorepo or load-testing SLOs. "Works" means <em>code-complete and structurally sound per inspection</em>. The working tree is dirty; recent commits are build/<code>tsc</code> fixes. Treat scale/latency claims as "designed-for," not "measured."</blockquote>
+
+<h2 id="s1">2. The meeting's proposed architecture, in brief</h2>
+<p>The emerging stack from <code>Analyze1.md</code> / <code>Analyze2.md</code>:</p>
+<ul>
+<li><strong>External users</strong> → Supabase (auth + session); <strong>internal/infra</strong> → Keycloak (SSO/IAM/roles).</li>
+<li><strong>Service-to-service</strong> → SPIFFE/SPIRE + mTLS mesh + gRPC contracts (Envoy sidecars).</li>
+<li><strong>Authorization</strong> → OPA / ABAC, returning <strong>obligations</strong> (mask, filter, audit, TTL), not just allow/deny.</li>
+<li><strong>Consent</strong> → a CMP outside the perimeter; consent is a purpose-bound <em>input</em> to authorization, not a replacement.</li>
+<li><strong>MDM</strong> → resolves real-world entities (person vs patient/doctor projections); deterministic + probabilistic + AI-suggested links + steward approval; "claims, not forced merges."</li>
+<li><strong>Event backbone</strong> → one primary "Reality Log" (Kafka <em>or</em> Redpanda) + NATS/JetStream command bus + Temporal workflows + gRPC sync.</li>
+<li><strong>Observability/Audit/Lineage</strong> → OTel/Grafana/Prometheus + an immutable audit ledger + policy-decision logs + lineage, with a <strong>taxonomy</strong> (infra/service/security/data/MDM/policy/consent/audit).</li>
+<li><strong>Developer experience</strong> → split the vague "shell" into four named things: <strong>App Shell, Platform Gateway, Service Sidecar, Platform SDK</strong>.</li>
+<li><strong>Infra/GitOps</strong> → every resource has an owner in a resource registry; break-glass paths are explicit and audited.</li>
+</ul>
+<p>The critique's central correction: <strong>do not let one flat "platform" carry overlapping identity truth across Supabase/Keycloak/OPA/MDM/RLS.</strong> Decompose into eight planes with contracts between them, mint <strong>one canonical internal principal</strong> after authentication, and make OPA the single decision engine that returns obligations.</p>
+
+<div class="scorecard">
+  <div class="card"><div class="n c-green">5</div><div class="l">Planes substantially met</div></div>
+  <div class="card"><div class="n c-yellow">2</div><div class="l">Planes partial</div></div>
+  <div class="card"><div class="n c-red">1</div><div class="l">Plane is a real gap (Trust/mesh)</div></div>
+  <div class="card"><div class="n c-blue">7</div><div class="l">Build/extend items (§7)</div></div>
+</div>
+
+<blockquote><strong>The honest headline.</strong> ProjexCloud already implements <strong>5 of the 8 proposed control planes</strong> in application-layer form — and, importantly, it <strong>already keeps the "five identities" separate</strong>, which the critique calls the single biggest risk. The genuine gaps are narrow and nameable: (1) a <strong>service-identity / mTLS-mesh Trust Plane</strong> (SPIFFE/Envoy/gRPC), (2) <strong>OPA-style obligations</strong> (mask/filter/TTL) instead of bare allow/deny, (3) a <strong>minted, audience-bound internal Principal Token</strong> for east-west calls (we have the principal <em>model</em>, not the signed token), (4) <strong>probabilistic / steward-gated MDM resolution</strong>, (5) a <strong>command bus + durable-workflow engine</strong> (NATS/JetStream/Temporal), and (6) a <strong>resource-ownership / GitOps registry</strong>. None of these contradict the build; they extend it.</blockquote>
+
+<h2 id="s2">3. The "five identities" discipline test</h2>
+<p>The strongest point in <code>Analyze2.md</code> §2: the word "identity" is overloaded across five distinct concepts, and a platform that lets them bleed together becomes "unmanageable." Does ProjexCloud keep them separate? <strong>Largely yes</strong> — this is a real strength of the existing design.</p>
+<div class="tablewrap"><table>
+<thead><tr><th>Identity type (per critique)</th><th>Who owns it in the proposal</th><th>ProjexCloud owner</th><th>Kept separate?</th></tr></thead>
+<tbody>
+<tr><td><strong>Human login identity</strong> — who is authenticated this session</td><td>Supabase / Keycloak / IdP</td><td><code>sdk-identity</code> (OIDC/SAML/SCIM/MFA/sessions) → App Identity layer</td><td><span class="pill green">✅ Works</span> distinct layer</td></tr>
+<tr><td><strong>Infra operator identity</strong> — who can touch infra</td><td>Keycloak / VPN / IAM</td><td>Out of product scope (cloud IAM / VPN); not modelled as a ProjexCloud SDK</td><td><span class="pill blue">�580 N/A</span> infra concern</td></tr>
+<tr><td><strong>Service identity</strong> — which service is calling</td><td>SPIFFE/SPIRE + mTLS</td><td>JWT + API keys (<code>sdk-api-keys</code>); no SVIDs</td><td><span class="pill red">🔴 Gap</span> no cryptographic workload identity</td></tr>
+<tr><td><strong>Platform subject identity</strong> — normalized actor (user/service/tenant/app/org)</td><td>Platform context service</td><td><code>sdk-identity-resolver</code> → frozen <code>IdentityContext</code> (person/app/tenant/bu/reseller/roles/abac/rebac/consents/scopes)</td><td><span class="pill green">✅ Works</span> exactly this object exists</td></tr>
+<tr><td><strong>Master-data identity</strong> — which real-world entity</td><td>MDM</td><td><code>sdk-identity-resolver</code> + 6-layer MDM tables (Master Person → Persona projections)</td><td><span class="pill green">✅ Works</span> deterministic; <span class="pill yellow">🟡</span> no probabilistic resolution</td></tr>
+</tbody></table></div>
+<blockquote>ProjexCloud's six-layer model (<strong>Master Person → App Identity → Tenant Membership → Persona → Encounter → Relationship</strong>) <em>is</em> the architectural answer to "do not conflate login identity with data identity." The Person-is-pure / Persona-is-contextual split matches the meeting's patient/doctor/radiologist example precisely. The one identity ProjexCloud does <strong>not</strong> cryptographically establish is <strong>service identity</strong> — that is the Trust-Plane gap (§4.1).</blockquote>
+
+<h2 id="s3">4. Plane-by-plane scorecard (the 8 control planes)</h2>
+
+<h3>4.1 Trust Plane — prove who/what is calling</h3>
+<div class="tablewrap"><table>
+<thead><tr><th>Required element</th><th>Status</th><th>ProjexCloud reality</th></tr></thead>
+<tbody>
+<tr><td>External session auth</td><td><span class="pill blue">�580 N/A</span>/<span class="pill green">✅</span></td><td>No Supabase; <code>sdk-identity</code> is the IdP (OIDC/SAML/SCIM/MFA). Role filled, different vendor.</td></tr>
+<tr><td>Internal/infra session auth</td><td><span class="pill blue">�580 N/A</span></td><td>No Keycloak; infra/VPN access is outside the product boundary.</td></tr>
+<tr><td><strong>Service identity (SPIFFE/SPIRE)</strong></td><td><span class="pill red">🔴 Gap</span></td><td>No SVIDs, no workload identity. Service-to-service is JWT + API keys.</td></tr>
+<tr><td><strong>mTLS service mesh (Envoy/Cilium/Linkerd)</strong></td><td><span class="pill red">🔴 Gap</span></td><td>No mesh. Only mTLS use is outbound webhook client-certs (<code>sdk-webhook/mtlsAgent.ts</code>).</td></tr>
+<tr><td><strong>Normalized internal principal (Platform Principal)</strong></td><td><span class="pill green">✅ Works</span> (model)</td><td><code>IdentityContext</code> is exactly the normalized principal the critique's "Change 2" asks for — composed from JWT claims + projection, frozen, consumed by every SDK (lint rule OC-4 bans hand-walking the layers).</td></tr>
+<tr><td><strong>Minted, audience-bound internal Principal <em>Token</em></strong></td><td><span class="pill yellow">🟡 Partial</span></td><td>The principal is an <em>in-process object</em>, not a signed, <code>aud</code>-bound JWT minted at the gateway for east-west calls. The confused-deputy defense the critique wants (Scenario 5) is therefore not fully realized for service-to-service hops.</td></tr>
+</tbody></table></div>
+<p><strong>Verdict:</strong> ProjexCloud nails the <em>principal model</em> but not the <em>service-trust substrate</em>. This is the same finding v1 made about "zero-trust mesh as drawn." The control objective (identity-bound, default-deny, audited) is met at the app layer; the SPIFFE/mTLS/gRPC <em>mechanism</em> is absent.</p>
+
+<h3>4.2 Session / Edge Plane</h3>
+<div class="tablewrap"><table>
+<thead><tr><th>Required element</th><th>Status</th><th>ProjexCloud reality</th></tr></thead>
+<tbody>
+<tr><td>Session creation, JWT identity, session management</td><td><span class="pill green">✅ Works</span></td><td><code>sdk-identity</code> sessions + impersonation (scoped, TTL'd, audited).</td></tr>
+<tr><td>Gateway validates external token → maps to principal</td><td><span class="pill green">✅ Works</span></td><td><code>api-gateway</code> + <code>resolveIdentityContext()</code>; every read path resolves the frozen context.</td></tr>
+<tr><td>Context enrichment (app_id/tenant_id/org/bu/device/purpose/network-zone)</td><td><span class="pill green">✅ Works</span>/<span class="pill yellow">🟡</span></td><td>app_id, tenant_id, bu_id/ancestors, reseller, geo, personas, scopes all present. <strong>device posture, network zone, and explicit purpose</strong> are not first-class context fields yet.</td></tr>
+</tbody></table></div>
+
+<h3>4.3 Policy Plane — decide what is allowed</h3>
+<div class="tablewrap"><table>
+<thead><tr><th>Required element</th><th>Status</th><th>ProjexCloud reality</th></tr></thead>
+<tbody>
+<tr><td>Central PDP for access decisions (ABAC/ReBAC)</td><td><span class="pill green">✅ Works</span></td><td><code>sdk-policy</code> (IQL→Cedar-shape evaluator, versioned precompiled bundles) + <code>sdk-rebac</code> (BFS, depth/visit budget, reachability cache).</td></tr>
+<tr><td>Decision audit log</td><td><span class="pill green">✅ Works</span></td><td><code>DecisionRecord</code> persists outcome, reason, <code>layers_used</code>, <code>projection_version</code>.</td></tr>
+<tr><td><strong>Obligations (mask fields / row filter / audit level / TTL)</strong></td><td><span class="pill red">🔴 Gap</span></td><td><code>EvaluatePolicyResult</code> returns <code>{ decision: ALLOW|DENY, reason, layers_used }</code> — <strong>no obligations object</strong>. The critique's "Change 3" (OPA returns obligations, not just allow/deny) is <strong>not</strong> implemented. Field masking / row filtering is left to each caller — exactly the drift the critique warns about.</td></tr>
+<tr><td>Real OPA/Cedar runtime</td><td><span class="pill yellow">🟡 Partial</span></td><td>Cedar-<em>shaped</em> terms, hand-rolled evaluator; not the genuine Cedar/OPA engine (carried over from v1).</td></tr>
+<tr><td>Policy admin console / simulator / versioning</td><td><span class="pill yellow">🟡 Partial</span></td><td>Policies are versioned (draft/active/deprecated/retired) and tenant-scoped; a dedicated admin console + local policy simulator are not shipped services.</td></tr>
+</tbody></table></div>
+<p><strong>Verdict:</strong> default-deny ABAC+ReBAC is real and strong; the missing piece is <strong>obligations</strong>, which is the single highest-leverage Policy-Plane fix (small-to-medium effort, see §7).</p>
+
+<h3>4.4 Consent Plane — decide whether the purpose is permitted</h3>
+<div class="tablewrap"><table>
+<thead><tr><th>Required element</th><th>Status</th><th>ProjexCloud reality</th></tr></thead>
+<tbody>
+<tr><td>Purpose registry, grant/revoke, receipts, cross-border</td><td><span class="pill green">✅ Works</span></td><td><code>sdk-consent</code> A-tier: purpose taxonomy, grant/revoke, cross-border check, consent receipts. Active consents surface in <code>IdentityContext.active_consents</code>.</td></tr>
+<tr><td>Consent kept <em>separate</em> from authorization</td><td><span class="pill green">✅ Works</span></td><td>Consent is its own SDK + tables, not folded into roles — matches the critique's "consent ≠ authorization" rule.</td></tr>
+<tr><td><strong>Consent as a formal <em>input</em> to the policy decision</strong></td><td><span class="pill yellow">🟡 Partial</span></td><td>Consent receipts are <em>carried</em> in the principal, but <code>sdk-policy</code> does not take a consent/purpose receipt as a first-class, gated decision input (purpose-bound deny). The two planes coexist but aren't wired into one decision the way Scenario 4 (CMP-down → fail-closed for purpose-bound processing) expects.</td></tr>
+<tr><td>Revocation triggers downstream events</td><td><span class="pill yellow">🟡 Partial</span></td><td>Revoke is recorded; a revocation→event→projection/MDM cascade is not a shipped flow.</td></tr>
+</tbody></table></div>
+
+<h3>4.5 MDM / Real-Identity Plane — resolve real-world entities</h3>
+<div class="tablewrap"><table>
+<thead><tr><th>Required element</th><th>Status</th><th>ProjexCloud reality</th></tr></thead>
+<tbody>
+<tr><td>Pure entity registry + contextual projections + canonical IDs + crosswalk</td><td><span class="pill green">✅ Works</span></td><td>6-layer model; Master Person is canonical, Persona/Encounter/Relationship are contextual. <code>sdk-identity-resolver</code> flattens with hot/cold projection + live fallback.</td></tr>
+<tr><td>Deterministic resolution (exact handles)</td><td><span class="pill green">✅ Works</span></td><td>Canonical-ID resolution across the layers.</td></tr>
+<tr><td><strong>Probabilistic resolution + candidate links</strong></td><td><span class="pill red">🔴 Gap</span></td><td>No fuzzy/probabilistic matcher.</td></tr>
+<tr><td><strong>AI-suggested links + steward queue + "claims, not forced merges"</strong></td><td><span class="pill red">🔴 Gap</span></td><td>No AI-jury, no steward workflow, no <code>POSSIBLY_SAME</code> link state, no calibration (ECE). This is Scenario 6 / Scenario 10 territory — currently unanswerable.</td></tr>
+<tr><td>Unlink = compensating event (not delete)</td><td><span class="pill red">🔴 Gap</span></td><td>No merge/unmerge-as-event machinery.</td></tr>
+</tbody></table></div>
+<p><strong>Verdict:</strong> the <em>structural</em> MDM (entities, projections, crosswalk, canonical IDs) is built and correct; the <em>resolution intelligence</em> (probabilistic + AI-suggested + steward-gated + reversible) is the RealMDM gap v1 already flagged. The meeting explicitly wants this for the billion-scale / 3M-identity ambition.</p>
+
+<h3>4.6 Event &amp; Workflow Plane</h3>
+<div class="tablewrap"><table>
+<thead><tr><th>Required element</th><th>Status</th><th>ProjexCloud reality</th></tr></thead>
+<tbody>
+<tr><td><strong>One primary durable "Reality Log"</strong> (Kafka or Redpanda)</td><td><span class="pill green">✅ Works</span></td><td><code>kafka-runtime</code> → ClickHouse/Postgres dual-write; <code>sdk-meter</code>/<code>meter-collector</code> hash-chained. ProjexCloud already made the critique's "pick one, not both" choice: <strong>Kafka</strong>.</td></tr>
+<tr><td>Event envelope / schema discipline</td><td><span class="pill yellow">🟡 Partial</span></td><td>Events are structured and hash-chained per SDK; no central schema registry or single envelope standard.</td></tr>
+<tr><td><strong>Command/control bus (NATS / JetStream)</strong></td><td><span class="pill red">🔴 Gap</span></td><td>Not present. Internal command/control rides the same Kafka/HTTP paths.</td></tr>
+<tr><td><strong>Durable workflow engine (Temporal)</strong></td><td><span class="pill yellow">🟡 Partial</span></td><td><code>sdk-workflow</code> exists (B-tier) but is not a Temporal-class durable-state engine; long-running saga/replay guarantees are not proven.</td></tr>
+<tr><td>Idempotency ledger + replay tools</td><td><span class="pill yellow">🟡 Partial</span></td><td>Hash-chained ledgers give tamper-evidence; explicit idempotency keys / replay tooling are uneven across SDKs.</td></tr>
+<tr><td>gRPC synchronous contracts</td><td><span class="pill red">🔴 Gap</span></td><td>All sync APIs are HTTP/Fastify; no gRPC.</td></tr>
+</tbody></table></div>
+
+<h3>4.7 Observability / Audit / Lineage Plane</h3>
+<div class="tablewrap"><table>
+<thead><tr><th>Observability type (critique taxonomy)</th><th>Status</th><th>ProjexCloud reality</th></tr></thead>
+<tbody>
+<tr><td>Audit observability (who/what/when/why/where)</td><td><span class="pill green">✅ Works</span></td><td><code>sdk-audit</code> SHA-256 prev-hash chain, retention classes, verifier, signed export.</td></tr>
+<tr><td>Cross-system trace (one trace_id end-to-end)</td><td><span class="pill green">✅ Works</span></td><td><code>sdk-trace</code> (ClickHouse-backed timeline, signed export).</td></tr>
+<tr><td>Policy observability (allow/deny, version, obligations)</td><td><span class="pill yellow">🟡 Partial</span></td><td><code>DecisionRecord</code> logs allow/deny + reason + layers; <strong>obligation</strong> logging absent (no obligations exist yet).</td></tr>
+<tr><td>Data / lineage observability (derivation, freshness, drift)</td><td><span class="pill green">✅ Works</span> (own model)</td><td><code>sdk-lineage</code> + <code>lineage-projector</code>; proprietary node/edge schema (not OpenLineage).</td></tr>
+<tr><td>Infra + service observability (CPU/latency/error rate, OTel/Grafana/Prometheus)</td><td><span class="pill yellow">🟡 Partial</span></td><td><code>telemetry</code> + <code>sdk-diagnostic-telemetry</code> packages exist; a full OTel→Grafana/Prometheus/Loki stack is not wired as a shipped observability portal.</td></tr>
+<tr><td>Security observability (auth failures, privilege change, suspicious access)</td><td><span class="pill yellow">🟡 Partial</span></td><td>Vault SIEM forwarder (Splunk/Elastic/Sumo) + audit events; no detection rules/alerting layer.</td></tr>
+<tr><td><strong>MDM observability (match confidence, unresolved, merge reversals)</strong></td><td><span class="pill red">🔴 Gap</span></td><td>Depends on probabilistic MDM that doesn't exist (§4.5).</td></tr>
+<tr><td>Consent observability (consent checked, purpose, receipt id)</td><td><span class="pill yellow">🟡 Partial</span></td><td>Receipts exist; a dedicated consent-decision audit stream is not separated out.</td></tr>
+</tbody></table></div>
+<p><strong>Verdict:</strong> the <em>evidence</em> half of this plane (audit/trace/lineage/meter, all hash-chained and exportable) is genuinely strong; the <em>operational telemetry portal</em> half (OTel/Grafana taxonomy, security detection, MDM metrics) is partial.</p>
+
+<h3>4.8 Developer-Experience / Shell Plane</h3>
+<p>The critique's most actionable correction: stop calling four different things "shell." Split into <strong>App Shell · Platform Gateway · Service Sidecar · Platform SDK</strong>. ProjexCloud already has three of the four — and never fell into the "god component" trap.</p>
+<div class="tablewrap"><table>
+<thead><tr><th>Shell decomposition</th><th>Status</th><th>ProjexCloud reality</th></tr></thead>
+<tbody>
+<tr><td><strong>App Shell</strong> (UI container, nav, session context, visible capabilities)</td><td><span class="pill green">✅ Works</span></td><td>Three Next.js apps (<code>projexcloud-admin</code>, <code>tenant-admin</code>, <code>tenant-workspace</code>) render capability-aware pages.</td></tr>
+<tr><td><strong>Platform Gateway</strong> (north-south entry, token validation, policy call, coarse enforcement)</td><td><span class="pill green">✅ Works</span></td><td><code>api-gateway</code> wires 15+ SDK migration chains, Kafka/Redis/ClickHouse, BYOK, SIEM; resolves principal and enforces.</td></tr>
+<tr><td><strong>Platform SDK</strong> (generated/typed clients so app devs don't hand-roll auth/audit/MDM)</td><td><span class="pill green">✅ Works</span></td><td>The 70+ <code>sdk-*</code>/<code>hdk-*</code> packages + the <code>/build</code> planner (RAG over the catalog, foundation-SDK auto-injection, dependency closure) <em>are</em> the golden-path SDK layer.</td></tr>
+<tr><td><strong>Service Sidecar / Mesh proxy</strong> (east-west identity, mTLS, retries, traffic policy)</td><td><span class="pill red">🔴 Gap</span></td><td>No sidecar/mesh — same root as the Trust-Plane gap (§4.1).</td></tr>
+</tbody></table></div>
+<blockquote>The critique warns the shell can become a "god component." ProjexCloud's design <strong>already avoids this</strong> by separating the gateway, the SDK packages, and the UI apps — and by enforcing the boundary with lint rules (no direct identity imports; no cross-pool reads except sanctioned patterns). The one missing limb is the service sidecar.</blockquote>
+
+<h2 id="s4">5. The 7 "change immediately" corrections → our status</h2>
+<div class="tablewrap"><table>
+<thead><tr><th>#</th><th>Critique's "change immediately"</th><th>ProjexCloud status</th></tr></thead>
+<tbody>
+<tr><td>1</td><td>Rename "shell" into four explicit components</td><td><span class="pill green">✅ Works</span> — 3 of 4 already exist as distinct surfaces (App Shell / Gateway / SDK); sidecar missing.</td></tr>
+<tr><td>2</td><td>Create a Platform Principal Token after auth</td><td><span class="pill yellow">🟡 Partial</span> — principal <em>model</em> (<code>IdentityContext</code>) exists and is canonical; not minted as a signed, audience-bound token for service hops.</td></tr>
+<tr><td>3</td><td>Make OPA return <strong>obligations</strong>, not just allow/deny</td><td><span class="pill red">🔴 Gap</span> — <code>EvaluatePolicyResult</code> is allow/deny + reason only. <strong>Highest-leverage fix.</strong></td></tr>
+<tr><td>4</td><td>Decide Kafka/Redpanda/NATS boundaries now</td><td><span class="pill green">✅ Works</span> (partly) — Kafka chosen as the one Reality Log; NATS/JetStream/Temporal boundaries still undefined.</td></tr>
+<tr><td>5</td><td>Treat external auth as accelerator, not source of truth</td><td><span class="pill green">✅ Works</span> — ProjexCloud's own identity layer + projection is the source of truth; no external IdP carries business policy.</td></tr>
+<tr><td>6</td><td>Establish a platform resource registry (owner per resource, GitOps)</td><td><span class="pill red">🔴 Gap</span> — no resource-ownership registry SDK; this is an infra/GitOps program.</td></tr>
+<tr><td>7</td><td>Make MDM a platform control-plane service (Resolve/Link/Crosswalk/Explain APIs)</td><td><span class="pill green">✅ Works</span> (structurally) / <span class="pill yellow">🟡</span> — resolver is a control-plane service; <code>ProposeLink/ApproveLink/RejectLink/ExplainIdentity</code> (steward APIs) are missing.</td></tr>
+</tbody></table></div>
+
+<h2 id="s5">6. The 10 stress-test scenarios → how ProjexCloud answers</h2>
+<p><strong>Read this column-by-column.</strong> "Verdict (today)" scores the <strong>running code</strong> — and it is unchanged by the v3.2 design update or the P10 task creation, because a design doc and a backlogged ticket don't alter runtime. "After P10 ships" is the target once the named epic merges. This is the §0 caveat made concrete: the reds/yellows are <em>real today</em> and <em>scheduled to close</em>.</p>
+<div class="tablewrap"><table>
+<thead><tr><th>#</th><th>Scenario</th><th>Runtime answer today</th><th>Verdict (today)</th><th>After P10 ships</th></tr></thead>
+<tbody>
+<tr><td>1</td><td>External auth is down</td><td>Identity layer is in-product; short-lived JWTs verify locally; service paths don't depend on a 3rd-party IdP</td><td><span class="pill green">✅</span></td><td><span class="pill green">✅</span> (already)</td></tr>
+<tr><td>2</td><td>Internal IdP (Keycloak) is down</td><td>N/A as drawn (no Keycloak); infra break-glass is outside product scope</td><td><span class="pill blue">◻ N/A</span></td><td><span class="pill blue">◻ N/A</span></td></tr>
+<tr><td>3</td><td>PDP is down — fail open or closed?</td><td>Default-deny posture + precompiled cache, <strong>but</strong> explicit fail-closed-on-error + audited break-glass not formalized</td><td><span class="pill yellow">🟡</span></td><td><span class="pill green">✅</span> via <strong>P10·E4</strong></td></tr>
+<tr><td>4</td><td>CMP down — purpose-bound access?</td><td>Consent is a separate plane but <strong>not</strong> a gating input, so "fail closed on missing consent" isn't enforced</td><td><span class="pill red">🔴</span></td><td><span class="pill green">✅</span> via <strong>P10·E3</strong></td></tr>
+<tr><td>5</td><td>JWT header tampered</td><td>Principal composed server-side from verified claims (not raw headers); <strong>but</strong> no minted, audience-bound internal token for downstream hops</td><td><span class="pill yellow">🟡</span></td><td><span class="pill green">✅</span> via <strong>P10·E2</strong> <span class="muted">(mesh/mTLS still deferred, not needed for this)</span></td></tr>
+<tr><td>6</td><td>Auth'd but not MDM-resolved</td><td>Auth identity &amp; data identity <em>are</em> separate; <strong>but</strong> no candidate/<code>POSSIBLY_SAME</code> state to express "possibly same"</td><td><span class="pill yellow">🟡</span></td><td><span class="pill green">✅</span> via <strong>P10·E6</strong></td></tr>
+<tr><td>7</td><td>API leaks a UI-hidden field</td><td>No obligation-driven server-side masking → masking is per-caller, leaks if a caller forgets</td><td><span class="pill red">🔴</span></td><td><span class="pill green">✅</span> via <strong>P10·E1</strong></td></tr>
+<tr><td>8</td><td>RLS vs PDP divergent visibility</td><td>RLS + Pool Router is defense-in-depth; <code>sdk-policy</code> is the single app-layer PDP for governed data</td><td><span class="pill green">✅</span></td><td><span class="pill green">✅</span> (already)</td></tr>
+<tr><td>9</td><td>Sidecar fails open</td><td>No sidecar exists; enforcement is already at the service/code boundary via <code>resolveIdentityContext()</code> + policy</td><td><span class="pill green">✅</span></td><td><span class="pill green">✅</span> (already)</td></tr>
+<tr><td>10</td><td>AI wrongly links two people</td><td>No AI linking exists → no false-merge risk, but none of the suggest/steward/unmerge machinery either</td><td><span class="pill red">🔴</span></td><td><span class="pill green">✅</span> via <strong>P10·E6</strong></td></tr>
+</tbody></table></div>
+<blockquote><strong>Why the "today" column is still red/yellow after the design + task work.</strong> Verdicts here measure <em>runtime behavior</em>, which only changes when code merges — not when a design is written (Architecture §11A) or a ticket is filed (P10·E1–E9). That is the same "designed &amp; backlogged ≠ shipped" line as §0, applied to failure modes. The five gaps behind scenarios 3/4/5/6/7/10 — <strong>obligations (E1), consent-gating (E3), minted principal token (E2), fail-closed/break-glass (E4), probabilistic/steward MDM (E6)</strong> — are now each an owned, scheduled epic, so the "After P10 ships" column turns <strong>nine of ten green</strong> (the tenth is N/A). When those epics merge and Epic <strong>E7</strong> verifies no regression, this table is what should be re-scored — not before.</blockquote>
+
+<h2 id="s6">7. What we are missing &amp; what to build (with effort)</h2>
+<p>Effort = relative engineering size (S/M/L), not a commitment. Ordered by leverage (cheap + high-impact first).</p>
+<div class="tablewrap"><table>
+<thead><tr><th>#</th><th>Gap</th><th>Plane</th><th>What to build (extension target)</th><th>Effort</th></tr></thead>
+<tbody>
+<tr><td>1</td><td><strong>Policy obligations</strong> (mask/filter/audit-level/TTL)</td><td>Policy</td><td>Extend <code>sdk-policy</code>: add an <code>obligations</code> object to <code>EvaluatePolicyResult</code> + a small server-side enforcement helper library (field masking, row filter injection) every service calls. Closes Scenario 7; unlocks policy-observability of obligations.</td><td><strong>S–M</strong></td></tr>
+<tr><td>2</td><td><strong>Minted internal Principal Token</strong></td><td>Trust</td><td>Have <code>api-gateway</code> mint a signed, short-TTL, <code>aud</code>-bound JWT from the resolved <code>IdentityContext</code>; downstream services verify it instead of trusting forwarded headers. Closes Scenario 5; precondition for safe east-west calls.</td><td><strong>M</strong></td></tr>
+<tr><td>3</td><td><strong>Consent as a decision input</strong></td><td>Consent</td><td>Wire <code>sdk-consent</code> receipts into <code>sdk-policy</code> as a first-class, purpose-gated input; fail-closed on missing consent for purpose-bound resources. Closes Scenario 4; adds consent-decision audit stream.</td><td><strong>M</strong></td></tr>
+<tr><td>4</td><td><strong>PDP fail-closed + audited break-glass</strong></td><td>Policy</td><td>Formalize fail-closed-on-evaluator-error for sensitive classes, short-TTL cached decisions for low-risk, and an explicit audited break-glass path (reuse <code>sdk-approval</code>). Closes Scenario 3.</td><td><strong>S</strong></td></tr>
+<tr><td>5</td><td><strong>Probabilistic + steward-gated MDM</strong></td><td>MDM</td><td>Extend <code>sdk-identity-resolver</code>: probabilistic/graph matching, candidate-link state (<code>POSSIBLY_SAME</code>), AI-suggestion queue, steward approve/reject workflow, unlink-as-compensating-event, calibration (ECE) monitoring, <code>ProposeLink/ApproveLink/RejectLink/ExplainIdentity</code> APIs. Closes Scenarios 6 &amp; 10; required for the billion-scale ambition.</td><td><strong>L</strong></td></tr>
+<tr><td>6</td><td><strong>Trust/mesh substrate</strong> (SPIFFE/SPIRE + mTLS mesh + gRPC)</td><td>Trust / DevEx</td><td><em>Infra program, not an SDK:</em> SPIRE for SVIDs, Envoy/Linkerd sidecars, optional gRPC contracts; keep app-layer authz on top. Adds the missing Service Sidecar limb.</td><td><strong>L</strong></td></tr>
+<tr><td>7</td><td><strong>Command bus + durable workflow</strong> (NATS/JetStream + Temporal)</td><td>Event/Workflow</td><td>Adopt NATS/JetStream for internal command/control; promote <code>sdk-workflow</code> onto (or wrap) Temporal for durable saga state, idempotency ledger, replay. Define the event-envelope + schema-registry standard.</td><td><strong>M–L</strong></td></tr>
+<tr><td>8</td><td><strong>Resource-ownership / GitOps registry</strong></td><td>Infra</td><td><em>Infra/GitOps program:</em> every droplet/cluster/DB/bucket/topic carries owner/team/repo/terraform-module/cost-center/classification/expiry; "no owner = no resource"; break-glass process. Could surface as a thin <code>sdk-resource-registry</code> over Terraform state.</td><td><strong>M–L</strong></td></tr>
+<tr><td>9</td><td><strong>Observability portal + taxonomy</strong> (OTel/Grafana/Prometheus + detection)</td><td>Observability</td><td>Wire <code>telemetry</code>/<code>sdk-diagnostic-telemetry</code> into an OTel→Grafana/Prometheus/Loki stack along the critique's 8-type taxonomy; add security-detection rules over the SIEM forwarder.</td><td><strong>M</strong></td></tr>
+<tr><td>10</td><td><strong>Device posture / network zone / purpose</strong> as context fields</td><td>Session</td><td>Add <code>device_trust</code>, <code>network_zone</code>, <code>purpose</code> to the principal/context so policy + consent can condition on them.</td><td><strong>S</strong></td></tr>
+</tbody></table></div>
+<blockquote><strong>Reading guide.</strong> Items <strong>1–4 and 10 are S/M extensions of SDKs that already exist</strong> — they are the highest-credibility, fastest wins and together flip Scenarios 3, 4, 5, 7 from red/yellow to green. Item <strong>5 (probabilistic MDM)</strong> is the one large <em>product</em> bet that the meeting's billion-scale vision actually requires. Items <strong>6, 7, 8</strong> are <em>infra/platform programs</em> (mesh, workflow bus, GitOps) — real work, but orthogonal to the application SDKs and adoptable incrementally underneath them.</blockquote>
+
+<h2 id="s7b">8. Necessity verdict — what ProjexCloud needs vs. what's optional, and why</h2>
+<p>§7 lists the gaps; this section judges them. Two framing facts decide everything below:</p>
+<ul>
+<li><strong>The critique is a lens, not a spec.</strong> <code>Analyze2.md</code> critiques a meeting that proposed a <em>different</em> stack — Supabase + Keycloak + Go + gRPC + SPIFFE. ProjexCloud owns identity end-to-end (TypeScript/Postgres/Fastify), so the critique's biggest worries — the "four-headed auth monster," the "two sources of truth (RLS vs OPA)" — describe a <strong>path ProjexCloud deliberately did not take</strong>, not debt it carries. Those are not gaps to close.</li>
+<li><strong>The durable value is the principles, not the vendor list.</strong> The critique's lasting contributions are five disciplines: separate the five identities, mint one canonical principal, return obligations not yes/no, keep consent ≠ authorization, never let the "shell" become a god component. ProjexCloud already honors <strong>four of the five</strong> (obligations is the lone miss). That is the strongest evidence the core design is sound and most of the heavyweight prescriptions are optional.</li>
+</ul>
+<p>Against that, every §7 item sorts into one of three buckets. Legend: <span class="pill green">✅ Necessary now</span> do regardless · <span class="pill yellow">🟡 Conditional</span> necessary only if a named fact is true · <span class="pill blue">◻ Defer / not needed</span> over-engineering for ProjexCloud's stack &amp; stage today.</p>
+
+<h3>8.1 Necessary regardless — real risk, mostly cheap</h3>
+<div class="tablewrap"><table>
+<thead><tr><th>Item</th><th>Verdict</th><th>Why it's necessary for <em>this</em> architecture</th></tr></thead>
+<tbody>
+<tr><td><strong>Policy obligations + server-side masking</strong> (§7.1)</td><td><span class="pill green">✅ Necessary now</span></td><td>"UI hides the field but the API still returns it" (Scenario 7) is a textbook data-leak bug, not a theoretical one. For a multi-tenant spine touching PHI/PII/financial, leaving masking to each caller <strong>will</strong> eventually leak. Cheap (S–M) + high-risk-reduction = the rare item that is both urgent and inexpensive. <strong>Do first.</strong></td></tr>
+<tr><td><strong>PDP fail-closed + audited break-glass</strong> (§7.4)</td><td><span class="pill green">✅ Necessary now</span></td><td>Basic security hygiene for any central PDP. Cheap (S). No architectural reason to defer.</td></tr>
+<tr><td><strong>Device / network-zone / purpose context fields</strong> (§7.10)</td><td><span class="pill green">✅ Necessary now</span></td><td>Small (S) and a prerequisite for the conditional items below — policy and consent can't condition on context they don't carry.</td></tr>
+<tr><td><strong>Resource-ownership / GitOps registry</strong> (§7.8)</td><td><span class="pill green">✅ Necessary now</span> (ops, not product)</td><td>The most grounded concern in <code>Analyze1.md</code> ("droplets created and deleted with no owner"). It's an <em>operations practice</em>, not a product feature — necessary as the team scales, independent of the SDK roadmap.</td></tr>
+</tbody></table></div>
+
+<h3>8.2 Conditional — necessary only if a specific fact is true</h3>
+<div class="tablewrap"><table>
+<thead><tr><th>Item</th><th>Verdict</th><th>The fact that decides it</th></tr></thead>
+<tbody>
+<tr><td><strong>Consent as a gated decision input</strong> (§7.3)</td><td><span class="pill yellow">🟡 Conditional</span></td><td>Necessary <strong>if</strong> ProjexCloud commits to healthcare / insurance / GDPR verticals — and the P7 field-evidence + HDK-capture work suggests it does. In a regulated vertical, purpose-bound fail-closed is table stakes, not a nicety. If the near-term market is internal tooling, it's premature. <em>The vertical decides this, not the critique.</em></td></tr>
+<tr><td><strong>Minted, audience-bound internal Principal Token + mTLS</strong> (§7.2)</td><td><span class="pill yellow">🟡 Conditional</span></td><td>Necessary <strong>if</strong> the topology becomes genuinely multi-hop service-to-service with identity forwarding. Today the gateway composes the principal server-side from verified claims, which already defuses the confused-deputy worst case. The minted token earns its keep when fan-out across independent services is real — not in a "gateway + SDKs" shape.</td></tr>
+<tr><td><strong>Probabilistic / AI-jury / steward-gated MDM</strong> (§7.5)</td><td><span class="pill yellow">🟡 Conditional</span> (be skeptical)</td><td>Necessary <strong>only if</strong> ProjexCloud's actual job is resolving <em>fuzzy</em> real-world identities across systems ("is this the same patient?"). The meeting's "billions of patients / 3M identities" framing is aspirational. ProjexCloud is built for <strong>deterministic canonical IDs within tenants</strong> — building probabilistic + calibration + steward machinery speculatively is exactly the over-engineering the critique warns against elsewhere. <strong>Don't build it for a use case not yet sold.</strong></td></tr>
+</tbody></table></div>
+
+<h3>8.3 Not necessary for ProjexCloud's architecture today — and why</h3>
+<div class="tablewrap"><table>
+<thead><tr><th>Item</th><th>Verdict</th><th>Why ProjexCloud's architecture makes it optional</th></tr></thead>
+<tbody>
+<tr><td><strong>SPIFFE/SPIRE + mTLS service mesh + Envoy/Cilium</strong> (§7.6)</td><td><span class="pill blue">◻ Defer / not needed</span></td><td>App-layer zero-trust (JWT + Postgres RLS + Pool Router + lint-enforced boundaries) is a <strong>legitimate, defensible architecture</strong>, not a deficiency. A mesh pays off with many polyglot services on untrusted network paths — or when a security buyer reads slide 25 literally. For a TypeScript monorepo behind one gateway it's defense-in-depth, an L-sized <em>infra program</em>, not a missing feature. Adopting it to satisfy a diagram is the wrong reason.</td></tr>
+<tr><td><strong>NATS/JetStream command bus + Temporal</strong> (§7.7)</td><td><span class="pill blue">◻ Defer / not needed</span></td><td>The critique's own rule — "don't run both Kafka and Redpanda, you double the ops burden" — kills adding <em>three</em> more infra systems without a concrete durable-workflow need. ProjexCloud already made the disciplined choice: <strong>one Kafka reality log</strong>. Add Temporal/NATS when a specific long-running saga demands it, not before.</td></tr>
+<tr><td><strong>gRPC synchronous contracts</strong></td><td><span class="pill blue">◻ Defer / not needed</span></td><td>HTTP/Fastify is adequate at the current topology and team size. gRPC is a micro-optimization until service count and latency budgets actually force it. No correctness or security objective requires it.</td></tr>
+<tr><td><strong>Supabase + Keycloak split (and the OPA/Cedar runtime)</strong></td><td><span class="pill blue">◻ Not needed</span></td><td>A <strong>path not taken</strong>. ProjexCloud's owned identity layer + single app-layer PDP <em>collapses</em> the very ambiguity the critique spends pages worrying about. Swapping in named vendors would re-introduce the multi-source-of-truth risk, not remove it. Keep the Cedar-<em>shape</em> evaluator unless a buyer contractually requires the literal OPA/Cedar engine.</td></tr>
+<tr><td><strong>Real OpenLineage / OCSF / Merkle wire formats</strong></td><td><span class="pill blue">◻ Not needed</span> (until a buyer asks)</td><td>The hash-chained audit + own lineage graph already deliver the <em>control objective</em> (tamper-evidence, derivation). The named standards matter only for a literal due-diligence reading; add a translation/export adapter <em>if</em> a deal requires it (cheap), don't re-platform.</td></tr>
+</tbody></table></div>
+
+<blockquote><strong>Two facts would flip several "conditional" rows to "necessary."</strong> (a) <em>Which regulated verticals are committed for the next 2–3 quarters</em> — this decides consent-gating and, indirectly, probabilistic MDM. (b) <em>Is the runtime topology "gateway + SDKs" or genuinely many independent services?</em> — this decides the minted principal token and the mesh. Until those are fixed, treating the L-sized items as committed work is itself a form of over-engineering.</blockquote>
+
+<blockquote><strong>Recommended sequencing.</strong> (1) Ship <strong>obligations + server-side masking</strong>, <strong>fail-closed + break-glass</strong>, and the <strong>context fields</strong> — cheap, necessary, flips Scenarios 3/4/5/7 toward green. (2) Wire <strong>consent into the decision</strong> the moment a regulated vertical is committed. (3) <strong>Explicitly defer</strong> the mesh, the Temporal/NATS trio, and probabilistic MDM — and <em>say so in the deck</em> so "deferred by design" is never mistaken for "missed." The honest architectural position: ProjexCloud already built the hard conceptual core; the necessary remainder is a handful of S/M extensions, and the expensive items are conditional bets to make <strong>only when the market names them.</strong></blockquote>
+
+<h2 id="s7">9. Open questions from the critique → already-answered vs still-open</h2>
+<p><code>Analyze2.md</code> §9 lists ~70 open questions. ProjexCloud's existing design already answers a large share of them. A representative cut:</p>
+<div class="tablewrap"><table>
+<thead><tr><th>Critique question</th><th>ProjexCloud's de-facto answer</th><th>Settled?</th></tr></thead>
+<tbody>
+<tr><td>Is app_id + tenant_id + org_id + bu_id the global scope model?</td><td>Yes — plus reseller/parent/root tenant + geo node; it's the frozen <code>IdentityContext</code> spine.</td><td><span class="pill green">✅ Settled</span></td></tr>
+<tr><td>Multi-tenant SaaS from the beginning?</td><td>Yes — recursive sub-tenants/resellers, pool isolation, active-active routing built in.</td><td><span class="pill green">✅ Settled</span></td></tr>
+<tr><td>Will OPA be the central PDP? Only allow/deny or obligations?</td><td>Single app-layer PDP (<code>sdk-policy</code>); allow/deny today, obligations <strong>designed v3.2</strong> (Arch §11A.3 + OC-11), implementation pending.</td><td><span class="pill green">🟢 Designed</span></td></tr>
+<tr><td>Where does policy data live / versioning?</td><td>Postgres policy tables, versioned draft→active→deprecated→retired, precompiled bundles.</td><td><span class="pill green">✅ Settled</span></td></tr>
+<tr><td>First master domains (Person/Org/Address/Device/Document)?</td><td>Person is canonical today; Device/Geo SDKs exist; Org/Address not first-class master entities yet.</td><td><span class="pill yellow">🟡 Partly</span></td></tr>
+<tr><td>Real-time vs async stewardship first?</td><td>Real-time deterministic resolve is shipped; async stewardship not built.</td><td><span class="pill yellow">🟡 Partly</span></td></tr>
+<tr><td>Kafka and Redpanda both, or one?</td><td>One — Kafka.</td><td><span class="pill green">✅ Settled</span></td></tr>
+<tr><td>Do all internal calls require mTLS? Service→OPA subject mapping?</td><td>No mTLS mesh today; service identity is JWT/API-key — open (§7.6).</td><td><span class="pill red">🔴 Open</span></td></tr>
+<tr><td>Where do audit logs go / immutable events / lineage from day one?</td><td>Hash-chained <code>sdk-audit</code> + <code>sdk-trace</code> + <code>sdk-lineage</code>, signed export — all from day one.</td><td><span class="pill green">✅ Settled</span></td></tr>
+<tr><td>Resource ownership registry / who can create infra / break-glass?</td><td><strong>Designed v3.2</strong> — <code>resource_registry</code> + OC-12 + GitOps quarantine + <code>sdk-approval</code> break-glass (Arch §11A.8), implementation pending.</td><td><span class="pill green">🟢 Designed</span></td></tr>
+</tbody></table></div>
+
+<h2 id="s8">10. Verdict &amp; recommended next step</h2>
+<p>The meeting's instinct — <em>"apps are easy now; the hard thing is the platform underneath them"</em> — is exactly what ProjexCloud was built to be. Measured against the critique's eight-plane decomposition, the build is <strong>further along than the meeting assumes</strong>: it already keeps the five identities separate, already has a canonical principal model, already chose one event log, already split the "shell" into three of four named surfaces, and already ships hash-chained audit/trace/lineage. It did <strong>not</strong> fall into the four traps the critique fears most (god-component shell, four-headed auth monster, two-sources-of-truth policy, informal everything).</p>
+<p>The genuine deltas are few and nameable:</p>
+<ol>
+<li><strong>Obligations</strong> on policy decisions (S–M) — flips the field-leak scenario.</li>
+<li><strong>Minted, audience-bound internal Principal Token + mTLS</strong> (M / L-infra) — flips the confused-deputy scenario.</li>
+<li><strong>Consent wired as a decision input</strong> with fail-closed (M) — flips the CMP-down scenario.</li>
+<li><strong>Probabilistic / steward-gated / reversible MDM resolution</strong> (L) — the one big product bet the billion-scale vision needs.</li>
+<li><strong>Trust mesh, command/workflow bus, and GitOps resource registry</strong> (infra programs) — adoptable underneath the SDKs without rewriting them.</li>
+</ol>
+<blockquote><strong>Recommended next step</strong> (echoing the critique's own): freeze this mapping into a <strong>Platform Architecture Decision Record</strong> with one diagram, one trust flow, one policy-with-obligations flow, one MDM-resolution flow, and one ownership matrix — then knock out the §7 <strong>S/M items (1–4, 10) first</strong>. They are cheap, high-credibility, and move six of the ten stress tests into the green before any infra program (mesh/Temporal/GitOps) is started.</blockquote>
+
+<h2 id="s9">11. Appendix — plane → SDK index</h2>
+<div class="tablewrap"><table>
+<thead><tr><th>Control plane</th><th>Owning ProjexCloud packages / services</th><th>Plane verdict</th></tr></thead>
+<tbody>
+<tr><td>Trust</td><td><code>sdk-identity</code>, <code>sdk-api-keys</code>, <code>sdk-identity-resolver</code> (principal); <em>principal token designed v3.2 (Arch §11A.4); SPIFFE/mesh deferred-gated (§11A.9 D-2)</em></td><td><span class="pill yellow">🟡 Partial</span></td></tr>
+<tr><td>Session / Edge</td><td><code>sdk-identity</code> (sessions/impersonation), <code>api-gateway</code>, <code>sdk-projection</code>, <code>identity-projector</code></td><td><span class="pill green">✅ Works</span></td></tr>
+<tr><td>Policy</td><td><code>sdk-policy</code>, <code>sdk-rebac</code>, <code>sdk-persona</code>; <em>obligations designed v3.2 (Arch §11A.3 + OC-11); real OPA/Cedar + simulator deferred</em></td><td><span class="pill yellow">🟡 Partial</span></td></tr>
+<tr><td>Consent</td><td><code>sdk-consent</code>, <code>sdk-data-rights</code>; <em>consent-as-decision-input designed v3.2 (Arch §11A.5 + P18)</em></td><td><span class="pill green">✅ Works</span> / <span class="pill yellow">🟡</span></td></tr>
+<tr><td>MDM / Real-Identity</td><td><code>sdk-identity-resolver</code> + 6-layer tables; <em>missing: probabilistic + steward + reversible links</em></td><td><span class="pill yellow">🟡 Partial</span></td></tr>
+<tr><td>Event &amp; Workflow</td><td><code>kafka-runtime</code>, <code>clickhouse-runtime</code>, <code>sdk-meter</code>, <code>meter-collector</code>, <code>sdk-event</code>, <code>sdk-workflow</code>; <em>missing: NATS/JetStream, Temporal, gRPC, schema registry</em></td><td><span class="pill yellow">🟡 Partial</span></td></tr>
+<tr><td>Observability / Audit / Lineage</td><td><code>sdk-audit</code>, <code>sdk-trace</code>, <code>sdk-lineage</code>, <code>lineage-projector</code>, <code>telemetry</code>, <code>sdk-diagnostic-telemetry</code>, vault SIEM forwarder</td><td><span class="pill green">✅ Works</span> (evidence) / <span class="pill yellow">🟡</span> (telemetry portal)</td></tr>
+<tr><td>Developer Experience / Shell</td><td>Apps (<code>projexcloud-admin</code>, <code>tenant-admin</code>, <code>tenant-workspace</code>), <code>api-gateway</code>, the 70+ <code>sdk-*</code>/<code>hdk-*</code> packages, <code>/build</code> planner, <code>sdk-registry</code>/<code>sdk-catalog-index</code>/<code>sdk-capability</code>; <em>missing: service sidecar</em></td><td><span class="pill green">✅ Works</span> (3 of 4)</td></tr>
+<tr><td>Infra / GitOps</td><td><em>Resource-ownership registry designed v3.2 (Arch §11A.8 + OC-12: <code>resource_registry</code>, "no owner = no resource"); GitOps program, not an SDK</em></td><td><span class="pill red">🔴 Gap</span> → <span class="pill green">🟢 Designed</span></td></tr>
+</tbody></table></div>
+<hr/>
+
+<h2 id="s10">12. Disposition update — answering the <code>Analyze3.md</code> follow-up</h2>
+<p>A third-party review (<code>gaps/Analyze3.md</code>) scored this report and concluded ProjexCloud answers "roughly 80–85%" of the Analyze1/Analyze2 concerns, flagging six "major gaps" plus two strategic questions it "could not find answers" for. Two things to reconcile:</p>
+<ul>
+<li><strong>Timing.</strong> Analyze3 read §§1–11 of <em>this report</em>, which scored Obligations / Principal Token / Consent-gating as open gaps. <strong>After that, the architecture document committed designs for them</strong> in <a href="../v3.1/Architecture-v3.1.html"><code>Architecture-v3.1.html</code></a> <strong>v3.2 §11A</strong> (principles P16–P18, constraints OC-11/OC-12). So three of Analyze3's "❌ Not Answered" items now have a documented answer the reviewer hadn't seen.</li>
+<li><strong>"Deferred" is an answer.</strong> The remaining items are now <em>consciously</em> deferred against two named decisions (§11A.9), not silently missing. That disposition — "deferred pending decision X" — is itself the resolution Analyze3 was looking for.</li>
+</ul>
+<p>Status key: <span class="pill green">✅ Answered</span> in product/design · <span class="pill green">🟢 Designed v3.2</span> committed in Architecture §11A (decision recorded; <em>code not yet shipped</em>) · <span class="pill blue">◻ Deferred (gated)</span> conscious deferral against a named decision.</p>
+<div class="tablewrap"><table>
+<thead><tr><th>Analyze3 item</th><th>Analyze3 verdict</th><th>Disposition now</th><th>Where answered</th></tr></thead>
+<tbody>
+<tr><td>Identity model (five-identities separation)</td><td>✅ Answered</td><td><span class="pill green">✅ Answered</span></td><td>Arch §7 six-layer stack · report §3</td></tr>
+<tr><td>Multi-tenant architecture</td><td>✅ Answered</td><td><span class="pill green">✅ Answered</span></td><td>Arch §8/§12 · report §8.1</td></tr>
+<tr><td>ABAC / ReBAC central PDP</td><td>✅ Answered</td><td><span class="pill green">✅ Answered</span></td><td>Arch §11 · report §4.3</td></tr>
+<tr><td>Platform shell decomposition</td><td>✅ Answered</td><td><span class="pill green">✅ Answered</span> (3 of 4)</td><td>Arch §11A.1 · report §4.8</td></tr>
+<tr><td><strong>C. OPA obligations</strong> (highest priority)</td><td>❌ Not answered</td><td><span class="pill green">🟢 Designed v3.2</span></td><td>Arch §11A.3 + P16 + <strong>OC-11</strong> — obligations object on the decision, server-side enforcement</td></tr>
+<tr><td><strong>B. Minted principal token</strong></td><td>🟡 Partial</td><td><span class="pill green">🟢 Designed v3.2</span></td><td>Arch §11A.4 + P17 — signed, audience-bound token minted from <code>IdentityContext</code></td></tr>
+<tr><td><strong>D. Consent as decision input</strong></td><td>🟡 Partial</td><td><span class="pill green">🟢 Designed v3.2</span></td><td>Arch §11A.5 + P18 — purpose-gated, fail-closed on missing/revoked receipt</td></tr>
+<tr><td><strong>F. Resource ownership registry</strong></td><td>❌ Not answered</td><td><span class="pill green">🟢 Designed v3.2</span></td><td>Arch §11A.8 + <strong>OC-12</strong> — <code>resource_registry</code>, "no owner = no resource," GitOps quarantine</td></tr>
+<tr><td>Event architecture (bus/workflow)</td><td>🟡 Partial</td><td><span class="pill blue">◻ Deferred (gated)</span></td><td>One Kafka log chosen; NATS/Temporal gated on <strong>D-2</strong> (Arch §11A.7/§11A.9)</td></tr>
+<tr><td><strong>A. Service identity + service mesh</strong></td><td>❌ Not answered</td><td><span class="pill blue">◻ Deferred (gated)</span></td><td>App-layer zero-trust today; SPIFFE/mTLS mesh gated on <strong>D-2</strong> topology decision (Arch §11A.7/§11A.9)</td></tr>
+<tr><td><strong>E. Probabilistic MDM</strong></td><td>❌ Not answered</td><td><span class="pill blue">◻ Deferred (gated)</span></td><td>Deterministic today; probabilistic/steward gated on <strong>D-1</strong> committed verticals (Arch §11A.7/§11A.9)</td></tr>
+</tbody></table></div>
+<p>The strategic questions the critiques left open are now recorded as explicit, owner-assigned decisions (mirrored in Architecture §11A.9). <strong>D-1/D-2</strong> decide whether a deferred item becomes <em>Required</em>; <strong>D-3</strong> decides whether it should be promoted to <em>Planned</em> ahead of that trigger.</p>
+<div class="tablewrap"><table>
+<thead><tr><th>Decision</th><th>Question</th><th>What it forces</th></tr></thead>
+<tbody>
+<tr><td><strong>D-1</strong></td><td>Which regulated verticals are committed (next 2–3 quarters)?</td><td>A committed regulated vertical makes <strong>consent-gating (P18) mandatory</strong> and can promote <strong>probabilistic MDM</strong> from deferred to required.</td></tr>
+<tr><td><strong>D-2</strong></td><td>Final runtime topology — Gateway→SDKs→DB, or Gateway→100+ services→mesh?</td><td>Topology A leaves the minted Principal Token sufficient and the <strong>mesh/gRPC/NATS/Temporal deferred</strong>; Topology B makes the <strong>service mesh necessary</strong>.</td></tr>
+<tr><td><strong>D-3</strong></td><td>Expected <em>3-year</em> topology &amp; scale — 10–20 services/single-region, or 200+ services/multi-region/multi-cloud/partner-hosted?</td><td>The large-shape answer promotes <strong>service identity (SPIFFE/SPIRE) from Deferred → Planned</strong> now (roadmap slot + abstraction seam), even though implementation still waits on D-2. The small-shape answer keeps all four deferrals as-is.</td></tr>
+</tbody></table></div>
+<blockquote><strong>Provisional D-1 resolution — Healthcare (multi-source patient data).</strong> A healthcare client exists and a healthcare vertical is likely (not yet hard-committed); patient records originate from <strong>multiple independent sources</strong> (external hospitals/labs/HIEs/payers, no shared ID). That fires D-1 and promotes three items for the healthcare path: <strong>consent/purpose gating (P18) → Required</strong> (HIPAA TPO + 42 CFR Part 2), <strong>obligations/field-masking (P16) → Required</strong> (HIPAA "minimum necessary"), and — because multi-source — <strong>probabilistic MDM / EMPI → Required</strong> (was Deferred; duplicate patient records are a safety/billing hazard). The minted Principal Token + audit attribution become <strong>strongly recommended</strong>; <strong>Temporal → Planned</strong> if prior-auth/referral workflows are in scope; the <strong>service mesh stays Deferred</strong> (healthcare is a regulatory trigger, not a topology one). EMPI is the one large (L) build — it extends <code>sdk-identity-resolver</code> with probabilistic matching, confidence scores, a <code>POSSIBLY_SAME</code> candidate state, an <code>sdk-approval</code>-governed steward queue, and reversible merge/unmerge events. Full detail in Architecture <strong>§11A.10</strong>. Other HIPAA needs (vault encryption + crypto-shred, DSAR, consent receipts, 6-yr audit retention) are already covered.</blockquote>
+<blockquote><strong>Net of the v3.2 update.</strong> Of Analyze3's six "major gaps": <strong>four now have a committed design</strong> (obligations, principal token, consent-gating, resource registry) and <strong>two are consciously deferred against named decisions</strong> (service identity/mesh → D-2; probabilistic MDM → D-1). Nothing on the list is now "unanswered" in the sense of <em>undocumented</em>. The honest caveat Analyze3 itself made still holds: <strong>"designed" is not "shipped."</strong> These are architecture-doc commitments and lint constraints, not merged code — the build order in §8 (obligations and the minted token first, consent on D-1, registry alongside) is how they become real.</blockquote>
+<blockquote><strong>On the deferrals' risk (Analyze4 refinement).</strong> The deferred items carry <strong>no material architectural risk <em>for the current target topology</em></strong> — deliberately <em>not</em> the stronger claim "no residual risk." The risk is <strong>conditional, not zero</strong>: if ProjexCloud signs a large healthcare/government account, probabilistic MDM becomes critical; if the service count and cross-cluster footprint grow, service identity does. That conditionality is exactly what D-1/D-2/D-3 capture. A deferred item therefore has a <strong>lifecycle</strong> — <span class="pill blue">◻ Deferred</span> (no trigger in sight) → <span class="pill yellow">🟡 Planned</span> (3-year horizon makes the trigger likely; roadmap slot now) → <span class="pill green">✅ Required</span> (trigger fires; build now). Of the four, <strong>service identity (SPIFFE/SPIRE) is the most likely to graduate from Deferred to Planned</strong> as the platform scales; the command bus and literal OPA/Cedar runtime are the least likely to move without a very specific trigger.</blockquote>
+
+<hr/>
+<p><em>End of v2. This report scores the 91-package ProjexCloud build against the platform-architecture vision in <code>Analyze1.md</code> / <code>Analyze2.md</code>, and (§12) reconciles with the <code>Analyze3.md</code> follow-up and Architecture v3.2 §11A. It is deliberately conservative where runtime behaviour was not executed, and it inherits the vendor-naming caveats (Cedar-shape vs OPA, hash-chain vs OCSF/Merkle, own lineage vs OpenLineage) established in the v1 Insignia report.</em></p>
+
+</div>
+</body>
+</html>

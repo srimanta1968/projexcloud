@@ -1,5 +1,6 @@
 import { dataService } from '@projexlight/db-runtime';
 import { emitEvent } from '@projexlight/sdk-audit';
+import { CONSENT_ABSENT_REASON, hasActiveConsent } from '@projexlight/contracts';
 import { compileToCedar, evaluateCedar, parseIQL } from './iqlParser';
 import { getCached, setCached } from './precompCache';
 
@@ -23,16 +24,17 @@ export async function createPolicy(input: CreatePolicyInput, actor_id = 'system'
   const ast = parseIQL(input.iql_source);
   const cedar = compileToCedar(ast);
   const rows = await dataService.rows<PolicyRecord>(
-    `INSERT INTO policy.policy (tenant_id, name, iql_source, cedar_compiled, version)
-     VALUES ($1, $2, $3, $4::jsonb, $5)
+    `INSERT INTO policy.policy (tenant_id, name, iql_source, cedar_compiled, version, obligations)
+     VALUES ($1, $2, $3, $4::jsonb, $5, $6::jsonb)
      RETURNING policy_id, tenant_id, name, iql_source, cedar_compiled,
-               version, status, created_at, updated_at`,
+               version, status, created_at, updated_at, obligations`,
     [
       input.tenant_id ?? null,
       input.name,
       input.iql_source,
       JSON.stringify(cedar),
       input.version,
+      input.obligations ? JSON.stringify(input.obligations) : null,
     ],
   );
   const policy = rows[0];
@@ -46,7 +48,7 @@ export async function createPolicy(input: CreatePolicyInput, actor_id = 'system'
 export async function getPolicy(policy_id: string): Promise<PolicyRecord | null> {
   return dataService.one<PolicyRecord>(
     `SELECT policy_id, tenant_id, name, iql_source, cedar_compiled,
-            version, status, created_at, updated_at
+            version, status, created_at, updated_at, obligations
        FROM policy.policy WHERE policy_id = $1`,
     [policy_id],
   );
@@ -62,36 +64,66 @@ export async function getPolicy(policy_id: string): Promise<PolicyRecord | null>
  * inject the current version into the context.
  */
 export async function evaluatePolicy(input: EvaluatePolicyInput): Promise<EvaluatePolicyResult> {
+  try {
+    return await evaluatePolicyCore(input);
+  } catch (err) {
+    // A genuine "policy not found" is a 404, not evaluator degradation.
+    if (/not found/i.test((err as Error).message)) throw err;
+    // P10/E4: fail-closed on evaluator unavailability (DB/cache/cedar error).
+    return failClosedDecision(input, err as Error);
+  }
+}
+
+async function evaluatePolicyCore(input: EvaluatePolicyInput): Promise<EvaluatePolicyResult> {
   const policy = await getPolicy(input.policy_id);
   if (!policy) throw new Error(`Policy ${input.policy_id} not found`);
 
   const ctx = (input.context ?? {}) as Record<string, unknown>;
   const projection_version = typeof ctx.projection_version === 'number' ? ctx.projection_version : 0;
 
-  const cached = await getCached(input.policy_id, input.subject_id, input.target_id, projection_version);
+  // P10/E3: purpose-bound evaluations skip the precomp cache so consent
+  // revocation/expiry take effect on the very next decision (live, never stale).
+  const purposeBound = input.purpose_bound === true;
+  const cached = purposeBound
+    ? null
+    : await getCached(input.policy_id, input.subject_id, input.target_id, projection_version);
   if (cached) {
     return cached;
   }
 
-  const allowed = evaluateCedar(
+  const policyAllows = evaluateCedar(
     policy.cedar_compiled as ReturnType<typeof compileToCedar>,
     ctx,
   );
-  const reason = allowed
-    ? `Policy ${policy.name}@${policy.version} permits the access`
-    : `Policy ${policy.name}@${policy.version} did not match the conditions`;
+
+  // P10/E3: consent gating. For a purpose-bound resource a valid consent
+  // receipt is REQUIRED; absent/expired/revoked consent fails closed (DENY)
+  // regardless of the policy verdict, with a distinct auditable reason code.
+  const consentSatisfied =
+    !purposeBound || hasActiveConsent(input.consent_receipts, input.purpose ?? '');
+  const allowed = policyAllows && consentSatisfied;
+  const reason = !consentSatisfied
+    ? `${CONSENT_ABSENT_REASON}: no active consent for purpose '${input.purpose ?? '(unspecified)'}'`
+    : allowed
+      ? `Policy ${policy.name}@${policy.version} permits the access`
+      : `Policy ${policy.name}@${policy.version} did not match the conditions`;
 
   const layers_used = layersTouchedByContext(ctx);
+  if (purposeBound) layers_used.push('consent');
+  // P10/E1: obligations only attach to an ALLOW; a DENY (or an obligation-free
+  // bundle) yields the pre-P10 allow/deny result with no obligations field.
+  const obligations = allowed && policy.obligations ? policy.obligations : undefined;
   const result: Omit<EvaluatePolicyResult, 'cached'> = {
     decision: allowed ? 'ALLOW' : 'DENY',
     reason,
     layers_used,
     projection_version,
+    ...(obligations ? { obligations } : {}),
   };
 
   await dataService.query(
-    `INSERT INTO policy.decision (policy_id, subject_id, target_id, decision, reason, layers_used, projection_version)
-     VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+    `INSERT INTO policy.decision (policy_id, subject_id, target_id, decision, reason, layers_used, projection_version, obligations)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb)`,
     [
       input.policy_id,
       input.subject_id,
@@ -100,10 +132,14 @@ export async function evaluatePolicy(input: EvaluatePolicyInput): Promise<Evalua
       result.reason,
       layers_used,
       projection_version,
+      obligations ? JSON.stringify(obligations) : null,
     ],
   );
 
-  await setCached(input.policy_id, input.subject_id, input.target_id, projection_version, result);
+  // Never cache purpose-bound decisions — consent state is live (E3).
+  if (!purposeBound) {
+    await setCached(input.policy_id, input.subject_id, input.target_id, projection_version, result);
+  }
 
   // FR-POL-3: fan-out sampled decisions to sdk-audit. Best-effort; never
   // blocks the evaluator hot path (emitEvent swallows failures).
@@ -119,6 +155,14 @@ export async function evaluatePolicy(input: EvaluatePolicyInput): Promise<Evalua
       reason: result.reason,
       layers_used: result.layers_used,
       projection_version,
+      // P10/E1: surface obligations in the audit chain so policy observability
+      // can see what mask/filter/audit_level/ttl was enforced per decision.
+      obligations: obligations ?? null,
+      // P10/E3: surface the consent gate so consent observability can see the
+      // purpose and whether a consent-derived denial occurred.
+      purpose: input.purpose ?? null,
+      purpose_bound: purposeBound,
+      consent_satisfied: consentSatisfied,
     },
     pool_index: POOL_INDEX,
     actor_kind: 'service',
@@ -151,6 +195,72 @@ export async function emitPolicyUpdated(policy: PolicyRecord, actor_id: string):
     subject_kind: 'policy',
     subject_id: policy.policy_id,
   });
+}
+
+/**
+ * P10/E4: produces a fail-closed decision when the evaluator is unavailable.
+ * Sensitive (default) classes DENY; low-risk classes may serve a short-TTL
+ * cached decision if one exists. Every degraded decision is audited best-effort.
+ */
+async function failClosedDecision(input: EvaluatePolicyInput, err: Error): Promise<EvaluatePolicyResult> {
+  const ctx = (input.context ?? {}) as Record<string, unknown>;
+  const projection_version = typeof ctx.projection_version === 'number' ? ctx.projection_version : 0;
+  const resourceClass = input.resource_class ?? 'sensitive';
+
+  let result: EvaluatePolicyResult;
+  if (resourceClass === 'low_risk') {
+    const cached = await getCached(
+      input.policy_id,
+      input.subject_id,
+      input.target_id,
+      projection_version,
+    ).catch(() => null);
+    result = cached
+      ? { ...cached, cached: true, degraded: true }
+      : {
+          decision: 'DENY',
+          reason: `evaluator_unavailable: no cached low-risk decision (${err.message})`,
+          layers_used: [],
+          projection_version,
+          cached: false,
+          degraded: true,
+        };
+  } else {
+    result = {
+      decision: 'DENY',
+      reason: `evaluator_unavailable: fail-closed for sensitive resource (${err.message})`,
+      layers_used: [],
+      projection_version,
+      cached: false,
+      degraded: true,
+    };
+  }
+
+  // Best-effort degraded-decision audit — never throw from the fail-closed path.
+  try {
+    await emitEvent({
+      event_type: 'policy.evaluated.v1',
+      payload: {
+        policy_id: input.policy_id,
+        subject_id: input.subject_id,
+        target_id: input.target_id ?? null,
+        decision: result.decision,
+        reason: result.reason,
+        degraded: true,
+        resource_class: resourceClass,
+        error: err.message,
+      },
+      pool_index: POOL_INDEX,
+      actor_kind: 'service',
+      actor_id: 'sdk-policy.evaluate.failclosed',
+      tenant_id: null,
+      subject_kind: 'persona',
+      subject_id: input.subject_id,
+    });
+  } catch {
+    // swallow — degraded audit is best-effort and must not mask the denial
+  }
+  return result;
 }
 
 function layersTouchedByContext(ctx: Record<string, unknown>): string[] {

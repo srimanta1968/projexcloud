@@ -1,0 +1,58 @@
+name: P10 CI Gate
+
+# P10/E7 — non-breaking integration & regression hardening.
+# Two required gates: a full workspace build, and the regression/isolation/chaos
+# test suites. Merge is blocked while either job is red (branch protection).
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main, 'p*/**']
+
+jobs:
+  # c3a982f1 — CI gate: pnpm -w build (+ additive-only migration check).
+  p10-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v3
+        with: { version: 9.0.0 }
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'pnpm'
+      - name: Install
+        run: pnpm install --frozen-lockfile
+      - name: Full workspace build
+        run: pnpm -w build
+      - name: Verify migrations are additive-only (no drops/renames)
+        run: node scripts/verify-additive-migrations.mjs
+
+  # 878da704 — CI gate: regression + isolation/chaos suites; block on red.
+  p10-tests:
+    runs-on: ubuntu-latest
+    needs: p10-build
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v3
+        with: { version: 9.0.0 }
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'pnpm'
+      - name: Install
+        run: pnpm install --frozen-lockfile
+      - name: Build (needed for dist-based tests)
+        run: pnpm -w build
+      - name: Doctrine lint (OC-1..OC-12, incl. OC-11/OC-12)
+        run: pnpm --filter @projexlight/lint-rules test
+      - name: Obligation leak-case unit tests
+        run: pnpm --filter @projexlight/contracts test
+      - name: P10 cross-SDK integration + regression suite
+        run: node --test tests/integration/p10-crosscutting.test.mjs
+      # Agent-isolation / chaos suites — run any package exposing them. The
+      # vector-namespace isolation probe + federation chaos drill run at gateway
+      # boot; package-level isolation suites run here. Block on red.
+      - name: Agent-isolation / chaos suites
+        run: pnpm -r --if-present run test:isolation && pnpm -r --if-present run test:chaos

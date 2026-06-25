@@ -6,6 +6,11 @@
 
 import crypto from 'crypto';
 
+// P10/E8 — observability taxonomy, OTel spans, Prometheus, SIEM detection.
+export * from './observability';
+export * from './prometheus';
+export * from './detection';
+
 export interface EnvelopeContext {
   trace_id: string;
   span_id: string;

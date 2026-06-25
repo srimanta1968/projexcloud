@@ -43,7 +43,21 @@ services:
       - ./feedback:/feedback                                             # Feedback files (read-write)
       - ${RESULTS_PATH:-../test-results}:/results                        # Test results output
       - ./mcp-config.json:/app/mcp-config.json:ro  # Owner project configuration
-      - ./registered_projects:/app/registered_projects                   # Multi-project registry
+
+      # ============================================================
+      # SHARED PROJECT REGISTRY (single source of truth)
+      # ============================================================
+      # SAME ~/.projexlight/registered_projects.json the Dev MCP uses, so this
+      # Test MCP sees every project's auth token + per-env URL. Host path comes
+      # from PROJEX_REGISTRY_DIR_HOST in .env (written by the setup scripts).
+      #
+      # Default (var unset, e.g. cloud where the Test MCP is launched by the
+      # ai-appgen container via API): a Docker NAMED VOLUME 'projex_registry'
+      # (declared below). In Fargate/ECS, mount EFS at /registry via the task
+      # definition and set PROJEX_REGISTRY_DIR=/registry, or rely purely on the
+      # per-request API context (projectId/apiUrl/apiKey) — the registry is
+      # optional and the server boots fine without it.
+      - ${PROJEX_REGISTRY_DIR_HOST:-projex_registry}:/registry
     extra_hosts:
       - "host.docker.internal:host-gateway"        # Enable host network access
     env_file:
@@ -51,6 +65,7 @@ services:
     environment:
       - WORKSPACE_PATH=/workspace
       - FEEDBACK_PATH=/feedback
+      - PROJEX_REGISTRY_DIR=/registry              # Shared registry mount (see volumes)
       - MCP_SERVER_PORT=8000
       - MCP_SERVER_HOST=0.0.0.0
       - MCP_CONFIG_FILE=/app/mcp-config.json
@@ -90,6 +105,12 @@ services:
       timeout: 10s
       retries: 3
       start_period: 40s
+
+# Named volume used as the shared-registry fallback when PROJEX_REGISTRY_DIR_HOST
+# is not set (cloud / standalone). Shared with the Dev MCP when both run under the
+# same compose project.
+volumes:
+  projex_registry:
 
 # ============================================================
 # TEST MCP SERVER CAPABILITIES

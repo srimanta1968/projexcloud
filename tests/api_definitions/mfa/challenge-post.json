@@ -1,23 +1,39 @@
 {
-  "name": "POST /api/mfa/challenge - Issue MFA challenge",
-  "endpoint": "/api/mfa/challenge",
-  "method": "POST",
-  "requiresAuth": true,
-  "expectedStatus": 201,
-  "taskId": "0a56d68b-c7cd-4456-91b2-88bcca766676",
-  "sprintId": "8ef1d09e-dd8e-4daf-8d03-54dcd9f812f8",
-  "featureId": "7e463119-3ef9-497a-96ca-8453f7a60048",
-  "epicId": "00996d23-f667-4a82-9285-7728ba357e7b",
-  "priority": 20,
-  "dependsOn": ["POST /api/auth/register"],
-  "testCases": [
-    {
-      "name": "Issue a TOTP challenge",
-      "headers": { "Authorization": "Bearer {{cache:auth.register.response.data.token}}" },
-      "payload": { "kind": "totp" },
-      "expectedStatus": 201
-    }
-  ],
-  "expectedResponse": { "data": { "challenge_id": "string", "kind": "string" } },
-  "captureResponse": { "mfa.challenge.response.data.challenge_id": "data.challenge_id" }
+ "name": "POST /api/mfa/challenge - Issue MFA challenge",
+ "endpoint": "/api/mfa/challenge",
+ "method": "POST",
+ "requiresAuth": true,
+ "expectedStatus": 201,
+ "taskId": "0a56d68b-c7cd-4456-91b2-88bcca766676",
+ "sprintId": "8ef1d09e-dd8e-4daf-8d03-54dcd9f812f8",
+ "featureId": "7e463119-3ef9-497a-96ca-8453f7a60048",
+ "epicId": "00996d23-f667-4a82-9285-7728ba357e7b",
+ "priority": 20,
+ "dependsOn": [
+  "POST /api/auth/register"
+ ],
+ "testCases": [
+  {
+   "name": "Issue a TOTP challenge",
+   "headers": {
+    "Authorization": "Bearer {{cache:auth.register.response.data.token}}"
+   },
+   "payload": {
+    "kind": "totp"
+   },
+   "expectedStatus": 201,
+   "testability": "manual"
+  }
+ ],
+ "expectedResponse": {
+  "data": {
+   "challenge_id": "string",
+   "kind": "string"
+  }
+ },
+ "captureResponse": {
+  "mfa.challenge.response.data.challenge_id": "data.challenge_id"
+ },
+ "testability": "manual",
+ "skipReason": "Requires a person-scoped JWT carrying sub/person_id; runner synthetic token lacks it (verified: returns 201 with a real login token). Covered by integration test."
 }

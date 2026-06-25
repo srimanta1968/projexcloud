@@ -1,0 +1,104 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Local LLM &amp; SDK Discovery · ProjexCloud</title><style>
+:root{--bg:#0d1117;--panel:#161b22;--ink:#e6edf3;--muted:#8b949e;--line:#30363d;--accent:#58a6ff;--ok:#3fb950}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.65 -apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif}
+a{color:var(--accent);text-decoration:none}a:hover{text-decoration:underline}
+.layout{display:grid;grid-template-columns:280px 1fr;min-height:100vh}
+aside{position:sticky;top:0;align-self:start;height:100vh;overflow:auto;background:var(--panel);border-right:1px solid var(--line);padding:20px 16px}
+aside h1{font-size:15px;margin:0 0 2px}aside .sub{color:var(--muted);font-size:12px;margin-bottom:16px}
+aside h2{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin:16px 0 6px}
+aside a{display:block;padding:6px 10px;border-radius:6px;color:var(--ink);font-size:13px}
+aside a:hover{background:#21262d;text-decoration:none}
+aside a.active{background:#1f6feb;color:#fff}
+main{padding:30px 42px;max-width:960px}
+h1,h2,h3,h4{line-height:1.3}
+h1{font-size:26px;margin:0 0 18px;padding-bottom:10px;border-bottom:1px solid var(--line)}
+h2{font-size:20px;margin:30px 0 10px;padding-bottom:6px;border-bottom:1px solid var(--line)}
+h3{font-size:16px;margin:22px 0 8px}h4{font-size:14px;margin:18px 0 6px;color:var(--muted)}
+p{margin:10px 0}
+code{background:#0b0f14;border:1px solid var(--line);border-radius:5px;padding:1px 5px;font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:.88em}
+pre{background:#0b0f14;border:1px solid var(--line);border-radius:8px;padding:12px 14px;overflow:auto;margin:12px 0}
+pre code{background:none;border:0;padding:0;font-size:12.5px;line-height:1.55;color:#c9d1d9}
+table{border-collapse:collapse;width:100%;margin:14px 0;font-size:13.5px}
+th,td{border:1px solid var(--line);padding:8px 11px;text-align:left;vertical-align:top}
+th{background:#1c2330;color:var(--muted);font-weight:600}
+tr:nth-child(even) td{background:#11161d}
+blockquote{margin:12px 0;padding:8px 16px;border-left:3px solid var(--accent);background:#11161d;border-radius:0 8px 8px 0;color:#c9d1d9}
+ul{margin:10px 0;padding-left:22px}li{margin:4px 0}
+ul.task{list-style:none;padding-left:4px}ul.task li::before{content:"☐ ";color:var(--muted)}
+hr{border:0;border-top:1px solid var(--line);margin:24px 0}
+.crumb{color:var(--muted);font-size:12px;margin-bottom:14px}
+</style></head><body>
+<div class="layout">
+<aside><h1>ProjexCloud</h1><div class="sub">Setup &amp; Deployment</div>
+<h2>Guides</h2>
+<a class="" href="README.html">Overview / Index</a>
+<a class="" href="dev-environment.html">Developer Environment</a>
+<a class="" href="production-overview.html">Production — Overview</a>
+<a class="" href="production-aws-ec2.html">Production — AWS (EC2)</a>
+<a class="" href="production-digitalocean.html">Production — DigitalOcean</a>
+<a class="active" href="local-llm-and-discovery.html">Local LLM &amp; Discovery</a>
+<h2>Reference</h2>
+<a href="../v3.1/api_docs/index.html">API Reference ↗</a>
+<a href="../v3.1/api_docs/test-plan.html">QA Test Plan ↗</a>
+</aside>
+<main>
+<div class="crumb">docs / setup / local-llm-and-discovery.html</div>
+<h1>Local LLM &amp; SDK Discovery</h1>
+<p>Answers a common question: <strong>&quot;is the local LLM we use for discovery part of the Docker setup?&quot;</strong></p>
+<p><strong>Short answer:</strong> SDK *discovery* does <strong>not</strong> run as a separate LLM container. The discovery model is an <strong>in-process embedding model</strong> — there is no LLM server to add to <code>docker-compose</code>. The only Docker concern is caching that model&#x27;s weights (~33 MB) so it isn&#x27;t re-downloaded. A *separate, optional* local <strong>generation</strong> LLM (Ollama / vLLM) exists only for on-prem/air-gapped deployments and is operator-supplied. Both are covered below for dev and prod.</p>
+<h2>1. The two things people mean by &quot;local LLM&quot;</h2>
+<table><thead><tr><th></th><th><strong>Discovery embeddings</strong></th><th><strong>On-prem generation LLM</strong></th></tr></thead><tbody><tr><td>Purpose</td><td>Intent → SDK semantic search (catalog RAG)</td><td>Text/chat completions for tenants</td></tr><tr><td>Model</td><td><code>Xenova/bge-small-en-v1.5</code> (INT8 ONNX, 384-dim)</td><td>e.g. <code>llama-3.1-70b-instruct</code></td></tr><tr><td>Runtime</td><td><strong>In-process</strong> via <code>@huggingface/transformers</code></td><td><strong>External server</strong>: Ollama / vLLM</td></tr><tr><td>Container?</td><td><strong>No</strong> — runs inside <code>registry-mcp</code> / gateway</td><td>Operator-run, in-cluster (P8 Variant C only)</td></tr><tr><td>Needed by default?</td><td>Yes (discovery)</td><td>No (only air-gapped/sovereign deploys)</td></tr><tr><td>Code</td><td><code>packages/sdk-registry/src/embeddings.ts</code></td><td><code>sdk-ai-gateway</code> <code>localProviderResolver</code> + <code>sdk-onprem</code></td></tr></tbody></table>
+<h2>2. How discovery actually works (no server)</h2>
+<ul><li>The SDK catalog and a <strong>prebuilt vector index ship committed</strong> in</li></ul>
+<p>  <code>packages/sdk-registry/dist/</code>:   <code>registry.catalog.json</code>, <code>registry.embeddings.bin</code>, <code>registry.embeddings.meta.json</code>.</p>
+<ul><li>The **<code>registry-mcp</code> service** (port <code>3600</code>) is the discovery / MCP surface.</li></ul>
+<p>  It loads that prebuilt index at boot (<code>embeddings=loaded</code>).</p>
+<ul><li>To answer a query it embeds the <strong>live intent string</strong> with the in-process</li></ul>
+<p>  <code>bge-small</code> ONNX model (lazy-loaded on first query). The model file is fetched   once from Hugging Face and cached, then runs fully offline — no per-query API   cost, no network.</p>
+<ul><li>The <code>api-gateway</code> only embeds the <strong>whole catalog</strong> when</li></ul>
+<p>  <code>CATALOG_SYNC_ON_BOOT=true</code> (a one-time/CI reindex job, off by default).</p>
+<p>So the &quot;local LLM for discovery&quot; is a 33 MB ONNX file loaded by Node, not a service. The Docker task is <strong>persisting that file</strong>, not running a container.</p>
+<h2>3. Developer setup</h2>
+<p>Discovery needs nothing extra for the API gateway. To run the <strong>discovery service</strong> locally:</p>
+<pre><code>pnpm --filter @projexlight/registry-mcp build
+REGISTRY_MCP_CATALOG_PATH=packages/sdk-registry/dist/registry.catalog.json \
+REGISTRY_MCP_EMBEDDINGS_BIN=packages/sdk-registry/dist/registry.embeddings.bin \
+REGISTRY_MCP_EMBEDDINGS_META=packages/sdk-registry/dist/registry.embeddings.meta.json \
+REGISTRY_MCP_AUTH_MODE=disabled \
+pnpm --filter @projexlight/registry-mcp start
+# → registry-mcp listening on 0.0.0.0:3600 — catalog=NN SDKs, embeddings=loaded</code></pre>
+<p>The <strong>first</strong> semantic query downloads <code>bge-small-en-v1.5</code> (~33 MB) from Hugging Face; subsequent queries are offline. No GPU required (INT8 CPU ONNX).</p>
+<blockquote>On a machine with no internet, pre-populate the transformers.js cache (set <code>HF_HOME</code> to a directory you copied from an online machine) before the first query.</blockquote>
+<h2>4. Production setup (Docker)</h2>
+<p>A <code>discovery</code> profile is included in <code>scripts/setup/docker-compose.prod.yml</code>. It builds <code>services/registry-mcp/Dockerfile</code>, serves the committed catalog + index, and mounts a named volume (<code>hf_cache</code>) so the model downloads <strong>once</strong> and survives container recreates.</p>
+<pre><code># Bring up the gateway AND the discovery service:
+docker compose --env-file .env.prod -f scripts/setup/docker-compose.prod.yml \
+  --profile selfhosted --profile discovery up -d --build
+# or, with managed DB/Redis:
+docker compose --env-file .env.prod -f scripts/setup/docker-compose.prod.yml \
+  --profile managed --profile discovery up -d --build
+
+curl -fsS http://localhost:3600/healthz</code></pre>
+<p>Relevant env (already defaulted in the image; override in <code>.env.prod</code> if needed):</p>
+<table><thead><tr><th>Variable</th><th>Default</th><th>Meaning</th></tr></thead><tbody><tr><td><code>DISCOVERY_PORT</code></td><td><code>3600</code></td><td>Host port for registry-mcp</td></tr><tr><td><code>REGISTRY_MCP_AUTH_MODE</code></td><td><code>disabled</code></td><td><code>jwt</code> to require per-tenant auth when exposed</td></tr><tr><td><code>HF_HOME</code></td><td><code>/app/.hf-cache</code></td><td>transformers.js model cache (mounted as the <code>hf_cache</code> volume)</td></tr></tbody></table>
+<h3>Air-gapped / no egress at runtime</h3>
+<p>Bake the model into the image so no network is needed at runtime: uncomment the pre-warm <code>RUN</code> line in <code>services/registry-mcp/Dockerfile</code> (it embeds one string at build time, populating <code>HF_HOME</code>). For air-gapped <strong>builds</strong>, instead copy a pre-downloaded cache into <code>/app/.hf-cache</code> (or mount the <code>hf_cache</code> volume pre-populated). The committed <code>registry.embeddings.bin</code> already covers the catalog vectors; the model is only needed to embed live queries.</p>
+<h2>5. On-prem generation LLM (Ollama / vLLM) — optional, P8 Variant C only</h2>
+<p>This is <strong>separate from discovery</strong> and only relevant to on-prem/sovereign deployments that must not call cloud LLMs (<code>FR-ONP-5/8</code>):</p>
+<ul><li>The operator runs <strong>Ollama or vLLM in-cluster</strong> and registers each model</li></ul>
+<p>  (endpoint URL + model id) in the <code>onprem.local_llm_model</code> table.</p>
+<ul><li><code>sdk-onprem</code> registers a resolver into <code>sdk-ai-gateway</code>&#x27;s</li></ul>
+<p>  <code>localProviderResolver</code>; the AI gateway then prefers the local model over any   cloud route. A latency probe (<code>localLlmProbe</code>, <code>ONPREM_PROBE_*</code> env) disables a   model whose p99 exceeds budget.</p>
+<ul><li>ProjexCloud ships the <strong>contract</strong>, not the LLM server — the operator supplies</li></ul>
+<p>  the Ollama/vLLM deployment and endpoint. It is <strong>not</strong> part of the default   <code>docker-compose.prod.yml</code>. To experiment locally:</p>
+<p>  ``<code>bash   docker run -d --name ollama -p 11434:11434 ollama/ollama   docker exec -it ollama ollama pull llama3.1   # then register the endpoint via the on-prem admin flow (sdk-onprem)   </code>``</p>
+<p>Cloud (non-sovereign) deployments skip this entirely and use the configured cloud provider keys via <code>sdk-ai-gateway</code>.</p>
+<h2>6. So, did the Docker setup miss anything?</h2>
+<p>No model server was missing — discovery is in-process. What this update adds:</p>
+<ul><li><code>services/registry-mcp/Dockerfile</code> (the discovery service had none).</li><li>A <code>discovery</code> profile + persistent <code>hf_cache</code> volume in</li></ul>
+<p>  <code>docker-compose.prod.yml</code> so the embedding model is cached, not re-downloaded.</p>
+<ul><li>This document, covering dev + prod + the air-gapped and on-prem paths.</li></ul>
+</main></div></body></html>

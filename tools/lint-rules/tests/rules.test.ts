@@ -77,4 +77,20 @@ describe('AC-13 · OC lint rules fire on known-bad fixtures', () => {
     expect(out).toMatch(/@projexlight\/oc-2-registered-event-type/);
     expect(out).toMatch(/profile\.field\.shred\.v1/);
   });
+
+  // -------------------------------------------------------------------
+  // P10/E1 — OC-11 obligation enforcement
+  // -------------------------------------------------------------------
+
+  it('P10 · OC-11 flags a governed read that serializes raw rows', () => {
+    const out = lintFixture('oc-11-bad.ts');
+    expect(out).toMatch(/@projexlight\/oc-11-obligation-enforcement-required/);
+    expect(out).toMatch(/OC-11/);
+  });
+
+  it('P10 · OC-12 flags provisioning without a registry row', () => {
+    const out = lintFixture('oc-12-bad.ts');
+    expect(out).toMatch(/@projexlight\/oc-12-resource-registered-required/);
+    expect(out).toMatch(/OC-12/);
+  });
 });

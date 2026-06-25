@@ -59,9 +59,27 @@ import {
   startSloAlarms,
 } from '@projexlight/sdk-meter';
 import { server as secretsServer } from '@projexlight/sdk-secrets';
-import { migrationsDir as tenantMigrations, server as tenantServer, createTenant as tenantCreate, listTenants as tenantList } from '@projexlight/sdk-tenant';
+import { migrationsDir as tenantMigrations, server as tenantServer, createTenant as tenantCreate, listTenants as tenantList, ensureApp as appEnsure } from '@projexlight/sdk-tenant';
 import { migrationsDir as consentMigrations, server as consentServer } from '@projexlight/sdk-consent';
 import { migrationsDir as policyMigrations, server as policyServer } from '@projexlight/sdk-policy';
+import {
+  migrationsDir as principalTokenMigrations,
+  mintPrincipalToken,
+  startPrincipalKeyRotation,
+} from '@projexlight/sdk-principal-token';
+import {
+  migrationsDir as resourceRegistryMigrations,
+  server as resourceRegistryServer,
+} from '@projexlight/sdk-resource-registry';
+import { requireAuth } from '@projexlight/sdk-identity';
+import { resolveIdentityContext, getEmpiMetrics } from '@projexlight/sdk-identity-resolver';
+import { emitEvent, addEmitTap } from '@projexlight/sdk-audit';
+import {
+  registry as metricsRegistry,
+  recordMdmMetrics,
+  recordConsentCheck,
+  runDetections,
+} from '@projexlight/telemetry';
 import { migrationsDir as rebacMigrations, server as rebacServer } from '@projexlight/sdk-rebac';
 import { migrationsDir as apiKeysMigrations, server as apiKeysServer } from '@projexlight/sdk-api-keys';
 import { migrationsDir as projectionMigrations } from '@projexlight/sdk-projection';
@@ -174,7 +192,7 @@ import {
 import '@projexlight/connector-slack';
 import { migrationsDir as profileMigrations, server as profileServer } from '@projexlight/sdk-profile';
 import { migrationsDir as personaMigrations, server as personaServer } from '@projexlight/sdk-persona';
-import { server as resolverServer } from '@projexlight/sdk-identity-resolver';
+import { server as resolverServer, migrationsDir as resolverMigrations } from '@projexlight/sdk-identity-resolver';
 import {
   migrationsDir as dataRightsMigrations,
   server as dataRightsServer,
@@ -335,6 +353,7 @@ import { server as hdkCameraServer }      from '@projexlight/hdk-camera';
 import { server as hdkMapServer }         from '@projexlight/hdk-map';
 import { config } from './config';
 import { eventRegistryRoutes } from './routes/events';
+import { obligationEnforcementPlugin } from './plugins/obligationEnforcement';
 
 /**
  * api-gateway — the prototype service binary that hosts every SDK's server
@@ -350,11 +369,42 @@ app.register(cors, {
   origin: config.corsOrigin,
   credentials: true,
 });
+// P10/E1 — central obligation enforcement (mask/filter) for governed reads.
+// Registered before route surfaces so its preSerialization hook covers every
+// handler that attaches req.governedObligations from a policy decision.
+app.register(obligationEnforcementPlugin);
 // P7 FR-DSP-2 — WebSocket plugin for dispatch live updates.
 app.register(websocket);
 
 app.get('/health', async (): Promise<{ status: string; service: string; timestamp: string }> => {
   return { status: 'ok', service: config.appName, timestamp: new Date().toISOString() };
+});
+
+// P10/E8 — Prometheus scrape endpoint. Refreshes MDM gauges from the EMPI
+// service on each scrape, then renders the full registry (8-type taxonomy).
+const httpDuration = metricsRegistry.histogram(
+  'http_request_duration_seconds',
+  'HTTP request duration in seconds',
+  'service',
+);
+app.addHook('onResponse', async (req, reply) => {
+  try {
+    httpDuration.observe(
+      { method: req.method, status_class: `${Math.floor(reply.statusCode / 100)}xx` },
+      reply.elapsedTime / 1000,
+    );
+  } catch {
+    // metrics must never affect responses
+  }
+});
+app.get('/metrics', async (_req, reply) => {
+  try {
+    recordMdmMetrics(await getEmpiMetrics());
+  } catch {
+    // best-effort: MDM gauges refresh on the next scrape
+  }
+  reply.header('Content-Type', 'text/plain; version=0.0.4');
+  return metricsRegistry.render();
 });
 
 // Mount each SDK's server surface and shared registry routes.
@@ -370,6 +420,8 @@ app.register(consentServer.registerRoutes);
 app.register(policyServer.registerRoutes);
 app.register(rebacServer.registerRoutes);
 app.register(apiKeysServer.registerRoutes);
+// P10/E5 — resource ownership registry read/register API.
+app.register(resourceRegistryServer.registerRoutes);
 
 // P3 / Wave 3 — Canonical Entities + Privacy Ops + HDK Foundation.
 app.register(profileServer.registerRoutes);
@@ -528,6 +580,70 @@ app.get<{
 });
 
 // ─────────────────────────────────────────────────────────────────────
+// P10/E2 — POST /api/principal-token: mint an audience-bound, short-TTL
+// platform principal token from the SERVER-RESOLVED identity context. All
+// claims derive from the verified JWT / resolved IdentityContext — never from
+// request input (the only caller value is the target audience). Downstream
+// services verify this token (requirePrincipalToken) instead of trusting
+// forwarded user headers (closes the confused-deputy class, Scenario 5).
+// ─────────────────────────────────────────────────────────────────────
+app.post<{ Body: { audience?: string; ttl_seconds?: number; purpose?: string } }>(
+  '/api/principal-token',
+  { preHandler: requireAuth },
+  async (req, reply) => {
+    const auth = req.auth;
+    if (!auth?.sub) {
+      return reply.code(401).send({ error: 'Unauthorized' });
+    }
+    const audience = req.body?.audience;
+    if (!audience) {
+      return reply.code(400).send({ error: 'ValidationError', details: ['audience is required'] });
+    }
+    try {
+      // Prefer the full resolved IdentityContext; fall back to the verified
+      // six-layer JWT claims when app/tenant aren't bound yet (both are
+      // server-resolved identity, never request input).
+      const resolved =
+        auth.app_id && auth.tenant_id
+          ? await resolveIdentityContext({
+              person_id: auth.sub,
+              app_id: auth.app_id,
+              tenant_id: auth.tenant_id,
+            })
+          : {
+              person_id: auth.sub,
+              app_id: auth.app_id ?? '',
+              tenant_id: auth.tenant_id ?? '',
+              all_persona_ids: auth.all_persona_ids ?? [],
+              primary_persona_id: auth.primary_persona_id ?? null,
+              effective_scopes: [],
+              effective_role_closure: [],
+              projection_version: auth.projection_version ?? 0,
+            };
+      // P10/E9 — capture device posture + network zone at the gateway and
+      // thread the requested purpose into the principal.
+      const headerStr = (v: unknown): string | undefined =>
+        typeof v === 'string' && v.length > 0 ? v : undefined;
+      const principal = {
+        ...resolved,
+        device_trust: headerStr(req.headers['x-device-trust']),
+        network_zone: headerStr(req.headers['x-network-zone']),
+        purpose: req.body?.purpose,
+      };
+      const token = await mintPrincipalToken(principal, {
+        audience,
+        ttlSeconds: req.body?.ttl_seconds,
+        actorKind: auth.actor?.kind,
+      });
+      return reply.code(201).send({ data: { token, audience, sub: principal.person_id } });
+    } catch (err) {
+      req.log.error(err);
+      return reply.code(500).send({ error: (err as Error).message });
+    }
+  },
+);
+
+// ─────────────────────────────────────────────────────────────────────
 // Admin-token-guarded tenant provisioning (used by projexcloud-admin
 // portal). Wraps sdk-tenant service functions so operators don't need
 // a tenant-scoped JWT.
@@ -586,6 +702,34 @@ app.post<{ Body: {
     return reply.code(500).send({ error: msg });
   }
 });
+
+// Provision the parent app (and its owning org) a tenant references via
+// tenant.app_id. Idempotent — returns the existing app if app_id already
+// exists. Without this there is no admin path to create the first app, so
+// POST /admin/tenants fails the tenant_app_id_fkey FK.
+app.post<{ Body: { app_id: string; display_name: string; org_name?: string } }>(
+  '/admin/apps',
+  async (req, reply) => {
+    if (!checkAdminToken(req, reply)) return;
+    const b = req.body ?? ({} as Record<string, never>);
+    if (!b.app_id || !b.display_name) {
+      return reply.code(400).send({
+        error: 'ValidationError',
+        details: ['app_id, display_name are required'],
+      });
+    }
+    try {
+      const app_record = await appEnsure({
+        app_id: b.app_id,
+        display_name: b.display_name,
+        org_name: b.org_name,
+      });
+      return reply.code(201).send({ data: { app: app_record } });
+    } catch (err) {
+      return reply.code(500).send({ error: (err as Error).message });
+    }
+  },
+);
 
 app.post<{
   Body: { lookback_hours?: number };
@@ -699,6 +843,8 @@ const start = async (): Promise<void> => {
       { sdk: 'sdk-tenant', dir: tenantMigrations },
       { sdk: 'sdk-consent', dir: consentMigrations },
       { sdk: 'sdk-policy', dir: policyMigrations },
+      { sdk: 'sdk-principal-token', dir: principalTokenMigrations },
+      { sdk: 'sdk-resource-registry', dir: resourceRegistryMigrations },
       { sdk: 'sdk-rebac', dir: rebacMigrations },
       { sdk: 'sdk-api-keys', dir: apiKeysMigrations },
       { sdk: 'sdk-projection', dir: projectionMigrations },
@@ -709,6 +855,7 @@ const start = async (): Promise<void> => {
       { sdk: 'sdk-device', dir: deviceMigrations },
       { sdk: 'sdk-feature-flags', dir: featureFlagsMigrations },
       { sdk: 'sdk-data-rights', dir: dataRightsMigrations },
+      { sdk: 'sdk-identity-resolver', dir: resolverMigrations },
       { sdk: 'hdk-sync', dir: hdkSyncMigrations },
       { sdk: 'hdk-foundation', dir: hdkFoundationMigrations },
       // P4 — Operational + Billing
@@ -893,6 +1040,32 @@ const start = async (): Promise<void> => {
       enabled: process.env.AGENT_SIGNING_KEY_ROTATION_ENABLED !== 'false',
     });
     app.addHook('onClose', async () => signingKeyRotationHandle.stop());
+
+    // P10/E2 — principal-token signing-key rotation. The signing secret is
+    // wrapped at rest by a vault-sourced key (PRINCIPAL_TOKEN_WRAP_KEY,
+    // provisioned from sdk-vault). Rotation retires the old key with a
+    // TTL-overlap window so in-flight short-TTL tokens stay verifiable, and
+    // emits an audited security.principal_token.key_rotated.v1 event.
+    const principalKeyRotationHandle = startPrincipalKeyRotation({
+      enabled: process.env.PRINCIPAL_TOKEN_KEY_ROTATION_ENABLED !== 'false',
+      intervalMs: parseInt(
+        process.env.PRINCIPAL_TOKEN_KEY_ROTATION_INTERVAL_MS || String(24 * 60 * 60 * 1000),
+        10,
+      ),
+      onRotate: async (kid) => {
+        await emitEvent({
+          event_type: 'security.principal_token.key_rotated.v1',
+          payload: { kid },
+          pool_index: 'admin',
+          actor_kind: 'service',
+          actor_id: 'api-gateway.principal-token',
+          tenant_id: null,
+          subject_kind: 'signing_key',
+          subject_id: kid,
+        });
+      },
+    });
+    app.addHook('onClose', async () => principalKeyRotationHandle.stop());
 
     // P7 G11 — Iceberg backend wiring. Env-driven: ICEBERG_BACKEND_DRIVER ∈
     // {nessie, glue, none}, ICEBERG_BACKEND_BASE_URL, ICEBERG_BACKEND_TOKEN.
@@ -1147,7 +1320,28 @@ const start = async (): Promise<void> => {
     } catch (err) {
       console.warn('[api-gateway] BYOK real KMS adapter wiring failed:', (err as Error).message);
     }
-    setSiemForwarder(installAutoSiemForwarder());
+    const siemForwarder = installAutoSiemForwarder();
+    setSiemForwarder(siemForwarder);
+    // P10/E8 — run security detection rules over the audit stream and route
+    // matches to SIEM/XDR via the vault forwarder; also record consent metrics.
+    addEmitTap((e) => {
+      void runDetections(
+        {
+          event_type: e.event_type,
+          actor_id: e.actor_id,
+          tenant_id: e.tenant_id ?? null,
+          subject_id: e.subject_id ?? undefined,
+          payload: (e.payload ?? {}) as Record<string, unknown>,
+        },
+        siemForwarder as unknown as Parameters<typeof runDetections>[1],
+      );
+      if (e.event_type === 'policy.evaluated.v1') {
+        const p = (e.payload ?? {}) as Record<string, unknown>;
+        if (typeof p.purpose === 'string') {
+          recordConsentCheck(p.purpose, p.consent_satisfied === true, null);
+        }
+      }
+    });
     if (config.redis.enabled) {
       void installByokInvalidator().catch((err) =>
         console.warn('[api-gateway] BYOK invalidator subscribe failed:', (err as Error).message),

@@ -49,7 +49,20 @@ services:
       # ============================================================
       - ./feedback:/feedback                       # Feedback files (read-write)
       - ./mcp-config.json:/app/mcp-config.json:ro  # Owner project configuration
-      - ./registered_projects:/app/registered_projects  # Multi-project registry
+
+      # ============================================================
+      # SHARED PROJECT REGISTRY (single source of truth)
+      # ============================================================
+      # The registered_projects.json lives in the user's hidden home folder
+      # (~/.projexlight) and is mounted into BOTH the Dev and Test MCP at the
+      # same fixed path. PROJEX_REGISTRY_DIR_HOST is written into .env by the
+      # setup scripts (cross-OS absolute path). One file = one source of truth.
+      #
+      # Default (var unset, e.g. cloud / standalone where no setup script ran):
+      # a Docker NAMED VOLUME 'projex_registry' (declared below) — still shared
+      # between the Dev and Test MCP. In Fargate/ECS point PROJEX_REGISTRY_DIR
+      # at an EFS mount instead, or rely purely on per-request API context.
+      - ${PROJEX_REGISTRY_DIR_HOST:-projex_registry}:/registry
 
       # Per-project .projexlight folders (mounted automatically)
       # Owner project: ../.projexlight is accessible via /workspace/.projexlight
@@ -62,6 +75,7 @@ services:
     environment:
       - WORKSPACE_PATH=/workspace
       - FEEDBACK_PATH=/feedback
+      - PROJEX_REGISTRY_DIR=/registry              # Shared registry mount (see volumes)
       - MCP_SERVER_PORT=8766
       - MCP_SERVER_HOST=0.0.0.0
       - MCP_CONFIG_FILE=/app/mcp-config.json
@@ -77,6 +91,12 @@ services:
       timeout: 10s
       retries: 3
       start_period: 40s
+
+# Named volume used as the shared-registry fallback when PROJEX_REGISTRY_DIR_HOST
+# is not set (cloud / standalone). When the setup scripts set that var to
+# ~/.projexlight, this volume is simply unused.
+volumes:
+  projex_registry:
 
 # ============================================================
 # DEV MCP SERVER CAPABILITIES

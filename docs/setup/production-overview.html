@@ -1,0 +1,126 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Production Setup — Overview · ProjexCloud</title><style>
+:root{--bg:#0d1117;--panel:#161b22;--ink:#e6edf3;--muted:#8b949e;--line:#30363d;--accent:#58a6ff;--ok:#3fb950}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.65 -apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif}
+a{color:var(--accent);text-decoration:none}a:hover{text-decoration:underline}
+.layout{display:grid;grid-template-columns:280px 1fr;min-height:100vh}
+aside{position:sticky;top:0;align-self:start;height:100vh;overflow:auto;background:var(--panel);border-right:1px solid var(--line);padding:20px 16px}
+aside h1{font-size:15px;margin:0 0 2px}aside .sub{color:var(--muted);font-size:12px;margin-bottom:16px}
+aside h2{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin:16px 0 6px}
+aside a{display:block;padding:6px 10px;border-radius:6px;color:var(--ink);font-size:13px}
+aside a:hover{background:#21262d;text-decoration:none}
+aside a.active{background:#1f6feb;color:#fff}
+main{padding:30px 42px;max-width:960px}
+h1,h2,h3,h4{line-height:1.3}
+h1{font-size:26px;margin:0 0 18px;padding-bottom:10px;border-bottom:1px solid var(--line)}
+h2{font-size:20px;margin:30px 0 10px;padding-bottom:6px;border-bottom:1px solid var(--line)}
+h3{font-size:16px;margin:22px 0 8px}h4{font-size:14px;margin:18px 0 6px;color:var(--muted)}
+p{margin:10px 0}
+code{background:#0b0f14;border:1px solid var(--line);border-radius:5px;padding:1px 5px;font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:.88em}
+pre{background:#0b0f14;border:1px solid var(--line);border-radius:8px;padding:12px 14px;overflow:auto;margin:12px 0}
+pre code{background:none;border:0;padding:0;font-size:12.5px;line-height:1.55;color:#c9d1d9}
+table{border-collapse:collapse;width:100%;margin:14px 0;font-size:13.5px}
+th,td{border:1px solid var(--line);padding:8px 11px;text-align:left;vertical-align:top}
+th{background:#1c2330;color:var(--muted);font-weight:600}
+tr:nth-child(even) td{background:#11161d}
+blockquote{margin:12px 0;padding:8px 16px;border-left:3px solid var(--accent);background:#11161d;border-radius:0 8px 8px 0;color:#c9d1d9}
+ul{margin:10px 0;padding-left:22px}li{margin:4px 0}
+ul.task{list-style:none;padding-left:4px}ul.task li::before{content:"☐ ";color:var(--muted)}
+hr{border:0;border-top:1px solid var(--line);margin:24px 0}
+.crumb{color:var(--muted);font-size:12px;margin-bottom:14px}
+</style></head><body>
+<div class="layout">
+<aside><h1>ProjexCloud</h1><div class="sub">Setup &amp; Deployment</div>
+<h2>Guides</h2>
+<a class="" href="README.html">Overview / Index</a>
+<a class="" href="dev-environment.html">Developer Environment</a>
+<a class="active" href="production-overview.html">Production — Overview</a>
+<a class="" href="production-aws-ec2.html">Production — AWS (EC2)</a>
+<a class="" href="production-digitalocean.html">Production — DigitalOcean</a>
+<a class="" href="local-llm-and-discovery.html">Local LLM &amp; Discovery</a>
+<h2>Reference</h2>
+<a href="../v3.1/api_docs/index.html">API Reference ↗</a>
+<a href="../v3.1/api_docs/test-plan.html">QA Test Plan ↗</a>
+</aside>
+<main>
+<div class="crumb">docs / setup / production-overview.html</div>
+<h1>Production Setup — Overview (read first)</h1>
+<p>Shared concepts for deploying ProjexCloud to any cloud. The cloud-specific guides (<a href="./production-aws-ec2.html">AWS EC2</a>, <a href="./production-digitalocean.html">DigitalOcean</a>) only cover the parts that differ (VM creation, managed Postgres/Redis, firewalls, TLS). Everything below is common to all of them.</p>
+<h2>1. Architecture in production</h2>
+<pre><code>            ┌───────────────────────┐
+   HTTPS    │  Load balancer / TLS  │   (ALB / DO LB / Nginx + certbot)
+  ───────▶  │  reverse proxy        │
+            └──────────┬────────────┘
+                       │ :3000
+            ┌──────────▼────────────┐
+            │   api-gateway         │  Fastify; imports ~90 SDKs;
+            │  (Docker container)   │  auto-runs all migrations on boot
+            └───┬─────────┬─────────┘
+                │         │
+        ┌───────▼──┐  ┌───▼───────┐   (optional)
+        │ Postgres │  │  Redis    │   Kafka / ClickHouse / OpenSearch
+        │ (managed)│  │ (managed) │
+        └──────────┘  └───────────┘</code></pre>
+<p>The <strong>api-gateway is the only required compute</strong>. The other services (<code>identity-projector</code>, <code>lineage-projector</code>, <code>meter-collector</code>, <code>pool-federation-runtime</code>, <code>semantic-service</code>) are optional scale-out workers you add once traffic warrants — each has its own Dockerfile and reads the same env. See <a href="#7-scaling-out">Scaling</a> and <code>docs/v3.1/SCALING-RUNBOOK.md</code>.</p>
+<h2>2. Two deployment modes</h2>
+<p><code>scripts/setup/prod-setup.sh</code> supports both:</p>
+<table><thead><tr><th>Mode</th><th>What runs in Docker on the VM</th><th>Postgres / Redis</th><th>When to use</th></tr></thead><tbody><tr><td><code>--mode selfhosted</code></td><td>api-gateway <strong>+ Postgres + Redis</strong></td><td>containers on the VM</td><td>Smallest footprint, demos, single-box prod</td></tr><tr><td><code>--mode managed</code></td><td>api-gateway <strong>only</strong></td><td><strong>managed</strong> RDS/ElastiCache or DO Managed DB/Redis</td><td>Real production — backups, HA, scaling handled by the cloud</td></tr></tbody></table>
+<p><strong>Recommendation:</strong> use <code>managed</code> for anything customer-facing so the database has automated backups, failover and point-in-time recovery.</p>
+<h2>3. Database &amp; migrations — there is no manual SQL</h2>
+<p>On every boot the gateway runs each SDK&#x27;s migrations in dependency order (forward-only, sha256-tracked in a migrations ledger table). Consequences:</p>
+<ul><li><strong>First deploy:</strong> point the gateway at an <strong>empty</strong> database; it creates the</li></ul>
+<p>  entire schema itself. Give it a generous health-check <code>start_period</code> (≥ 60s)   for the first boot.</p>
+<ul><li><strong>Upgrades:</strong> deploy the new image and restart; new migrations apply</li></ul>
+<p>  automatically, already-applied ones are skipped.</p>
+<ul><li><strong>Rollback:</strong> migrations are forward-only. Roll back by restoring a database</li></ul>
+<p>  snapshot taken <strong>before</strong> the deploy — always snapshot the managed DB before   a release.</p>
+<p>The DB user the gateway connects as therefore needs DDL rights (CREATE TABLE/INDEX/TYPE) on its database.</p>
+<p><strong>Required extensions:</strong> the cluster must have <strong>pgvector</strong> (sdk-agent-runtime) and <strong>PostGIS</strong> (sdk-geo) available, or the gateway aborts on boot. The bundled <code>scripts/setup/postgres.Dockerfile</code> bakes both in (used by the self-hosted profile); for managed Postgres (RDS / DO) enable them via the provider&#x27;s extension mechanism. <code>prod-setup.sh --mode selfhosted</code> runs <code>ensure-pg-extensions.sh</code> to verify/install them before the gateway starts.</p>
+<h2>4. Environment &amp; secrets</h2>
+<p>Copy the template and fill it in on the host (never commit it):</p>
+<pre><code>cp scripts/setup/.env.prod.example .env.prod</code></pre>
+<p>Must-set before <code>prod-setup.sh</code> will start (it refuses on <code>CHANGE_ME</code>/empty):</p>
+<table><thead><tr><th>Variable</th><th>Notes</th></tr></thead><tbody><tr><td><code>DB_PASSWORD</code></td><td>Managed DB password</td></tr><tr><td><code>ADMIN_OPS_TOKEN</code></td><td>Shared secret for <code>/admin/*</code> operator endpoints + seeding. <code>openssl rand -hex 32</code></td></tr><tr><td><code>JWT_SECRET</code></td><td>Long random string. <code>openssl rand -hex 32</code></td></tr></tbody></table>
+<p>Key others: <code>DB_HOST</code>/<code>DB_PORT</code>/<code>DB_NAME</code>/<code>DB_USER</code>, <code>DB_SSL=true</code> for managed Postgres, <code>REDIS_HOST</code>/<code>REDIS_PASSWORD</code>, <code>CORS_ORIGIN</code> (your app domain), <code>GATEWAY_PORT</code>. Full list with comments is in <code>.env.prod.example</code>. In a mature setup, inject these from the cloud&#x27;s secret store (AWS Secrets Manager, DO secrets, Vault) rather than a file on disk.</p>
+<h2>5. Deploy procedure (cloud-agnostic)</h2>
+<p>On the target Linux host, as the deploy user, from the repo root:</p>
+<pre><code># 0. Provision DB/Redis + open the firewall  → see your cloud-specific doc
+# 1. Configure
+cp scripts/setup/.env.prod.example .env.prod &amp;&amp; $EDITOR .env.prod
+# 2. Bring up the stack (builds the image, starts containers, runs migrations,
+#    waits for /health, seeds pricing catalogs + first tenant)
+scripts/setup/prod-setup.sh --mode managed        # or --mode selfhosted
+# 3. Verify
+curl -fsS http://localhost:3000/health</code></pre>
+<p>Updates later:</p>
+<pre><code>git pull
+docker compose --env-file .env.prod -f scripts/setup/docker-compose.prod.yml up -d --build</code></pre>
+<h2>6. Seeding production data</h2>
+<p><code>prod-setup.sh</code> runs <code>seed-dev-data.mjs</code> inside the gateway container after the stack is healthy. It applies the <strong>pricing catalogs</strong> (left in <code>draft</code>) and creates a first tenant. For production you typically:</p>
+<p>1. Review the draft pricing catalogs, then promote with an sdk-meter    <code>setCatalogStatus({ status: &#x27;active&#x27; })</code> call. 2. Replace the default <code>dev-app</code> tenant with your real tenant(s) via    <code>POST /admin/tenants</code> (header <code>x-admin-ops-token: $ADMIN_OPS_TOKEN</code>):</p>
+<p>   ``<code>bash    curl -X POST http://localhost:3000/admin/tenants \      -H &quot;x-admin-ops-token: $ADMIN_OPS_TOKEN&quot; -H &#x27;content-type: application/json&#x27; \      -d &#x27;{&quot;app_id&quot;:&quot;acme&quot;,&quot;display_name&quot;:&quot;Acme Inc&quot;,&quot;region&quot;:&quot;us-east-1&quot;,&quot;isolation_tier&quot;:&quot;P&quot;}&#x27;    </code>``</p>
+<h2>7. Scaling out</h2>
+<ul><li>Run <strong>N</strong> api-gateway replicas behind the load balancer; they are stateless</li></ul>
+<p>  (Redis holds the shared route cache + soft-cap counter — set <code>REDIS_ENABLED=true</code>   and a shared <code>REDIS_HOST</code>).</p>
+<ul><li>Move usage events onto <strong>Kafka</strong> (<code>KAFKA_ENABLED=true</code>, <code>KAFKA_BROKERS=...</code>)</li></ul>
+<p>  and run <code>meter-collector</code> to drain the topic.</p>
+<ul><li>Enable <strong>ClickHouse</strong> (<code>CLICKHOUSE_ENABLED=true</code>) for OLAP trace/telemetry</li></ul>
+<p>  rollups; otherwise traces mirror into Postgres.</p>
+<ul><li>Multi-pool database topology (admin/app/evidence) and PgBouncer are covered in</li></ul>
+<p>  <code>docs/v3.1/SCALING-RUNBOOK.md</code>.</p>
+<h2>8. Production hardening checklist</h2>
+<ul class="task"><li>Managed Postgres with automated backups + PITR; <code>DB_SSL=true</code>.</li><li>Snapshot the DB immediately <strong>before</strong> every deploy (migration rollback path).</li><li>TLS terminated at the LB/reverse proxy; gateway port <strong>not</strong> public.</li><li>Firewall: only the LB reaches <code>:3000</code>; only the gateway reaches DB/Redis.</li><li>Strong <code>ADMIN_OPS_TOKEN</code>/<code>JWT_SECRET</code>/<code>DB_PASSWORD</code> from a secret store.</li><li><code>CORS_ORIGIN</code> pinned to your real front-end origin(s).</li><li><code>NODE_ENV=production</code> (synthetic vendor stubs refuse to run unless</li></ul>
+<p>      <code>ALLOW_SYNTHETIC_*=true</code>; wire real adapters via their env vars).</p>
+<ul class="task"><li>Centralized logs/metrics: gateway logs JSON to stdout; Prometheus scrape +</li></ul>
+<p>      Grafana dashboard in <code>infrastructure/</code>.</p>
+<ul class="task"><li>Health/uptime check hitting <code>GET /health</code>.</li></ul>
+<h2>9. Health, logs, rollback</h2>
+<pre><code>COMPOSE=&quot;docker compose --env-file .env.prod -f scripts/setup/docker-compose.prod.yml&quot;
+$COMPOSE ps
+$COMPOSE logs -f api-gateway
+$COMPOSE restart api-gateway
+$COMPOSE down                # stop (keeps managed DB; keeps local volumes)
+# Roll back: deploy the previous image tag AND restore the pre-deploy DB snapshot.</code></pre>
+</main></div></body></html>
