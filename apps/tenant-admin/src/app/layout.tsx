@@ -8,6 +8,12 @@ export const metadata: Metadata = {
   description: 'Tenant operator console — billing, members, webhooks, approvals.',
 };
 
+// Render every page per-request so server components read the live container
+// env (e.g. TENANT_ADMIN_TENANT_ID) and current gateway data instead of a
+// build-time static snapshot. This is an operator console over live data, so
+// static optimization is never wanted here.
+export const dynamic = 'force-dynamic';
+
 const NAV = [
   { href: '/', label: 'Home' },
   { href: '/billing', label: 'Billing' },
