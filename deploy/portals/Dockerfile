@@ -25,10 +25,16 @@ ARG NEXT_PUBLIC_BASE_PATH=""
 ARG NEXT_PUBLIC_GATEWAY_URL="https://cloud.projexlight.com"
 ARG NEXT_PUBLIC_API_BASE="https://cloud.projexlight.com"
 ARG NEXT_PUBLIC_HOSTED_MCP="https://cloud.projexlight.com"
+# Cross-portal link targets (same-origin path prefixes in prod). Default to the
+# prod values so a plain build is correct; dev compose overrides to localhost ports.
+ARG NEXT_PUBLIC_TENANT_URL="/tenant"
+ARG NEXT_PUBLIC_CONSOLE_URL="/console"
 ENV NEXT_PUBLIC_BASE_PATH=$NEXT_PUBLIC_BASE_PATH \
     NEXT_PUBLIC_GATEWAY_URL=$NEXT_PUBLIC_GATEWAY_URL \
     NEXT_PUBLIC_API_BASE=$NEXT_PUBLIC_API_BASE \
-    NEXT_PUBLIC_HOSTED_MCP=$NEXT_PUBLIC_HOSTED_MCP
+    NEXT_PUBLIC_HOSTED_MCP=$NEXT_PUBLIC_HOSTED_MCP \
+    NEXT_PUBLIC_TENANT_URL=$NEXT_PUBLIC_TENANT_URL \
+    NEXT_PUBLIC_CONSOLE_URL=$NEXT_PUBLIC_CONSOLE_URL
 RUN pnpm --filter "@projexlight/${APP}" build
 
 FROM node:20-alpine AS runtime

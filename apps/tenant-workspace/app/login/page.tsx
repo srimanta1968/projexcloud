@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import LoginForm from '../../components/LoginForm';
 import { AuthShell } from '../../components/AuthShell';
+import { TENANT_URL, CONSOLE_URL } from '../../lib/portalLinks';
 
 /**
  * /login — returning-user sign-in. On success, lands on /dashboard which
@@ -27,9 +28,9 @@ export default function LoginPage(): JSX.Element {
       </div>
 
       <p className="mt-7 text-center text-xs text-muted-foreground">
-        Tenant admins manage their workspace at{' '}
-        <a href="http://localhost:3200" className="underline">localhost:3200</a>. Platform staff run at{' '}
-        <a href="http://localhost:3100" className="underline">localhost:3100</a>.
+        Tenant admins manage their workspace in the{' '}
+        <a href={TENANT_URL} className="underline">Tenant Admin console</a>. Platform staff use the{' '}
+        <a href={CONSOLE_URL} className="underline">Platform Console</a>.
       </p>
     </AuthShell>
   );

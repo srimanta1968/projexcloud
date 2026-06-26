@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useState } from 'react';
 import SignupForm from '../../components/SignupForm';
 import { AuthShell } from '../../components/AuthShell';
+import { TENANT_URL, TENANT_BILLING_URL } from '../../lib/portalLinks';
 import type { SignupTenantResponse } from '../../services/authApi';
 
 /**
@@ -30,8 +31,8 @@ export default function SignupPage(): JSX.Element {
         </div>
         <h2 className="mt-7 text-lg font-semibold">Next steps</h2>
         <ol className="list-decimal space-y-1 pl-6 text-sm leading-relaxed">
-          <li>Open the <a href="http://localhost:3200" target="_blank" rel="noreferrer" className="text-primary underline">Tenant Admin console</a> to invite teammates, add webhooks, and connect Slack / Salesforce / M365.</li>
-          <li>Bookmark <a href="http://localhost:3200/billing" target="_blank" rel="noreferrer" className="text-primary underline">Billing</a> — check it weekly during your trial.</li>
+          <li>Open the <a href={TENANT_URL} target="_blank" rel="noreferrer" className="text-primary underline">Tenant Admin console</a> to invite teammates, add webhooks, and connect Slack / Salesforce / M365.</li>
+          <li>Bookmark <a href={TENANT_BILLING_URL} target="_blank" rel="noreferrer" className="text-primary underline">Billing</a> — check it weekly during your trial.</li>
           <li>Read the <a href="/docs/user/tenant-getting-started.html" target="_blank" rel="noreferrer" className="text-primary underline">Getting Started guide</a> — a 15-minute walkthrough of the trial.</li>
         </ol>
         <p className="mt-7 text-xs text-muted-foreground">
