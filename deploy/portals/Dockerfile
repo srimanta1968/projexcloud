@@ -11,20 +11,24 @@
 # basePath/asset prefixes are baked at build time, so they MUST be passed here.
 
 FROM node:20-alpine AS build
+WORKDIR /workspace
+ENV NEXT_TELEMETRY_DISABLED=1
+RUN corepack enable
+# Context + install come FIRST and are app-agnostic, so this layer is shared
+# (cached) across all three portal builds — one install, three quick builds.
+COPY . .
+RUN pnpm install --frozen-lockfile
+# App-specific args declared late so they don't invalidate the install layer.
+# NEXT_PUBLIC_* are baked into the client bundle at build time.
 ARG APP
 ARG NEXT_PUBLIC_BASE_PATH=""
 ARG NEXT_PUBLIC_GATEWAY_URL="https://cloud.projexlight.com"
 ARG NEXT_PUBLIC_API_BASE="https://cloud.projexlight.com"
 ARG NEXT_PUBLIC_HOSTED_MCP="https://cloud.projexlight.com"
-ENV NEXT_TELEMETRY_DISABLED=1 \
-    NEXT_PUBLIC_BASE_PATH=$NEXT_PUBLIC_BASE_PATH \
+ENV NEXT_PUBLIC_BASE_PATH=$NEXT_PUBLIC_BASE_PATH \
     NEXT_PUBLIC_GATEWAY_URL=$NEXT_PUBLIC_GATEWAY_URL \
     NEXT_PUBLIC_API_BASE=$NEXT_PUBLIC_API_BASE \
     NEXT_PUBLIC_HOSTED_MCP=$NEXT_PUBLIC_HOSTED_MCP
-WORKDIR /workspace
-RUN corepack enable
-COPY . .
-RUN pnpm install --frozen-lockfile
 RUN pnpm --filter "@projexlight/${APP}" build
 
 FROM node:20-alpine AS runtime
