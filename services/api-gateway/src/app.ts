@@ -366,7 +366,14 @@ const app = Fastify({
 
 app.register(helmet);
 app.register(cors, {
-  origin: config.corsOrigin,
+  // Customers build their own apps against this API, so a single "*" in
+  // CORS_ORIGIN means "allow any origin". We map it to `true` (reflect the
+  // request's Origin) rather than a literal "*", because a bare "*" is invalid
+  // alongside `credentials: true` — reflecting keeps credentialed calls working.
+  origin:
+    config.corsOrigin.length === 1 && config.corsOrigin[0] === '*'
+      ? true
+      : config.corsOrigin,
   credentials: true,
 });
 // P10/E1 — central obligation enforcement (mask/filter) for governed reads.
