@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>ProjexCloud — Ship multi-tenant SaaS in days</title>
+  <meta name="description" content="ProjexCloud pre-wires identity, billing, audit, AI, and compliance so your team ships product, not plumbing." />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='%231A51C7'/><path d='M9 22V10h6.2a4.1 4.1 0 0 1 0 8.2H13' stroke='white' stroke-width='2.6' fill='none' stroke-linecap='round'/></svg>" />
+  <style>
+    :root{
+      --ink:#0b1220; --fg:#1b2a44; --muted:#5a6573; --border:#e2e7ef;
+      --soft:#f5f9ff; --brand:#1A51C7; --brand-700:#1542a6; --brand-50:#eef3ff;
+      --success:#1f8a5b; --white:#fff; --radius:16px;
+      --shadow-sm:0 1px 2px rgba(11,18,32,.06),0 1px 3px rgba(11,18,32,.08);
+      --shadow-md:0 10px 30px -12px rgba(11,18,32,.25);
+      --shadow-lg:0 30px 60px -20px rgba(11,18,32,.35);
+    }
+    *{box-sizing:border-box;margin:0;padding:0}
+    html{scroll-behavior:smooth}
+    body{
+      font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;
+      color:var(--fg);background:var(--white);line-height:1.55;
+      -webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility;
+    }
+    a{color:inherit;text-decoration:none}
+    .wrap{max-width:1140px;margin:0 auto;padding:0 24px}
+
+    /* ---------- header ---------- */
+    header{position:sticky;top:0;z-index:50;background:rgba(255,255,255,.82);
+      backdrop-filter:saturate(180%) blur(12px);border-bottom:1px solid var(--border)}
+    .nav{display:flex;align-items:center;justify-content:space-between;height:68px}
+    .brand{display:flex;align-items:center;gap:11px;font-weight:700;color:var(--ink);font-size:18px;letter-spacing:-.01em}
+    .brand .mark{width:32px;height:32px;border-radius:9px;background:linear-gradient(135deg,var(--brand),#3f74e8);
+      display:grid;place-items:center;box-shadow:var(--shadow-sm)}
+    .navlinks{display:flex;align-items:center;gap:30px}
+    .navlinks a{color:var(--muted);font-size:14.5px;font-weight:500;transition:color .15s}
+    .navlinks a:hover{color:var(--ink)}
+    .btn{display:inline-flex;align-items:center;gap:8px;font-weight:600;font-size:14.5px;
+      padding:10px 18px;border-radius:10px;border:1px solid transparent;cursor:pointer;transition:all .15s;white-space:nowrap}
+    .btn-primary{background:var(--brand);color:#fff;box-shadow:var(--shadow-sm)}
+    .btn-primary:hover{background:var(--brand-700);transform:translateY(-1px);box-shadow:var(--shadow-md)}
+    .btn-ghost{background:#fff;color:var(--ink);border-color:var(--border)}
+    .btn-ghost:hover{border-color:#c3ccda;background:var(--soft)}
+    @media(max-width:760px){.navlinks .hide-sm{display:none}}
+
+    /* ---------- hero ---------- */
+    .hero{position:relative;overflow:hidden;
+      background:radial-gradient(1200px 520px at 50% -10%,#eaf0ff 0%,rgba(245,249,255,0) 60%),
+                 linear-gradient(180deg,#fbfcfe 0%,#fff 100%)}
+    .hero-inner{padding:88px 0 72px;text-align:center}
+    .eyebrow{display:inline-flex;align-items:center;gap:8px;background:var(--brand-50);color:var(--brand-700);
+      font-weight:600;font-size:13px;padding:7px 14px;border-radius:999px;border:1px solid #dbe5ff;margin-bottom:24px}
+    .eyebrow .dot{width:7px;height:7px;border-radius:50%;background:var(--success)}
+    h1{font-size:clamp(34px,5.2vw,58px);line-height:1.05;letter-spacing:-.03em;color:var(--ink);font-weight:800;
+      max-width:880px;margin:0 auto 22px}
+    h1 .grad{background:linear-gradient(120deg,var(--brand),#5b86f0);-webkit-background-clip:text;background-clip:text;color:transparent}
+    .lede{font-size:clamp(17px,2.1vw,20px);color:var(--muted);max-width:660px;margin:0 auto 36px}
+    .cta-row{display:flex;gap:14px;justify-content:center;flex-wrap:wrap}
+    .btn-lg{padding:14px 26px;font-size:15.5px;border-radius:12px}
+    .trust{margin-top:44px;display:flex;gap:30px;justify-content:center;flex-wrap:wrap;color:var(--muted);font-size:13.5px;font-weight:500}
+    .trust span{display:inline-flex;align-items:center;gap:8px}
+    .trust svg{color:var(--success)}
+
+    /* ---------- section shell ---------- */
+    section{padding:80px 0}
+    .sec-head{text-align:center;max-width:680px;margin:0 auto 52px}
+    .sec-head .kicker{color:var(--brand);font-weight:700;font-size:13px;letter-spacing:.08em;text-transform:uppercase;margin-bottom:12px}
+    .sec-head h2{font-size:clamp(26px,3.6vw,38px);letter-spacing:-.02em;color:var(--ink);font-weight:800;margin-bottom:14px}
+    .sec-head p{color:var(--muted);font-size:17px}
+
+    /* ---------- features ---------- */
+    .feat-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:22px}
+    @media(max-width:900px){.feat-grid{grid-template-columns:repeat(2,1fr)}}
+    @media(max-width:600px){.feat-grid{grid-template-columns:1fr}}
+    .feat{background:#fff;border:1px solid var(--border);border-radius:var(--radius);padding:28px;transition:all .2s}
+    .feat:hover{border-color:#cdd8ec;box-shadow:var(--shadow-md);transform:translateY(-2px)}
+    .feat .ico{width:46px;height:46px;border-radius:12px;background:var(--brand-50);color:var(--brand);
+      display:grid;place-items:center;margin-bottom:18px}
+    .feat h3{font-size:17.5px;color:var(--ink);font-weight:700;margin-bottom:8px;letter-spacing:-.01em}
+    .feat p{color:var(--muted);font-size:14.5px}
+
+    /* ---------- portals ---------- */
+    .portals{background:linear-gradient(180deg,#fff 0%,var(--soft) 100%);border-top:1px solid var(--border)}
+    .portal-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:24px}
+    @media(max-width:900px){.portal-grid{grid-template-columns:1fr;max-width:520px;margin:0 auto}}
+    .portal{position:relative;display:flex;flex-direction:column;background:#fff;border:1px solid var(--border);
+      border-radius:18px;padding:30px;box-shadow:var(--shadow-sm);transition:all .2s;overflow:hidden}
+    .portal::before{content:"";position:absolute;inset:0 0 auto 0;height:4px;background:linear-gradient(90deg,var(--brand),#5b86f0);opacity:0;transition:opacity .2s}
+    .portal:hover{border-color:#bcccea;box-shadow:var(--shadow-lg);transform:translateY(-4px)}
+    .portal:hover::before{opacity:1}
+    .portal .ico{width:52px;height:52px;border-radius:14px;display:grid;place-items:center;color:#fff;margin-bottom:20px}
+    .portal .badge{position:absolute;top:24px;right:24px;font-size:11.5px;font-weight:600;color:var(--muted);
+      background:var(--soft);border:1px solid var(--border);padding:4px 10px;border-radius:999px}
+    .portal h3{font-size:21px;color:var(--ink);font-weight:800;letter-spacing:-.02em;margin-bottom:6px}
+    .portal .who{font-size:13px;font-weight:600;color:var(--brand);margin-bottom:14px}
+    .portal p{color:var(--muted);font-size:14.5px;flex:1;margin-bottom:22px}
+    .portal .feats{list-style:none;margin:0 0 24px;padding:0}
+    .portal .feats li{font-size:13.5px;color:var(--fg);padding:6px 0 6px 26px;position:relative}
+    .portal .feats li::before{content:"";position:absolute;left:0;top:11px;width:14px;height:8px;
+      border-left:2px solid var(--success);border-bottom:2px solid var(--success);transform:rotate(-45deg)}
+    .portal .signin{display:inline-flex;align-items:center;justify-content:center;gap:8px;width:100%;
+      padding:13px;border-radius:11px;background:var(--ink);color:#fff;font-weight:600;font-size:14.5px;transition:all .15s}
+    .portal .signin:hover{background:var(--brand);gap:12px}
+    .ico-a{background:linear-gradient(135deg,#1A51C7,#3f74e8)}
+    .ico-b{background:linear-gradient(135deg,#0f8a5e,#22b07d)}
+    .ico-c{background:linear-gradient(135deg,#5a3ec8,#8266ea)}
+
+    /* ---------- footer ---------- */
+    footer{background:var(--ink);color:#c7d0e0;padding:54px 0 38px}
+    .foot{display:flex;justify-content:space-between;align-items:center;gap:24px;flex-wrap:wrap}
+    .foot .brand{color:#fff}
+    .foot .links{display:flex;gap:26px;flex-wrap:wrap}
+    .foot .links a{color:#9fb0c9;font-size:14px;transition:color .15s}
+    .foot .links a:hover{color:#fff}
+    .foot-bottom{margin-top:30px;padding-top:24px;border-top:1px solid rgba(255,255,255,.1);
+      display:flex;justify-content:space-between;gap:14px;flex-wrap:wrap;color:#7f90ab;font-size:13px}
+    .status{display:inline-flex;align-items:center;gap:8px}
+    .status .dot{width:8px;height:8px;border-radius:50%;background:#36c98a;box-shadow:0 0 0 4px rgba(54,201,138,.18)}
+  </style>
+</head>
+<body>
+  <header>
+    <div class="wrap nav">
+      <a class="brand" href="/">
+        <span class="mark">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M6 19V5h6.5a4.5 4.5 0 0 1 0 9H9.5" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </span>
+        ProjexCloud
+      </a>
+      <nav class="navlinks">
+        <a class="hide-sm" href="#platform">Platform</a>
+        <a class="hide-sm" href="#portals">Portals</a>
+        <a class="hide-sm" href="/api/health">Status</a>
+        <a class="btn btn-primary" href="#portals">Sign in</a>
+      </nav>
+    </div>
+  </header>
+
+  <!-- HERO -->
+  <div class="hero">
+    <div class="wrap hero-inner">
+      <span class="eyebrow"><span class="dot"></span> Multi-tenant SaaS infrastructure</span>
+      <h1>Ship multi-tenant SaaS in&nbsp;days, <span class="grad">not quarters</span></h1>
+      <p class="lede">ProjexCloud pre-wires identity, billing, audit, AI, and compliance — so your
+        team builds product, not plumbing.</p>
+      <div class="cta-row">
+        <a class="btn btn-primary btn-lg" href="#portals">Choose your portal
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M5 12h14M13 6l6 6-6 6" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </a>
+        <a class="btn btn-ghost btn-lg" href="#platform">Explore the platform</a>
+      </div>
+      <div class="trust">
+        <span><svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M20 6 9 17l-5-5" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg> Tenant-isolated by default</span>
+        <span><svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M20 6 9 17l-5-5" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg> Usage metering &amp; billing</span>
+        <span><svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M20 6 9 17l-5-5" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg> Tamper-evident audit</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- PLATFORM / FEATURES -->
+  <section id="platform">
+    <div class="wrap">
+      <div class="sec-head">
+        <div class="kicker">The platform</div>
+        <h2>Everything multi-tenant SaaS needs, already wired</h2>
+        <p>Stop rebuilding the same foundation. ProjexCloud ships the cross-cutting concerns as composable, production-grade SDKs.</p>
+      </div>
+      <div class="feat-grid">
+        <div class="feat">
+          <div class="ico"><svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M12 2 4 5v6c0 5 3.5 8 8 11 4.5-3 8-6 8-11V5l-8-3Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg></div>
+          <h3>Identity &amp; Access</h3>
+          <p>Multi-tenant auth, scoped JWTs, RBAC, and per-tenant isolation enforced at the gateway.</p>
+        </div>
+        <div class="feat">
+          <div class="ico"><svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M3 7h18M3 7v10a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V7M3 7l2-3h14l2 3M8 13h4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+          <h3>Metering &amp; Billing</h3>
+          <p>Real-time usage metering, pricing catalogs, and Redis-backed soft-caps — ledgered to Postgres.</p>
+        </div>
+        <div class="feat">
+          <div class="ico"><svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M12 3v3m0 12v3m9-9h-3M6 12H3m13.5-6.5-2 2m-5 5-2 2m9 0-2-2m-5-5-2-2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><circle cx="12" cy="12" r="3.2" stroke="currentColor" stroke-width="1.8"/></svg></div>
+          <h3>AI Gateway</h3>
+          <p>One API across Anthropic, OpenAI, Bedrock &amp; Gemini, with per-tenant keys, routing, and guardrails.</p>
+        </div>
+        <div class="feat">
+          <div class="ico"><svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M9 12l2 2 4-4M7 3h10l4 4v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7l4-4Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg></div>
+          <h3>Audit &amp; Compliance</h3>
+          <p>Tamper-evident audit ledger with retention classes and verifiable event chains across every SDK.</p>
+        </div>
+        <div class="feat">
+          <div class="ico"><svg width="22" height="22" viewBox="0 0 24 24" fill="none"><circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="1.8"/><path d="m20 20-3.2-3.2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></div>
+          <h3>SDK Discovery</h3>
+          <p>Semantic registry of 96+ SDKs with an embedding-powered build planner — intent in, blueprint out.</p>
+        </div>
+        <div class="feat">
+          <div class="ico"><svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M4 7c0-1.7 3.6-3 8-3s8 1.3 8 3-3.6 3-8 3-8-1.3-8-3Zm0 0v10c0 1.7 3.6 3 8 3s8-1.3 8-3V7M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+          <h3>Scale &amp; Reliability</h3>
+          <p>Multi-pool Postgres + pgvector, Redis hot paths, and ClickHouse analytics — built to grow with you.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- PORTALS -->
+  <section id="portals" class="portals">
+    <div class="wrap">
+      <div class="sec-head">
+        <div class="kicker">Sign in</div>
+        <h2>Choose your portal</h2>
+        <p>Three purpose-built consoles. Pick the one that matches your role.</p>
+      </div>
+      <div class="portal-grid">
+
+        <!-- Workspace -->
+        <div class="portal">
+          <span class="badge">For builders</span>
+          <div class="ico ico-a"><svg width="26" height="26" viewBox="0 0 24 24" fill="none"><path d="M3 9h18M3 9V6a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V9Zm4-3.5h.01M10 5.5h.01" stroke="#fff" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+          <h3>Workspace</h3>
+          <div class="who">Developers &amp; end users</div>
+          <p>Build, deploy, and operate your SaaS. Discover SDKs, compose builds, and ship with the platform behind you.</p>
+          <ul class="feats">
+            <li>SDK discovery &amp; build planner</li>
+            <li>Deployments &amp; project management</li>
+            <li>Usage &amp; AI tooling</li>
+          </ul>
+          <a class="signin" href="/workspace">Sign in to Workspace
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M5 12h14M13 6l6 6-6 6" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></a>
+        </div>
+
+        <!-- Tenant Admin -->
+        <div class="portal">
+          <span class="badge">For org admins</span>
+          <div class="ico ico-b"><svg width="26" height="26" viewBox="0 0 24 24" fill="none"><circle cx="9" cy="8" r="3.2" stroke="#fff" stroke-width="1.9"/><path d="M3.5 19a5.5 5.5 0 0 1 11 0M16 7.5a3 3 0 0 1 0 5.4M17.5 19a4.8 4.8 0 0 0-3-4.4" stroke="#fff" stroke-width="1.9" stroke-linecap="round"/></svg></div>
+          <h3>Tenant Admin</h3>
+          <div class="who">Organization administrators</div>
+          <p>Run your organization on ProjexCloud — manage people, money, and integrations in one console.</p>
+          <ul class="feats">
+            <li>Billing &amp; subscriptions</li>
+            <li>Members &amp; roles</li>
+            <li>Webhooks &amp; approvals</li>
+          </ul>
+          <a class="signin" href="/tenant">Sign in to Tenant Admin
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M5 12h14M13 6l6 6-6 6" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></a>
+        </div>
+
+        <!-- Platform Admin -->
+        <div class="portal">
+          <span class="badge">For operators</span>
+          <div class="ico ico-c"><svg width="26" height="26" viewBox="0 0 24 24" fill="none"><path d="M12 2.5l2 2 2.8-.5.6 2.8 2.6 1.2-1.1 2.6 1.1 2.6-2.6 1.2-.6 2.8-2.8-.5-2 2-2-2-2.8.5-.6-2.8-2.6-1.2 1.1-2.6L4 8.8l2.6-1.2.6-2.8L10 5.3l2-2.8Z" stroke="#fff" stroke-width="1.7" stroke-linejoin="round"/><circle cx="12" cy="12" r="2.6" stroke="#fff" stroke-width="1.7"/></svg></div>
+          <h3>Platform Admin</h3>
+          <div class="who">ProjexCloud operators</div>
+          <p>Operate the whole platform — provision tenants, manage capacity, and enforce quality across every deployment.</p>
+          <ul class="feats">
+            <li>Tenants &amp; connection pools</li>
+            <li>Pricing catalogs &amp; SDKs</li>
+            <li>Quality gates &amp; telemetry</li>
+          </ul>
+          <a class="signin" href="/console">Sign in to Platform Admin
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M5 12h14M13 6l6 6-6 6" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></a>
+        </div>
+
+      </div>
+    </div>
+  </section>
+
+  <!-- FOOTER -->
+  <footer>
+    <div class="wrap">
+      <div class="foot">
+        <a class="brand" href="/">
+          <span class="mark"><svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M6 19V5h6.5a4.5 4.5 0 0 1 0 9H9.5" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+          ProjexCloud
+        </a>
+        <div class="links">
+          <a href="#platform">Platform</a>
+          <a href="#portals">Portals</a>
+          <a href="/workspace">Workspace</a>
+          <a href="/tenant">Tenant Admin</a>
+          <a href="/console">Platform Admin</a>
+          <a href="/api/health">API Status</a>
+        </div>
+      </div>
+      <div class="foot-bottom">
+        <span>&copy; 2026 ProjexCloud. All rights reserved.</span>
+        <span class="status"><span class="dot"></span> All systems operational</span>
+      </div>
+    </div>
+  </footer>
+</body>
+</html>

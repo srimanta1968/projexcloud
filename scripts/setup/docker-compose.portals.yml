@@ -1,0 +1,82 @@
+# ProjexCloud web portals — three Next.js apps (standalone) behind nginx.
+#
+#   /workspace -> portal-workspace (tenant-workspace)
+#   /tenant    -> portal-tenant    (tenant-admin)
+#   /console   -> portal-console   (projexcloud-admin)
+#
+# basePath + public API base are baked at BUILD time (Next bakes NEXT_PUBLIC_*),
+# so they live under build.args here. Ports bind to 127.0.0.1 only — nginx is
+# the sole public entry. Joins the existing stack network so server-side calls
+# can reach projexcloud_gateway / projexcloud_discovery by name.
+#
+# Build + run on the host:
+#   docker compose -f scripts/setup/docker-compose.portals.yml up -d --build
+
+name: projexcloud-portals
+
+services:
+  portal-workspace:
+    build:
+      context: ../..
+      dockerfile: deploy/portals/Dockerfile
+      args:
+        APP: tenant-workspace
+        NEXT_PUBLIC_BASE_PATH: /workspace
+        NEXT_PUBLIC_GATEWAY_URL: https://cloud.projexlight.com
+        NEXT_PUBLIC_API_BASE: https://cloud.projexlight.com
+        NEXT_PUBLIC_HOSTED_MCP: https://cloud.projexlight.com
+    image: projexcloud/portal-workspace:local
+    container_name: projexcloud_portal_workspace
+    environment:
+      NODE_ENV: production
+      PORT: "3000"
+      # Server-side (app/api/*) calls reach the sibling containers by name.
+      HOSTED_MCP_URL: http://projexcloud_discovery:3600
+      GATEWAY_URL: http://projexcloud_gateway:3000
+    ports:
+      - "127.0.0.1:3300:3000"
+    restart: unless-stopped
+    networks: [projex]
+
+  portal-tenant:
+    build:
+      context: ../..
+      dockerfile: deploy/portals/Dockerfile
+      args:
+        APP: tenant-admin
+        NEXT_PUBLIC_BASE_PATH: /tenant
+        NEXT_PUBLIC_GATEWAY_URL: https://cloud.projexlight.com
+        NEXT_PUBLIC_API_BASE: https://cloud.projexlight.com
+    image: projexcloud/portal-tenant:local
+    container_name: projexcloud_portal_tenant
+    environment:
+      NODE_ENV: production
+      PORT: "3000"
+    ports:
+      - "127.0.0.1:3200:3000"
+    restart: unless-stopped
+    networks: [projex]
+
+  portal-console:
+    build:
+      context: ../..
+      dockerfile: deploy/portals/Dockerfile
+      args:
+        APP: projexcloud-admin
+        NEXT_PUBLIC_BASE_PATH: /console
+        NEXT_PUBLIC_GATEWAY_URL: https://cloud.projexlight.com
+        NEXT_PUBLIC_API_BASE: https://cloud.projexlight.com
+    image: projexcloud/portal-console:local
+    container_name: projexcloud_portal_console
+    environment:
+      NODE_ENV: production
+      PORT: "3000"
+    ports:
+      - "127.0.0.1:3100:3000"
+    restart: unless-stopped
+    networks: [projex]
+
+networks:
+  projex:
+    external: true
+    name: projexcloud-prod_projex

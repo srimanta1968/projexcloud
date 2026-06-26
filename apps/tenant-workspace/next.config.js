@@ -44,6 +44,11 @@ const nextConfig = {
   reactStrictMode: true,
   // The design-system package ships TS source; Next transpiles it in-app.
   transpilePackages: ['@projexlight/design-system'],
+  // Self-contained server bundle for slim Docker images.
+  output: 'standalone',
+  // Path-based hosting behind nginx (e.g. /workspace). Empty for local dev.
+  // Baked in at build time, so set NEXT_PUBLIC_BASE_PATH before `next build`.
+  basePath: process.env.NEXT_PUBLIC_BASE_PATH || undefined,
 };
 
 module.exports = nextConfig;
