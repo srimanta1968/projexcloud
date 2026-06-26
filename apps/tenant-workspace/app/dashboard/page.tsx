@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button, Card } from '@projexlight/design-system';
 import { getToken } from '../../lib/apiClient';
+import { TENANT_URL, CONSOLE_URL } from '../../lib/portalLinks';
 import { logoutUser } from '../../services/authApi';
 
 interface DecodedClaims {
@@ -37,8 +38,8 @@ const TILES = [
 ];
 
 const EXTERNAL = [
-  { href: 'http://localhost:3200', label: 'Tenant Admin', desc: 'Members, billing, connectors, BYOK' },
-  { href: 'http://localhost:3100', label: 'Platform Console', desc: 'Operator-only (requires ADMIN_OPS_TOKEN)' },
+  { href: TENANT_URL, label: 'Tenant Admin', desc: 'Members, billing, connectors, BYOK' },
+  { href: CONSOLE_URL, label: 'Platform Console', desc: 'Operator-only (requires ADMIN_OPS_TOKEN)' },
 ];
 
 function ClaimRow({ label, children }: { label: string; children: React.ReactNode }): JSX.Element {
