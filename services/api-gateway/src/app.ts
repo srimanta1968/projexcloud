@@ -2406,6 +2406,67 @@ const start = async (): Promise<void> => {
       }
     });
 
+    // Update the CURRENT user's profile: name/avatar -> L2 profile band (resolved
+    // via the user's first active membership, which supplies the required tenant
+    // + app), phone -> person-level alias. Avatar is stored as a reference
+    // (e.g. an sdk-media blob ref or URL). Powers the profile-completion form.
+    app.put<{
+      Body: { display_name?: string; given_name?: string; family_name?: string; phone?: string; avatar?: string };
+    }>('/api/me/profile', { preHandler: requireAuth }, async (req, reply) => {
+      const person_id = req.auth?.sub;
+      if (!person_id) return reply.code(401).send({ success: false, error: 'Unauthorized' });
+      const b = req.body || {};
+      try {
+        // phone -> person-level alias (replace any existing), hash via pgcrypto
+        if (b.phone !== undefined) {
+          await dataService.query(`DELETE FROM identity.alias WHERE person_id = $1 AND kind = 'phone'`, [person_id]);
+          if (b.phone) {
+            await dataService.query(
+              `INSERT INTO identity.alias (person_id, kind, value_envelope, value_hash, verified_at)
+               VALUES ($1, 'phone', convert_to($2,'UTF8'), digest('phone|' || trim($2), 'sha256'), NULL)`,
+              [person_id, b.phone],
+            );
+          }
+        }
+        // name/avatar -> L2 profile band (needs an app_identity + tenant)
+        const fields: Record<string, string> = {};
+        for (const k of ['display_name', 'given_name', 'family_name', 'avatar'] as const) {
+          if (b[k]) fields[k] = String(b[k]);
+        }
+        let band_written = false;
+        if (Object.keys(fields).length > 0) {
+          const m = await dataService.one<{ tenant_id: string; app_id: string }>(
+            `SELECT tm.tenant_id::text AS tenant_id, t.app_id AS app_id
+               FROM identity.tenant_membership tm
+               JOIN tenant.tenant t ON t.tenant_id = tm.tenant_id
+              WHERE tm.person_id = $1 AND tm.status = 'active'
+              ORDER BY tm.created_at ASC LIMIT 1`,
+            [person_id],
+          );
+          if (m) {
+            const ai = await dataService.one<{ app_identity_id: string }>(
+              `INSERT INTO identity.app_identity (person_id, app_id) VALUES ($1, $2)
+               ON CONFLICT (person_id, app_id) DO UPDATE SET app_id = EXCLUDED.app_id
+               RETURNING app_identity_id`,
+              [person_id, m.app_id],
+            );
+            await dataService.query(
+              `INSERT INTO profile.band_l2 (app_identity_id, band_kind, tenant_id, fields_envelope)
+               VALUES ($1, 'profile', $2, $3::jsonb)
+               ON CONFLICT (app_identity_id, band_kind)
+               DO UPDATE SET fields_envelope = profile.band_l2.fields_envelope || EXCLUDED.fields_envelope,
+                             updated_at = now()`,
+              [ai!.app_identity_id, m.tenant_id, JSON.stringify(fields)],
+            );
+            band_written = true;
+          }
+        }
+        return { success: true, data: { person_id, band_written, phone_updated: b.phone !== undefined } };
+      } catch (e) {
+        return reply.code(500).send({ success: false, error: (e as Error).message });
+      }
+    });
+
     app.post<{
       Params: { persona_id: string };
       Body: { role?: string };

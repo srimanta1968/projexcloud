@@ -22,5 +22,5 @@ export async function middleware(req: NextRequest): Promise<NextResponse> {
 
 export const config = {
   // Only the authenticated builder surfaces; marketing/landing pages stay public.
-  matcher: ['/dashboard/:path*', '/admin/:path*', '/build/:path*', '/features/:path*'],
+  matcher: ['/dashboard/:path*', '/admin/:path*', '/build/:path*', '/features/:path*', '/profile/:path*'],
 };

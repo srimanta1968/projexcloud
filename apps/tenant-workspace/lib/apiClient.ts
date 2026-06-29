@@ -66,3 +66,29 @@ export async function apiPost<TResp>(path: string, body: unknown): Promise<TResp
   }
   return (payload as { data: TResp }).data;
 }
+
+/** PUTs JSON to the api-gateway and returns the parsed `data` envelope. */
+export async function apiPut<TResp>(path: string, body: unknown): Promise<TResp> {
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  const token = getToken();
+  if (token) headers.Authorization = `Bearer ${token}`;
+
+  const res = await fetch(`${API_BASE}${path}`, {
+    method: 'PUT',
+    headers,
+    body: JSON.stringify(body),
+  });
+
+  let payload: unknown = null;
+  try {
+    payload = await res.json();
+  } catch {
+    payload = null;
+  }
+
+  if (!res.ok) {
+    const p = (payload as { error?: string; details?: string[] }) ?? {};
+    throw { status: res.status, error: p.error || `HTTP_${res.status}`, details: p.details } as ApiError;
+  }
+  return (payload as { data: TResp }).data;
+}
