@@ -23,6 +23,8 @@ export type ActorKind = 'human' | 'service' | 'agent' | 'support_impersonator';
 export interface SixLayerJwtClaims {
   sub: string;
   email?: string;
+  /** Human display name (from the L2 profile band), so portals can greet the user without an extra fetch. */
+  display_name?: string;
   org_id?: string | null;
   app_id?: string | null;
   tenant_id?: string | null;
@@ -73,6 +75,7 @@ export function verifyJwt(token: string): SixLayerJwtClaims {
 export interface BuildJwtInput {
   person_id: string;
   email: string;
+  display_name?: string;
   tenant_id?: string | null;
   bu_id?: string | null;
   app_id?: string | null;
@@ -87,6 +90,8 @@ export function buildSixLayerClaims(input: BuildJwtInput): SixLayerJwtClaims {
   return {
     sub: input.person_id,
     email: input.email,
+    // Omitted from the token when unknown (undefined is dropped by JSON serialization).
+    display_name: input.display_name || undefined,
     tenant_id: input.tenant_id ?? null,
     bu_id: input.bu_id ?? null,
     app_id: input.app_id ?? null,

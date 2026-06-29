@@ -318,22 +318,58 @@ export interface UserinfoResponse {
   sub: string;
   person_id: string;
   email?: string;
-  org_id?: string;
-  app_id?: string;
-  tenant_id?: string;
-  bu_id?: string;
-  primary_persona_id?: string;
-  admin_pool_index?: string;
-  app_pool_index?: Record<string, string>;
+  /** Human display name from the L2 profile band (never L1 secure data). */
+  display_name?: string;
+  /** Avatar media reference from the profile band, when set. */
+  avatar?: string;
+  /** Active tenant-membership role-template ids for the subject. */
+  roles: string[];
+  /** Primary persona id when persona projection exists; null otherwise. */
+  persona: string | null;
 }
 
+/**
+ * Resolves the OIDC-style userinfo for a subject: email (from the email alias),
+ * display name + avatar (from the L2 'profile' band), and active roles (from
+ * tenant memberships). L1 secure data is never read or returned.
+ */
 export async function readUserinfo(person_id: string): Promise<UserinfoResponse | null> {
-  const row = await dataService.one<{ email_alias: string | null }>(
-    `SELECT (SELECT value_hash::text FROM identity.alias
-              WHERE person_id = p.person_id AND kind = 'email' LIMIT 1) AS email_alias
-       FROM identity.person p WHERE p.person_id = $1`,
+  const row = await dataService.one<{
+    email: string | null;
+    display_name: string | null;
+    avatar: string | null;
+    roles: string[] | null;
+  }>(
+    `SELECT
+       (SELECT convert_from(value_envelope, 'UTF8')
+          FROM identity.alias
+         WHERE person_id = p.person_id AND kind = 'email' AND value_envelope IS NOT NULL
+         LIMIT 1) AS email,
+       (SELECT b.fields_envelope->>'display_name'
+          FROM profile.band_l2 b
+          JOIN identity.app_identity ai ON ai.app_identity_id = b.app_identity_id
+         WHERE ai.person_id = p.person_id AND b.band_kind = 'profile'
+         ORDER BY b.updated_at DESC LIMIT 1) AS display_name,
+       (SELECT b.fields_envelope->>'avatar'
+          FROM profile.band_l2 b
+          JOIN identity.app_identity ai ON ai.app_identity_id = b.app_identity_id
+         WHERE ai.person_id = p.person_id AND b.band_kind = 'profile'
+         ORDER BY b.updated_at DESC LIMIT 1) AS avatar,
+       (SELECT array_remove(array_agg(DISTINCT tm.role_template_id::text), NULL)
+          FROM identity.tenant_membership tm
+         WHERE tm.person_id = p.person_id AND tm.status = 'active') AS roles
+     FROM identity.person p
+     WHERE p.person_id = $1`,
     [person_id],
   );
   if (!row) return null;
-  return { sub: person_id, person_id };
+  return {
+    sub: person_id,
+    person_id,
+    email: row.email ?? undefined,
+    display_name: row.display_name ?? undefined,
+    avatar: row.avatar ?? undefined,
+    roles: row.roles ?? [],
+    persona: null,
+  };
 }
