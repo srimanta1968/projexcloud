@@ -2373,38 +2373,81 @@ const start = async (): Promise<void> => {
 
     // Tenant primary/billing contact — resolved from the founding (earliest
     // active) member: display name from the L2 profile band, email + phone from
-    // the person's aliases. Gives support/billing a real human to reach.
-    app.get<{ Params: { tenant_id: string } }>('/api/tenants/:tenant_id/contact', async (req, reply) => {
-      const tenant_id = req.params.tenant_id;
-      try {
-        const row = await dataService.one<{
-          person_id: string;
-          display_name: string | null;
-          email: string | null;
-          phone: string | null;
-        }>(
-          `SELECT
-             tm.person_id::text AS person_id,
-             (SELECT b.fields_envelope->>'display_name'
-                FROM profile.band_l2 b
-                JOIN identity.app_identity ai ON ai.app_identity_id = b.app_identity_id
-               WHERE ai.person_id = tm.person_id AND b.band_kind = 'profile'
-               ORDER BY b.updated_at DESC LIMIT 1) AS display_name,
-             (SELECT convert_from(value_envelope, 'UTF8') FROM identity.alias
-               WHERE person_id = tm.person_id AND kind = 'email' AND value_envelope IS NOT NULL LIMIT 1) AS email,
-             (SELECT convert_from(value_envelope, 'UTF8') FROM identity.alias
-               WHERE person_id = tm.person_id AND kind = 'phone' AND value_envelope IS NOT NULL LIMIT 1) AS phone
-           FROM identity.tenant_membership tm
-          WHERE tm.tenant_id = $1::uuid AND tm.status = 'active'
-          ORDER BY tm.created_at ASC LIMIT 1`,
-          [tenant_id],
-        );
-        if (!row) return reply.code(404).send({ success: false, error: 'No active member found for tenant' });
-        return { success: true, data: row };
-      } catch (e) {
-        return reply.code(500).send({ success: false, error: (e as Error).message });
-      }
-    });
+    // the person's aliases. Purpose-bound + consent-gated + audited (TK-3572):
+    // internal purposes (support/billing/operations) are TPO-allowed; any other
+    // purpose requires an active consent.receipt for the contact and fails
+    // closed if absent. Every access (granted or denied) is written to audit.
+    const CONTACT_INTERNAL_PURPOSES = new Set(['support', 'billing', 'operations']);
+    app.get<{ Params: { tenant_id: string }; Querystring: { purpose?: string } }>(
+      '/api/tenants/:tenant_id/contact',
+      async (req, reply) => {
+        const tenant_id = req.params.tenant_id;
+        const purpose = (req.query.purpose || 'support').trim();
+        const audit = async (event: string, person_id: string, extra: Record<string, unknown> = {}) => {
+          try {
+            await emitEvent({
+              event_type: event,
+              payload: { tenant_id, purpose, ...extra },
+              pool_index: 'admin',
+              actor_kind: 'service',
+              actor_id: 'api-gateway.tenant-contact',
+              tenant_id,
+              subject_kind: 'person',
+              subject_id: person_id,
+            });
+          } catch { /* audit is best-effort; never block the decision on it */ }
+        };
+        try {
+          const row = await dataService.one<{
+            person_id: string;
+            display_name: string | null;
+            email: string | null;
+            phone: string | null;
+          }>(
+            `SELECT
+               tm.person_id::text AS person_id,
+               (SELECT b.fields_envelope->>'display_name'
+                  FROM profile.band_l2 b
+                  JOIN identity.app_identity ai ON ai.app_identity_id = b.app_identity_id
+                 WHERE ai.person_id = tm.person_id AND b.band_kind = 'profile'
+                 ORDER BY b.updated_at DESC LIMIT 1) AS display_name,
+               (SELECT convert_from(value_envelope, 'UTF8') FROM identity.alias
+                 WHERE person_id = tm.person_id AND kind = 'email' AND value_envelope IS NOT NULL LIMIT 1) AS email,
+               (SELECT convert_from(value_envelope, 'UTF8') FROM identity.alias
+                 WHERE person_id = tm.person_id AND kind = 'phone' AND value_envelope IS NOT NULL LIMIT 1) AS phone
+             FROM identity.tenant_membership tm
+            WHERE tm.tenant_id = $1::uuid AND tm.status = 'active'
+            ORDER BY tm.created_at ASC LIMIT 1`,
+            [tenant_id],
+          );
+          if (!row) return reply.code(404).send({ success: false, error: 'No active member found for tenant' });
+
+          // Consent gate: non-internal purposes require an active consent receipt.
+          if (!CONTACT_INTERNAL_PURPOSES.has(purpose)) {
+            const consent = await dataService.one<{ ok: number }>(
+              `SELECT 1 AS ok FROM consent.receipt
+                WHERE person_id = $1::uuid AND revoked_at IS NULL
+                  AND (expires_at IS NULL OR expires_at > now())
+                LIMIT 1`,
+              [row.person_id],
+            );
+            if (!consent) {
+              await audit('consent.contact_read.denied.v1', row.person_id, { reason: 'consent_absent' });
+              return reply.code(403).send({
+                success: false,
+                error: 'consent_absent',
+                details: [`reading tenant contact for purpose '${purpose}' requires an active consent receipt`],
+              });
+            }
+          }
+
+          await audit('consent.contact_read.granted.v1', row.person_id);
+          return { success: true, data: row };
+        } catch (e) {
+          return reply.code(500).send({ success: false, error: (e as Error).message });
+        }
+      },
+    );
 
     // Update the CURRENT user's profile: name/avatar -> L2 profile band (resolved
     // via the user's first active membership, which supplies the required tenant
