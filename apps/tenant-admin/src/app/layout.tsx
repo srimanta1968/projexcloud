@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import type { ReactNode } from 'react';
 import Link from 'next/link';
+import { CurrentUserBadge } from '@projexlight/design-system';
 import '@projexlight/design-system/styles.css';
 
 export const metadata: Metadata = {
@@ -43,6 +44,7 @@ export default function RootLayout({ children }: { children: ReactNode }): JSX.E
               </Link>
             ))}
           </nav>
+          <CurrentUserBadge className="ml-4" loginPath="/login" />
         </header>
         <main className="p-6">
           <Link href="/" className="text-[13px] text-muted-foreground hover:text-foreground">← Console home</Link>
