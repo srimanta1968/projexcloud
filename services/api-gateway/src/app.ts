@@ -2335,16 +2335,34 @@ const start = async (): Promise<void> => {
     });
 
     // --- Tenant-scoped endpoints for tenant-admin pages ---
-    // Members (/api/personas)
+    // Members (/api/personas) — resolves a tenant's members from the
+    // authoritative identity.tenant_membership, with the display name from the
+    // L2 profile band (falling back to email, then "Member").
     app.get<{ Querystring: { tenant_id?: string } }>('/api/personas', async (req, reply) => {
       const tenant_id = req.query.tenant_id;
       if (!tenant_id) return reply.code(400).send({ success: false, error: 'tenant_id required' });
       try {
         const { rows } = await dataService.query(
-          `SELECT persona_id, tenant_id::text AS tenant_id, display_name, role,
-                  bu_id, status, created_at
-             FROM persona.persona WHERE tenant_id = $1::uuid
-            ORDER BY display_name LIMIT 500`,
+          `SELECT
+             tm.membership_id::text AS persona_id,
+             COALESCE(
+               (SELECT b.fields_envelope->>'display_name'
+                  FROM profile.band_l2 b
+                  JOIN identity.app_identity ai ON ai.app_identity_id = b.app_identity_id
+                 WHERE ai.person_id = tm.person_id AND b.band_kind = 'profile'
+                 ORDER BY b.updated_at DESC LIMIT 1),
+               (SELECT convert_from(value_envelope, 'UTF8')
+                  FROM identity.alias
+                 WHERE person_id = tm.person_id AND kind = 'email' AND value_envelope IS NOT NULL
+                 LIMIT 1),
+               'Member'
+             ) AS display_name,
+             tm.role_template_id::text AS role,
+             tm.bu_id::text AS bu_id,
+             tm.status AS status
+           FROM identity.tenant_membership tm
+          WHERE tm.tenant_id = $1::uuid AND tm.status = 'active'
+          ORDER BY display_name LIMIT 500`,
           [tenant_id],
         );
         return { success: true, data: rows };
