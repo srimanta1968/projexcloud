@@ -56,6 +56,18 @@ interface RegisterPersonInput {
   email: string;
   password: string;
   home_region?: string;
+  /** Optional human-identity fields. phone is stored as a person-level alias. */
+  given_name?: string;
+  family_name?: string;
+  display_name?: string;
+  phone?: string;
+}
+
+/** Composes a person display name from the provided fields, or undefined if none. */
+function composeDisplayName(input: { display_name?: string; given_name?: string; family_name?: string }): string | undefined {
+  if (input.display_name) return input.display_name;
+  const joined = [input.given_name, input.family_name].filter(Boolean).join(' ').trim();
+  return joined.length > 0 ? joined : undefined;
 }
 
 export interface RegisteredPerson {
@@ -104,6 +116,17 @@ export async function registerPerson(input: RegisterPersonInput): Promise<Regist
     );
     if (!credRow) throw new Error('Failed to insert identity.credential');
 
+    // Optional phone: stored as a person-level alias (kind='phone'), mirroring
+    // the email alias. value_envelope holds the raw value (vault wrapping is a
+    // cross-cutting follow-up, consistent with the current email alias convention).
+    if (input.phone) {
+      await dataService.query(
+        `INSERT INTO identity.alias (person_id, kind, value_envelope, value_hash, verified_at)
+         VALUES ($1, 'phone', $2, $3, NULL)`,
+        [personRow.person_id, Buffer.from(input.phone, 'utf-8'), hashAliasValue('phone', input.phone)],
+      );
+    }
+
     return { person: personRow, email_alias: aliasRow, credential: credRow };
   } catch (err) {
     throw err;
@@ -121,6 +144,11 @@ export interface SignupTenantInput {
   password: string;
   company_name: string;
   region?: string;
+  /** Optional founder identity fields, written to the L2 profile band / phone alias. */
+  given_name?: string;
+  family_name?: string;
+  display_name?: string;
+  phone?: string;
 }
 
 export interface SignupTenantResult {
@@ -129,7 +157,12 @@ export interface SignupTenantResult {
   app_id: string;
   tenant_id: string;
   membership_id: string;
+  /** Company display name (tenant.display_name) — unchanged for back-compat. */
   display_name: string;
+  /** The L2 App Identity materialized for (person, app). */
+  app_identity_id: string;
+  /** The founder's person display name (from the profile band), if provided. */
+  person_display_name?: string;
   region: string;
 }
 
@@ -203,6 +236,43 @@ export async function signupTenant(input: SignupTenantInput): Promise<SignupTena
       [person_id, tenant_id],
     );
 
+    // Materialize the L2 App Identity for (person, app) so a profile band can attach.
+    const appIdentity = await q<{ app_identity_id: string }>(
+      `INSERT INTO identity.app_identity (person_id, app_id)
+       VALUES ($1, $2)
+       ON CONFLICT (person_id, app_id) DO UPDATE SET app_id = EXCLUDED.app_id
+       RETURNING app_identity_id`,
+      [person_id, appId],
+    );
+    const app_identity_id = appIdentity.rows[0].app_identity_id;
+
+    // Write the founder's display name into the L2 'profile' band when provided.
+    // fields_envelope holds the JSON profile (vault wrapping is the cross-cutting
+    // follow-up, consistent with the current alias.value_envelope convention).
+    const person_display_name = composeDisplayName(input);
+    if (person_display_name || input.given_name || input.family_name) {
+      const fields = JSON.stringify({
+        display_name: person_display_name,
+        given_name: input.given_name,
+        family_name: input.family_name,
+      });
+      await q(
+        `INSERT INTO profile.band_l2 (app_identity_id, band_kind, tenant_id, fields_envelope)
+         VALUES ($1, 'profile', $2, $3::jsonb)
+         ON CONFLICT (app_identity_id, band_kind) DO UPDATE SET fields_envelope = EXCLUDED.fields_envelope, updated_at = now()`,
+        [app_identity_id, tenant_id, fields],
+      );
+    }
+
+    // Optional phone as a person-level alias (mirrors the email alias).
+    if (input.phone) {
+      await q(
+        `INSERT INTO identity.alias (person_id, kind, value_envelope, value_hash, verified_at)
+         VALUES ($1, 'phone', $2, $3, NULL)`,
+        [person_id, Buffer.from(input.phone, 'utf-8'), hashAliasValue('phone', input.phone)],
+      );
+    }
+
     return {
       person_id,
       org_id,
@@ -210,6 +280,8 @@ export async function signupTenant(input: SignupTenantInput): Promise<SignupTena
       tenant_id,
       membership_id: membership.rows[0].membership_id,
       display_name: input.company_name.trim(),
+      app_identity_id,
+      person_display_name,
       region,
     };
   });

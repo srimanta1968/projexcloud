@@ -29,6 +29,10 @@ export async function registerHandler(req: FastifyRequest, reply: FastifyReply):
     const result = await registerPerson({
       email: validation.value.email,
       password: validation.value.password,
+      given_name: validation.value.given_name,
+      family_name: validation.value.family_name,
+      display_name: validation.value.display_name,
+      phone: validation.value.phone,
     });
     const token = signJwt(buildSixLayerClaims({
       person_id: result.person.person_id,
