@@ -61,6 +61,7 @@ import {
 import { server as secretsServer } from '@projexlight/sdk-secrets';
 import { migrationsDir as tenantMigrations, server as tenantServer, createTenant as tenantCreate, listTenants as tenantList, ensureApp as appEnsure } from '@projexlight/sdk-tenant';
 import { migrationsDir as consentMigrations, server as consentServer } from '@projexlight/sdk-consent';
+import { migrationsDir as assetMigrations, registerAsset as assetRegister, getTwin as assetGetTwin } from '@projexlight/sdk-asset';
 import { migrationsDir as policyMigrations, server as policyServer } from '@projexlight/sdk-policy';
 import {
   migrationsDir as principalTokenMigrations,
@@ -849,6 +850,8 @@ const start = async (): Promise<void> => {
       // P2
       { sdk: 'sdk-tenant', dir: tenantMigrations },
       { sdk: 'sdk-consent', dir: consentMigrations },
+      // P12 — physical-AI fleet
+      { sdk: 'sdk-asset', dir: assetMigrations },
       { sdk: 'sdk-policy', dir: policyMigrations },
       { sdk: 'sdk-principal-token', dir: principalTokenMigrations },
       { sdk: 'sdk-resource-registry', dir: resourceRegistryMigrations },
@@ -2335,6 +2338,49 @@ const start = async (): Promise<void> => {
     });
 
     // --- Tenant-scoped endpoints for tenant-admin pages ---
+    // Digital-twin registry (P12) — register a robot asset with its component
+    // tree + sensors, and read the full twin. Backed by sdk-asset.
+    app.post<{
+      Body: {
+        tenant_id?: string;
+        bu_id?: string;
+        device_uuid?: string;
+        model?: string;
+        display_name?: string;
+        components?: unknown[];
+      };
+    }>('/api/assets', { preHandler: requireAuth }, async (req, reply) => {
+      const tenant_id = req.body?.tenant_id || req.auth?.tenant_id;
+      if (!tenant_id) return reply.code(400).send({ success: false, error: 'tenant_id required' });
+      try {
+        const result = await assetRegister({
+          tenant_id,
+          bu_id: req.body?.bu_id,
+          device_uuid: req.body?.device_uuid,
+          model: req.body?.model,
+          display_name: req.body?.display_name,
+          components: (req.body?.components as never) ?? [],
+        });
+        return reply.code(201).send({ success: true, data: result });
+      } catch (e) {
+        return reply.code(500).send({ success: false, error: (e as Error).message });
+      }
+    });
+
+    app.get<{ Params: { asset_id: string } }>(
+      '/api/assets/:asset_id/twin',
+      { preHandler: requireAuth },
+      async (req, reply) => {
+        try {
+          const twin = await assetGetTwin(req.params.asset_id);
+          if (!twin) return reply.code(404).send({ success: false, error: 'asset not found' });
+          return { success: true, data: twin };
+        } catch (e) {
+          return reply.code(500).send({ success: false, error: (e as Error).message });
+        }
+      },
+    );
+
     // Members (/api/personas) — resolves a tenant's members from the
     // authoritative identity.tenant_membership, with the display name from the
     // L2 profile band (falling back to email, then "Member").
