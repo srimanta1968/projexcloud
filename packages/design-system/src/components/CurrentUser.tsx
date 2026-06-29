@@ -51,6 +51,8 @@ export function useUser(options: UseUserOptions = {}): UseUserResult {
     (loginPath = '/login') => {
       if (typeof window === 'undefined') return;
       window.localStorage.removeItem(tokenKey);
+      // Clear the middleware session cookie (matches SESSION_COOKIE in ./auth).
+      document.cookie = 'projexlight.session=; path=/; SameSite=Lax; max-age=0';
       window.location.assign(loginPath);
     },
     [tokenKey],
