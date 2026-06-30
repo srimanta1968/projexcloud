@@ -5,7 +5,7 @@ import websocket from '@fastify/websocket';
 import { initPool } from '@projexlight/db-runtime';
 import { closeRedis, initRedis } from '@projexlight/redis-runtime';
 import { closeKafka, initKafka, publishMessage } from '@projexlight/kafka-runtime';
-import { closeClickHouse, initClickHouse } from '@projexlight/clickhouse-runtime';
+import { closeClickHouse, initClickHouse, insert as chInsert } from '@projexlight/clickhouse-runtime';
 import { runMigrations } from '@projexlight/migration-runner';
 import {
   migrationsDir as vaultMigrations,
@@ -61,7 +61,7 @@ import {
 import { server as secretsServer } from '@projexlight/sdk-secrets';
 import { migrationsDir as tenantMigrations, server as tenantServer, createTenant as tenantCreate, listTenants as tenantList, ensureApp as appEnsure } from '@projexlight/sdk-tenant';
 import { migrationsDir as consentMigrations, server as consentServer } from '@projexlight/sdk-consent';
-import { migrationsDir as assetMigrations, registerAsset as assetRegister, getTwin as assetGetTwin, bootstrapAssetClickHouseSchema } from '@projexlight/sdk-asset';
+import { migrationsDir as assetMigrations, registerAsset as assetRegister, getTwin as assetGetTwin, bootstrapAssetClickHouseSchema, ingestReadings as assetIngestReadings } from '@projexlight/sdk-asset';
 import { migrationsDir as commandMigrations } from '@projexlight/sdk-command';
 import { migrationsDir as policyMigrations, server as policyServer } from '@projexlight/sdk-policy';
 import {
@@ -260,7 +260,7 @@ import { migrationsDir as connectorSnowflakeMigrations } from '@projexlight/conn
 // P9.2 — global SDK catalog RAG store (Epic A). Auto-migrates catalog.* and
 // (best-effort) syncs manifests → pgvector for the build planner + registry MCP.
 import { migrationsDir as catalogIndexMigrations, syncCatalog } from '@projexlight/sdk-catalog-index';
-import { registerIngestRoutes, migrationsDir as ingestMigrations } from '@projexlight/sdk-ingest';
+import { registerIngestRoutes, migrationsDir as ingestMigrations, setIngestHooks, type SensorReadingRow } from '@projexlight/sdk-ingest';
 
 // P7 / Wave 7 — Field + Evidence + Hyperscale. Closes G10 (federation
 // runtime) + G11 (Iceberg lakehouse). 8 new SDKs + 1 new service.
@@ -515,6 +515,42 @@ app.register(leadScoringServer.registerRoutes);
 // Fastify's overloaded `post` doesn't structurally satisfy sdk-ingest's minimal
 // RouteApp signature, but the call is correct at runtime — cast to satisfy tsc.
 registerIngestRoutes(app as unknown as Parameters<typeof registerIngestRoutes>[0]);
+
+// P12 · E1 — wire the typed sensor-reading sink. Prefer the ClickHouse
+// time-series table when CH is enabled; otherwise fall back to the Postgres
+// asset.sensor_reading mirror (dev/local). Catalog validation + idempotency
+// live in sdk-ingest; this hook is purely the storage write.
+setIngestHooks({
+  async writeSensorReadings(rows: SensorReadingRow[]): Promise<void> {
+    if (rows.length === 0) return;
+    if (config.clickhouse.enabled) {
+      await chInsert(
+        'asset.sensor_reading',
+        rows.map((r) => ({
+          sensor_id: r.sensor_id,
+          asset_id: r.asset_id,
+          tenant_id: r.tenant_id,
+          component_id: r.component_id,
+          ts: r.ts,
+          value: r.value,
+          unit: r.unit,
+          quality: r.quality,
+        })),
+      );
+      return;
+    }
+    await assetIngestReadings(
+      rows.map((r) => ({
+        sensor_id: r.sensor_id,
+        asset_id: r.asset_id,
+        tenant_id: r.tenant_id ?? '',
+        ts: r.ts,
+        value: r.value,
+        quality: r.quality,
+      })),
+    );
+  },
+});
 
 // P7 FR-DSP-3 — route optimization HTTP endpoint.
 app.post<{
