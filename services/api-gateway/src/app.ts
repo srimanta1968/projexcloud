@@ -62,6 +62,7 @@ import { server as secretsServer } from '@projexlight/sdk-secrets';
 import { migrationsDir as tenantMigrations, server as tenantServer, createTenant as tenantCreate, listTenants as tenantList, ensureApp as appEnsure } from '@projexlight/sdk-tenant';
 import { migrationsDir as consentMigrations, server as consentServer } from '@projexlight/sdk-consent';
 import { migrationsDir as assetMigrations, registerAsset as assetRegister, getTwin as assetGetTwin, bootstrapAssetClickHouseSchema } from '@projexlight/sdk-asset';
+import { migrationsDir as commandMigrations } from '@projexlight/sdk-command';
 import { migrationsDir as policyMigrations, server as policyServer } from '@projexlight/sdk-policy';
 import {
   migrationsDir as principalTokenMigrations,
@@ -852,6 +853,7 @@ const start = async (): Promise<void> => {
       { sdk: 'sdk-consent', dir: consentMigrations },
       // P12 — physical-AI fleet
       { sdk: 'sdk-asset', dir: assetMigrations },
+      { sdk: 'sdk-command', dir: commandMigrations },
       { sdk: 'sdk-policy', dir: policyMigrations },
       { sdk: 'sdk-principal-token', dir: principalTokenMigrations },
       { sdk: 'sdk-resource-registry', dir: resourceRegistryMigrations },
