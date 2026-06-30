@@ -273,6 +273,7 @@ import {
   updateDatasetLabelSource,
   setDatasetLineageRecorder,
   listDatasetBuilds,
+  exportDatasetBuild,
 } from '@projexlight/sdk-analytics';
 import {
   migrationsDir as lineageMigrations,
@@ -2785,6 +2786,22 @@ const start = async (): Promise<void> => {
           to: req.body.to,
         });
         if (!data) return reply.code(404).send({ success: false, error: 'dataset spec not found' });
+        return { success: true, data };
+      } catch (e) {
+        return reply.code(500).send({ success: false, error: (e as Error).message });
+      }
+    });
+
+    // P12 · E1 — export a built training dataset to the warehouse / object store.
+    app.post<{
+      Params: { build_id: string };
+      Body: { target?: string };
+    }>('/api/analytics/builds/:build_id/export', { preHandler: requireAuth }, async (req, reply) => {
+      const tenant_id = req.auth?.tenant_id;
+      if (!tenant_id) return reply.code(400).send({ success: false, error: 'tenant context required' });
+      try {
+        const data = await exportDatasetBuild(tenant_id, req.params.build_id, { target: req.body?.target });
+        if (!data) return reply.code(404).send({ success: false, error: 'dataset build not found' });
         return { success: true, data };
       } catch (e) {
         return reply.code(500).send({ success: false, error: (e as Error).message });

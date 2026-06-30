@@ -414,6 +414,96 @@ export interface DatasetBuildRecord {
   built_at: string;
 }
 
+/* --------------------------------------------------- export to warehouse */
+
+export interface DatasetExportContext {
+  tenant_id: string;
+  spec_id: string;
+  build_id: string;
+  rows: Array<FeatureWindowRow | LabeledFeatureRow>;
+  /** Optional caller-specified destination (e.g. warehouse table or object key). */
+  target?: string;
+}
+
+/**
+ * Writes a built dataset to a warehouse / object store and returns an
+ * export_ref (URI / table ref). Wired by the host to a real S3 / Iceberg writer;
+ * when unwired, exportDatasetBuild falls back to registering an Iceberg extract.
+ */
+export type DatasetExporter = (ctx: DatasetExportContext) => Promise<{ export_ref: string }>;
+
+let _exporter: DatasetExporter | null = null;
+export function setDatasetExporter(exporter: DatasetExporter | null): void {
+  _exporter = exporter;
+}
+export function _resetDatasetExporter(): void {
+  _exporter = null;
+}
+
+export interface DatasetExportResult {
+  build_id: string;
+  export_ref: string;
+  rows_exported: number;
+}
+
+/**
+ * Export a previously-recorded build to the warehouse / object store. Re-derives
+ * the feature rows for the build's window + spec (labeled if the spec has a
+ * label source), hands them to the wired exporter (or the built-in Iceberg
+ * extract registry fallback), and stamps export_ref on the build.
+ */
+export async function exportDatasetBuild(
+  tenant_id: string,
+  build_id: string,
+  opts: { target?: string } = {},
+): Promise<DatasetExportResult | null> {
+  const build = await getDatasetBuild(tenant_id, build_id);
+  if (!build) return null;
+  const spec = await getDatasetSpec(tenant_id, build.spec_id);
+  if (!spec) return null;
+
+  let rows: Array<FeatureWindowRow | LabeledFeatureRow> = await buildFeatureWindows({
+    tenant_id,
+    asset_id: spec.asset_id,
+    sensor_ids: spec.sensor_ids ?? undefined,
+    from: build.window_from,
+    to: build.window_to,
+    grain: spec.bucket_grain,
+    aggregations: spec.aggregations,
+  });
+  if (spec.label_source) {
+    rows = await labelFeatureWindows(rows, spec.label_source as unknown as LabelSource, {
+      tenant_id,
+      asset_id: spec.asset_id,
+      from: build.window_from,
+      to: build.window_to,
+    });
+  }
+
+  let export_ref: string;
+  if (_exporter) {
+    const res = await _exporter({ tenant_id, spec_id: build.spec_id, build_id, rows, target: opts.target });
+    export_ref = res.export_ref;
+  } else {
+    // Fallback: register an Iceberg lakehouse extract (warehouse.* table ref).
+    export_ref = opts.target ?? `warehouse.ml_dataset_${build_id.replace(/-/g, '')}`;
+    await dataService.rows(
+      `INSERT INTO analytics.extract_to_lakehouse
+         (extract_id, tenant_id, iceberg_table_ref, partition_strategy, last_extracted_at)
+       VALUES ($1, $2, $3, $4::jsonb, now())
+       ON CONFLICT (extract_id) DO UPDATE SET last_extracted_at = now()`,
+      [`ds_${build_id}`, tenant_id, export_ref, JSON.stringify({ by: 'window_start' })],
+    );
+  }
+
+  await dataService.rows(
+    `UPDATE analytics.dataset_build SET export_ref = $2 WHERE build_id = $1::uuid`,
+    [build_id, export_ref],
+  );
+
+  return { build_id, export_ref, rows_exported: rows.length };
+}
+
 /** List builds for a spec (reproducibility ledger: window + lineage_ref per build). */
 export async function listDatasetBuilds(tenant_id: string, spec_id: string): Promise<DatasetBuildRecord[]> {
   return dataService.rows<DatasetBuildRecord>(

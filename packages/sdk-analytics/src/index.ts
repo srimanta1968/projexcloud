@@ -25,6 +25,9 @@ export {
   _resetDatasetLineageRecorder,
   listDatasetBuilds,
   getDatasetBuild,
+  exportDatasetBuild,
+  setDatasetExporter,
+  _resetDatasetExporter,
 } from './services/datasetBuilder';
 export type {
   BucketGrain,
@@ -43,4 +46,7 @@ export type {
   DatasetLineageContext,
   DatasetLineageRecorder,
   DatasetBuildRecord,
+  DatasetExportContext,
+  DatasetExporter,
+  DatasetExportResult,
 } from './services/datasetBuilder';
