@@ -4,21 +4,31 @@
   "method": "PUT",
   "requiresAuth": true,
   "dependsOn": [
-    "POST /api/auth/register"
+    "POST /api/auth/signup-tenant"
   ],
   "expectedStatus": 200,
   "sdk": "sdk-content",
   "sourceFile": "packages/sdk-content/src/server/routes.ts",
   "_generated": true,
   "testability": "manual",
-  "skipReason": "Auto-generated from implemented route scan; payload/expectedResponse inferred from the handler and need review before enabling automated execution.",
+  "skipReason": "Needs a real sub-bearing JWT from the signup-tenant chain (tenant_id + token). Handler requires tenant_id + name; upserts content.taxonomy and returns 200.",
   "testCases": [
     {
-      "name": "Auto-generated from route scan (review payload before enabling)",
+      "name": "Upsert a tenant taxonomy with a small structure tree",
       "headers": {
-        "Authorization": "Bearer {{cache:auth.register.response.data.token}}"
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
       },
-      "payload": {},
+      "payload": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "name": "{{dynamic:name}}",
+        "structure": {
+          "root": "topics",
+          "children": [
+            { "code": "news", "label": "News" },
+            { "code": "guides", "label": "Guides" }
+          ]
+        }
+      },
       "expectedStatus": 200
     }
   ]

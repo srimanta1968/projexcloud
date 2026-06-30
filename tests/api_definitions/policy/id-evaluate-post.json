@@ -1,22 +1,33 @@
 {
-  "name": "POST /policy/:id/evaluate \u2014 semantic-service",
+  "name": "POST /policy/:id/evaluate — semantic-service",
   "endpoint": "/policy/:id/evaluate",
   "method": "POST",
   "requiresAuth": false,
-  "expectedStatus": 201,
+  "expectedStatus": 200,
   "sdk": "semantic-service",
   "sourceFile": "services/semantic-service/src/routes.ts",
   "_generated": true,
+  "dependsOn": [
+    "POST /policy/register"
+  ],
   "testability": "manual",
-  "skipReason": "Auto-generated from implemented route scan; payload/expectedResponse inferred from the handler and need review before enabling automated execution.",
+  "skipReason": "Evaluation targets a registered, ACTIVE SemanticPolicy; the policy_id must come from POST /policy/register (with activate=true), which is itself a manual _generated def that does not capture its id, so the FK is not obtainable in an automated run. Required body fields filled.",
   "testCases": [
     {
-      "name": "Auto-generated from route scan (review payload before enabling)",
+      "name": "Evaluate a semantic policy (happy path)",
       "pathParams": {
-        "id": "{{static:REPLACE_WITH_ID}}"
+        "id": "{{cache:policy.register.response.data.policy_id}}"
       },
-      "payload": {},
-      "expectedStatus": 201
+      "payload": {
+        "subject_type": "{{static:Doctor}}",
+        "subject_id": "{{dynamic:uuid}}",
+        "action": "{{static:write}}",
+        "resource_type": "{{static:Prescription}}",
+        "resource_id": "{{dynamic:uuid}}",
+        "active_edges": [],
+        "trace_id": "{{dynamic:uuid}}"
+      },
+      "expectedStatus": 200
     }
   ]
 }

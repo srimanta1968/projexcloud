@@ -4,22 +4,29 @@
   "method": "POST",
   "requiresAuth": true,
   "dependsOn": [
-    "POST /api/auth/register"
+    "POST /api/auth/signup-tenant"
   ],
-  "expectedStatus": 200,
+  "expectedStatus": 201,
   "sdk": "sdk-campaign",
   "sourceFile": "packages/sdk-campaign/src/server/routes.ts",
   "_generated": true,
   "testability": "manual",
-  "skipReason": "Auto-generated from implemented route scan; payload/expectedResponse inferred from the handler and need review before enabling automated execution.",
+  "skipReason": "Needs a real sub-bearing JWT from the signup-tenant chain (tenant_id + token). Handler requires tenant_id + name; creates campaign.campaign and returns 201.",
+  "captureResponse": {
+    "campaigns.create.response.data.campaign.campaign_id": "data.campaign.campaign_id"
+  },
   "testCases": [
     {
-      "name": "Auto-generated from route scan (review payload before enabling)",
+      "name": "Create a marketing campaign for the signed-up tenant",
       "headers": {
-        "Authorization": "Bearer {{cache:auth.register.response.data.token}}"
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
       },
-      "payload": {},
-      "expectedStatus": 200
+      "payload": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "name": "{{dynamic:name}}",
+        "variant_flag_id": "{{static:flag_homepage_v2}}"
+      },
+      "expectedStatus": 201
     }
   ]
 }

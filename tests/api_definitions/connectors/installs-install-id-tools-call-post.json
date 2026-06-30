@@ -4,24 +4,28 @@
   "method": "POST",
   "requiresAuth": true,
   "dependsOn": [
-    "POST /api/auth/register"
+    "POST /api/auth/register",
+    "POST /api/connectors/installs"
   ],
   "expectedStatus": 200,
   "sdk": "sdk-connectors",
   "sourceFile": "packages/sdk-connectors/src/server/routes.ts",
   "_generated": true,
   "testability": "manual",
-  "skipReason": "Auto-generated from implemented route scan; payload/expectedResponse inferred from the handler and need review before enabling automated execution.",
+  "skipReason": "Requires a real connector install (OAuth vendor creds) and a tool_name present in that install's manifest; install_id FK comes from POST /api/connectors/installs which is itself manual.",
   "testCases": [
     {
-      "name": "Auto-generated from route scan (review payload before enabling)",
+      "name": "Invoke a connector tool by name",
       "headers": {
         "Authorization": "Bearer {{cache:auth.register.response.data.token}}"
       },
       "pathParams": {
-        "install_id": "{{static:REPLACE_WITH_ID}}"
+        "install_id": "{{cache:connectors.installs.create.response.data.install.install_id}}"
       },
-      "payload": {},
+      "payload": {
+        "tool_name": "{{static:list_channels}}",
+        "args": {}
+      },
       "expectedStatus": 200
     }
   ]

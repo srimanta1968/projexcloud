@@ -6,20 +6,31 @@
   "dependsOn": [
     "POST /api/auth/register"
   ],
-  "expectedStatus": 200,
+  "expectedStatus": 201,
   "sdk": "sdk-service-request",
   "sourceFile": "packages/sdk-service-request/src/server/routes.ts",
   "_generated": true,
-  "testability": "manual",
-  "skipReason": "Auto-generated from implemented route scan; payload/expectedResponse inferred from the handler and need review before enabling automated execution.",
+  "fieldOptions": {
+    "priority": ["low", "normal", "high", "urgent"],
+    "severity": ["trivial", "minor", "major", "critical"]
+  },
+  "captureResponse": {
+    "service-request.tickets.response.data.ticket.ticket_id": "data.ticket.ticket_id"
+  },
   "testCases": [
     {
-      "name": "Auto-generated from route scan (review payload before enabling)",
+      "name": "Open a ticket (tenant_id + encounter_id + requester_persona_id required)",
       "headers": {
         "Authorization": "Bearer {{cache:auth.register.response.data.token}}"
       },
-      "payload": {},
-      "expectedStatus": 200
+      "payload": {
+        "tenant_id": "{{dynamic:uuid}}",
+        "encounter_id": "{{dynamic:uuid}}",
+        "requester_persona_id": "{{dynamic:uuid}}",
+        "priority": "{{static:normal}}",
+        "severity": "{{static:minor}}"
+      },
+      "expectedStatus": 201
     }
   ]
 }

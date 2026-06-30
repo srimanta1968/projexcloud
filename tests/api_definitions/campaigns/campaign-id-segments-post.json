@@ -4,25 +4,37 @@
   "method": "POST",
   "requiresAuth": true,
   "dependsOn": [
-    "POST /api/auth/register"
+    "POST /api/auth/signup-tenant",
+    "POST /api/campaigns"
   ],
-  "expectedStatus": 200,
+  "expectedStatus": 201,
   "sdk": "sdk-campaign",
   "sourceFile": "packages/sdk-campaign/src/server/routes.ts",
   "_generated": true,
   "testability": "manual",
-  "skipReason": "Auto-generated from implemented route scan; payload/expectedResponse inferred from the handler and need review before enabling automated execution.",
+  "skipReason": "Needs a real sub-bearing JWT and a campaign_id from the campaign create. Handler reads optional body.dsl (defaults {}); upserts campaign.segment and returns 201.",
+  "captureResponse": {
+    "campaigns.segment.create.response.data.segment.segment_id": "data.segment.segment_id"
+  },
   "testCases": [
     {
-      "name": "Auto-generated from route scan (review payload before enabling)",
+      "name": "Upsert a segment whose DSL targets the tenant population",
       "headers": {
-        "Authorization": "Bearer {{cache:auth.register.response.data.token}}"
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
       },
       "pathParams": {
-        "campaign_id": "{{static:REPLACE_WITH_ID}}"
+        "campaign_id": "{{cache:campaigns.create.response.data.campaign.campaign_id}}"
       },
-      "payload": {},
-      "expectedStatus": 200
+      "payload": {
+        "dsl": {
+          "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+          "match": "all",
+          "rules": [
+            { "attr": "status", "op": "eq", "value": "active" }
+          ]
+        }
+      },
+      "expectedStatus": 201
     }
   ]
 }

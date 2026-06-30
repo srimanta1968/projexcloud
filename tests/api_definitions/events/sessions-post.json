@@ -4,22 +4,31 @@
   "method": "POST",
   "requiresAuth": true,
   "dependsOn": [
-    "POST /api/auth/register"
+    "POST /api/auth/register",
+    "POST /api/tenants",
+    "POST /api/encounters"
   ],
-  "expectedStatus": 200,
+  "expectedStatus": 201,
   "sdk": "sdk-event",
   "sourceFile": "packages/sdk-event/src/server/routes.ts",
   "_generated": true,
   "testability": "manual",
-  "skipReason": "Auto-generated from implemented route scan; payload/expectedResponse inferred from the handler and need review before enabling automated execution.",
+  "skipReason": "Requires a tenant and an open encounter (event.session.encounter_id); createSession inserts an event.session row.",
   "testCases": [
     {
-      "name": "Auto-generated from route scan (review payload before enabling)",
+      "name": "Create an event session under an encounter",
       "headers": {
         "Authorization": "Bearer {{cache:auth.register.response.data.token}}"
       },
-      "payload": {},
-      "expectedStatus": 200
+      "payload": {
+        "tenant_id": "{{cache:tenants.create.response.data.tenant_id}}",
+        "encounter_id": "{{cache:encounters.create.response.data.encounter.encounter_id}}",
+        "title": "{{dynamic:name}}",
+        "capacity": 100,
+        "starts_at": "{{static:2026-07-01T10:00:00Z}}",
+        "ends_at": "{{static:2026-07-01T12:00:00Z}}"
+      },
+      "expectedStatus": 201
     }
   ]
 }

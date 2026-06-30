@@ -4,22 +4,30 @@
   "method": "POST",
   "requiresAuth": true,
   "dependsOn": [
-    "POST /api/auth/register"
+    "POST /api/auth/signup-tenant"
   ],
-  "expectedStatus": 200,
+  "expectedStatus": 201,
   "sdk": "sdk-content",
   "sourceFile": "packages/sdk-content/src/server/routes.ts",
   "_generated": true,
   "testability": "manual",
-  "skipReason": "Auto-generated from implemented route scan; payload/expectedResponse inferred from the handler and need review before enabling automated execution.",
+  "skipReason": "Needs a real sub-bearing JWT from the signup-tenant chain (tenant_id + token). Handler requires tenant_id + type_code + slug; creates content.item and returns 201.",
+  "captureResponse": {
+    "content.item.create.response.data.item.item_id": "data.item.item_id"
+  },
   "testCases": [
     {
-      "name": "Auto-generated from route scan (review payload before enabling)",
+      "name": "Create a draft article content item",
       "headers": {
-        "Authorization": "Bearer {{cache:auth.register.response.data.token}}"
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
       },
-      "payload": {},
-      "expectedStatus": 200
+      "payload": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "type_code": "{{static:article}}",
+        "slug": "{{dynamic:name}}",
+        "owner_persona_id": "{{cache:auth.signup-tenant.response.data.userId}}"
+      },
+      "expectedStatus": 201
     }
   ]
 }

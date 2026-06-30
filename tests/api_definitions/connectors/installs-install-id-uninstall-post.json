@@ -4,24 +4,27 @@
   "method": "POST",
   "requiresAuth": true,
   "dependsOn": [
-    "POST /api/auth/register"
+    "POST /api/auth/register",
+    "POST /api/connectors/installs"
   ],
   "expectedStatus": 200,
   "sdk": "sdk-connectors",
   "sourceFile": "packages/sdk-connectors/src/server/routes.ts",
   "_generated": true,
   "testability": "manual",
-  "skipReason": "Auto-generated from implemented route scan; payload/expectedResponse inferred from the handler and need review before enabling automated execution.",
+  "skipReason": "install_id FK comes from POST /api/connectors/installs which is itself manual (OAuth vendor creds). Body actor_id is optional (defaults to 'unknown').",
   "testCases": [
     {
-      "name": "Auto-generated from route scan (review payload before enabling)",
+      "name": "Uninstall a connector install",
       "headers": {
         "Authorization": "Bearer {{cache:auth.register.response.data.token}}"
       },
       "pathParams": {
-        "install_id": "{{static:REPLACE_WITH_ID}}"
+        "install_id": "{{cache:connectors.installs.create.response.data.install.install_id}}"
       },
-      "payload": {},
+      "payload": {
+        "actor_id": "{{cache:auth.register.response.data.userId}}"
+      },
       "expectedStatus": 200
     }
   ]

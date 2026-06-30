@@ -7,7 +7,31 @@
   "sprintId": "efcf9cbd-5e84-469e-946e-efcabf8c88e1",
   "featureId": "d00b18c5-a75a-4a02-8e0e-b6f941ac60c1",
   "epicId": "0d61fa89-b842-43af-baf9-42454044726f",
+  "expectedStatus": 200,
   "testability": "manual",
-  "skipReason": "Requires an active (approved) break-glass grant; multi-step approval flow not auto-testable.",
-  "testCases": []
+  "skipReason": "Requires an active (approved) break-glass grant; the action must fall within the grant scope. Part of the multi-step request -> decide -> use flow.",
+  "dependsOn": [
+    "POST /api/auth/register",
+    "POST /api/break-glass",
+    "POST /api/break-glass/:grant_id/decide"
+  ],
+  "testCases": [
+    {
+      "name": "Exercise the active grant within scope, emitting a certificate",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.register.response.data.token}}"
+      },
+      "pathParams": {
+        "grant_id": "{{cache:break-glass.request.response.data.grant.grant_id}}"
+      },
+      "payload": {
+        "action": "{{static:read}}",
+        "target_id": "{{dynamic:uuid}}"
+      },
+      "expectedStatus": 200
+    }
+  ],
+  "expectedResponse": {
+    "data": { "certificate": { "grant_id": "string", "cert_hash": "string" } }
+  }
 }

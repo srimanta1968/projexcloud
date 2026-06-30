@@ -4,24 +4,28 @@
   "method": "POST",
   "requiresAuth": true,
   "dependsOn": [
-    "POST /api/auth/register"
+    "POST /api/auth/register",
+    "POST /api/crm/deals"
   ],
   "expectedStatus": 200,
   "sdk": "sdk-crm",
   "sourceFile": "packages/sdk-crm/src/server/routes.ts",
   "_generated": true,
-  "testability": "manual",
-  "skipReason": "Auto-generated from implemented route scan; payload/expectedResponse inferred from the handler and need review before enabling automated execution.",
+  "fieldOptions": {
+    "stage": ["qualifying", "proposal", "negotiation", "closed-won", "closed-lost"]
+  },
   "testCases": [
     {
-      "name": "Auto-generated from route scan (review payload before enabling)",
+      "name": "Transition an existing deal to a valid stage",
       "headers": {
         "Authorization": "Bearer {{cache:auth.register.response.data.token}}"
       },
       "pathParams": {
-        "deal_id": "{{static:REPLACE_WITH_ID}}"
+        "deal_id": "{{cache:crm.deals.response.data.deal.deal_id}}"
       },
-      "payload": {},
+      "payload": {
+        "stage": "{{static:proposal}}"
+      },
       "expectedStatus": 200
     }
   ]

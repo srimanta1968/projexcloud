@@ -11,15 +11,24 @@
   "sourceFile": "packages/sdk-audit/src/server/routes.ts",
   "_generated": true,
   "testability": "manual",
-  "skipReason": "Auto-generated from implemented route scan; payload/expectedResponse inferred from the handler and need review before enabling automated execution.",
+  "skipReason": "Self-audit export: with inline=true the handler materializes the artifact synchronously (signs + writes to object store), which needs the export signing key / S3 wiring. Async path (inline omitted) returns 202.",
   "testCases": [
     {
-      "name": "Auto-generated from route scan (review payload before enabling)",
+      "name": "Request an inline JSONL export of the tenant audit chain",
       "headers": {
         "Authorization": "Bearer {{cache:auth.register.response.data.token}}"
       },
-      "payload": {},
+      "payload": {
+        "tenant_id": "{{static:00000000-0000-0000-0000-000000000001}}",
+        "format": "{{static:jsonl}}",
+        "range_start": "{{static:2024-01-01T00:00:00Z}}",
+        "range_end": "{{static:2026-12-31T23:59:59Z}}",
+        "inline": true
+      },
       "expectedStatus": 201
     }
-  ]
+  ],
+  "fieldOptions": {
+    "format": ["pdf", "jsonl"]
+  }
 }

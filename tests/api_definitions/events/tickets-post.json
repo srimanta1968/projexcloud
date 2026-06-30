@@ -4,21 +4,27 @@
   "method": "POST",
   "requiresAuth": true,
   "dependsOn": [
-    "POST /api/auth/register"
+    "POST /api/auth/register",
+    "POST /api/events/sessions",
+    "POST /api/personas"
   ],
   "expectedStatus": 201,
   "sdk": "sdk-event",
   "sourceFile": "packages/sdk-event/src/server/routes.ts",
   "_generated": true,
   "testability": "manual",
-  "skipReason": "Auto-generated from implemented route scan; payload/expectedResponse inferred from the handler and need review before enabling automated execution.",
+  "skipReason": "Requires a scheduled/live session with capacity and a holder persona; issueTicket reserves capacity and mints a qr_token.",
   "testCases": [
     {
-      "name": "Auto-generated from route scan (review payload before enabling)",
+      "name": "Issue a ticket for a session",
       "headers": {
         "Authorization": "Bearer {{cache:auth.register.response.data.token}}"
       },
-      "payload": {},
+      "payload": {
+        "session_id": "{{cache:events.sessions.create.response.data.session.session_id}}",
+        "holder_persona_id": "{{cache:personas.create.response.data.persona.persona_id}}",
+        "price": 50
+      },
       "expectedStatus": 201
     }
   ]

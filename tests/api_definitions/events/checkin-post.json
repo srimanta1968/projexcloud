@@ -4,21 +4,27 @@
   "method": "POST",
   "requiresAuth": true,
   "dependsOn": [
-    "POST /api/auth/register"
+    "POST /api/auth/register",
+    "POST /api/events/tickets",
+    "POST /api/personas"
   ],
   "expectedStatus": 201,
   "sdk": "sdk-event",
   "sourceFile": "packages/sdk-event/src/server/routes.ts",
   "_generated": true,
   "testability": "manual",
-  "skipReason": "Auto-generated from implemented route scan; payload/expectedResponse inferred from the handler and need review before enabling automated execution.",
+  "skipReason": "Requires an issued ticket (qr_token) and a checking-in persona; checkIn transitions the ticket issued -> used and inserts a checkin row.",
   "testCases": [
     {
-      "name": "Auto-generated from route scan (review payload before enabling)",
+      "name": "Check in an issued ticket via its qr_token",
       "headers": {
         "Authorization": "Bearer {{cache:auth.register.response.data.token}}"
       },
-      "payload": {},
+      "payload": {
+        "qr_token": "{{cache:events.tickets.create.response.data.ticket.qr_token}}",
+        "checked_in_by_persona_id": "{{cache:personas.create.response.data.persona.persona_id}}",
+        "device_uuid": "{{static:gate-scanner-01}}"
+      },
       "expectedStatus": 201
     }
   ]

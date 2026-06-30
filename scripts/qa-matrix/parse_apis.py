@@ -80,6 +80,7 @@ for dirpath, _dirs, files in os.walk(API_DIR):
                 "expectedResponse": d.get("expectedResponse", None),
                 "dependsOn": d.get("dependsOn", []), "sdk": sdk, "file": rel,
                 "generated": generated, "sourceFile": source_file,
+                "fieldOptions": d.get("fieldOptions", None),
             })
         for tc in tcs:
             rows.append({
@@ -92,6 +93,7 @@ for dirpath, _dirs, files in os.walk(API_DIR):
                 "expectedResponse": tc.get("expectedResponse", d.get("expectedResponse", None)),
                 "dependsOn": d.get("dependsOn", []), "sdk": sdk, "file": rel,
                 "generated": generated, "sourceFile": source_file,
+                "fieldOptions": d.get("fieldOptions", None),
             })
 
 os.makedirs(OUT_DIR, exist_ok=True)

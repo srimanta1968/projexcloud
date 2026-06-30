@@ -4,25 +4,29 @@
   "method": "POST",
   "requiresAuth": true,
   "dependsOn": [
-    "POST /api/auth/register"
+    "POST /api/auth/signup-tenant",
+    "POST /api/content/items",
+    "POST /api/content/items/:item_id/versions"
   ],
   "expectedStatus": 200,
   "sdk": "sdk-content",
   "sourceFile": "packages/sdk-content/src/server/routes.ts",
   "_generated": true,
   "testability": "manual",
-  "skipReason": "Auto-generated from implemented route scan; payload/expectedResponse inferred from the handler and need review before enabling automated execution.",
+  "skipReason": "Needs a real sub-bearing JWT, an item_id and version_id from the create chain. Handler requires published_by (a person/persona UUID); sets item.status=published and returns 200.",
   "testCases": [
     {
-      "name": "Auto-generated from route scan (review payload before enabling)",
+      "name": "Publish a version on behalf of the signed-up user",
       "headers": {
-        "Authorization": "Bearer {{cache:auth.register.response.data.token}}"
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
       },
       "pathParams": {
-        "item_id": "{{static:REPLACE_WITH_ID}}",
-        "version_id": "{{static:REPLACE_WITH_ID}}"
+        "item_id": "{{cache:content.item.create.response.data.item.item_id}}",
+        "version_id": "{{cache:content.version.create.response.data.version.version_id}}"
       },
-      "payload": {},
+      "payload": {
+        "published_by": "{{cache:auth.signup-tenant.response.data.userId}}"
+      },
       "expectedStatus": 200
     }
   ]

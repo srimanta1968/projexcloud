@@ -4,25 +4,28 @@
   "method": "POST",
   "requiresAuth": true,
   "dependsOn": [
-    "POST /api/auth/register"
+    "POST /api/auth/register",
+    "POST /api/media/upload-url"
   ],
-  "expectedStatus": 201,
+  "expectedStatus": 200,
   "sdk": "sdk-media",
   "sourceFile": "packages/sdk-media/src/server/routes.ts",
   "_generated": true,
   "testability": "manual",
-  "skipReason": "Auto-generated from implemented route scan; payload/expectedResponse inferred from the handler and need review before enabling automated execution.",
+  "skipReason": "Requires a JWT bearing a tenant_id claim and a blob_id from POST /api/media/upload-url (which itself needs a seeded tenant + active vault tenant key). checksum_hex must be the 64-char hex SHA-256 of the uploaded bytes.",
   "testCases": [
     {
-      "name": "Auto-generated from route scan (review payload before enabling)",
+      "name": "Commit an uploaded blob with its SHA-256 checksum",
       "headers": {
         "Authorization": "Bearer {{cache:auth.register.response.data.token}}"
       },
       "pathParams": {
-        "blob_id": "{{static:REPLACE_WITH_ID}}"
+        "blob_id": "{{cache:media.upload-url.create.response.data.blob_id}}"
       },
-      "payload": {},
-      "expectedStatus": 201
+      "payload": {
+        "checksum_hex": "{{static:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855}}"
+      },
+      "expectedStatus": 200
     }
   ]
 }

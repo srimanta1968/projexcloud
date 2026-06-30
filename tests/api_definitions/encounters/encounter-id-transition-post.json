@@ -4,24 +4,32 @@
   "method": "POST",
   "requiresAuth": true,
   "dependsOn": [
-    "POST /api/auth/register"
+    "POST /api/auth/register",
+    "POST /api/encounters",
+    "POST /api/personas"
   ],
   "expectedStatus": 200,
   "sdk": "sdk-engagement",
   "sourceFile": "packages/sdk-engagement/src/server/routes.ts",
   "_generated": true,
   "testability": "manual",
-  "skipReason": "Auto-generated from implemented route scan; payload/expectedResponse inferred from the handler and need review before enabling automated execution.",
+  "skipReason": "Requires an open encounter; transitionEncounter validates the state machine (open -> in-progress/closed/sealed).",
+  "fieldOptions": {
+    "to": ["open", "in-progress", "closed", "sealed"]
+  },
   "testCases": [
     {
-      "name": "Auto-generated from route scan (review payload before enabling)",
+      "name": "Transition the encounter open -> in-progress",
       "headers": {
         "Authorization": "Bearer {{cache:auth.register.response.data.token}}"
       },
       "pathParams": {
-        "encounter_id": "{{static:REPLACE_WITH_ID}}"
+        "encounter_id": "{{cache:encounters.create.response.data.encounter.encounter_id}}"
       },
-      "payload": {},
+      "payload": {
+        "to": "{{static:in-progress}}",
+        "actor_id": "{{cache:personas.create.response.data.persona.persona_id}}"
+      },
       "expectedStatus": 200
     }
   ]

@@ -4,25 +4,28 @@
   "method": "POST",
   "requiresAuth": true,
   "dependsOn": [
-    "POST /api/auth/register"
+    "POST /api/auth/register",
+    "POST /api/mcp/server-registrations"
   ],
-  "expectedStatus": 201,
+  "expectedStatus": 200,
   "sdk": "sdk-mcp-bridge",
   "sourceFile": "packages/sdk-mcp-bridge/src/server/routes.ts",
   "_generated": true,
   "testability": "manual",
-  "skipReason": "Auto-generated from implemented route scan; payload/expectedResponse inferred from the handler and need review before enabling automated execution.",
+  "skipReason": "Disable targets an existing MCP server registration whose creation (POST /api/mcp/server-registrations) requires a live MCP fixture and is itself manual; the registration_id cannot be captured in an automated run. Required body field (reason) filled.",
   "testCases": [
     {
-      "name": "Auto-generated from route scan (review payload before enabling)",
+      "name": "Disable a registered MCP server",
       "headers": {
         "Authorization": "Bearer {{cache:auth.register.response.data.token}}"
       },
       "pathParams": {
-        "id": "{{static:REPLACE_WITH_ID}}"
+        "id": "{{cache:mcp.server-registrations.create.response.data.registration_id}}"
       },
-      "payload": {},
-      "expectedStatus": 201
+      "payload": {
+        "reason": "{{static:Decommissioned by automated test}}"
+      },
+      "expectedStatus": 200
     }
   ]
 }

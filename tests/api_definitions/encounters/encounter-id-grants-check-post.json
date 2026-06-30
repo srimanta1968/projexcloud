@@ -4,24 +4,29 @@
   "method": "POST",
   "requiresAuth": true,
   "dependsOn": [
-    "POST /api/auth/register"
+    "POST /api/auth/register",
+    "POST /api/encounters",
+    "POST /api/personas"
   ],
   "expectedStatus": 200,
   "sdk": "sdk-engagement",
   "sourceFile": "packages/sdk-engagement/src/server/routes.ts",
   "_generated": true,
   "testability": "manual",
-  "skipReason": "Auto-generated from implemented route scan; payload/expectedResponse inferred from the handler and need review before enabling automated execution.",
+  "skipReason": "Requires an open encounter and a grantee persona; checkGrant evaluates scope.methods for the given method.",
   "testCases": [
     {
-      "name": "Auto-generated from route scan (review payload before enabling)",
+      "name": "Check whether a grantee may call a method",
       "headers": {
         "Authorization": "Bearer {{cache:auth.register.response.data.token}}"
       },
       "pathParams": {
-        "encounter_id": "{{static:REPLACE_WITH_ID}}"
+        "encounter_id": "{{cache:encounters.create.response.data.encounter.encounter_id}}"
       },
-      "payload": {},
+      "payload": {
+        "grantee_persona_id": "{{cache:personas.create.response.data.persona.persona_id}}",
+        "method": "{{static:chart.read}}"
+      },
       "expectedStatus": 200
     }
   ]

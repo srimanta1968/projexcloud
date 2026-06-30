@@ -7,10 +7,23 @@
   "priority": 400,
   "dependsOn": ["POST /api/auth/register"],
   "testability": "manual",
-  "skipReason": "Requires a reachable MCP server fixture (synthetic Slack/Snowflake/Jira from TK-3306); exercised by AC-12 e2e test.",
+  "skipReason": "Requires a reachable MCP server fixture (synthetic Slack/Snowflake/Jira from TK-3306); the handler opens a live transport and calls tools/list during registration, so it cannot run without the fixture. Exercised by AC-12 e2e test. Required body fields filled.",
+  "fieldOptions": {
+    "transport": ["http", "sse", "stdio"]
+  },
   "testCases": [
     {
       "name": "Manual: register synthetic Slack-MCP fixture",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.register.response.data.token}}"
+      },
+      "payload": {
+        "tenant_id": "{{cache:auth.register.response.data.tenant_id}}",
+        "display_name": "{{dynamic:company}}",
+        "transport": "{{static:http}}",
+        "endpoint_url": "{{static:http://localhost:9401/mcp}}",
+        "credential_envelope_b64": "{{static:eyJ0b2tlbiI6InRlc3QtY3JlZCJ9}}"
+      },
       "expectedStatus": 201,
       "expectedResponse": { "success": true }
     }

@@ -1,22 +1,32 @@
 {
-  "name": "POST /api/ingest/:entity/batch \u2014 sdk-ingest",
+  "name": "POST /api/ingest/:entity/batch — sdk-ingest",
   "endpoint": "/api/ingest/:entity/batch",
   "method": "POST",
   "requiresAuth": false,
-  "expectedStatus": 201,
+  "expectedStatus": 200,
   "sdk": "sdk-ingest",
   "sourceFile": "packages/sdk-ingest/src/server.ts",
-  "_generated": true,
-  "testability": "manual",
-  "skipReason": "Auto-generated from implemented route scan; payload/expectedResponse inferred from the handler and need review before enabling automated execution.",
   "testCases": [
     {
-      "name": "Auto-generated from route scan (review payload before enabling)",
+      "name": "Land a one-record batch for an entity (idempotent upsert)",
       "pathParams": {
-        "entity": "{{static:REPLACE_WITH_ID}}"
+        "entity": "{{static:demo_entity}}"
       },
-      "payload": {},
-      "expectedStatus": 201
+      "payload": {
+        "mode": "{{static:upsert}}",
+        "idempotency_key": "{{dynamic:uuid}}",
+        "records": [
+          {
+            "external_id": "{{dynamic:uuid}}",
+            "name": "Demo Record",
+            "value": 42
+          }
+        ]
+      },
+      "expectedStatus": 200
     }
-  ]
+  ],
+  "fieldOptions": {
+    "mode": ["upsert", "insert"]
+  }
 }

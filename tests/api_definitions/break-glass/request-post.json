@@ -7,7 +7,34 @@
   "sprintId": "efcf9cbd-5e84-469e-946e-efcabf8c88e1",
   "featureId": "d00b18c5-a75a-4a02-8e0e-b6f941ac60c1",
   "epicId": "0d61fa89-b842-43af-baf9-42454044726f",
+  "expectedStatus": 201,
   "testability": "manual",
-  "skipReason": "Break-glass requires a pre-seeded approval route + approver persona and a multi-step flow (request -> decide -> use); not auto-testable by the regression runner.",
-  "testCases": []
+  "skipReason": "Opens an sdk-approval request against route_id, so it depends on a pre-seeded active approval route (POST /api/approvals/routes, itself manual); part of the multi-step request -> decide -> use flow.",
+  "dependsOn": [
+    "POST /api/auth/register",
+    "POST /api/approvals/routes"
+  ],
+  "testCases": [
+    {
+      "name": "Request emergency break-glass access to a patient record",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.register.response.data.token}}"
+      },
+      "payload": {
+        "tenant_id": "{{static:00000000-0000-0000-0000-000000000001}}",
+        "route_id": "{{cache:approvals.routes.create.response.data.route.route_id}}",
+        "justification": "{{static:Emergency access required to treat unconscious patient}}",
+        "scope": { "resource": "patient.record", "actions": ["read"] },
+        "ttl_minutes": 60
+      },
+      "expectedStatus": 201
+    }
+  ],
+  "expectedResponse": {
+    "data": { "grant": { "grant_id": "string", "status": "string" }, "pending_step_ids": "array" }
+  },
+  "captureResponse": {
+    "break-glass.request.response.data.grant.grant_id": "data.grant.grant_id",
+    "break-glass.request.response.data.pending_step_ids.0": "data.pending_step_ids.0"
+  }
 }

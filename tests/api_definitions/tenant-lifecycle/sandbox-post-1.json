@@ -6,20 +6,23 @@
   "dependsOn": [
     "POST /api/auth/register"
   ],
-  "expectedStatus": 200,
+  "expectedStatus": 201,
   "sdk": "sdk-tenant-lifecycle",
   "sourceFile": "packages/sdk-tenant-lifecycle/src/server/routes.ts",
   "_generated": true,
   "testability": "manual",
-  "skipReason": "Auto-generated from implemented route scan; payload/expectedResponse inferred from the handler and need review before enabling automated execution.",
+  "skipReason": "Creates a sandbox sub-tenant from the caller's JWT tenant_id (403 if the token carries no tenant_id) and provisions a sub-pool via createSandboxTenant; needs a real parent tenant + pool. Body fields (expires_at, sanitization_policy) are optional.",
   "testCases": [
     {
-      "name": "Auto-generated from route scan (review payload before enabling)",
+      "name": "Create sandbox sub-tenant",
       "headers": {
         "Authorization": "Bearer {{cache:auth.register.response.data.token}}"
       },
-      "payload": {},
-      "expectedStatus": 200
+      "payload": {
+        "expires_at": "{{static:2027-01-01T00:00:00Z}}",
+        "sanitization_policy": "{{static:default-pii-mask}}"
+      },
+      "expectedStatus": 201
     }
   ]
 }

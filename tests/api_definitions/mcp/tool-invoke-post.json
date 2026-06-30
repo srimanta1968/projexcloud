@@ -5,12 +5,24 @@
   "description": "Capability-token-gated MCP tool invocation. Validates token against args, marks single-use, opens transport, calls /tools/call, persists mcp.tool_invocation + mcp.tool.invoked.v1. AC-12, FR-MCP-3.",
   "requiresAuth": true,
   "priority": 410,
-  "dependsOn": ["POST /api/auth/register"],
+  "dependsOn": ["POST /api/auth/register", "POST /api/mcp/server-registrations"],
   "testability": "manual",
-  "skipReason": "Requires registered MCP server + minted capability_token; AC-12 e2e test drives all three (Slack/Snowflake/Jira).",
+  "skipReason": "Requires a registered MCP server (manual fixture) plus a minted single-use capability_token; neither tool_id nor capability_token_id can be captured in an automated run. AC-12 e2e test drives all three (Slack/Snowflake/Jira). Required body fields filled.",
   "testCases": [
     {
       "name": "Manual: invoke slack.post-message via mcp-bridge",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.register.response.data.token}}"
+      },
+      "pathParams": {
+        "tool_id": "{{cache:mcp.server-registrations.create.response.data.tools.0.tool_id}}"
+      },
+      "payload": {
+        "agent_run_id": "{{dynamic:uuid}}",
+        "capability_token_id": "{{cache:mcp.capability-tokens.create.response.data.capability_token_id}}",
+        "args": { "channel": "#general", "text": "hello from automated test" },
+        "trace_id": "{{dynamic:uuid}}"
+      },
       "expectedStatus": 200,
       "expectedResponse": { "success": true }
     }

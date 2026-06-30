@@ -4,25 +4,29 @@
   "method": "POST",
   "requiresAuth": true,
   "dependsOn": [
-    "POST /api/auth/register"
+    "POST /api/auth/register",
+    "POST /api/social/interactions"
   ],
   "expectedStatus": 200,
   "sdk": "sdk-social",
   "sourceFile": "packages/sdk-social/src/server/routes.ts",
   "_generated": true,
-  "testability": "manual",
-  "skipReason": "Auto-generated from implemented route scan; payload/expectedResponse inferred from the handler and need review before enabling automated execution.",
   "testCases": [
     {
-      "name": "Auto-generated from route scan (review payload before enabling)",
+      "name": "Capture an interaction as a CRM lead",
       "headers": {
         "Authorization": "Bearer {{cache:auth.register.response.data.token}}"
       },
       "pathParams": {
-        "interaction_id": "{{static:REPLACE_WITH_ID}}"
+        "interaction_id": "{{cache:social.interactions.create.response.data.interaction.interaction_id}}"
       },
-      "payload": {},
+      "payload": {
+        "contact_id": "{{dynamic:uuid}}"
+      },
       "expectedStatus": 200
     }
-  ]
+  ],
+  "expectedResponse": {
+    "data": { "interaction": { "interaction_id": "string", "captured_lead_contact_id": "string" } }
+  }
 }

@@ -1,22 +1,24 @@
 {
-  "name": "POST /admin/webhooks/dlq/:delivery_id/replay \u2014 api-gateway",
+  "name": "POST /admin/webhooks/dlq/:delivery_id/replay — api-gateway",
   "endpoint": "/admin/webhooks/dlq/:delivery_id/replay",
   "method": "POST",
   "requiresAuth": false,
-  "expectedStatus": 201,
+  "expectedStatus": 200,
   "sdk": "api-gateway",
   "sourceFile": "services/api-gateway/src/app.ts",
   "_generated": true,
   "testability": "manual",
-  "skipReason": "Auto-generated from implemented route scan; payload/expectedResponse inferred from the handler and need review before enabling automated execution.",
+  "skipReason": "Gated by the ADMIN_OPS_TOKEN (x-admin-ops-token header). Reads no body; delivery_id is a path FK to a dead-lettered webhook delivery.",
   "testCases": [
     {
-      "name": "Auto-generated from route scan (review payload before enabling)",
-      "pathParams": {
-        "delivery_id": "{{static:REPLACE_WITH_ID}}"
+      "name": "Replay a dead-lettered webhook delivery",
+      "headers": {
+        "x-admin-ops-token": "{{static:ADMIN_OPS_TOKEN}}"
       },
-      "payload": {},
-      "expectedStatus": 201
+      "pathParams": {
+        "delivery_id": "{{static:REPLACE_WITH_DELIVERY_ID}}"
+      },
+      "expectedStatus": 200
     }
   ]
 }

@@ -4,22 +4,27 @@
   "method": "POST",
   "requiresAuth": true,
   "dependsOn": [
-    "POST /api/auth/register"
+    "POST /api/auth/register",
+    "POST /api/search/index"
   ],
-  "expectedStatus": 201,
+  "expectedStatus": 200,
   "sdk": "sdk-search",
   "sourceFile": "packages/sdk-search/src/server/routes.ts",
   "_generated": true,
   "testability": "manual",
-  "skipReason": "Auto-generated from implemented route scan; payload/expectedResponse inferred from the handler and need review before enabling automated execution.",
+  "skipReason": "ABAC free-text/DSL query against OpenSearch; requires a real OpenSearch cluster (or in-process synthetic client) and a registered index for the entity_kind (POST /api/search/index). tenant_id and effective_scopes are server-injected from the JWT, never the body. Required body field (entity_kind) filled.",
   "testCases": [
     {
-      "name": "Auto-generated from route scan (review payload before enabling)",
+      "name": "Query encounter entities",
       "headers": {
         "Authorization": "Bearer {{cache:auth.register.response.data.token}}"
       },
-      "payload": {},
-      "expectedStatus": 201
+      "payload": {
+        "entity_kind": "{{static:encounter}}",
+        "q": "{{dynamic:word}}",
+        "size": 10
+      },
+      "expectedStatus": 200
     }
   ]
 }

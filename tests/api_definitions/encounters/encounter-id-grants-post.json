@@ -4,25 +4,35 @@
   "method": "POST",
   "requiresAuth": true,
   "dependsOn": [
-    "POST /api/auth/register"
+    "POST /api/auth/register",
+    "POST /api/encounters",
+    "POST /api/personas"
   ],
-  "expectedStatus": 200,
+  "expectedStatus": 201,
   "sdk": "sdk-engagement",
   "sourceFile": "packages/sdk-engagement/src/server/routes.ts",
   "_generated": true,
   "testability": "manual",
-  "skipReason": "Auto-generated from implemented route scan; payload/expectedResponse inferred from the handler and need review before enabling automated execution.",
+  "skipReason": "Requires an open encounter and grantee/issuer personas; issueGrant inserts a time/scope-bounded encounter_grant row.",
   "testCases": [
     {
-      "name": "Auto-generated from route scan (review payload before enabling)",
+      "name": "Issue a scope-bounded encounter grant",
       "headers": {
         "Authorization": "Bearer {{cache:auth.register.response.data.token}}"
       },
       "pathParams": {
-        "encounter_id": "{{static:REPLACE_WITH_ID}}"
+        "encounter_id": "{{cache:encounters.create.response.data.encounter.encounter_id}}"
       },
-      "payload": {},
-      "expectedStatus": 200
+      "payload": {
+        "grantee_persona_id": "{{cache:personas.create.response.data.persona.persona_id}}",
+        "issuer_persona_id": "{{cache:personas.create.response.data.persona.persona_id}}",
+        "scope": {
+          "methods": ["chart.read"]
+        },
+        "ttl_ms": 28800000,
+        "capability_token_ref": "{{static:cap-token-ref-001}}"
+      },
+      "expectedStatus": 201
     }
   ]
 }

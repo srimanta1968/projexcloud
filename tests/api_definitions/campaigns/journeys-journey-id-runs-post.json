@@ -4,25 +4,32 @@
   "method": "POST",
   "requiresAuth": true,
   "dependsOn": [
-    "POST /api/auth/register"
+    "POST /api/auth/signup-tenant",
+    "POST /api/campaigns/:campaign_id/journeys",
+    "POST /api/personas"
   ],
-  "expectedStatus": 200,
+  "expectedStatus": 201,
   "sdk": "sdk-campaign",
   "sourceFile": "packages/sdk-campaign/src/server/routes.ts",
   "_generated": true,
   "testability": "manual",
-  "skipReason": "Auto-generated from implemented route scan; payload/expectedResponse inferred from the handler and need review before enabling automated execution.",
+  "skipReason": "Requires subject_persona_id (best-effort from the persona create, itself manual / needs a membership_id) plus a journey_id from the journey create. Handler requires subject_persona_id; inserts campaign.journey_run and returns 201.",
+  "captureResponse": {
+    "campaigns.run.create.response.data.run.run_id": "data.run.run_id"
+  },
   "testCases": [
     {
-      "name": "Auto-generated from route scan (review payload before enabling)",
+      "name": "Start a journey run for a subject persona",
       "headers": {
-        "Authorization": "Bearer {{cache:auth.register.response.data.token}}"
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
       },
       "pathParams": {
-        "journey_id": "{{static:REPLACE_WITH_ID}}"
+        "journey_id": "{{cache:campaigns.journey.create.response.data.journey.journey_id}}"
       },
-      "payload": {},
-      "expectedStatus": 200
+      "payload": {
+        "subject_persona_id": "{{cache:personas.create.response.data.persona.persona_id}}"
+      },
+      "expectedStatus": 201
     }
   ]
 }

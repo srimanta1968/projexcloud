@@ -7,7 +7,34 @@
   "sprintId": "efcf9cbd-5e84-469e-946e-efcabf8c88e1",
   "featureId": "01f9d9f9-989e-4cd7-b6cf-50173e3830bd",
   "epicId": "2e2950d2-3772-4768-bd85-8a8734958c78",
+  "expectedStatus": 200,
   "testability": "manual",
-  "skipReason": "Requires a queued candidate link with an approval step_id; multi-step adjudication flow not auto-testable.",
-  "testCases": []
+  "skipReason": "Requires a queued candidate link with a pending approval step_id; the candidate link itself has no HTTP creation endpoint and steward-review must run first, so :link_id and step_id have no resolvable provider chain.",
+  "dependsOn": [
+    "POST /api/auth/register",
+    "POST /api/empi/candidate-links/:link_id/steward-review"
+  ],
+  "fieldOptions": {
+    "decision": ["approve", "reject"]
+  },
+  "testCases": [
+    {
+      "name": "Steward approves a candidate link (triggers reversible merge)",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.register.response.data.token}}"
+      },
+      "pathParams": {
+        "link_id": "{{cache:empi.steward-review.response.data.link.link_id}}"
+      },
+      "payload": {
+        "step_id": "{{cache:empi.steward-review.response.data.pending_step_ids.0}}",
+        "decision": "{{static:approve}}",
+        "reason": "{{static:Records confirmed as the same patient}}"
+      },
+      "expectedStatus": 200
+    }
+  ],
+  "expectedResponse": {
+    "data": { "link": { "link_id": "string", "status": "string" } }
+  }
 }

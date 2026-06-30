@@ -7,7 +7,34 @@
   "sprintId": "efcf9cbd-5e84-469e-946e-efcabf8c88e1",
   "featureId": "d00b18c5-a75a-4a02-8e0e-b6f941ac60c1",
   "epicId": "0d61fa89-b842-43af-baf9-42454044726f",
+  "expectedStatus": 200,
   "testability": "manual",
-  "skipReason": "Depends on a pending break-glass grant + approval step_id; multi-step approval flow not auto-testable.",
-  "testCases": []
+  "skipReason": "Depends on a pending break-glass grant and its gating approval step_id; the acting persona must match the route's approver. Part of the multi-step request -> decide -> use flow.",
+  "dependsOn": [
+    "POST /api/auth/register",
+    "POST /api/break-glass"
+  ],
+  "fieldOptions": {
+    "decision": ["approve", "reject"]
+  },
+  "testCases": [
+    {
+      "name": "Approve the gating request, activating the grant",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.register.response.data.token}}"
+      },
+      "pathParams": {
+        "grant_id": "{{cache:break-glass.request.response.data.grant.grant_id}}"
+      },
+      "payload": {
+        "step_id": "{{cache:break-glass.request.response.data.pending_step_ids.0}}",
+        "decision": "{{static:approve}}",
+        "reason": "{{static:Emergency verified - access approved}}"
+      },
+      "expectedStatus": 200
+    }
+  ],
+  "expectedResponse": {
+    "data": { "grant": { "grant_id": "string", "status": "string" } }
+  }
 }

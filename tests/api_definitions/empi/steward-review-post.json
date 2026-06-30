@@ -7,7 +7,34 @@
   "sprintId": "efcf9cbd-5e84-469e-946e-efcabf8c88e1",
   "featureId": "01f9d9f9-989e-4cd7-b6cf-50173e3830bd",
   "epicId": "2e2950d2-3772-4768-bd85-8a8734958c78",
+  "expectedStatus": 201,
   "testability": "manual",
-  "skipReason": "Requires an existing candidate link + an approval route; multi-step steward flow not auto-testable.",
-  "testCases": []
+  "skipReason": "Requires an existing empi.candidate_link (only created internally via probabilistic matchAndLink — no HTTP creation endpoint), so the :link_id path param has no resolvable provider; route_id chains from POST /api/approvals/routes.",
+  "dependsOn": [
+    "POST /api/auth/register",
+    "POST /api/approvals/routes"
+  ],
+  "testCases": [
+    {
+      "name": "Queue a candidate link for steward review",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.register.response.data.token}}"
+      },
+      "pathParams": {
+        "link_id": "{{cache:empi.candidate-links.create.response.data.link.link_id}}"
+      },
+      "payload": {
+        "tenant_id": "{{static:00000000-0000-0000-0000-000000000001}}",
+        "route_id": "{{cache:approvals.routes.create.response.data.route.route_id}}"
+      },
+      "expectedStatus": 201
+    }
+  ],
+  "expectedResponse": {
+    "data": { "link": { "link_id": "string", "steward_request_id": "string" }, "pending_step_ids": "array" }
+  },
+  "captureResponse": {
+    "empi.steward-review.response.data.link.link_id": "data.link.link_id",
+    "empi.steward-review.response.data.pending_step_ids.0": "data.pending_step_ids.0"
+  }
 }

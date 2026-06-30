@@ -4,25 +4,34 @@
   "method": "POST",
   "requiresAuth": true,
   "dependsOn": [
-    "POST /api/auth/register"
+    "POST /api/auth/signup-tenant",
+    "POST /api/campaigns"
   ],
-  "expectedStatus": 200,
+  "expectedStatus": 201,
   "sdk": "sdk-campaign",
   "sourceFile": "packages/sdk-campaign/src/server/routes.ts",
   "_generated": true,
   "testability": "manual",
-  "skipReason": "Auto-generated from implemented route scan; payload/expectedResponse inferred from the handler and need review before enabling automated execution.",
+  "skipReason": "Needs a real sub-bearing JWT and a campaign_id from the campaign create. Handler reads optional body.steps (defaults []); upserts campaign.journey and returns 201.",
+  "captureResponse": {
+    "campaigns.journey.create.response.data.journey.journey_id": "data.journey.journey_id"
+  },
   "testCases": [
     {
-      "name": "Auto-generated from route scan (review payload before enabling)",
+      "name": "Define a two-step journey (delay then notification)",
       "headers": {
-        "Authorization": "Bearer {{cache:auth.register.response.data.token}}"
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
       },
       "pathParams": {
-        "campaign_id": "{{static:REPLACE_WITH_ID}}"
+        "campaign_id": "{{cache:campaigns.create.response.data.campaign.campaign_id}}"
       },
-      "payload": {},
-      "expectedStatus": 200
+      "payload": {
+        "steps": [
+          { "kind": "delay", "duration_hours": 24 },
+          { "kind": "notification", "template_code": "welcome_v1" }
+        ]
+      },
+      "expectedStatus": 201
     }
   ]
 }
