@@ -1,0 +1,27 @@
+{
+  "name": "PUT /api/analytics/datasets/:spec_id/label-source — set supervised labeling",
+  "endpoint": "/api/analytics/datasets/:spec_id/label-source",
+  "method": "PUT",
+  "requiresAuth": true,
+  "expectedStatus": 200,
+  "taskId": "9ac502a1-98c0-4f89-8d9a-353899b1b58c",
+  "sprintId": "efcf9cbd-5e84-469e-946e-efcabf8c88e1",
+  "priority": 53,
+  "dependsOn": ["POST /api/auth/signup-tenant", "POST /api/analytics/datasets"],
+  "testability": "manual",
+  "skipReason": "Needs a real sub-bearing JWT and a registered dataset spec. Sets the labeling source (inline intervals, or a provider that joins events/evidence) so the next build produces a supervised dataset.",
+  "testCases": [
+    {
+      "name": "Set interval-based labels",
+      "headers": { "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}" },
+      "pathParams": { "spec_id": "{{cache:analytics.dataset.response.data.spec_id}}" },
+      "payload": {
+        "kind": "intervals",
+        "default_label": 0,
+        "intervals": [{ "from": "{{dynamic:pastdatetime}}", "to": "{{dynamic:datetime}}", "label": 1 }]
+      },
+      "expectedStatus": 200,
+      "testability": "manual"
+    }
+  ]
+}

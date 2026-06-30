@@ -17,6 +17,10 @@ export {
   getDatasetSpec,
   listDatasetSpecs,
   buildDatasetFromSpec,
+  labelFeatureWindows,
+  updateDatasetLabelSource,
+  setLabelProvider,
+  _resetLabelProvider,
 } from './services/datasetBuilder';
 export type {
   BucketGrain,
@@ -26,4 +30,10 @@ export type {
   DatasetSpecRecord,
   CreateDatasetSpecInput,
   DatasetBuildResult,
+  LabelValue,
+  IntervalLabel,
+  LabelSource,
+  LabeledFeatureRow,
+  LabelProvider,
+  LabelProviderContext,
 } from './services/datasetBuilder';

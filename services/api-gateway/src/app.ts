@@ -266,6 +266,7 @@ import {
   createDatasetSpec,
   listDatasetSpecs,
   buildDatasetFromSpec,
+  updateDatasetLabelSource,
 } from '@projexlight/sdk-analytics';
 import {
   migrationsDir as lineageMigrations,
@@ -2679,6 +2680,36 @@ const start = async (): Promise<void> => {
         const data = await buildDatasetFromSpec(tenant_id, req.params.spec_id, {
           from: req.body.from,
           to: req.body.to,
+        });
+        if (!data) return reply.code(404).send({ success: false, error: 'dataset spec not found' });
+        return { success: true, data };
+      } catch (e) {
+        return reply.code(500).send({ success: false, error: (e as Error).message });
+      }
+    });
+
+    // P12 · E1 — set the labeling source on a dataset spec (supervised datasets:
+    // inline intervals or a provider that joins events/evidence).
+    app.put<{
+      Params: { spec_id: string };
+      Body: {
+        kind?: 'intervals' | 'provider';
+        intervals?: Array<{ from: string; to: string; label: number | string }>;
+        default_label?: number | string;
+        provider_args?: Record<string, unknown>;
+      };
+    }>('/api/analytics/datasets/:spec_id/label-source', { preHandler: requireAuth }, async (req, reply) => {
+      const tenant_id = req.auth?.tenant_id;
+      if (!tenant_id) return reply.code(400).send({ success: false, error: 'tenant context required' });
+      if (req.body?.kind !== 'intervals' && req.body?.kind !== 'provider') {
+        return reply.code(400).send({ success: false, error: "kind must be 'intervals' or 'provider'" });
+      }
+      try {
+        const data = await updateDatasetLabelSource(tenant_id, req.params.spec_id, {
+          kind: req.body.kind,
+          intervals: req.body.intervals,
+          default_label: req.body.default_label,
+          provider_args: req.body.provider_args,
         });
         if (!data) return reply.code(404).send({ success: false, error: 'dataset spec not found' });
         return { success: true, data };

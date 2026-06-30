@@ -98,6 +98,100 @@ export async function buildFeatureWindows(spec: FeatureWindowSpec): Promise<Feat
   return [...byBucket.values()];
 }
 
+/* --------------------------------------------------- labeling (supervised) */
+
+export type LabelValue = number | string;
+
+export interface IntervalLabel {
+  from: string;
+  to: string;
+  label: LabelValue;
+}
+
+/**
+ * How to label feature windows for supervised training:
+ *   - 'intervals': inline labeled time ranges (e.g. "these windows were a fault").
+ *   - 'provider':  delegate to a pluggable label provider the host wires to
+ *                  sdk-event / sdk-evidence (join events/evidence to windows).
+ */
+export interface LabelSource {
+  kind: 'intervals' | 'provider';
+  intervals?: IntervalLabel[];
+  default_label?: LabelValue;
+  /** Opaque args passed to the label provider (provider kind). */
+  provider_args?: Record<string, unknown>;
+}
+
+export interface LabeledFeatureRow extends FeatureWindowRow {
+  label: LabelValue | null;
+  labeled: boolean;
+}
+
+export interface LabelProviderContext {
+  tenant_id: string;
+  asset_id: string;
+  from: string;
+  to: string;
+  window_starts: string[];
+  args?: Record<string, unknown>;
+}
+
+/** Returns a map of window_start(ISO) -> label. Wired by the host to events/evidence. */
+export type LabelProvider = (ctx: LabelProviderContext) => Promise<Record<string, LabelValue>>;
+
+let _labelProvider: LabelProvider | null = null;
+export function setLabelProvider(provider: LabelProvider | null): void {
+  _labelProvider = provider;
+}
+export function _resetLabelProvider(): void {
+  _labelProvider = null;
+}
+
+/**
+ * Attach a label to each feature window. For 'intervals', a window is labeled
+ * when its start falls within a labeled interval; otherwise default_label. For
+ * 'provider', the wired provider supplies labels (join with events/evidence);
+ * if no provider is wired, rows fall back to default_label / unlabeled.
+ */
+export async function labelFeatureWindows(
+  rows: FeatureWindowRow[],
+  source: LabelSource,
+  ctx: { tenant_id: string; asset_id: string; from: string; to: string },
+): Promise<LabeledFeatureRow[]> {
+  const defaultLabel = source.default_label ?? null;
+
+  if (source.kind === 'provider') {
+    let map: Record<string, LabelValue> = {};
+    if (_labelProvider) {
+      map = await _labelProvider({
+        tenant_id: ctx.tenant_id,
+        asset_id: ctx.asset_id,
+        from: ctx.from,
+        to: ctx.to,
+        window_starts: rows.map((r) => r.window_start),
+        args: source.provider_args,
+      });
+    }
+    return rows.map((r) => {
+      const has = Object.prototype.hasOwnProperty.call(map, r.window_start);
+      const label = has ? map[r.window_start] : defaultLabel;
+      return { ...r, label, labeled: has };
+    });
+  }
+
+  // intervals
+  const intervals = (source.intervals ?? []).map((iv) => ({
+    from: new Date(iv.from).getTime(),
+    to: new Date(iv.to).getTime(),
+    label: iv.label,
+  }));
+  return rows.map((r) => {
+    const t = new Date(r.window_start).getTime();
+    const hit = intervals.find((iv) => t >= iv.from && t < iv.to);
+    return { ...r, label: hit ? hit.label : defaultLabel, labeled: !!hit };
+  });
+}
+
 /* ----------------------------------------------------------- dataset specs */
 
 export interface DatasetSpecRecord {
@@ -172,18 +266,36 @@ export async function listDatasetSpecs(tenant_id: string): Promise<DatasetSpecRe
   );
 }
 
+/** Set/replace the labeling source on a spec (turns it into a supervised dataset). */
+export async function updateDatasetLabelSource(
+  tenant_id: string,
+  spec_id: string,
+  label_source: LabelSource | null,
+): Promise<DatasetSpecRecord | null> {
+  return dataService.one<DatasetSpecRecord>(
+    `UPDATE analytics.dataset_spec
+        SET label_source = $3::jsonb
+      WHERE tenant_id = $1::uuid AND spec_id = $2::uuid
+     RETURNING spec_id::text, tenant_id::text, name, asset_id::text, sensor_ids,
+               bucket_grain, aggregations, label_source, created_at`,
+    [tenant_id, spec_id, label_source ? JSON.stringify(label_source) : null],
+  );
+}
+
 export interface DatasetBuildResult {
   build_id: string;
   spec_id: string;
   window_from: string;
   window_to: string;
   row_count: number;
-  rows: FeatureWindowRow[];
+  labeled_count: number;
+  rows: Array<FeatureWindowRow | LabeledFeatureRow>;
 }
 
 /**
- * Materialize a registered spec over [from, to): build the feature windows and
- * record a dataset_build row. Returns the build metadata + the feature rows.
+ * Materialize a registered spec over [from, to): build the feature windows,
+ * apply the spec's label source (if any) joining events/evidence for supervised
+ * datasets, and record a dataset_build row. Returns the build metadata + rows.
  */
 export async function buildDatasetFromSpec(
   tenant_id: string,
@@ -193,7 +305,7 @@ export async function buildDatasetFromSpec(
   const spec = await getDatasetSpec(tenant_id, spec_id);
   if (!spec) return null;
 
-  const rows = await buildFeatureWindows({
+  const baseRows = await buildFeatureWindows({
     tenant_id,
     asset_id: spec.asset_id,
     sensor_ids: spec.sensor_ids ?? undefined,
@@ -203,11 +315,25 @@ export async function buildDatasetFromSpec(
     aggregations: spec.aggregations,
   });
 
+  let rows: Array<FeatureWindowRow | LabeledFeatureRow> = baseRows;
+  let labeled_count = 0;
+  if (spec.label_source) {
+    const labeled = await labelFeatureWindows(baseRows, spec.label_source as unknown as LabelSource, {
+      tenant_id,
+      asset_id: spec.asset_id,
+      from: window.from,
+      to: window.to,
+    });
+    rows = labeled;
+    labeled_count = labeled.filter((r) => r.labeled).length;
+  }
+
   const build = await dataService.one<{ build_id: string }>(
-    `INSERT INTO analytics.dataset_build (spec_id, tenant_id, window_from, window_to, row_count)
-     VALUES ($1, $2, $3::timestamptz, $4::timestamptz, $5)
+    `INSERT INTO analytics.dataset_build
+       (spec_id, tenant_id, window_from, window_to, row_count, labeled_count)
+     VALUES ($1, $2, $3::timestamptz, $4::timestamptz, $5, $6)
      RETURNING build_id::text`,
-    [spec_id, tenant_id, window.from, window.to, rows.length],
+    [spec_id, tenant_id, window.from, window.to, rows.length, labeled_count],
   );
   if (!build) throw new Error('failed to record dataset build');
 
@@ -217,6 +343,7 @@ export async function buildDatasetFromSpec(
     window_from: window.from,
     window_to: window.to,
     row_count: rows.length,
+    labeled_count,
     rows,
   };
 }
