@@ -5,6 +5,7 @@ import websocket from '@fastify/websocket';
 import { initPool } from '@projexlight/db-runtime';
 import { closeRedis, initRedis } from '@projexlight/redis-runtime';
 import { closeKafka, initKafka, publishMessage } from '@projexlight/kafka-runtime';
+import { randomUUID } from 'crypto';
 import { closeClickHouse, initClickHouse, insert as chInsert } from '@projexlight/clickhouse-runtime';
 import { runMigrations } from '@projexlight/migration-runner';
 import {
@@ -267,10 +268,13 @@ import {
   listDatasetSpecs,
   buildDatasetFromSpec,
   updateDatasetLabelSource,
+  setDatasetLineageRecorder,
+  listDatasetBuilds,
 } from '@projexlight/sdk-analytics';
 import {
   migrationsDir as lineageMigrations,
   runLineageBackfill,
+  emit as lineageEmit,
 } from '@projexlight/sdk-lineage';
 import { migrationsDir as semanticMigrations }         from '@projexlight/sdk-semantic';
 import { migrationsDir as connectorSnowflakeMigrations } from '@projexlight/connector-snowflake';
@@ -573,6 +577,20 @@ setIngestHooks({
 // command-lifecycle transition (issued / gated / approved / rejected) is
 // recorded as a verifiable audit entry. rebac/policy/approval hooks stay at
 // their safe defaults until their governance routes are configured.
+// P12 · E1 — record dataset-build provenance via sdk-lineage (reuse). A built
+// training dataset is derived_from the robot asset's sensor data; the returned
+// edge_id is stored as the build's lineage_ref for reproducibility.
+setDatasetLineageRecorder(async (ctx): Promise<string | null> => {
+  const edge = await lineageEmit({
+    from: { ref_kind: 'asset.asset', ref_id: ctx.asset_id, kind: 'record', tenant_id: ctx.tenant_id },
+    to: { ref_kind: 'analytics.dataset_build', ref_id: ctx.build_id, kind: 'record', tenant_id: ctx.tenant_id },
+    edge_kind: 'derived_from',
+    producer_sdk: 'sdk-analytics',
+    trace_id: randomUUID(),
+  });
+  return edge.edge_id;
+});
+
 setCommandHooks({
   async audit(event): Promise<void> {
     await appendAuditEntry({
@@ -2687,6 +2705,22 @@ const start = async (): Promise<void> => {
         return reply.code(500).send({ success: false, error: (e as Error).message });
       }
     });
+
+    // P12 · E1 — reproducibility ledger: builds for a spec (window + lineage_ref).
+    app.get<{ Params: { spec_id: string } }>(
+      '/api/analytics/datasets/:spec_id/builds',
+      { preHandler: requireAuth },
+      async (req, reply) => {
+        const tenant_id = req.auth?.tenant_id;
+        if (!tenant_id) return reply.code(400).send({ success: false, error: 'tenant context required' });
+        try {
+          const data = await listDatasetBuilds(tenant_id, req.params.spec_id);
+          return { success: true, data };
+        } catch (e) {
+          return reply.code(500).send({ success: false, error: (e as Error).message });
+        }
+      },
+    );
 
     // P12 · E1 — set the labeling source on a dataset spec (supervised datasets:
     // inline intervals or a provider that joins events/evidence).

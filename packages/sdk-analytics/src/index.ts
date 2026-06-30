@@ -21,6 +21,10 @@ export {
   updateDatasetLabelSource,
   setLabelProvider,
   _resetLabelProvider,
+  setDatasetLineageRecorder,
+  _resetDatasetLineageRecorder,
+  listDatasetBuilds,
+  getDatasetBuild,
 } from './services/datasetBuilder';
 export type {
   BucketGrain,
@@ -36,4 +40,7 @@ export type {
   LabeledFeatureRow,
   LabelProvider,
   LabelProviderContext,
+  DatasetLineageContext,
+  DatasetLineageRecorder,
+  DatasetBuildRecord,
 } from './services/datasetBuilder';

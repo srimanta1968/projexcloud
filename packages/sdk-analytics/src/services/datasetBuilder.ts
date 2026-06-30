@@ -192,6 +192,33 @@ export async function labelFeatureWindows(
   });
 }
 
+/* ------------------------------------------------ lineage / reproducibility */
+
+export interface DatasetLineageContext {
+  tenant_id: string;
+  asset_id: string;
+  spec_id: string;
+  build_id: string;
+  window_from: string;
+  window_to: string;
+  row_count: number;
+}
+
+/**
+ * Records the provenance of a dataset build (dataset derived_from the asset's
+ * sensor data) and returns a lineage_ref. Wired by the host to sdk-lineage.emit
+ * so sdk-analytics stays free of a hard sdk-lineage dep.
+ */
+export type DatasetLineageRecorder = (ctx: DatasetLineageContext) => Promise<string | null>;
+
+let _lineageRecorder: DatasetLineageRecorder | null = null;
+export function setDatasetLineageRecorder(recorder: DatasetLineageRecorder | null): void {
+  _lineageRecorder = recorder;
+}
+export function _resetDatasetLineageRecorder(): void {
+  _lineageRecorder = null;
+}
+
 /* ----------------------------------------------------------- dataset specs */
 
 export interface DatasetSpecRecord {
@@ -289,6 +316,7 @@ export interface DatasetBuildResult {
   window_to: string;
   row_count: number;
   labeled_count: number;
+  lineage_ref: string | null;
   rows: Array<FeatureWindowRow | LabeledFeatureRow>;
 }
 
@@ -337,6 +365,30 @@ export async function buildDatasetFromSpec(
   );
   if (!build) throw new Error('failed to record dataset build');
 
+  // Provenance: record the dataset-derived-from-asset edge (reproducibility).
+  let lineage_ref: string | null = null;
+  if (_lineageRecorder) {
+    try {
+      lineage_ref = await _lineageRecorder({
+        tenant_id,
+        asset_id: spec.asset_id,
+        spec_id,
+        build_id: build.build_id,
+        window_from: window.from,
+        window_to: window.to,
+        row_count: rows.length,
+      });
+      if (lineage_ref) {
+        await dataService.rows(
+          `UPDATE analytics.dataset_build SET lineage_ref = $2 WHERE build_id = $1::uuid`,
+          [build.build_id, lineage_ref],
+        );
+      }
+    } catch (err) {
+      console.warn('[sdk-analytics] lineage recorder failed:', (err as Error).message);
+    }
+  }
+
   return {
     build_id: build.build_id,
     spec_id,
@@ -344,6 +396,43 @@ export async function buildDatasetFromSpec(
     window_to: window.to,
     row_count: rows.length,
     labeled_count,
+    lineage_ref,
     rows,
   };
+}
+
+export interface DatasetBuildRecord {
+  build_id: string;
+  spec_id: string;
+  tenant_id: string;
+  window_from: string;
+  window_to: string;
+  row_count: number;
+  labeled_count: number;
+  lineage_ref: string | null;
+  export_ref: string | null;
+  built_at: string;
+}
+
+/** List builds for a spec (reproducibility ledger: window + lineage_ref per build). */
+export async function listDatasetBuilds(tenant_id: string, spec_id: string): Promise<DatasetBuildRecord[]> {
+  return dataService.rows<DatasetBuildRecord>(
+    `SELECT build_id::text, spec_id::text, tenant_id::text, window_from, window_to,
+            row_count, labeled_count, lineage_ref, export_ref, built_at
+       FROM analytics.dataset_build
+      WHERE tenant_id = $1::uuid AND spec_id = $2::uuid
+      ORDER BY built_at DESC`,
+    [tenant_id, spec_id],
+  );
+}
+
+/** Read a single build by id (the full reproducibility record). */
+export async function getDatasetBuild(tenant_id: string, build_id: string): Promise<DatasetBuildRecord | null> {
+  return dataService.one<DatasetBuildRecord>(
+    `SELECT build_id::text, spec_id::text, tenant_id::text, window_from, window_to,
+            row_count, labeled_count, lineage_ref, export_ref, built_at
+       FROM analytics.dataset_build
+      WHERE tenant_id = $1::uuid AND build_id = $2::uuid`,
+    [tenant_id, build_id],
+  );
 }
