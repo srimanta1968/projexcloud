@@ -1,0 +1,17 @@
+[Unit]
+Description=ProjexCloud container stack (reconcile on boot)
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+WorkingDirectory=/home/ec2-user/projexcloud
+ExecStart=/home/ec2-user/projexcloud/deploy.sh up
+# Boot path uses --no-build (existing images), so this is fast; allow headroom
+# for image (re)creation just in case.
+TimeoutStartSec=600
+
+[Install]
+WantedBy=multi-user.target
