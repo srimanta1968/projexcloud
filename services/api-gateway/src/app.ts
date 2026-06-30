@@ -64,7 +64,7 @@ import {
 import { server as secretsServer } from '@projexlight/sdk-secrets';
 import { migrationsDir as tenantMigrations, server as tenantServer, createTenant as tenantCreate, listTenants as tenantList, ensureApp as appEnsure } from '@projexlight/sdk-tenant';
 import { migrationsDir as consentMigrations, server as consentServer } from '@projexlight/sdk-consent';
-import { migrationsDir as assetMigrations, registerAsset as assetRegister, getTwin as assetGetTwin, bootstrapAssetClickHouseSchema, ingestReadings as assetIngestReadings, startSensorRollupJob, runSensorRollup } from '@projexlight/sdk-asset';
+import { migrationsDir as assetMigrations, registerAsset as assetRegister, getTwin as assetGetTwin, bootstrapAssetClickHouseSchema, ingestReadings as assetIngestReadings, startSensorRollupJob, runSensorRollup, queryReadings as assetQueryReadings } from '@projexlight/sdk-asset';
 import {
   migrationsDir as commandMigrations,
   issueCommand,
@@ -2536,6 +2536,26 @@ const start = async (): Promise<void> => {
         }
       },
     );
+
+    // P12 · E1 — sensor time-series query (raw or 1m/1h/day rollup) by
+    // asset / sensor / time range. Backed by sdk-asset (storage-agnostic).
+    app.get<{
+      Params: { asset_id: string };
+      Querystring: { sensor_id?: string; from?: string; to?: string; bucket?: string };
+    }>('/api/assets/:asset_id/readings', { preHandler: requireAuth }, async (req, reply) => {
+      const q = req.query ?? {};
+      try {
+        const data = await assetQueryReadings(req.params.asset_id, {
+          sensor_id: q.sensor_id,
+          from: q.from,
+          to: q.to,
+          bucket: q.bucket,
+        });
+        return { success: true, data };
+      } catch (e) {
+        return reply.code(500).send({ success: false, error: (e as Error).message });
+      }
+    });
 
     // P12 · E1 — per-robot / per-sensor metered usage rollup (sdk-meter).
     app.get<{ Params: { asset_id: string } }>(
