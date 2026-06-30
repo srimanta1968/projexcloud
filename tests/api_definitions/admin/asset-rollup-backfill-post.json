@@ -1,0 +1,23 @@
+{
+  "name": "POST /api/admin/asset/rollup/backfill — sensor rollup backfill (operator)",
+  "endpoint": "/api/admin/asset/rollup/backfill",
+  "method": "POST",
+  "requiresAuth": false,
+  "expectedStatus": 200,
+  "taskId": "c87c2262-c4fa-42ec-990d-800cda93e91d",
+  "sprintId": "efcf9cbd-5e84-469e-946e-efcabf8c88e1",
+  "sdk": "api-gateway",
+  "sourceFile": "services/api-gateway/src/app.ts",
+  "priority": 32,
+  "testability": "manual",
+  "skipReason": "Operator endpoint gated by the ADMIN_OPS_TOKEN header and requires ClickHouse enabled; recomputes the 1m+1h sensor rollups for a window (idempotent delete-then-reinsert). Verify live with the ops token against a CH-backed env.",
+  "testCases": [
+    {
+      "name": "Backfill the trailing 24h of sensor rollups",
+      "headers": { "x-admin-ops-token": "{{static:ADMIN_OPS_TOKEN}}" },
+      "payload": { "lookback_hours": 24 },
+      "expectedStatus": 200,
+      "testability": "manual"
+    }
+  ]
+}

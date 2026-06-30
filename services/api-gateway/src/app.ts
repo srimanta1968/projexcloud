@@ -61,7 +61,7 @@ import {
 import { server as secretsServer } from '@projexlight/sdk-secrets';
 import { migrationsDir as tenantMigrations, server as tenantServer, createTenant as tenantCreate, listTenants as tenantList, ensureApp as appEnsure } from '@projexlight/sdk-tenant';
 import { migrationsDir as consentMigrations, server as consentServer } from '@projexlight/sdk-consent';
-import { migrationsDir as assetMigrations, registerAsset as assetRegister, getTwin as assetGetTwin, bootstrapAssetClickHouseSchema, ingestReadings as assetIngestReadings } from '@projexlight/sdk-asset';
+import { migrationsDir as assetMigrations, registerAsset as assetRegister, getTwin as assetGetTwin, bootstrapAssetClickHouseSchema, ingestReadings as assetIngestReadings, startSensorRollupJob, runSensorRollup } from '@projexlight/sdk-asset';
 import { migrationsDir as commandMigrations } from '@projexlight/sdk-command';
 import { migrationsDir as policyMigrations, server as policyServer } from '@projexlight/sdk-policy';
 import {
@@ -793,6 +793,34 @@ app.post<{
       until: until.toISOString(),
     });
     return { success: true, data: result };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    return reply.code(500).send({ success: false, error: msg });
+  }
+});
+
+// P12 · E1 — operator-triggered sensor rollup backfill (off the hot path).
+// Header-auth gated (ADMIN_OPS_TOKEN), mirrors /admin/storm/ingest-now. Recomputes
+// the 1m + 1h rollups for a trailing window; idempotent (delete-then-reinsert).
+app.post<{
+  Body: { lookback_hours?: number; from?: string; to?: string };
+}>('/api/admin/asset/rollup/backfill', async (req, reply) => {
+  const adminToken = process.env.ADMIN_OPS_TOKEN;
+  const presented = req.headers['x-admin-ops-token'];
+  if (!adminToken || !presented || presented !== adminToken) {
+    return reply.code(401).send({ success: false, error: 'admin token required' });
+  }
+  if (!config.clickhouse.enabled) {
+    return reply.code(409).send({ success: false, error: 'ClickHouse not enabled' });
+  }
+  const body = req.body ?? {};
+  const to = body.to ? new Date(body.to) : new Date();
+  const from = body.from
+    ? new Date(body.from)
+    : new Date(to.getTime() - (body.lookback_hours ?? 24) * 60 * 60 * 1000);
+  try {
+    const data = await runSensorRollup({ from: from.toISOString(), to: to.toISOString() });
+    return { success: true, data };
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     return reply.code(500).send({ success: false, error: msg });
@@ -2959,6 +2987,10 @@ const start = async (): Promise<void> => {
         try {
           await bootstrapAssetClickHouseSchema();
           console.log('[api-gateway] ClickHouse schema bootstrapped (sdk-asset sensor rollups active)');
+          // Decoupled rollup/downsample job (meter-collector pattern): keeps the
+          // 1h tier current + reconciles the trailing window off the hot path.
+          startSensorRollupJob();
+          console.log('[api-gateway] sdk-asset sensor rollup job started');
         } catch (err) {
           console.warn(
             '[api-gateway] sdk-asset ClickHouse bootstrap failed:',
