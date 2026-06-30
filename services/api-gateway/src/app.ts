@@ -63,7 +63,11 @@ import { server as secretsServer } from '@projexlight/sdk-secrets';
 import { migrationsDir as tenantMigrations, server as tenantServer, createTenant as tenantCreate, listTenants as tenantList, ensureApp as appEnsure } from '@projexlight/sdk-tenant';
 import { migrationsDir as consentMigrations, server as consentServer } from '@projexlight/sdk-consent';
 import { migrationsDir as assetMigrations, registerAsset as assetRegister, getTwin as assetGetTwin, bootstrapAssetClickHouseSchema, ingestReadings as assetIngestReadings, startSensorRollupJob, runSensorRollup } from '@projexlight/sdk-asset';
-import { migrationsDir as commandMigrations } from '@projexlight/sdk-command';
+import {
+  migrationsDir as commandMigrations,
+  issueCommand,
+  CommandAuthorizationError,
+} from '@projexlight/sdk-command';
 import { migrationsDir as policyMigrations, server as policyServer } from '@projexlight/sdk-policy';
 import {
   migrationsDir as principalTokenMigrations,
@@ -2463,6 +2467,45 @@ const start = async (): Promise<void> => {
         }
       },
     );
+
+    // P12 · E1 — issue a command to a robot asset/component (sdk-command).
+    // Authorized via rebac + policy (composed in sdk-command); risky commands
+    // land as `pending` awaiting approval.
+    app.post<{
+      Body: {
+        tenant_id?: string;
+        target_asset_id?: string;
+        target_component_id?: string;
+        type?: string;
+        params?: Record<string, unknown>;
+        risk_class?: 'low' | 'medium' | 'high' | 'critical';
+      };
+    }>('/api/commands', { preHandler: requireAuth }, async (req, reply) => {
+      const tenant_id = req.body?.tenant_id || req.auth?.tenant_id;
+      const issued_by = req.auth?.sub;
+      if (!tenant_id) return reply.code(400).send({ success: false, error: 'tenant_id required' });
+      if (!issued_by) return reply.code(400).send({ success: false, error: 'issuer identity required' });
+      if (!req.body?.target_asset_id || !req.body?.type) {
+        return reply.code(400).send({ success: false, error: 'target_asset_id and type are required' });
+      }
+      try {
+        const data = await issueCommand({
+          tenant_id,
+          target_asset_id: req.body.target_asset_id,
+          target_component_id: req.body.target_component_id,
+          type: req.body.type,
+          params: req.body.params,
+          risk_class: req.body.risk_class,
+          issued_by,
+        });
+        return reply.code(201).send({ success: true, data });
+      } catch (e) {
+        if (e instanceof CommandAuthorizationError) {
+          return reply.code(403).send({ success: false, error: e.message });
+        }
+        return reply.code(500).send({ success: false, error: (e as Error).message });
+      }
+    });
 
     // Members (/api/personas) — resolves a tenant's members from the
     // authoritative identity.tenant_membership, with the display name from the
