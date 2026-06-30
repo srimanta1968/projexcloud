@@ -3,6 +3,7 @@ export * from './components/Badge';
 export * from './components/Button';
 export * from './components/Card';
 export * from './components/AdminLoginForm';
+export * from './components/AdminLogout';
 export * from './components/Container';
 export * from './components/CurrentUser';
 export * from './components/Field';
