@@ -13,8 +13,15 @@ export async function middleware(req: NextRequest): Promise<NextResponse> {
   const token = req.cookies.get(SESSION_COOKIE)?.value;
   const user = await resolveSession(token, API_BASE);
   if (!user) {
-    const loginUrl = new URL('/login', req.url);
-    loginUrl.searchParams.set('returnTo', req.nextUrl.pathname);
+    // Clone nextUrl so the portal's basePath (/workspace) is preserved — a bare
+    // new URL('/login') would resolve to the host root and hit the gateway (404).
+    // returnTo carries the full public path (basePath + pathname) so the post-
+    // login redirect routes back through nginx to this portal.
+    const loginUrl = req.nextUrl.clone();
+    const returnTo = (req.nextUrl.basePath || '') + req.nextUrl.pathname;
+    loginUrl.search = '';
+    loginUrl.pathname = '/login';
+    loginUrl.searchParams.set('returnTo', returnTo);
     return NextResponse.redirect(loginUrl);
   }
   return NextResponse.next();
