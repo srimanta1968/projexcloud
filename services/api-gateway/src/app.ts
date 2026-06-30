@@ -261,7 +261,12 @@ import { migrationsDir as ragMigrations }              from '@projexlight/sdk-kn
 import { migrationsDir as parsingMigrations }          from '@projexlight/sdk-parsing';
 import { migrationsDir as conversationMigrations }     from '@projexlight/sdk-conversation';
 import { migrationsDir as recommendationMigrations }   from '@projexlight/sdk-recommendation';
-import { migrationsDir as analyticsMigrations }        from '@projexlight/sdk-analytics';
+import {
+  migrationsDir as analyticsMigrations,
+  createDatasetSpec,
+  listDatasetSpecs,
+  buildDatasetFromSpec,
+} from '@projexlight/sdk-analytics';
 import {
   migrationsDir as lineageMigrations,
   runLineageBackfill,
@@ -2611,6 +2616,71 @@ const start = async (): Promise<void> => {
         if (!data) {
           return reply.code(409).send({ success: false, error: 'command not found or not pending' });
         }
+        return { success: true, data };
+      } catch (e) {
+        return reply.code(500).send({ success: false, error: (e as Error).message });
+      }
+    });
+
+    // P12 · E1 — ML feature/training-dataset builder (sdk-analytics).
+    // Register a dataset spec, list specs, and materialize feature windows.
+    app.post<{
+      Body: {
+        name?: string;
+        asset_id?: string;
+        sensor_ids?: string[];
+        grain?: 'minute' | 'hour' | 'day';
+        aggregations?: Array<'avg' | 'min' | 'max' | 'last' | 'count'>;
+        label_source?: Record<string, unknown>;
+      };
+    }>('/api/analytics/datasets', { preHandler: requireAuth }, async (req, reply) => {
+      const tenant_id = req.auth?.tenant_id;
+      if (!tenant_id) return reply.code(400).send({ success: false, error: 'tenant context required' });
+      if (!req.body?.name || !req.body?.asset_id) {
+        return reply.code(400).send({ success: false, error: 'name and asset_id are required' });
+      }
+      try {
+        const data = await createDatasetSpec({
+          tenant_id,
+          name: req.body.name,
+          asset_id: req.body.asset_id,
+          sensor_ids: req.body.sensor_ids,
+          grain: req.body.grain,
+          aggregations: req.body.aggregations,
+          label_source: req.body.label_source,
+        });
+        return reply.code(201).send({ success: true, data });
+      } catch (e) {
+        return reply.code(500).send({ success: false, error: (e as Error).message });
+      }
+    });
+
+    app.get('/api/analytics/datasets', { preHandler: requireAuth }, async (req, reply) => {
+      const tenant_id = req.auth?.tenant_id;
+      if (!tenant_id) return reply.code(400).send({ success: false, error: 'tenant context required' });
+      try {
+        const data = await listDatasetSpecs(tenant_id);
+        return { success: true, data };
+      } catch (e) {
+        return reply.code(500).send({ success: false, error: (e as Error).message });
+      }
+    });
+
+    app.post<{
+      Params: { spec_id: string };
+      Body: { from?: string; to?: string };
+    }>('/api/analytics/datasets/:spec_id/build', { preHandler: requireAuth }, async (req, reply) => {
+      const tenant_id = req.auth?.tenant_id;
+      if (!tenant_id) return reply.code(400).send({ success: false, error: 'tenant context required' });
+      if (!req.body?.from || !req.body?.to) {
+        return reply.code(400).send({ success: false, error: 'from and to are required' });
+      }
+      try {
+        const data = await buildDatasetFromSpec(tenant_id, req.params.spec_id, {
+          from: req.body.from,
+          to: req.body.to,
+        });
+        if (!data) return reply.code(404).send({ success: false, error: 'dataset spec not found' });
         return { success: true, data };
       } catch (e) {
         return reply.code(500).send({ success: false, error: (e as Error).message });
