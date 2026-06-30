@@ -71,6 +71,7 @@ import {
   setCommandHooks,
   startCommandDispatcher,
   getCommandBroker,
+  issueRobotCredential,
   CommandAuthorizationError,
 } from '@projexlight/sdk-command';
 import { migrationsDir as policyMigrations, server as policyServer } from '@projexlight/sdk-policy';
@@ -2563,6 +2564,28 @@ const start = async (): Promise<void> => {
         if (e instanceof CommandAuthorizationError) {
           return reply.code(403).send({ success: false, error: e.message });
         }
+        return reply.code(500).send({ success: false, error: (e as Error).message });
+      }
+    });
+
+    // P12 · E1 — mint a per-robot scoped credential (reuses sdk-api-keys).
+    // Returns the plaintext key exactly once; the edge agent uses it to ack
+    // commands + subscribe to its asset's delivery stream.
+    app.post<{
+      Params: { asset_id: string };
+      Body: { rate_limit_rpm?: number; expires_at?: string };
+    }>('/api/assets/:asset_id/credentials', { preHandler: requireAuth }, async (req, reply) => {
+      const tenant_id = req.auth?.tenant_id;
+      if (!tenant_id) return reply.code(400).send({ success: false, error: 'tenant context required' });
+      try {
+        const data = await issueRobotCredential({
+          tenant_id,
+          asset_id: req.params.asset_id,
+          rate_limit_rpm: req.body?.rate_limit_rpm,
+          expires_at: req.body?.expires_at,
+        });
+        return reply.code(201).send({ success: true, data });
+      } catch (e) {
         return reply.code(500).send({ success: false, error: (e as Error).message });
       }
     });

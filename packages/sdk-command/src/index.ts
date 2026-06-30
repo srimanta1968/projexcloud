@@ -32,3 +32,15 @@ export type {
 } from './services/commandService';
 export { getCommandBroker } from './services/commandBroker';
 export type { CommandDeliveryEvent, CommandSubscriber } from './services/commandBroker';
+export {
+  issueRobotCredential,
+  verifyRobotCredential,
+  assetScope,
+  COMMAND_ACK_SCOPE,
+  COMMAND_STREAM_SCOPE,
+} from './services/commandCreds';
+export type {
+  IssueRobotCredentialInput,
+  RobotCredential,
+  VerifyRobotCredentialResult,
+} from './services/commandCreds';
