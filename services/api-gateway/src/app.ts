@@ -27,6 +27,7 @@ import {
   server as auditServer,
   startAuditVerifierScheduler,
   startRetentionShredder as startAuditRetentionShredder,
+  appendAuditEntry,
 } from '@projexlight/sdk-audit';
 import { migrationsDir as identityMigrations, server as identityServer } from '@projexlight/sdk-identity';
 import {
@@ -66,6 +67,8 @@ import { migrationsDir as assetMigrations, registerAsset as assetRegister, getTw
 import {
   migrationsDir as commandMigrations,
   issueCommand,
+  applyCommandApprovalDecision,
+  setCommandHooks,
   CommandAuthorizationError,
 } from '@projexlight/sdk-command';
 import { migrationsDir as policyMigrations, server as policyServer } from '@projexlight/sdk-policy';
@@ -554,6 +557,31 @@ setIngestHooks({
         quality: r.quality,
       })),
     );
+  },
+});
+
+// P12 · E1 — wire sdk-command's audit hook to the sdk-audit ledger so every
+// command-lifecycle transition (issued / gated / approved / rejected) is
+// recorded as a verifiable audit entry. rebac/policy/approval hooks stay at
+// their safe defaults until their governance routes are configured.
+setCommandHooks({
+  async audit(event): Promise<void> {
+    await appendAuditEntry({
+      pool_index: 'default',
+      event_type: event.action,
+      actor_kind: 'human',
+      actor_id: event.actor_id,
+      tenant_id: event.tenant_id,
+      subject_kind: 'command',
+      subject_id: event.command_id,
+      payload: {
+        type: event.type,
+        risk_class: event.risk_class,
+        status: event.status,
+        approval_id: event.approval_id ?? null,
+        reason: event.reason ?? null,
+      },
+    });
   },
 });
 
@@ -2503,6 +2531,33 @@ const start = async (): Promise<void> => {
         if (e instanceof CommandAuthorizationError) {
           return reply.code(403).send({ success: false, error: e.message });
         }
+        return reply.code(500).send({ success: false, error: (e as Error).message });
+      }
+    });
+
+    // P12 · E1 — approve/reject a gated (pending) risky command. Audited.
+    app.post<{
+      Params: { command_id: string };
+      Body: { approved?: boolean; reason?: string };
+    }>('/api/commands/:command_id/decision', { preHandler: requireAuth }, async (req, reply) => {
+      const tenant_id = req.auth?.tenant_id;
+      const decided_by = req.auth?.sub;
+      if (!tenant_id) return reply.code(400).send({ success: false, error: 'tenant context required' });
+      if (!decided_by) return reply.code(400).send({ success: false, error: 'approver identity required' });
+      if (typeof req.body?.approved !== 'boolean') {
+        return reply.code(400).send({ success: false, error: 'approved (boolean) is required' });
+      }
+      try {
+        const data = await applyCommandApprovalDecision(tenant_id, req.params.command_id, {
+          approved: req.body.approved,
+          decided_by,
+          reason: req.body.reason,
+        });
+        if (!data) {
+          return reply.code(409).send({ success: false, error: 'command not found or not pending' });
+        }
+        return { success: true, data };
+      } catch (e) {
         return reply.code(500).send({ success: false, error: (e as Error).message });
       }
     });

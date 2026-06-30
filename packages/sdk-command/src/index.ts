@@ -8,6 +8,7 @@ export {
   issueCommand,
   getCommand,
   listCommandsByAsset,
+  applyCommandApprovalDecision,
   setCommandHooks,
   classifyRisk,
   requiresApproval,
@@ -21,4 +22,6 @@ export type {
   AuthorizeContext,
   AuthorizeDecision,
   CommandHooks,
+  CommandAuditEvent,
+  CommandDecisionInput,
 } from './services/commandService';

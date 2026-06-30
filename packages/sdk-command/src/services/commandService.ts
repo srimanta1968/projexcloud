@@ -66,15 +66,32 @@ export interface AuthorizeDecision {
   reason?: string;
 }
 
+/** Audit event emitted at each command-lifecycle transition. */
+export interface CommandAuditEvent {
+  action: 'command.issued' | 'command.gated' | 'command.approved' | 'command.rejected';
+  command_id: string;
+  tenant_id: string;
+  actor_id: string;
+  type: string;
+  risk_class: RiskClass;
+  status: CommandStatus;
+  approval_id?: string | null;
+  reason?: string;
+}
+
 /**
- * Governance hooks. Defaults allow (so an unconfigured deploy still functions,
- * matching the sdk-ingest hook convention). The gateway wires:
+ * Governance hooks. Defaults allow / no-op (so an unconfigured deploy still
+ * functions, matching the sdk-ingest hook convention). The gateway wires:
  *   - rebac:  sdk-rebac relationship check (can issuer actuate this asset?)
  *   - policy: sdk-policy evaluation (geofence / time-window / condition)
+ *   - requestApproval: sdk-approval — open a grant for a risky command
+ *   - audit: sdk-audit — append the command-lifecycle entry to the ledger
  */
 export interface CommandHooks {
   rebac?(ctx: AuthorizeContext): Promise<AuthorizeDecision>;
   policy?(ctx: AuthorizeContext): Promise<AuthorizeDecision>;
+  requestApproval?(ctx: AuthorizeContext): Promise<{ approval_id: string } | null>;
+  audit?(event: CommandAuditEvent): Promise<void>;
 }
 
 let _hooks: CommandHooks = {};
@@ -143,12 +160,23 @@ export async function issueCommand(input: IssueCommandInput): Promise<CommandRec
   const policy = (await _hooks.policy?.(ctx)) ?? { allow: true };
   if (!policy.allow) throw new CommandAuthorizationError(policy.reason ?? 'policy denied');
 
-  const status: CommandStatus = requiresApproval(risk_class) ? 'pending' : 'approved';
+  const gated = requiresApproval(risk_class);
+  const status: CommandStatus = gated ? 'pending' : 'approved';
+
+  // Risky commands open an approval grant before they can be dispatched.
+  let approval_id: string | null = null;
+  if (gated) {
+    try {
+      approval_id = (await _hooks.requestApproval?.(ctx))?.approval_id ?? null;
+    } catch (err) {
+      console.warn('[sdk-command] approval request failed:', (err as Error).message);
+    }
+  }
 
   const row = await dataService.one<CommandRecord>(
     `INSERT INTO command.command
-       (tenant_id, target_asset_id, target_component_id, type, params, risk_class, status, issued_by)
-     VALUES ($1, $2, $3, $4, $5::jsonb, $6, $7, $8)
+       (tenant_id, target_asset_id, target_component_id, type, params, risk_class, status, approval_id, issued_by)
+     VALUES ($1, $2, $3, $4, $5::jsonb, $6, $7, $8, $9)
      RETURNING command_id::text, tenant_id::text, target_asset_id::text,
                target_component_id::text, type, params, risk_class, status,
                approval_id::text, issued_by::text, issued_at,
@@ -161,10 +189,75 @@ export async function issueCommand(input: IssueCommandInput): Promise<CommandRec
       JSON.stringify(params),
       risk_class,
       status,
+      approval_id,
       input.issued_by,
     ],
   );
   if (!row) throw new Error('failed to persist command');
+
+  await emitAudit({
+    action: gated ? 'command.gated' : 'command.issued',
+    command_id: row.command_id,
+    tenant_id: row.tenant_id,
+    actor_id: input.issued_by,
+    type: row.type,
+    risk_class,
+    status: row.status,
+    approval_id,
+  });
+  return row;
+}
+
+/** Best-effort audit emit; never blocks the command path. */
+async function emitAudit(event: CommandAuditEvent): Promise<void> {
+  try {
+    await _hooks.audit?.(event);
+  } catch (err) {
+    console.warn('[sdk-command] audit hook failed:', (err as Error).message);
+  }
+}
+
+export interface CommandDecisionInput {
+  approved: boolean;
+  decided_by: string;
+  reason?: string;
+}
+
+/**
+ * Apply an approval decision to a gated (pending) command: approve → `approved`
+ * (dispatchable) or reject → `rejected`. No-op (returns the row unchanged) when
+ * the command is not pending. Audited either way.
+ */
+export async function applyCommandApprovalDecision(
+  tenant_id: string,
+  command_id: string,
+  decision: CommandDecisionInput,
+): Promise<CommandRecord | null> {
+  if (!decision.decided_by) throw new Error('decided_by is required');
+  const next: CommandStatus = decision.approved ? 'approved' : 'rejected';
+  const row = await dataService.one<CommandRecord>(
+    `UPDATE command.command
+        SET status = $3, updated_at = now()
+      WHERE tenant_id = $1::uuid AND command_id = $2::uuid AND status = 'pending'
+     RETURNING command_id::text, tenant_id::text, target_asset_id::text,
+               target_component_id::text, type, params, risk_class, status,
+               approval_id::text, issued_by::text, issued_at,
+               dispatched_at, ack_at, ack_result`,
+    [tenant_id, command_id, next],
+  );
+  if (!row) return null;
+
+  await emitAudit({
+    action: decision.approved ? 'command.approved' : 'command.rejected',
+    command_id: row.command_id,
+    tenant_id: row.tenant_id,
+    actor_id: decision.decided_by,
+    type: row.type,
+    risk_class: row.risk_class,
+    status: row.status,
+    approval_id: row.approval_id,
+    reason: decision.reason,
+  });
   return row;
 }
 
