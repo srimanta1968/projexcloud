@@ -44,7 +44,7 @@ export default function RootLayout({ children }: { children: ReactNode }): JSX.E
               </Link>
             ))}
           </nav>
-          <CurrentUserBadge className="ml-4" loginPath="/login" />
+          <CurrentUserBadge className="ml-4" loginPath={`${process.env.NEXT_PUBLIC_BASE_PATH ?? ''}/login`} />
         </header>
         <main className="p-6">
           <Link href="/" className="text-[13px] text-muted-foreground hover:text-foreground">← Console home</Link>
