@@ -73,6 +73,9 @@ import {
   startCommandDispatcher,
   getCommandBroker,
   issueRobotCredential,
+  getCommand,
+  listCommandsByAsset,
+  ackCommandWithCredential,
   CommandAuthorizationError,
 } from '@projexlight/sdk-command';
 import { migrationsDir as policyMigrations, server as policyServer } from '@projexlight/sdk-policy';
@@ -2629,6 +2632,68 @@ const start = async (): Promise<void> => {
           expires_at: req.body?.expires_at,
         });
         return reply.code(201).send({ success: true, data });
+      } catch (e) {
+        return reply.code(500).send({ success: false, error: (e as Error).message });
+      }
+    });
+
+    // P12 · E1 — command status lookup.
+    app.get<{ Params: { command_id: string } }>(
+      '/api/commands/:command_id',
+      { preHandler: requireAuth },
+      async (req, reply) => {
+        const tenant_id = req.auth?.tenant_id;
+        if (!tenant_id) return reply.code(400).send({ success: false, error: 'tenant context required' });
+        try {
+          const data = await getCommand(tenant_id, req.params.command_id);
+          if (!data) return reply.code(404).send({ success: false, error: 'command not found' });
+          return { success: true, data };
+        } catch (e) {
+          return reply.code(500).send({ success: false, error: (e as Error).message });
+        }
+      },
+    );
+
+    // P12 · E1 — list commands for an asset.
+    app.get<{ Params: { asset_id: string } }>(
+      '/api/assets/:asset_id/commands',
+      { preHandler: requireAuth },
+      async (req, reply) => {
+        const tenant_id = req.auth?.tenant_id;
+        if (!tenant_id) return reply.code(400).send({ success: false, error: 'tenant context required' });
+        try {
+          const data = await listCommandsByAsset(tenant_id, req.params.asset_id);
+          return { success: true, data };
+        } catch (e) {
+          return reply.code(500).send({ success: false, error: (e as Error).message });
+        }
+      },
+    );
+
+    // P12 · E1 — ack/feedback ingestion FROM the robot/edge. Authenticated by the
+    // per-robot scoped credential (sdk-api-keys), NOT a user JWT.
+    app.post<{
+      Params: { command_id: string };
+      Body: { ok?: boolean; code?: string; message?: string; data?: Record<string, unknown> };
+    }>('/api/commands/:command_id/ack', async (req, reply) => {
+      const authz = req.headers['authorization'];
+      const token = typeof authz === 'string' && authz.startsWith('Bearer ') ? authz.slice(7) : '';
+      const b = req.body ?? {};
+      if (typeof b.ok !== 'boolean') {
+        return reply.code(400).send({ success: false, error: 'ok (boolean) is required' });
+      }
+      try {
+        const result = await ackCommandWithCredential(token, req.params.command_id, {
+          ok: b.ok,
+          code: b.code,
+          message: b.message,
+          data: b.data,
+        });
+        if (result.outcome === 'unauthorized') return reply.code(401).send({ success: false, error: result.error });
+        if (result.outcome === 'forbidden') return reply.code(403).send({ success: false, error: result.error });
+        if (result.outcome === 'not_found') return reply.code(404).send({ success: false, error: result.error });
+        if (result.outcome === 'conflict') return reply.code(409).send({ success: false, error: result.error });
+        return { success: true, data: result.command };
       } catch (e) {
         return reply.code(500).send({ success: false, error: (e as Error).message });
       }

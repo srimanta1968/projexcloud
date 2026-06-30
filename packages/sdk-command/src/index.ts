@@ -12,6 +12,7 @@ export {
   dispatchCommand,
   dispatchApprovedCommands,
   recordAck,
+  ackCommandWithCredential,
   startCommandDispatcher,
   setCommandHooks,
   classifyRisk,
@@ -29,6 +30,8 @@ export type {
   CommandAuditEvent,
   CommandDecisionInput,
   AckInput,
+  AckOutcome,
+  AckWithCredentialResult,
 } from './services/commandService';
 export { getCommandBroker } from './services/commandBroker';
 export type { CommandDeliveryEvent, CommandSubscriber } from './services/commandBroker';

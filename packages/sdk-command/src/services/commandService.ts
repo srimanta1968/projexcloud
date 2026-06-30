@@ -1,5 +1,7 @@
 import { dataService } from '@projexlight/db-runtime';
+import { verifyKey } from '@projexlight/sdk-api-keys';
 import { getCommandBroker } from './commandBroker';
+import { COMMAND_ACK_SCOPE, assetScope } from './commandCreds';
 
 /**
  * sdk-command — command & control (actuation) for the physical-AI fleet
@@ -408,6 +410,41 @@ export async function recordAck(
     reason: ack.message,
   });
   return row;
+}
+
+export type AckOutcome = 'ok' | 'unauthorized' | 'forbidden' | 'not_found' | 'conflict';
+
+export interface AckWithCredentialResult {
+  outcome: AckOutcome;
+  command?: CommandRecord;
+  error?: string;
+}
+
+/**
+ * Robot/edge ack path: authenticate with the per-robot scoped credential
+ * (sdk-api-keys) rather than a user JWT, then record the ack. The credential
+ * must be active and scoped (command:ack + asset:<target_asset_id>) to the
+ * command's asset. Fail-closed at each step.
+ */
+export async function ackCommandWithCredential(
+  plaintext: string,
+  command_id: string,
+  ack: AckInput,
+): Promise<AckWithCredentialResult> {
+  if (!plaintext) return { outcome: 'unauthorized', error: 'missing credential' };
+  const key = await verifyKey(plaintext);
+  if (!key) return { outcome: 'unauthorized', error: 'invalid, expired, or revoked key' };
+
+  const cmd = await getCommand(key.tenant_id, command_id);
+  if (!cmd) return { outcome: 'not_found', error: 'command not found' };
+
+  if (!key.scopes.includes(COMMAND_ACK_SCOPE) || !key.scopes.includes(assetScope(cmd.target_asset_id))) {
+    return { outcome: 'forbidden', error: 'credential not scoped to this command' };
+  }
+
+  const updated = await recordAck(key.tenant_id, command_id, ack);
+  if (!updated) return { outcome: 'conflict', error: 'command not in dispatched state' };
+  return { outcome: 'ok', command: updated };
 }
 
 /**
