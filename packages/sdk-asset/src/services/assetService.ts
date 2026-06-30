@@ -131,3 +131,71 @@ export async function getTwin(asset_id: string): Promise<TwinNode | null> {
   }
   return { ...a, components: roots };
 }
+
+/* ----------------------------------------------------------- sensor readings */
+
+export interface ReadingInput {
+  sensor_id: string;
+  asset_id: string;
+  tenant_id: string;
+  ts?: string;
+  value?: number;
+  quality?: string;
+}
+
+/** Idempotent-friendly batch ingest of sensor readings. Returns the count. */
+export async function ingestReadings(readings: ReadingInput[]): Promise<{ ingested: number }> {
+  if (!readings.length) return { ingested: 0 };
+  return dataService.tx(async (q) => {
+    let n = 0;
+    for (const r of readings) {
+      await q(
+        `INSERT INTO asset.sensor_reading (sensor_id, asset_id, tenant_id, ts, value, quality)
+         VALUES ($1, $2, $3, COALESCE($4::timestamptz, now()), $5, $6)`,
+        [r.sensor_id, r.asset_id, r.tenant_id, r.ts ?? null, r.value ?? null, r.quality ?? null],
+      );
+      n += 1;
+    }
+    return { ingested: n };
+  });
+}
+
+export interface QueryReadingsOpts {
+  sensor_id?: string;
+  from?: string;
+  to?: string;
+  /** Rollup interval: 'second' | 'minute' | 'hour' | 'day'. Omit for raw rows. */
+  bucket?: string;
+}
+
+const BUCKETS = new Set(['second', 'minute', 'hour', 'day']);
+
+/** Queries raw or rolled-up readings for an asset. Rollup aggregates per bucket. */
+export async function queryReadings(asset_id: string, opts: QueryReadingsOpts): Promise<Record<string, unknown>[]> {
+  const params: unknown[] = [asset_id];
+  let where = 'asset_id = $1::uuid';
+  if (opts.sensor_id) { params.push(opts.sensor_id); where += ` AND sensor_id = $${params.length}::uuid`; }
+  if (opts.from) { params.push(opts.from); where += ` AND ts >= $${params.length}::timestamptz`; }
+  if (opts.to) { params.push(opts.to); where += ` AND ts <= $${params.length}::timestamptz`; }
+
+  if (opts.bucket && BUCKETS.has(opts.bucket)) {
+    params.push(opts.bucket);
+    return dataService.rows<Record<string, unknown>>(
+      `SELECT sensor_id::text AS sensor_id,
+              date_trunc($${params.length}, ts) AS bucket,
+              count(*) AS n, min(value) AS min, max(value) AS max,
+              avg(value) AS avg, (array_agg(value ORDER BY ts DESC))[1] AS last
+         FROM asset.sensor_reading
+        WHERE ${where}
+        GROUP BY sensor_id, bucket
+        ORDER BY bucket DESC
+        LIMIT 5000`,
+      params,
+    );
+  }
+  return dataService.rows<Record<string, unknown>>(
+    `SELECT sensor_id::text AS sensor_id, ts, value, quality
+       FROM asset.sensor_reading WHERE ${where} ORDER BY ts DESC LIMIT 5000`,
+    params,
+  );
+}

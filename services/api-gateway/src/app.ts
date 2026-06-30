@@ -61,7 +61,7 @@ import {
 import { server as secretsServer } from '@projexlight/sdk-secrets';
 import { migrationsDir as tenantMigrations, server as tenantServer, createTenant as tenantCreate, listTenants as tenantList, ensureApp as appEnsure } from '@projexlight/sdk-tenant';
 import { migrationsDir as consentMigrations, server as consentServer } from '@projexlight/sdk-consent';
-import { migrationsDir as assetMigrations, registerAsset as assetRegister, getTwin as assetGetTwin } from '@projexlight/sdk-asset';
+import { migrationsDir as assetMigrations, registerAsset as assetRegister, getTwin as assetGetTwin, bootstrapAssetClickHouseSchema } from '@projexlight/sdk-asset';
 import { migrationsDir as policyMigrations, server as policyServer } from '@projexlight/sdk-policy';
 import {
   migrationsDir as principalTokenMigrations,
@@ -2913,6 +2913,17 @@ const start = async (): Promise<void> => {
         } catch (err) {
           console.warn(
             '[api-gateway] sdk-diagnostic-telemetry ClickHouse bootstrap failed:',
+            (err as Error).message,
+          );
+        }
+
+        // P12 FR — sdk-asset per-sensor time-series rollups (sensor_reading + 1m/1h MVs).
+        try {
+          await bootstrapAssetClickHouseSchema();
+          console.log('[api-gateway] ClickHouse schema bootstrapped (sdk-asset sensor rollups active)');
+        } catch (err) {
+          console.warn(
+            '[api-gateway] sdk-asset ClickHouse bootstrap failed:',
             (err as Error).message,
           );
         }
