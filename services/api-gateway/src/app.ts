@@ -57,6 +57,7 @@ import {
   createCatalogVersion,
   setCatalogStatus,
   startSloAlarms,
+  getRobotUsage,
 } from '@projexlight/sdk-meter';
 import { server as secretsServer } from '@projexlight/sdk-secrets';
 import { migrationsDir as tenantMigrations, server as tenantServer, createTenant as tenantCreate, listTenants as tenantList, ensureApp as appEnsure } from '@projexlight/sdk-tenant';
@@ -2441,6 +2442,22 @@ const start = async (): Promise<void> => {
           const twin = await assetGetTwin(req.params.asset_id);
           if (!twin) return reply.code(404).send({ success: false, error: 'asset not found' });
           return { success: true, data: twin };
+        } catch (e) {
+          return reply.code(500).send({ success: false, error: (e as Error).message });
+        }
+      },
+    );
+
+    // P12 · E1 — per-robot / per-sensor metered usage rollup (sdk-meter).
+    app.get<{ Params: { asset_id: string } }>(
+      '/api/meter/assets/:asset_id/usage',
+      { preHandler: requireAuth },
+      async (req, reply) => {
+        const tenant_id = req.auth?.tenant_id;
+        if (!tenant_id) return reply.code(400).send({ success: false, error: 'tenant context required' });
+        try {
+          const data = await getRobotUsage(tenant_id, req.params.asset_id);
+          return { success: true, data };
         } catch (e) {
           return reply.code(500).send({ success: false, error: (e as Error).message });
         }
