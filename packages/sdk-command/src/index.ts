@@ -9,6 +9,10 @@ export {
   getCommand,
   listCommandsByAsset,
   applyCommandApprovalDecision,
+  dispatchCommand,
+  dispatchApprovedCommands,
+  recordAck,
+  startCommandDispatcher,
   setCommandHooks,
   classifyRisk,
   requiresApproval,
@@ -24,4 +28,7 @@ export type {
   CommandHooks,
   CommandAuditEvent,
   CommandDecisionInput,
+  AckInput,
 } from './services/commandService';
+export { getCommandBroker } from './services/commandBroker';
+export type { CommandDeliveryEvent, CommandSubscriber } from './services/commandBroker';

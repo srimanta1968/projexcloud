@@ -1,4 +1,5 @@
 import { dataService } from '@projexlight/db-runtime';
+import { getCommandBroker } from './commandBroker';
 
 /**
  * sdk-command — command & control (actuation) for the physical-AI fleet
@@ -68,7 +69,14 @@ export interface AuthorizeDecision {
 
 /** Audit event emitted at each command-lifecycle transition. */
 export interface CommandAuditEvent {
-  action: 'command.issued' | 'command.gated' | 'command.approved' | 'command.rejected';
+  action:
+    | 'command.issued'
+    | 'command.gated'
+    | 'command.approved'
+    | 'command.rejected'
+    | 'command.dispatched'
+    | 'command.acked'
+    | 'command.failed';
   command_id: string;
   tenant_id: string;
   actor_id: string;
@@ -291,4 +299,137 @@ export async function listCommandsByAsset(
       LIMIT $3`,
     [tenant_id, target_asset_id, limit],
   );
+}
+
+/* --------------------------------------------------- delivery + ack loop */
+
+const SELECT_COMMAND_COLS = `command_id::text, tenant_id::text, target_asset_id::text,
+            target_component_id::text, type, params, risk_class, status,
+            approval_id::text, issued_by::text, issued_at,
+            dispatched_at, ack_at, ack_result`;
+
+const DISPATCH_INTERVAL_MS = parseInt(process.env.COMMAND_DISPATCH_INTERVAL_MS || '2000', 10);
+const DISPATCH_BATCH = parseInt(process.env.COMMAND_DISPATCH_BATCH || '50', 10);
+
+/**
+ * Dispatch one approved command: flip approved → dispatched and publish it to
+ * the per-asset delivery channel (broker → WebSocket → robot/edge). Returns the
+ * dispatched command, or null when it is not in 'approved' state.
+ */
+export async function dispatchCommand(tenant_id: string, command_id: string): Promise<CommandRecord | null> {
+  const row = await dataService.one<CommandRecord>(
+    `UPDATE command.command
+        SET status = 'dispatched', dispatched_at = now(), updated_at = now()
+      WHERE tenant_id = $1::uuid AND command_id = $2::uuid AND status = 'approved'
+     RETURNING ${SELECT_COMMAND_COLS}`,
+    [tenant_id, command_id],
+  );
+  if (!row) return null;
+
+  getCommandBroker().publish({
+    kind: 'command.dispatched',
+    asset_id: row.target_asset_id,
+    command_id: row.command_id,
+    tenant_id: row.tenant_id,
+    type: row.type,
+    params: row.params,
+    emitted_at: new Date().toISOString(),
+  });
+  await emitAudit({
+    action: 'command.dispatched',
+    command_id: row.command_id,
+    tenant_id: row.tenant_id,
+    actor_id: 'sdk-command:dispatcher',
+    type: row.type,
+    risk_class: row.risk_class,
+    status: row.status,
+    approval_id: row.approval_id,
+  });
+  return row;
+}
+
+/** Dispatch up to `limit` approved commands across all tenants. Returns count dispatched. */
+export async function dispatchApprovedCommands(limit = DISPATCH_BATCH): Promise<number> {
+  const pending = await dataService.rows<{ tenant_id: string; command_id: string }>(
+    `SELECT tenant_id::text AS tenant_id, command_id::text AS command_id
+       FROM command.command WHERE status = 'approved'
+      ORDER BY issued_at ASC LIMIT $1`,
+    [limit],
+  );
+  let dispatched = 0;
+  for (const p of pending) {
+    const row = await dispatchCommand(p.tenant_id, p.command_id);
+    if (row) dispatched += 1;
+  }
+  return dispatched;
+}
+
+export interface AckInput {
+  ok: boolean;
+  code?: string;
+  message?: string;
+  data?: Record<string, unknown>;
+}
+
+/**
+ * Close the loop: record the robot/edge ack/feedback for a dispatched command.
+ * ok → 'acked', else → 'failed'. No-op (null) when not in 'dispatched' state.
+ */
+export async function recordAck(
+  tenant_id: string,
+  command_id: string,
+  ack: AckInput,
+): Promise<CommandRecord | null> {
+  const next: CommandStatus = ack.ok ? 'acked' : 'failed';
+  const ackResult = {
+    ok: ack.ok,
+    code: ack.code ?? null,
+    message: ack.message ?? null,
+    data: ack.data ?? null,
+  };
+  const row = await dataService.one<CommandRecord>(
+    `UPDATE command.command
+        SET status = $3, ack_at = now(), ack_result = $4::jsonb, updated_at = now()
+      WHERE tenant_id = $1::uuid AND command_id = $2::uuid AND status = 'dispatched'
+     RETURNING ${SELECT_COMMAND_COLS}`,
+    [tenant_id, command_id, next, JSON.stringify(ackResult)],
+  );
+  if (!row) return null;
+
+  await emitAudit({
+    action: ack.ok ? 'command.acked' : 'command.failed',
+    command_id: row.command_id,
+    tenant_id: row.tenant_id,
+    actor_id: 'robot:' + row.target_asset_id,
+    type: row.type,
+    risk_class: row.risk_class,
+    status: row.status,
+    approval_id: row.approval_id,
+    reason: ack.message,
+  });
+  return row;
+}
+
+/**
+ * Start the background dispatcher: every COMMAND_DISPATCH_INTERVAL_MS, push any
+ * approved commands onto the delivery channel. Decoupled from the issue/approve
+ * request path. Returns a stop function. Failures are logged, never fatal.
+ */
+export function startCommandDispatcher(): () => void {
+  let stopped = false;
+  const tick = async (): Promise<void> => {
+    if (stopped) return;
+    try {
+      await dispatchApprovedCommands();
+    } catch (err) {
+      console.warn('[sdk-command] dispatcher tick failed:', (err as Error).message);
+    }
+  };
+  const timer = setInterval(() => { void tick(); }, DISPATCH_INTERVAL_MS);
+  if (typeof timer.unref === 'function') timer.unref();
+  void tick();
+  return () => {
+    stopped = true;
+    clearInterval(timer);
+  };
 }

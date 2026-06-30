@@ -69,6 +69,8 @@ import {
   issueCommand,
   applyCommandApprovalDecision,
   setCommandHooks,
+  startCommandDispatcher,
+  getCommandBroker,
   CommandAuthorizationError,
 } from '@projexlight/sdk-command';
 import { migrationsDir as policyMigrations, server as policyServer } from '@projexlight/sdk-policy';
@@ -860,6 +862,28 @@ app.post<{
   }
 });
 
+// P12 · E1 — per-asset command delivery stream. An edge agent for a robot
+// subscribes here and receives dispatched commands in real time.
+app.register(async (instance) => {
+  instance.get<{
+    Params: { asset_id: string };
+  }>('/api/commands/stream/:asset_id', { websocket: true }, (connection, req) => {
+    const assetId = req.params.asset_id;
+    const broker = getCommandBroker();
+    const unsubscribe = broker.subscribe(assetId, (event) => {
+      try {
+        connection.socket.send(JSON.stringify(event));
+      } catch {
+        // Socket closed mid-send; cleanup happens via close handler.
+      }
+    });
+    connection.socket.on('close', () => unsubscribe());
+    connection.socket.send(
+      JSON.stringify({ kind: 'hello', asset_id: assetId, emitted_at: new Date().toISOString() }),
+    );
+  });
+});
+
 app.register(async (instance) => {
   instance.get<{
     Params: { persona_id: string };
@@ -1522,6 +1546,14 @@ const start = async (): Promise<void> => {
       batchSize: parseInt(process.env.EVIDENCE_RETENTION_BATCH_SIZE || '100', 10),
     });
     app.addHook('onClose', async () => evidenceRetentionShredderHandle.stop());
+
+    // P12 · E1 — command dispatcher: pushes approved commands onto the per-asset
+    // delivery channel, off the issue/approve request path. Disable with
+    // COMMAND_DISPATCHER_ENABLED=false.
+    if (process.env.COMMAND_DISPATCHER_ENABLED !== 'false') {
+      const commandDispatcherStop = startCommandDispatcher();
+      app.addHook('onClose', async () => commandDispatcherStop());
+    }
 
     // P6B — lineage backfill admin endpoint (FR-LIN-5 / TK-3380). Resumable
     // via per-(pool, event_type) checkpoint; dry-run reports counts without
