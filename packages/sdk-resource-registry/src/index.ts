@@ -9,5 +9,6 @@ export { migrationsDir } from './db';
 export {
   registerResource,
   getOwnership,
+  listResources,
   reconcile,
 } from './services/resourceRegistryService';

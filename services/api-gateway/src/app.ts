@@ -5,7 +5,8 @@ import websocket from '@fastify/websocket';
 import { initPool } from '@projexlight/db-runtime';
 import { closeRedis, initRedis } from '@projexlight/redis-runtime';
 import { closeKafka, initKafka, publishMessage } from '@projexlight/kafka-runtime';
-import { closeClickHouse, initClickHouse } from '@projexlight/clickhouse-runtime';
+import { randomUUID } from 'crypto';
+import { closeClickHouse, initClickHouse, insert as chInsert } from '@projexlight/clickhouse-runtime';
 import { runMigrations } from '@projexlight/migration-runner';
 import {
   migrationsDir as vaultMigrations,
@@ -27,6 +28,7 @@ import {
   server as auditServer,
   startAuditVerifierScheduler,
   startRetentionShredder as startAuditRetentionShredder,
+  appendAuditEntry,
 } from '@projexlight/sdk-audit';
 import { migrationsDir as identityMigrations, server as identityServer } from '@projexlight/sdk-identity';
 import {
@@ -57,10 +59,25 @@ import {
   createCatalogVersion,
   setCatalogStatus,
   startSloAlarms,
+  getRobotUsage,
 } from '@projexlight/sdk-meter';
 import { server as secretsServer } from '@projexlight/sdk-secrets';
 import { migrationsDir as tenantMigrations, server as tenantServer, createTenant as tenantCreate, listTenants as tenantList, ensureApp as appEnsure } from '@projexlight/sdk-tenant';
 import { migrationsDir as consentMigrations, server as consentServer } from '@projexlight/sdk-consent';
+import { migrationsDir as assetMigrations, registerAsset as assetRegister, getTwin as assetGetTwin, bootstrapAssetClickHouseSchema, ingestReadings as assetIngestReadings, startSensorRollupJob, runSensorRollup, queryReadings as assetQueryReadings } from '@projexlight/sdk-asset';
+import {
+  migrationsDir as commandMigrations,
+  issueCommand,
+  applyCommandApprovalDecision,
+  setCommandHooks,
+  startCommandDispatcher,
+  getCommandBroker,
+  issueRobotCredential,
+  getCommand,
+  listCommandsByAsset,
+  ackCommandWithCredential,
+  CommandAuthorizationError,
+} from '@projexlight/sdk-command';
 import { migrationsDir as policyMigrations, server as policyServer } from '@projexlight/sdk-policy';
 import {
   migrationsDir as principalTokenMigrations,
@@ -248,17 +265,27 @@ import { migrationsDir as ragMigrations }              from '@projexlight/sdk-kn
 import { migrationsDir as parsingMigrations }          from '@projexlight/sdk-parsing';
 import { migrationsDir as conversationMigrations }     from '@projexlight/sdk-conversation';
 import { migrationsDir as recommendationMigrations }   from '@projexlight/sdk-recommendation';
-import { migrationsDir as analyticsMigrations }        from '@projexlight/sdk-analytics';
+import {
+  migrationsDir as analyticsMigrations,
+  createDatasetSpec,
+  listDatasetSpecs,
+  buildDatasetFromSpec,
+  updateDatasetLabelSource,
+  setDatasetLineageRecorder,
+  listDatasetBuilds,
+  exportDatasetBuild,
+} from '@projexlight/sdk-analytics';
 import {
   migrationsDir as lineageMigrations,
   runLineageBackfill,
+  emit as lineageEmit,
 } from '@projexlight/sdk-lineage';
 import { migrationsDir as semanticMigrations }         from '@projexlight/sdk-semantic';
 import { migrationsDir as connectorSnowflakeMigrations } from '@projexlight/connector-snowflake';
 // P9.2 — global SDK catalog RAG store (Epic A). Auto-migrates catalog.* and
 // (best-effort) syncs manifests → pgvector for the build planner + registry MCP.
 import { migrationsDir as catalogIndexMigrations, syncCatalog } from '@projexlight/sdk-catalog-index';
-import { registerIngestRoutes, migrationsDir as ingestMigrations } from '@projexlight/sdk-ingest';
+import { registerIngestRoutes, migrationsDir as ingestMigrations, setIngestHooks, type SensorReadingRow } from '@projexlight/sdk-ingest';
 
 // P7 / Wave 7 — Field + Evidence + Hyperscale. Closes G10 (federation
 // runtime) + G11 (Iceberg lakehouse). 8 new SDKs + 1 new service.
@@ -514,6 +541,81 @@ app.register(leadScoringServer.registerRoutes);
 // RouteApp signature, but the call is correct at runtime — cast to satisfy tsc.
 registerIngestRoutes(app as unknown as Parameters<typeof registerIngestRoutes>[0]);
 
+// P12 · E1 — wire the typed sensor-reading sink. Prefer the ClickHouse
+// time-series table when CH is enabled; otherwise fall back to the Postgres
+// asset.sensor_reading mirror (dev/local). Catalog validation + idempotency
+// live in sdk-ingest; this hook is purely the storage write.
+setIngestHooks({
+  async writeSensorReadings(rows: SensorReadingRow[]): Promise<void> {
+    if (rows.length === 0) return;
+    if (config.clickhouse.enabled) {
+      await chInsert(
+        'asset.sensor_reading',
+        rows.map((r) => ({
+          sensor_id: r.sensor_id,
+          asset_id: r.asset_id,
+          tenant_id: r.tenant_id,
+          component_id: r.component_id,
+          ts: r.ts,
+          value: r.value,
+          unit: r.unit,
+          quality: r.quality,
+        })),
+      );
+      return;
+    }
+    await assetIngestReadings(
+      rows.map((r) => ({
+        sensor_id: r.sensor_id,
+        asset_id: r.asset_id,
+        tenant_id: r.tenant_id ?? '',
+        ts: r.ts,
+        value: r.value,
+        quality: r.quality,
+      })),
+    );
+  },
+});
+
+// P12 · E1 — wire sdk-command's audit hook to the sdk-audit ledger so every
+// command-lifecycle transition (issued / gated / approved / rejected) is
+// recorded as a verifiable audit entry. rebac/policy/approval hooks stay at
+// their safe defaults until their governance routes are configured.
+// P12 · E1 — record dataset-build provenance via sdk-lineage (reuse). A built
+// training dataset is derived_from the robot asset's sensor data; the returned
+// edge_id is stored as the build's lineage_ref for reproducibility.
+setDatasetLineageRecorder(async (ctx): Promise<string | null> => {
+  const edge = await lineageEmit({
+    from: { ref_kind: 'asset.asset', ref_id: ctx.asset_id, kind: 'record', tenant_id: ctx.tenant_id },
+    to: { ref_kind: 'analytics.dataset_build', ref_id: ctx.build_id, kind: 'record', tenant_id: ctx.tenant_id },
+    edge_kind: 'derived_from',
+    producer_sdk: 'sdk-analytics',
+    trace_id: randomUUID(),
+  });
+  return edge.edge_id;
+});
+
+setCommandHooks({
+  async audit(event): Promise<void> {
+    await appendAuditEntry({
+      pool_index: 'default',
+      event_type: event.action,
+      actor_kind: 'human',
+      actor_id: event.actor_id,
+      tenant_id: event.tenant_id,
+      subject_kind: 'command',
+      subject_id: event.command_id,
+      payload: {
+        type: event.type,
+        risk_class: event.risk_class,
+        status: event.status,
+        approval_id: event.approval_id ?? null,
+        reason: event.reason ?? null,
+      },
+    });
+  },
+});
+
 // P7 FR-DSP-3 — route optimization HTTP endpoint.
 app.post<{
   Body: { persona_id?: string; task_ids?: string[]; start_task_id?: string };
@@ -761,6 +863,56 @@ app.post<{
   }
 });
 
+// P12 · E1 — operator-triggered sensor rollup backfill (off the hot path).
+// Header-auth gated (ADMIN_OPS_TOKEN), mirrors /admin/storm/ingest-now. Recomputes
+// the 1m + 1h rollups for a trailing window; idempotent (delete-then-reinsert).
+app.post<{
+  Body: { lookback_hours?: number; from?: string; to?: string };
+}>('/api/admin/asset/rollup/backfill', async (req, reply) => {
+  const adminToken = process.env.ADMIN_OPS_TOKEN;
+  const presented = req.headers['x-admin-ops-token'];
+  if (!adminToken || !presented || presented !== adminToken) {
+    return reply.code(401).send({ success: false, error: 'admin token required' });
+  }
+  if (!config.clickhouse.enabled) {
+    return reply.code(409).send({ success: false, error: 'ClickHouse not enabled' });
+  }
+  const body = req.body ?? {};
+  const to = body.to ? new Date(body.to) : new Date();
+  const from = body.from
+    ? new Date(body.from)
+    : new Date(to.getTime() - (body.lookback_hours ?? 24) * 60 * 60 * 1000);
+  try {
+    const data = await runSensorRollup({ from: from.toISOString(), to: to.toISOString() });
+    return { success: true, data };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    return reply.code(500).send({ success: false, error: msg });
+  }
+});
+
+// P12 · E1 — per-asset command delivery stream. An edge agent for a robot
+// subscribes here and receives dispatched commands in real time.
+app.register(async (instance) => {
+  instance.get<{
+    Params: { asset_id: string };
+  }>('/api/commands/stream/:asset_id', { websocket: true }, (connection, req) => {
+    const assetId = req.params.asset_id;
+    const broker = getCommandBroker();
+    const unsubscribe = broker.subscribe(assetId, (event) => {
+      try {
+        connection.socket.send(JSON.stringify(event));
+      } catch {
+        // Socket closed mid-send; cleanup happens via close handler.
+      }
+    });
+    connection.socket.on('close', () => unsubscribe());
+    connection.socket.send(
+      JSON.stringify({ kind: 'hello', asset_id: assetId, emitted_at: new Date().toISOString() }),
+    );
+  });
+});
+
 app.register(async (instance) => {
   instance.get<{
     Params: { persona_id: string };
@@ -849,6 +1001,9 @@ const start = async (): Promise<void> => {
       // P2
       { sdk: 'sdk-tenant', dir: tenantMigrations },
       { sdk: 'sdk-consent', dir: consentMigrations },
+      // P12 — physical-AI fleet
+      { sdk: 'sdk-asset', dir: assetMigrations },
+      { sdk: 'sdk-command', dir: commandMigrations },
       { sdk: 'sdk-policy', dir: policyMigrations },
       { sdk: 'sdk-principal-token', dir: principalTokenMigrations },
       { sdk: 'sdk-resource-registry', dir: resourceRegistryMigrations },
@@ -1420,6 +1575,14 @@ const start = async (): Promise<void> => {
       batchSize: parseInt(process.env.EVIDENCE_RETENTION_BATCH_SIZE || '100', 10),
     });
     app.addHook('onClose', async () => evidenceRetentionShredderHandle.stop());
+
+    // P12 · E1 — command dispatcher: pushes approved commands onto the per-asset
+    // delivery channel, off the issue/approve request path. Disable with
+    // COMMAND_DISPATCHER_ENABLED=false.
+    if (process.env.COMMAND_DISPATCHER_ENABLED !== 'false') {
+      const commandDispatcherStop = startCommandDispatcher();
+      app.addHook('onClose', async () => commandDispatcherStop());
+    }
 
     // P6B — lineage backfill admin endpoint (FR-LIN-5 / TK-3380). Resumable
     // via per-(pool, event_type) checkpoint; dry-run reports counts without
@@ -2335,19 +2498,532 @@ const start = async (): Promise<void> => {
     });
 
     // --- Tenant-scoped endpoints for tenant-admin pages ---
-    // Members (/api/personas)
+    // Digital-twin registry (P12) — register a robot asset with its component
+    // tree + sensors, and read the full twin. Backed by sdk-asset.
+    app.post<{
+      Body: {
+        tenant_id?: string;
+        bu_id?: string;
+        device_uuid?: string;
+        model?: string;
+        display_name?: string;
+        components?: unknown[];
+      };
+    }>('/api/assets', { preHandler: requireAuth }, async (req, reply) => {
+      const tenant_id = req.body?.tenant_id || req.auth?.tenant_id;
+      if (!tenant_id) return reply.code(400).send({ success: false, error: 'tenant_id required' });
+      try {
+        const result = await assetRegister({
+          tenant_id,
+          bu_id: req.body?.bu_id,
+          device_uuid: req.body?.device_uuid,
+          model: req.body?.model,
+          display_name: req.body?.display_name,
+          components: (req.body?.components as never) ?? [],
+        });
+        return reply.code(201).send({ success: true, data: result });
+      } catch (e) {
+        return reply.code(500).send({ success: false, error: (e as Error).message });
+      }
+    });
+
+    app.get<{ Params: { asset_id: string } }>(
+      '/api/assets/:asset_id/twin',
+      { preHandler: requireAuth },
+      async (req, reply) => {
+        try {
+          const twin = await assetGetTwin(req.params.asset_id);
+          if (!twin) return reply.code(404).send({ success: false, error: 'asset not found' });
+          return { success: true, data: twin };
+        } catch (e) {
+          return reply.code(500).send({ success: false, error: (e as Error).message });
+        }
+      },
+    );
+
+    // P12 · E1 — sensor time-series query (raw or 1m/1h/day rollup) by
+    // asset / sensor / time range. Backed by sdk-asset (storage-agnostic).
+    app.get<{
+      Params: { asset_id: string };
+      Querystring: { sensor_id?: string; from?: string; to?: string; bucket?: string };
+    }>('/api/assets/:asset_id/readings', { preHandler: requireAuth }, async (req, reply) => {
+      const q = req.query ?? {};
+      try {
+        const data = await assetQueryReadings(req.params.asset_id, {
+          sensor_id: q.sensor_id,
+          from: q.from,
+          to: q.to,
+          bucket: q.bucket,
+        });
+        return { success: true, data };
+      } catch (e) {
+        return reply.code(500).send({ success: false, error: (e as Error).message });
+      }
+    });
+
+    // P12 · E1 — per-robot / per-sensor metered usage rollup (sdk-meter).
+    app.get<{ Params: { asset_id: string } }>(
+      '/api/meter/assets/:asset_id/usage',
+      { preHandler: requireAuth },
+      async (req, reply) => {
+        const tenant_id = req.auth?.tenant_id;
+        if (!tenant_id) return reply.code(400).send({ success: false, error: 'tenant context required' });
+        try {
+          const data = await getRobotUsage(tenant_id, req.params.asset_id);
+          return { success: true, data };
+        } catch (e) {
+          return reply.code(500).send({ success: false, error: (e as Error).message });
+        }
+      },
+    );
+
+    // P12 · E1 — issue a command to a robot asset/component (sdk-command).
+    // Authorized via rebac + policy (composed in sdk-command); risky commands
+    // land as `pending` awaiting approval.
+    app.post<{
+      Body: {
+        tenant_id?: string;
+        target_asset_id?: string;
+        target_component_id?: string;
+        type?: string;
+        params?: Record<string, unknown>;
+        risk_class?: 'low' | 'medium' | 'high' | 'critical';
+      };
+    }>('/api/commands', { preHandler: requireAuth }, async (req, reply) => {
+      const tenant_id = req.body?.tenant_id || req.auth?.tenant_id;
+      const issued_by = req.auth?.sub;
+      if (!tenant_id) return reply.code(400).send({ success: false, error: 'tenant_id required' });
+      if (!issued_by) return reply.code(400).send({ success: false, error: 'issuer identity required' });
+      if (!req.body?.target_asset_id || !req.body?.type) {
+        return reply.code(400).send({ success: false, error: 'target_asset_id and type are required' });
+      }
+      try {
+        const data = await issueCommand({
+          tenant_id,
+          target_asset_id: req.body.target_asset_id,
+          target_component_id: req.body.target_component_id,
+          type: req.body.type,
+          params: req.body.params,
+          risk_class: req.body.risk_class,
+          issued_by,
+        });
+        return reply.code(201).send({ success: true, data });
+      } catch (e) {
+        if (e instanceof CommandAuthorizationError) {
+          return reply.code(403).send({ success: false, error: e.message });
+        }
+        return reply.code(500).send({ success: false, error: (e as Error).message });
+      }
+    });
+
+    // P12 · E1 — mint a per-robot scoped credential (reuses sdk-api-keys).
+    // Returns the plaintext key exactly once; the edge agent uses it to ack
+    // commands + subscribe to its asset's delivery stream.
+    app.post<{
+      Params: { asset_id: string };
+      Body: { rate_limit_rpm?: number; expires_at?: string };
+    }>('/api/assets/:asset_id/credentials', { preHandler: requireAuth }, async (req, reply) => {
+      const tenant_id = req.auth?.tenant_id;
+      if (!tenant_id) return reply.code(400).send({ success: false, error: 'tenant context required' });
+      try {
+        const data = await issueRobotCredential({
+          tenant_id,
+          asset_id: req.params.asset_id,
+          rate_limit_rpm: req.body?.rate_limit_rpm,
+          expires_at: req.body?.expires_at,
+        });
+        return reply.code(201).send({ success: true, data });
+      } catch (e) {
+        return reply.code(500).send({ success: false, error: (e as Error).message });
+      }
+    });
+
+    // P12 · E1 — command status lookup.
+    app.get<{ Params: { command_id: string } }>(
+      '/api/commands/:command_id',
+      { preHandler: requireAuth },
+      async (req, reply) => {
+        const tenant_id = req.auth?.tenant_id;
+        if (!tenant_id) return reply.code(400).send({ success: false, error: 'tenant context required' });
+        try {
+          const data = await getCommand(tenant_id, req.params.command_id);
+          if (!data) return reply.code(404).send({ success: false, error: 'command not found' });
+          return { success: true, data };
+        } catch (e) {
+          return reply.code(500).send({ success: false, error: (e as Error).message });
+        }
+      },
+    );
+
+    // P12 · E1 — list commands for an asset.
+    app.get<{ Params: { asset_id: string } }>(
+      '/api/assets/:asset_id/commands',
+      { preHandler: requireAuth },
+      async (req, reply) => {
+        const tenant_id = req.auth?.tenant_id;
+        if (!tenant_id) return reply.code(400).send({ success: false, error: 'tenant context required' });
+        try {
+          const data = await listCommandsByAsset(tenant_id, req.params.asset_id);
+          return { success: true, data };
+        } catch (e) {
+          return reply.code(500).send({ success: false, error: (e as Error).message });
+        }
+      },
+    );
+
+    // P12 · E1 — ack/feedback ingestion FROM the robot/edge. Authenticated by the
+    // per-robot scoped credential (sdk-api-keys), NOT a user JWT.
+    app.post<{
+      Params: { command_id: string };
+      Body: { ok?: boolean; code?: string; message?: string; data?: Record<string, unknown> };
+    }>('/api/commands/:command_id/ack', async (req, reply) => {
+      const authz = req.headers['authorization'];
+      const token = typeof authz === 'string' && authz.startsWith('Bearer ') ? authz.slice(7) : '';
+      const b = req.body ?? {};
+      if (typeof b.ok !== 'boolean') {
+        return reply.code(400).send({ success: false, error: 'ok (boolean) is required' });
+      }
+      try {
+        const result = await ackCommandWithCredential(token, req.params.command_id, {
+          ok: b.ok,
+          code: b.code,
+          message: b.message,
+          data: b.data,
+        });
+        if (result.outcome === 'unauthorized') return reply.code(401).send({ success: false, error: result.error });
+        if (result.outcome === 'forbidden') return reply.code(403).send({ success: false, error: result.error });
+        if (result.outcome === 'not_found') return reply.code(404).send({ success: false, error: result.error });
+        if (result.outcome === 'conflict') return reply.code(409).send({ success: false, error: result.error });
+        return { success: true, data: result.command };
+      } catch (e) {
+        return reply.code(500).send({ success: false, error: (e as Error).message });
+      }
+    });
+
+    // P12 · E1 — approve/reject a gated (pending) risky command. Audited.
+    app.post<{
+      Params: { command_id: string };
+      Body: { approved?: boolean; reason?: string };
+    }>('/api/commands/:command_id/decision', { preHandler: requireAuth }, async (req, reply) => {
+      const tenant_id = req.auth?.tenant_id;
+      const decided_by = req.auth?.sub;
+      if (!tenant_id) return reply.code(400).send({ success: false, error: 'tenant context required' });
+      if (!decided_by) return reply.code(400).send({ success: false, error: 'approver identity required' });
+      if (typeof req.body?.approved !== 'boolean') {
+        return reply.code(400).send({ success: false, error: 'approved (boolean) is required' });
+      }
+      try {
+        const data = await applyCommandApprovalDecision(tenant_id, req.params.command_id, {
+          approved: req.body.approved,
+          decided_by,
+          reason: req.body.reason,
+        });
+        if (!data) {
+          return reply.code(409).send({ success: false, error: 'command not found or not pending' });
+        }
+        return { success: true, data };
+      } catch (e) {
+        return reply.code(500).send({ success: false, error: (e as Error).message });
+      }
+    });
+
+    // P12 · E1 — ML feature/training-dataset builder (sdk-analytics).
+    // Register a dataset spec, list specs, and materialize feature windows.
+    app.post<{
+      Body: {
+        name?: string;
+        asset_id?: string;
+        sensor_ids?: string[];
+        grain?: 'minute' | 'hour' | 'day';
+        aggregations?: Array<'avg' | 'min' | 'max' | 'last' | 'count'>;
+        label_source?: Record<string, unknown>;
+      };
+    }>('/api/analytics/datasets', { preHandler: requireAuth }, async (req, reply) => {
+      const tenant_id = req.auth?.tenant_id;
+      if (!tenant_id) return reply.code(400).send({ success: false, error: 'tenant context required' });
+      if (!req.body?.name || !req.body?.asset_id) {
+        return reply.code(400).send({ success: false, error: 'name and asset_id are required' });
+      }
+      try {
+        const data = await createDatasetSpec({
+          tenant_id,
+          name: req.body.name,
+          asset_id: req.body.asset_id,
+          sensor_ids: req.body.sensor_ids,
+          grain: req.body.grain,
+          aggregations: req.body.aggregations,
+          label_source: req.body.label_source,
+        });
+        return reply.code(201).send({ success: true, data });
+      } catch (e) {
+        return reply.code(500).send({ success: false, error: (e as Error).message });
+      }
+    });
+
+    app.get('/api/analytics/datasets', { preHandler: requireAuth }, async (req, reply) => {
+      const tenant_id = req.auth?.tenant_id;
+      if (!tenant_id) return reply.code(400).send({ success: false, error: 'tenant context required' });
+      try {
+        const data = await listDatasetSpecs(tenant_id);
+        return { success: true, data };
+      } catch (e) {
+        return reply.code(500).send({ success: false, error: (e as Error).message });
+      }
+    });
+
+    app.post<{
+      Params: { spec_id: string };
+      Body: { from?: string; to?: string };
+    }>('/api/analytics/datasets/:spec_id/build', { preHandler: requireAuth }, async (req, reply) => {
+      const tenant_id = req.auth?.tenant_id;
+      if (!tenant_id) return reply.code(400).send({ success: false, error: 'tenant context required' });
+      if (!req.body?.from || !req.body?.to) {
+        return reply.code(400).send({ success: false, error: 'from and to are required' });
+      }
+      try {
+        const data = await buildDatasetFromSpec(tenant_id, req.params.spec_id, {
+          from: req.body.from,
+          to: req.body.to,
+        });
+        if (!data) return reply.code(404).send({ success: false, error: 'dataset spec not found' });
+        return { success: true, data };
+      } catch (e) {
+        return reply.code(500).send({ success: false, error: (e as Error).message });
+      }
+    });
+
+    // P12 · E1 — export a built training dataset to the warehouse / object store.
+    app.post<{
+      Params: { build_id: string };
+      Body: { target?: string };
+    }>('/api/analytics/builds/:build_id/export', { preHandler: requireAuth }, async (req, reply) => {
+      const tenant_id = req.auth?.tenant_id;
+      if (!tenant_id) return reply.code(400).send({ success: false, error: 'tenant context required' });
+      try {
+        const data = await exportDatasetBuild(tenant_id, req.params.build_id, { target: req.body?.target });
+        if (!data) return reply.code(404).send({ success: false, error: 'dataset build not found' });
+        return { success: true, data };
+      } catch (e) {
+        return reply.code(500).send({ success: false, error: (e as Error).message });
+      }
+    });
+
+    // P12 · E1 — reproducibility ledger: builds for a spec (window + lineage_ref).
+    app.get<{ Params: { spec_id: string } }>(
+      '/api/analytics/datasets/:spec_id/builds',
+      { preHandler: requireAuth },
+      async (req, reply) => {
+        const tenant_id = req.auth?.tenant_id;
+        if (!tenant_id) return reply.code(400).send({ success: false, error: 'tenant context required' });
+        try {
+          const data = await listDatasetBuilds(tenant_id, req.params.spec_id);
+          return { success: true, data };
+        } catch (e) {
+          return reply.code(500).send({ success: false, error: (e as Error).message });
+        }
+      },
+    );
+
+    // P12 · E1 — set the labeling source on a dataset spec (supervised datasets:
+    // inline intervals or a provider that joins events/evidence).
+    app.put<{
+      Params: { spec_id: string };
+      Body: {
+        kind?: 'intervals' | 'provider';
+        intervals?: Array<{ from: string; to: string; label: number | string }>;
+        default_label?: number | string;
+        provider_args?: Record<string, unknown>;
+      };
+    }>('/api/analytics/datasets/:spec_id/label-source', { preHandler: requireAuth }, async (req, reply) => {
+      const tenant_id = req.auth?.tenant_id;
+      if (!tenant_id) return reply.code(400).send({ success: false, error: 'tenant context required' });
+      if (req.body?.kind !== 'intervals' && req.body?.kind !== 'provider') {
+        return reply.code(400).send({ success: false, error: "kind must be 'intervals' or 'provider'" });
+      }
+      try {
+        const data = await updateDatasetLabelSource(tenant_id, req.params.spec_id, {
+          kind: req.body.kind,
+          intervals: req.body.intervals,
+          default_label: req.body.default_label,
+          provider_args: req.body.provider_args,
+        });
+        if (!data) return reply.code(404).send({ success: false, error: 'dataset spec not found' });
+        return { success: true, data };
+      } catch (e) {
+        return reply.code(500).send({ success: false, error: (e as Error).message });
+      }
+    });
+
+    // Members (/api/personas) — resolves a tenant's members from the
+    // authoritative identity.tenant_membership, with the display name from the
+    // L2 profile band (falling back to email, then "Member").
     app.get<{ Querystring: { tenant_id?: string } }>('/api/personas', async (req, reply) => {
       const tenant_id = req.query.tenant_id;
       if (!tenant_id) return reply.code(400).send({ success: false, error: 'tenant_id required' });
       try {
         const { rows } = await dataService.query(
-          `SELECT persona_id, tenant_id::text AS tenant_id, display_name, role,
-                  bu_id, status, created_at
-             FROM persona.persona WHERE tenant_id = $1::uuid
-            ORDER BY display_name LIMIT 500`,
+          `SELECT
+             tm.membership_id::text AS persona_id,
+             COALESCE(
+               (SELECT b.fields_envelope->>'display_name'
+                  FROM profile.band_l2 b
+                  JOIN identity.app_identity ai ON ai.app_identity_id = b.app_identity_id
+                 WHERE ai.person_id = tm.person_id AND b.band_kind = 'profile'
+                 ORDER BY b.updated_at DESC LIMIT 1),
+               (SELECT convert_from(value_envelope, 'UTF8')
+                  FROM identity.alias
+                 WHERE person_id = tm.person_id AND kind = 'email' AND value_envelope IS NOT NULL
+                 LIMIT 1),
+               'Member'
+             ) AS display_name,
+             tm.role_template_id::text AS role,
+             tm.bu_id::text AS bu_id,
+             tm.status AS status
+           FROM identity.tenant_membership tm
+          WHERE tm.tenant_id = $1::uuid AND tm.status = 'active'
+          ORDER BY display_name LIMIT 500`,
           [tenant_id],
         );
         return { success: true, data: rows };
+      } catch (e) {
+        return reply.code(500).send({ success: false, error: (e as Error).message });
+      }
+    });
+
+    // Tenant primary/billing contact — resolved from the founding (earliest
+    // active) member: display name from the L2 profile band, email + phone from
+    // the person's aliases. Purpose-bound + consent-gated + audited (TK-3572):
+    // internal purposes (support/billing/operations) are TPO-allowed; any other
+    // purpose requires an active consent.receipt for the contact and fails
+    // closed if absent. Every access (granted or denied) is written to audit.
+    const CONTACT_INTERNAL_PURPOSES = new Set(['support', 'billing', 'operations']);
+    app.get<{ Params: { tenant_id: string }; Querystring: { purpose?: string } }>(
+      '/api/tenants/:tenant_id/contact',
+      async (req, reply) => {
+        const tenant_id = req.params.tenant_id;
+        const purpose = (req.query.purpose || 'support').trim();
+        const audit = async (event: string, person_id: string, extra: Record<string, unknown> = {}) => {
+          try {
+            await emitEvent({
+              event_type: event,
+              payload: { tenant_id, purpose, ...extra },
+              pool_index: 'admin',
+              actor_kind: 'service',
+              actor_id: 'api-gateway.tenant-contact',
+              tenant_id,
+              subject_kind: 'person',
+              subject_id: person_id,
+            });
+          } catch { /* audit is best-effort; never block the decision on it */ }
+        };
+        try {
+          const row = await dataService.one<{
+            person_id: string;
+            display_name: string | null;
+            email: string | null;
+            phone: string | null;
+          }>(
+            `SELECT
+               tm.person_id::text AS person_id,
+               (SELECT b.fields_envelope->>'display_name'
+                  FROM profile.band_l2 b
+                  JOIN identity.app_identity ai ON ai.app_identity_id = b.app_identity_id
+                 WHERE ai.person_id = tm.person_id AND b.band_kind = 'profile'
+                 ORDER BY b.updated_at DESC LIMIT 1) AS display_name,
+               (SELECT convert_from(value_envelope, 'UTF8') FROM identity.alias
+                 WHERE person_id = tm.person_id AND kind = 'email' AND value_envelope IS NOT NULL LIMIT 1) AS email,
+               (SELECT convert_from(value_envelope, 'UTF8') FROM identity.alias
+                 WHERE person_id = tm.person_id AND kind = 'phone' AND value_envelope IS NOT NULL LIMIT 1) AS phone
+             FROM identity.tenant_membership tm
+            WHERE tm.tenant_id = $1::uuid AND tm.status = 'active'
+            ORDER BY tm.created_at ASC LIMIT 1`,
+            [tenant_id],
+          );
+          if (!row) return reply.code(404).send({ success: false, error: 'No active member found for tenant' });
+
+          // Consent gate: non-internal purposes require an active consent receipt.
+          if (!CONTACT_INTERNAL_PURPOSES.has(purpose)) {
+            const consent = await dataService.one<{ ok: number }>(
+              `SELECT 1 AS ok FROM consent.receipt
+                WHERE person_id = $1::uuid AND revoked_at IS NULL
+                  AND (expires_at IS NULL OR expires_at > now())
+                LIMIT 1`,
+              [row.person_id],
+            );
+            if (!consent) {
+              await audit('consent.contact_read.denied.v1', row.person_id, { reason: 'consent_absent' });
+              return reply.code(403).send({
+                success: false,
+                error: 'consent_absent',
+                details: [`reading tenant contact for purpose '${purpose}' requires an active consent receipt`],
+              });
+            }
+          }
+
+          await audit('consent.contact_read.granted.v1', row.person_id);
+          return { success: true, data: row };
+        } catch (e) {
+          return reply.code(500).send({ success: false, error: (e as Error).message });
+        }
+      },
+    );
+
+    // Update the CURRENT user's profile: name/avatar -> L2 profile band (resolved
+    // via the user's first active membership, which supplies the required tenant
+    // + app), phone -> person-level alias. Avatar is stored as a reference
+    // (e.g. an sdk-media blob ref or URL). Powers the profile-completion form.
+    app.put<{
+      Body: { display_name?: string; given_name?: string; family_name?: string; phone?: string; avatar?: string };
+    }>('/api/me/profile', { preHandler: requireAuth }, async (req, reply) => {
+      const person_id = req.auth?.sub;
+      if (!person_id) return reply.code(401).send({ success: false, error: 'Unauthorized' });
+      const b = req.body || {};
+      try {
+        // phone -> person-level alias (replace any existing), hash via pgcrypto
+        if (b.phone !== undefined) {
+          await dataService.query(`DELETE FROM identity.alias WHERE person_id = $1 AND kind = 'phone'`, [person_id]);
+          if (b.phone) {
+            await dataService.query(
+              `INSERT INTO identity.alias (person_id, kind, value_envelope, value_hash, verified_at)
+               VALUES ($1, 'phone', convert_to($2,'UTF8'), digest('phone|' || trim($2), 'sha256'), NULL)`,
+              [person_id, b.phone],
+            );
+          }
+        }
+        // name/avatar -> L2 profile band (needs an app_identity + tenant)
+        const fields: Record<string, string> = {};
+        for (const k of ['display_name', 'given_name', 'family_name', 'avatar'] as const) {
+          if (b[k]) fields[k] = String(b[k]);
+        }
+        let band_written = false;
+        if (Object.keys(fields).length > 0) {
+          const m = await dataService.one<{ tenant_id: string; app_id: string }>(
+            `SELECT tm.tenant_id::text AS tenant_id, t.app_id AS app_id
+               FROM identity.tenant_membership tm
+               JOIN tenant.tenant t ON t.tenant_id = tm.tenant_id
+              WHERE tm.person_id = $1 AND tm.status = 'active'
+              ORDER BY tm.created_at ASC LIMIT 1`,
+            [person_id],
+          );
+          if (m) {
+            const ai = await dataService.one<{ app_identity_id: string }>(
+              `INSERT INTO identity.app_identity (person_id, app_id) VALUES ($1, $2)
+               ON CONFLICT (person_id, app_id) DO UPDATE SET app_id = EXCLUDED.app_id
+               RETURNING app_identity_id`,
+              [person_id, m.app_id],
+            );
+            await dataService.query(
+              `INSERT INTO profile.band_l2 (app_identity_id, band_kind, tenant_id, fields_envelope)
+               VALUES ($1, 'profile', $2, $3::jsonb)
+               ON CONFLICT (app_identity_id, band_kind)
+               DO UPDATE SET fields_envelope = profile.band_l2.fields_envelope || EXCLUDED.fields_envelope,
+                             updated_at = now()`,
+              [ai!.app_identity_id, m.tenant_id, JSON.stringify(fields)],
+            );
+            band_written = true;
+          }
+        }
+        return { success: true, data: { person_id, band_written, phone_updated: b.phone !== undefined } };
       } catch (e) {
         return reply.code(500).send({ success: false, error: (e as Error).message });
       }
@@ -2710,6 +3386,21 @@ const start = async (): Promise<void> => {
         } catch (err) {
           console.warn(
             '[api-gateway] sdk-diagnostic-telemetry ClickHouse bootstrap failed:',
+            (err as Error).message,
+          );
+        }
+
+        // P12 FR — sdk-asset per-sensor time-series rollups (sensor_reading + 1m/1h MVs).
+        try {
+          await bootstrapAssetClickHouseSchema();
+          console.log('[api-gateway] ClickHouse schema bootstrapped (sdk-asset sensor rollups active)');
+          // Decoupled rollup/downsample job (meter-collector pattern): keeps the
+          // 1h tier current + reconciles the trailing window off the hot path.
+          startSensorRollupJob();
+          console.log('[api-gateway] sdk-asset sensor rollup job started');
+        } catch (err) {
+          console.warn(
+            '[api-gateway] sdk-asset ClickHouse bootstrap failed:',
             (err as Error).message,
           );
         }

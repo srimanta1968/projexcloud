@@ -42,6 +42,16 @@ export interface RegisterResourceInput {
   expires_at?: string;
 }
 
+export interface ListResourcesFilter {
+  owner?: string;
+  status?: ResourceStatus;
+  environment?: string;
+  resource_type?: string;
+  team?: string;
+  limit?: number;
+  offset?: number;
+}
+
 export interface ReconcileInput {
   /** resource_ids observed live in the cloud / terraform state. */
   live_resource_ids: string[];

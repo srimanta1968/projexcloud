@@ -1,0 +1,28 @@
+{
+  "name": "POST /api/analytics/datasets — register a feature-dataset spec",
+  "endpoint": "/api/analytics/datasets",
+  "method": "POST",
+  "requiresAuth": true,
+  "expectedStatus": 201,
+  "taskId": "1e108f10-9db0-467e-8457-e966deb347bf",
+  "sprintId": "efcf9cbd-5e84-469e-946e-efcabf8c88e1",
+  "priority": 50,
+  "dependsOn": ["POST /api/auth/signup-tenant"],
+  "testability": "manual",
+  "skipReason": "Needs a real sub-bearing JWT (tenant context from the token). Registers an ML feature-dataset spec over an asset's sensor time-series.",
+  "captureResponse": { "analytics.dataset.response.data.spec_id": "data.spec_id" },
+  "testCases": [
+    {
+      "name": "Register a per-minute feature dataset spec",
+      "headers": { "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}" },
+      "payload": {
+        "name": "{{dynamic:name}}",
+        "asset_id": "{{cache:assets.create.response.data.asset_id}}",
+        "grain": "{{static:minute}}",
+        "aggregations": ["avg", "min", "max", "last", "count"]
+      },
+      "expectedStatus": 201,
+      "testability": "manual"
+    }
+  ]
+}

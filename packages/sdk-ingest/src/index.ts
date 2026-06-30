@@ -9,11 +9,16 @@
 export { migrationsDir } from './db';
 export {
   ingestBatch,
+  ingestSensorReadingsBatch,
   setIngestHooks,
   INGEST_POOL,
   type IngestEnvelope,
   type IngestResult,
   type IngestMode,
   type IngestHooks,
+  type SensorReadingInput,
+  type SensorReadingRow,
+  type SensorBatchEnvelope,
+  type SensorBatchResult,
 } from './service';
 export { registerIngestRoutes } from './server';

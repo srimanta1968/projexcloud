@@ -1,0 +1,28 @@
+{
+  "name": "POST /api/commands — issue a command to a robot asset/component",
+  "endpoint": "/api/commands",
+  "method": "POST",
+  "requiresAuth": true,
+  "expectedStatus": 201,
+  "taskId": "2714a4d2-08d5-41cd-99ac-5677bd53c6d4",
+  "sprintId": "efcf9cbd-5e84-469e-946e-efcabf8c88e1",
+  "priority": 40,
+  "dependsOn": ["POST /api/auth/signup-tenant", "POST /api/assets"],
+  "testability": "manual",
+  "skipReason": "Needs a real sub-bearing JWT and a registered asset_id (same as the rest of the P12 asset chain). Authorizes via rebac+policy and persists the command; low/medium risk auto-approve, high/critical land pending.",
+  "captureResponse": { "commands.create.response.data.command_id": "data.command_id" },
+  "testCases": [
+    {
+      "name": "Issue a low-risk move command",
+      "headers": { "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}" },
+      "payload": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "target_asset_id": "{{cache:assets.create.response.data.asset_id}}",
+        "type": "{{static:move}}",
+        "params": { "x": 1, "y": 2 }
+      },
+      "expectedStatus": 201,
+      "testability": "manual"
+    }
+  ]
+}

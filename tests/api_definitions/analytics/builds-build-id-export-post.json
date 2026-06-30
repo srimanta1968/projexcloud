@@ -1,0 +1,23 @@
+{
+  "name": "POST /api/analytics/builds/:build_id/export — export dataset to warehouse/object store",
+  "endpoint": "/api/analytics/builds/:build_id/export",
+  "method": "POST",
+  "requiresAuth": true,
+  "expectedStatus": 200,
+  "taskId": "a7937433-469c-40dc-836f-7c3b3ced4a40",
+  "sprintId": "efcf9cbd-5e84-469e-946e-efcabf8c88e1",
+  "priority": 55,
+  "dependsOn": ["POST /api/auth/signup-tenant", "POST /api/analytics/datasets/:spec_id/build"],
+  "testability": "manual",
+  "skipReason": "Needs a real sub-bearing JWT and a recorded dataset_build. Re-derives the feature rows and exports them to the warehouse/object store (default: registers an Iceberg lakehouse extract + stamps export_ref); a real S3/Iceberg writer is wired via the exporter hook.",
+  "testCases": [
+    {
+      "name": "Export a built dataset to the warehouse",
+      "headers": { "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}" },
+      "pathParams": { "build_id": "{{cache:analytics.build.response.data.build_id}}" },
+      "payload": {},
+      "expectedStatus": 200,
+      "testability": "manual"
+    }
+  ]
+}

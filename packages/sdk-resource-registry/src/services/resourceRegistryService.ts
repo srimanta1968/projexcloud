@@ -1,6 +1,7 @@
 import { dataService } from '@projexlight/db-runtime';
 import { emitEvent } from '@projexlight/sdk-audit';
 import type {
+  ListResourcesFilter,
   ReconcileInput,
   ReconcileResult,
   RegisterResourceInput,
@@ -74,6 +75,37 @@ export async function getOwnership(resource_id: string): Promise<ResourceRegistr
   return dataService.one<ResourceRegistryRecord>(
     `SELECT ${SELECT_COLS} FROM platform.resource_registry WHERE resource_id = $1`,
     [resource_id],
+  );
+}
+
+/**
+ * Read API: list ownership records, filtered by owner / status / environment /
+ * resource_type / team. Paginated (default 100, max 500). Powers the admin
+ * "who owns what" surface and orphan/quarantine review.
+ */
+export async function listResources(filter: ListResourcesFilter = {}): Promise<ResourceRegistryRecord[]> {
+  const params: unknown[] = [];
+  const clauses: string[] = [];
+  if (filter.owner) { params.push(filter.owner); clauses.push(`owner = $${params.length}`); }
+  if (filter.status) { params.push(filter.status); clauses.push(`status = $${params.length}`); }
+  if (filter.environment) { params.push(filter.environment); clauses.push(`environment = $${params.length}`); }
+  if (filter.resource_type) { params.push(filter.resource_type); clauses.push(`resource_type = $${params.length}`); }
+  if (filter.team) { params.push(filter.team); clauses.push(`team = $${params.length}`); }
+
+  const where = clauses.length > 0 ? `WHERE ${clauses.join(' AND ')}` : '';
+  const limit = Math.min(Math.max(filter.limit ?? 100, 1), 500);
+  const offset = Math.max(filter.offset ?? 0, 0);
+  params.push(limit);
+  const limitIdx = params.length;
+  params.push(offset);
+  const offsetIdx = params.length;
+
+  return dataService.rows<ResourceRegistryRecord>(
+    `SELECT ${SELECT_COLS} FROM platform.resource_registry
+     ${where}
+     ORDER BY updated_at DESC
+     LIMIT $${limitIdx} OFFSET $${offsetIdx}`,
+    params,
   );
 }
 

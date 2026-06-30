@@ -1,0 +1,23 @@
+{
+  "name": "POST /api/commands/:command_id/ack — robot/edge ack & feedback ingestion",
+  "endpoint": "/api/commands/:command_id/ack",
+  "method": "POST",
+  "requiresAuth": false,
+  "expectedStatus": 200,
+  "taskId": "16d543f8-4b54-44a9-b3d6-a3fa7ddfa83d",
+  "sprintId": "efcf9cbd-5e84-469e-946e-efcabf8c88e1",
+  "priority": 46,
+  "dependsOn": ["POST /api/assets/:asset_id/credentials", "POST /api/commands"],
+  "testability": "manual",
+  "skipReason": "Authenticated by the per-robot scoped credential (sdk-api-keys plaintext key from POST /api/assets/:asset_id/credentials), not a user JWT, and requires the command to be in 'dispatched' state. Verify live with a robot credential after dispatch.",
+  "testCases": [
+    {
+      "name": "Robot acks a dispatched command",
+      "headers": { "Authorization": "Bearer {{cache:assets.credential.response.data.plaintext}}" },
+      "pathParams": { "command_id": "{{cache:commands.create.response.data.command_id}}" },
+      "payload": { "ok": true, "code": "DONE", "message": "executed" },
+      "expectedStatus": 200,
+      "testability": "manual"
+    }
+  ]
+}

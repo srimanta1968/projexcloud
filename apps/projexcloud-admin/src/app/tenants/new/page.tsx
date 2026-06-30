@@ -1,9 +1,13 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { Button, Field, Input, PageHeader, Select } from '@projexlight/design-system';
+import { requireSession } from '../../../lib/session';
 
 async function createTenantAction(formData: FormData): Promise<void> {
   'use server';
+  // Verify an authenticated operator session BEFORE the ADMIN_OPS_TOKEN is used,
+  // so an unauthenticated server-action invocation provisions nothing.
+  await requireSession();
   const body = {
     app_id: String(formData.get('app_id') ?? '').trim(),
     display_name: String(formData.get('display_name') ?? '').trim(),

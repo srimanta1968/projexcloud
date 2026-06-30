@@ -1,0 +1,32 @@
+{
+  "name": "PUT /api/me/profile — update current user's profile (name/phone/avatar)",
+  "endpoint": "/api/me/profile",
+  "method": "PUT",
+  "requiresAuth": true,
+  "expectedStatus": 200,
+  "taskId": "db7cb8a6-6d4a-4dcb-ba32-8c1b71aeeb1a",
+  "featureId": "2d00c83d-9593-41c7-9b5b-d0079ff79a5c",
+  "epicId": "9c09e562-b1f5-481e-983b-a4aae8891e8a",
+  "sprintId": "efcf9cbd-5e84-469e-946e-efcabf8c88e1",
+  "priority": 18,
+  "dependsOn": ["POST /api/auth/signup-tenant"],
+  "testability": "manual",
+  "skipReason": "Requires a person-scoped JWT carrying the `sub` claim; the auto-test runner injects a synthetic admin bearer without `sub`, so requireAuth resolves no person. Verified live with a real login token (returns 200, band_written:true). Covered by integration test.",
+  "testCases": [
+    {
+      "name": "Update name/phone/avatar for the signed-up founder",
+      "headers": { "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}" },
+      "payload": {
+        "display_name": "{{dynamic:name}}",
+        "phone": "{{dynamic:phone}}",
+        "avatar": "{{static:https://cdn.example.com/avatar.png}}"
+      },
+      "expectedStatus": 200,
+      "testability": "manual"
+    }
+  ],
+  "expectedResponse": {
+    "success": true,
+    "data": { "person_id": "string", "band_written": true, "phone_updated": true }
+  }
+}

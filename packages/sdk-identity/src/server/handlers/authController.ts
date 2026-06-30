@@ -29,10 +29,15 @@ export async function registerHandler(req: FastifyRequest, reply: FastifyReply):
     const result = await registerPerson({
       email: validation.value.email,
       password: validation.value.password,
+      given_name: validation.value.given_name,
+      family_name: validation.value.family_name,
+      display_name: validation.value.display_name,
+      phone: validation.value.phone,
     });
     const token = signJwt(buildSixLayerClaims({
       person_id: result.person.person_id,
       email: validation.value.email,
+      display_name: validation.value.display_name,
       actor_kind: 'human',
       mfa_methods: ['pwd'],
     }));
@@ -70,6 +75,7 @@ export async function signupTenantHandler(req: FastifyRequest, reply: FastifyRep
     const token = signJwt(buildSixLayerClaims({
       person_id: result.person_id,
       email: validation.value.email,
+      display_name: result.person_display_name,
       tenant_id: result.tenant_id,
       app_id: result.app_id,
       actor_kind: 'human',

@@ -17,6 +17,9 @@ export interface MeterDimensions {
   latency_ms?: number;
   bytes_in?: number;
   bytes_out?: number;
+  /** P12 — physical-AI fleet attribution (optional; additive, back-compat). */
+  asset_id?: string | null;
+  sensor_id?: string | null;
 }
 
 export interface UsageEventV1 {

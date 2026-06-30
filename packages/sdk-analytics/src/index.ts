@@ -11,3 +11,42 @@
  * tasks under feat_analytics.
  */
 export { migrationsDir } from './db';
+export {
+  buildFeatureWindows,
+  createDatasetSpec,
+  getDatasetSpec,
+  listDatasetSpecs,
+  buildDatasetFromSpec,
+  labelFeatureWindows,
+  updateDatasetLabelSource,
+  setLabelProvider,
+  _resetLabelProvider,
+  setDatasetLineageRecorder,
+  _resetDatasetLineageRecorder,
+  listDatasetBuilds,
+  getDatasetBuild,
+  exportDatasetBuild,
+  setDatasetExporter,
+  _resetDatasetExporter,
+} from './services/datasetBuilder';
+export type {
+  BucketGrain,
+  Aggregation,
+  FeatureWindowSpec,
+  FeatureWindowRow,
+  DatasetSpecRecord,
+  CreateDatasetSpecInput,
+  DatasetBuildResult,
+  LabelValue,
+  IntervalLabel,
+  LabelSource,
+  LabeledFeatureRow,
+  LabelProvider,
+  LabelProviderContext,
+  DatasetLineageContext,
+  DatasetLineageRecorder,
+  DatasetBuildRecord,
+  DatasetExportContext,
+  DatasetExporter,
+  DatasetExportResult,
+} from './services/datasetBuilder';

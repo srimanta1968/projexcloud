@@ -34,6 +34,15 @@ export type {
 } from './services/meterGate';
 export { recordQuotaDenial } from './services/quotaDenial';
 export type { RecordDenialInput, DenialRow } from './services/quotaDenial';
+export {
+  reportRobotUsage,
+  meterSensorReadings,
+  meterRobotCommand,
+  meterRobotActiveHours,
+  getRobotUsage,
+  ROBOT_SKU,
+} from './services/robotMeter';
+export type { RobotUsageInput, RobotUsageRow } from './services/robotMeter';
 export { applyHardCapOverride } from './services/hardCapOverride';
 export type { ApplyHardCapOverrideInput, HardCapOverrideResult } from './services/hardCapOverride';
 export {
