@@ -81,6 +81,7 @@ for dirpath, _dirs, files in os.walk(API_DIR):
                 "dependsOn": d.get("dependsOn", []), "sdk": sdk, "file": rel,
                 "generated": generated, "sourceFile": source_file,
                 "fieldOptions": d.get("fieldOptions", None),
+                "serverFieldOptions": d.get("serverFieldOptions", None),
             })
         for tc in tcs:
             rows.append({
@@ -94,6 +95,7 @@ for dirpath, _dirs, files in os.walk(API_DIR):
                 "dependsOn": d.get("dependsOn", []), "sdk": sdk, "file": rel,
                 "generated": generated, "sourceFile": source_file,
                 "fieldOptions": d.get("fieldOptions", None),
+                "serverFieldOptions": d.get("serverFieldOptions", None),
             })
 
 os.makedirs(OUT_DIR, exist_ok=True)

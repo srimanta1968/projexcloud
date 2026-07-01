@@ -141,18 +141,25 @@ def render_api(method, endpoint, rows):
         parts.append(f'<div class="k">Implemented in</div><div><span class="muted">{esc(r0.get("sourceFile"))}</span></div>')
     if r0.get("generated"):
         parts.append('<div class="k">Status</div><div class="manual">auto-generated from route scan — review payload/response before enabling automated tests</div>')
-    if r0.get("fieldOptions"):
-        fo = r0["fieldOptions"]
-        fo_rows = "".join(
+    def _opts_rows(fo):
+        return "".join(
             '<div><code>{k}</code>: {vals}</div>'.format(
                 k=esc(k),
                 vals=", ".join('<code>{}</code>'.format(esc(str(v))) for v in (vals or [])),
             )
             for k, vals in fo.items()
         )
-        parts.append('<div class="k">Field options</div>'
-                     '<div>{rows}<div class="note">Allowed values (enum / DB-CHECK) for these request fields — '
-                     'QA should exercise each option.</div></div>'.format(rows=fo_rows))
+    if r0.get("fieldOptions"):
+        parts.append('<div class="k">Request field options</div>'
+                     '<div>{rows}<div class="note">Allowed values (enum / DB-CHECK) for these '
+                     '<b>request</b> fields you send — QA should exercise each option.</div></div>'
+                     .format(rows=_opts_rows(r0["fieldOptions"])))
+    if r0.get("serverFieldOptions"):
+        parts.append('<div class="k">Server-managed values</div>'
+                     '<div>{rows}<div class="note">Set by the server (not sent in the request) — '
+                     'these are the possible <b>response</b> values for the entity’s lifecycle; '
+                     'QA asserts them in the response / after state-changing calls.</div></div>'
+                     .format(rows=_opts_rows(r0["serverFieldOptions"])))
     parts.append(f'<div class="k">Source spec</div><div><span class="muted">{esc(r0.get("file",""))}</span></div>')
     parts.append('</div>')
     # per test case
