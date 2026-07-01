@@ -1,5 +1,6 @@
 import { cookies } from 'next/headers';
 import { SESSION_COOKIE, resolveSession, type SessionUser } from '@projexlight/design-system/auth';
+import { isPlatformOperator } from './operator';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:3500';
 
@@ -17,6 +18,23 @@ export async function requireSession(): Promise<SessionUser> {
   const user = await resolveSession(token, API_BASE);
   if (!user) {
     throw new Error('Unauthorized: a valid operator session is required for this action');
+  }
+  return user;
+}
+
+/**
+ * Guards a PLATFORM-OPERATOR-ONLY server action (e.g. admin ops-token mint /
+ * revoke). Resolves the session AND asserts platform-operator status, so a
+ * tenant admin, developer, or customer session — even a valid one — is
+ * rejected. Call this at the TOP of the action, before ADMIN_OPS_TOKEN is used.
+ * Fail-closed: see isPlatformOperator().
+ */
+export async function requirePlatformOperator(): Promise<SessionUser> {
+  const user = await requireSession();
+  if (!isPlatformOperator(user)) {
+    throw new Error(
+      'Forbidden: only ProjexCloud platform operators may view or manage admin ops tokens',
+    );
   }
   return user;
 }
