@@ -1,6 +1,7 @@
 {
   "name": "POST /api/api-keys/:key_id/rotate - Rotate API key with grace window",
   "endpoint": "/api/api-keys/:key_id/rotate",
+  "sdk": "sdk-api-keys",
   "method": "POST",
   "requiresAuth": true,
   "expectedStatus": 201,
@@ -11,16 +12,28 @@
   "priority": 50,
   "testability": "manual",
   "skipReason": "Depends on a previously-issued key_id; integration test covers full lifecycle.",
-  "dependsOn": ["POST /api/auth/register", "POST /api/api-keys"],
+  "dependsOn": [
+    "POST /api/auth/register",
+    "POST /api/api-keys"
+  ],
   "testCases": [
     {
       "name": "Rotate the freshly-issued key",
-      "headers": { "Authorization": "Bearer {{cache:auth.register.response.data.token}}" },
-      "pathParams": { "key_id": "{{cache:api-keys.create.response.data.key.key_id}}" },
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.register.response.data.token}}"
+      },
+      "pathParams": {
+        "key_id": "{{cache:api-keys.create.response.data.key.key_id}}"
+      },
       "expectedStatus": 201
     }
   ],
   "expectedResponse": {
-    "data": { "key": { "key_id": "string" }, "plaintext": "string" }
+    "data": {
+      "key": {
+        "key_id": "string"
+      },
+      "plaintext": "string"
+    }
   }
 }

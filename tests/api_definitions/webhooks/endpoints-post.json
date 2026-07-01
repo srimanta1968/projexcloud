@@ -1,6 +1,7 @@
 {
   "name": "POST /api/webhooks/endpoints - Register webhook endpoint",
   "endpoint": "/api/webhooks/endpoints",
+  "sdk": "sdk-webhook",
   "method": "POST",
   "requiresAuth": true,
   "expectedStatus": 201,
@@ -11,11 +12,15 @@
   "priority": 20,
   "testability": "manual",
   "skipReason": "Requires a vault key_id (signing_key_ref) to exist; covered by integration test that issues a vault key first.",
-  "dependsOn": ["POST /api/auth/register"],
+  "dependsOn": [
+    "POST /api/auth/register"
+  ],
   "testCases": [
     {
       "name": "Register HTTPS endpoint",
-      "headers": { "Authorization": "Bearer {{cache:auth.register.response.data.token}}" },
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.register.response.data.token}}"
+      },
       "payload": {
         "tenant_id": "{{static:00000000-0000-0000-0000-000000000001}}",
         "url": "{{static:https://webhook.example.com/projex}}",
@@ -26,7 +31,12 @@
     }
   ],
   "expectedResponse": {
-    "data": { "endpoint": { "endpoint_id": "string", "status": "string" } }
+    "data": {
+      "endpoint": {
+        "endpoint_id": "string",
+        "status": "string"
+      }
+    }
   },
   "captureResponse": {
     "webhooks.endpoints.create.response.data.endpoint.endpoint_id": "data.endpoint.endpoint_id"

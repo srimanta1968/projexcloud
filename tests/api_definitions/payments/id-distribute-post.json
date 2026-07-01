@@ -1,6 +1,7 @@
 {
   "name": "POST /api/payments/:charge_id/distribute - Append immutable distribution ledger entries",
   "endpoint": "/api/payments/:charge_id/distribute",
+  "sdk": "sdk-payment",
   "method": "POST",
   "requiresAuth": true,
   "expectedStatus": 201,
@@ -11,17 +12,30 @@
   "priority": 60,
   "testability": "manual",
   "skipReason": "Depends on a captured charge + real persona party ids; covered by integration test (escrow/marketplace flow).",
-  "dependsOn": ["POST /api/auth/register", "POST /api/payments/charge"],
+  "dependsOn": [
+    "POST /api/auth/register",
+    "POST /api/payments/charge"
+  ],
   "testCases": [
     {
       "name": "Split charge between two parties",
-      "headers": { "Authorization": "Bearer {{cache:auth.register.response.data.token}}" },
-      "pathParams": { "charge_id": "{{cache:payments.charge.response.data.charge.charge_id}}" },
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.register.response.data.token}}"
+      },
+      "pathParams": {
+        "charge_id": "{{cache:payments.charge.response.data.charge.charge_id}}"
+      },
       "payload": {
         "currency": "USD",
         "splits": [
-          { "party_persona_id": "{{cache:auth.register.response.data.userId}}", "share": 20.00 },
-          { "party_persona_id": "{{static:00000000-0000-0000-0000-000000000099}}", "share": 5.00 }
+          {
+            "party_persona_id": "{{cache:auth.register.response.data.userId}}",
+            "share": 20
+          },
+          {
+            "party_persona_id": "{{static:00000000-0000-0000-0000-000000000099}}",
+            "share": 5
+          }
         ]
       },
       "expectedStatus": 201

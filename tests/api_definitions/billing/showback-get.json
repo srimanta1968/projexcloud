@@ -1,6 +1,7 @@
 {
   "name": "GET /api/billing/showback - Per-(app, BU, persona-kind, encounter) splits — THE wedge",
   "endpoint": "/api/billing/showback",
+  "sdk": "sdk-billing",
   "method": "GET",
   "requiresAuth": true,
   "expectedStatus": 200,
@@ -11,11 +12,16 @@
   "priority": 60,
   "testability": "manual",
   "skipReason": "Aggregates billing.line_item; requires a finalized invoice in period; covered by integration test.",
-  "dependsOn": ["POST /api/auth/register", "POST /api/billing/invoices/generate"],
+  "dependsOn": [
+    "POST /api/auth/register",
+    "POST /api/billing/invoices/generate"
+  ],
   "testCases": [
     {
       "name": "Split by app_id + bu_id for Jan 2026",
-      "headers": { "Authorization": "Bearer {{cache:auth.register.response.data.token}}" },
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.register.response.data.token}}"
+      },
       "queryParams": {
         "tenant_id": "{{static:00000000-0000-0000-0000-000000000001}}",
         "period_start": "{{static:2026-01-01}}",
@@ -26,6 +32,9 @@
     }
   ],
   "expectedResponse": {
-    "data": { "rows": "array", "total_amount": "number" }
+    "data": {
+      "rows": "array",
+      "total_amount": "number"
+    }
   }
 }

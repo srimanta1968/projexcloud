@@ -1,6 +1,7 @@
 {
   "name": "POST /api/payments/methods - Attach PCI-tokenized payment method",
   "endpoint": "/api/payments/methods",
+  "sdk": "sdk-payment",
   "method": "POST",
   "requiresAuth": true,
   "expectedStatus": 201,
@@ -11,11 +12,15 @@
   "priority": 20,
   "testability": "manual",
   "skipReason": "Requires a real provider token (Stripe pi_*); covered by vendor sandbox test per AC-3.",
-  "dependsOn": ["POST /api/auth/register"],
+  "dependsOn": [
+    "POST /api/auth/register"
+  ],
   "testCases": [
     {
       "name": "Attach Stripe card via tokenized ref",
-      "headers": { "Authorization": "Bearer {{cache:auth.register.response.data.token}}" },
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.register.response.data.token}}"
+      },
       "payload": {
         "tenant_id": "{{static:00000000-0000-0000-0000-000000000001}}",
         "persona_id": "{{cache:auth.register.response.data.userId}}",
@@ -31,7 +36,13 @@
     }
   ],
   "expectedResponse": {
-    "data": { "method": { "method_id": "string", "provider": "string", "last4": "string" } }
+    "data": {
+      "method": {
+        "method_id": "string",
+        "provider": "string",
+        "last4": "string"
+      }
+    }
   },
   "captureResponse": {
     "payments.methods.create.response.data.method.method_id": "data.method.method_id"

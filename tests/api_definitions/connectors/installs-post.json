@@ -1,6 +1,7 @@
 {
   "name": "POST /api/connectors/installs - Install connector (OAuth)",
   "endpoint": "/api/connectors/installs",
+  "sdk": "sdk-connectors",
   "method": "POST",
   "requiresAuth": true,
   "expectedStatus": 201,
@@ -11,17 +12,26 @@
   "priority": 20,
   "testability": "manual",
   "skipReason": "OAuth requires real vendor app creds (Slack, Salesforce, etc); covered by per-connector integration test.",
-  "dependsOn": ["POST /api/auth/register"],
-  "testCases": [{
-    "name": "Install slack connector",
-    "headers": { "Authorization": "Bearer {{cache:auth.register.response.data.token}}" },
-    "payload": {
-      "tenant_id": "{{static:00000000-0000-0000-0000-000000000001}}",
-      "connector_kind": "slack",
-      "account_ref": "T0DEMO",
-      "oauth_token": "{{static:xoxb-test-token}}",
-      "scopes": ["channels:read", "chat:write"]
-    },
-    "expectedStatus": 201
-  }]
+  "dependsOn": [
+    "POST /api/auth/register"
+  ],
+  "testCases": [
+    {
+      "name": "Install slack connector",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.register.response.data.token}}"
+      },
+      "payload": {
+        "tenant_id": "{{static:00000000-0000-0000-0000-000000000001}}",
+        "connector_kind": "slack",
+        "account_ref": "T0DEMO",
+        "oauth_token": "{{static:xoxb-test-token}}",
+        "scopes": [
+          "channels:read",
+          "chat:write"
+        ]
+      },
+      "expectedStatus": 201
+    }
+  ]
 }

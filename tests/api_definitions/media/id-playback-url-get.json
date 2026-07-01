@@ -1,6 +1,7 @@
 {
   "name": "GET /api/media/:blob_id/playback-url - Issue presigned playback URL",
   "endpoint": "/api/media/:blob_id/playback-url",
+  "sdk": "sdk-media",
   "method": "GET",
   "requiresAuth": true,
   "expectedStatus": 200,
@@ -11,17 +12,29 @@
   "priority": 45,
   "testability": "manual",
   "skipReason": "Requires a ready blob (upload URL must have been followed by an actual S3 PUT + mark-ready); covered by integration test.",
-  "dependsOn": ["POST /api/auth/register", "POST /api/media/upload-url"],
+  "dependsOn": [
+    "POST /api/auth/register",
+    "POST /api/media/upload-url"
+  ],
   "testCases": [
     {
       "name": "Issue 10min playback URL for the uploaded blob",
-      "headers": { "Authorization": "Bearer {{cache:auth.register.response.data.token}}" },
-      "pathParams": { "blob_id": "{{cache:media.upload-url.create.response.data.blob_id}}" },
-      "queryParams": { "ttl_seconds": "600" },
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.register.response.data.token}}"
+      },
+      "pathParams": {
+        "blob_id": "{{cache:media.upload-url.create.response.data.blob_id}}"
+      },
+      "queryParams": {
+        "ttl_seconds": "600"
+      },
       "expectedStatus": 200
     }
   ],
   "expectedResponse": {
-    "data": { "url_id": "string", "playback_url": "string" }
+    "data": {
+      "url_id": "string",
+      "playback_url": "string"
+    }
   }
 }

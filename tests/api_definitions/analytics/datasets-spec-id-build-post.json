@@ -1,21 +1,32 @@
 {
   "name": "POST /api/analytics/datasets/:spec_id/build — materialize feature windows",
   "endpoint": "/api/analytics/datasets/:spec_id/build",
+  "sdk": "sdk-analytics",
   "method": "POST",
   "requiresAuth": true,
   "expectedStatus": 200,
   "taskId": "1e108f10-9db0-467e-8457-e966deb347bf",
   "sprintId": "efcf9cbd-5e84-469e-946e-efcabf8c88e1",
   "priority": 52,
-  "dependsOn": ["POST /api/auth/signup-tenant", "POST /api/analytics/datasets"],
+  "dependsOn": [
+    "POST /api/auth/signup-tenant",
+    "POST /api/analytics/datasets"
+  ],
   "testability": "manual",
   "skipReason": "Needs a real sub-bearing JWT and a registered dataset spec; materializes the feature windows over a time range and records a dataset_build.",
   "testCases": [
     {
       "name": "Build feature windows for a 1h range",
-      "headers": { "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}" },
-      "pathParams": { "spec_id": "{{cache:analytics.dataset.response.data.spec_id}}" },
-      "payload": { "from": "{{dynamic:pastdatetime}}", "to": "{{dynamic:datetime}}" },
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "pathParams": {
+        "spec_id": "{{cache:analytics.dataset.response.data.spec_id}}"
+      },
+      "payload": {
+        "from": "{{dynamic:pastdatetime}}",
+        "to": "{{dynamic:datetime}}"
+      },
       "expectedStatus": 200,
       "testability": "manual"
     }

@@ -1,6 +1,7 @@
 {
   "name": "POST /api/resellers - Create reseller",
   "endpoint": "/api/resellers",
+  "sdk": "sdk-tenant",
   "method": "POST",
   "requiresAuth": true,
   "expectedStatus": 201,
@@ -11,20 +12,35 @@
   "priority": 25,
   "testability": "manual",
   "skipReason": "Requires a seeded tenant.org row; covered by integration test alongside tenant create.",
-  "dependsOn": ["POST /api/auth/register"],
+  "dependsOn": [
+    "POST /api/auth/register"
+  ],
   "testCases": [
     {
       "name": "Create a reseller with brand + commission rules",
-      "headers": { "Authorization": "Bearer {{cache:auth.register.response.data.token}}" },
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.register.response.data.token}}"
+      },
       "payload": {
         "org_id": "{{static:00000000-0000-0000-0000-000000000010}}",
         "brand_name": "{{dynamic:name}}",
-        "commission_rules": { "default_pct": 15 },
+        "commission_rules": {
+          "default_pct": 15
+        },
         "invoice_aggregation": "consolidated"
       },
       "expectedStatus": 201
     }
   ],
-  "expectedResponse": { "data": { "reseller": { "reseller_id": "string", "brand_name": "string" } } },
-  "captureResponse": { "resellers.create.response.data.reseller.reseller_id": "data.reseller.reseller_id" }
+  "expectedResponse": {
+    "data": {
+      "reseller": {
+        "reseller_id": "string",
+        "brand_name": "string"
+      }
+    }
+  },
+  "captureResponse": {
+    "resellers.create.response.data.reseller.reseller_id": "data.reseller.reseller_id"
+  }
 }

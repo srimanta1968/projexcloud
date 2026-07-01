@@ -1,6 +1,7 @@
 {
   "name": "POST /api/workflows/start - Start a run of a registered workflow",
   "endpoint": "/api/workflows/start",
+  "sdk": "sdk-workflow",
   "method": "POST",
   "requiresAuth": true,
   "expectedStatus": 201,
@@ -11,22 +12,34 @@
   "priority": 30,
   "testability": "manual",
   "skipReason": "Depends on a registered workflow definition with in-process step handlers; covered by integration test where a demo workflow module is loaded.",
-  "dependsOn": ["POST /api/auth/register", "POST /api/workflows/definitions"],
+  "dependsOn": [
+    "POST /api/auth/register",
+    "POST /api/workflows/definitions"
+  ],
   "testCases": [
     {
       "name": "Start demo-payment-flow",
-      "headers": { "Authorization": "Bearer {{cache:auth.register.response.data.token}}" },
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.register.response.data.token}}"
+      },
       "payload": {
         "name": "{{static:demo-payment-flow}}",
         "version": "{{static:1.0.0}}",
         "namespace": "{{static:admin}}",
-        "input": { "amount": 1500, "currency": "USD" }
+        "input": {
+          "amount": 1500,
+          "currency": "USD"
+        }
       },
       "expectedStatus": 201
     }
   ],
   "expectedResponse": {
-    "data": { "run_id": "string", "status": "string", "steps": "array" }
+    "data": {
+      "run_id": "string",
+      "status": "string",
+      "steps": "array"
+    }
   },
   "captureResponse": {
     "workflows.start.response.data.run_id": "data.run_id"

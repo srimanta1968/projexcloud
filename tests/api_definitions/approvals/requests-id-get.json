@@ -1,6 +1,7 @@
 {
   "name": "GET /api/approvals/requests/:request_id - Query request + step trail",
   "endpoint": "/api/approvals/requests/:request_id",
+  "sdk": "sdk-approval",
   "method": "GET",
   "requiresAuth": true,
   "expectedStatus": 200,
@@ -11,12 +12,19 @@
   "priority": 50,
   "testability": "manual",
   "skipReason": "Depends on an existing request_id; covered by integration test.",
-  "dependsOn": ["POST /api/auth/register", "POST /api/approvals/requests"],
+  "dependsOn": [
+    "POST /api/auth/register",
+    "POST /api/approvals/requests"
+  ],
   "testCases": [
     {
       "name": "Get request state + steps",
-      "headers": { "Authorization": "Bearer {{cache:auth.register.response.data.token}}" },
-      "pathParams": { "request_id": "{{cache:approvals.requests.create.response.data.request.request_id}}" },
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.register.response.data.token}}"
+      },
+      "pathParams": {
+        "request_id": "{{cache:approvals.requests.create.response.data.request.request_id}}"
+      },
       "expectedStatus": 200
     }
   ]

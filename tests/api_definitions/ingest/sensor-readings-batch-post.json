@@ -1,19 +1,25 @@
 {
   "name": "POST /api/ingest/sensor-readings/batch — typed sensor time-series batch ingest",
   "endpoint": "/api/ingest/sensor-readings/batch",
+  "sdk": "sdk-ingest",
   "method": "POST",
   "requiresAuth": true,
   "expectedStatus": 201,
   "taskId": "f9f1c848-2019-484f-97ca-13b22a3effce",
   "sprintId": "efcf9cbd-5e84-469e-946e-efcabf8c88e1",
   "priority": 30,
-  "dependsOn": ["POST /api/auth/signup-tenant", "POST /api/assets"],
+  "dependsOn": [
+    "POST /api/auth/signup-tenant",
+    "POST /api/assets"
+  ],
   "testability": "manual",
   "skipReason": "Writes to the ClickHouse time-series table (external store) and validates each reading against the asset.sensor catalog; a real sensor_id is nested inside the asset twin and cannot be captured via cache (no array indexing). Verify live with a signup-tenant token + a registered asset's sensor_id.",
   "testCases": [
     {
       "name": "Idempotent batch of catalog-valid sensor readings",
-      "headers": { "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}" },
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
       "payload": {
         "idempotency_key": "{{dynamic:uuid}}",
         "readings": [

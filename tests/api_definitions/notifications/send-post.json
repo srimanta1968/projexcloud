@@ -1,6 +1,7 @@
 {
   "name": "POST /api/notifications/send - Dispatch notification with consent + quiet-hours + render",
   "endpoint": "/api/notifications/send",
+  "sdk": "sdk-notification",
   "method": "POST",
   "requiresAuth": true,
   "expectedStatus": 201,
@@ -11,18 +12,24 @@
   "priority": 40,
   "testability": "manual",
   "skipReason": "Requires a seeded notification.template + consent.purpose + sdk-consent grant; covered by integration test.",
-  "dependsOn": ["POST /api/auth/register"],
+  "dependsOn": [
+    "POST /api/auth/register"
+  ],
   "testCases": [
     {
       "name": "Send email notification with rendered body",
-      "headers": { "Authorization": "Bearer {{cache:auth.register.response.data.token}}" },
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.register.response.data.token}}"
+      },
       "payload": {
         "tenant_id": "{{static:00000000-0000-0000-0000-000000000001}}",
         "template_code": "welcome-email",
         "person_id": "{{cache:auth.register.response.data.userId}}",
         "channel": "email",
         "destination": "{{dynamic:email}}",
-        "payload": { "name": "Alice" },
+        "payload": {
+          "name": "Alice"
+        },
         "locale": "en-US"
       },
       "expectedStatus": 201
@@ -30,7 +37,10 @@
   ],
   "expectedResponse": {
     "data": {
-      "message": { "message_id": "string", "status": "string" },
+      "message": {
+        "message_id": "string",
+        "status": "string"
+      },
       "status": "string",
       "rendered_body": "string"
     }

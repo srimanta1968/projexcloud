@@ -1,6 +1,7 @@
 {
   "name": "POST /api/payments/:charge_id/refund - Issue refund (sdk-approval gates high-value)",
   "endpoint": "/api/payments/:charge_id/refund",
+  "sdk": "sdk-payment",
   "method": "POST",
   "requiresAuth": true,
   "expectedStatus": 201,
@@ -11,17 +12,33 @@
   "priority": 50,
   "testability": "manual",
   "skipReason": "Depends on a captured charge; covered by Stripe sandbox integration test.",
-  "dependsOn": ["POST /api/auth/register", "POST /api/payments/charge"],
+  "dependsOn": [
+    "POST /api/auth/register",
+    "POST /api/payments/charge"
+  ],
   "testCases": [
     {
       "name": "Refund $5.00 USD below approval threshold",
-      "headers": { "Authorization": "Bearer {{cache:auth.register.response.data.token}}" },
-      "pathParams": { "charge_id": "{{cache:payments.charge.response.data.charge.charge_id}}" },
-      "payload": { "amount": 5.00, "reason": "customer requested partial refund" },
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.register.response.data.token}}"
+      },
+      "pathParams": {
+        "charge_id": "{{cache:payments.charge.response.data.charge.charge_id}}"
+      },
+      "payload": {
+        "amount": 5,
+        "reason": "customer requested partial refund"
+      },
       "expectedStatus": 201
     }
   ],
   "expectedResponse": {
-    "data": { "refund": { "refund_id": "string", "status": "string", "amount": "string" } }
+    "data": {
+      "refund": {
+        "refund_id": "string",
+        "status": "string",
+        "amount": "string"
+      }
+    }
   }
 }

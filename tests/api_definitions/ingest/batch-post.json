@@ -1,5 +1,6 @@
 {
   "endpoint": "/api/ingest/customer/batch",
+  "sdk": "sdk-ingest",
   "method": "POST",
   "taskId": "2d87127f-b97f-42c3-b448-3ea49104bada",
   "featureId": "a07b6fa1-99ab-4b29-976e-5f4278e32c82",
@@ -8,27 +9,48 @@
   "description": "sdk-ingest batch front door. Accepts an envelope { entity, mode: upsert|insert, idempotency_key, records[] } and imports records into the target entity. Records provenance via sdk-lineage and an append-only entry via sdk-audit. Returns per-record results { imported, skipped, errors[] }.",
   "requiresAuth": true,
   "priority": 45,
-  "dependsOn": ["POST /api/auth/register"],
+  "dependsOn": [
+    "POST /api/auth/register"
+  ],
   "testCases": [
     {
       "name": "Bulk upsert customer records with idempotency key",
-      "headers": { "Authorization": "Bearer {{cache:auth.register.response.data.token}}" },
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.register.response.data.token}}"
+      },
       "payload": {
         "entity": "customer",
         "mode": "upsert",
         "idempotency_key": "{{dynamic:uuid}}",
         "records": [
-          { "external_id": "C-1001", "name": "Acme Corp", "email": "ops@acme.test" },
-          { "external_id": "C-1002", "name": "Globex", "email": "ap@globex.test" }
+          {
+            "external_id": "C-1001",
+            "name": "Acme Corp",
+            "email": "ops@acme.test"
+          },
+          {
+            "external_id": "C-1002",
+            "name": "Globex",
+            "email": "ap@globex.test"
+          }
         ]
       },
       "expectedStatus": 200,
-      "expectedResponse": { "imported": 2 }
+      "expectedResponse": {
+        "imported": 2
+      }
     },
     {
       "name": "Reject batch with no records",
-      "headers": { "Authorization": "Bearer {{cache:auth.register.response.data.token}}" },
-      "payload": { "entity": "customer", "mode": "upsert", "idempotency_key": "{{dynamic:uuid}}", "records": [] },
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.register.response.data.token}}"
+      },
+      "payload": {
+        "entity": "customer",
+        "mode": "upsert",
+        "idempotency_key": "{{dynamic:uuid}}",
+        "records": []
+      },
       "expectedStatus": 400
     }
   ]

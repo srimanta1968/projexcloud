@@ -1,6 +1,7 @@
 {
   "name": "POST /api/tenants/:tenant_id/reseller-attach - Attach reseller",
   "endpoint": "/api/tenants/:tenant_id/reseller-attach",
+  "sdk": "sdk-tenant",
   "method": "POST",
   "requiresAuth": true,
   "expectedStatus": 200,
@@ -11,15 +12,25 @@
   "priority": 50,
   "testability": "manual",
   "skipReason": "Depends on both tenant + reseller seed rows; covered by integration test.",
-  "dependsOn": ["POST /api/auth/register", "POST /api/tenants", "POST /api/resellers"],
+  "dependsOn": [
+    "POST /api/auth/register",
+    "POST /api/tenants",
+    "POST /api/resellers"
+  ],
   "testCases": [
     {
       "name": "Attach a reseller to a tenant with custom commission",
-      "headers": { "Authorization": "Bearer {{cache:auth.register.response.data.token}}" },
-      "pathParams": { "tenant_id": "{{cache:tenants.create.response.data.tenant_id}}" },
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.register.response.data.token}}"
+      },
+      "pathParams": {
+        "tenant_id": "{{cache:tenants.create.response.data.tenant_id}}"
+      },
       "payload": {
         "reseller_id": "{{cache:resellers.create.response.data.reseller.reseller_id}}",
-        "commission_rules": { "default_pct": 12 }
+        "commission_rules": {
+          "default_pct": 12
+        }
       },
       "expectedStatus": 200
     }

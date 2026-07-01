@@ -1,6 +1,7 @@
 {
   "name": "POST /api/notifications/quiet-hours - Upsert per-persona quiet-hours",
   "endpoint": "/api/notifications/quiet-hours",
+  "sdk": "sdk-notification",
   "method": "POST",
   "requiresAuth": true,
   "expectedStatus": 200,
@@ -11,16 +12,30 @@
   "priority": 25,
   "testability": "manual",
   "skipReason": "FR-NTF-5 quiet-hours upsert requires tenant-scoped JWT (req.auth.tenant_id). The /api/auth/register flow returns a JWT with tenant_id=null, so this endpoint 403s. Re-enable when test harness can mint a tenant-scoped token, or add a setupScript that seeds a tenant + tenant-scoped login.",
-  "dependsOn": ["POST /api/auth/register"],
+  "dependsOn": [
+    "POST /api/auth/register"
+  ],
   "testCases": [
     {
       "name": "Set nightly 22:00-06:00 PT quiet window",
-      "headers": { "Authorization": "Bearer {{cache:auth.register.response.data.token}}" },
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.register.response.data.token}}"
+      },
       "payload": {
         "persona_id": "{{cache:auth.register.response.data.userId}}",
         "windows": [
-          { "dow": 0, "start": "22:00", "end": "06:00", "tz": "America/Los_Angeles" },
-          { "dow": 1, "start": "22:00", "end": "06:00", "tz": "America/Los_Angeles" }
+          {
+            "dow": 0,
+            "start": "22:00",
+            "end": "06:00",
+            "tz": "America/Los_Angeles"
+          },
+          {
+            "dow": 1,
+            "start": "22:00",
+            "end": "06:00",
+            "tz": "America/Los_Angeles"
+          }
         ],
         "dnd": false
       },
@@ -28,6 +43,11 @@
     }
   ],
   "expectedResponse": {
-    "data": { "quiet_hours": { "persona_id": "string", "dnd": "boolean" } }
+    "data": {
+      "quiet_hours": {
+        "persona_id": "string",
+        "dnd": "boolean"
+      }
+    }
   }
 }

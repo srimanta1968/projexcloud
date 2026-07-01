@@ -1,6 +1,7 @@
 {
   "name": "POST /api/workflows/:run_id/signal - Signal in-flight run",
   "endpoint": "/api/workflows/:run_id/signal",
+  "sdk": "sdk-workflow",
   "method": "POST",
   "requiresAuth": true,
   "expectedStatus": 200,
@@ -11,13 +12,25 @@
   "priority": 40,
   "testability": "manual",
   "skipReason": "Synthetic in-process engine completes runs synchronously, so signals target a long-running step that only exists in production Temporal workers.",
-  "dependsOn": ["POST /api/auth/register", "POST /api/workflows/start"],
+  "dependsOn": [
+    "POST /api/auth/register",
+    "POST /api/workflows/start"
+  ],
   "testCases": [
     {
       "name": "Send approval signal to running workflow",
-      "headers": { "Authorization": "Bearer {{cache:auth.register.response.data.token}}" },
-      "pathParams": { "run_id": "{{cache:workflows.start.response.data.run_id}}" },
-      "payload": { "signal_name": "{{static:approve}}", "payload": { "approver_id": "{{cache:auth.register.response.data.userId}}" } },
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.register.response.data.token}}"
+      },
+      "pathParams": {
+        "run_id": "{{cache:workflows.start.response.data.run_id}}"
+      },
+      "payload": {
+        "signal_name": "{{static:approve}}",
+        "payload": {
+          "approver_id": "{{cache:auth.register.response.data.userId}}"
+        }
+      },
       "expectedStatus": 200
     }
   ]

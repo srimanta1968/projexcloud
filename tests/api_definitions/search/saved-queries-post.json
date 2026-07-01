@@ -1,6 +1,7 @@
 {
   "name": "POST /api/search/saved-queries - Persist a named DSL query",
   "endpoint": "/api/search/saved-queries",
+  "sdk": "sdk-search",
   "method": "POST",
   "requiresAuth": true,
   "expectedStatus": 201,
@@ -11,21 +12,37 @@
   "priority": 40,
   "testability": "manual",
   "skipReason": "Requires authenticated persona context; runs cleanly under integration test with a registered tenant.",
-  "dependsOn": ["POST /api/auth/register"],
+  "dependsOn": [
+    "POST /api/auth/register"
+  ],
   "testCases": [
     {
       "name": "Save my-open-encounters query",
-      "headers": { "Authorization": "Bearer {{cache:auth.register.response.data.token}}" },
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.register.response.data.token}}"
+      },
       "payload": {
         "tenant_id": "{{static:00000000-0000-0000-0000-000000000001}}",
         "persona_id": "{{cache:auth.register.response.data.userId}}",
         "name": "{{static:my-open-encounters}}",
-        "dsl": { "query": { "term": { "status": "open" } }, "size": 50 }
+        "dsl": {
+          "query": {
+            "term": {
+              "status": "open"
+            }
+          },
+          "size": 50
+        }
       },
       "expectedStatus": 201
     }
   ],
   "expectedResponse": {
-    "data": { "saved_query": { "query_id": "string", "name": "string" } }
+    "data": {
+      "saved_query": {
+        "query_id": "string",
+        "name": "string"
+      }
+    }
   }
 }

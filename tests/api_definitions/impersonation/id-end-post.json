@@ -1,6 +1,7 @@
 {
   "name": "POST /api/impersonation/:grant_id/end - End impersonation",
   "endpoint": "/api/impersonation/:grant_id/end",
+  "sdk": "sdk-identity",
   "method": "POST",
   "requiresAuth": true,
   "expectedStatus": 200,
@@ -11,12 +12,19 @@
   "priority": 50,
   "testability": "manual",
   "skipReason": "Depends on a real impersonation_grant row; covered by integration test alongside request + approve.",
-  "dependsOn": ["POST /api/auth/register", "POST /api/impersonation/request"],
+  "dependsOn": [
+    "POST /api/auth/register",
+    "POST /api/impersonation/request"
+  ],
   "testCases": [
     {
       "name": "End the active impersonation session",
-      "headers": { "Authorization": "Bearer {{cache:auth.register.response.data.token}}" },
-      "pathParams": { "grant_id": "{{cache:impersonation.request.response.data.grant.grant_id}}" },
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.register.response.data.token}}"
+      },
+      "pathParams": {
+        "grant_id": "{{cache:impersonation.request.response.data.grant.grant_id}}"
+      },
       "expectedStatus": 200
     }
   ]

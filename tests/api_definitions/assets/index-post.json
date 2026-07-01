@@ -1,6 +1,7 @@
 {
   "name": "POST /api/assets — register a robot asset + component/sensor tree",
   "endpoint": "/api/assets",
+  "sdk": "sdk-asset",
   "method": "POST",
   "requiresAuth": true,
   "expectedStatus": 201,
@@ -9,22 +10,55 @@
   "epicId": "d386cc32-4151-4ae2-a337-a00891fc1d44",
   "sprintId": "efcf9cbd-5e84-469e-946e-efcabf8c88e1",
   "priority": 20,
-  "dependsOn": ["POST /api/auth/signup-tenant"],
+  "dependsOn": [
+    "POST /api/auth/signup-tenant"
+  ],
   "testability": "manual",
   "skipReason": "Needs a real sub-bearing JWT; verified live (201 + asset_id) with a signup-tenant token. Registers asset + nested component tree + sensors.",
-  "captureResponse": { "assets.create.response.data.asset_id": "data.asset_id" },
+  "captureResponse": {
+    "assets.create.response.data.asset_id": "data.asset_id"
+  },
   "testCases": [
     {
       "name": "Register a humanoid with a component/sensor tree",
-      "headers": { "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}" },
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
       "payload": {
         "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
         "device_uuid": "{{static:dev_robotA}}",
         "model": "{{static:Humanoid-X1}}",
         "display_name": "{{static:Unit-001}}",
         "components": [
-          { "kind": "head", "sensors": [{ "kind": "camera", "unit": "frame" }] },
-          { "kind": "arm", "name": "left_arm", "children": [{ "kind": "hand", "children": [{ "kind": "finger", "sensors": [{ "kind": "force", "unit": "N" }] }] }] }
+          {
+            "kind": "head",
+            "sensors": [
+              {
+                "kind": "camera",
+                "unit": "frame"
+              }
+            ]
+          },
+          {
+            "kind": "arm",
+            "name": "left_arm",
+            "children": [
+              {
+                "kind": "hand",
+                "children": [
+                  {
+                    "kind": "finger",
+                    "sensors": [
+                      {
+                        "kind": "force",
+                        "unit": "N"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
         ]
       },
       "expectedStatus": 201,

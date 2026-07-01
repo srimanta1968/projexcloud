@@ -1,21 +1,32 @@
 {
   "name": "POST /api/commands/:command_id/decision — approve/reject a gated command",
   "endpoint": "/api/commands/:command_id/decision",
+  "sdk": "sdk-command",
   "method": "POST",
   "requiresAuth": true,
   "expectedStatus": 200,
   "taskId": "b1fd6243-7bbf-4494-84ff-68d7194b0698",
   "sprintId": "efcf9cbd-5e84-469e-946e-efcabf8c88e1",
   "priority": 41,
-  "dependsOn": ["POST /api/auth/signup-tenant", "POST /api/commands"],
+  "dependsOn": [
+    "POST /api/auth/signup-tenant",
+    "POST /api/commands"
+  ],
   "testability": "manual",
   "skipReason": "Needs a real sub-bearing JWT and a high-risk command in 'pending' status (low/medium auto-approve, so the standard move command isn't pending). Issue an 'estop'/'firmware_update' command, then decide it. Audited via sdk-audit either way.",
   "testCases": [
     {
       "name": "Approve a pending risky command",
-      "headers": { "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}" },
-      "pathParams": { "command_id": "{{cache:commands.create.response.data.command_id}}" },
-      "payload": { "approved": true, "reason": "operator confirmed safe" },
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "pathParams": {
+        "command_id": "{{cache:commands.create.response.data.command_id}}"
+      },
+      "payload": {
+        "approved": true,
+        "reason": "operator confirmed safe"
+      },
       "expectedStatus": 200,
       "testability": "manual"
     }

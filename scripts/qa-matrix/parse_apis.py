@@ -9,14 +9,48 @@ ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 API_DIR = os.path.join(ROOT, "tests", "api_definitions")
 OUT_DIR = os.path.join(ROOT, "scripts", "qa-matrix")
 
-# Map api_definition resource folder -> implementing SDK/service (best-effort).
+# Map api_definition resource folder -> canonical implementing SDK/service.
+# Every def now carries an explicit "sdk" field, so this is only a fallback for
+# any future def added without one. Keep in sync with scripts/qa-matrix canonical map.
 RESOURCE_SDK = {
-    "policies": "sdk-policy", "principal-token": "sdk-principal-token",
-    "break-glass": "sdk-approval", "resources": "sdk-resource-registry",
-    "empi": "sdk-identity-resolver", "observability": "telemetry/api-gateway",
-    "consents": "sdk-consent", "relationships": "sdk-rebac", "api-keys": "sdk-api-keys",
-    "tenants": "sdk-tenant", "auth": "sdk-identity", "impersonation": "sdk-identity",
-    "consent": "sdk-consent", "audit": "sdk-audit",
+    "admin": "api-gateway", "health": "api-gateway",
+    "agent-runtime": "sdk-agent-runtime", "agent-runtime-agents": "sdk-agent-runtime",
+    "agent-runtime-runs": "sdk-agent-runtime", "agent-runtime-tokens": "sdk-agent-runtime",
+    "ai-gateway": "sdk-ai-gateway", "analytics": "sdk-analytics",
+    "api-keys": "sdk-api-keys", "keys": "sdk-api-keys",
+    "app-identities": "sdk-persona", "personas": "sdk-persona", "persons": "sdk-persona",
+    "memberships": "sdk-persona",
+    "approvals": "sdk-approval", "break-glass": "sdk-approval",
+    "assets": "sdk-asset", "audit": "sdk-audit",
+    "auth": "sdk-identity", "identity": "sdk-identity", "impersonation": "sdk-identity",
+    "me": "sdk-identity", "mfa": "sdk-identity", "saml": "sdk-identity", "scim": "sdk-identity",
+    "billing": "sdk-billing",
+    "bridge": "semantic-service", "build-plan": "semantic-service", "intent": "semantic-service",
+    "ontology": "semantic-service", "plan": "semantic-service", "policy": "semantic-service",
+    "campaigns": "sdk-campaign", "charts": "sdk-policy", "commands": "sdk-command",
+    "connectors": "sdk-connectors", "consent": "sdk-consent", "consents": "sdk-consent",
+    "content": "sdk-content", "contracts": "contracts", "crm": "sdk-crm",
+    "data-rights": "sdk-data-rights", "devices": "sdk-device",
+    "diagnostic": "sdk-diagnostic-telemetry", "dispatch": "sdk-dispatch",
+    "empi": "sdk-identity-resolver", "resolver": "sdk-identity-resolver",
+    "encounters": "sdk-engagement", "grants": "sdk-engagement", "participants": "sdk-engagement",
+    "events": "sdk-event", "evidence": "sdk-evidence",
+    "failovers": "pool-federation-runtime", "routes": "pool-federation-runtime",
+    "flags": "sdk-feature-flags", "geo": "sdk-geo", "geo-nodes": "sdk-tenant",
+    "hdk-diagnostic": "hdk-diagnostic", "hdk-idp": "hdk-idp",
+    "hdk-permissions": "hdk-permissions", "hdk-sync": "hdk-sync",
+    "ingest": "sdk-ingest", "lead-scoring": "sdk-lead-scoring", "leads": "sdk-crm",
+    "mcp": "sdk-mcp-bridge", "media": "sdk-media", "meter": "sdk-meter",
+    "notifications": "sdk-notification", "observability": "telemetry",
+    "payments": "sdk-payment", "policies": "sdk-policy",
+    "principal-token": "sdk-principal-token", "profile": "sdk-profile",
+    "relationships": "sdk-rebac", "role-assignments": "sdk-rebac", "role-templates": "sdk-rebac",
+    "resellers": "sdk-tenant", "tenants": "sdk-tenant", "tenant-lifecycle": "sdk-tenant-lifecycle",
+    "resources": "sdk-resource-registry", "router": "sdk-pool-router",
+    "search": "sdk-search", "secrets": "sdk-secrets", "service-request": "sdk-service-request",
+    "social": "sdk-social", "storm": "sdk-storm", "taxonomy": "sdk-taxonomy",
+    "trace": "sdk-trace", "vault": "sdk-vault", "webhooks": "sdk-webhook",
+    "workflows": "sdk-workflow", "x": "sdk-capability",
 }
 
 def infer_sdk(rel_path):

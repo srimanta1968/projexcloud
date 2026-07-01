@@ -1,6 +1,7 @@
 {
   "name": "POST /api/approvals/routes - Create approval route definition",
   "endpoint": "/api/approvals/routes",
+  "sdk": "sdk-approval",
   "method": "POST",
   "requiresAuth": true,
   "expectedStatus": 201,
@@ -11,26 +12,48 @@
   "priority": 20,
   "testability": "manual",
   "skipReason": "Steps reference persona UUIDs that must exist; integration test seeds a manager + finance persona first.",
-  "dependsOn": ["POST /api/auth/register"],
+  "dependsOn": [
+    "POST /api/auth/register"
+  ],
   "testCases": [
     {
       "name": "Create 2-step approval route (manager → finance m-of-n)",
-      "headers": { "Authorization": "Bearer {{cache:auth.register.response.data.token}}" },
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.register.response.data.token}}"
+      },
       "payload": {
         "tenant_id": "{{static:00000000-0000-0000-0000-000000000001}}",
         "name": "{{static:high-value-refund}}",
         "description": "{{static:Refunds above $10k}}",
         "kind_pattern": "{{static:payment.refund > 10000 USD}}",
         "steps": [
-          { "name": "{{static:manager}}", "kind": "{{static:single}}", "approver_persona_id": "{{cache:auth.register.response.data.userId}}", "sla_minutes": 60 },
-          { "name": "{{static:finance}}", "kind": "{{static:m-of-n}}", "m": 1, "approvers": ["{{cache:auth.register.response.data.userId}}"], "sla_minutes": 120 }
+          {
+            "name": "{{static:manager}}",
+            "kind": "{{static:single}}",
+            "approver_persona_id": "{{cache:auth.register.response.data.userId}}",
+            "sla_minutes": 60
+          },
+          {
+            "name": "{{static:finance}}",
+            "kind": "{{static:m-of-n}}",
+            "m": 1,
+            "approvers": [
+              "{{cache:auth.register.response.data.userId}}"
+            ],
+            "sla_minutes": 120
+          }
         ]
       },
       "expectedStatus": 201
     }
   ],
   "expectedResponse": {
-    "data": { "route": { "route_id": "string", "status": "string" } }
+    "data": {
+      "route": {
+        "route_id": "string",
+        "status": "string"
+      }
+    }
   },
   "captureResponse": {
     "approvals.routes.create.response.data.route.route_id": "data.route.route_id"

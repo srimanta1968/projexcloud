@@ -1,6 +1,7 @@
 {
   "name": "POST /api/tenants/:tenant_id/fiscal-calendar - Set fiscal calendar",
   "endpoint": "/api/tenants/:tenant_id/fiscal-calendar",
+  "sdk": "sdk-tenant",
   "method": "POST",
   "requiresAuth": true,
   "expectedStatus": 201,
@@ -11,13 +12,24 @@
   "priority": 45,
   "testability": "manual",
   "skipReason": "Depends on tenant seed row; covered by integration test.",
-  "dependsOn": ["POST /api/auth/register", "POST /api/tenants"],
+  "dependsOn": [
+    "POST /api/auth/register",
+    "POST /api/tenants"
+  ],
   "testCases": [
     {
       "name": "Set fiscal year starting in April with USD",
-      "headers": { "Authorization": "Bearer {{cache:auth.register.response.data.token}}" },
-      "pathParams": { "tenant_id": "{{cache:tenants.create.response.data.tenant_id}}" },
-      "payload": { "year_start_month": 4, "base_currency": "USD", "period_kind": "quarter" },
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.register.response.data.token}}"
+      },
+      "pathParams": {
+        "tenant_id": "{{cache:tenants.create.response.data.tenant_id}}"
+      },
+      "payload": {
+        "year_start_month": 4,
+        "base_currency": "USD",
+        "period_kind": "quarter"
+      },
       "expectedStatus": 201
     }
   ]

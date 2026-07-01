@@ -1,6 +1,7 @@
 {
   "name": "POST /api/approvals/steps/:step_id/decide - Approve or reject a step",
   "endpoint": "/api/approvals/steps/:step_id/decide",
+  "sdk": "sdk-approval",
   "method": "POST",
   "requiresAuth": true,
   "expectedStatus": 200,
@@ -11,12 +12,19 @@
   "priority": 40,
   "testability": "manual",
   "skipReason": "Depends on a pending step assigned to the calling persona; covered by integration test.",
-  "dependsOn": ["POST /api/auth/register", "POST /api/approvals/requests"],
+  "dependsOn": [
+    "POST /api/auth/register",
+    "POST /api/approvals/requests"
+  ],
   "testCases": [
     {
       "name": "Approve manager step",
-      "headers": { "Authorization": "Bearer {{cache:auth.register.response.data.token}}" },
-      "pathParams": { "step_id": "{{cache:approvals.requests.create.response.data.pending_steps.0.step_id}}" },
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.register.response.data.token}}"
+      },
+      "pathParams": {
+        "step_id": "{{cache:approvals.requests.create.response.data.pending_steps.0.step_id}}"
+      },
       "payload": {
         "decision": "{{static:approve}}",
         "acting_persona_id": "{{cache:auth.register.response.data.userId}}",
@@ -26,6 +34,13 @@
     }
   ],
   "expectedResponse": {
-    "data": { "step": { "decision": "string" }, "request": { "status": "string" } }
+    "data": {
+      "step": {
+        "decision": "string"
+      },
+      "request": {
+        "status": "string"
+      }
+    }
   }
 }

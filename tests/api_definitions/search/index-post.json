@@ -1,6 +1,7 @@
 {
   "name": "POST /api/search/index - Register/ensure per-tenant index",
   "endpoint": "/api/search/index",
+  "sdk": "sdk-search",
   "method": "POST",
   "requiresAuth": true,
   "expectedStatus": 201,
@@ -11,19 +12,29 @@
   "priority": 20,
   "testability": "manual",
   "skipReason": "Requires a real OpenSearch cluster (or a registered synthetic client in-process); validated by integration test.",
-  "dependsOn": ["POST /api/auth/register"],
+  "dependsOn": [
+    "POST /api/auth/register"
+  ],
   "testCases": [
     {
       "name": "Register encounter entity index",
-      "headers": { "Authorization": "Bearer {{cache:auth.register.response.data.token}}" },
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.register.response.data.token}}"
+      },
       "payload": {
         "tenant_id": "{{static:00000000-0000-0000-0000-000000000001}}",
         "entity_kind": "{{static:encounter}}",
         "field_mappings": {
           "properties": {
-            "tenant_id": { "type": "keyword" },
-            "_scope_tags": { "type": "keyword" },
-            "status": { "type": "keyword" }
+            "tenant_id": {
+              "type": "keyword"
+            },
+            "_scope_tags": {
+              "type": "keyword"
+            },
+            "status": {
+              "type": "keyword"
+            }
           }
         }
       },
@@ -31,7 +42,12 @@
     }
   ],
   "expectedResponse": {
-    "data": { "definition": { "index_def_id": "string", "opensearch_alias": "string" } }
+    "data": {
+      "definition": {
+        "index_def_id": "string",
+        "opensearch_alias": "string"
+      }
+    }
   },
   "captureResponse": {
     "search.index.create.response.data.definition.index_def_id": "data.definition.index_def_id"
