@@ -141,6 +141,18 @@ def render_api(method, endpoint, rows):
         parts.append(f'<div class="k">Implemented in</div><div><span class="muted">{esc(r0.get("sourceFile"))}</span></div>')
     if r0.get("generated"):
         parts.append('<div class="k">Status</div><div class="manual">auto-generated from route scan — review payload/response before enabling automated tests</div>')
+    if r0.get("fieldOptions"):
+        fo = r0["fieldOptions"]
+        fo_rows = "".join(
+            '<div><code>{k}</code>: {vals}</div>'.format(
+                k=esc(k),
+                vals=", ".join('<code>{}</code>'.format(esc(str(v))) for v in (vals or [])),
+            )
+            for k, vals in fo.items()
+        )
+        parts.append('<div class="k">Field options</div>'
+                     '<div>{rows}<div class="note">Allowed values (enum / DB-CHECK) for these request fields — '
+                     'QA should exercise each option.</div></div>'.format(rows=fo_rows))
     parts.append(f'<div class="k">Source spec</div><div><span class="muted">{esc(r0.get("file",""))}</span></div>')
     parts.append('</div>')
     # per test case
