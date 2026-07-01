@@ -21,6 +21,7 @@ const NAV = [
   { href: '/sovereign-regions', label: 'Sovereign' },
   { href: '/onprem-installs', label: 'On-Prem' },
   { href: '/active-active', label: 'Active-Active' },
+  { href: '/security/ops-tokens', label: 'Ops Tokens' },
   { href: '/help', label: 'Help' },
 ];
 

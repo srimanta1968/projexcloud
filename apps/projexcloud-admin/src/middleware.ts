@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { SESSION_COOKIE, resolveSession } from '@projexlight/design-system/auth';
+import { isPlatformOperator } from './lib/operator';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:3500';
 
@@ -25,6 +26,15 @@ export async function middleware(req: NextRequest): Promise<NextResponse> {
     loginUrl.searchParams.set('returnTo', returnTo);
     return NextResponse.redirect(loginUrl);
   }
+
+  // /security/* manages the platform-wide admin ops token and is PLATFORM-
+  // OPERATOR-ONLY. Fail-closed: a tenant admin, developer, or customer session
+  // that authenticates here is still rejected (403) unless it is a ProjexCloud
+  // platform operator (PLATFORM_OPERATOR_ROLE or PLATFORM_OPERATOR_EMAILS).
+  if (req.nextUrl.pathname.startsWith('/security') && !isPlatformOperator(user)) {
+    return new NextResponse('Forbidden: platform-operator access required', { status: 403 });
+  }
+
   return NextResponse.next();
 }
 

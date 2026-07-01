@@ -89,6 +89,9 @@ import {
   server as resourceRegistryServer,
 } from '@projexlight/sdk-resource-registry';
 import { requireAuth } from '@projexlight/sdk-identity';
+import { adminOpsMigrationsDir } from './admin/migrations';
+import { verifyAdminOpsToken, invalidateAdminOpsCache } from './admin/adminOpsAuth';
+import { issueOpsToken, revokeOpsToken, listOpsTokens } from './admin/opsTokenStore';
 import { resolveIdentityContext, getEmpiMetrics } from '@projexlight/sdk-identity-resolver';
 import { emitEvent, addEmitTap } from '@projexlight/sdk-audit';
 import {
@@ -757,18 +760,17 @@ app.post<{ Body: { audience?: string; ttl_seconds?: number; purpose?: string } }
 // portal). Wraps sdk-tenant service functions so operators don't need
 // a tenant-scoped JWT.
 // ─────────────────────────────────────────────────────────────────────
-function checkAdminToken(req: FastifyRequest, reply: FastifyReply): boolean {
-  const adminToken = process.env.ADMIN_OPS_TOKEN;
-  const presented = req.headers['x-admin-ops-token'];
-  if (!adminToken || !presented || presented !== adminToken) {
-    reply.code(401).send({ success: false, error: 'admin token required' });
-    return false;
-  }
-  return true;
+// Validates x-admin-ops-token against the DB-backed admin.ops_token set (with
+// an env ADMIN_OPS_TOKEN break-glass fallback). Async because the token set is
+// sourced from the DB; see admin/adminOpsAuth.ts.
+async function checkAdminToken(req: FastifyRequest, reply: FastifyReply): Promise<boolean> {
+  if (await verifyAdminOpsToken(req.headers['x-admin-ops-token'])) return true;
+  reply.code(401).send({ success: false, error: 'admin token required' });
+  return false;
 }
 
 app.get('/admin/tenants', async (req, reply) => {
-  if (!checkAdminToken(req, reply)) return;
+  if (!(await checkAdminToken(req, reply))) return;
   try {
     const tenants = await tenantList(200);
     return reply.code(200).send({ data: { tenants } });
@@ -785,7 +787,7 @@ app.post<{ Body: {
   brand_domain?: string;
   module_subscriptions?: string[];
 } }>('/admin/tenants', async (req, reply) => {
-  if (!checkAdminToken(req, reply)) return;
+  if (!(await checkAdminToken(req, reply))) return;
   const b = req.body ?? ({} as Record<string, never>);
   if (!b.app_id || !b.display_name || !b.region) {
     return reply.code(400).send({
@@ -819,7 +821,7 @@ app.post<{ Body: {
 app.post<{ Body: { app_id: string; display_name: string; org_name?: string } }>(
   '/admin/apps',
   async (req, reply) => {
-    if (!checkAdminToken(req, reply)) return;
+    if (!(await checkAdminToken(req, reply))) return;
     const b = req.body ?? ({} as Record<string, never>);
     if (!b.app_id || !b.display_name) {
       return reply.code(400).send({
@@ -843,11 +845,7 @@ app.post<{ Body: { app_id: string; display_name: string; org_name?: string } }>(
 app.post<{
   Body: { lookback_hours?: number };
 }>('/admin/storm/ingest-now', async (req, reply) => {
-  const adminToken = process.env.ADMIN_OPS_TOKEN;
-  const presented = req.headers['x-admin-ops-token'];
-  if (!adminToken || !presented || presented !== adminToken) {
-    return reply.code(401).send({ success: false, error: 'admin token required' });
-  }
+  if (!(await checkAdminToken(req, reply))) return;
   const lookbackHours = req.body?.lookback_hours ?? 24;
   const until = new Date();
   const since = new Date(until.getTime() - lookbackHours * 60 * 60 * 1000);
@@ -869,11 +867,7 @@ app.post<{
 app.post<{
   Body: { lookback_hours?: number; from?: string; to?: string };
 }>('/api/admin/asset/rollup/backfill', async (req, reply) => {
-  const adminToken = process.env.ADMIN_OPS_TOKEN;
-  const presented = req.headers['x-admin-ops-token'];
-  if (!adminToken || !presented || presented !== adminToken) {
-    return reply.code(401).send({ success: false, error: 'admin token required' });
-  }
+  if (!(await checkAdminToken(req, reply))) return;
   if (!config.clickhouse.enabled) {
     return reply.code(409).send({ success: false, error: 'ClickHouse not enabled' });
   }
@@ -1006,6 +1000,8 @@ const start = async (): Promise<void> => {
       { sdk: 'sdk-command', dir: commandMigrations },
       { sdk: 'sdk-policy', dir: policyMigrations },
       { sdk: 'sdk-principal-token', dir: principalTokenMigrations },
+      // DB-backed, revocable admin ops tokens (x-admin-ops-token source of truth).
+      { sdk: 'api-gateway-admin-ops', dir: adminOpsMigrationsDir },
       { sdk: 'sdk-resource-registry', dir: resourceRegistryMigrations },
       { sdk: 'sdk-rebac', dir: rebacMigrations },
       { sdk: 'sdk-api-keys', dir: apiKeysMigrations },
@@ -1261,11 +1257,7 @@ const start = async (): Promise<void> => {
         status?: 'active' | 'degraded' | 'retired';
       };
     }>('/admin/federation/iceberg-catalogs', async (req, reply) => {
-      const adminToken = process.env.ADMIN_OPS_TOKEN;
-      const presented = req.headers['x-admin-ops-token'];
-      if (!adminToken || !presented || presented !== adminToken) {
-        return reply.code(401).send({ success: false, error: 'admin token required' });
-      }
+      if (!(await checkAdminToken(req, reply))) return;
       const b = req.body ?? {};
       if (!b.catalog_id || !b.region || !b.backend || !b.root_url) {
         return reply.code(400).send({
@@ -1309,11 +1301,7 @@ const start = async (): Promise<void> => {
 
     // GET /admin/federation/iceberg-catalogs
     app.get('/admin/federation/iceberg-catalogs', async (req, reply) => {
-      const adminToken = process.env.ADMIN_OPS_TOKEN;
-      const presented = req.headers['x-admin-ops-token'];
-      if (!adminToken || !presented || presented !== adminToken) {
-        return reply.code(401).send({ success: false, error: 'admin token required' });
-      }
+      if (!(await checkAdminToken(req, reply))) return;
       const rows = await dataService.rows(
         `SELECT catalog_id, region, backend, root_url, capacity_tier, status, created_at
            FROM federation.iceberg_catalog
@@ -1334,11 +1322,7 @@ const start = async (): Promise<void> => {
         z_order_cols?: string[];
       };
     }>('/admin/federation/iceberg-bindings', async (req, reply) => {
-      const adminToken = process.env.ADMIN_OPS_TOKEN;
-      const presented = req.headers['x-admin-ops-token'];
-      if (!adminToken || !presented || presented !== adminToken) {
-        return reply.code(401).send({ success: false, error: 'admin token required' });
-      }
+      if (!(await checkAdminToken(req, reply))) return;
       const b = req.body ?? {};
       if (!b.binding_id || !b.catalog_id || !b.table_ref) {
         return reply.code(400).send({
@@ -1382,11 +1366,7 @@ const start = async (): Promise<void> => {
     app.post<{ Body: BootstrapBackendInput }>(
       '/admin/federation/iceberg-backend',
       async (req, reply) => {
-        const adminToken = process.env.ADMIN_OPS_TOKEN;
-        const presented = req.headers['x-admin-ops-token'];
-        if (!adminToken || !presented || presented !== adminToken) {
-          return reply.code(401).send({ success: false, error: 'admin token required' });
-        }
+        if (!(await checkAdminToken(req, reply))) return;
         const b = req.body ?? ({} as BootstrapBackendInput);
         if (!b.driver) {
           return reply.code(400).send({ success: false, error: 'driver is required' });
@@ -1418,11 +1398,7 @@ const start = async (): Promise<void> => {
     app.post<{
       Body: { federation_id?: string; from_region?: string; to_region?: string };
     }>('/admin/federation/chaos-drill', async (req, reply) => {
-      const adminToken = process.env.ADMIN_OPS_TOKEN;
-      const presented = req.headers['x-admin-ops-token'];
-      if (!adminToken || !presented || presented !== adminToken) {
-        return reply.code(401).send({ success: false, error: 'admin token required' });
-      }
+      if (!(await checkAdminToken(req, reply))) return;
       const b = req.body ?? {};
       if (!b.federation_id || !b.from_region || !b.to_region) {
         return reply.code(400).send({
@@ -1445,11 +1421,7 @@ const start = async (): Promise<void> => {
 
     // GET /admin/federation/orchestrator-stats — read-only probe counter.
     app.get('/admin/federation/orchestrator-stats', async (req, reply) => {
-      const adminToken = process.env.ADMIN_OPS_TOKEN;
-      const presented = req.headers['x-admin-ops-token'];
-      if (!adminToken || !presented || presented !== adminToken) {
-        return reply.code(401).send({ success: false, error: 'admin token required' });
-      }
+      if (!(await checkAdminToken(req, reply))) return;
       return { success: true, data: federationOrchestrator.stats() };
     });
 
@@ -1597,11 +1569,7 @@ const start = async (): Promise<void> => {
         to?: string;
       };
     }>('/admin/lineage/backfill', async (req, reply) => {
-      const adminToken = process.env.ADMIN_OPS_TOKEN;
-      const presented = req.headers['x-admin-ops-token'];
-      if (!adminToken || !presented || presented !== adminToken) {
-        return reply.code(401).send({ success: false, error: 'admin token required' });
-      }
+      if (!(await checkAdminToken(req, reply))) return;
       try {
         const result = await runLineageBackfill({
           pool_index: req.body?.pool_index,
@@ -1620,15 +1588,13 @@ const start = async (): Promise<void> => {
 
     // P7 Y-11 — pricing-catalog admin endpoints backing the Admin UI.
     // All gated by ADMIN_OPS_TOKEN; read endpoints are GET, mutating are POST/PATCH.
-    const requireAdmin = (req: { headers: Record<string, unknown> }): string | null => {
-      const adminToken = process.env.ADMIN_OPS_TOKEN;
-      const presented = req.headers['x-admin-ops-token'];
-      if (!adminToken || !presented || presented !== adminToken) return 'admin token required';
-      return null;
+    const requireAdmin = async (req: { headers: Record<string, unknown> }): Promise<string | null> => {
+      if (await verifyAdminOpsToken(req.headers['x-admin-ops-token'])) return null;
+      return 'admin token required';
     };
 
     app.get('/admin/meter/pricing-catalogs', async (req, reply) => {
-      const err = requireAdmin(req as unknown as { headers: Record<string, unknown> });
+      const err = await requireAdmin(req as unknown as { headers: Record<string, unknown> });
       if (err) return reply.code(401).send({ success: false, error: err });
       const catalogs = await listPricingCatalogs();
       return { success: true, data: catalogs };
@@ -1637,7 +1603,7 @@ const start = async (): Promise<void> => {
     app.get<{ Params: { catalog_id: string } }>(
       '/admin/meter/pricing-catalogs/:catalog_id',
       async (req, reply) => {
-        const err = requireAdmin(req as unknown as { headers: Record<string, unknown> });
+        const err = await requireAdmin(req as unknown as { headers: Record<string, unknown> });
         if (err) return reply.code(401).send({ success: false, error: err });
         const result = await getPricingCatalog(req.params.catalog_id);
         if (!result.catalog) return reply.code(404).send({ success: false, error: 'catalog not found' });
@@ -1652,7 +1618,7 @@ const start = async (): Promise<void> => {
         operator_id?: string;
       };
     }>('/admin/meter/pricing-catalogs', async (req, reply) => {
-      const err = requireAdmin(req as unknown as { headers: Record<string, unknown> });
+      const err = await requireAdmin(req as unknown as { headers: Record<string, unknown> });
       if (err) return reply.code(401).send({ success: false, error: err });
       const { catalog_id, version, operator_id } = req.body ?? {};
       if (!catalog_id || !version || !operator_id) {
@@ -1677,7 +1643,7 @@ const start = async (): Promise<void> => {
         operator_id?: string;
       };
     }>('/admin/meter/pricing-catalogs/:catalog_id/rates/:sku', async (req, reply) => {
-      const err = requireAdmin(req as unknown as { headers: Record<string, unknown> });
+      const err = await requireAdmin(req as unknown as { headers: Record<string, unknown> });
       if (err) return reply.code(401).send({ success: false, error: err });
       const body = req.body ?? {};
       if (!body.unit || !body.mode || !body.operator_id) {
@@ -1704,7 +1670,7 @@ const start = async (): Promise<void> => {
       Params: { catalog_id: string };
       Body: { status?: 'draft' | 'active' | 'retired'; operator_id?: string };
     }>('/admin/meter/pricing-catalogs/:catalog_id/status', async (req, reply) => {
-      const err = requireAdmin(req as unknown as { headers: Record<string, unknown> });
+      const err = await requireAdmin(req as unknown as { headers: Record<string, unknown> });
       if (err) return reply.code(401).send({ success: false, error: err });
       const { status, operator_id } = req.body ?? {};
       if (!status || !operator_id) {
@@ -1736,7 +1702,7 @@ const start = async (): Promise<void> => {
         operator_id?: string;
       };
     }>('/admin/byok/bindings', async (req, reply) => {
-      const err = requireAdmin(req as unknown as { headers: Record<string, unknown> });
+      const err = await requireAdmin(req as unknown as { headers: Record<string, unknown> });
       if (err) return reply.code(401).send({ success: false, error: err });
       const b = req.body ?? {};
       if (!b.tenant_id || !b.provider || !b.customer_kms_key_arn || !b.tenant_key_id || !b.operator_id) {
@@ -1764,7 +1730,7 @@ const start = async (): Promise<void> => {
     app.get<{ Params: { tenant_id: string } }>(
       '/admin/byok/bindings/tenant/:tenant_id',
       async (req, reply) => {
-        const err = requireAdmin(req as unknown as { headers: Record<string, unknown> });
+        const err = await requireAdmin(req as unknown as { headers: Record<string, unknown> });
         if (err) return reply.code(401).send({ success: false, error: err });
         const b = await getByokBindingForTenant(req.params.tenant_id);
         if (!b) return reply.code(404).send({ success: false, error: 'no binding for tenant' });
@@ -1776,7 +1742,7 @@ const start = async (): Promise<void> => {
       Params: { binding_id: string };
       Body: { previous_tenant_key_id?: string; new_tenant_key_id?: string; operator_id?: string };
     }>('/admin/byok/bindings/:binding_id/rotate', async (req, reply) => {
-      const err = requireAdmin(req as unknown as { headers: Record<string, unknown> });
+      const err = await requireAdmin(req as unknown as { headers: Record<string, unknown> });
       if (err) return reply.code(401).send({ success: false, error: err });
       const b = req.body ?? {};
       if (!b.previous_tenant_key_id || !b.new_tenant_key_id || !b.operator_id) {
@@ -1802,7 +1768,7 @@ const start = async (): Promise<void> => {
       Params: { binding_id: string };
       Body: { reason?: string; operator_id?: string };
     }>('/admin/byok/bindings/:binding_id/revoke', async (req, reply) => {
-      const err = requireAdmin(req as unknown as { headers: Record<string, unknown> });
+      const err = await requireAdmin(req as unknown as { headers: Record<string, unknown> });
       if (err) return reply.code(401).send({ success: false, error: err });
       const b = req.body ?? {};
       if (!b.reason || !b.operator_id) {
@@ -1823,7 +1789,7 @@ const start = async (): Promise<void> => {
 
     // --- Variant B · Sovereign Cloud ---
     app.get('/admin/sovereign/regions', async (req, reply) => {
-      const err = requireAdmin(req as unknown as { headers: Record<string, unknown> });
+      const err = await requireAdmin(req as unknown as { headers: Record<string, unknown> });
       if (err) return reply.code(401).send({ success: false, error: err });
       return { success: true, data: await listSovereignRegions() };
     });
@@ -1838,7 +1804,7 @@ const start = async (): Promise<void> => {
         operator_id?: string;
       };
     }>('/admin/sovereign/regions', async (req, reply) => {
-      const err = requireAdmin(req as unknown as { headers: Record<string, unknown> });
+      const err = await requireAdmin(req as unknown as { headers: Record<string, unknown> });
       if (err) return reply.code(401).send({ success: false, error: err });
       const b = req.body ?? {};
       if (!b.region_id || !b.regime || !b.operator_partner || !b.kms_provider || !b.operator_id) {
@@ -1866,7 +1832,7 @@ const start = async (): Promise<void> => {
       Params: { region_id: string };
       Body: { version?: string; bundle_artifact_ref?: string; signature_hex?: string };
     }>('/admin/sovereign/regions/:region_id/bundles', async (req, reply) => {
-      const err = requireAdmin(req as unknown as { headers: Record<string, unknown> });
+      const err = await requireAdmin(req as unknown as { headers: Record<string, unknown> });
       if (err) return reply.code(401).send({ success: false, error: err });
       const b = req.body ?? {};
       if (!b.version || !b.bundle_artifact_ref || !b.signature_hex) {
@@ -1891,7 +1857,7 @@ const start = async (): Promise<void> => {
     app.post<{ Params: { release_id: string } }>(
       '/admin/sovereign/bundles/:release_id/applied',
       async (req, reply) => {
-        const err = requireAdmin(req as unknown as { headers: Record<string, unknown> });
+        const err = await requireAdmin(req as unknown as { headers: Record<string, unknown> });
         if (err) return reply.code(401).send({ success: false, error: err });
         try {
           const r = await markSovereignBundleApplied(req.params.release_id);
@@ -1913,7 +1879,7 @@ const start = async (): Promise<void> => {
         artifact_ref?: string;
       };
     }>('/admin/sovereign/regions/:region_id/attestations', async (req, reply) => {
-      const err = requireAdmin(req as unknown as { headers: Record<string, unknown> });
+      const err = await requireAdmin(req as unknown as { headers: Record<string, unknown> });
       if (err) return reply.code(401).send({ success: false, error: err });
       const b = req.body ?? {};
       if (!b.regime || !b.auditor_id || !b.issued_at || !b.expires_at || !b.artifact_ref) {
@@ -1945,7 +1911,7 @@ const start = async (): Promise<void> => {
         incident_ref?: string | null;
       };
     }>('/admin/sovereign/regions/:region_id/leaks', async (req, reply) => {
-      const err = requireAdmin(req as unknown as { headers: Record<string, unknown> });
+      const err = await requireAdmin(req as unknown as { headers: Record<string, unknown> });
       if (err) return reply.code(401).send({ success: false, error: err });
       const b = req.body ?? {};
       if (!b.kind || !b.severity) {
@@ -1975,7 +1941,7 @@ const start = async (): Promise<void> => {
         billing_mode?: 'internal-report-only' | 'flat-fee' | 'per-incident';
       };
     }>('/admin/onprem/installs', async (req, reply) => {
-      const err = requireAdmin(req as unknown as { headers: Record<string, unknown> });
+      const err = await requireAdmin(req as unknown as { headers: Record<string, unknown> });
       if (err) return reply.code(401).send({ success: false, error: err });
       const b = req.body ?? {};
       if (!b.customer_id || !b.cluster_name || !b.k8s_distribution || !b.installed_version) {
@@ -2002,7 +1968,7 @@ const start = async (): Promise<void> => {
     app.get<{ Params: { install_id: string } }>(
       '/admin/onprem/installs/:install_id',
       async (req, reply) => {
-        const err = requireAdmin(req as unknown as { headers: Record<string, unknown> });
+        const err = await requireAdmin(req as unknown as { headers: Record<string, unknown> });
         if (err) return reply.code(401).send({ success: false, error: err });
         const i = await getOnpremInstall(req.params.install_id);
         if (!i) return reply.code(404).send({ success: false, error: 'install not found' });
@@ -2018,7 +1984,7 @@ const start = async (): Promise<void> => {
         migrations_applied?: Array<{ sdk: string; filename: string }>;
       };
     }>('/admin/onprem/installs/:install_id/bundles', async (req, reply) => {
-      const err = requireAdmin(req as unknown as { headers: Record<string, unknown> });
+      const err = await requireAdmin(req as unknown as { headers: Record<string, unknown> });
       if (err) return reply.code(401).send({ success: false, error: err });
       const b = req.body ?? {};
       if (!b.bundle_version || typeof b.signature_verified !== 'boolean') {
@@ -2050,7 +2016,7 @@ const start = async (): Promise<void> => {
         status?: 'ready' | 'loading' | 'disabled';
       };
     }>('/admin/onprem/installs/:install_id/local-llms', async (req, reply) => {
-      const err = requireAdmin(req as unknown as { headers: Record<string, unknown> });
+      const err = await requireAdmin(req as unknown as { headers: Record<string, unknown> });
       if (err) return reply.code(401).send({ success: false, error: err });
       const b = req.body ?? {};
       if (!b.model_id || !b.backend || !b.endpoint_url || !b.quantization) {
@@ -2078,7 +2044,7 @@ const start = async (): Promise<void> => {
       Params: { install_id: string };
       Body: { period_start?: string; period_end?: string; artifact_local_path?: string };
     }>('/admin/onprem/installs/:install_id/billing-reports', async (req, reply) => {
-      const err = requireAdmin(req as unknown as { headers: Record<string, unknown> });
+      const err = await requireAdmin(req as unknown as { headers: Record<string, unknown> });
       if (err) return reply.code(401).send({ success: false, error: err });
       const b = req.body ?? {};
       if (!b.period_start || !b.period_end || !b.artifact_local_path) {
@@ -2112,7 +2078,7 @@ const start = async (): Promise<void> => {
         replication_overrides?: Record<string, 'sync' | 'async' | 'single-region'>;
       };
     }>('/admin/active-active/profiles', async (req, reply) => {
-      const err = requireAdmin(req as unknown as { headers: Record<string, unknown> });
+      const err = await requireAdmin(req as unknown as { headers: Record<string, unknown> });
       if (err) return reply.code(401).send({ success: false, error: err });
       const b = req.body ?? {};
       if (!b.tenant_id || !b.home_region || !Array.isArray(b.paired_regions) || !b.contract_addendum_ref) {
@@ -2140,7 +2106,7 @@ const start = async (): Promise<void> => {
     app.get<{ Params: { tenant_id: string } }>(
       '/admin/active-active/profiles/:tenant_id',
       async (req, reply) => {
-        const err = requireAdmin(req as unknown as { headers: Record<string, unknown> });
+        const err = await requireAdmin(req as unknown as { headers: Record<string, unknown> });
         if (err) return reply.code(401).send({ success: false, error: err });
         const p = await getActiveActiveProfile(req.params.tenant_id);
         if (!p) return reply.code(404).send({ success: false, error: 'no profile for tenant' });
@@ -2153,7 +2119,7 @@ const start = async (): Promise<void> => {
       Params: { profile_id: string };
       Body: { to_region?: string; from_region?: string };
     }>('/admin/active-active/profiles/:profile_id/drills', async (req, reply) => {
-      const err = requireAdmin(req as unknown as { headers: Record<string, unknown> });
+      const err = await requireAdmin(req as unknown as { headers: Record<string, unknown> });
       if (err) return reply.code(401).send({ success: false, error: err });
       const b = req.body ?? {};
       if (!b.to_region) {
@@ -2178,7 +2144,7 @@ const start = async (): Promise<void> => {
 
     // --- /admin/pools (projexcloud-admin /pools page) ---
     app.get('/admin/pools', async (req, reply) => {
-      const err = requireAdmin(req as unknown as { headers: Record<string, unknown> });
+      const err = await requireAdmin(req as unknown as { headers: Record<string, unknown> });
       if (err) return reply.code(401).send({ success: false, error: err });
       try {
         const { rows } = await dataService.query(
@@ -2193,7 +2159,7 @@ const start = async (): Promise<void> => {
     });
 
     app.get<{ Params: { pool_index: string } }>('/admin/pools/:pool_index', async (req, reply) => {
-      const err = requireAdmin(req as unknown as { headers: Record<string, unknown> });
+      const err = await requireAdmin(req as unknown as { headers: Record<string, unknown> });
       if (err) return reply.code(401).send({ success: false, error: err });
       try {
         const { rows } = await dataService.query(
@@ -2233,7 +2199,7 @@ const start = async (): Promise<void> => {
       Params: { pool_index: string };
       Body: { to_status?: string; reason?: string; operator_id?: string };
     }>('/admin/pools/:pool_index/status', async (req, reply) => {
-      const err = requireAdmin(req as unknown as { headers: Record<string, unknown> });
+      const err = await requireAdmin(req as unknown as { headers: Record<string, unknown> });
       if (err) return reply.code(401).send({ success: false, error: err });
       const b = req.body ?? {};
       if (!b.to_status || !b.reason || !b.operator_id) {
@@ -2265,7 +2231,7 @@ const start = async (): Promise<void> => {
     app.get<{
       Querystring: { tenant_id?: string; from?: string; to?: string };
     }>('/admin/invoices', async (req, reply) => {
-      const err = requireAdmin(req as unknown as { headers: Record<string, unknown> });
+      const err = await requireAdmin(req as unknown as { headers: Record<string, unknown> });
       if (err) return reply.code(401).send({ success: false, error: err });
       const { tenant_id, from, to } = req.query;
       try {
@@ -2289,7 +2255,7 @@ const start = async (): Promise<void> => {
     });
 
     app.get<{ Params: { invoice_id: string } }>('/admin/invoices/:invoice_id', async (req, reply) => {
-      const err = requireAdmin(req as unknown as { headers: Record<string, unknown> });
+      const err = await requireAdmin(req as unknown as { headers: Record<string, unknown> });
       if (err) return reply.code(401).send({ success: false, error: err });
       try {
         const inv = await dataService.query(
@@ -2309,7 +2275,7 @@ const start = async (): Promise<void> => {
 
     // --- /admin/webhooks (operator cross-tenant view + DLQ) ---
     app.get<{ Querystring: { tenant_id?: string } }>('/admin/webhooks', async (req, reply) => {
-      const err = requireAdmin(req as unknown as { headers: Record<string, unknown> });
+      const err = await requireAdmin(req as unknown as { headers: Record<string, unknown> });
       if (err) return reply.code(401).send({ success: false, error: err });
       try {
         const params: unknown[] = [];
@@ -2329,7 +2295,7 @@ const start = async (): Promise<void> => {
 
     // Operator cross-tenant DLQ — direct query so we can drop the tenant_id filter.
     app.get('/admin/webhooks/dlq', async (req, reply) => {
-      const err = requireAdmin(req as unknown as { headers: Record<string, unknown> });
+      const err = await requireAdmin(req as unknown as { headers: Record<string, unknown> });
       if (err) return reply.code(401).send({ success: false, error: err });
       try {
         const { rows } = await dataService.query(
@@ -2350,7 +2316,7 @@ const start = async (): Promise<void> => {
     });
 
     app.post<{ Params: { delivery_id: string } }>('/admin/webhooks/dlq/:delivery_id/replay', async (req, reply) => {
-      const err = requireAdmin(req as unknown as { headers: Record<string, unknown> });
+      const err = await requireAdmin(req as unknown as { headers: Record<string, unknown> });
       if (err) return reply.code(401).send({ success: false, error: err });
       try {
         const { replayDelivery } = await import('@projexlight/sdk-webhook');
@@ -2363,7 +2329,7 @@ const start = async (): Promise<void> => {
 
     // --- /admin/approvals (operator view) ---
     app.get('/admin/approvals/routes', async (req, reply) => {
-      const err = requireAdmin(req as unknown as { headers: Record<string, unknown> });
+      const err = await requireAdmin(req as unknown as { headers: Record<string, unknown> });
       if (err) return reply.code(401).send({ success: false, error: err });
       try {
         const { rows } = await dataService.query(
@@ -2377,7 +2343,7 @@ const start = async (): Promise<void> => {
     });
 
     app.get('/admin/approvals/breaches', async (req, reply) => {
-      const err = requireAdmin(req as unknown as { headers: Record<string, unknown> });
+      const err = await requireAdmin(req as unknown as { headers: Record<string, unknown> });
       if (err) return reply.code(401).send({ success: false, error: err });
       try {
         const { rows } = await dataService.query(
@@ -2401,7 +2367,7 @@ const start = async (): Promise<void> => {
       Params: { request_id: string };
       Body: { decision?: 'approved' | 'rejected'; reason?: string; operator_id?: string };
     }>('/admin/approvals/requests/:request_id/operator-override', async (req, reply) => {
-      const err = requireAdmin(req as unknown as { headers: Record<string, unknown> });
+      const err = await requireAdmin(req as unknown as { headers: Record<string, unknown> });
       if (err) return reply.code(401).send({ success: false, error: err });
       const b = req.body ?? {};
       if (!b.decision || !b.reason || !b.operator_id) {
@@ -2426,7 +2392,7 @@ const start = async (): Promise<void> => {
     app.get<{
       Querystring: { tenant_id?: string; actor_id?: string; from?: string; to?: string; limit?: string };
     }>('/admin/audit/entries', async (req, reply) => {
-      const err = requireAdmin(req as unknown as { headers: Record<string, unknown> });
+      const err = await requireAdmin(req as unknown as { headers: Record<string, unknown> });
       if (err) return reply.code(401).send({ success: false, error: err });
       const { tenant_id, actor_id, from, to } = req.query;
       const limit = Math.min(parseInt(req.query.limit ?? '100', 10), 500);
@@ -2453,7 +2419,7 @@ const start = async (): Promise<void> => {
     });
 
     app.get<{ Params: { entry_id: string } }>('/admin/audit/entries/:entry_id', async (req, reply) => {
-      const err = requireAdmin(req as unknown as { headers: Record<string, unknown> });
+      const err = await requireAdmin(req as unknown as { headers: Record<string, unknown> });
       if (err) return reply.code(401).send({ success: false, error: err });
       try {
         const { rows } = await dataService.query(
@@ -2468,7 +2434,7 @@ const start = async (): Promise<void> => {
     });
 
     app.post<{ Querystring: { tenant_id?: string } }>('/admin/audit/verify', async (req, reply) => {
-      const err = requireAdmin(req as unknown as { headers: Record<string, unknown> });
+      const err = await requireAdmin(req as unknown as { headers: Record<string, unknown> });
       if (err) return reply.code(401).send({ success: false, error: err });
       const tenant_id = req.query.tenant_id;
       if (!tenant_id) return reply.code(400).send({ success: false, error: 'tenant_id query param required' });
@@ -3309,11 +3275,7 @@ const start = async (): Promise<void> => {
         reason?: string;
       };
     }>('/admin/meter/hardcap/override', async (req, reply) => {
-      const adminToken = process.env.ADMIN_OPS_TOKEN;
-      const presented = req.headers['x-admin-ops-token'];
-      if (!adminToken || !presented || presented !== adminToken) {
-        return reply.code(401).send({ success: false, error: 'admin token required' });
-      }
+      if (!(await checkAdminToken(req, reply))) return;
       const body = req.body ?? {};
       if (!body.tenant_id || !body.sku || !body.until || !body.operator_id || !body.reason) {
         return reply.code(400).send({
@@ -3344,11 +3306,7 @@ const start = async (): Promise<void> => {
     app.post<{
       Body: { reason?: string; actor_id?: string };
     }>('/admin/security/rotate-signing-key', async (req, reply) => {
-      const adminToken = process.env.ADMIN_OPS_TOKEN;
-      const presented = req.headers['x-admin-ops-token'];
-      if (!adminToken || !presented || presented !== adminToken) {
-        return reply.code(401).send({ success: false, error: 'admin token required' });
-      }
+      if (!(await checkAdminToken(req, reply))) return;
       const reason = req.body?.reason?.trim() || 'manual emergency rotation';
       const actor_id = req.body?.actor_id?.trim() || 'ops-emergency';
       try {
@@ -3363,6 +3321,91 @@ const start = async (): Promise<void> => {
         return reply.code(500).send({ success: false, error: msg });
       }
     });
+
+    // ─────────────────────────────────────────────────────────────────────
+    // DB-backed admin ops tokens (x-admin-ops-token management). Lets an
+    // operator GRANT a scoped, optionally time-boxed token (e.g. for QA) and
+    // REVOKE it later with a DB write — no gateway redeploy and no rotation of
+    // the shared env secret. All three routes are themselves admin-gated, so a
+    // caller must already hold a valid ops token (the env break-glass token or
+    // an existing DB token) to mint/revoke.
+    // ─────────────────────────────────────────────────────────────────────
+
+    // POST /admin/security/ops-tokens — mint a new token. Returns the plaintext
+    // ONCE; only its hash is stored. Body: { label, ttl_seconds?, reason?, created_by? }.
+    app.post<{
+      Body: { label?: string; ttl_seconds?: number; reason?: string; created_by?: string };
+    }>('/admin/security/ops-tokens', async (req, reply) => {
+      if (!(await checkAdminToken(req, reply))) return;
+      const label = req.body?.label?.trim();
+      if (!label) {
+        return reply.code(400).send({ success: false, error: 'label is required' });
+      }
+      try {
+        const issued = await issueOpsToken({
+          label,
+          ttlSeconds: req.body?.ttl_seconds ?? null,
+          reason: req.body?.reason?.trim(),
+          createdBy: req.body?.created_by?.trim(),
+        });
+        invalidateAdminOpsCache();
+        await emitEvent({
+          event_type: 'security.admin_ops_token.issued.v1',
+          payload: { id: issued.id, label: issued.label, expires_at: issued.expires_at },
+          pool_index: 'admin',
+          actor_kind: 'service',
+          actor_id: req.body?.created_by?.trim() || 'api-gateway.admin-ops',
+          tenant_id: null,
+          subject_kind: 'admin_ops_token',
+          subject_id: issued.id,
+        });
+        // token is returned exactly once — it cannot be recovered later.
+        return reply.code(201).send({ success: true, data: issued });
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        return reply.code(500).send({ success: false, error: msg });
+      }
+    });
+
+    // GET /admin/security/ops-tokens — list token metadata (never secrets).
+    app.get('/admin/security/ops-tokens', async (req, reply) => {
+      if (!(await checkAdminToken(req, reply))) return;
+      try {
+        return { success: true, data: await listOpsTokens() };
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        return reply.code(500).send({ success: false, error: msg });
+      }
+    });
+
+    // DELETE /admin/security/ops-tokens/:id — revoke a token immediately.
+    app.delete<{ Params: { id: string } }>(
+      '/admin/security/ops-tokens/:id',
+      async (req, reply) => {
+        if (!(await checkAdminToken(req, reply))) return;
+        try {
+          const revoked = await revokeOpsToken(req.params.id);
+          if (!revoked) {
+            return reply.code(404).send({ success: false, error: 'token not found or already revoked' });
+          }
+          invalidateAdminOpsCache();
+          await emitEvent({
+            event_type: 'security.admin_ops_token.revoked.v1',
+            payload: { id: req.params.id },
+            pool_index: 'admin',
+            actor_kind: 'service',
+            actor_id: 'api-gateway.admin-ops',
+            tenant_id: null,
+            subject_kind: 'admin_ops_token',
+            subject_id: req.params.id,
+          });
+          return { success: true, data: { id: req.params.id, status: 'revoked' } };
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          return reply.code(500).send({ success: false, error: msg });
+        }
+      },
+    );
 
     // Optional ClickHouse: when enabled, init the client + apply sdk-trace
     // ClickHouse migrations (trace.span OLAP table). Mirrors the Postgres
