@@ -90,7 +90,11 @@ import {
 } from '@projexlight/sdk-resource-registry';
 import { requireAuth } from '@projexlight/sdk-identity';
 import { adminOpsMigrationsDir } from './admin/migrations';
-import { verifyAdminOpsToken, invalidateAdminOpsCache } from './admin/adminOpsAuth';
+import {
+  verifyAdminOpsToken,
+  invalidateAndBroadcastAdminOps,
+  installAdminOpsInvalidator,
+} from './admin/adminOpsAuth';
 import { issueOpsToken, revokeOpsToken, listOpsTokens } from './admin/opsTokenStore';
 import { resolveIdentityContext, getEmpiMetrics } from '@projexlight/sdk-identity-resolver';
 import { emitEvent, addEmitTap } from '@projexlight/sdk-audit';
@@ -962,6 +966,9 @@ const start = async (): Promise<void> => {
         // on the hot path instead of running SUM(units) on Postgres per req.
         installRedisUsageCounter();
         console.log('[api-gateway] Redis usage counter active (soft-cap hot path)');
+
+        // Cross-replica admin ops-token cache invalidation (mint/revoke fanout).
+        await installAdminOpsInvalidator();
       } catch (err) {
         console.warn('[api-gateway] Redis unavailable, falling back to in-memory route cache:', (err as Error).message);
       }
@@ -3348,7 +3355,7 @@ const start = async (): Promise<void> => {
           reason: req.body?.reason?.trim(),
           createdBy: req.body?.created_by?.trim(),
         });
-        invalidateAdminOpsCache();
+        await invalidateAndBroadcastAdminOps();
         await emitEvent({
           event_type: 'security.admin_ops_token.issued.v1',
           payload: { id: issued.id, label: issued.label, expires_at: issued.expires_at },
@@ -3388,7 +3395,7 @@ const start = async (): Promise<void> => {
           if (!revoked) {
             return reply.code(404).send({ success: false, error: 'token not found or already revoked' });
           }
-          invalidateAdminOpsCache();
+          await invalidateAndBroadcastAdminOps();
           await emitEvent({
             event_type: 'security.admin_ops_token.revoked.v1',
             payload: { id: req.params.id },
