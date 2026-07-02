@@ -116,6 +116,8 @@ import {
 import {
   migrationsDir as notificationMigrations,
   server as notificationServer,
+  setPlatformEmailProvider,
+  getPlatformEmailProvider,
   registerSesEmailAdapter,
   registerSmtpEmailAdapter,
   registerTwilioSmsAdapter,
@@ -3414,6 +3416,42 @@ const start = async (): Promise<void> => {
         }
       },
     );
+
+    // ─────────────────────────────────────────────────────────────────────
+    // Platform-default email provider (operator-configured). x-admin-ops-token
+    // gated. The tenant-first send resolver falls back to this when a tenant has
+    // no BYO provider of their own.
+    // ─────────────────────────────────────────────────────────────────────
+    app.post<{
+      Body: { kind?: string; config?: Record<string, unknown>; from_address?: string; credential?: string };
+    }>('/admin/notifications/providers', async (req, reply) => {
+      if (!(await checkAdminToken(req, reply))) return;
+      const b = req.body ?? {};
+      if (!b.kind || !['smtp', 'sendgrid', 'ses'].includes(b.kind)) {
+        return reply.code(400).send({ success: false, error: 'kind is required (smtp|sendgrid|ses)' });
+      }
+      try {
+        const provider = await setPlatformEmailProvider({
+          kind: b.kind as 'smtp' | 'sendgrid' | 'ses',
+          config: b.config,
+          from_address: b.from_address,
+          credential: b.credential,
+          created_by: 'admin-ops',
+        });
+        return reply.code(201).send({ success: true, data: provider });
+      } catch (e) {
+        return reply.code(500).send({ success: false, error: (e as Error).message });
+      }
+    });
+
+    app.get('/admin/notifications/providers', async (req, reply) => {
+      if (!(await checkAdminToken(req, reply))) return;
+      try {
+        return { success: true, data: await getPlatformEmailProvider() };
+      } catch (e) {
+        return reply.code(500).send({ success: false, error: (e as Error).message });
+      }
+    });
 
     // Optional ClickHouse: when enabled, init the client + apply sdk-trace
     // ClickHouse migrations (trace.span OLAP table). Mirrors the Postgres

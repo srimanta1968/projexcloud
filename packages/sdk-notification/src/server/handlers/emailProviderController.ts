@@ -4,6 +4,7 @@ import {
   listEmailProviders,
   rotateEmailProvider,
   revokeEmailProvider,
+  verifyEmailProvider,
   type EmailProviderKind,
 } from '../../services/emailProviderService';
 
@@ -95,6 +96,25 @@ export async function rotateEmailProviderHandler(req: FastifyRequest, reply: Fas
     });
     reply.code(200).send({ data: { provider: binding } });
   } catch (err) { fail(req, reply, err); }
+}
+
+/** POST /api/notifications/providers/:provider_id/verify — send a test email to validate the config. */
+export async function verifyEmailProviderHandler(req: FastifyRequest, reply: FastifyReply): Promise<void> {
+  const tid = authTenant(req, reply); if (!tid) return;
+  const provider_id = String((req.params as Record<string, unknown>)?.provider_id ?? '');
+  const body = (req.body as Record<string, unknown>) ?? {};
+  const to = String(body.to ?? '').trim();
+  if (!to) {
+    reply.code(400).send({ error: 'ValidationError', details: ['to (recipient email) is required'] });
+    return;
+  }
+  try {
+    const result = await verifyEmailProvider({ tenant_id: tid, binding_id: provider_id, to });
+    reply.code(200).send({ data: { verified: true, result } });
+  } catch (err) {
+    // A failed test send is an expected, informative outcome — return 200 with verified:false.
+    reply.code(200).send({ data: { verified: false, error: (err as Error).message } });
+  }
 }
 
 /** DELETE /api/notifications/providers/:provider_id — revoke the provider. */

@@ -13,6 +13,10 @@ export {
   rotateEmailProvider,
   revokeEmailProvider,
   listEmailProviders,
+  verifyEmailProvider,
+  resolveEmailSend,
+  setPlatformEmailProvider,
+  getPlatformEmailProvider,
 } from './services/emailProviderService';
 export type {
   EmailProviderBinding,

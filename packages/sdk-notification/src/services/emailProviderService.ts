@@ -1,6 +1,8 @@
-import { createCipheriv, randomBytes } from 'crypto';
+import { createCipheriv, createDecipheriv, randomBytes } from 'crypto';
 import { dataService } from '@projexlight/db-runtime';
 import { appendAuditEntry } from '@projexlight/sdk-audit';
+import { buildSmtpTransport, sendViaSmtp, type SmtpConfig } from './smtpEmailAdapter';
+import type { SendArgs, SendResult } from './providerAdapters';
 
 /**
  * Configurable email (notification) provider — bind / rotate / revoke / list.
@@ -109,6 +111,15 @@ function wrapEnvelope(secret: string): Buffer {
   const tag = cipher.getAuthTag();
   const wrapped = `${iv.toString('base64')}.${tag.toString('base64')}.${ct.toString('base64')}`;
   return Buffer.from(wrapped, 'utf8');
+}
+
+/** Reverses wrapEnvelope: base64(iv).base64(tag).base64(ciphertext) -> plaintext secret. */
+function unwrapEnvelope(envelope: Buffer): string {
+  const [ivB64, tagB64, ctB64] = envelope.toString('utf8').split('.');
+  if (!ivB64 || !tagB64 || !ctB64) throw new Error('malformed email provider credential envelope');
+  const decipher = createDecipheriv('aes-256-gcm', wrapKey(), Buffer.from(ivB64, 'base64'));
+  decipher.setAuthTag(Buffer.from(tagB64, 'base64'));
+  return Buffer.concat([decipher.update(Buffer.from(ctB64, 'base64')), decipher.final()]).toString('utf8');
 }
 
 interface EmailProviderRow {
@@ -294,4 +305,158 @@ async function emitAudit(
       (auditErr as Error).message,
     );
   }
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// Send resolution (tenant-first, platform-fallback) + verify + platform CRUD.
+// ─────────────────────────────────────────────────────────────────────
+
+interface ResolvedEmailProvider {
+  kind: EmailProviderKind;
+  config: Record<string, unknown>;
+  from_address: string | null;
+  credential: string;
+}
+
+/** Dispatches a send through a decrypted provider config (SMTP via nodemailer, SendGrid via HTTP). */
+async function sendViaConfig(p: ResolvedEmailProvider, args: SendArgs): Promise<SendResult> {
+  const from = p.from_address || process.env.FROM_EMAIL || process.env.NOTIFICATION_FROM_EMAIL;
+  if (!from) throw new Error('email provider config missing from_address');
+  if (p.kind === 'smtp') {
+    const c = p.config as { host?: string; port?: number; secure?: boolean; user?: string; from_name?: string };
+    if (!c.host) throw new Error('smtp config missing host');
+    const cfg: SmtpConfig = {
+      host: c.host,
+      port: c.port ?? 587,
+      secure: c.secure ?? false,
+      user: c.user,
+      pass: p.credential,
+      from,
+      fromName: c.from_name,
+    };
+    return sendViaSmtp(buildSmtpTransport(cfg), cfg, args);
+  }
+  if (p.kind === 'sendgrid') {
+    const fromName = (p.config as { from_name?: string }).from_name;
+    const res = await fetch('https://api.sendgrid.com/v3/mail/send', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${p.credential}`, 'content-type': 'application/json' },
+      body: JSON.stringify({
+        personalizations: [{ to: [{ email: args.destination }] }],
+        from: { email: from, name: fromName },
+        subject: args.subject ?? 'Notification',
+        content: [{ type: 'text/plain', value: args.body }],
+      }),
+    });
+    if (!res.ok) throw new Error(`sendgrid ${res.status}: ${(await res.text()).slice(0, 200)}`);
+    return {
+      provider: 'sendgrid',
+      provider_message_id: res.headers.get('x-message-id') ?? `sg_${Date.now().toString(36)}`,
+      delivered_status: 'sent',
+    };
+  }
+  // 'ses' per-tenant is not wired here; caller falls back to the env SES adapter.
+  throw new Error(`per-provider send not supported for kind: ${p.kind}`);
+}
+
+async function loadResolved(sql: string, params: unknown[]): Promise<ResolvedEmailProvider | null> {
+  const row = await dataService.one<{
+    kind: EmailProviderKind;
+    config: Record<string, unknown> | null;
+    from_address: string | null;
+    credential_envelope: Buffer | null;
+  }>(sql, params);
+  if (!row || !row.credential_envelope) return null;
+  return {
+    kind: row.kind,
+    config: row.config ?? {},
+    from_address: row.from_address,
+    credential: unwrapEnvelope(row.credential_envelope),
+  };
+}
+
+/**
+ * Tenant-first / platform-fallback email send. Returns the SendResult when a
+ * tenant or platform provider is configured; returns null when neither exists so
+ * the caller can fall through to the env-registered adapter (sendWithFailover).
+ */
+export async function resolveEmailSend(tenant_id: string, args: SendArgs): Promise<SendResult | null> {
+  const tenant = await loadResolved(
+    `SELECT kind, config, from_address, credential_envelope
+       FROM notification.tenant_provider_credential
+      WHERE tenant_id = $1::uuid AND channel = 'email' AND status = 'active' LIMIT 1`,
+    [tenant_id],
+  );
+  if (tenant) return sendViaConfig(tenant, args);
+  const platform = await loadResolved(
+    `SELECT kind, config, from_address, credential_envelope
+       FROM notification.provider
+      WHERE channel = 'email' AND status = 'active' ORDER BY created_at DESC LIMIT 1`,
+    [],
+  );
+  if (platform) return sendViaConfig(platform, args);
+  return null;
+}
+
+/** Sends a real test email through a specific tenant provider to validate its config. */
+export async function verifyEmailProvider(input: {
+  tenant_id: string;
+  binding_id: string;
+  to: string;
+}): Promise<SendResult> {
+  const resolved = await loadResolved(
+    `SELECT kind, config, from_address, credential_envelope
+       FROM notification.tenant_provider_credential
+      WHERE binding_id = $1 AND tenant_id = $2::uuid AND status = 'active' LIMIT 1`,
+    [input.binding_id, input.tenant_id],
+  );
+  if (!resolved) throw new Error(`active email provider not found: ${input.binding_id}`);
+  return sendViaConfig(resolved, {
+    channel: 'email',
+    destination: input.to,
+    subject: 'ProjexCloud email provider test',
+    body: 'This is a test message confirming your email provider configuration works.',
+  });
+}
+
+export interface PlatformEmailProvider {
+  provider_id: string;
+  kind: EmailProviderKind;
+  config: Record<string, unknown>;
+  from_address: string | null;
+  last_4: string | null;
+  status: string;
+  created_at?: string;
+}
+
+/** Platform-operator: set/replace the platform-default email provider (one active per channel). */
+export async function setPlatformEmailProvider(input: {
+  kind: EmailProviderKind;
+  config?: Record<string, unknown>;
+  from_address?: string;
+  credential?: string;
+  created_by?: string;
+}): Promise<PlatformEmailProvider> {
+  assertKind(input.kind);
+  const envelope = input.credential ? wrapEnvelope(input.credential) : null;
+  const last4 = input.credential && input.credential.length >= 4 ? input.credential.slice(-4) : null;
+  return dataService.tx<PlatformEmailProvider>(async (q) => {
+    await q(`UPDATE notification.provider SET status='revoked', updated_at=now() WHERE channel='email' AND status='active'`);
+    const r = await q<PlatformEmailProvider>(
+      `INSERT INTO notification.provider (channel, kind, config, from_address, credential_envelope, last_4, status, created_by)
+       VALUES ('email', $1, $2::jsonb, $3, $4, $5, 'active', $6)
+       RETURNING provider_id, kind, config, from_address, last_4, status`,
+      [input.kind, JSON.stringify(input.config ?? {}), input.from_address ?? null, envelope, last4, input.created_by ?? null],
+    );
+    return r.rows[0];
+  });
+}
+
+/** Platform-operator: read the active platform-default email provider (no secret). */
+export async function getPlatformEmailProvider(): Promise<PlatformEmailProvider | null> {
+  return dataService.one<PlatformEmailProvider>(
+    `SELECT provider_id, kind, config, from_address, last_4, status, created_at
+       FROM notification.provider
+      WHERE channel = 'email' AND status = 'active' ORDER BY created_at DESC LIMIT 1`,
+  );
 }

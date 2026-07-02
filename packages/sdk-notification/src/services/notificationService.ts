@@ -5,6 +5,7 @@ import { checkConsent } from '@projexlight/sdk-consent';
 import { resolveTemplate, renderTemplate, TemplateNotFoundError } from './templateEngine';
 import { getQuietHours, isInQuietHours } from './quietHours';
 import { sendWithFailover } from './providerAdapters';
+import { resolveEmailSend } from './emailProviderService';
 import type {
   CreateTemplateInput,
   MessageRecord,
@@ -264,12 +265,17 @@ export async function sendNotification(input: SendNotificationInput): Promise<Se
   // Dispatch via provider (with failover) — synchronous in this prototype.
   // Production swaps for an async queue worker; the result schema is identical.
   try {
-    const sendResult = await sendWithFailover(input.channel, {
+    const sendArgs = {
       channel: input.channel,
       destination: await unwrapDestination(message.destination_envelope, input.tenant_id),
       body: rendered_body,
       metadata: { template_code: input.template_code, tenant_id: input.tenant_id },
-    });
+    };
+    // Email: tenant-first, platform-fallback provider resolution (BYO SMTP/SendGrid).
+    // Returns null when neither is configured — fall through to the env-registered adapter.
+    const sendResult =
+      (input.channel === 'email' ? await resolveEmailSend(input.tenant_id, sendArgs) : null) ??
+      (await sendWithFailover(input.channel, sendArgs));
     const sentRows = await dataService.rows<MessageRecord>(
       `UPDATE notification.message
           SET status = $2, provider = $3, provider_message_id = $4, sent_at = now()

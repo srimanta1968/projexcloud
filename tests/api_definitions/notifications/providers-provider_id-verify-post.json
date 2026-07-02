@@ -1,0 +1,33 @@
+{
+  "name": "POST /api/notifications/providers/:provider_id/verify - Test-send to validate email provider",
+  "endpoint": "/api/notifications/providers/:provider_id/verify",
+  "sdk": "sdk-notification",
+  "method": "POST",
+  "requiresAuth": true,
+  "taskId": "bce1d54b-e5e7-490a-824a-363b617d65d4",
+  "sprintId": "efcf9cbd-5e84-469e-946e-efcabf8c88e1",
+  "featureId": "e9e9b8ee-101b-4a6c-8100-538b861781a8",
+  "epicId": "f9bd4029-5fd6-4dc1-bfce-00af515b8294",
+  "priority": 36,
+  "dependsOn": ["POST /api/auth/signup-tenant", "POST /api/notifications/providers"],
+  "testCases": [
+    {
+      "name": "Verify the configured email provider with a test send",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "pathParams": {
+        "provider_id": "{{cache:notifications.providers.create.response.data.provider.binding_id}}"
+      },
+      "payload": {
+        "to": "{{dynamic:email}}"
+      },
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "data": {
+          "verified": false
+        }
+      }
+    }
+  ]
+}

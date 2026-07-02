@@ -10,6 +10,7 @@ import {
   listEmailProvidersHandler,
   rotateEmailProviderHandler,
   revokeEmailProviderHandler,
+  verifyEmailProviderHandler,
 } from './handlers/emailProviderController';
 
 /**
@@ -49,6 +50,11 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
 
   app.delete('/api/notifications/providers/:provider_id', { preHandler: requireAuth }, async (req, reply) => {
     try { await revokeEmailProviderHandler(req, reply); }
+    catch (err) { req.log.error(err); if (!reply.sent) reply.code(500).send({ error: 'InternalError' }); }
+  });
+
+  app.post('/api/notifications/providers/:provider_id/verify', { preHandler: requireAuth }, async (req, reply) => {
+    try { await verifyEmailProviderHandler(req, reply); }
     catch (err) { req.log.error(err); if (!reply.sent) reply.code(500).send({ error: 'InternalError' }); }
   });
 }
