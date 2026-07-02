@@ -6,6 +6,8 @@ export type NotificationChannel = 'email' | 'sms' | 'whatsapp' | 'push' | 'slack
 export type NotificationProvider =
   | 'twilio'
   | 'ses'
+  | 'smtp'
+  | 'sendgrid'
   | 'whatsapp-bsp'
   | 'apns'
   | 'fcm'

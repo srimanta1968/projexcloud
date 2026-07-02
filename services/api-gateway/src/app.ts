@@ -117,6 +117,7 @@ import {
   migrationsDir as notificationMigrations,
   server as notificationServer,
   registerSesEmailAdapter,
+  registerSmtpEmailAdapter,
   registerTwilioSmsAdapter,
   registerApnsPushAdapter,
   registerFcmPushAdapter,
@@ -3477,6 +3478,7 @@ const start = async (): Promise<void> => {
     const realAdaptersWired: string[] = [];
     if (registerStripeAdapter()) realAdaptersWired.push('payment:stripe');
     if (registerSesEmailAdapter()) realAdaptersWired.push('notification:email:ses');
+    if (registerSmtpEmailAdapter()) realAdaptersWired.push('notification:email:smtp');
     if (registerTwilioSmsAdapter()) realAdaptersWired.push('notification:sms:twilio');
     if (registerApnsPushAdapter()) realAdaptersWired.push('notification:push:apns');
     if (registerFcmPushAdapter()) realAdaptersWired.push('notification:push:fcm');

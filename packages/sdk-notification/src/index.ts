@@ -23,6 +23,7 @@ export { resolveTemplate, renderTemplate } from './services/templateEngine';
 export { registerAdapter, getProvidersForChannel } from './services/providerAdapters';
 export type { ProviderAdapter, SendArgs, SendResult } from './services/providerAdapters';
 export { registerSesEmailAdapter, sesEmailAdapter } from './services/sesEmailAdapter';
+export { registerSmtpEmailAdapter, smtpEmailAdapter } from './services/smtpEmailAdapter';
 export { registerTwilioSmsAdapter, twilioSmsAdapter } from './services/twilioSmsAdapter';
 export { registerApnsPushAdapter, apnsPushAdapter } from './services/apnsPushAdapter';
 export { registerFcmPushAdapter, fcmPushAdapter } from './services/fcmPushAdapter';
