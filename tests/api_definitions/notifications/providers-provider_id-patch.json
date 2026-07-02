@@ -1,0 +1,35 @@
+{
+  "name": "PATCH /api/notifications/providers/:provider_id - Rotate tenant email provider credentials",
+  "endpoint": "/api/notifications/providers/:provider_id",
+  "sdk": "sdk-notification",
+  "method": "PATCH",
+  "requiresAuth": true,
+  "taskId": "c68920df-05a6-47c7-b02e-ae9622014314",
+  "sprintId": "efcf9cbd-5e84-469e-946e-efcabf8c88e1",
+  "featureId": "e9e9b8ee-101b-4a6c-8100-538b861781a8",
+  "epicId": "f9bd4029-5fd6-4dc1-bfce-00af515b8294",
+  "priority": 34,
+  "dependsOn": ["POST /api/auth/signup-tenant", "POST /api/notifications/providers"],
+  "testCases": [
+    {
+      "name": "Rotate the tenant's email provider credential",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "pathParams": {
+        "provider_id": "{{cache:notifications.providers.create.response.data.provider.binding_id}}"
+      },
+      "payload": {
+        "credential": "{{static:SG.qa-rotated-api-key-wxyz9876}}"
+      },
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "data": {
+          "provider": {
+            "status": "active"
+          }
+        }
+      }
+    }
+  ]
+}

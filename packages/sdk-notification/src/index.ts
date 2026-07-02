@@ -8,6 +8,17 @@ export {
   TemplateNotFoundError,
 } from './services/notificationService';
 export { getQuietHours, setQuietHours, isInQuietHours } from './services/quietHours';
+export {
+  bindEmailProvider,
+  rotateEmailProvider,
+  revokeEmailProvider,
+  listEmailProviders,
+} from './services/emailProviderService';
+export type {
+  EmailProviderBinding,
+  EmailProviderKind,
+  BindEmailProviderInput,
+} from './services/emailProviderService';
 export { resolveTemplate, renderTemplate } from './services/templateEngine';
 export { registerAdapter, getProvidersForChannel } from './services/providerAdapters';
 export type { ProviderAdapter, SendArgs, SendResult } from './services/providerAdapters';

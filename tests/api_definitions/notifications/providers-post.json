@@ -1,0 +1,49 @@
+{
+  "name": "POST /api/notifications/providers - Configure tenant email provider",
+  "endpoint": "/api/notifications/providers",
+  "sdk": "sdk-notification",
+  "method": "POST",
+  "requiresAuth": true,
+  "taskId": "66b8f119-2acf-47c9-bae8-0e1e281b48a4",
+  "sprintId": "efcf9cbd-5e84-469e-946e-efcabf8c88e1",
+  "featureId": "e9e9b8ee-101b-4a6c-8100-538b861781a8",
+  "epicId": "f9bd4029-5fd6-4dc1-bfce-00af515b8294",
+  "priority": 30,
+  "dependsOn": ["POST /api/auth/signup-tenant"],
+  "captureResponse": {
+    "notifications.providers.create.response.data.provider.binding_id": "data.provider.binding_id"
+  },
+  "expectedResponse": {
+    "data": {
+      "provider": {
+        "binding_id": "string",
+        "kind": "string",
+        "status": "string",
+        "last_4": "string"
+      }
+    }
+  },
+  "testCases": [
+    {
+      "name": "Configure a SendGrid email provider for the tenant",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "payload": {
+        "kind": "sendgrid",
+        "from_address": "{{dynamic:email}}",
+        "credential": "{{static:SG.qa-test-api-key-abcd1234}}",
+        "config": {}
+      },
+      "expectedStatus": 201,
+      "expectedResponse": {
+        "data": {
+          "provider": {
+            "status": "active",
+            "kind": "sendgrid"
+          }
+        }
+      }
+    }
+  ]
+}
