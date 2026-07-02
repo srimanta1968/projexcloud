@@ -17,7 +17,11 @@ RUN corepack enable
 # Context + install come FIRST and are app-agnostic, so this layer is shared
 # (cached) across all three portal builds — one install, three quick builds.
 COPY . .
-RUN pnpm install --frozen-lockfile
+# pnpm store is a BuildKit cache mount persisted across builds on this host, so
+# the ~780 deps are fetched once and reused by every portal build + every deploy
+# (no re-download when the source changes). Requires BuildKit (Compose v2).
+RUN --mount=type=cache,id=pnpm-store,target=/pnpm-store \
+    pnpm install --frozen-lockfile --store-dir=/pnpm-store
 # App-specific args declared late so they don't invalidate the install layer.
 # NEXT_PUBLIC_* are baked into the client bundle at build time.
 ARG APP
@@ -35,7 +39,9 @@ ENV NEXT_PUBLIC_BASE_PATH=$NEXT_PUBLIC_BASE_PATH \
     NEXT_PUBLIC_HOSTED_MCP=$NEXT_PUBLIC_HOSTED_MCP \
     NEXT_PUBLIC_TENANT_URL=$NEXT_PUBLIC_TENANT_URL \
     NEXT_PUBLIC_CONSOLE_URL=$NEXT_PUBLIC_CONSOLE_URL
-RUN pnpm --filter "@projexlight/${APP}" build
+# Persist Next's build cache per app so an unchanged portal rebuilds incrementally.
+RUN --mount=type=cache,id=next-${APP},target=/workspace/apps/${APP}/.next/cache \
+    pnpm --filter "@projexlight/${APP}" build
 
 FROM node:20-alpine AS runtime
 ARG APP
