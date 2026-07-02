@@ -1,5 +1,7 @@
 # ProjexCloud Admin — Platform Operator Guide
 
+> **New:** Start with [onboarding-overview](onboarding-overview.html) for the three-portal model and identity model. Persona onboarding guides (Word + HTML) live in this folder. This page is the detailed operator reference.
+
 **Audience:** ProjexCloud platform staff (SRE, support, finance, compliance).
 **URL (dev):** `http://localhost:3100`
 **Backed by:** api-gateway on `http://localhost:3500` via `/admin/*` routes,

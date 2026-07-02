@@ -1,0 +1,39 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Tenant Admin Onboarding</title>
+<style>
+ :root{--brand:#1A51C7;--ink:#0b1220;--fg:#1b2a44;--muted:#5a6573;--border:#e2e7ef;--soft:#f5f9ff;--brand50:#eef3ff}
+ *{box-sizing:border-box} body{font-family:'Inter',-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:var(--fg);line-height:1.6;max-width:900px;margin:0 auto;padding:40px 24px;background:#fff}
+ h1.doctitle{font-size:32px;letter-spacing:-.02em;color:var(--ink);margin:0 0 6px} .docsub{color:var(--muted);font-size:17px;margin:0 0 28px}
+ h1{font-size:25px;color:var(--brand);border-bottom:2px solid var(--brand50);padding-bottom:6px;margin:38px 0 14px}
+ h2{font-size:20px;color:var(--ink);margin:28px 0 10px} h3{font-size:16.5px;color:var(--ink);margin:22px 0 8px}
+ p{margin:0 0 12px} ul,ol{margin:0 0 14px;padding-left:24px} li{margin:5px 0}
+ code{font-family:Consolas,Menlo,monospace;background:var(--brand50);color:var(--brand);padding:1px 6px;border-radius:5px;font-size:.9em}
+ pre{background:#0b1220;color:#e6ecf5;padding:16px 18px;border-radius:10px;overflow-x:auto;font-size:13px;line-height:1.5}
+ pre code{background:none;color:inherit;padding:0}
+ table{border-collapse:collapse;width:100%;margin:8px 0 20px;font-size:14px}
+ th{background:var(--brand);color:#fff;text-align:left;padding:9px 12px;font-size:12.5px}
+ td{border-bottom:1px solid var(--border);padding:9px 12px;vertical-align:top}
+ tr:nth-child(even) td{background:#f7f9fc}
+ .callout{border-radius:12px;padding:14px 18px;margin:8px 0 18px;border:1px solid var(--border)}
+ .callout.info{background:#eef3fc;border-color:#dbe5ff} .callout.warn{background:#fbf1e0;border-color:#f0dcb4} .callout.good{background:#e8f5ec;border-color:#bfe3cb}
+ .callout b{color:var(--ink)} hr{border:none;border-top:1px solid var(--border);margin:30px 0}
+ .footer{margin-top:46px;padding-top:18px;border-top:1px solid var(--border);color:var(--muted);font-size:13px}
+</style></head><body>
+
+<h1 class="doctitle">Tenant Admin — Onboarding Guide</h1>
+<p class="docsub">Run your organization on ProjexCloud: people, money, integrations, and governance for one tenant.</p>
+<div class="callout info"><b>Part of the onboarding suite.</b> See <strong>onboarding-overview</strong> for the three-portal model and the identity model. Persona guides: Tenant Admin, Tenant Developer, App User, Platform Admin, ProjexCloud Admin.</div>
+<h1>Who you are &amp; where you sign in</h1>
+<p>You administer <strong>one tenant</strong> — your organization inside an application. You sign in at <strong>/tenant</strong> (port 3200) with your ProjexCloud identity; your tenant membership carries the <strong>tenant-admin</strong> role. The same login also opens Workspace if your membership has a builder role.</p>
+<div class="callout good"><b>First login.</b> The first user of a new tenant is auto-promoted to tenant admin. Everyone else you add becomes a member with the persona/role you assign.</div>
+<h1>What you manage</h1>
+<table><thead><tr><th>Area</th><th>What you do</th><th>SDK behind it</th></tr></thead><tbody><tr><td>Billing</td><td>Plans, subscriptions, live-meter accrual, per-BU showback, invoices</td><td><code>sdk-billing</code>, <code>sdk-meter</code></td></tr><tr><td>Members &amp; roles</td><td>Invite people by email, assign personas (Admin/Developer/Operator/Viewer), group into Business Units</td><td><code>sdk-persona</code>, <code>sdk-rebac</code></td></tr><tr><td>API keys</td><td>Issue/rotate/revoke programmatic credentials scoped to a service persona</td><td><code>sdk-api-keys</code></td></tr><tr><td>Webhooks</td><td>Register endpoints, verify HMAC, replay from the DLQ</td><td><code>sdk-webhook</code></td></tr><tr><td>Approvals</td><td>Configure routing (predicate → ordered steps → SLA), 4-eyes sign-off</td><td><code>sdk-approval</code></td></tr><tr><td>Connectors</td><td>OAuth-connect Salesforce, Slack, M365, Snowflake, Jira, GitHub…</td><td><code>sdk-connectors</code></td></tr><tr><td>Consent</td><td>Manage purpose-bound consent receipts and DSAR export</td><td><code>sdk-consent</code>, <code>sdk-data-rights</code></td></tr><tr><td>AI providers</td><td>Set per-tenant LLM keys (Anthropic/OpenAI/Bedrock/Gemini), guardrails, BYOK</td><td><code>sdk-ai-gateway</code>, <code>sdk-vault</code></td></tr></tbody></table>
+<h1>Day-1 checklist</h1>
+<ol><li>Confirm your billing plan and add a payment method.</li><li>Invite your team by email; assign each person a persona/role; create Business Units if you have multiple sites/regions.</li><li>Issue an API key for your first integration (store the secret once — it is shown only at creation).</li><li>Set your AI provider keys (or enable BYOK) so AI features bill to your account, not the platform markup.</li><li>Register a webhook endpoint for the events you care about and confirm signature verification.</li><li>Review consent purposes and approval routes before going live with personal data.</li></ol>
+<h1>Members, personas &amp; roles — the model</h1>
+<p>A <strong>member</strong> = a person + a <strong>tenant membership</strong> + one or more <strong>personas</strong>. The persona is the assignable identity (&quot;hat&quot;); a <strong>role</strong> maps the persona to permissions; a <strong>Business Unit</strong> groups personas under their own approval chain. Personas can be <strong>human</strong> (invited by email) or <strong>service</strong> (machine identities for integrations and, in robotics, robots).</p>
+<h1>Troubleshooting</h1>
+<ul><li><strong>A member can’t sign in</strong> — check their invite was accepted and their membership status is active; revoked memberships invalidate sessions immediately.</li><li><strong>API call returns 401</strong> — the key was revoked or the JWT expired; re-issue or re-authenticate.</li><li><strong>AI calls billed unexpectedly</strong> — set tenant AI provider keys / BYOK so token cost goes to your provider, not the platform governance SKU.</li></ul>
+<div class="footer">ProjexCloud + Projexlight &middot; Onboarding documentation &middot; cloud.projexlight.com</div>
+</body></html>

@@ -1,3 +1,5 @@
+> **Note (doc type):** This is a roadmap / design brainstorm transcript, not a user onboarding guide. For onboarding see [onboarding-overview](onboarding-overview.html). Consider relocating this file to `docs/roadmap/`.
+
 ❯ Can you think how we can publish capability of all sdk we built and Then we need to create a ai agent which will based on User project descriptiopn or prompt dioscover all sdk the  
  project needs and use those existing sdk to generate code in the cloud, or think a very innivative way how the customer or tenant can build new application using our sdk and how the
 ai coding tool integration can happen for multiple different vertical application and cli coding tool can use our sdk and build the custom vertical applications

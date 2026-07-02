@@ -1,0 +1,40 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Tenant Developer Onboarding</title>
+<style>
+ :root{--brand:#1A51C7;--ink:#0b1220;--fg:#1b2a44;--muted:#5a6573;--border:#e2e7ef;--soft:#f5f9ff;--brand50:#eef3ff}
+ *{box-sizing:border-box} body{font-family:'Inter',-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:var(--fg);line-height:1.6;max-width:900px;margin:0 auto;padding:40px 24px;background:#fff}
+ h1.doctitle{font-size:32px;letter-spacing:-.02em;color:var(--ink);margin:0 0 6px} .docsub{color:var(--muted);font-size:17px;margin:0 0 28px}
+ h1{font-size:25px;color:var(--brand);border-bottom:2px solid var(--brand50);padding-bottom:6px;margin:38px 0 14px}
+ h2{font-size:20px;color:var(--ink);margin:28px 0 10px} h3{font-size:16.5px;color:var(--ink);margin:22px 0 8px}
+ p{margin:0 0 12px} ul,ol{margin:0 0 14px;padding-left:24px} li{margin:5px 0}
+ code{font-family:Consolas,Menlo,monospace;background:var(--brand50);color:var(--brand);padding:1px 6px;border-radius:5px;font-size:.9em}
+ pre{background:#0b1220;color:#e6ecf5;padding:16px 18px;border-radius:10px;overflow-x:auto;font-size:13px;line-height:1.5}
+ pre code{background:none;color:inherit;padding:0}
+ table{border-collapse:collapse;width:100%;margin:8px 0 20px;font-size:14px}
+ th{background:var(--brand);color:#fff;text-align:left;padding:9px 12px;font-size:12.5px}
+ td{border-bottom:1px solid var(--border);padding:9px 12px;vertical-align:top}
+ tr:nth-child(even) td{background:#f7f9fc}
+ .callout{border-radius:12px;padding:14px 18px;margin:8px 0 18px;border:1px solid var(--border)}
+ .callout.info{background:#eef3fc;border-color:#dbe5ff} .callout.warn{background:#fbf1e0;border-color:#f0dcb4} .callout.good{background:#e8f5ec;border-color:#bfe3cb}
+ .callout b{color:var(--ink)} hr{border:none;border-top:1px solid var(--border);margin:30px 0}
+ .footer{margin-top:46px;padding-top:18px;border-top:1px solid var(--border);color:var(--muted);font-size:13px}
+</style></head><body>
+
+<h1 class="doctitle">Tenant Developer — Onboarding Guide</h1>
+<p class="docsub">Discover SDKs, compose a build, and deploy your application on the ProjexCloud backbone.</p>
+<div class="callout info"><b>Part of the onboarding suite.</b> See <strong>onboarding-overview</strong> for the three-portal model and the identity model. Persona guides: Tenant Admin, Tenant Developer, App User, Platform Admin, ProjexCloud Admin.</div>
+<h1>Who you are &amp; where you sign in</h1>
+<p>You build and operate applications for a tenant. You sign in at <strong>/workspace</strong> (port 3300) with your ProjexCloud identity; your tenant membership carries a <strong>developer/builder</strong> role. It is the same login you would use for Tenant Admin — only the role differs.</p>
+<h1>Two ways to build</h1>
+<table><thead><tr><th>Path</th><th>How</th><th>Best for</th></tr></thead><tbody><tr><td>No-code / Workspace</td><td>Discover SDKs, compose a build plan in the browser, deploy</td><td>First app, prototypes, non-developers</td></tr><tr><td>CLI + MCP</td><td><code>npx @projexlight/cli init</code>, write code with your AI agent over MCP, <code>projex deploy</code></td><td>Engineers, CI/CD, repeatable builds</td></tr></tbody></table>
+<h1>The build flow</h1>
+<ol><li>Open Workspace and browse the <strong>SDK registry</strong> (96 SDKs / 256 APIs) — search by intent (&quot;metering&quot;, &quot;evidence capture&quot;, &quot;fleet dispatch&quot;).</li><li>Compose a <strong>build plan</strong>: pick the SDK families your app needs; the planner wires identity, tenancy, metering, and audit for you.</li><li>Implement domain logic — in Workspace or via the CLI with your coding agent connected through the <strong>MCP bridge</strong>.</li><li>Validate against blueprints, tests and certification gates, then <strong>deploy</strong>.</li><li>Operate: watch usage on the meter, traces, and diagnostics; iterate.</li></ol>
+<h1>Working with multiple developers (and multiple apps)</h1>
+<ul><li>Many developers collaborate inside the same app/tenant; <strong>ReBAC</strong> (<code>sdk-rebac</code>) and <strong>ABAC policy</strong> (<code>sdk-policy</code>) bound what each person can touch.</li><li>Identities are shared at the person level but <strong>isolated per app</strong> at L2/L3 — work on one app does not leak into another.</li><li>Each app has its own data model and event namespace (<code>app_id</code>); register a new App (via Platform Admin/onboarding) for each distinct product.</li><li>Use Business Units and feature flags (<code>sdk-feature-flags</code>) to stage rollouts and keep a kill-switch.</li></ul>
+<h1>Never store identity as strings</h1>
+<div class="callout warn"><b>The non-negotiable.</b> No domain table stores a person’s name, address, device, or org as a primary string. Reference the canonical ID and the right identity layer (<code>persona_id</code> and above); fetch the name through the Persona/Profile SDKs with the access mesh on every call. A PR that adds a <code>person_name</code> column fails review.</div>
+<h1>Robotics developers — starter stack</h1>
+<p>For physical-AI / fleet apps, compose: <code>sdk-device</code> + <code>hdk-camera</code> (enroll &amp; attest robots), <code>sdk-ingest</code> (telemetry), <code>sdk-meter</code> (per-robot metering), <code>sdk-geo</code>/<code>sdk-dispatch</code>/<code>sdk-assignment</code> (locate &amp; task), <code>sdk-evidence</code> (capture), <code>sdk-analytics</code>/<code>sdk-diagnostic-telemetry</code> (fleet health), <code>sdk-audit</code>/<code>sdk-approval</code> (governance), <code>sdk-ai-gateway</code>/<code>sdk-agent-runtime</code> (autonomy), <code>sdk-pool-router</code> (scale). See the overview’s robotics example for sample data shapes.</p>
+<div class="footer">ProjexCloud + Projexlight &middot; Onboarding documentation &middot; cloud.projexlight.com</div>
+</body></html>

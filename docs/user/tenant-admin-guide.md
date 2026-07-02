@@ -1,5 +1,7 @@
 # Tenant Admin — Tenant Operator Guide
 
+> **New:** Start with [onboarding-overview](onboarding-overview.html) and [tenant-admin-onboarding](tenant-admin-onboarding.html) for the portals, login model, and day-1 flow. This page is the detailed feature reference.
+
 **Audience:** A customer's tenant administrator (the person who owns the
 tenant inside their company — usually IT lead, RevOps lead, or a delegated
 admin persona).

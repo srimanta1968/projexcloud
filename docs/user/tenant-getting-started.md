@@ -1,9 +1,11 @@
 # Tenant — Getting Started (Trial Workspace)
 
+> **New:** For the full picture across all three portals and personas, see [onboarding-overview](onboarding-overview.html). Workspace dev port is now **3300** (`/workspace` in production).
+
 **Audience:** the person who just signed up for a free ProjexCloud trial
 (the first user of a brand-new tenant, who is automatically promoted to
 tenant admin).
-**Where you are:** `http://localhost:3000` — the **tenant workspace**.
+**Where you are:** `http://localhost:3300` — the **tenant workspace**.
 **Backed by:** api-gateway on `http://localhost:3500` via `/api/*` routes,
 authenticated with the six-layer JWT you just received.
 
@@ -24,7 +26,7 @@ trial works end-to-end.
 
 ## 1. Look at your workspace dashboard
 
-Go to `http://localhost:3000/dashboard`. You should see:
+Go to `http://localhost:3300/dashboard`. You should see:
 
 - **Active session** card — your email, Tenant ID, App ID, Org ID, and
   session expiry. This is your JWT decoded client-side (display only;
@@ -135,7 +137,7 @@ API calls you make are metered by `sdk-meter`. After the calls in §3:
 
 ## 5. Try the AI scaffolding flow (`/build`)
 
-Back in the workspace, go to `http://localhost:3000/build`. This is
+Back in the workspace, go to `http://localhost:3300/build`. This is
 the cloud agent surface — it takes a natural-language project
 description, matches it against the vertical blueprint catalogue
 (`Field-service dispatch`, `Insurance claims intake`, `B2B SaaS analytics`,

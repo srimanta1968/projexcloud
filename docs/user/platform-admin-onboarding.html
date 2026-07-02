@@ -1,0 +1,38 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Platform Admin Onboarding</title>
+<style>
+ :root{--brand:#1A51C7;--ink:#0b1220;--fg:#1b2a44;--muted:#5a6573;--border:#e2e7ef;--soft:#f5f9ff;--brand50:#eef3ff}
+ *{box-sizing:border-box} body{font-family:'Inter',-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:var(--fg);line-height:1.6;max-width:900px;margin:0 auto;padding:40px 24px;background:#fff}
+ h1.doctitle{font-size:32px;letter-spacing:-.02em;color:var(--ink);margin:0 0 6px} .docsub{color:var(--muted);font-size:17px;margin:0 0 28px}
+ h1{font-size:25px;color:var(--brand);border-bottom:2px solid var(--brand50);padding-bottom:6px;margin:38px 0 14px}
+ h2{font-size:20px;color:var(--ink);margin:28px 0 10px} h3{font-size:16.5px;color:var(--ink);margin:22px 0 8px}
+ p{margin:0 0 12px} ul,ol{margin:0 0 14px;padding-left:24px} li{margin:5px 0}
+ code{font-family:Consolas,Menlo,monospace;background:var(--brand50);color:var(--brand);padding:1px 6px;border-radius:5px;font-size:.9em}
+ pre{background:#0b1220;color:#e6ecf5;padding:16px 18px;border-radius:10px;overflow-x:auto;font-size:13px;line-height:1.5}
+ pre code{background:none;color:inherit;padding:0}
+ table{border-collapse:collapse;width:100%;margin:8px 0 20px;font-size:14px}
+ th{background:var(--brand);color:#fff;text-align:left;padding:9px 12px;font-size:12.5px}
+ td{border-bottom:1px solid var(--border);padding:9px 12px;vertical-align:top}
+ tr:nth-child(even) td{background:#f7f9fc}
+ .callout{border-radius:12px;padding:14px 18px;margin:8px 0 18px;border:1px solid var(--border)}
+ .callout.info{background:#eef3fc;border-color:#dbe5ff} .callout.warn{background:#fbf1e0;border-color:#f0dcb4} .callout.good{background:#e8f5ec;border-color:#bfe3cb}
+ .callout b{color:var(--ink)} hr{border:none;border-top:1px solid var(--border);margin:30px 0}
+ .footer{margin-top:46px;padding-top:18px;border-top:1px solid var(--border);color:var(--muted);font-size:13px}
+</style></head><body>
+
+<h1 class="doctitle">Platform Admin (Operator) — Onboarding Guide</h1>
+<p class="docsub">Operate ProjexCloud across all tenants: provisioning, capacity, billing ops, audit and compliance.</p>
+<div class="callout info"><b>Part of the onboarding suite.</b> See <strong>onboarding-overview</strong> for the three-portal model and the identity model. Persona guides: Tenant Admin, Tenant Developer, App User, Platform Admin, ProjexCloud Admin.</div>
+<h1>Who you are &amp; where you sign in</h1>
+<p>You are a ProjexCloud <strong>operator</strong> — SRE, support, finance, or compliance. You sign in at <strong>/console</strong> (port 3100). This is a <strong>platform-level identity</strong>, distinct from any tenant identity: a tenant user cannot sign into the console, and you act across every tenant.</p>
+<h1>What you operate</h1>
+<table><thead><tr><th>Area</th><th>What you do</th><th>SDK / route</th></tr></thead><tbody><tr><td>Tenants</td><td>Provision, browse, lifecycle (trial → active → suspend → offboard)</td><td><code>sdk-tenant</code>, <code>sdk-tenant-lifecycle</code>, <code>/admin/tenants</code></td></tr><tr><td>Pools</td><td>Capacity &amp; routing — add pools, flip placement, watch health</td><td><code>sdk-pool-router</code></td></tr><tr><td>Pricing catalogs</td><td>SKUs, soft/hard caps, catalog versioning</td><td><code>sdk-meter</code></td></tr><tr><td>Invoices</td><td>Review and issue per-tenant invoices from metered usage</td><td><code>sdk-billing</code></td></tr><tr><td>Webhooks</td><td>Replay platform DLQ</td><td><code>sdk-webhook</code></td></tr><tr><td>Approvals</td><td>Platform approval routes and pending requests</td><td><code>sdk-approval</code></td></tr><tr><td>Audit</td><td>Browse the SHA-256 hash-chained ledger</td><td><code>sdk-audit</code></td></tr><tr><td>Sovereign / On-prem</td><td>Sovereign regions, air-gapped installs, active-active</td><td><code>sdk-sovereign</code>, <code>sdk-onprem</code></td></tr></tbody></table>
+<h1>Provisioning a tenant</h1>
+<ol><li>Ensure the parent <strong>App</strong> exists (registered by ProjexCloud Admin). Create it first if none.</li><li>Open <strong>Tenants → New</strong>, enter App ID, display name (company), region and isolation tier (S/P/G), optional brand domain.</li><li>Submit — this writes <code>tenant.tenant</code>, emits <code>tenant.created.v1</code> + <code>tenant.pool.assigned.v1</code> through the audit chain, and assigns pool placement.</li><li>Hand the tenant to the customer; their first user becomes tenant admin.</li></ol>
+<h1>Authentication &amp; the current gap</h1>
+<div class="callout warn"><b>Read this before exposing the console.</b> Privileged provisioning actions are gated by an <code>ADMIN_OPS_TOKEN</code> at the gateway, but the <strong>console UI itself currently has no enforced login gate</strong>. Until the portal auth middleware ships, restrict /console at the network edge (IP allow-list) so the server-held ops token is never reachable by an anonymous visitor. The Projexlight *Portal authentication middleware* feature tracks the fix.</div>
+<h1>Troubleshooting</h1>
+<ul><li><strong>Provision fails</strong> — verify the App ID exists and the ops token is configured.</li><li><strong>Tenant lifecycle action blocked</strong> — some actions need a tenant-scoped JWT in addition to the ops token.</li><li><strong>Pool hot</strong> — add a pool and migrate tenants offline (staged dual-write → atomic cutover).</li></ul>
+<div class="footer">ProjexCloud + Projexlight &middot; Onboarding documentation &middot; cloud.projexlight.com</div>
+</body></html>
