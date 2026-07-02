@@ -27,6 +27,7 @@ const NAV = [
   { href: '/ai/mcp-servers', label: 'AI' },
   { href: '/ai/providers', label: 'AI Providers' },
   { href: '/byok', label: 'BYOK' },
+  { href: '/notifications/providers', label: 'Email' },
   { href: '/help', label: 'Help' },
 ];
 

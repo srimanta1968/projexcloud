@@ -22,6 +22,7 @@ const NAV = [
   { href: '/onprem-installs', label: 'On-Prem' },
   { href: '/active-active', label: 'Active-Active' },
   { href: '/security/ops-tokens', label: 'Ops Tokens' },
+  { href: '/notifications', label: 'Email' },
   { href: '/help', label: 'Help' },
 ];
 
