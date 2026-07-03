@@ -1444,12 +1444,12 @@ recover_env_from_registry() {
     local fresh_mappings
     fresh_mappings=$(jq -r '
         to_entries
-        | map(select(.value.containerPath))
+        | map(select(.value.containerPath and .value.projectPath))
         | map({(.value.projectPath): .value.containerPath})
         | add
         | if . == null then {} else . end
         | tojson
-    ' "$reg_file" 2>/dev/null)
+    ' "$reg_file" 2>/dev/null) || fresh_mappings='{}'
 
     {
         echo ""
@@ -1467,7 +1467,7 @@ recover_env_from_registry() {
         | select(.value.isOwner != true)
         | select(.value.containerPath | startswith("/projects/additional"))
         | "\(.value.containerPath | ltrimstr("/projects/additional"))|\(.value.projectPath)"
-    ' "$reg_file" 2>/dev/null)
+    ' "$reg_file" 2>/dev/null) || fresh_mappings='{}'
 
     local emitted=0
     if [ -n "$additional_projects" ]; then
