@@ -33,13 +33,13 @@ async function ensureChTrackingTable(): Promise<void> {
   // The first file in the migration set creates trace.ch_migrations itself.
   // We still try a defensive CREATE here to handle ordering edge cases (e.g.
   // someone renames the first file later).
+  // ClickHouse's client rejects multiple statements in one command() — issue the
+  // CREATE DATABASE and CREATE TABLE as separate commands.
+  await getClickHouse().command({ query: 'CREATE DATABASE IF NOT EXISTS trace' });
   await getClickHouse().command({
-    query: `
-      CREATE DATABASE IF NOT EXISTS trace;
-      CREATE TABLE IF NOT EXISTS trace.ch_migrations (
+    query: `CREATE TABLE IF NOT EXISTS trace.ch_migrations (
         sdk String, filename String, sha256 String, applied_at DateTime DEFAULT now()
-      ) ENGINE = MergeTree ORDER BY (sdk, filename)
-    `,
+      ) ENGINE = MergeTree ORDER BY (sdk, filename)`,
   });
 }
 
