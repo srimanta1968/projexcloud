@@ -25,7 +25,7 @@
         "grant_id": "{{cache:impersonation.request.response.data.grant.grant_id}}"
       },
       "payload": {
-        "manager_approval_id": "{{var:approval_ref}}",
+        "manager_approval_id": "{{dynamic:uuid}}",
         "customer_consent_ref": "{{var:customer_consent_ref}}"
       },
       "expectedStatus": 200
@@ -49,11 +49,27 @@
   "statusTransitions": {
     "entity": "impersonation_grant",
     "field": "status",
-    "flow": ["pending_approval", "active", "ended"],
+    "flow": [
+      "pending_approval",
+      "active",
+      "ended"
+    ],
     "transitions": [
-      { "from": null, "to": "pending_approval", "via": "POST /api/impersonation/request" },
-      { "from": "pending_approval", "to": "active", "via": "POST /api/impersonation/:grant_id/approve" },
-      { "from": "active", "to": "ended", "via": "POST /api/impersonation/:grant_id/end" }
+      {
+        "from": null,
+        "to": "pending_approval",
+        "via": "POST /api/impersonation/request"
+      },
+      {
+        "from": "pending_approval",
+        "to": "active",
+        "via": "POST /api/impersonation/:grant_id/approve"
+      },
+      {
+        "from": "active",
+        "to": "ended",
+        "via": "POST /api/impersonation/:grant_id/end"
+      }
     ]
   },
   "captureResponse": {
