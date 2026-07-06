@@ -9,15 +9,21 @@
   "sdk": "api-gateway",
   "sourceFile": "services/api-gateway/src/app.ts",
   "priority": 32,
-  "testability": "manual",
-  "skipReason": "Operator endpoint gated by the ADMIN_OPS_TOKEN header and requires ClickHouse enabled; recomputes the 1m+1h sensor rollups for a window (idempotent delete-then-reinsert). Verify live with the ops token against a CH-backed env.",
+  "testability": "auto",
+  "captureResponse": {
+    "asset-rollup-backfill.run.response.data.rebuilt_1m": "rebuilt_1m",
+    "asset-rollup-backfill.run.response.data.rebuilt_1h": "rebuilt_1h"
+  },
   "testCases": [
     {
       "name": "Backfill the trailing 24h of sensor rollups",
-      "headers": { "x-admin-ops-token": "{{static:ADMIN_OPS_TOKEN}}" },
-      "payload": { "lookback_hours": 24 },
-      "expectedStatus": 200,
-      "testability": "manual"
+      "headers": { "x-admin-ops-token": "${ADMIN_OPS_TOKEN}" },
+      "payload": {
+        "lookback_hours": 24,
+        "from": "{{dynamic:pastdatetime}}",
+        "to": "{{dynamic:futuredatetime}}"
+      },
+      "expectedStatus": 200
     }
   ]
 }

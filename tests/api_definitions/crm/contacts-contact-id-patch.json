@@ -4,27 +4,45 @@
   "method": "PATCH",
   "requiresAuth": true,
   "dependsOn": [
+    "POST /api/auth/signup-tenant",
     "POST /api/auth/register",
+    "POST /api/app-identities",
+    "POST /api/memberships",
+    "POST /api/personas",
     "POST /api/crm/contacts"
   ],
   "expectedStatus": 200,
   "sdk": "sdk-crm",
   "sourceFile": "packages/sdk-crm/src/server/routes.ts",
   "_generated": true,
-  "fieldOptions": {
+  "fieldEnums": {
     "lifecycle_stage": ["lead", "prospect", "customer", "churned", "former"]
+  },
+  "statusTransitions": {
+    "entity": "contact",
+    "field": "lifecycle_stage",
+    "flow": ["lead", "prospect", "customer", "churned", "former"],
+    "transitions": [
+      { "from": "lead", "to": "prospect", "via": "PATCH /api/crm/contacts/:contact_id" },
+      { "from": "prospect", "to": "customer", "via": "PATCH /api/crm/contacts/:contact_id" },
+      { "from": "customer", "to": "churned", "via": "PATCH /api/crm/contacts/:contact_id" },
+      { "from": "churned", "to": "former", "via": "PATCH /api/crm/contacts/:contact_id" }
+    ]
   },
   "testCases": [
     {
       "name": "Update contact lifecycle_stage on an existing contact",
       "headers": {
-        "Authorization": "Bearer {{cache:auth.register.response.data.token}}"
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
       },
       "pathParams": {
         "contact_id": "{{cache:crm.contacts.response.data.contact.contact_id}}"
       },
       "payload": {
-        "lifecycle_stage": "{{static:customer}}"
+        "lifecycle_stage": "customer",
+        "owner_persona_id": "{{cache:personas.create.response.data.persona.persona_id}}",
+        "custom_fields": { "tier": "gold" },
+        "external_refs": { "hubspot_id": "HS-002" }
       },
       "expectedStatus": 200
     }

@@ -4,28 +4,56 @@
   "method": "POST",
   "requiresAuth": true,
   "dependsOn": [
-    "POST /api/auth/register",
+    "POST /api/auth/signup-tenant",
     "POST /api/media/upload-url"
   ],
   "expectedStatus": 200,
   "sdk": "sdk-media",
-  "sourceFile": "packages/sdk-media/src/server/routes.ts",
+  "sourceFile": "packages/sdk-media/src/server/handlers/mediaController.ts",
   "_generated": true,
-  "testability": "manual",
-  "skipReason": "Requires a JWT bearing a tenant_id claim and a blob_id from POST /api/media/upload-url (which itself needs a seeded tenant + active vault tenant key). checksum_hex must be the 64-char hex SHA-256 of the uploaded bytes.",
+  "testability": "auto",
+  "statusTransitions": {
+    "entity": "media.blob",
+    "field": "status",
+    "flow": ["uploading", "ready", "transcoded", "shredded"],
+    "transitions": [
+      {
+        "from": "uploading",
+        "to": "ready",
+        "via": "POST /api/media/:blob_id/ready"
+      }
+    ]
+  },
   "testCases": [
     {
       "name": "Commit an uploaded blob with its SHA-256 checksum",
       "headers": {
-        "Authorization": "Bearer {{cache:auth.register.response.data.token}}"
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
       },
       "pathParams": {
         "blob_id": "{{cache:media.upload-url.create.response.data.blob_id}}"
       },
       "payload": {
-        "checksum_hex": "{{static:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855}}"
+        "checksum_hex": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
       },
       "expectedStatus": 200
     }
-  ]
+  ],
+  "expectedResponse": {
+    "data": {
+      "blob": {
+        "blob_id": "string",
+        "tenant_id": "string",
+        "persona_id": "string",
+        "s3_key": "string",
+        "content_type": "string",
+        "byte_size": 0,
+        "status": "string"
+      }
+    }
+  },
+  "captureResponse": {
+    "media.ready.response.data.blob.blob_id": "data.blob.blob_id",
+    "media.ready.response.data.blob.status": "data.blob.status"
+  }
 }

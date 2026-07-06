@@ -4,27 +4,45 @@
   "method": "POST",
   "requiresAuth": true,
   "dependsOn": [
-    "POST /api/auth/register",
+    "POST /api/auth/signup-tenant",
     "POST /api/service-request/tickets"
   ],
   "expectedStatus": 200,
   "sdk": "sdk-service-request",
   "sourceFile": "packages/sdk-service-request/src/server/routes.ts",
   "_generated": true,
-  "fieldOptions": {
+  "fieldEnums": {
     "to": ["new", "in-progress", "awaiting-customer", "resolved", "closed"]
+  },
+  "statusTransitions": {
+    "entity": "service_request.ticket",
+    "field": "status",
+    "flow": ["new", "in-progress", "awaiting-customer", "resolved", "closed"],
+    "transitions": [
+      { "from": "new", "to": "in-progress", "via": "POST /api/service-request/tickets/:ticket_id/transition" },
+      { "from": "new", "to": "closed", "via": "POST /api/service-request/tickets/:ticket_id/transition" },
+      { "from": "in-progress", "to": "awaiting-customer", "via": "POST /api/service-request/tickets/:ticket_id/transition" },
+      { "from": "in-progress", "to": "resolved", "via": "POST /api/service-request/tickets/:ticket_id/transition" },
+      { "from": "awaiting-customer", "to": "in-progress", "via": "POST /api/service-request/tickets/:ticket_id/transition" },
+      { "from": "awaiting-customer", "to": "resolved", "via": "POST /api/service-request/tickets/:ticket_id/transition" },
+      { "from": "resolved", "to": "closed", "via": "POST /api/service-request/tickets/:ticket_id/transition" }
+    ]
+  },
+  "captureResponse": {
+    "service-request.transition.response.data.ticket.ticket_id": "data.ticket.ticket_id",
+    "service-request.transition.response.data.ticket.status": "data.ticket.status"
   },
   "testCases": [
     {
       "name": "Transition a new ticket to in-progress (valid transition from default status 'new')",
       "headers": {
-        "Authorization": "Bearer {{cache:auth.register.response.data.token}}"
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
       },
       "pathParams": {
         "ticket_id": "{{cache:service-request.tickets.response.data.ticket.ticket_id}}"
       },
       "payload": {
-        "to": "{{static:in-progress}}"
+        "to": "in-progress"
       },
       "expectedStatus": 200
     }

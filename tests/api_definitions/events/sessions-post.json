@@ -5,15 +5,15 @@
   "requiresAuth": true,
   "dependsOn": [
     "POST /api/auth/register",
-    "POST /api/tenants",
+    "POST /api/auth/signup-tenant",
+    "POST /api/vault/keys",
     "POST /api/encounters"
   ],
   "expectedStatus": 201,
   "sdk": "sdk-event",
   "sourceFile": "packages/sdk-event/src/server/routes.ts",
   "_generated": true,
-  "testability": "manual",
-  "skipReason": "Requires a tenant and an open encounter (event.session.encounter_id); createSession inserts an event.session row.",
+  "testability": "auto",
   "testCases": [
     {
       "name": "Create an event session under an encounter",
@@ -21,14 +21,20 @@
         "Authorization": "Bearer {{cache:auth.register.response.data.token}}"
       },
       "payload": {
-        "tenant_id": "{{cache:tenants.create.response.data.tenant_id}}",
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
         "encounter_id": "{{cache:encounters.create.response.data.encounter.encounter_id}}",
         "title": "{{dynamic:name}}",
+        "address_id": null,
         "capacity": 100,
-        "starts_at": "{{static:2026-07-01T10:00:00Z}}",
-        "ends_at": "{{static:2026-07-01T12:00:00Z}}"
+        "starts_at": "2026-09-01T10:00:00Z",
+        "ends_at": "2026-09-01T12:00:00Z"
       },
       "expectedStatus": 201
     }
-  ]
+  ],
+  "captureResponse": {
+    "events.sessions.create.response.data.session.session_id": "data.session.session_id",
+    "events.sessions.create.response.data.session.tenant_id": "data.session.tenant_id",
+    "events.sessions.create.response.data.session.status": "data.session.status"
+  }
 }

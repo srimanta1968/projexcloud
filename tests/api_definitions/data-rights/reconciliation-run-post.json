@@ -2,6 +2,7 @@
   "name": "POST /api/data-rights/reconciliation/run - Run residency reconciliation (AC-10)",
   "endpoint": "/api/data-rights/reconciliation/run",
   "sdk": "sdk-data-rights",
+  "sourceFile": "packages/sdk-data-rights/src/server/routes.ts",
   "method": "POST",
   "requiresAuth": true,
   "expectedStatus": 200,
@@ -10,19 +11,23 @@
   "featureId": "3eee9beb-21fc-4fd1-bf3f-1c172143a39b",
   "epicId": "93a549d6-9a93-4d82-86bb-bac5167fa960",
   "priority": 90,
+  "testability": "auto",
   "dependsOn": [
-    "POST /api/auth/register"
+    "POST /api/auth/signup-tenant"
   ],
   "testCases": [
     {
-      "name": "Run reconciliation (empty discrepancies → green)",
+      "name": "Run reconciliation (empty discrepancies -> green)",
       "headers": {
-        "Authorization": "Bearer {{cache:auth.register.response.data.token}}"
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
       },
       "payload": {
         "discrepancies": []
       },
       "expectedStatus": 200
     }
-  ]
+  ],
+  "captureResponse": {
+    "data-rights-reconciliation.run.response.data.reconciliation.run_id": "data.reconciliation.run_id"
+  }
 }

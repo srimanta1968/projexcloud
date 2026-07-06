@@ -6,12 +6,16 @@
   "featureId": "338dfcbc-f3b5-4566-8991-d5f6ed531903",
   "epicId": "4a3cb476-6cb9-4427-b89d-2307f7cb78e3",
   "sprintId": "8ef1d09e-dd8e-4daf-8d03-54dcd9f812f8",
-  "description": "Planner v2: retrieve-then-compose. Embeds the intent locally (bge-small), retrieves top-K candidate SDKs, injects the foundation/AIM tier + dependency closure, then composes a plan from candidates only. Returns { plan: { summary, recommended_sdks[], custom_work[], clarifying_questions[], vertical_pack, complexity }, meta: { catalog_size, provider, retrieval } }.",
+  "description": "Planner v2: retrieve-then-compose. Embeds the intent locally (bge-small), retrieves top-K candidate SDKs, injects the foundation/AIM tier + dependency closure, then composes a plan from candidates only. Returns { plan: { summary, recommended_sdks[], custom_work[], clarifying_questions[], vertical_pack, complexity }, meta: { catalog_size, provider, audit_status, retrieval } }.",
   "requiresAuth": true,
   "priority": 40,
   "dependsOn": [
     "POST /api/auth/register"
   ],
+  "captureResponse": {
+    "build-plan.compose.response.data.provider": "meta.provider",
+    "build-plan.compose.response.data.catalog_size": "meta.catalog_size"
+  },
   "testCases": [
     {
       "name": "Compose a plan for a financial accounting app",
@@ -46,6 +50,5 @@
       "expectedStatus": 401
     }
   ],
-  "testability": "manual",
-  "skipReason": "Automated test unstable - requires manual testing"
+  "testability": "auto"
 }

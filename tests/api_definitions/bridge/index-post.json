@@ -1,24 +1,32 @@
 {
-  "name": "POST /bridge \u2014 semantic-service",
+  "name": "POST /bridge — semantic-service",
   "endpoint": "/bridge",
   "method": "POST",
   "requiresAuth": false,
-  "expectedStatus": 201,
+  "expectedStatus": 200,
   "sdk": "semantic-service",
   "sourceFile": "services/semantic-service/src/routes.ts",
   "_generated": true,
-  "testability": "manual",
-  "skipReason": "Auto-generated from implemented route scan; payload/expectedResponse inferred from the handler and need review before enabling automated execution.",
+  "testability": "auto",
+  "fieldEnums": {
+    "access_mode": ["read-only", "read-write"]
+  },
+  "dependsOn": ["POST /ontology/register"],
+  "captureResponse": {
+    "bridge.create.response.data.bridge_id": "data.bridge_id",
+    "bridge.create.response.data.from_object_type_id": "data.from_object_type_id",
+    "bridge.create.response.data.to_object_type_id": "data.to_object_type_id"
+  },
   "testCases": [
     {
-      "name": "Auto-generated from route scan (review payload before enabling)",
+      "name": "Register a cross-domain bridge between two object types",
       "payload": {
-        "from_object_type_id": "{{static:REPLACE_WITH_ID}}",
-        "to_object_type_id": "{{static:REPLACE_WITH_ID}}",
-        "access_mode": "{{static:sample}}",
-        "requires_cross_tenant_consent": "{{static:sample}}"
+        "from_object_type_id": "{{cache:ontology.register.response.data.object_types.0.object_type_id}}",
+        "to_object_type_id": "{{cache:ontology.register.response.data.object_types.1.object_type_id}}",
+        "access_mode": "read-only",
+        "requires_cross_tenant_consent": true
       },
-      "expectedStatus": 201
+      "expectedStatus": 200
     }
   ]
 }

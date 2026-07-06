@@ -12,8 +12,22 @@
   "sdk": "sdk-content",
   "sourceFile": "packages/sdk-content/src/server/routes.ts",
   "_generated": true,
-  "testability": "manual",
-  "skipReason": "Needs a real sub-bearing JWT, an item_id and version_id from the create chain. Handler requires published_by (a person/persona UUID); sets item.status=published and returns 200.",
+  "testability": "auto",
+  "fieldEnums": {
+    "status": ["draft", "published", "archived"]
+  },
+  "statusTransitions": {
+    "entity": "content.item",
+    "field": "status",
+    "flow": ["draft", "published", "archived"],
+    "transitions": [
+      { "from": "draft", "to": "published", "via": "POST /api/content/items/:item_id/versions/:version_id/publish" }
+    ]
+  },
+  "captureResponse": {
+    "content.item.publish.response.data.item.item_id": "data.item.item_id",
+    "content.item.publish.response.data.item.status": "data.item.status"
+  },
   "testCases": [
     {
       "name": "Publish a version on behalf of the signed-up user",
@@ -29,12 +43,5 @@
       },
       "expectedStatus": 200
     }
-  ],
-  "serverFieldOptions": {
-    "status": [
-      "draft",
-      "published",
-      "archived"
-    ]
-  }
+  ]
 }

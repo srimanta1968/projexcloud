@@ -4,14 +4,19 @@
   "method": "POST",
   "taskId": "72094eaa-8bdc-4be0-9fe4-e35f952b98cf",
   "description": "Start an agent_run. Computes ttl_deadline from agent's default_ttl_seconds, materialises agent_chain from parent_run_id, emits agent.run.started.v1 (regulated retention) with chain as actor provenance.",
+  "sourceFile": "packages/sdk-agent-runtime/src/server/handlers/agentRunController.ts",
   "requiresAuth": true,
   "priority": 70,
   "dependsOn": [
     "POST /api/auth/register",
+    "POST /api/personas",
     "POST /api/agent-runtime/agents"
   ],
   "captureResponse": {
     "agent-runtime-runs.create.response.data.run_id": "data.run_id"
+  },
+  "fieldEnums": {
+    "actor_kind": ["human", "service", "agent"]
   },
   "testCases": [
     {
@@ -21,10 +26,12 @@
       },
       "payload": {
         "agent_id": "{{cache:agent-runtime-agents.create.response.data.agent_id}}",
-        "persona_id": "{{dynamic:uuid}}",
-        "trace_id": "{{dynamic:uuid}}",
-        "actor_id": "{{static:test-user}}",
-        "actor_kind": "{{static:human}}"
+        "persona_id": "{{cache:personas.create.response.data.persona.persona_id}}",
+        "trace_id": "{{var:trace_id}}",
+        "parent_run_id": null,
+        "ttl_seconds": 300,
+        "actor_id": "{{var:operator_id}}",
+        "actor_kind": "human"
       },
       "expectedStatus": 201,
       "expectedResponse": {

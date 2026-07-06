@@ -13,8 +13,7 @@
   "dependsOn": [
     "POST /api/auth/signup-tenant"
   ],
-  "testability": "manual",
-  "skipReason": "Needs a real sub-bearing JWT; verified live (201 + asset_id) with a signup-tenant token. Registers asset + nested component tree + sensors.",
+  "testability": "auto",
   "captureResponse": {
     "assets.create.response.data.asset_id": "data.asset_id"
   },
@@ -26,16 +25,22 @@
       },
       "payload": {
         "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
-        "device_uuid": "{{static:dev_robotA}}",
-        "model": "{{static:Humanoid-X1}}",
-        "display_name": "{{static:Unit-001}}",
+        "bu_id": "{{var:bu_id}}",
+        "device_uuid": "dev_robotA",
+        "model": "Humanoid-X1",
+        "display_name": "Unit-001",
         "components": [
           {
             "kind": "head",
+            "name": "head",
+            "position": { "x": 0, "y": 0, "z": 1 },
             "sensors": [
               {
                 "kind": "camera",
-                "unit": "frame"
+                "unit": "frame",
+                "min_value": 0,
+                "max_value": 60,
+                "sample_rate_hz": 30
               }
             ]
           },
@@ -51,7 +56,10 @@
                     "sensors": [
                       {
                         "kind": "force",
-                        "unit": "N"
+                        "unit": "N",
+                        "min_value": 0,
+                        "max_value": 100,
+                        "sample_rate_hz": 200
                       }
                     ]
                   }
@@ -61,8 +69,7 @@
           }
         ]
       },
-      "expectedStatus": 201,
-      "testability": "manual"
+      "expectedStatus": 201
     }
   ]
 }

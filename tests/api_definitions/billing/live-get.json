@@ -2,6 +2,7 @@
   "name": "GET /api/billing/live - Real-time current-period accrual",
   "endpoint": "/api/billing/live",
   "sdk": "sdk-billing",
+  "sourceFile": "packages/sdk-billing/src/server/routes.ts",
   "method": "GET",
   "requiresAuth": true,
   "expectedStatus": 200,
@@ -10,19 +11,18 @@
   "featureId": "27e7a551-ff73-49df-977a-1c1f56126bbb",
   "epicId": "d83f7b6e-821c-4fe1-96e6-910eca8fbbfc",
   "priority": 40,
-  "testability": "manual",
-  "skipReason": "Reads live meter rollup; covered by integration test with a seeded tenant + catalog.",
+  "testability": "auto",
   "dependsOn": [
-    "POST /api/auth/register"
+    "POST /api/auth/signup-tenant"
   ],
   "testCases": [
     {
       "name": "Read live meter for tenant",
       "headers": {
-        "Authorization": "Bearer {{cache:auth.register.response.data.token}}"
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
       },
       "queryParams": {
-        "tenant_id": "{{static:00000000-0000-0000-0000-000000000001}}"
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}"
       },
       "expectedStatus": 200
     }

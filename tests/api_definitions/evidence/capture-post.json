@@ -1,5 +1,5 @@
 {
-  "name": "POST /api/evidence/capture \u2014 sdk-evidence",
+  "name": "POST /api/evidence/capture — sdk-evidence",
   "endpoint": "/api/evidence/capture",
   "method": "POST",
   "requiresAuth": false,
@@ -7,26 +7,43 @@
   "sdk": "sdk-evidence",
   "sourceFile": "packages/sdk-evidence/src/server/index.ts",
   "_generated": true,
-  "testability": "manual",
-  "skipReason": "Auto-generated from implemented route scan; payload/expectedResponse inferred from the handler and need review before enabling automated execution.",
+  "testability": "auto",
+  "dependsOn": [
+    "POST /api/auth/signup-tenant",
+    "POST /api/personas",
+    "POST /api/devices",
+    "POST /api/devices/:device_uuid/attest",
+    "POST /api/media/:blob_id/ready",
+    "POST /api/consents",
+    "POST /api/encounters"
+  ],
+  "fieldEnums": {
+    "retention_class": ["transient", "operational", "regulated"]
+  },
+  "captureResponse": {
+    "evidence.capture.response.data.capture.capture_id": "data.capture.capture_id",
+    "evidence.capture.response.data.capture.tenant_id": "data.capture.tenant_id",
+    "evidence.capture.response.data.capture.encounter_id": "data.capture.encounter_id",
+    "evidence.capture.response.data.capture.status": "data.capture.status"
+  },
   "testCases": [
     {
-      "name": "Auto-generated from route scan (review payload before enabling)",
+      "name": "Provenance-stamped capture intake for an open encounter",
       "payload": {
-        "tenant_id": "{{static:REPLACE_WITH_ID}}",
-        "encounter_id": "{{static:REPLACE_WITH_ID}}",
-        "capturer_persona_id": "{{static:REPLACE_WITH_ID}}",
-        "device_uuid": "{{static:sample}}",
-        "device_attestation_id": "{{static:REPLACE_WITH_ID}}",
-        "raw_blob_id": "{{static:REPLACE_WITH_ID}}",
-        "blob_checksum": "{{static:sample}}",
-        "captured_at": "{{dynamic:futuredatetime}}",
-        "lat": "{{static:sample}}",
-        "lng": "{{static:sample}}",
-        "altitude": "{{static:sample}}",
-        "imu_signature": "{{static:sample}}",
-        "consent_ref": "{{static:sample}}",
-        "retention_class": "{{static:sample}}",
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "encounter_id": "{{cache:encounters.create.response.data.encounter.encounter_id}}",
+        "capturer_persona_id": "{{cache:personas.create.response.data.persona.persona_id}}",
+        "device_uuid": "{{cache:devices.create.response.data.device.device_uuid}}",
+        "device_attestation_id": "{{cache:devices.attest.response.data.attestation.attestation_id}}",
+        "raw_blob_id": "{{cache:media.ready.response.data.blob.blob_id}}",
+        "blob_checksum": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "captured_at": "{{dynamic:pastdatetime}}",
+        "lat": 37.7749,
+        "lng": -122.4194,
+        "altitude": 12.5,
+        "imu_signature": "aW11LXNpZ25hdHVyZS1zYW1wbGU=",
+        "consent_ref": "{{cache:consents.create.response.data.receipt.receipt_id}}",
+        "retention_class": "regulated",
         "retention_expires_at": "{{dynamic:futuredatetime}}"
       },
       "expectedStatus": 201

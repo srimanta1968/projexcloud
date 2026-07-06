@@ -4,25 +4,51 @@
   "method": "POST",
   "requiresAuth": true,
   "dependsOn": [
-    "POST /api/auth/register"
+    "POST /api/auth/register",
+    "POST /api/auth/signup-tenant",
+    "POST /api/vault/keys",
+    "POST /api/encounters",
+    "POST /api/personas",
+    "POST /api/encounters/:encounter_id/grants"
   ],
   "expectedStatus": 200,
   "sdk": "sdk-engagement",
   "sourceFile": "packages/sdk-engagement/src/server/routes.ts",
   "_generated": true,
-  "testability": "manual",
-  "skipReason": "Auto-generated from implemented route scan; payload/expectedResponse inferred from the handler and need review before enabling automated execution.",
+  "testability": "auto",
+  "statusTransitions": {
+    "entity": "encounter_grant",
+    "field": "status",
+    "flow": ["active", "revoked"],
+    "transitions": [
+      {
+        "from": null,
+        "to": "active",
+        "via": "POST /api/encounters/:encounter_id/grants"
+      },
+      {
+        "from": "active",
+        "to": "revoked",
+        "via": "POST /api/grants/:grant_id/revoke"
+      }
+    ]
+  },
   "testCases": [
     {
-      "name": "Auto-generated from route scan (review payload before enabling)",
+      "name": "Revoke an active encounter grant",
       "headers": {
         "Authorization": "Bearer {{cache:auth.register.response.data.token}}"
       },
       "pathParams": {
-        "grant_id": "{{static:REPLACE_WITH_ID}}"
+        "grant_id": "{{cache:encounters.issue-grant.response.data.grant.grant_id}}"
       },
       "payload": {},
       "expectedStatus": 200
     }
-  ]
+  ],
+  "captureResponse": {
+    "grants.revoke.response.data.grant.grant_id": "data.grant.grant_id",
+    "grants.revoke.response.data.grant.encounter_id": "data.grant.encounter_id",
+    "grants.revoke.response.data.grant.revoked_at": "data.grant.revoked_at"
+  }
 }

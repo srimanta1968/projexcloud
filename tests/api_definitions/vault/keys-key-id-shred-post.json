@@ -4,27 +4,39 @@
   "method": "POST",
   "requiresAuth": true,
   "dependsOn": [
-    "POST /api/auth/register"
+    "POST /api/auth/register",
+    "POST /api/vault/keys"
   ],
-  "expectedStatus": 201,
+  "expectedStatus": 200,
   "sdk": "sdk-vault",
   "sourceFile": "packages/sdk-vault/src/server/routes.ts",
   "_generated": true,
-  "testability": "manual",
-  "skipReason": "Auto-generated from implemented route scan; payload/expectedResponse inferred from the handler and need review before enabling automated execution.",
+  "testability": "auto",
   "testCases": [
     {
-      "name": "Auto-generated from route scan (review payload before enabling)",
+      "name": "Cryptographic-shred an issued key",
       "headers": {
         "Authorization": "Bearer {{cache:auth.register.response.data.token}}"
       },
       "pathParams": {
-        "key_id": "{{static:REPLACE_WITH_ID}}"
+        "key_id": "{{cache:vault.keys.create.response.data.key_id}}"
       },
       "payload": {
-        "reason": "{{static:sample}}"
+        "reason": "compliance-shred"
       },
-      "expectedStatus": 201
+      "expectedStatus": 200
     }
-  ]
+  ],
+  "statusTransitions": {
+    "entity": "vault.key",
+    "field": "state",
+    "flow": ["issued", "active", "rotated", "shredded"],
+    "transitions": [
+      { "from": "active", "to": "shredded", "via": "POST /api/vault/keys/:key_id/shred" },
+      { "from": "rotated", "to": "shredded", "via": "POST /api/vault/keys/:key_id/shred" }
+    ]
+  },
+  "captureResponse": {
+    "vault.shred.response.data.key_id": "data.key_id"
+  }
 }

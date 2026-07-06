@@ -4,31 +4,51 @@
   "method": "POST",
   "requiresAuth": true,
   "dependsOn": [
-    "POST /api/auth/register"
+    "POST /api/auth/signup-tenant"
   ],
   "expectedStatus": 201,
   "sdk": "sdk-audit",
-  "sourceFile": "packages/sdk-audit/src/server/routes.ts",
+  "sourceFile": "packages/sdk-audit/src/server/handlers/exportController.ts",
   "_generated": true,
-  "testability": "manual",
-  "skipReason": "Self-audit export: with inline=true the handler materializes the artifact synchronously (signs + writes to object store), which needs the export signing key / S3 wiring. Async path (inline omitted) returns 202.",
+  "testability": "auto",
   "testCases": [
     {
       "name": "Request an inline JSONL export of the tenant audit chain",
       "headers": {
-        "Authorization": "Bearer {{cache:auth.register.response.data.token}}"
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
       },
       "payload": {
-        "tenant_id": "{{static:00000000-0000-0000-0000-000000000001}}",
-        "format": "{{static:jsonl}}",
-        "range_start": "{{static:2024-01-01T00:00:00Z}}",
-        "range_end": "{{static:2026-12-31T23:59:59Z}}",
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "format": "jsonl",
+        "range_start": "{{dynamic:pastdatetime}}",
+        "range_end": "{{dynamic:futuredatetime}}",
         "inline": true
       },
       "expectedStatus": 201
     }
   ],
-  "fieldOptions": {
+  "fieldEnums": {
     "format": ["pdf", "jsonl"]
+  },
+  "statusTransitions": {
+    "entity": "export_request",
+    "field": "status",
+    "flow": ["pending", "running", "ready", "failed"],
+    "transitions": [
+      { "from": "pending", "to": "running", "via": "POST /api/audit/export" },
+      { "from": "running", "to": "ready", "via": "POST /api/audit/export" },
+      { "from": "running", "to": "failed", "via": "POST /api/audit/export" }
+    ]
+  },
+  "expectedResponse": {
+    "data": {
+      "request_id": "string",
+      "status": "string",
+      "artifact_s3_key": "string",
+      "signature_hex": "string"
+    }
+  },
+  "captureResponse": {
+    "audit.export.response.data.request_id": "data.request_id"
   }
 }

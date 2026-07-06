@@ -1,31 +1,49 @@
 {
-  "name": "PUT /admin/meter/pricing-catalogs/:catalog_id/rates/:sku \u2014 api-gateway",
+  "name": "PUT /admin/meter/pricing-catalogs/:catalog_id/rates/:sku — api-gateway",
   "endpoint": "/admin/meter/pricing-catalogs/:catalog_id/rates/:sku",
   "method": "PUT",
   "requiresAuth": false,
-  "expectedStatus": 201,
+  "expectedStatus": 200,
   "sdk": "api-gateway",
   "sourceFile": "services/api-gateway/src/app.ts",
   "_generated": true,
-  "testability": "manual",
-  "skipReason": "Auto-generated from implemented route scan; payload/expectedResponse inferred from the handler and need review before enabling automated execution.",
+  "testability": "auto",
+  "dependsOn": ["POST /admin/meter/pricing-catalogs"],
+  "fieldEnums": {
+    "mode": [
+      "flat_per_call",
+      "tiered_per_call",
+      "passthrough_plus_margin",
+      "per_unit",
+      "bundled_subscription",
+      "free_internal"
+    ]
+  },
+  "captureResponse": {
+    "meter-pricing-rates.upsert.response.data.rate_id": "rate_id"
+  },
   "testCases": [
     {
-      "name": "Auto-generated from route scan (review payload before enabling)",
+      "name": "Upsert a rate row for a SKU on a catalog",
+      "headers": {
+        "x-admin-ops-token": "${ADMIN_OPS_TOKEN}"
+      },
       "pathParams": {
-        "catalog_id": "{{static:REPLACE_WITH_ID}}",
-        "sku": "{{static:REPLACE_WITH_ID}}"
+        "catalog_id": "{{cache:meter-pricing-catalogs.create.response.data.catalog_id}}",
+        "sku": "ai.gateway.tokens.input"
       },
       "payload": {
-        "unit": "{{static:sample}}",
-        "mode": "{{static:sample}}",
-        "price": "{{static:sample}}",
-        "margin_pct": "{{static:sample}}",
-        "tiers": "{{static:sample}}",
-        "operator_id": "{{static:REPLACE_WITH_ID}}",
-        "status": "{{static:sample}}"
+        "unit": "token",
+        "mode": "per_unit",
+        "price": 0.0025,
+        "margin_pct": 15.0,
+        "tiers": [
+          { "up_to": 100000, "unit_price": 0.0025 },
+          { "up_to": null, "unit_price": 0.002 }
+        ],
+        "operator_id": "{{var:operator_id}}"
       },
-      "expectedStatus": 201
+      "expectedStatus": 200
     }
   ]
 }

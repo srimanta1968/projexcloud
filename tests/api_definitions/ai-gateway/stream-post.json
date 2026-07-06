@@ -1,19 +1,60 @@
 {
   "endpoint": "/api/ai-gateway/stream",
   "sdk": "sdk-ai-gateway",
+  "sourceFile": "packages/sdk-ai-gateway/src/server/handlers/completionController.ts",
   "method": "POST",
   "taskId": "33b1ff5b-534c-4fd3-bc2b-b2ac3e0e7d33",
   "description": "Streaming LLM completion (SSE). Yields StreamChunk frames as data: <json>\\n\\n; closes with data: [DONE]\\n\\n. Persists ai_gateway.completion on stream close.",
   "requiresAuth": true,
   "priority": 310,
   "dependsOn": [
-    "POST /api/auth/register"
+    "POST /api/auth/signup-tenant",
+    "POST /api/personas",
+    "POST /api/agent-runtime/agents",
+    "POST /api/agent-runtime/runs"
   ],
   "testability": "manual",
-  "skipReason": "SSE response not validatable by the JSON-only API runner; exercised by a manual or specialised streaming test client.",
+  "skipReason": "Response is a text/event-stream (SSE) produced by a live third-party model adapter (real Anthropic/OpenAI stream). The JSON-only API runner cannot consume SSE frames nor supply a real provider adapter, so this is exercised by a specialised streaming integration client. Chain is wired for that harness.",
+  "fieldEnums": {
+    "request.provider_hint": [
+      "anthropic",
+      "openai",
+      "gemini",
+      "bedrock",
+      "local-llama",
+      "local-mistral"
+    ]
+  },
   "testCases": [
     {
-      "name": "Manual: SSE stream produces chunks and final completion row",
+      "name": "SSE stream produces chunks and final completion row",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "payload": {
+        "request": {
+          "model": "claude-opus-4-7",
+          "prompt": "Stream a short greeting.",
+          "max_tokens": 100,
+          "temperature": 0.7,
+          "top_p": 1,
+          "stop_sequences": [],
+          "task_tag": "test",
+          "provider_hint": "anthropic",
+          "tools": [],
+          "stream": true
+        },
+        "context": {
+          "agent_id": "{{cache:agent-runtime-agents.create.response.data.agent_id}}",
+          "run_id": "{{cache:agent-runtime-runs.create.response.data.run_id}}",
+          "acting_persona_id": "{{cache:personas.create.response.data.persona.persona_id}}",
+          "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+          "trace_id": "{{dynamic:uuid}}",
+          "span_id": "{{dynamic:uuid}}",
+          "ttl_deadline": "{{dynamic:futuredatetime}}",
+          "agent_chain": []
+        }
+      },
       "expectedStatus": 200,
       "expectedResponse": {
         "success": true

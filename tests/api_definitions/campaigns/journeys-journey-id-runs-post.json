@@ -5,6 +5,7 @@
   "requiresAuth": true,
   "dependsOn": [
     "POST /api/auth/signup-tenant",
+    "POST /api/campaigns",
     "POST /api/campaigns/:campaign_id/journeys",
     "POST /api/personas"
   ],
@@ -12,10 +13,19 @@
   "sdk": "sdk-campaign",
   "sourceFile": "packages/sdk-campaign/src/server/routes.ts",
   "_generated": true,
-  "testability": "manual",
-  "skipReason": "Requires subject_persona_id (best-effort from the persona create, itself manual / needs a membership_id) plus a journey_id from the journey create. Handler requires subject_persona_id; inserts campaign.journey_run and returns 201.",
+  "testability": "auto",
+  "statusTransitions": {
+    "entity": "campaign.journey_run",
+    "field": "state",
+    "flow": ["active", "paused", "completed", "exited"],
+    "transitions": [
+      { "from": "(none)", "to": "active", "via": "POST /api/campaigns/journeys/:journey_id/runs" },
+      { "from": "active", "to": "completed", "via": "POST /api/campaigns/runs/:run_id/advance" }
+    ]
+  },
   "captureResponse": {
-    "campaigns.run.create.response.data.run.run_id": "data.run.run_id"
+    "campaigns.run.create.response.data.run.run_id": "data.run.run_id",
+    "campaigns.run.create.response.data.run.state": "data.run.state"
   },
   "testCases": [
     {
@@ -31,13 +41,5 @@
       },
       "expectedStatus": 201
     }
-  ],
-  "serverFieldOptions": {
-    "state": [
-      "active",
-      "paused",
-      "completed",
-      "exited"
-    ]
-  }
+  ]
 }

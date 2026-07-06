@@ -2,6 +2,7 @@
   "name": "GET /api/billing/showback - Per-(app, BU, persona-kind, encounter) splits — THE wedge",
   "endpoint": "/api/billing/showback",
   "sdk": "sdk-billing",
+  "sourceFile": "packages/sdk-billing/src/server/routes.ts",
   "method": "GET",
   "requiresAuth": true,
   "expectedStatus": 200,
@@ -10,23 +11,25 @@
   "featureId": "27e7a551-ff73-49df-977a-1c1f56126bbb",
   "epicId": "d83f7b6e-821c-4fe1-96e6-910eca8fbbfc",
   "priority": 60,
-  "testability": "manual",
-  "skipReason": "Aggregates billing.line_item; requires a finalized invoice in period; covered by integration test.",
+  "testability": "auto",
   "dependsOn": [
-    "POST /api/auth/register",
+    "POST /api/auth/signup-tenant",
+    "POST /admin/meter/pricing-catalogs",
+    "PUT /admin/meter/pricing-catalogs/:catalog_id/rates/:sku",
+    "PATCH /admin/meter/pricing-catalogs/:catalog_id/status",
     "POST /api/billing/invoices/generate"
   ],
   "testCases": [
     {
       "name": "Split by app_id + bu_id for Jan 2026",
       "headers": {
-        "Authorization": "Bearer {{cache:auth.register.response.data.token}}"
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
       },
       "queryParams": {
-        "tenant_id": "{{static:00000000-0000-0000-0000-000000000001}}",
-        "period_start": "{{static:2026-01-01}}",
-        "period_end": "{{static:2026-01-31}}",
-        "group_by": "{{static:app_id,bu_id}}"
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "period_start": "2026-01-01",
+        "period_end": "2026-01-31",
+        "group_by": "app_id,bu_id"
       },
       "expectedStatus": 200
     }
@@ -36,5 +39,8 @@
       "rows": "array",
       "total_amount": "number"
     }
+  },
+  "fieldEnums": {
+    "group_by": ["app_id", "bu_id", "persona_kind", "encounter_id", "sku", "actor_kind"]
   }
 }

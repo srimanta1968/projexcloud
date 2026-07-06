@@ -8,8 +8,28 @@
   "priority": 120,
   "dependsOn": [
     "POST /api/auth/register",
+    "POST /api/agent-runtime/agents",
+    "POST /api/agent-runtime/runs",
     "POST /api/agent-runtime/tokens"
   ],
+  "fieldEnums": {
+    "actor_kind": ["human", "service", "agent"]
+  },
+  "statusTransitions": {
+    "entity": "agents.capability_token",
+    "field": "status",
+    "flow": ["active", "revoked"],
+    "transitions": [
+      {
+        "from": "active",
+        "to": "revoked",
+        "via": "POST /api/agent-runtime/tokens/:token_id/revoke"
+      }
+    ]
+  },
+  "captureResponse": {
+    "agent-runtime-tokens.revoke.response.data.token_id": "data.token_id"
+  },
   "testCases": [
     {
       "name": "Revoke a capability token",
@@ -20,8 +40,9 @@
         "token_id": "{{cache:agent-runtime-tokens.mint.response.data.token_id}}"
       },
       "payload": {
-        "reason": "{{static:Operator-initiated revoke for testing}}",
-        "actor_kind": "{{static:human}}"
+        "reason": "Operator-initiated revoke for testing",
+        "actor_id": "{{var:operator_id}}",
+        "actor_kind": "human"
       },
       "expectedStatus": 200,
       "expectedResponse": {

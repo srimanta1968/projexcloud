@@ -1,5 +1,5 @@
 {
-  "name": "PATCH /admin/meter/pricing-catalogs/:catalog_id/status \u2014 api-gateway",
+  "name": "PATCH /admin/meter/pricing-catalogs/:catalog_id/status — api-gateway",
   "endpoint": "/admin/meter/pricing-catalogs/:catalog_id/status",
   "method": "PATCH",
   "requiresAuth": false,
@@ -7,17 +7,32 @@
   "sdk": "api-gateway",
   "sourceFile": "services/api-gateway/src/app.ts",
   "_generated": true,
-  "testability": "manual",
-  "skipReason": "Auto-generated from implemented route scan; payload/expectedResponse inferred from the handler and need review before enabling automated execution.",
+  "testability": "auto",
+  "dependsOn": ["POST /admin/meter/pricing-catalogs"],
+  "fieldEnums": {
+    "status": ["draft", "active", "retired"]
+  },
+  "statusTransitions": {
+    "entity": "pricing_catalog",
+    "field": "status",
+    "flow": ["draft", "active", "retired"],
+    "transitions": [
+      { "from": "draft", "to": "active", "via": "PATCH /admin/meter/pricing-catalogs/:catalog_id/status" },
+      { "from": "active", "to": "retired", "via": "PATCH /admin/meter/pricing-catalogs/:catalog_id/status" }
+    ]
+  },
   "testCases": [
     {
-      "name": "Auto-generated from route scan (review payload before enabling)",
+      "name": "Promote a draft catalog to active",
+      "headers": {
+        "x-admin-ops-token": "${ADMIN_OPS_TOKEN}"
+      },
       "pathParams": {
-        "catalog_id": "{{static:REPLACE_WITH_ID}}"
+        "catalog_id": "{{cache:meter-pricing-catalogs.create.response.data.catalog_id}}"
       },
       "payload": {
-        "status": "{{static:sample}}",
-        "operator_id": "{{static:REPLACE_WITH_ID}}"
+        "status": "active",
+        "operator_id": "{{var:operator_id}}"
       },
       "expectedStatus": 200
     }

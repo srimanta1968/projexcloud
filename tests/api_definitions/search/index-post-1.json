@@ -1,30 +1,49 @@
 {
-  "name": "POST /api/search — sdk-search",
+  "name": "POST /api/search - ABAC-filtered DSL/free-text search",
   "endpoint": "/api/search",
   "method": "POST",
   "requiresAuth": true,
   "dependsOn": [
-    "POST /api/auth/register",
+    "POST /api/auth/signup-tenant",
     "POST /api/search/index"
   ],
   "expectedStatus": 200,
   "sdk": "sdk-search",
   "sourceFile": "packages/sdk-search/src/server/routes.ts",
   "_generated": true,
-  "testability": "manual",
-  "skipReason": "ABAC free-text/DSL query against OpenSearch; requires a real OpenSearch cluster (or in-process synthetic client) and a registered index for the entity_kind (POST /api/search/index). tenant_id and effective_scopes are server-injected from the JWT, never the body. Required body field (entity_kind) filled.",
+  "testability": "auto",
   "testCases": [
     {
       "name": "Query encounter entities",
       "headers": {
-        "Authorization": "Bearer {{cache:auth.register.response.data.token}}"
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
       },
       "payload": {
-        "entity_kind": "{{static:encounter}}",
-        "q": "{{dynamic:word}}",
-        "size": 10
+        "entity_kind": "encounter",
+        "q": "open",
+        "dsl": {
+          "query": {
+            "term": {
+              "status": "open"
+            }
+          }
+        },
+        "size": 10,
+        "from": 0
       },
       "expectedStatus": 200
     }
-  ]
+  ],
+  "expectedResponse": {
+    "data": {
+      "hits": "array",
+      "total": "number",
+      "took_ms": "number",
+      "index_used": "string"
+    }
+  },
+  "captureResponse": {
+    "search.query.response.data.index_used": "data.index_used",
+    "search.query.response.data.total": "data.total"
+  }
 }

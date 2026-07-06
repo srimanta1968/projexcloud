@@ -2,6 +2,7 @@
   "name": "POST /api/approvals/steps/:step_id/decide - Approve or reject a step",
   "endpoint": "/api/approvals/steps/:step_id/decide",
   "sdk": "sdk-approval",
+  "sourceFile": "packages/sdk-approval/src/server/routes.ts",
   "method": "POST",
   "requiresAuth": true,
   "expectedStatus": 200,
@@ -10,25 +11,25 @@
   "featureId": "b273628f-6bee-4ad4-b5c0-9a9cb38da247",
   "epicId": "d83f7b6e-821c-4fe1-96e6-910eca8fbbfc",
   "priority": 40,
-  "testability": "manual",
-  "skipReason": "Depends on a pending step assigned to the calling persona; covered by integration test.",
+  "testability": "auto",
   "dependsOn": [
-    "POST /api/auth/register",
+    "POST /api/auth/signup-tenant",
+    "POST /api/approvals/routes",
     "POST /api/approvals/requests"
   ],
   "testCases": [
     {
       "name": "Approve manager step",
       "headers": {
-        "Authorization": "Bearer {{cache:auth.register.response.data.token}}"
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
       },
       "pathParams": {
         "step_id": "{{cache:approvals.requests.create.response.data.pending_steps.0.step_id}}"
       },
       "payload": {
-        "decision": "{{static:approve}}",
-        "acting_persona_id": "{{cache:auth.register.response.data.userId}}",
-        "reason": "{{static:LGTM after review}}"
+        "decision": "approve",
+        "acting_persona_id": "{{cache:auth.signup-tenant.response.data.userId}}",
+        "reason": "LGTM after review"
       },
       "expectedStatus": 200
     }
@@ -36,11 +37,29 @@
   "expectedResponse": {
     "data": {
       "step": {
+        "step_id": "string",
         "decision": "string"
       },
       "request": {
         "status": "string"
-      }
+      },
+      "next_steps": "array"
     }
+  },
+  "fieldEnums": {
+    "decision": ["approve", "reject"]
+  },
+  "statusTransitions": {
+    "entity": "approval.request",
+    "field": "status",
+    "flow": ["pending", "approved", "rejected"],
+    "transitions": [
+      { "from": "pending", "to": "approved", "via": "POST /api/approvals/steps/:step_id/decide" },
+      { "from": "pending", "to": "rejected", "via": "POST /api/approvals/steps/:step_id/decide" }
+    ]
+  },
+  "captureResponse": {
+    "approvals.steps.decide.response.data.step.step_id": "data.step.step_id",
+    "approvals.steps.decide.response.data.request.status": "data.request.status"
   }
 }

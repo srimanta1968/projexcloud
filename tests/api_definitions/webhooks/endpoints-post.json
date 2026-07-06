@@ -5,27 +5,31 @@
   "method": "POST",
   "requiresAuth": true,
   "expectedStatus": 201,
+  "sourceFile": "packages/sdk-webhook/src/server/routes.ts",
   "taskId": "c9735690-fae6-4db6-8dda-cfadae86876a",
   "sprintId": "8ef1d09e-dd8e-4daf-8d03-54dcd9f812f8",
   "featureId": "edce9080-4593-4e84-a4c6-54309b62e01e",
   "epicId": "d83f7b6e-821c-4fe1-96e6-910eca8fbbfc",
   "priority": 20,
-  "testability": "manual",
-  "skipReason": "Requires a vault key_id (signing_key_ref) to exist; covered by integration test that issues a vault key first.",
+  "testability": "auto",
   "dependsOn": [
-    "POST /api/auth/register"
+    "POST /api/auth/signup-tenant"
   ],
+  "fieldEnums": {
+    "signing_algo": ["hmac-sha256", "hmac-sha512"]
+  },
   "testCases": [
     {
       "name": "Register HTTPS endpoint",
       "headers": {
-        "Authorization": "Bearer {{cache:auth.register.response.data.token}}"
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
       },
       "payload": {
-        "tenant_id": "{{static:00000000-0000-0000-0000-000000000001}}",
-        "url": "{{static:https://webhook.example.com/projex}}",
-        "signing_key_ref": "{{static:vault-key-webhook-001}}",
-        "signing_algo": "{{static:hmac-sha256}}"
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "url": "https://webhook.example.com/projex",
+        "signing_key_ref": "{{var:signing_key_ref}}",
+        "signing_algo": "hmac-sha256",
+        "mtls_client_cert_ref": "{{var:mtls_client_cert_ref}}"
       },
       "expectedStatus": 201
     }
@@ -34,11 +38,13 @@
     "data": {
       "endpoint": {
         "endpoint_id": "string",
+        "tenant_id": "string",
         "status": "string"
       }
     }
   },
   "captureResponse": {
-    "webhooks.endpoints.create.response.data.endpoint.endpoint_id": "data.endpoint.endpoint_id"
+    "webhooks.register-endpoint.response.data.endpoint.endpoint_id": "data.endpoint.endpoint_id",
+    "webhooks.register-endpoint.response.data.endpoint.tenant_id": "data.endpoint.tenant_id"
   }
 }

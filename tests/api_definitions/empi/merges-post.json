@@ -2,6 +2,7 @@
   "name": "POST /api/empi/merges - reversible merge of two persons",
   "endpoint": "/api/empi/merges",
   "sdk": "sdk-identity-resolver",
+  "sourceFile": "packages/sdk-identity-resolver/src/server/routes.ts",
   "method": "POST",
   "requiresAuth": true,
   "taskId": "f01a9d81-9d1c-46e2-95f2-7dc193e70aa5",
@@ -20,8 +21,9 @@
       },
       "payload": {
         "surviving_person_id": "{{cache:auth.register.response.data.userId}}",
-        "merged_person_id": "{{dynamic:uuid}}",
-        "reason": "{{static:Duplicate patient records confirmed by steward}}"
+        "merged_person_id": "{{var:person_id}}",
+        "link_id": "{{var:link_id}}",
+        "reason": "Duplicate patient records confirmed by steward"
       },
       "expectedStatus": 201
     }
@@ -33,6 +35,14 @@
         "kind": "string"
       }
     }
+  },
+  "statusTransitions": {
+    "entity": "candidate_link",
+    "field": "status",
+    "flow": ["open", "merged", "rejected", "superseded"],
+    "transitions": [
+      { "from": "open", "to": "merged", "via": "POST /api/empi/merges" }
+    ]
   },
   "captureResponse": {
     "empi.merges.create.response.data.merge.merge_id": "data.merge.merge_id"

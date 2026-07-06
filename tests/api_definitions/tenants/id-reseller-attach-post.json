@@ -10,21 +10,19 @@
   "featureId": "d3f526f1-243f-4b31-b538-aeffeddca534",
   "epicId": "00996d23-f667-4a82-9285-7728ba357e7b",
   "priority": 50,
-  "testability": "manual",
-  "skipReason": "Depends on both tenant + reseller seed rows; covered by integration test.",
+  "testability": "auto",
   "dependsOn": [
-    "POST /api/auth/register",
-    "POST /api/tenants",
+    "POST /api/auth/signup-tenant",
     "POST /api/resellers"
   ],
   "testCases": [
     {
       "name": "Attach a reseller to a tenant with custom commission",
       "headers": {
-        "Authorization": "Bearer {{cache:auth.register.response.data.token}}"
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
       },
       "pathParams": {
-        "tenant_id": "{{cache:tenants.create.response.data.tenant_id}}"
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}"
       },
       "payload": {
         "reseller_id": "{{cache:resellers.create.response.data.reseller.reseller_id}}",
@@ -34,5 +32,9 @@
       },
       "expectedStatus": 200
     }
-  ]
+  ],
+  "captureResponse": {
+    "tenants.attach-reseller.response.data.tenant_id": "data.tenant_id",
+    "tenants.attach-reseller.response.data.reseller_id": "data.reseller_id"
+  }
 }

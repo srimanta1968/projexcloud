@@ -1,29 +1,40 @@
 {
-  "name": "POST /admin/lineage/backfill \u2014 api-gateway",
+  "name": "POST /admin/lineage/backfill — api-gateway",
   "endpoint": "/admin/lineage/backfill",
   "method": "POST",
   "requiresAuth": false,
-  "expectedStatus": 201,
+  "expectedStatus": 200,
   "sdk": "api-gateway",
   "sourceFile": "services/api-gateway/src/app.ts",
   "_generated": true,
-  "testability": "manual",
-  "skipReason": "Auto-generated from implemented route scan; payload/expectedResponse inferred from the handler and need review before enabling automated execution.",
+  "testability": "auto",
+  "fieldEnums": {
+    "event_type": [
+      "parsing.field.extracted.v1",
+      "recommendation.suggestion.generated.v1",
+      "semantic.intent.planned.v1",
+      "ai-gateway.complete.v1"
+    ]
+  },
+  "captureResponse": {
+    "lineage-backfill.run.response.data.rows_emitted": "rows_emitted",
+    "lineage-backfill.run.response.data.rows_examined": "rows_examined"
+  },
   "testCases": [
     {
-      "name": "Auto-generated from route scan (review payload before enabling)",
+      "name": "Dry-run backfill of lineage edges for one event type",
       "headers": {
-        "x-admin-ops-token": "{{static:ADMIN_OPS_TOKEN}}"
+        "x-admin-ops-token": "${ADMIN_OPS_TOKEN}"
       },
       "payload": {
-        "pool_index": "{{static:sample}}",
-        "event_type": "{{static:sample}}",
-        "batch_size": "{{static:sample}}",
-        "dry_run": "{{static:sample}}",
-        "from": "{{static:sample}}",
-        "to": "{{static:sample}}"
+        "pool_index": "{{var:pool_index}}",
+        "event_type": "ai-gateway.complete.v1",
+        "batch_size": 500,
+        "dry_run": true,
+        "from": "{{dynamic:pastdatetime}}",
+        "to": "{{dynamic:futuredatetime}}"
       },
-      "expectedStatus": 201
+      "expectedStatus": 200
     }
   ]
 }

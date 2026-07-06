@@ -4,28 +4,47 @@
   "method": "POST",
   "requiresAuth": true,
   "dependsOn": [
-    "POST /api/auth/register",
+    "POST /api/auth/signup-tenant",
     "POST /api/connectors/installs"
   ],
   "expectedStatus": 200,
   "sdk": "sdk-connectors",
   "sourceFile": "packages/sdk-connectors/src/server/routes.ts",
-  "_generated": true,
-  "testability": "manual",
-  "skipReason": "install_id FK comes from POST /api/connectors/installs which is itself manual (OAuth vendor creds). Body actor_id is optional (defaults to 'unknown').",
+  "testability": "auto",
+  "statusTransitions": {
+    "entity": "connectors.install",
+    "field": "status",
+    "flow": [
+      "pending",
+      "active",
+      "paused",
+      "uninstalled"
+    ],
+    "transitions": [
+      {
+        "from": "active",
+        "to": "uninstalled",
+        "via": "POST /api/connectors/installs/:install_id/uninstall"
+      }
+    ]
+  },
   "testCases": [
     {
       "name": "Uninstall a connector install",
       "headers": {
-        "Authorization": "Bearer {{cache:auth.register.response.data.token}}"
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
       },
       "pathParams": {
-        "install_id": "{{cache:connectors.installs.create.response.data.install.install_id}}"
+        "install_id": "{{cache:connectors.create.response.data.install.install_id}}"
       },
       "payload": {
-        "actor_id": "{{cache:auth.register.response.data.userId}}"
+        "actor_id": "{{cache:auth.signup-tenant.response.data.userId}}"
       },
       "expectedStatus": 200
     }
-  ]
+  ],
+  "captureResponse": {
+    "connectors.uninstall.response.data.install.install_id": "data.install.install_id",
+    "connectors.uninstall.response.data.install.status": "data.install.status"
+  }
 }

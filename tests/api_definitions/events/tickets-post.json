@@ -5,15 +5,19 @@
   "requiresAuth": true,
   "dependsOn": [
     "POST /api/auth/register",
+    "POST /api/auth/signup-tenant",
+    "POST /api/vault/keys",
+    "POST /api/encounters",
     "POST /api/events/sessions",
+    "POST /api/app-identities",
+    "POST /api/memberships",
     "POST /api/personas"
   ],
   "expectedStatus": 201,
   "sdk": "sdk-event",
   "sourceFile": "packages/sdk-event/src/server/routes.ts",
   "_generated": true,
-  "testability": "manual",
-  "skipReason": "Requires a scheduled/live session with capacity and a holder persona; issueTicket reserves capacity and mints a qr_token.",
+  "testability": "auto",
   "testCases": [
     {
       "name": "Issue a ticket for a session",
@@ -27,5 +31,10 @@
       },
       "expectedStatus": 201
     }
-  ]
+  ],
+  "captureResponse": {
+    "events.tickets.create.response.data.ticket.ticket_id": "data.ticket.ticket_id",
+    "events.tickets.create.response.data.ticket.qr_token": "data.ticket.qr_token",
+    "events.tickets.create.response.data.ticket.status": "data.ticket.status"
+  }
 }

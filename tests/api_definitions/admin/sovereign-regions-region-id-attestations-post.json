@@ -1,5 +1,5 @@
 {
-  "name": "POST /admin/sovereign/regions/:region_id/attestations \u2014 api-gateway",
+  "name": "POST /admin/sovereign/regions/:region_id/attestations — api-gateway",
   "endpoint": "/admin/sovereign/regions/:region_id/attestations",
   "method": "POST",
   "requiresAuth": false,
@@ -7,22 +7,39 @@
   "sdk": "api-gateway",
   "sourceFile": "services/api-gateway/src/app.ts",
   "_generated": true,
-  "testability": "manual",
-  "skipReason": "Auto-generated from implemented route scan; payload/expectedResponse inferred from the handler and need review before enabling automated execution.",
+  "testability": "auto",
+  "fieldEnums": {
+    "regime": ["fedramp-high", "il5", "pipl", "eu-sovereign", "uae-trd"]
+  },
+  "statusTransitions": {
+    "entity": "sovereign.region_config",
+    "field": "attestation_state",
+    "flow": ["in-progress", "attested", "expired"],
+    "transitions": [
+      { "from": "in-progress", "to": "attested", "via": "POST /admin/sovereign/regions/:region_id/attestations" }
+    ]
+  },
+  "captureResponse": {
+    "sovereign.attest.response.data.attestation_id": "data.attestation_id"
+  },
+  "dependsOn": ["POST /admin/sovereign/regions"],
   "testCases": [
     {
-      "name": "Auto-generated from route scan (review payload before enabling)",
+      "name": "Record a regime attestation for a sovereign region",
       "pathParams": {
-        "region_id": "{{static:REPLACE_WITH_ID}}"
+        "region_id": "{{cache:sovereign.register.response.data.region_id}}"
       },
       "payload": {
-        "regime": "{{static:sample}}",
-        "auditor_id": "{{static:REPLACE_WITH_ID}}",
-        "issued_at": "{{dynamic:futuredatetime}}",
+        "regime": "eu-sovereign",
+        "auditor_id": "{{var:auditor_id}}",
+        "issued_at": "{{dynamic:pastdatetime}}",
         "expires_at": "{{dynamic:futuredatetime}}",
-        "artifact_ref": "{{static:sample}}"
+        "artifact_ref": "s3://sovereign-attestations/eu-sov-fra-2026Q3.pdf"
       },
-      "expectedStatus": 201
+      "expectedStatus": 201,
+      "headers": {
+        "x-admin-ops-token": "${ADMIN_OPS_TOKEN}"
+      }
     }
   ]
 }

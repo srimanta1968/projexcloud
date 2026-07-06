@@ -7,17 +7,25 @@
   "sdk": "api-gateway",
   "sourceFile": "services/api-gateway/src/app.ts",
   "_generated": true,
-  "testability": "manual",
-  "skipReason": "Gated by the ADMIN_OPS_TOKEN (x-admin-ops-token header). Reads no body; release_id is a path FK to a previously-recorded sovereign bundle release.",
+  "testability": "auto",
+  "captureResponse": {
+    "sovereign.mark-applied.response.data.release_id": "data.release_id",
+    "sovereign.mark-applied.response.data.applied_at": "data.applied_at"
+  },
+  "dependsOn": [
+    "POST /admin/sovereign/regions",
+    "POST /admin/sovereign/regions/:region_id/bundles"
+  ],
   "testCases": [
     {
-      "name": "Mark a sovereign bundle release as applied",
+      "name": "Mark a previously-shipped sovereign bundle release as applied",
       "headers": {
-        "x-admin-ops-token": "{{static:ADMIN_OPS_TOKEN}}"
+        "x-admin-ops-token": "${ADMIN_OPS_TOKEN}"
       },
       "pathParams": {
-        "release_id": "{{static:REPLACE_WITH_RELEASE_ID}}"
+        "release_id": "{{cache:sovereign.ship-bundle.response.data.release_id}}"
       },
+      "payload": {},
       "expectedStatus": 200
     }
   ]

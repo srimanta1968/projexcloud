@@ -1,40 +1,80 @@
 {
+  "name": "POST /api/mcp/server-registrations — sdk-mcp-bridge",
   "endpoint": "/api/mcp/server-registrations",
   "sdk": "sdk-mcp-bridge",
+  "sourceFile": "packages/sdk-mcp-bridge/src/server/handlers/mcpController.ts",
   "method": "POST",
   "taskId": "6f8b9bec-5c04-43eb-b5ab-c21ad56e5fa9",
   "description": "Register an external MCP server. Opens transport, calls tools/list to auto-register tools, emits mcp.server.registered.v1. Probe failure rolls back to status='disabled'. FR-MCP-1/2/7.",
   "requiresAuth": true,
   "priority": 400,
+  "expectedStatus": 201,
+  "testability": "auto",
   "dependsOn": [
-    "POST /api/auth/register"
+    "POST /api/auth/signup-tenant"
   ],
-  "testability": "manual",
-  "skipReason": "Requires a reachable MCP server fixture (synthetic Slack/Snowflake/Jira from TK-3306); the handler opens a live transport and calls tools/list during registration, so it cannot run without the fixture. Exercised by AC-12 e2e test. Required body fields filled.",
-  "fieldOptions": {
+  "fieldEnums": {
     "transport": [
       "http",
       "sse",
       "stdio"
     ]
   },
+  "statusTransitions": {
+    "entity": "mcp.server_registration",
+    "field": "status",
+    "flow": [
+      "active",
+      "degraded",
+      "disabled"
+    ],
+    "transitions": [
+      {
+        "from": "",
+        "to": "active",
+        "via": "POST /api/mcp/server-registrations"
+      },
+      {
+        "from": "active",
+        "to": "disabled",
+        "via": "POST /api/mcp/server-registrations/:id/disable"
+      }
+    ]
+  },
   "testCases": [
     {
-      "name": "Manual: register synthetic Slack-MCP fixture",
+      "name": "Register a synthetic Slack MCP server",
       "headers": {
-        "Authorization": "Bearer {{cache:auth.register.response.data.token}}"
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
       },
       "payload": {
-        "tenant_id": "{{cache:auth.register.response.data.tenant_id}}",
-        "display_name": "{{dynamic:company}}",
-        "transport": "{{static:http}}",
-        "endpoint_url": "{{static:http://localhost:9401/mcp}}",
-        "credential_envelope_b64": "{{static:eyJ0b2tlbiI6InRlc3QtY3JlZCJ9}}"
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "display_name": "Slack MCP",
+        "transport": "http",
+        "endpoint_url": "http://localhost:9401/mcp",
+        "credential_envelope_b64": "{{static:eyJ0b2tlbiI6InRlc3QtY3JlZCJ9}}",
+        "allowed_agent_ids": []
       },
-      "expectedStatus": 201,
-      "expectedResponse": {
-        "success": true
-      }
+      "expectedStatus": 201
     }
-  ]
+  ],
+  "expectedResponse": {
+    "success": true,
+    "data": {
+      "server": {
+        "registration_id": "string",
+        "tenant_id": "string",
+        "display_name": "string",
+        "transport": "string",
+        "endpoint_url": "string",
+        "status": "string"
+      },
+      "tools": "array"
+    }
+  },
+  "captureResponse": {
+    "mcp-server-registrations.create.response.data.server.registration_id": "data.server.registration_id",
+    "mcp-server-registrations.create.response.data.server.tenant_id": "data.server.tenant_id",
+    "mcp-server-registrations.create.response.data.tools.0.tool_id": "data.tools.0.tool_id"
+  }
 }

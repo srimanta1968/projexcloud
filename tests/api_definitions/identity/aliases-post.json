@@ -10,11 +10,20 @@
   "featureId": "7e463119-3ef9-497a-96ca-8453f7a60048",
   "epicId": "00996d23-f667-4a82-9285-7728ba357e7b",
   "priority": 30,
-  "testability": "manual",
-  "skipReason": "identity.alias.person_id FKs to identity.person. Even though /api/auth/register creates a person row and returns userId=person_id (verified — 3 other person-FK tests pass via {{cache:auth.register.response.data.userId}}), this specific test consistently sees a fabricated/stale userId at runtime — the FK violation message in api-gateway logs shows UUIDs that never landed in identity.person. Suspect a test-runner cache-race or per-test re-registration that silently fails. Re-enable when the test harness exposes per-test session pinning, or write a dedicated setupScript that explicitly seeds (person, phone-alias) and captures both IDs.",
+  "testability": "auto",
   "dependsOn": [
     "POST /api/auth/register"
   ],
+  "fieldEnums": {
+    "kind": [
+      "email",
+      "phone",
+      "gov_id",
+      "biometric_template_ref",
+      "social_idp_subject",
+      "saml_nameid"
+    ]
+  },
   "testCases": [
     {
       "name": "Attach a phone alias to the registered person",
@@ -29,11 +38,18 @@
       "expectedStatus": 201
     }
   ],
+  "captureResponse": {
+    "identity.aliases.response.data.alias.alias_id": "data.alias.alias_id",
+    "identity.aliases.response.data.alias.person_id": "data.alias.person_id"
+  },
   "expectedResponse": {
     "data": {
       "alias": {
         "alias_id": "string",
-        "kind": "string"
+        "person_id": "string",
+        "kind": "string",
+        "created_at": "string",
+        "merged_into": "string"
       }
     }
   }

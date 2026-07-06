@@ -10,39 +10,68 @@
   "featureId": "7a33ef6c-2dad-4c40-a8a2-f414c13e6c48",
   "epicId": "00996d23-f667-4a82-9285-7728ba357e7b",
   "priority": 30,
-  "testability": "manual",
-  "skipReason": "Requires a real tenant_id from POST /api/tenants; covered by integration test.",
+  "testability": "auto",
   "dependsOn": [
-    "POST /api/auth/register"
+    "POST /api/auth/signup-tenant"
   ],
   "testCases": [
     {
       "name": "Issue a key with crm + engagement scopes",
       "headers": {
-        "Authorization": "Bearer {{cache:auth.register.response.data.token}}"
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
       },
       "payload": {
-        "tenant_id": "{{static:00000000-0000-0000-0000-000000000001}}",
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
         "scopes": [
           "crm.contact.read",
           "engagement.encounter.create"
         ],
-        "rate_limit_rpm": 600
+        "rate_limit_rpm": 600,
+        "expires_at": "{{dynamic:futuredatetime}}"
       },
       "expectedStatus": 201
     }
   ],
+  "statusTransitions": {
+    "entity": "api-key",
+    "field": "status",
+    "flow": [
+      "active",
+      "rotating",
+      "revoked",
+      "expired"
+    ],
+    "transitions": [
+      {
+        "from": "none",
+        "to": "active",
+        "via": "POST /api/api-keys"
+      },
+      {
+        "from": "active",
+        "to": "rotating",
+        "via": "POST /api/api-keys/:key_id/rotate"
+      },
+      {
+        "from": "active",
+        "to": "revoked",
+        "via": "POST /api/api-keys/:key_id/revoke"
+      }
+    ]
+  },
   "expectedResponse": {
     "data": {
       "key": {
         "key_id": "string",
         "prefix": "string",
-        "scopes": "array"
+        "scopes": "array",
+        "status": "string"
       },
       "plaintext": "string"
     }
   },
   "captureResponse": {
-    "api-keys.create.response.data.key.key_id": "data.key.key_id"
+    "api-keys.create.response.data.key.key_id": "data.key.key_id",
+    "api-keys.create.response.data.key.tenant_id": "data.key.tenant_id"
   }
 }

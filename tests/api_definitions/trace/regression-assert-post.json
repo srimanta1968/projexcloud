@@ -6,18 +6,35 @@
   "description": "FR-TRC-8 regression test API. Body: {trace_id, expected_layers: string[]}. Returns {pass, matched_layers, missing_layers, extra_layers}. CI uses this to assert traces match the expected 8-layer composition.",
   "requiresAuth": true,
   "priority": 520,
+  "sourceFile": "packages/sdk-trace/src/server/handlers/traceController.ts",
+  "testability": "auto",
   "dependsOn": [
     "POST /api/auth/register"
   ],
-  "testability": "manual",
-  "skipReason": "Requires fixture trace + populated span rows; CI assertion helper",
+  "fieldEnums": {
+    "expected_layers": [
+      "gateway", "identity", "consent", "pool-router", "vault", "policy",
+      "rebac", "meter", "sdk-body", "tool", "agent", "lineage"
+    ]
+  },
   "testCases": [
     {
-      "name": "Manual: regression assert returns matched layers",
+      "name": "Regression assert returns matched/missing/extra layers",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.register.response.data.token}}"
+      },
+      "payload": {
+        "trace_id": "{{var:trace_id}}",
+        "expected_layers": ["gateway", "identity", "policy", "meter"]
+      },
       "expectedStatus": 200,
       "expectedResponse": {
         "success": true
       }
     }
-  ]
+  ],
+  "captureResponse": {
+    "trace.regression-assert.response.data.trace_id": "data.trace_id",
+    "trace.regression-assert.response.data.pass": "data.pass"
+  }
 }

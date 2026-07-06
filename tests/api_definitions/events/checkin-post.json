@@ -5,15 +5,28 @@
   "requiresAuth": true,
   "dependsOn": [
     "POST /api/auth/register",
-    "POST /api/events/tickets",
-    "POST /api/personas"
+    "POST /api/auth/signup-tenant",
+    "POST /api/vault/keys",
+    "POST /api/encounters",
+    "POST /api/events/sessions",
+    "POST /api/app-identities",
+    "POST /api/memberships",
+    "POST /api/personas",
+    "POST /api/events/tickets"
   ],
   "expectedStatus": 201,
   "sdk": "sdk-event",
   "sourceFile": "packages/sdk-event/src/server/routes.ts",
   "_generated": true,
-  "testability": "manual",
-  "skipReason": "Requires an issued ticket (qr_token) and a checking-in persona; checkIn transitions the ticket issued -> used and inserts a checkin row.",
+  "testability": "auto",
+  "statusTransitions": {
+    "entity": "event.ticket",
+    "field": "status",
+    "flow": ["issued", "used", "refunded", "void"],
+    "transitions": [
+      { "from": "issued", "to": "used", "via": "POST /api/events/checkin" }
+    ]
+  },
   "testCases": [
     {
       "name": "Check in an issued ticket via its qr_token",
@@ -23,9 +36,13 @@
       "payload": {
         "qr_token": "{{cache:events.tickets.create.response.data.ticket.qr_token}}",
         "checked_in_by_persona_id": "{{cache:personas.create.response.data.persona.persona_id}}",
-        "device_uuid": "{{static:gate-scanner-01}}"
+        "device_uuid": "gate-scanner-01"
       },
       "expectedStatus": 201
     }
-  ]
+  ],
+  "captureResponse": {
+    "events.checkin.create.response.data.checkin.checkin_id": "data.checkin.checkin_id",
+    "events.checkin.create.response.data.checkin.ticket_id": "data.checkin.ticket_id"
+  }
 }

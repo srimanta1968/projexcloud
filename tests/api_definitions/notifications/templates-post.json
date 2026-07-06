@@ -10,25 +10,27 @@
   "featureId": "01ca8316-09cf-462d-bf9d-7eeac8745bff",
   "epicId": "d83f7b6e-821c-4fe1-96e6-910eca8fbbfc",
   "priority": 20,
-  "testability": "manual",
-  "skipReason": "FR-NTF-3 template register requires tenant-scoped JWT (req.auth.tenant_id). The /api/auth/register flow returns a JWT with tenant_id=null, so this endpoint 403s. Re-enable when test harness can mint a tenant-scoped token (or add a setupScript that creates a tenant + member + tenant-scoped login).",
+  "testability": "auto",
   "dependsOn": [
-    "POST /api/auth/register"
+    "POST /api/auth/signup-tenant"
   ],
   "testCases": [
     {
-      "name": "Register platform-default email template",
+      "name": "Register a tenant-scoped email template",
       "headers": {
-        "Authorization": "Bearer {{cache:auth.register.response.data.token}}"
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
       },
       "payload": {
         "code": "{{dynamic:slug}}",
         "channel": "email",
         "locale_bundles": {
           "en-US": {
+            "subject": "Welcome",
             "body": "Hi {name}, welcome!"
           }
-        }
+        },
+        "required_consent_purpose": null,
+        "version": "1.0.0"
       },
       "expectedStatus": 201
     }
@@ -41,5 +43,12 @@
         "channel": "string"
       }
     }
+  },
+  "captureResponse": {
+    "notifications.templates.create.response.data.template.template_id": "data.template.template_id",
+    "notifications.templates.create.response.data.template.code": "data.template.code"
+  },
+  "fieldEnums": {
+    "channel": ["email", "sms", "whatsapp", "push", "slack"]
   }
 }

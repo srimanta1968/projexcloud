@@ -4,21 +4,41 @@
   "sdk": "sdk-api-keys",
   "method": "POST",
   "requiresAuth": false,
-  "expectedStatus": 201,
+  "expectedStatus": 200,
   "sourceFile": "services/api-gateway/src/app.ts",
-  "_generated": true,
-  "testability": "manual",
-  "skipReason": "Auto-generated from implemented route scan; payload/expectedResponse inferred from the handler and need review before enabling automated execution.",
+  "testability": "auto",
+  "dependsOn": [
+    "POST /api/auth/signup-tenant",
+    "POST /api/keys"
+  ],
+  "statusTransitions": {
+    "entity": "api-key",
+    "field": "status",
+    "flow": ["active", "rotating", "revoked", "expired"],
+    "transitions": [
+      {
+        "from": "active",
+        "to": "revoked",
+        "via": "POST /api/keys/:key_id/revoke"
+      }
+    ]
+  },
   "testCases": [
     {
-      "name": "Auto-generated from route scan (review payload before enabling)",
+      "name": "Revoke the freshly-issued key",
       "pathParams": {
-        "key_id": "{{static:REPLACE_WITH_ID}}"
+        "key_id": "{{cache:keys.create.response.data.key_id}}"
       },
       "payload": {
-        "reason": "{{static:sample}}"
+        "reason": "compromised-credential-rotation"
       },
-      "expectedStatus": 201
+      "expectedStatus": 200
     }
-  ]
+  ],
+  "expectedResponse": {
+    "success": "boolean"
+  },
+  "captureResponse": {
+    "keys.revoke.response.success": "success"
+  }
 }

@@ -10,22 +10,28 @@
   "featureId": "d3f526f1-243f-4b31-b538-aeffeddca534",
   "epicId": "00996d23-f667-4a82-9285-7728ba357e7b",
   "priority": 30,
-  "testability": "manual",
-  "skipReason": "Requires tenant.app row seeded; covered by integration test.",
+  "testability": "auto",
   "dependsOn": [
-    "POST /api/auth/register"
+    "POST /api/auth/signup-tenant"
   ],
+  "captureResponse": {
+    "role-templates.create.response.data.role_template.role_template_id": "data.role_template.role_template_id",
+    "role-templates.create.response.data.role_template.tenant_id": "data.role_template.tenant_id",
+    "role-templates.create.response.data.role_template.app_id": "data.role_template.app_id"
+  },
   "testCases": [
     {
-      "name": "Create a platform-default doctor role template",
+      "name": "Create a tenant-scoped doctor role template",
       "headers": {
-        "Authorization": "Bearer {{cache:auth.register.response.data.token}}"
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
       },
       "payload": {
-        "app_id": "healthcare",
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "app_id": "{{cache:auth.signup-tenant.response.data.app_id}}",
         "name": "{{dynamic:name}}",
         "permissions": {
-          "chart.read": true
+          "chart.read": true,
+          "chart.write": false
         }
       },
       "expectedStatus": 201

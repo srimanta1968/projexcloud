@@ -10,27 +10,31 @@
   "featureId": "01ca8316-09cf-462d-bf9d-7eeac8745bff",
   "epicId": "d83f7b6e-821c-4fe1-96e6-910eca8fbbfc",
   "priority": 40,
-  "testability": "manual",
-  "skipReason": "Requires a seeded notification.template + consent.purpose + sdk-consent grant; covered by integration test.",
+  "testability": "auto",
   "dependsOn": [
-    "POST /api/auth/register"
+    "POST /api/auth/signup-tenant",
+    "POST /api/notifications/templates"
   ],
   "testCases": [
     {
       "name": "Send email notification with rendered body",
       "headers": {
-        "Authorization": "Bearer {{cache:auth.register.response.data.token}}"
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
       },
       "payload": {
-        "tenant_id": "{{static:00000000-0000-0000-0000-000000000001}}",
-        "template_code": "welcome-email",
-        "person_id": "{{cache:auth.register.response.data.userId}}",
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "template_code": "{{cache:notifications.templates.create.response.data.template.code}}",
+        "person_id": "{{cache:auth.signup-tenant.response.data.userId}}",
+        "app_identity_id": "{{cache:auth.signup-tenant.response.data.userId}}",
         "channel": "email",
         "destination": "{{dynamic:email}}",
         "payload": {
           "name": "Alice"
         },
-        "locale": "en-US"
+        "locale": "en-US",
+        "scheduled_at": "{{dynamic:futuredatetime}}",
+        "enforce_consent": false,
+        "honor_quiet_hours": false
       },
       "expectedStatus": 201
     }
@@ -47,5 +51,8 @@
   },
   "captureResponse": {
     "notifications.send.response.data.message.message_id": "data.message.message_id"
+  },
+  "fieldEnums": {
+    "channel": ["email", "sms", "whatsapp", "push", "slack"]
   }
 }

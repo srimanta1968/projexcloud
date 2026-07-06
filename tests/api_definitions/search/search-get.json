@@ -2,6 +2,7 @@
   "name": "GET /api/search?q= - ABAC-filtered free-text search",
   "endpoint": "/api/search",
   "sdk": "sdk-search",
+  "sourceFile": "packages/sdk-search/src/server/routes.ts",
   "method": "GET",
   "requiresAuth": true,
   "expectedStatus": 200,
@@ -10,22 +11,23 @@
   "featureId": "02447110-6a41-4546-8d10-2107aa023f3a",
   "epicId": "d83f7b6e-821c-4fe1-96e6-910eca8fbbfc",
   "priority": 30,
-  "testability": "manual",
-  "skipReason": "Requires a registered tenant index with seeded documents; validated by integration test.",
+  "testability": "auto",
   "dependsOn": [
-    "POST /api/auth/register",
+    "POST /api/auth/signup-tenant",
     "POST /api/search/index"
   ],
   "testCases": [
     {
       "name": "Query encounters with free text",
       "headers": {
-        "Authorization": "Bearer {{cache:auth.register.response.data.token}}"
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
       },
       "queryParams": {
-        "tenant_id": "{{static:00000000-0000-0000-0000-000000000001}}",
-        "entity_kind": "{{static:encounter}}",
-        "q": "{{static:open}}"
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "entity_kind": "encounter",
+        "q": "open",
+        "size": 10,
+        "from": 0
       },
       "expectedStatus": 200
     }
@@ -34,6 +36,7 @@
     "data": {
       "hits": "array",
       "total": "number",
+      "took_ms": "number",
       "index_used": "string"
     }
   }

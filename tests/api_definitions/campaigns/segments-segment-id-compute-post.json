@@ -4,22 +4,27 @@
   "method": "POST",
   "requiresAuth": true,
   "dependsOn": [
-    "POST /api/auth/register"
+    "POST /api/auth/signup-tenant",
+    "POST /api/campaigns",
+    "POST /api/campaigns/:campaign_id/segments"
   ],
   "expectedStatus": 200,
   "sdk": "sdk-campaign",
   "sourceFile": "packages/sdk-campaign/src/server/routes.ts",
   "_generated": true,
-  "testability": "manual",
-  "skipReason": "Auto-generated from implemented route scan; payload/expectedResponse inferred from the handler and need review before enabling automated execution.",
+  "testability": "auto",
+  "captureResponse": {
+    "campaigns.compute.response.data.segment.segment_id": "data.segment.segment_id",
+    "campaigns.compute.response.data.segment.population_estimate": "data.segment.population_estimate"
+  },
   "testCases": [
     {
-      "name": "Auto-generated from route scan (review payload before enabling)",
+      "name": "Recompute a segment's population estimate",
       "headers": {
-        "Authorization": "Bearer {{cache:auth.register.response.data.token}}"
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
       },
       "pathParams": {
-        "segment_id": "{{static:REPLACE_WITH_ID}}"
+        "segment_id": "{{cache:campaigns.segment.create.response.data.segment.segment_id}}"
       },
       "payload": {},
       "expectedStatus": 200

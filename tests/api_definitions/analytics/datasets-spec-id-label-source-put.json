@@ -10,10 +10,13 @@
   "priority": 53,
   "dependsOn": [
     "POST /api/auth/signup-tenant",
+    "POST /api/assets",
     "POST /api/analytics/datasets"
   ],
-  "testability": "manual",
-  "skipReason": "Needs a real sub-bearing JWT and a registered dataset spec. Sets the labeling source (inline intervals, or a provider that joins events/evidence) so the next build produces a supervised dataset.",
+  "testability": "auto",
+  "fieldEnums": {
+    "kind": ["intervals", "provider"]
+  },
   "testCases": [
     {
       "name": "Set interval-based labels",
@@ -32,10 +35,11 @@
             "to": "{{dynamic:datetime}}",
             "label": 1
           }
-        ]
+        ],
+        "provider_args": {}
       },
       "expectedStatus": 200,
-      "testability": "manual"
+      "testability": "auto"
     }
   ]
 }

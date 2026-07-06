@@ -4,22 +4,47 @@
   "method": "POST",
   "requiresAuth": true,
   "dependsOn": [
-    "POST /api/auth/register"
+    "POST /api/auth/signup-tenant"
   ],
-  "expectedStatus": 201,
+  "expectedStatus": 202,
   "sdk": "sdk-webhook",
   "sourceFile": "packages/sdk-webhook/src/server/routes.ts",
   "_generated": true,
-  "testability": "manual",
-  "skipReason": "Auto-generated from implemented route scan; payload/expectedResponse inferred from the handler and need review before enabling automated execution.",
+  "testability": "auto",
+  "fieldEnums": {
+    "event_type": [
+      "billing.invoice.finalized.v1",
+      "billing.invoice.paid.v1",
+      "billing.dunning.advanced.v1",
+      "billing.reprice.dry-run.completed.v1"
+    ]
+  },
   "testCases": [
     {
-      "name": "Auto-generated from route scan (review payload before enabling)",
+      "name": "Publish billing.invoice.finalized.v1 for tenant",
       "headers": {
-        "Authorization": "Bearer {{cache:auth.register.response.data.token}}"
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
       },
-      "payload": {},
-      "expectedStatus": 201
+      "payload": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "event_type": "billing.invoice.finalized.v1",
+        "event_id": "{{var:event_id}}",
+        "payload": {
+          "invoice_id": "inv_0001",
+          "amount_due_cents": 12500,
+          "currency": "USD"
+        }
+      },
+      "expectedStatus": 202
     }
-  ]
+  ],
+  "expectedResponse": {
+    "data": {
+      "deliveries_enqueued": "number",
+      "delivery_ids": "array"
+    }
+  },
+  "captureResponse": {
+    "webhooks.publish.response.data.deliveries_enqueued": "data.deliveries_enqueued"
+  }
 }

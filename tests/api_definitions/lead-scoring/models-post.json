@@ -1,5 +1,5 @@
 {
-  "name": "POST /api/lead-scoring/models \u2014 sdk-lead-scoring",
+  "name": "POST /api/lead-scoring/models — sdk-lead-scoring",
   "endpoint": "/api/lead-scoring/models",
   "method": "POST",
   "requiresAuth": false,
@@ -7,19 +7,45 @@
   "sdk": "sdk-lead-scoring",
   "sourceFile": "packages/sdk-lead-scoring/src/server/index.ts",
   "_generated": true,
-  "testability": "manual",
-  "skipReason": "Auto-generated from implemented route scan; payload/expectedResponse inferred from the handler and need review before enabling automated execution.",
+  "testability": "auto",
+  "dependsOn": [
+    "POST /api/auth/signup-tenant"
+  ],
   "testCases": [
     {
-      "name": "Auto-generated from route scan (review payload before enabling)",
+      "name": "Create an active lead-scoring model for (tenant, vertical)",
       "payload": {
-        "tenant_id": "{{static:REPLACE_WITH_ID}}",
-        "vertical": "{{static:sample}}",
-        "feature_set": "{{static:sample}}",
-        "weights": "{{static:sample}}",
-        "activate": "{{static:sample}}"
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "vertical": "solar",
+        "feature_set": {
+          "proximity": {},
+          "expertise": {},
+          "intent": {},
+          "storm_impact": {}
+        },
+        "weights": {
+          "proximity": 0.3,
+          "expertise": 0.25,
+          "intent": 0.3,
+          "storm_impact": 0.15
+        },
+        "activate": true
       },
       "expectedStatus": 201
     }
-  ]
+  ],
+  "expectedResponse": {
+    "data": {
+      "model_id": "string",
+      "tenant_id": "string",
+      "vertical": "string",
+      "trained_at": "string",
+      "feature_set": "object",
+      "status": "string"
+    }
+  },
+  "captureResponse": {
+    "lead-scoring.create.response.data.model_id": "data.model_id",
+    "lead-scoring.create.response.data.tenant_id": "data.tenant_id"
+  }
 }

@@ -1,31 +1,54 @@
 {
   "name": "POST /api/mcp/server-registrations/:id/disable — sdk-mcp-bridge",
   "endpoint": "/api/mcp/server-registrations/:id/disable",
+  "sdk": "sdk-mcp-bridge",
+  "sourceFile": "packages/sdk-mcp-bridge/src/server/handlers/mcpController.ts",
   "method": "POST",
   "requiresAuth": true,
+  "expectedStatus": 200,
+  "testability": "auto",
   "dependsOn": [
-    "POST /api/auth/register",
+    "POST /api/auth/signup-tenant",
     "POST /api/mcp/server-registrations"
   ],
-  "expectedStatus": 200,
-  "sdk": "sdk-mcp-bridge",
-  "sourceFile": "packages/sdk-mcp-bridge/src/server/routes.ts",
-  "_generated": true,
-  "testability": "manual",
-  "skipReason": "Disable targets an existing MCP server registration whose creation (POST /api/mcp/server-registrations) requires a live MCP fixture and is itself manual; the registration_id cannot be captured in an automated run. Required body field (reason) filled.",
+  "statusTransitions": {
+    "entity": "mcp.server_registration",
+    "field": "status",
+    "flow": [
+      "active",
+      "disabled"
+    ],
+    "transitions": [
+      {
+        "from": "active",
+        "to": "disabled",
+        "via": "POST /api/mcp/server-registrations/:id/disable"
+      }
+    ]
+  },
   "testCases": [
     {
       "name": "Disable a registered MCP server",
       "headers": {
-        "Authorization": "Bearer {{cache:auth.register.response.data.token}}"
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
       },
       "pathParams": {
-        "id": "{{cache:mcp.server-registrations.create.response.data.registration_id}}"
+        "id": "{{cache:mcp-server-registrations.create.response.data.server.registration_id}}"
       },
       "payload": {
-        "reason": "{{static:Decommissioned by automated test}}"
+        "reason": "Decommissioned by automated test"
       },
       "expectedStatus": 200
     }
-  ]
+  ],
+  "expectedResponse": {
+    "success": true,
+    "data": {
+      "registration_id": "string",
+      "disabled": true
+    }
+  },
+  "captureResponse": {
+    "mcp-server-registrations.disable.response.data.registration_id": "data.registration_id"
+  }
 }

@@ -7,21 +7,25 @@
   "sdk": "api-gateway",
   "sourceFile": "services/api-gateway/src/app.ts",
   "_generated": true,
-  "testability": "manual",
-  "skipReason": "Gated by the ADMIN_OPS_TOKEN (x-admin-ops-token header). driver=none hot-reloads to a no-op backend; nessie/glue additionally require ICEBERG_BACKEND_BASE_URL.",
+  "testability": "auto",
+  "fieldEnums": {
+    "driver": ["nessie", "glue", "none"]
+  },
+  "captureResponse": {
+    "federation-iceberg-backend.reload.response.data.driver": "driver"
+  },
   "testCases": [
     {
-      "name": "Hot-reload the iceberg backend driver",
+      "name": "Hot-reload the iceberg backend driver to a no-op backend",
       "headers": {
-        "x-admin-ops-token": "{{static:ADMIN_OPS_TOKEN}}"
+        "x-admin-ops-token": "${ADMIN_OPS_TOKEN}"
       },
       "payload": {
-        "driver": "{{static:none}}"
+        "driver": "none",
+        "base_url": "https://nessie.example.com/api/v1",
+        "bearer_token": "{{static:test-bearer-token}}"
       },
       "expectedStatus": 200
     }
-  ],
-  "fieldOptions": {
-    "driver": ["nessie", "glue", "none"]
-  }
+  ]
 }

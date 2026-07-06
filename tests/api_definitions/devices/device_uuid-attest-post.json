@@ -14,6 +14,9 @@
     "POST /api/auth/register",
     "POST /api/devices"
   ],
+  "fieldEnums": {
+    "method": ["secure-enclave", "key-attestation", "safetynet", "play-integrity"]
+  },
   "testCases": [
     {
       "name": "Attest via secure-enclave",
@@ -24,11 +27,15 @@
         "device_uuid": "{{cache:devices.create.response.data.device.device_uuid}}"
       },
       "payload": {
-        "method": "{{static:secure-enclave}}",
-        "signature_envelope": "{{static:base64envelope==}}",
+        "method": "secure-enclave",
+        "signature_envelope": "YmFzZTY0ZW52ZWxvcGU=",
+        "expires_at": "{{dynamic:futuredatetime}}",
         "verified": true
       },
       "expectedStatus": 201
     }
-  ]
+  ],
+  "captureResponse": {
+    "devices.attest.response.data.attestation.attestation_id": "data.attestation.attestation_id"
+  }
 }

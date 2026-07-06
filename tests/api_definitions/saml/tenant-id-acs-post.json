@@ -2,27 +2,39 @@
   "name": "POST /saml/:tenant_id/acs — sdk-identity",
   "endpoint": "/saml/:tenant_id/acs",
   "method": "POST",
-  "requiresAuth": true,
-  "dependsOn": [
-    "POST /api/auth/register"
-  ],
-  "expectedStatus": 201,
   "sdk": "sdk-identity",
-  "sourceFile": "packages/sdk-identity/src/server/routes.ts",
+  "sourceFile": "packages/sdk-identity/src/server/handlers/federationController.ts",
+  "description": "SAML Assertion Consumer Service (FR-IDN-8). The route has no auth preHandler (the IdP POSTs directly). With the default SAML_ADAPTER=mock the body is treated as an already-parsed assertion { name_id, email, groups, attributes }; downstream consumeSamlAssertion() finds-or-JIT-provisions identity.person, merges saml_nameid+email aliases, upserts identity.app_identity, and returns person_id/app_identity_id/alias_ids/jit_provisioned/role_template_id.",
+  "requiresAuth": false,
   "_generated": true,
-  "testability": "manual",
-  "skipReason": "Auto-generated from implemented route scan; payload/expectedResponse inferred from the handler and need review before enabling automated execution.",
+  "testability": "auto",
+  "dependsOn": [
+    "POST /api/auth/signup-tenant"
+  ],
+  "captureResponse": {
+    "saml.acs.response.data.person_id": "data.person_id",
+    "saml.acs.response.data.app_identity_id": "data.app_identity_id"
+  },
   "testCases": [
     {
-      "name": "Auto-generated from route scan (review payload before enabling)",
-      "headers": {
-        "Authorization": "Bearer {{cache:auth.register.response.data.token}}"
-      },
+      "name": "Mock-adapter assertion JIT-provisions a person",
       "pathParams": {
-        "tenant_id": "{{static:REPLACE_WITH_ID}}"
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}"
       },
-      "payload": {},
-      "expectedStatus": 201
+      "payload": {
+        "name_id": "{{dynamic:email}}",
+        "email": "{{dynamic:email}}",
+        "groups": [
+          "Engineering"
+        ],
+        "attributes": {}
+      },
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "data": {
+          "jit_provisioned": true
+        }
+      }
     }
   ]
 }

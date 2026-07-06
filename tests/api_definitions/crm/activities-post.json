@@ -4,26 +4,36 @@
   "method": "POST",
   "requiresAuth": true,
   "dependsOn": [
-    "POST /api/auth/register"
+    "POST /api/auth/signup-tenant",
+    "POST /api/auth/register",
+    "POST /api/app-identities",
+    "POST /api/memberships",
+    "POST /api/personas",
+    "POST /api/vault/keys",
+    "POST /api/encounters"
   ],
   "expectedStatus": 201,
   "sdk": "sdk-crm",
   "sourceFile": "packages/sdk-crm/src/server/routes.ts",
   "_generated": true,
-  "fieldOptions": {
+  "fieldEnums": {
     "kind": ["call", "email", "meeting", "note", "task"]
+  },
+  "captureResponse": {
+    "crm.activities.response.data.activity.activity_id": "data.activity.activity_id"
   },
   "testCases": [
     {
       "name": "Log an activity inside an encounter (encounter_id + kind + actor_persona_id required)",
       "headers": {
-        "Authorization": "Bearer {{cache:auth.register.response.data.token}}"
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
       },
       "payload": {
-        "encounter_id": "{{dynamic:uuid}}",
-        "kind": "{{static:note}}",
-        "actor_persona_id": "{{dynamic:uuid}}",
-        "summary": "{{static:Follow-up call with prospect}}"
+        "encounter_id": "{{cache:encounters.create.response.data.encounter.encounter_id}}",
+        "kind": "note",
+        "actor_persona_id": "{{cache:personas.create.response.data.persona.persona_id}}",
+        "summary": "Follow-up call with prospect",
+        "occurred_at": "{{dynamic:pastdatetime}}"
       },
       "expectedStatus": 201
     }

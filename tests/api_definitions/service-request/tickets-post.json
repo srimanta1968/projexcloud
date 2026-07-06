@@ -4,13 +4,16 @@
   "method": "POST",
   "requiresAuth": true,
   "dependsOn": [
-    "POST /api/auth/register"
+    "POST /api/auth/signup-tenant",
+    "POST /api/personas",
+    "POST /api/encounters",
+    "POST /api/service-request/queues"
   ],
   "expectedStatus": 201,
   "sdk": "sdk-service-request",
   "sourceFile": "packages/sdk-service-request/src/server/routes.ts",
   "_generated": true,
-  "fieldOptions": {
+  "fieldEnums": {
     "priority": ["low", "normal", "high", "urgent"],
     "severity": ["trivial", "minor", "major", "critical"]
   },
@@ -21,14 +24,18 @@
     {
       "name": "Open a ticket (tenant_id + encounter_id + requester_persona_id required)",
       "headers": {
-        "Authorization": "Bearer {{cache:auth.register.response.data.token}}"
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
       },
       "payload": {
-        "tenant_id": "{{dynamic:uuid}}",
-        "encounter_id": "{{dynamic:uuid}}",
-        "requester_persona_id": "{{dynamic:uuid}}",
-        "priority": "{{static:normal}}",
-        "severity": "{{static:minor}}"
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "encounter_id": "{{cache:encounters.create.response.data.encounter.encounter_id}}",
+        "requester_persona_id": "{{cache:personas.create.response.data.persona.persona_id}}",
+        "queue_id": "{{cache:service-request.queues.response.data.queue.queue_id}}",
+        "priority": "normal",
+        "severity": "minor",
+        "external_refs": {
+          "zendesk_id": "ZD-1001"
+        }
       },
       "expectedStatus": 201
     }

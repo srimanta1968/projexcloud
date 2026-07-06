@@ -4,29 +4,41 @@
   "method": "POST",
   "requiresAuth": true,
   "dependsOn": [
-    "POST /api/auth/register",
+    "POST /api/auth/signup-tenant",
     "POST /api/connectors/installs"
   ],
   "expectedStatus": 200,
   "sdk": "sdk-connectors",
   "sourceFile": "packages/sdk-connectors/src/server/routes.ts",
-  "_generated": true,
-  "testability": "manual",
-  "skipReason": "Requires a real connector install (OAuth vendor creds) and a tool_name present in that install's manifest; install_id FK comes from POST /api/connectors/installs which is itself manual.",
+  "testability": "auto",
+  "fieldEnums": {
+    "tool_name": [
+      "slack.message.post",
+      "slack.channel.list",
+      "slack.user.lookup",
+      "slack.thread.reply"
+    ]
+  },
   "testCases": [
     {
-      "name": "Invoke a connector tool by name",
+      "name": "Invoke a connector tool by name (slack stub returns NotConfigured payload with 200)",
       "headers": {
-        "Authorization": "Bearer {{cache:auth.register.response.data.token}}"
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
       },
       "pathParams": {
-        "install_id": "{{cache:connectors.installs.create.response.data.install.install_id}}"
+        "install_id": "{{cache:connectors.create.response.data.install.install_id}}"
       },
       "payload": {
-        "tool_name": "{{static:list_channels}}",
-        "args": {}
+        "tool_name": "slack.message.post",
+        "args": {
+          "channel": "C0DEMO",
+          "text": "Hello from ProjexCloud"
+        }
       },
       "expectedStatus": 200
     }
-  ]
+  ],
+  "captureResponse": {
+    "connectors.tools-call.response.data.result.ok": "data.result.ok"
+  }
 }

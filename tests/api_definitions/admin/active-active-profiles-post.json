@@ -1,27 +1,55 @@
 {
-  "name": "POST /admin/active-active/profiles \u2014 api-gateway",
+  "name": "POST /admin/active-active/profiles — api-gateway",
   "endpoint": "/admin/active-active/profiles",
   "method": "POST",
   "requiresAuth": false,
   "expectedStatus": 201,
   "sdk": "api-gateway",
   "sourceFile": "services/api-gateway/src/app.ts",
-  "_generated": true,
-  "testability": "manual",
-  "skipReason": "Auto-generated from implemented route scan; payload/expectedResponse inferred from the handler and need review before enabling automated execution.",
+  "testability": "auto",
+  "dependsOn": [
+    "POST /api/auth/signup-tenant"
+  ],
+  "fieldEnums": {
+    "home_region": ["us-east-1", "us-west-2", "eu-west-1", "ap-south-1"],
+    "replication_overrides": ["sync", "async", "single-region"]
+  },
   "testCases": [
     {
-      "name": "Auto-generated from route scan (review payload before enabling)",
+      "name": "Activate an active-active (tier-G+) profile for a tenant",
+      "headers": {
+        "x-admin-ops-token": "${ADMIN_OPS_TOKEN}"
+      },
       "payload": {
-        "tenant_id": "{{static:REPLACE_WITH_ID}}",
-        "home_region": "{{static:sample}}",
-        "paired_regions": "{{static:sample}}",
-        "contract_addendum_ref": "{{static:sample}}",
-        "rpo_target_seconds": "{{static:sample}}",
-        "rto_target_seconds": "{{static:sample}}",
-        "replication_overrides": "{{static:sample}}"
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "home_region": "us-east-1",
+        "paired_regions": ["us-west-2", "eu-west-1"],
+        "contract_addendum_ref": "addendum-2026-DR-001",
+        "rpo_target_seconds": 5,
+        "rto_target_seconds": 60,
+        "replication_overrides": {
+          "sdk-billing": "sync",
+          "sdk-analytics": "async"
+        }
       },
       "expectedStatus": 201
     }
-  ]
+  ],
+  "expectedResponse": {
+    "data": {
+      "profile_id": "string",
+      "tenant_id": "string",
+      "tier": "string",
+      "home_region": "string",
+      "paired_regions": "array",
+      "rpo_target_seconds": "number",
+      "rto_target_seconds": "number",
+      "contract_addendum_ref": "string",
+      "activated_at": "string"
+    }
+  },
+  "captureResponse": {
+    "active-active-profiles.create.response.data.profile_id": "data.profile_id",
+    "active-active-profiles.create.response.data.tenant_id": "data.tenant_id"
+  }
 }

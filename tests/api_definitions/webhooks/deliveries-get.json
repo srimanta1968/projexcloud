@@ -5,24 +5,25 @@
   "method": "GET",
   "requiresAuth": true,
   "expectedStatus": 200,
+  "sourceFile": "packages/sdk-webhook/src/server/routes.ts",
   "taskId": "b73a3d18-b3de-479a-adc1-17f142980204",
   "sprintId": "8ef1d09e-dd8e-4daf-8d03-54dcd9f812f8",
   "featureId": "edce9080-4593-4e84-a4c6-54309b62e01e",
   "epicId": "d83f7b6e-821c-4fe1-96e6-910eca8fbbfc",
   "priority": 40,
-  "testability": "manual",
-  "skipReason": "Reads DLQ rows; covered by integration test where a delivery has been forced to dlq.",
+  "testability": "auto",
   "dependsOn": [
-    "POST /api/auth/register"
+    "POST /api/auth/signup-tenant"
   ],
   "testCases": [
     {
       "name": "List DLQ for tenant",
       "headers": {
-        "Authorization": "Bearer {{cache:auth.register.response.data.token}}"
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
       },
       "queryParams": {
-        "tenant_id": "{{static:00000000-0000-0000-0000-000000000001}}"
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "limit": 100
       },
       "expectedStatus": 200
     }

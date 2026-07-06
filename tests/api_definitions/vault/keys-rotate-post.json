@@ -9,13 +9,13 @@
   "sprintId": "8ef1d09e-dd8e-4daf-8d03-54dcd9f812f8",
   "featureId": "150fa460-13da-408f-8853-23942d923cf2",
   "epicId": "ee93bf20-3149-45d5-a712-d55cc74df2d9",
-  "testability": "manual",
-  "skipReason": "Requires a pre-issued vault.key row; covered by the rotation-scheduler integration test.",
+  "sourceFile": "packages/sdk-vault/src/server/routes.ts",
+  "testability": "auto",
   "testCases": [
     {
-      "name": "Rotate a pre-issued key",
+      "name": "Rotate a freshly-issued key",
       "pathParams": {
-        "key_id": "00000000-0000-0000-0000-000000000001"
+        "key_id": "{{cache:vault.keys.create.response.data.key_id}}"
       },
       "payload": {
         "reason": "scheduled"
@@ -27,6 +27,18 @@
     }
   ],
   "dependsOn": [
-    "POST /api/auth/register"
-  ]
+    "POST /api/auth/register",
+    "POST /api/vault/keys"
+  ],
+  "statusTransitions": {
+    "entity": "vault.key",
+    "field": "state",
+    "flow": ["issued", "active", "rotated", "shredded"],
+    "transitions": [
+      { "from": "active", "to": "rotated", "via": "POST /api/vault/keys/:key_id/rotate" }
+    ]
+  },
+  "captureResponse": {
+    "vault.rotate.response.data.key_id": "data.key_id"
+  }
 }

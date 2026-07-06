@@ -2,6 +2,7 @@
   "name": "POST /api/empi/candidate-links/:link_id/steward-review - queue for steward",
   "endpoint": "/api/empi/candidate-links/:link_id/steward-review",
   "sdk": "sdk-identity-resolver",
+  "sourceFile": "packages/sdk-identity-resolver/src/server/routes.ts",
   "method": "POST",
   "requiresAuth": true,
   "taskId": "363e7b37-752c-497e-baa4-47eee238621c",
@@ -9,23 +10,22 @@
   "featureId": "01f9d9f9-989e-4cd7-b6cf-50173e3830bd",
   "epicId": "2e2950d2-3772-4768-bd85-8a8734958c78",
   "expectedStatus": 201,
-  "testability": "manual",
-  "skipReason": "Requires an existing empi.candidate_link (only created internally via probabilistic matchAndLink — no HTTP creation endpoint), so the :link_id path param has no resolvable provider; route_id chains from POST /api/approvals/routes.",
+  "testability": "auto",
   "dependsOn": [
-    "POST /api/auth/register",
+    "POST /api/auth/signup-tenant",
     "POST /api/approvals/routes"
   ],
   "testCases": [
     {
       "name": "Queue a candidate link for steward review",
       "headers": {
-        "Authorization": "Bearer {{cache:auth.register.response.data.token}}"
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
       },
       "pathParams": {
-        "link_id": "{{cache:empi.candidate-links.create.response.data.link.link_id}}"
+        "link_id": "{{var:link_id}}"
       },
       "payload": {
-        "tenant_id": "{{static:00000000-0000-0000-0000-000000000001}}",
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
         "route_id": "{{cache:approvals.routes.create.response.data.route.route_id}}"
       },
       "expectedStatus": 201

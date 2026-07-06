@@ -2,6 +2,7 @@
   "name": "POST /api/workflows/start - Start a run of a registered workflow",
   "endpoint": "/api/workflows/start",
   "sdk": "sdk-workflow",
+  "sourceFile": "packages/sdk-workflow/src/server/handlers/workflowController.ts",
   "method": "POST",
   "requiresAuth": true,
   "expectedStatus": 201,
@@ -10,22 +11,29 @@
   "featureId": "c8c3cd6c-f966-406e-b761-7d6fa53d786a",
   "epicId": "d83f7b6e-821c-4fe1-96e6-910eca8fbbfc",
   "priority": 30,
-  "testability": "manual",
-  "skipReason": "Depends on a registered workflow definition with in-process step handlers; covered by integration test where a demo workflow module is loaded.",
+  "testability": "auto",
   "dependsOn": [
     "POST /api/auth/register",
     "POST /api/workflows/definitions"
   ],
   "testCases": [
     {
-      "name": "Start demo-payment-flow",
+      "name": "Start qa-workflow-demo run (platform-scoped)",
       "headers": {
         "Authorization": "Bearer {{cache:auth.register.response.data.token}}"
       },
       "payload": {
-        "name": "{{static:demo-payment-flow}}",
-        "version": "{{static:1.0.0}}",
-        "namespace": "{{static:admin}}",
+        "name": "qa-workflow-demo",
+        "version": "1.0.0",
+        "namespace": "admin",
+        "envelope": {
+          "persona_id": "{{var:person_id}}",
+          "trace_id": "{{var:trace_id}}",
+          "actor": {
+            "kind": "service",
+            "id": "{{var:person_id}}"
+          }
+        },
         "input": {
           "amount": 1500,
           "currency": "USD"
@@ -34,14 +42,28 @@
       "expectedStatus": 201
     }
   ],
+  "fieldEnums": {
+    "envelope.actor.kind": ["human", "service", "agent", "support_impersonator"]
+  },
+  "statusTransitions": {
+    "entity": "workflow.run",
+    "field": "status",
+    "flow": ["running", "completed", "compensated"],
+    "transitions": [
+      { "from": "running", "to": "completed", "via": "POST /api/workflows/start" },
+      { "from": "running", "to": "compensated", "via": "POST /api/workflows/start" }
+    ]
+  },
   "expectedResponse": {
     "data": {
       "run_id": "string",
       "status": "string",
-      "steps": "array"
+      "steps": "array",
+      "output": "object"
     }
   },
   "captureResponse": {
-    "workflows.start.response.data.run_id": "data.run_id"
+    "workflows.start.response.data.run_id": "data.run_id",
+    "workflows.start.response.data.status": "data.status"
   }
 }

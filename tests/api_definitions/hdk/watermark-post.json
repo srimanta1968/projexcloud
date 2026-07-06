@@ -1,5 +1,5 @@
 {
-  "name": "POST /api/hdk/watermark \u2014 hdk-watermark",
+  "name": "POST /api/hdk/watermark — hdk-watermark",
   "endpoint": "/api/hdk/watermark",
   "method": "POST",
   "requiresAuth": false,
@@ -7,16 +7,25 @@
   "sdk": "hdk-watermark",
   "sourceFile": "packages/hdk-watermark/src/server/index.ts",
   "_generated": true,
-  "testability": "manual",
-  "skipReason": "Auto-generated from implemented route scan; payload/expectedResponse inferred from the handler and need review before enabling automated execution.",
+  "testability": "auto",
+  "dependsOn": [
+    "POST /api/auth/signup-tenant"
+  ],
+  "fieldEnums": {
+    "scheme": ["visible", "invisible", "cryptographic"]
+  },
+  "captureResponse": {
+    "watermark.create.response.data.application_id": "data.application_id",
+    "watermark.create.response.data.variant_id": "data.variant_id"
+  },
   "testCases": [
     {
-      "name": "Auto-generated from route scan (review payload before enabling)",
+      "name": "Record a watermark application",
       "payload": {
-        "variant_id": "{{static:REPLACE_WITH_ID}}",
-        "scheme": "{{static:sample}}",
-        "payload_envelope": "{{static:sample}}",
-        "tenant_id": "{{static:REPLACE_WITH_ID}}"
+        "variant_id": "{{var:variant_id}}",
+        "scheme": "visible",
+        "payload_envelope": "eyJ3IjoxfQ==",
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}"
       },
       "expectedStatus": 201
     }

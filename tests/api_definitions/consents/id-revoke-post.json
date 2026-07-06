@@ -2,6 +2,7 @@
   "name": "POST /api/consents/:receipt_id/revoke - Revoke consent",
   "endpoint": "/api/consents/:receipt_id/revoke",
   "sdk": "sdk-consent",
+  "sourceFile": "packages/sdk-consent/src/server/routes.ts",
   "method": "POST",
   "requiresAuth": true,
   "expectedStatus": 200,
@@ -12,6 +13,7 @@
   "priority": 60,
   "dependsOn": [
     "POST /api/auth/register",
+    "POST /api/consents/purposes",
     "POST /api/consents"
   ],
   "testCases": [
@@ -30,6 +32,21 @@
       "expectedStatus": 200
     }
   ],
+  "statusTransitions": {
+    "entity": "consent.receipt",
+    "field": "revoked_at",
+    "flow": [
+      "active",
+      "revoked"
+    ],
+    "transitions": [
+      {
+        "from": "active",
+        "to": "revoked",
+        "via": "POST /api/consents/:receipt_id/revoke"
+      }
+    ]
+  },
   "expectedResponse": {
     "data": {
       "revocation": {
@@ -37,5 +54,8 @@
         "receipt_id": "string"
       }
     }
+  },
+  "captureResponse": {
+    "consents.revoke.response.data.revocation.revocation_id": "data.revocation.revocation_id"
   }
 }

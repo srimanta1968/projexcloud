@@ -2,6 +2,7 @@
   "name": "POST /api/break-glass - request scoped emergency access",
   "endpoint": "/api/break-glass",
   "sdk": "sdk-approval",
+  "sourceFile": "packages/sdk-approval/src/server/routes.ts",
   "method": "POST",
   "requiresAuth": true,
   "taskId": "a89d8cd9-638e-40e6-86d3-c22bf8385c53",
@@ -9,22 +10,21 @@
   "featureId": "d00b18c5-a75a-4a02-8e0e-b6f941ac60c1",
   "epicId": "0d61fa89-b842-43af-baf9-42454044726f",
   "expectedStatus": 201,
-  "testability": "manual",
-  "skipReason": "Opens an sdk-approval request against route_id, so it depends on a pre-seeded active approval route (POST /api/approvals/routes, itself manual); part of the multi-step request -> decide -> use flow.",
+  "testability": "auto",
   "dependsOn": [
-    "POST /api/auth/register",
+    "POST /api/auth/signup-tenant",
     "POST /api/approvals/routes"
   ],
   "testCases": [
     {
       "name": "Request emergency break-glass access to a patient record",
       "headers": {
-        "Authorization": "Bearer {{cache:auth.register.response.data.token}}"
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
       },
       "payload": {
-        "tenant_id": "{{static:00000000-0000-0000-0000-000000000001}}",
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
         "route_id": "{{cache:approvals.routes.create.response.data.route.route_id}}",
-        "justification": "{{static:Emergency access required to treat unconscious patient}}",
+        "justification": "Emergency access required to treat unconscious patient",
         "scope": {
           "resource": "patient.record",
           "actions": [
@@ -45,8 +45,17 @@
       "pending_step_ids": "array"
     }
   },
+  "statusTransitions": {
+    "entity": "approval.break_glass_grant",
+    "field": "status",
+    "flow": ["pending", "active", "expired", "revoked"],
+    "transitions": [
+      { "from": null, "to": "pending", "via": "POST /api/break-glass" }
+    ]
+  },
   "captureResponse": {
     "break-glass.request.response.data.grant.grant_id": "data.grant.grant_id",
+    "break-glass.request.response.data.grant.status": "data.grant.status",
     "break-glass.request.response.data.pending_step_ids.0": "data.pending_step_ids.0"
   }
 }

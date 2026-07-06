@@ -7,21 +7,46 @@
   "sdk": "sdk-lead-scoring",
   "sourceFile": "packages/sdk-lead-scoring/src/server/index.ts",
   "_generated": true,
+  "testability": "auto",
   "dependsOn": [
+    "POST /api/auth/signup-tenant",
     "POST /api/lead-scoring/models"
   ],
-  "testability": "manual",
-  "skipReason": "Calls scoreContact() then nextBestAction(); scoreContact looks up an ACTIVE model for the (tenant_id, vertical) pair via getActiveModel and throws (400) when none exists. The parent POST /api/lead-scoring/models def neither activates nor captures a model id, so the tenant_id FK is not obtainable in an automated run. Required body fields filled for documentation.",
   "testCases": [
     {
-      "name": "Score + recommend next best action (happy path)",
+      "name": "Score + recommend next best action against the active model",
       "payload": {
-        "tenant_id": "{{cache:lead-scoring.models.create.response.data.tenant_id}}",
-        "vertical": "{{static:solar}}",
-        "contact_id": "{{dynamic:uuid}}",
-        "trace_id": "{{dynamic:uuid}}"
+        "tenant_id": "{{cache:lead-scoring.create.response.data.tenant_id}}",
+        "vertical": "solar",
+        "contact_id": "{{var:contact_id}}",
+        "trace_id": "{{var:trace_id}}",
+        "proximity": {
+          "distance_km": 8
+        },
+        "expertise": {
+          "persona_kinds": ["homeowner", "insurance-claimant"],
+          "vertical_specialties": ["roof", "flood"]
+        },
+        "intent": {
+          "days_since_last_engagement": 1,
+          "emails_opened": 6,
+          "replies": 2
+        },
+        "storm_impact": {
+          "overlapping_storm_events": 3
+        }
       },
       "expectedStatus": 200
     }
-  ]
+  ],
+  "expectedResponse": {
+    "data": {
+      "scoring": "object",
+      "action": "object"
+    }
+  },
+  "captureResponse": {
+    "lead-scoring.next-best-action.response.data.scoring.score.score_id": "data.scoring.score.score_id",
+    "lead-scoring.next-best-action.response.data.scoring.model_id": "data.scoring.model_id"
+  }
 }

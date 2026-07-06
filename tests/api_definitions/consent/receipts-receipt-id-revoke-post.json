@@ -4,24 +4,46 @@
   "sdk": "sdk-consent",
   "method": "POST",
   "requiresAuth": false,
-  "expectedStatus": 201,
+  "expectedStatus": 200,
   "sourceFile": "services/api-gateway/src/app.ts",
-  "_generated": true,
-  "testability": "manual",
-  "skipReason": "Auto-generated from implemented route scan; payload/expectedResponse inferred from the handler and need review before enabling automated execution.",
+  "testability": "auto",
+  "dependsOn": [
+    "POST /api/auth/register",
+    "POST /api/auth/signup-tenant",
+    "POST /api/consents/purposes",
+    "POST /api/consents"
+  ],
   "testCases": [
     {
-      "name": "Auto-generated from route scan (review payload before enabling)",
-      "headers": {
-        "x-admin-ops-token": "{{static:ADMIN_OPS_TOKEN}}"
-      },
+      "name": "Revoke a previously granted consent receipt",
       "pathParams": {
-        "receipt_id": "{{static:REPLACE_WITH_ID}}"
+        "receipt_id": "{{cache:consents.create.response.data.receipt.receipt_id}}"
       },
       "payload": {
-        "reason": "{{static:sample}}"
+        "reason": "User requested withdrawal of consent."
       },
-      "expectedStatus": 201
+      "expectedStatus": 200
     }
-  ]
+  ],
+  "statusTransitions": {
+    "entity": "consent.receipt",
+    "field": "status",
+    "flow": [
+      "active",
+      "revoked"
+    ],
+    "transitions": [
+      {
+        "from": "active",
+        "to": "revoked",
+        "via": "POST /api/consent/receipts/:receipt_id/revoke"
+      }
+    ]
+  },
+  "expectedResponse": {
+    "success": "boolean"
+  },
+  "captureResponse": {
+    "consent.revoke.response.success": "success"
+  }
 }

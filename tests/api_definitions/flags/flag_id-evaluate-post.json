@@ -12,6 +12,7 @@
   "priority": 60,
   "dependsOn": [
     "POST /api/auth/register",
+    "POST /api/auth/signup-tenant",
     "PUT /api/flags"
   ],
   "testCases": [
@@ -24,10 +25,15 @@
         "flag_id": "{{cache:flags.create.response.data.flag.flag_id}}"
       },
       "payload": {
-        "tenant_id": "22222222-2222-2222-2222-222222222222",
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "persona_id": "{{var:persona_id}}",
+        "bu_id": "{{var:bu_id}}",
         "attributes": {}
       },
       "expectedStatus": 200
     }
-  ]
+  ],
+  "captureResponse": {
+    "flags.evaluate.response.data.evaluation.flag_id": "data.evaluation.flag_id"
+  }
 }

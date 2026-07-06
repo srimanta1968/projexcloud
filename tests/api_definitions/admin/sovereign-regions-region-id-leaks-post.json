@@ -1,5 +1,5 @@
 {
-  "name": "POST /admin/sovereign/regions/:region_id/leaks \u2014 api-gateway",
+  "name": "POST /admin/sovereign/regions/:region_id/leaks — api-gateway",
   "endpoint": "/admin/sovereign/regions/:region_id/leaks",
   "method": "POST",
   "requiresAuth": false,
@@ -7,20 +7,30 @@
   "sdk": "api-gateway",
   "sourceFile": "services/api-gateway/src/app.ts",
   "_generated": true,
-  "testability": "manual",
-  "skipReason": "Auto-generated from implemented route scan; payload/expectedResponse inferred from the handler and need review before enabling automated execution.",
+  "testability": "auto",
+  "fieldEnums": {
+    "kind": ["egress-attempt", "cross-region-route", "policy-violation"],
+    "severity": ["info", "warn", "critical"]
+  },
+  "captureResponse": {
+    "sovereign.leak-alert.response.data.alert_id": "data.alert_id"
+  },
+  "dependsOn": ["POST /admin/sovereign/regions"],
   "testCases": [
     {
-      "name": "Auto-generated from route scan (review payload before enabling)",
+      "name": "Ingest a leak-monitor alert for a sovereign region",
       "pathParams": {
-        "region_id": "{{static:REPLACE_WITH_ID}}"
+        "region_id": "{{cache:sovereign.register.response.data.region_id}}"
       },
       "payload": {
-        "kind": "{{static:sample}}",
-        "severity": "{{static:sample}}",
-        "incident_ref": "{{static:sample}}"
+        "kind": "egress-attempt",
+        "severity": "critical",
+        "incident_ref": "INC-2026-0714-eu-sov-fra"
       },
-      "expectedStatus": 201
+      "expectedStatus": 201,
+      "headers": {
+        "x-admin-ops-token": "${ADMIN_OPS_TOKEN}"
+      }
     }
   ]
 }

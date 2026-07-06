@@ -4,23 +4,38 @@
   "sdk": "sdk-media",
   "method": "POST",
   "requiresAuth": true,
+  "sourceFile": "packages/sdk-media/src/server/handlers/mediaController.ts",
   "expectedStatus": 201,
   "taskId": "a961df12-c333-4db5-b389-31438b10d6b9",
   "sprintId": "8ef1d09e-dd8e-4daf-8d03-54dcd9f812f8",
   "featureId": "9396ba53-a104-415c-ba3c-4e2a1b8d2c8a",
   "epicId": "d83f7b6e-821c-4fe1-96e6-910eca8fbbfc",
   "priority": 50,
-  "testability": "manual",
-  "skipReason": "Requires a ready blob; covered by integration test.",
+  "testability": "auto",
   "dependsOn": [
-    "POST /api/auth/register",
+    "POST /api/auth/signup-tenant",
     "POST /api/media/upload-url"
   ],
+  "fieldEnums": {
+    "pipeline": ["video-mp4-hls", "image-optimize", "pdf-thumbnail"]
+  },
+  "statusTransitions": {
+    "entity": "media.transcode_job",
+    "field": "status",
+    "flow": ["queued", "running", "succeeded", "failed"],
+    "transitions": [
+      {
+        "from": null,
+        "to": "queued",
+        "via": "POST /api/media/:blob_id/transcode"
+      }
+    ]
+  },
   "testCases": [
     {
       "name": "Enqueue image-optimize pipeline",
       "headers": {
-        "Authorization": "Bearer {{cache:auth.register.response.data.token}}"
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
       },
       "pathParams": {
         "blob_id": "{{cache:media.upload-url.create.response.data.blob_id}}"
@@ -35,9 +50,16 @@
     "data": {
       "job": {
         "job_id": "string",
+        "blob_id": "string",
         "pipeline": "string",
-        "status": "string"
+        "status": "string",
+        "output_blob_ids": [],
+        "billed_units": 0
       }
     }
+  },
+  "captureResponse": {
+    "media.transcode.response.data.job.job_id": "data.job.job_id",
+    "media.transcode.response.data.job.status": "data.job.status"
   }
 }

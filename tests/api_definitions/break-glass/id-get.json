@@ -2,13 +2,41 @@
   "name": "GET /api/break-glass/:grant_id - read grant status + latest certificate",
   "endpoint": "/api/break-glass/:grant_id",
   "sdk": "sdk-approval",
+  "sourceFile": "packages/sdk-approval/src/server/routes.ts",
   "method": "GET",
   "requiresAuth": true,
+  "expectedStatus": 200,
   "taskId": "e674989a-98de-4f93-99d4-186d56d24d9e",
   "sprintId": "efcf9cbd-5e84-469e-946e-efcabf8c88e1",
   "featureId": "d00b18c5-a75a-4a02-8e0e-b6f941ac60c1",
   "epicId": "0d61fa89-b842-43af-baf9-42454044726f",
-  "testability": "manual",
-  "skipReason": "Requires an existing break-glass grant_id created via the multi-step approval flow.",
-  "testCases": []
+  "testability": "auto",
+  "dependsOn": [
+    "POST /api/auth/signup-tenant",
+    "POST /api/approvals/routes",
+    "POST /api/break-glass",
+    "POST /api/break-glass/:grant_id/decide",
+    "POST /api/break-glass/:grant_id/use"
+  ],
+  "testCases": [
+    {
+      "name": "Read grant status and latest certificate",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "pathParams": {
+        "grant_id": "{{cache:break-glass.request.response.data.grant.grant_id}}"
+      },
+      "expectedStatus": 200
+    }
+  ],
+  "expectedResponse": {
+    "data": {
+      "grant": {
+        "grant_id": "string",
+        "status": "string",
+        "certificate": "object"
+      }
+    }
+  }
 }

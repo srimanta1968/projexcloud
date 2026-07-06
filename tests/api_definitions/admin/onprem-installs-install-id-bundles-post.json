@@ -1,5 +1,5 @@
 {
-  "name": "POST /admin/onprem/installs/:install_id/bundles \u2014 api-gateway",
+  "name": "POST /admin/onprem/installs/:install_id/bundles — api-gateway",
   "endpoint": "/admin/onprem/installs/:install_id/bundles",
   "method": "POST",
   "requiresAuth": false,
@@ -7,22 +7,29 @@
   "sdk": "api-gateway",
   "sourceFile": "services/api-gateway/src/app.ts",
   "_generated": true,
-  "testability": "manual",
-  "skipReason": "Auto-generated from implemented route scan; payload/expectedResponse inferred from the handler and need review before enabling automated execution.",
+  "testability": "auto",
+  "captureResponse": {
+    "onprem.apply-bundle.response.data.apply_id": "data.apply_id"
+  },
+  "dependsOn": ["POST /admin/onprem/installs"],
   "testCases": [
     {
-      "name": "Auto-generated from route scan (review payload before enabling)",
+      "name": "Record a quarterly signed-bundle apply on an on-prem install",
       "pathParams": {
-        "install_id": "{{static:REPLACE_WITH_ID}}"
+        "install_id": "{{cache:onprem.register-install.response.data.install_id}}"
       },
       "payload": {
-        "bundle_version": "{{static:sample}}",
-        "signature_verified": "{{static:sample}}",
-        "migrations_applied": "{{static:sample}}",
-        "sdk": "{{static:sample}}",
-        "filename": "{{dynamic:name}}"
+        "bundle_version": "2026.3.0",
+        "signature_verified": true,
+        "migrations_applied": [
+          { "sdk": "sdk-identity", "filename": "001_init_identity.sql" },
+          { "sdk": "sdk-onprem", "filename": "001_init_onprem.sql" }
+        ]
       },
-      "expectedStatus": 201
+      "expectedStatus": 201,
+      "headers": {
+        "x-admin-ops-token": "${ADMIN_OPS_TOKEN}"
+      }
     }
   ]
 }

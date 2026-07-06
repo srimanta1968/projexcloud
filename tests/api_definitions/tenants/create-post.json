@@ -9,27 +9,34 @@
   "sprintId": "8ef1d09e-dd8e-4daf-8d03-54dcd9f812f8",
   "featureId": "d3f526f1-243f-4b31-b538-aeffeddca534",
   "epicId": "00996d23-f667-4a82-9285-7728ba357e7b",
-  "testability": "manual",
-  "skipReason": "Requires seeded tenant.org + tenant.app rows; covered by integration test.",
+  "testability": "auto",
+  "dependsOn": [
+    "POST /api/auth/signup-tenant"
+  ],
   "testCases": [
     {
-      "name": "Create a root tenant",
+      "name": "Create a root tenant under the self-serve app",
       "payload": {
-        "app_id": "healthcare",
+        "app_id": "{{cache:auth.signup-tenant.response.data.app_id}}",
         "display_name": "{{dynamic:name}}",
         "region": "us-east-1",
-        "isolation_tier": "S"
+        "isolation_tier": "S",
+        "brand_domain": "acme.example.com",
+        "admin_pool_index": "admin",
+        "app_pool_index": {},
+        "module_subscriptions": []
       },
       "expectedStatus": 201,
       "headers": {
-        "Authorization": "Bearer {{cache:auth.register.response.data.token}}"
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
       }
     }
   ],
-  "dependsOn": [
-    "POST /api/auth/register"
-  ],
+  "fieldEnums": {
+    "isolation_tier": ["S", "P", "G"]
+  },
   "captureResponse": {
-    "tenants.create.response.data.tenant_id": "data.tenant_id"
+    "tenants.create.response.data.tenant_id": "data.tenant_id",
+    "tenants.create.response.data.app_id": "data.app_id"
   }
 }

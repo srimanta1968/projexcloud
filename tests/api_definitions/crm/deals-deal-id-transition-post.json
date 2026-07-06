@@ -4,27 +4,49 @@
   "method": "POST",
   "requiresAuth": true,
   "dependsOn": [
+    "POST /api/auth/signup-tenant",
     "POST /api/auth/register",
+    "POST /api/app-identities",
+    "POST /api/memberships",
+    "POST /api/personas",
+    "POST /api/crm/contacts",
+    "POST /api/vault/keys",
+    "POST /api/encounters",
     "POST /api/crm/deals"
   ],
   "expectedStatus": 200,
   "sdk": "sdk-crm",
   "sourceFile": "packages/sdk-crm/src/server/routes.ts",
   "_generated": true,
-  "fieldOptions": {
+  "fieldEnums": {
     "stage": ["qualifying", "proposal", "negotiation", "closed-won", "closed-lost"]
+  },
+  "statusTransitions": {
+    "entity": "deal",
+    "field": "stage",
+    "flow": ["qualifying", "proposal", "negotiation", "closed-won", "closed-lost"],
+    "transitions": [
+      { "from": "qualifying", "to": "proposal", "via": "POST /api/crm/deals/:deal_id/transition" },
+      { "from": "proposal", "to": "negotiation", "via": "POST /api/crm/deals/:deal_id/transition" },
+      { "from": "negotiation", "to": "closed-won", "via": "POST /api/crm/deals/:deal_id/transition" },
+      { "from": "negotiation", "to": "closed-lost", "via": "POST /api/crm/deals/:deal_id/transition" }
+    ]
+  },
+  "captureResponse": {
+    "crm.deals-transition.response.data.deal.deal_id": "data.deal.deal_id",
+    "crm.deals-transition.response.data.deal.stage": "data.deal.stage"
   },
   "testCases": [
     {
       "name": "Transition an existing deal to a valid stage",
       "headers": {
-        "Authorization": "Bearer {{cache:auth.register.response.data.token}}"
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
       },
       "pathParams": {
         "deal_id": "{{cache:crm.deals.response.data.deal.deal_id}}"
       },
       "payload": {
-        "stage": "{{static:proposal}}"
+        "stage": "proposal"
       },
       "expectedStatus": 200
     }

@@ -7,15 +7,24 @@
  "sdk": "sdk-diagnostic-telemetry",
  "sourceFile": "packages/sdk-diagnostic-telemetry/src/server/index.ts",
  "_generated": true,
+ "testability": "auto",
+ "priority": 40,
+ "dependsOn": [
+  "POST /api/auth/register",
+  "POST /api/auth/signup-tenant",
+  "POST /api/devices"
+ ],
  "testCases": [
   {
-   "name": "Auto-generated from route scan (review payload before enabling)",
+   "name": "Record a crash snapshot for a registered device",
    "payload": {
     "device_uuid": "{{cache:devices.create.response.data.device.device_uuid}}",
-    "app_version": "{{static:1.2.3}}",
-    "os_version": "{{static:17.0}}",
-    "stack_envelope": "{{static:eyJzdGFjayI6IFtdfQ==}}",
-    "occurred_at": "{{dynamic:pastdatetime}}"
+    "person_id": "{{var:person_id}}",
+    "app_version": "1.2.3",
+    "os_version": "17.0",
+    "stack_envelope": "eyJzdGFjayI6IFtdfQ==",
+    "occurred_at": "{{dynamic:pastdatetime}}",
+    "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}"
    },
    "expectedStatus": 201,
    "expectedResponse": {
@@ -23,8 +32,8 @@
    }
   }
  ],
- "priority": 40,
- "dependsOn": [
-  "POST /api/devices"
- ]
+ "captureResponse": {
+  "diagnostic.crash.response.data.crash_id": "data.crash_id",
+  "diagnostic.crash.response.data.device_uuid": "data.device_uuid"
+ }
 }

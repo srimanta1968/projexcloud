@@ -12,10 +12,22 @@
   "sdk": "sdk-engagement",
   "sourceFile": "packages/sdk-engagement/src/server/routes.ts",
   "_generated": true,
-  "testability": "manual",
-  "skipReason": "Requires an open encounter; transitionEncounter validates the state machine (open -> in-progress/closed/sealed).",
-  "fieldOptions": {
+  "testability": "auto",
+  "fieldEnums": {
     "to": ["open", "in-progress", "closed", "sealed"]
+  },
+  "statusTransitions": {
+    "entity": "encounter",
+    "field": "state",
+    "flow": ["open", "in-progress", "closed", "sealed"],
+    "transitions": [
+      { "from": "open", "to": "in-progress", "via": "POST /api/encounters/:encounter_id/transition" },
+      { "from": "open", "to": "closed", "via": "POST /api/encounters/:encounter_id/transition" },
+      { "from": "open", "to": "sealed", "via": "POST /api/encounters/:encounter_id/transition" },
+      { "from": "in-progress", "to": "closed", "via": "POST /api/encounters/:encounter_id/transition" },
+      { "from": "in-progress", "to": "sealed", "via": "POST /api/encounters/:encounter_id/transition" },
+      { "from": "closed", "to": "sealed", "via": "POST /api/encounters/:encounter_id/transition" }
+    ]
   },
   "testCases": [
     {
@@ -27,10 +39,13 @@
         "encounter_id": "{{cache:encounters.create.response.data.encounter.encounter_id}}"
       },
       "payload": {
-        "to": "{{static:in-progress}}",
+        "to": "in-progress",
         "actor_id": "{{cache:personas.create.response.data.persona.persona_id}}"
       },
       "expectedStatus": 200
     }
-  ]
+  ],
+  "captureResponse": {
+    "encounters.transition.response.data.encounter.encounter_id": "data.encounter.encounter_id"
+  }
 }

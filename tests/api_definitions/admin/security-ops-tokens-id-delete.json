@@ -1,0 +1,39 @@
+{
+  "name": "DELETE /admin/security/ops-tokens/:id — api-gateway",
+  "endpoint": "/admin/security/ops-tokens/:id",
+  "method": "DELETE",
+  "requiresAuth": false,
+  "expectedStatus": 200,
+  "sdk": "api-gateway",
+  "sourceFile": "services/api-gateway/src/app.ts",
+  "testability": "auto",
+  "dependsOn": [
+    "POST /admin/security/ops-tokens"
+  ],
+  "statusTransitions": {
+    "entity": "ops_token",
+    "field": "status",
+    "flow": ["active", "revoked"],
+    "transitions": [
+      { "from": "active", "to": "revoked", "via": "DELETE /admin/security/ops-tokens/:id" }
+    ]
+  },
+  "testCases": [
+    {
+      "name": "Revoke a minted ops token by id",
+      "headers": {
+        "x-admin-ops-token": "${ADMIN_OPS_TOKEN}"
+      },
+      "pathParams": {
+        "id": "{{cache:ops-tokens.create.response.data.id}}"
+      },
+      "expectedStatus": 200
+    }
+  ],
+  "expectedResponse": {
+    "data": {
+      "id": "string",
+      "status": "string"
+    }
+  }
+}

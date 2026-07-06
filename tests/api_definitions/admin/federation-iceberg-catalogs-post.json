@@ -1,5 +1,5 @@
 {
-  "name": "POST /admin/federation/iceberg-catalogs \u2014 api-gateway",
+  "name": "POST /admin/federation/iceberg-catalogs — api-gateway",
   "endpoint": "/admin/federation/iceberg-catalogs",
   "method": "POST",
   "requiresAuth": false,
@@ -7,21 +7,27 @@
   "sdk": "api-gateway",
   "sourceFile": "services/api-gateway/src/app.ts",
   "_generated": true,
-  "testability": "manual",
-  "skipReason": "Auto-generated from implemented route scan; payload/expectedResponse inferred from the handler and need review before enabling automated execution.",
+  "testability": "auto",
+  "fieldEnums": {
+    "backend": ["glue", "nessie", "hive"],
+    "status": ["active", "degraded", "retired"]
+  },
+  "captureResponse": {
+    "federation-iceberg-catalogs.create.response.data.catalog_id": "catalog_id"
+  },
   "testCases": [
     {
-      "name": "Auto-generated from route scan (review payload before enabling)",
+      "name": "Register an Iceberg catalog for a region",
       "headers": {
-        "x-admin-ops-token": "{{static:ADMIN_OPS_TOKEN}}"
+        "x-admin-ops-token": "${ADMIN_OPS_TOKEN}"
       },
       "payload": {
-        "catalog_id": "{{static:REPLACE_WITH_ID}}",
-        "region": "{{static:sample}}",
-        "backend": "{{static:sample}}",
-        "root_url": "https://example.com",
-        "capacity_tier": "{{static:sample}}",
-        "status": "{{static:sample}}"
+        "catalog_id": "qa-iceberg-catalog-useast",
+        "region": "us-east-1",
+        "backend": "nessie",
+        "root_url": "https://nessie.example.com/api/v1",
+        "capacity_tier": "standard",
+        "status": "active"
       },
       "expectedStatus": 201
     }

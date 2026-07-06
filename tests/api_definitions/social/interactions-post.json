@@ -4,28 +4,28 @@
   "method": "POST",
   "requiresAuth": true,
   "dependsOn": [
-    "POST /api/auth/register",
+    "POST /api/auth/signup-tenant",
     "POST /api/social/handles"
   ],
   "expectedStatus": 201,
   "sdk": "sdk-social",
   "sourceFile": "packages/sdk-social/src/server/routes.ts",
   "_generated": true,
-  "fieldOptions": {
+  "fieldEnums": {
     "kind": ["dm", "comment", "mention", "review"]
   },
   "testCases": [
     {
       "name": "Ingest an inbound social interaction",
       "headers": {
-        "Authorization": "Bearer {{cache:auth.register.response.data.token}}"
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
       },
       "payload": {
         "handle_id": "{{cache:social.handles.create.response.data.handle.handle_id}}",
-        "kind": "{{static:comment}}",
+        "kind": "comment",
         "author_external_id": "{{dynamic:name}}",
-        "author_persona_id": "{{cache:auth.register.response.data.userId}}",
-        "body": "{{static:Loving the new product launch!}}"
+        "author_persona_id": "{{cache:auth.signup-tenant.response.data.userId}}",
+        "body": "Loving the new product launch!"
       },
       "expectedStatus": 201
     }

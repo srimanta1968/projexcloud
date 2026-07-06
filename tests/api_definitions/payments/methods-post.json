@@ -10,27 +10,31 @@
   "featureId": "33deeb13-adc2-4198-b1e1-1315ca492994",
   "epicId": "d83f7b6e-821c-4fe1-96e6-910eca8fbbfc",
   "priority": 20,
-  "testability": "manual",
-  "skipReason": "Requires a real provider token (Stripe pi_*); covered by vendor sandbox test per AC-3.",
+  "testability": "auto",
   "dependsOn": [
-    "POST /api/auth/register"
+    "POST /api/auth/signup-tenant"
   ],
+  "fieldEnums": {
+    "provider": ["stripe", "razorpay", "plaid", "ach"],
+    "kind": ["card", "bank-account", "upi", "wallet"]
+  },
   "testCases": [
     {
       "name": "Attach Stripe card via tokenized ref",
       "headers": {
-        "Authorization": "Bearer {{cache:auth.register.response.data.token}}"
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
       },
       "payload": {
-        "tenant_id": "{{static:00000000-0000-0000-0000-000000000001}}",
-        "persona_id": "{{cache:auth.register.response.data.userId}}",
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "persona_id": "{{cache:auth.signup-tenant.response.data.userId}}",
         "provider": "stripe",
-        "provider_token": "{{static:pm_card_visa}}",
+        "provider_token": "pm_card_visa",
         "kind": "card",
-        "last4": "{{static:4242}}",
-        "brand": "{{static:visa}}",
+        "last4": "4242",
+        "brand": "visa",
         "exp_month": 12,
-        "exp_year": 2030
+        "exp_year": 2030,
+        "secure_data_field_ref": "{{var:secure_data_field_ref}}"
       },
       "expectedStatus": 201
     }
