@@ -1,5 +1,5 @@
 {
-  "name": "POST /api/hdk-sync/conflicts/resolve - Resolve a conflict by registered policy (AC-11)",
+  "name": "POST /api/hdk-sync/conflicts/resolve - Resolve a conflict by registered policy; escalates to human-review queue (AC-11)",
   "endpoint": "/api/hdk-sync/conflicts/resolve",
   "sdk": "hdk-sync",
   "method": "POST",
@@ -21,7 +21,7 @@
         "Authorization": "Bearer {{cache:auth.register.response.data.token}}"
       },
       "payload": {
-        "event_type": "{{static:clinical.note.edit.v1}}",
+        "event_type": "{{cache:hdk-sync.event-type-policies.create.response.data.policy.event_type}}",
         "input_a": {
           "ops": [
             {
@@ -45,5 +45,9 @@
       },
       "expectedStatus": 200
     }
-  ]
+  ],
+  "captureResponse": {
+    "hdk-sync.conflicts-resolve.response.data.conflict.conflict_id": "data.conflict.conflict_id",
+    "hdk-sync.conflicts-resolve.response.data.human_review_task.task_id": "data.human_review_task.task_id"
+  }
 }

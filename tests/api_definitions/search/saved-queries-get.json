@@ -2,6 +2,7 @@
   "name": "GET /api/search/saved-queries - List a persona's saved queries",
   "endpoint": "/api/search/saved-queries",
   "sdk": "sdk-search",
+  "sourceFile": "packages/sdk-search/src/server/routes.ts",
   "method": "GET",
   "requiresAuth": true,
   "expectedStatus": 200,
@@ -10,22 +11,27 @@
   "featureId": "02447110-6a41-4546-8d10-2107aa023f3a",
   "epicId": "d83f7b6e-821c-4fe1-96e6-910eca8fbbfc",
   "priority": 50,
-  "testability": "manual",
-  "skipReason": "Requires authenticated persona; runs cleanly under integration test.",
+  "testability": "auto",
   "dependsOn": [
-    "POST /api/auth/register"
+    "POST /api/auth/signup-tenant",
+    "POST /api/search/saved-queries"
   ],
   "testCases": [
     {
       "name": "List my saved queries",
       "headers": {
-        "Authorization": "Bearer {{cache:auth.register.response.data.token}}"
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
       },
       "queryParams": {
-        "tenant_id": "{{static:00000000-0000-0000-0000-000000000001}}",
-        "persona_id": "{{cache:auth.register.response.data.userId}}"
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "persona_id": "{{cache:auth.signup-tenant.response.data.userId}}"
       },
       "expectedStatus": 200
     }
-  ]
+  ],
+  "expectedResponse": {
+    "data": {
+      "queries": "array"
+    }
+  }
 }

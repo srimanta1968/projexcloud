@@ -3,17 +3,22 @@
   "endpoint": "/api/ingest/sensor-readings/batch",
   "sdk": "sdk-ingest",
   "method": "POST",
+  "sourceFile": "packages/sdk-ingest/src/server.ts",
   "requiresAuth": true,
   "expectedStatus": 201,
   "taskId": "f9f1c848-2019-484f-97ca-13b22a3effce",
   "sprintId": "efcf9cbd-5e84-469e-946e-efcabf8c88e1",
   "priority": 30,
+  "testability": "auto",
   "dependsOn": [
     "POST /api/auth/signup-tenant",
     "POST /api/assets"
   ],
-  "testability": "manual",
-  "skipReason": "Writes to the ClickHouse time-series table (external store) and validates each reading against the asset.sensor catalog; a real sensor_id is nested inside the asset twin and cannot be captured via cache (no array indexing). Verify live with a signup-tenant token + a registered asset's sensor_id.",
+  "captureResponse": {
+    "ingest.sensor-readings.response.data.imported": "data.imported",
+    "ingest.sensor-readings.response.data.skipped": "data.skipped",
+    "ingest.sensor-readings.response.data.invalid": "data.invalid"
+  },
   "testCases": [
     {
       "name": "Idempotent batch of catalog-valid sensor readings",
@@ -22,18 +27,20 @@
       },
       "payload": {
         "idempotency_key": "{{dynamic:uuid}}",
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
         "readings": [
           {
-            "sensor_id": "{{cache:assets.sensor.id}}",
+            "sensor_id": "{{var:sensor_id}}",
             "asset_id": "{{cache:assets.create.response.data.asset_id}}",
+            "component_id": "{{var:component_id}}",
+            "ts": "{{dynamic:pastdatetime}}",
             "value": 12.5,
             "unit": "N",
             "quality": "good"
           }
         ]
       },
-      "expectedStatus": 201,
-      "testability": "manual"
+      "expectedStatus": 201
     }
   ]
 }

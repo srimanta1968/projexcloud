@@ -4,13 +4,17 @@
   "method": "POST",
   "requiresAuth": true,
   "dependsOn": [
-    "POST /api/auth/register"
+    "POST /api/auth/signup-tenant",
+    "POST /api/auth/register",
+    "POST /api/app-identities",
+    "POST /api/memberships",
+    "POST /api/personas"
   ],
   "expectedStatus": 201,
   "sdk": "sdk-crm",
   "sourceFile": "packages/sdk-crm/src/server/routes.ts",
   "_generated": true,
-  "fieldOptions": {
+  "fieldEnums": {
     "lifecycle_stage": ["lead", "prospect", "customer", "churned", "former"]
   },
   "captureResponse": {
@@ -20,13 +24,16 @@
     {
       "name": "Create persona-keyed contact (tenant_id + persona_id required)",
       "headers": {
-        "Authorization": "Bearer {{cache:auth.register.response.data.token}}"
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
       },
       "payload": {
-        "tenant_id": "{{dynamic:uuid}}",
-        "persona_id": "{{dynamic:uuid}}",
-        "lifecycle_stage": "{{static:lead}}",
-        "source": "{{static:web}}"
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "persona_id": "{{cache:personas.create.response.data.persona.persona_id}}",
+        "lifecycle_stage": "lead",
+        "source": "web",
+        "owner_persona_id": "{{cache:personas.create.response.data.persona.persona_id}}",
+        "custom_fields": { "segment": "enterprise" },
+        "external_refs": { "salesforce_id": "SF-001" }
       },
       "expectedStatus": 201
     }

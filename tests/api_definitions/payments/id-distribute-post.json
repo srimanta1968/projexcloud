@@ -10,17 +10,17 @@
   "featureId": "33deeb13-adc2-4198-b1e1-1315ca492994",
   "epicId": "d83f7b6e-821c-4fe1-96e6-910eca8fbbfc",
   "priority": 60,
-  "testability": "manual",
-  "skipReason": "Depends on a captured charge + real persona party ids; covered by integration test (escrow/marketplace flow).",
+  "testability": "auto",
   "dependsOn": [
-    "POST /api/auth/register",
+    "POST /api/auth/signup-tenant",
+    "POST /api/payments/methods",
     "POST /api/payments/charge"
   ],
   "testCases": [
     {
       "name": "Split charge between two parties",
       "headers": {
-        "Authorization": "Bearer {{cache:auth.register.response.data.token}}"
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
       },
       "pathParams": {
         "charge_id": "{{cache:payments.charge.response.data.charge.charge_id}}"
@@ -29,16 +29,32 @@
         "currency": "USD",
         "splits": [
           {
-            "party_persona_id": "{{cache:auth.register.response.data.userId}}",
+            "party_persona_id": "{{cache:auth.signup-tenant.response.data.userId}}",
             "share": 20
           },
           {
-            "party_persona_id": "{{static:00000000-0000-0000-0000-000000000099}}",
+            "party_persona_id": "{{var:person_id}}",
             "share": 5
           }
         ]
       },
       "expectedStatus": 201
     }
-  ]
+  ],
+  "expectedResponse": {
+    "data": {
+      "distributions": [
+        {
+          "distribution_id": "string",
+          "charge_id": "string",
+          "party_persona_id": "string",
+          "share": "string",
+          "seq": "string"
+        }
+      ]
+    }
+  },
+  "captureResponse": {
+    "payments.distribute.response.data.distribution.distribution_id": "data.distributions.0.distribution_id"
+  }
 }

@@ -10,12 +10,18 @@
   "epicId": "9c09e562-b1f5-481e-983b-a4aae8891e8a",
   "sprintId": "efcf9cbd-5e84-469e-946e-efcabf8c88e1",
   "priority": 16,
+  "testability": "auto",
   "sourceFile": "services/api-gateway/src/app.ts",
+  "dependsOn": [
+    "POST /api/auth/signup-tenant"
+  ],
   "testCases": [
     {
       "name": "List tenant members for a tenant_id",
-      "expectedStatus": 200,
-      "testability": "manual"
+      "queryParams": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}"
+      },
+      "expectedStatus": 200
     }
   ],
   "expectedResponse": {
@@ -29,7 +35,5 @@
         "status": "string"
       }
     ]
-  },
-  "testability": "manual",
-  "skipReason": "Needs a tenant_id that has members; verified live against a signup-tenant tenant. Members are resolved from identity.tenant_membership joined to the L2 profile band (display_name) with an email fallback."
+  }
 }

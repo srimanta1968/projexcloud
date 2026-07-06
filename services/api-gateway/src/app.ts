@@ -2252,10 +2252,10 @@ const start = async (): Promise<void> => {
         if (to)        { params.push(to);        where.push(`period_start <= $${params.length}::date`); }
         const { rows } = await dataService.query(
           `SELECT invoice_id, tenant_id::text AS tenant_id, period_start, period_end,
-                  total_cents, currency, status, finalized_at, created_at
+                  total, currency, status, finalized_at, generated_at
              FROM billing.invoice
             ${where.length ? 'WHERE ' + where.join(' AND ') : ''}
-            ORDER BY created_at DESC LIMIT 200`,
+            ORDER BY generated_at DESC LIMIT 200`,
           params,
         );
         return { success: true, data: rows };
@@ -2274,7 +2274,7 @@ const start = async (): Promise<void> => {
         );
         if (inv.rows.length === 0) return reply.code(404).send({ success: false, error: 'invoice not found' });
         const items = await dataService.query(
-          `SELECT * FROM billing.invoice_line WHERE invoice_id = $1 ORDER BY sku`,
+          `SELECT * FROM billing.line_item WHERE invoice_id = $1 ORDER BY sku`,
           [req.params.invoice_id],
         );
         return { success: true, data: { invoice: inv.rows[0], line_items: items.rows } };
@@ -2343,7 +2343,9 @@ const start = async (): Promise<void> => {
       if (err) return reply.code(401).send({ success: false, error: err });
       try {
         const { rows } = await dataService.query(
-          `SELECT route_id, tenant_id::text AS tenant_id, name, sla_minutes, created_at
+          `SELECT route_id, tenant_id::text AS tenant_id, name, status, created_at,
+                  (SELECT COALESCE(MAX((s->>'sla_minutes')::int), 0)
+                     FROM jsonb_array_elements(steps) s) AS sla_minutes
              FROM approval.route ORDER BY created_at DESC LIMIT 200`,
         );
         return { success: true, data: rows };
@@ -2357,14 +2359,20 @@ const start = async (): Promise<void> => {
       if (err) return reply.code(401).send({ success: false, error: err });
       try {
         const { rows } = await dataService.query(
-          `SELECT r.request_id, r.tenant_id::text AS tenant_id, r.route_id, r.subject_ref,
-                  r.created_at, r.status,
-                  EXTRACT(epoch FROM (now() - r.created_at))/60 AS elapsed_minutes,
-                  rt.sla_minutes
+          `SELECT r.request_id, r.tenant_id::text AS tenant_id, r.route_id,
+                  r.subject_kind || ':' || r.subject_id AS subject_ref,
+                  r.requested_at, r.status,
+                  EXTRACT(epoch FROM (now() - r.requested_at))/60 AS elapsed_minutes,
+                  sla.sla_minutes
              FROM approval.request r
              JOIN approval.route rt USING (route_id)
+             JOIN LATERAL (
+               SELECT COALESCE(MAX((s->>'sla_minutes')::int), 0) AS sla_minutes
+                 FROM jsonb_array_elements(rt.steps) s
+             ) sla ON true
             WHERE r.status = 'pending'
-              AND (now() - r.created_at) > (rt.sla_minutes || ' minutes')::interval
+              AND sla.sla_minutes > 0
+              AND (now() - r.requested_at) > (sla.sla_minutes || ' minutes')::interval
             ORDER BY elapsed_minutes DESC LIMIT 100`,
         );
         return { success: true, data: rows };
@@ -2387,10 +2395,16 @@ const start = async (): Promise<void> => {
         await dataService.query(
           `UPDATE approval.request
               SET status = $2,
+                  final_decision = $3,
                   resolved_at = now(),
-                  resolution_reason = $3
+                  reason = $4
             WHERE request_id = $1 AND status = 'pending'`,
-          [req.params.request_id, b.decision, `[operator-override by ${b.operator_id}] ${b.reason}`],
+          [
+            req.params.request_id,
+            b.decision,
+            b.decision === 'approved' ? 'approve' : 'reject',
+            `[operator-override by ${b.operator_id}] ${b.reason}`,
+          ],
         );
         return { success: true };
       } catch (e) {
@@ -2416,7 +2430,7 @@ const start = async (): Promise<void> => {
         params.push(limit);
         const { rows } = await dataService.query(
           `SELECT entry_id, tenant_id::text AS tenant_id, actor_kind, actor_id,
-                  action, occurred_at, seq
+                  event_type, occurred_at, seq
              FROM audit.entry
             ${where.length ? 'WHERE ' + where.join(' AND ') : ''}
             ORDER BY occurred_at DESC LIMIT $${params.length}`,
@@ -3009,11 +3023,22 @@ const start = async (): Promise<void> => {
       Params: { persona_id: string };
       Body: { role?: string };
     }>('/api/personas/:persona_id/role', async (req, reply) => {
-      if (!req.body?.role) return reply.code(400).send({ success: false, error: 'role required' });
+      const role = req.body?.role;
+      if (!role) return reply.code(400).send({ success: false, error: 'role required' });
+      // persona.persona has no free-text role column; the canonical model stores
+      // the persona's primary role as a role_template_id (UUID). Callers must pass
+      // a role_template_id, not a label.
+      const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      if (!UUID_RE.test(role)) {
+        return reply.code(400).send({
+          success: false,
+          error: 'role must be a role_template_id (uuid)',
+        });
+      }
       try {
         await dataService.query(
-          `UPDATE persona.persona SET role = $2 WHERE persona_id = $1`,
-          [req.params.persona_id, req.body.role],
+          `UPDATE persona.persona SET primary_role_template_id = $2::uuid WHERE persona_id = $1`,
+          [req.params.persona_id, role],
         );
         return { success: true };
       } catch (e) {
@@ -3039,7 +3064,7 @@ const start = async (): Promise<void> => {
     app.post<{ Params: { persona_id: string } }>('/api/personas/:persona_id/deactivate', async (req, reply) => {
       try {
         await dataService.query(
-          `UPDATE persona.persona SET status = 'inactive' WHERE persona_id = $1`,
+          `UPDATE persona.persona SET status = 'suspended' WHERE persona_id = $1`,
           [req.params.persona_id],
         );
         return { success: true };
@@ -3053,38 +3078,28 @@ const start = async (): Promise<void> => {
       const tenant_id = req.query.tenant_id;
       if (!tenant_id) return reply.code(400).send({ success: false, error: 'tenant_id required' });
       try {
-        const { rows } = await dataService.query(
-          `SELECT key_id, tenant_id::text AS tenant_id, name, scope,
-                  status, issued_at, last_used_at, expires_at
-             FROM api_keys.key WHERE tenant_id = $1::uuid
-            ORDER BY issued_at DESC LIMIT 200`,
-          [tenant_id],
-        );
-        return { success: true, data: rows };
+        // Delegate to sdk-api-keys so we honour the canonical schema
+        // (prefix / key_hash BYTEA / scopes[] / synthetic_persona_id).
+        const { listKeys } = await import('@projexlight/sdk-api-keys');
+        return { success: true, data: await listKeys(tenant_id) };
       } catch (e) {
         return reply.code(500).send({ success: false, error: (e as Error).message });
       }
     });
 
     app.post<{
-      Body: { tenant_id?: string; name?: string; scope?: string };
+      Body: { tenant_id?: string; name?: string; scope?: string; scopes?: string[] };
     }>('/api/keys', async (req, reply) => {
       const b = req.body ?? {};
-      if (!b.tenant_id || !b.name || !b.scope) {
-        return reply.code(400).send({ success: false, error: 'tenant_id + name + scope required' });
+      const scopes = b.scopes ?? (b.scope ? [b.scope] : []);
+      if (!b.tenant_id || scopes.length === 0) {
+        return reply.code(400).send({ success: false, error: 'tenant_id + scope(s) required' });
       }
       try {
-        const crypto = await import('crypto');
-        const keyId = `ak_${crypto.randomBytes(10).toString('hex')}`;
-        const plaintext = `pk_${crypto.randomBytes(24).toString('hex')}`;
-        const hash = crypto.createHash('sha256').update(plaintext).digest('hex');
-        await dataService.query(
-          `INSERT INTO api_keys.key (key_id, tenant_id, name, scope, secret_hash, status)
-           VALUES ($1, $2::uuid, $3, $4, $5, 'active')`,
-          [keyId, b.tenant_id, b.name, b.scope, hash],
-        );
+        const { issueKey } = await import('@projexlight/sdk-api-keys');
+        const { key, plaintext } = await issueKey({ tenant_id: b.tenant_id, scopes });
         // Plaintext returned exactly once — caller must capture.
-        return { success: true, data: { key_id: keyId, plaintext } };
+        return { success: true, data: { key_id: key.key_id, plaintext } };
       } catch (e) {
         return reply.code(500).send({ success: false, error: (e as Error).message });
       }
@@ -3094,10 +3109,9 @@ const start = async (): Promise<void> => {
       const reason = req.body?.reason?.trim();
       if (!reason) return reply.code(400).send({ success: false, error: 'reason required' });
       try {
-        await dataService.query(
-          `UPDATE api_keys.key SET status = 'revoked', revoked_at = now() WHERE key_id = $1`,
-          [req.params.key_id],
-        );
+        const { revokeKey } = await import('@projexlight/sdk-api-keys');
+        const revoked = await revokeKey(req.params.key_id);
+        if (!revoked) return reply.code(404).send({ success: false, error: 'key not found or already revoked' });
         return { success: true };
       } catch (e) {
         return reply.code(500).send({ success: false, error: (e as Error).message });
@@ -3138,7 +3152,9 @@ const start = async (): Promise<void> => {
       if (!tenant_id) return reply.code(400).send({ success: false, error: 'tenant_id required' });
       try {
         const { rows } = await dataService.query(
-          `SELECT route_id, name, sla_minutes, created_at
+          `SELECT route_id, name, status, created_at,
+                  (SELECT COALESCE(MAX((s->>'sla_minutes')::int), 0)
+                     FROM jsonb_array_elements(steps) s) AS sla_minutes
              FROM approval.route WHERE tenant_id = $1::uuid
             ORDER BY created_at DESC LIMIT 100`,
           [tenant_id],
@@ -3159,14 +3175,20 @@ const start = async (): Promise<void> => {
         let assigneeFilter = '';
         if (req.query.assignee_persona_id) {
           params.push(req.query.assignee_persona_id);
-          assigneeFilter = `AND assignee_persona_id = $${params.length}`;
+          // Assignment lives on approval.step (approver_persona_id), not the request.
+          assigneeFilter = `AND EXISTS (
+            SELECT 1 FROM approval.step st
+             WHERE st.request_id = r.request_id
+               AND st.approver_persona_id = $${params.length}::uuid
+               AND st.decision IS NULL)`;
         }
         const { rows } = await dataService.query(
-          `SELECT request_id, route_id, subject_ref, status, created_at,
-                  assignee_persona_id::text AS assignee_persona_id
-             FROM approval.request
-            WHERE tenant_id = $1::uuid AND status = 'pending' ${assigneeFilter}
-            ORDER BY created_at ASC LIMIT 100`,
+          `SELECT r.request_id, r.route_id,
+                  r.subject_kind || ':' || r.subject_id AS subject_ref,
+                  r.status, r.requested_at
+             FROM approval.request r
+            WHERE r.tenant_id = $1::uuid AND r.status = 'pending' ${assigneeFilter}
+            ORDER BY r.requested_at ASC LIMIT 100`,
           params,
         );
         return { success: true, data: rows };
@@ -3186,10 +3208,15 @@ const start = async (): Promise<void> => {
       try {
         await dataService.query(
           `UPDATE approval.request
-              SET status = $2, resolved_at = now(),
-                  resolution_reason = $3, resolved_by_persona_id = $4::uuid
+              SET status = $2, final_decision = $3, resolved_at = now(),
+                  reason = $4
             WHERE request_id = $1 AND status = 'pending'`,
-          [req.params.request_id, b.decision, b.comment, b.decider_persona_id],
+          [
+            req.params.request_id,
+            b.decision,
+            b.decision === 'approved' ? 'approve' : 'reject',
+            `[decided by ${b.decider_persona_id}] ${b.comment}`,
+          ],
         );
         return { success: true };
       } catch (e) {
@@ -3220,11 +3247,13 @@ const start = async (): Promise<void> => {
       const tenant_id = req.query.tenant_id;
       if (!tenant_id) return reply.code(400).send({ success: false, error: 'tenant_id required' });
       try {
+        // consent.purpose is an app-scoped catalog (keyed by app_id, no tenant_id
+        // column); return the full purpose catalogue.
         const { rows } = await dataService.query(
-          `SELECT purpose_id, name, description, retention_class, jurisdictions, created_at
-             FROM consent.purpose WHERE tenant_id = $1::uuid
-            ORDER BY name LIMIT 200`,
-          [tenant_id],
+          `SELECT purpose_id, app_id, description, legal_basis,
+                  default_jurisdictions, created_at
+             FROM consent.purpose
+            ORDER BY purpose_id LIMIT 200`,
         );
         return { success: true, data: rows };
       } catch (e) {
@@ -3238,19 +3267,23 @@ const start = async (): Promise<void> => {
       const tenant_id = req.query.tenant_id;
       if (!tenant_id) return reply.code(400).send({ success: false, error: 'tenant_id required' });
       try {
+        // consent.receipt identifies the subject by person_id and carries
+        // source_/target_tenant_id (no bare tenant_id); active/revoked state is
+        // derived from revoked_at (NULL = active).
         const params: unknown[] = [tenant_id];
-        const where: string[] = [`tenant_id = $1::uuid`];
+        const where: string[] = [`(source_tenant_id = $1::uuid OR target_tenant_id = $1::uuid)`];
         if (req.query.subject_persona_id) {
           params.push(req.query.subject_persona_id);
-          where.push(`subject_persona_id = $${params.length}::uuid`);
+          where.push(`person_id = $${params.length}::uuid`);
         }
         if (req.query.purpose_id) {
           params.push(req.query.purpose_id);
           where.push(`purpose_id = $${params.length}`);
         }
         const { rows } = await dataService.query(
-          `SELECT receipt_id, subject_persona_id::text AS subject_persona_id,
-                  purpose_id, status, granted_at, revoked_at
+          `SELECT receipt_id, person_id::text AS person_id, purpose_id,
+                  CASE WHEN revoked_at IS NULL THEN 'active' ELSE 'revoked' END AS status,
+                  granted_at, revoked_at
              FROM consent.receipt WHERE ${where.join(' AND ')}
             ORDER BY granted_at DESC LIMIT 200`,
           params,
@@ -3264,7 +3297,7 @@ const start = async (): Promise<void> => {
     app.post<{ Params: { receipt_id: string }; Body: { reason?: string } }>('/api/consent/receipts/:receipt_id/revoke', async (req, reply) => {
       try {
         await dataService.query(
-          `UPDATE consent.receipt SET status = 'revoked', revoked_at = now() WHERE receipt_id = $1`,
+          `UPDATE consent.receipt SET revoked_at = now() WHERE receipt_id = $1`,
           [req.params.receipt_id],
         );
         return { success: true };

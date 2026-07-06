@@ -1,26 +1,39 @@
 {
-  "name": "POST /admin/apps \u2014 api-gateway",
+  "name": "POST /admin/apps — api-gateway",
   "endpoint": "/admin/apps",
   "method": "POST",
   "requiresAuth": false,
   "expectedStatus": 201,
   "sdk": "api-gateway",
   "sourceFile": "services/api-gateway/src/app.ts",
-  "_generated": true,
-  "testability": "manual",
-  "skipReason": "Auto-generated from implemented route scan; payload/expectedResponse inferred from the handler and need review before enabling automated execution.",
+  "testability": "auto",
   "testCases": [
     {
-      "name": "Auto-generated from route scan (review payload before enabling)",
+      "name": "Provision an app (and its owning org) for tenant creation",
       "headers": {
-        "x-admin-ops-token": "{{static:ADMIN_OPS_TOKEN}}"
+        "x-admin-ops-token": "{{var:ADMIN_OPS_TOKEN}}"
       },
       "payload": {
         "app_id": "{{dynamic:name}}",
-        "display_name": "{{dynamic:name}}",
-        "org_name": "{{dynamic:name}}"
+        "display_name": "QA Admin App",
+        "org_name": "QA Admin Org"
       },
       "expectedStatus": 201
     }
-  ]
+  ],
+  "expectedResponse": {
+    "data": {
+      "app": {
+        "app_id": "string",
+        "org_id": "string",
+        "display_name": "string",
+        "status": "string",
+        "created_at": "string"
+      }
+    }
+  },
+  "captureResponse": {
+    "apps.create.response.data.app_id": "data.app.app_id",
+    "apps.create.response.data.org_id": "data.app.org_id"
+  }
 }

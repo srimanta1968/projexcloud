@@ -7,21 +7,48 @@
   "sdk": "sdk-lead-scoring",
   "sourceFile": "packages/sdk-lead-scoring/src/server/index.ts",
   "_generated": true,
+  "testability": "auto",
   "dependsOn": [
+    "POST /api/auth/signup-tenant",
     "POST /api/lead-scoring/models"
   ],
-  "testability": "manual",
-  "skipReason": "scoreContact() looks up an ACTIVE model for the (tenant_id, vertical) pair via getActiveModel and throws (400) when none exists; the parent POST /api/lead-scoring/models def neither activates nor captures a model id, so the tenant_id FK is not obtainable in an automated run. Required body fields filled for documentation.",
   "testCases": [
     {
-      "name": "Score a contact (happy path)",
+      "name": "Score a contact against the active model (happy path)",
       "payload": {
-        "tenant_id": "{{cache:lead-scoring.models.create.response.data.tenant_id}}",
-        "vertical": "{{static:solar}}",
-        "contact_id": "{{dynamic:uuid}}",
-        "trace_id": "{{dynamic:uuid}}"
+        "tenant_id": "{{cache:lead-scoring.create.response.data.tenant_id}}",
+        "vertical": "solar",
+        "contact_id": "{{var:contact_id}}",
+        "trace_id": "{{var:trace_id}}",
+        "proximity": {
+          "distance_km": 12
+        },
+        "expertise": {
+          "persona_kinds": ["homeowner"],
+          "vertical_specialties": ["roof", "flood"]
+        },
+        "intent": {
+          "days_since_last_engagement": 3,
+          "emails_opened": 4,
+          "replies": 1
+        },
+        "storm_impact": {
+          "overlapping_storm_events": 2
+        }
       },
       "expectedStatus": 200
     }
-  ]
+  ],
+  "expectedResponse": {
+    "data": {
+      "score": "object",
+      "components": "object",
+      "weights": "object",
+      "model_id": "string"
+    }
+  },
+  "captureResponse": {
+    "lead-scoring.score.response.data.score_id": "data.score.score_id",
+    "lead-scoring.score.response.data.model_id": "data.model_id"
+  }
 }

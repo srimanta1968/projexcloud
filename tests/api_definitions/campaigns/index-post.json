@@ -4,16 +4,25 @@
   "method": "POST",
   "requiresAuth": true,
   "dependsOn": [
-    "POST /api/auth/signup-tenant"
+    "POST /api/auth/signup-tenant",
+    "PUT /api/flags"
   ],
   "expectedStatus": 201,
   "sdk": "sdk-campaign",
   "sourceFile": "packages/sdk-campaign/src/server/routes.ts",
   "_generated": true,
-  "testability": "manual",
-  "skipReason": "Needs a real sub-bearing JWT from the signup-tenant chain (tenant_id + token). Handler requires tenant_id + name; creates campaign.campaign and returns 201.",
+  "testability": "auto",
+  "statusTransitions": {
+    "entity": "campaign.campaign",
+    "field": "status",
+    "flow": ["draft", "scheduled", "running", "paused", "completed"],
+    "transitions": [
+      { "from": "(none)", "to": "draft", "via": "POST /api/campaigns" }
+    ]
+  },
   "captureResponse": {
-    "campaigns.create.response.data.campaign.campaign_id": "data.campaign.campaign_id"
+    "campaigns.create.response.data.campaign.campaign_id": "data.campaign.campaign_id",
+    "campaigns.create.response.data.campaign.status": "data.campaign.status"
   },
   "testCases": [
     {
@@ -24,18 +33,9 @@
       "payload": {
         "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
         "name": "{{dynamic:name}}",
-        "variant_flag_id": "{{static:flag_homepage_v2}}"
+        "variant_flag_id": "{{cache:flags.create.response.data.flag.flag_id}}"
       },
       "expectedStatus": 201
     }
-  ],
-  "serverFieldOptions": {
-    "status": [
-      "draft",
-      "scheduled",
-      "running",
-      "paused",
-      "completed"
-    ]
-  }
+  ]
 }

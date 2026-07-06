@@ -10,30 +10,53 @@
   "featureId": "7a33ef6c-2dad-4c40-a8a2-f414c13e6c48",
   "epicId": "00996d23-f667-4a82-9285-7728ba357e7b",
   "priority": 50,
-  "testability": "manual",
-  "skipReason": "Depends on a previously-issued key_id; integration test covers full lifecycle.",
+  "testability": "auto",
   "dependsOn": [
-    "POST /api/auth/register",
+    "POST /api/auth/signup-tenant",
     "POST /api/api-keys"
   ],
   "testCases": [
     {
       "name": "Rotate the freshly-issued key",
       "headers": {
-        "Authorization": "Bearer {{cache:auth.register.response.data.token}}"
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
       },
       "pathParams": {
         "key_id": "{{cache:api-keys.create.response.data.key.key_id}}"
       },
+      "payload": {},
       "expectedStatus": 201
     }
   ],
+  "statusTransitions": {
+    "entity": "api-key",
+    "field": "status",
+    "flow": [
+      "active",
+      "rotating",
+      "revoked",
+      "expired"
+    ],
+    "transitions": [
+      {
+        "from": "active",
+        "to": "rotating",
+        "via": "POST /api/api-keys/:key_id/rotate"
+      }
+    ]
+  },
   "expectedResponse": {
     "data": {
       "key": {
-        "key_id": "string"
+        "key_id": "string",
+        "status": "string",
+        "rotated_from_key_id": "string"
       },
       "plaintext": "string"
     }
+  },
+  "captureResponse": {
+    "api-keys.rotate.response.data.key.key_id": "data.key.key_id",
+    "api-keys.rotate.response.data.key.rotated_from_key_id": "data.key.rotated_from_key_id"
   }
 }

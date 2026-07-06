@@ -1,5 +1,5 @@
 {
-  "name": "POST /api/hdk/measure \u2014 hdk-measure",
+  "name": "POST /api/hdk/measure — hdk-measure",
   "endpoint": "/api/hdk/measure",
   "method": "POST",
   "requiresAuth": false,
@@ -7,20 +7,30 @@
   "sdk": "hdk-measure",
   "sourceFile": "packages/hdk-measure/src/server/index.ts",
   "_generated": true,
-  "testability": "manual",
-  "skipReason": "Auto-generated from implemented route scan; payload/expectedResponse inferred from the handler and need review before enabling automated execution.",
+  "testability": "auto",
+  "dependsOn": [
+    "POST /api/auth/signup-tenant"
+  ],
+  "fieldEnums": {
+    "kind": ["area", "distance", "volume"],
+    "accuracy_class": ["high", "medium", "low"]
+  },
+  "captureResponse": {
+    "measure.create.response.data.measurement_id": "data.measurement_id",
+    "measure.create.response.data.capture_id": "data.capture_id"
+  },
   "testCases": [
     {
-      "name": "Auto-generated from route scan (review payload before enabling)",
+      "name": "Record an AR measurement",
       "payload": {
-        "capture_id": "{{static:REPLACE_WITH_ID}}",
-        "kind": "{{static:sample}}",
-        "value": "{{static:sample}}",
-        "unit": "{{static:sample}}",
-        "accuracy_class": "{{static:sample}}",
-        "device_uuid": "{{static:sample}}",
-        "captured_at": "{{dynamic:futuredatetime}}",
-        "tenant_id": "{{static:REPLACE_WITH_ID}}"
+        "capture_id": "{{var:capture_id}}",
+        "kind": "distance",
+        "value": 3.5,
+        "unit": "m",
+        "accuracy_class": "high",
+        "device_uuid": "{{dynamic:uuid}}",
+        "captured_at": "{{dynamic:pastdatetime}}",
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}"
       },
       "expectedStatus": 201
     }

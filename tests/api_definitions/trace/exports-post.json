@@ -6,18 +6,36 @@
   "description": "Signed PDF/JSON trace export. Persists trace.export with artifact_s3_key + HMAC signature; emits trace.export.requested.v1 + trace.export.ready.v1 (operational retention).",
   "requiresAuth": true,
   "priority": 510,
+  "sourceFile": "packages/sdk-trace/src/server/handlers/traceController.ts",
+  "testability": "auto",
   "dependsOn": [
-    "POST /api/auth/register"
+    "POST /api/auth/signup-tenant"
   ],
-  "testability": "manual",
-  "skipReason": "Requires populated trace.trace fixture + signer adapter; exercised by AC-10 integration.",
+  "fieldEnums": {
+    "format": ["pdf", "json"]
+  },
   "testCases": [
     {
-      "name": "Manual: PDF export persists trace.export row with signature",
+      "name": "PDF export persists trace.export row with signature",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "payload": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "requestor_persona_id": "{{var:person_id}}",
+        "trace_id": "{{var:trace_id}}",
+        "format": "pdf"
+      },
       "expectedStatus": 201,
       "expectedResponse": {
         "success": true
       }
     }
-  ]
+  ],
+  "captureResponse": {
+    "trace.exports.response.data.export_id": "data.export_id",
+    "trace.exports.response.data.trace_id": "data.trace_id",
+    "trace.exports.response.data.tenant_id": "data.tenant_id",
+    "trace.exports.response.data.artifact_s3_key": "data.artifact_s3_key"
+  }
 }

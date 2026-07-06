@@ -10,16 +10,27 @@
   "sdk": "sdk-vault",
   "sourceFile": "packages/sdk-vault/src/server/routes.ts",
   "_generated": true,
-  "testability": "manual",
-  "skipReason": "Auto-generated from implemented route scan; payload/expectedResponse inferred from the handler and need review before enabling automated execution.",
+  "testability": "auto",
+  "fieldEnums": {
+    "tier": ["root", "app", "pool", "tenant", "person", "device", "encounter"],
+    "algorithm": ["AES-256-GCM", "ChaCha20-Poly1305"]
+  },
   "testCases": [
     {
-      "name": "Auto-generated from route scan (review payload before enabling)",
+      "name": "Issue a root-tier vault key",
       "headers": {
         "Authorization": "Bearer {{cache:auth.register.response.data.token}}"
       },
-      "payload": {},
+      "payload": {
+        "tier": "root",
+        "kms_ref": "kms-root-001",
+        "algorithm": "AES-256-GCM",
+        "region": "us-east-1"
+      },
       "expectedStatus": 201
     }
-  ]
+  ],
+  "captureResponse": {
+    "vault.keys.create.response.data.key_id": "data.key_id"
+  }
 }

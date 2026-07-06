@@ -10,23 +10,35 @@
   "featureId": "f493450e-8ed8-425c-b905-f8a76a70bdcc",
   "epicId": "00996d23-f667-4a82-9285-7728ba357e7b",
   "priority": 25,
-  "testability": "manual",
-  "skipReason": "Requires verified provider id_token (Google/Apple/Microsoft); covered by manual smoke test.",
+  "testability": "auto",
+  "sourceFile": "packages/sdk-identity/src/server/routes.ts",
+  "dependsOn": [
+    "POST /api/auth/signup-tenant"
+  ],
+  "fieldEnums": {
+    "provider": ["google", "apple", "microsoft"]
+  },
   "testCases": [
     {
       "name": "Google callback with verified id_token claims",
       "pathParams": {
-        "provider": "{{static:google}}"
+        "provider": "google"
       },
       "payload": {
-        "tenant_id": "{{static:00000000-0000-0000-0000-000000000001}}",
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
         "verified_claims": {
-          "sub": "{{static:google-sub-abc123}}",
+          "sub": "{{dynamic:name}}",
           "email": "{{dynamic:email}}",
           "email_verified": true
         }
       },
       "expectedStatus": 200
     }
-  ]
+  ],
+  "expectedResponse": {
+    "data": { "person_id": "string", "jit_provisioned": true }
+  },
+  "captureResponse": {
+    "social.social-callback.response.data.person_id": "data.person_id"
+  }
 }

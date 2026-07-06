@@ -1,5 +1,5 @@
 {
-  "name": "POST /admin/onprem/installs/:install_id/billing-reports \u2014 api-gateway",
+  "name": "POST /admin/onprem/installs/:install_id/billing-reports — api-gateway",
   "endpoint": "/admin/onprem/installs/:install_id/billing-reports",
   "method": "POST",
   "requiresAuth": false,
@@ -7,20 +7,26 @@
   "sdk": "api-gateway",
   "sourceFile": "services/api-gateway/src/app.ts",
   "_generated": true,
-  "testability": "manual",
-  "skipReason": "Auto-generated from implemented route scan; payload/expectedResponse inferred from the handler and need review before enabling automated execution.",
+  "testability": "auto",
+  "captureResponse": {
+    "onprem.billing-report.response.data.report_id": "data.report_id"
+  },
+  "dependsOn": ["POST /admin/onprem/installs"],
   "testCases": [
     {
-      "name": "Auto-generated from route scan (review payload before enabling)",
+      "name": "Generate an internal-only billing report for a period",
       "pathParams": {
-        "install_id": "{{static:REPLACE_WITH_ID}}"
+        "install_id": "{{cache:onprem.register-install.response.data.install_id}}"
       },
       "payload": {
-        "period_start": "{{static:sample}}",
-        "period_end": "{{static:sample}}",
-        "artifact_local_path": "{{static:sample}}"
+        "period_start": "2026-04-01",
+        "period_end": "2026-06-30",
+        "artifact_local_path": "/var/onprem/reports/2026-q2.pdf"
       },
-      "expectedStatus": 201
+      "expectedStatus": 201,
+      "headers": {
+        "x-admin-ops-token": "{{var:ADMIN_OPS_TOKEN}}"
+      }
     }
   ]
 }

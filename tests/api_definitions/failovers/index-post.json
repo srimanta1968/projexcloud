@@ -1,5 +1,5 @@
 {
-  "name": "POST /failovers \u2014 pool-federation-runtime",
+  "name": "POST /failovers — pool-federation-runtime",
   "endpoint": "/failovers",
   "method": "POST",
   "requiresAuth": false,
@@ -7,21 +7,35 @@
   "sdk": "pool-federation-runtime",
   "sourceFile": "services/pool-federation-runtime/src/app.ts",
   "_generated": true,
-  "testability": "manual",
-  "skipReason": "Auto-generated from implemented route scan; payload/expectedResponse inferred from the handler and need review before enabling automated execution.",
+  "testability": "auto",
+  "description": "Record a failover event (chaos drill, real production failover, or operator-initiated) against federation.failover_event. Body maps 1:1 to recordFailover(); returns the persisted event including server-generated occurred_at.",
+  "fieldEnums": {
+    "trigger": [
+      "chaos-drill",
+      "production-failover",
+      "operator-initiated"
+    ]
+  },
+  "captureResponse": {
+    "failovers.record.response.data.event_id": "event_id",
+    "failovers.record.response.data.occurred_at": "occurred_at"
+  },
   "testCases": [
     {
-      "name": "Auto-generated from route scan (review payload before enabling)",
+      "name": "Record an operator-initiated failover",
       "payload": {
-        "event_id": "{{static:REPLACE_WITH_ID}}",
-        "federation_id": "{{static:REPLACE_WITH_ID}}",
-        "from_region": "{{static:sample}}",
-        "to_region": "{{static:sample}}",
-        "trigger": "{{static:sample}}",
-        "rpo_observed": "{{static:sample}}",
-        "rto_observed": "{{static:sample}}"
+        "event_id": "{{var:failover_event_id}}",
+        "federation_id": "{{var:federation_id}}",
+        "from_region": "us-east-1",
+        "to_region": "us-west-2",
+        "trigger": "chaos-drill",
+        "rpo_observed": 30,
+        "rto_observed": 120
       },
-      "expectedStatus": 201
+      "expectedStatus": 201,
+      "expectedResponse": {
+        "trigger": "chaos-drill"
+      }
     }
   ]
 }

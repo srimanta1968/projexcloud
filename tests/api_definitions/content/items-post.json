@@ -10,8 +10,10 @@
   "sdk": "sdk-content",
   "sourceFile": "packages/sdk-content/src/server/routes.ts",
   "_generated": true,
-  "testability": "manual",
-  "skipReason": "Needs a real sub-bearing JWT from the signup-tenant chain (tenant_id + token). Handler requires tenant_id + type_code + slug; creates content.item and returns 201.",
+  "testability": "auto",
+  "fieldEnums": {
+    "status": ["draft", "published", "archived"]
+  },
   "captureResponse": {
     "content.item.create.response.data.item.item_id": "data.item.item_id"
   },
@@ -23,18 +25,11 @@
       },
       "payload": {
         "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
-        "type_code": "{{static:article}}",
+        "type_code": "article",
         "slug": "{{dynamic:name}}",
         "owner_persona_id": "{{cache:auth.signup-tenant.response.data.userId}}"
       },
       "expectedStatus": 201
     }
-  ],
-  "serverFieldOptions": {
-    "status": [
-      "draft",
-      "published",
-      "archived"
-    ]
-  }
+  ]
 }

@@ -2,6 +2,7 @@
   "name": "POST /api/approvals/routes - Create approval route definition",
   "endpoint": "/api/approvals/routes",
   "sdk": "sdk-approval",
+  "sourceFile": "packages/sdk-approval/src/server/routes.ts",
   "method": "POST",
   "requiresAuth": true,
   "expectedStatus": 201,
@@ -10,39 +11,39 @@
   "featureId": "b273628f-6bee-4ad4-b5c0-9a9cb38da247",
   "epicId": "d83f7b6e-821c-4fe1-96e6-910eca8fbbfc",
   "priority": 20,
-  "testability": "manual",
-  "skipReason": "Steps reference persona UUIDs that must exist; integration test seeds a manager + finance persona first.",
+  "testability": "auto",
   "dependsOn": [
-    "POST /api/auth/register"
+    "POST /api/auth/signup-tenant"
   ],
   "testCases": [
     {
-      "name": "Create 2-step approval route (manager → finance m-of-n)",
+      "name": "Create 2-step approval route (manager single -> finance m-of-n)",
       "headers": {
-        "Authorization": "Bearer {{cache:auth.register.response.data.token}}"
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
       },
       "payload": {
-        "tenant_id": "{{static:00000000-0000-0000-0000-000000000001}}",
-        "name": "{{static:high-value-refund}}",
-        "description": "{{static:Refunds above $10k}}",
-        "kind_pattern": "{{static:payment.refund > 10000 USD}}",
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "name": "high-value-refund",
+        "description": "Refunds above $10k",
+        "kind_pattern": "payment.refund > 10000 USD",
         "steps": [
           {
-            "name": "{{static:manager}}",
-            "kind": "{{static:single}}",
-            "approver_persona_id": "{{cache:auth.register.response.data.userId}}",
+            "name": "manager",
+            "kind": "single",
+            "approver_persona_id": "{{cache:auth.signup-tenant.response.data.userId}}",
             "sla_minutes": 60
           },
           {
-            "name": "{{static:finance}}",
-            "kind": "{{static:m-of-n}}",
+            "name": "finance",
+            "kind": "m-of-n",
             "m": 1,
             "approvers": [
-              "{{cache:auth.register.response.data.userId}}"
+              "{{cache:auth.signup-tenant.response.data.userId}}"
             ],
             "sla_minutes": 120
           }
-        ]
+        ],
+        "delegation_rules": {}
       },
       "expectedStatus": 201
     }
@@ -54,6 +55,10 @@
         "status": "string"
       }
     }
+  },
+  "fieldEnums": {
+    "kind": ["single", "m-of-n", "role"],
+    "status": ["draft", "active", "deprecated"]
   },
   "captureResponse": {
     "approvals.routes.create.response.data.route.route_id": "data.route.route_id"

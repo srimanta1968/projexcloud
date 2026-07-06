@@ -1,18 +1,29 @@
 {
-  "name": "GET /admin/audit/entries \u2014 api-gateway",
+  "name": "GET /admin/audit/entries — api-gateway",
   "endpoint": "/admin/audit/entries",
   "method": "GET",
   "requiresAuth": false,
   "expectedStatus": 200,
   "sdk": "api-gateway",
   "sourceFile": "services/api-gateway/src/app.ts",
-  "_generated": true,
-  "testability": "manual",
-  "skipReason": "Auto-generated from implemented route scan; payload/expectedResponse inferred from the handler and need review before enabling automated execution.",
+  "testability": "auto",
+  "dependsOn": [
+    "POST /api/auth/signup-tenant"
+  ],
   "testCases": [
     {
-      "name": "Auto-generated from route scan (review payload before enabling)",
+      "name": "Browse a tenant's audit entries",
+      "headers": {
+        "x-admin-ops-token": "{{var:ADMIN_OPS_TOKEN}}"
+      },
+      "queryParams": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "limit": "100"
+      },
       "expectedStatus": 200
     }
-  ]
+  ],
+  "expectedResponse": {
+    "data": "array"
+  }
 }

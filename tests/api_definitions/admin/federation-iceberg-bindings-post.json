@@ -1,5 +1,5 @@
 {
-  "name": "POST /admin/federation/iceberg-bindings \u2014 api-gateway",
+  "name": "POST /admin/federation/iceberg-bindings — api-gateway",
   "endpoint": "/admin/federation/iceberg-bindings",
   "method": "POST",
   "requiresAuth": false,
@@ -7,21 +7,24 @@
   "sdk": "api-gateway",
   "sourceFile": "services/api-gateway/src/app.ts",
   "_generated": true,
-  "testability": "manual",
-  "skipReason": "Auto-generated from implemented route scan; payload/expectedResponse inferred from the handler and need review before enabling automated execution.",
+  "testability": "auto",
+  "dependsOn": ["POST /admin/federation/iceberg-catalogs"],
+  "captureResponse": {
+    "federation-iceberg-bindings.create.response.data.binding_id": "binding_id"
+  },
   "testCases": [
     {
-      "name": "Auto-generated from route scan (review payload before enabling)",
+      "name": "Bind an Iceberg table to a ClickHouse source",
       "headers": {
-        "x-admin-ops-token": "{{static:ADMIN_OPS_TOKEN}}"
+        "x-admin-ops-token": "{{var:ADMIN_OPS_TOKEN}}"
       },
       "payload": {
-        "binding_id": "{{static:REPLACE_WITH_ID}}",
-        "catalog_id": "{{static:REPLACE_WITH_ID}}",
-        "table_ref": "{{static:sample}}",
-        "source_clickhouse_table": "{{static:sample}}",
-        "partition_strategy": "{{static:sample}}",
-        "z_order_cols": "{{static:sample}}"
+        "binding_id": "qa-iceberg-binding-1",
+        "catalog_id": "{{cache:federation-iceberg-catalogs.create.response.data.catalog_id}}",
+        "table_ref": "warehouse.usage_events",
+        "source_clickhouse_table": "meter.usage_ledger",
+        "partition_strategy": { "region": "identity", "tenant": "identity", "time": "day" },
+        "z_order_cols": ["tenant_id", "sku"]
       },
       "expectedStatus": 201
     }

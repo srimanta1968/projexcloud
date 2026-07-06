@@ -1,23 +1,65 @@
 {
-  "name": "POST /ontology/register \u2014 semantic-service",
+  "name": "POST /ontology/register — semantic-service",
   "endpoint": "/ontology/register",
   "method": "POST",
   "requiresAuth": false,
-  "expectedStatus": 201,
+  "expectedStatus": 200,
   "sdk": "semantic-service",
   "sourceFile": "services/semantic-service/src/routes.ts",
   "_generated": true,
-  "testability": "manual",
-  "skipReason": "Auto-generated from implemented route scan; payload/expectedResponse inferred from the handler and need review before enabling automated execution.",
+  "testability": "auto",
+  "fieldEnums": {
+    "cardinality": ["1:1", "1:N", "N:N"]
+  },
+  "captureResponse": {
+    "ontology.register.response.data.ontology.ontology_id": "data.ontology.ontology_id",
+    "ontology.register.response.data.ontology.name": "data.ontology.name",
+    "ontology.register.response.data.object_types.0.object_type_id": "data.object_types.0.object_type_id",
+    "ontology.register.response.data.object_types.1.object_type_id": "data.object_types.1.object_type_id"
+  },
   "testCases": [
     {
-      "name": "Auto-generated from route scan (review payload before enabling)",
+      "name": "Register a self-contained domain ontology bundle (activate on register)",
       "payload": {
-        "bundle": "{{static:sample}}",
-        "bundle_ref": "{{static:sample}}",
-        "activate": "{{static:sample}}"
+        "bundle": {
+          "name": "healthcare-core",
+          "version": "1.0.0",
+          "parent_ontology": null,
+          "object_types": [
+            {
+              "name": "Patient",
+              "attribute_schema": { "mrn": "string" },
+              "backed_by": "persona.persona_ext:patient_chart"
+            },
+            {
+              "name": "Encounter",
+              "attribute_schema": { "code": "string" },
+              "backed_by": "clinical.encounter"
+            }
+          ],
+          "relation_types": [
+            {
+              "name": "treats",
+              "cardinality": "1:N",
+              "rebac_kind_mapping": "member",
+              "from_object_type_name": "Patient",
+              "to_object_type_name": "Encounter"
+            }
+          ],
+          "capability_graph": [
+            {
+              "tool_sku": "clinical.note.summarize",
+              "pre_conditions": {},
+              "post_conditions": {},
+              "object_type_name": "Patient",
+              "requires_relation_name": "treats"
+            }
+          ]
+        },
+        "bundle_ref": "@projexlight/contracts@3.1.0",
+        "activate": true
       },
-      "expectedStatus": 201
+      "expectedStatus": 200
     }
   ]
 }

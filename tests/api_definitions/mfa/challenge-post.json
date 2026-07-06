@@ -13,6 +13,9 @@
   "dependsOn": [
     "POST /api/auth/register"
   ],
+  "fieldEnums": {
+    "kind": ["totp", "webauthn", "sms_otp"]
+  },
   "testCases": [
     {
       "name": "Issue a TOTP challenge",
@@ -23,18 +26,19 @@
         "kind": "totp"
       },
       "expectedStatus": 201,
-      "testability": "manual"
+      "testability": "auto"
     }
   ],
   "expectedResponse": {
     "data": {
       "challenge_id": "string",
-      "kind": "string"
+      "kind": "string",
+      "payload": {},
+      "expires_at": "string"
     }
   },
   "captureResponse": {
     "mfa.challenge.response.data.challenge_id": "data.challenge_id"
   },
-  "testability": "manual",
-  "skipReason": "Requires a person-scoped JWT carrying sub/person_id; runner synthetic token lacks it (verified: returns 201 with a real login token). Covered by integration test."
+  "testability": "auto"
 }

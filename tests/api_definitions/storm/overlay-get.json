@@ -6,13 +6,40 @@
   "requiresAuth": false,
   "expectedStatus": 200,
   "sourceFile": "services/api-gateway/src/app.ts",
-  "_generated": true,
-  "testability": "manual",
-  "skipReason": "Auto-generated from implemented route scan; payload/expectedResponse inferred from the handler and need review before enabling automated execution.",
+  "testability": "auto",
   "testCases": [
     {
-      "name": "Auto-generated from route scan (review payload before enabling)",
+      "name": "Query storm events + intensity cell counts overlapping a bbox",
+      "queryParams": {
+        "min_lat": "24.0",
+        "min_lng": "-125.0",
+        "max_lat": "49.0",
+        "max_lng": "-66.0",
+        "since": "{{dynamic:pastdatetime}}"
+      },
       "expectedStatus": 200
+    },
+    {
+      "name": "Missing bbox floats returns 400",
+      "queryParams": {
+        "min_lat": "24.0",
+        "min_lng": "-125.0"
+      },
+      "expectedStatus": 400
+    },
+    {
+      "name": "min greater than max returns 400",
+      "queryParams": {
+        "min_lat": "49.0",
+        "min_lng": "-66.0",
+        "max_lat": "24.0",
+        "max_lng": "-125.0"
+      },
+      "expectedStatus": 400
     }
-  ]
+  ],
+  "expectedResponse": {
+    "events": "array",
+    "cell_count": "number"
+  }
 }

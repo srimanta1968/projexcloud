@@ -4,24 +4,42 @@
   "method": "GET",
   "requiresAuth": true,
   "dependsOn": [
-    "POST /api/auth/register"
+    "POST /api/auth/signup-tenant",
+    "POST /api/media/upload-url",
+    "POST /api/media/:blob_id/transcode"
   ],
   "expectedStatus": 200,
   "sdk": "sdk-media",
-  "sourceFile": "packages/sdk-media/src/server/routes.ts",
+  "sourceFile": "packages/sdk-media/src/server/handlers/mediaController.ts",
   "_generated": true,
-  "testability": "manual",
-  "skipReason": "Auto-generated from implemented route scan; payload/expectedResponse inferred from the handler and need review before enabling automated execution.",
+  "testability": "auto",
+  "fieldEnums": {
+    "pipeline": ["video-mp4-hls", "image-optimize", "pdf-thumbnail"],
+    "status": ["queued", "running", "succeeded", "failed"]
+  },
   "testCases": [
     {
-      "name": "Auto-generated from route scan (review payload before enabling)",
+      "name": "Poll a transcode job by id",
       "headers": {
-        "Authorization": "Bearer {{cache:auth.register.response.data.token}}"
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
       },
       "pathParams": {
-        "job_id": "{{static:REPLACE_WITH_ID}}"
+        "job_id": "{{cache:media.transcode.response.data.job.job_id}}"
       },
       "expectedStatus": 200
     }
-  ]
+  ],
+  "expectedResponse": {
+    "data": {
+      "job": {
+        "job_id": "string",
+        "blob_id": "string",
+        "pipeline": "string",
+        "status": "string",
+        "output_blob_ids": [],
+        "billed_units": 0,
+        "error_message": null
+      }
+    }
+  }
 }

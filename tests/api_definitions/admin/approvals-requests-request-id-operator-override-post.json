@@ -1,26 +1,48 @@
 {
-  "name": "POST /admin/approvals/requests/:request_id/operator-override \u2014 api-gateway",
+  "name": "POST /admin/approvals/requests/:request_id/operator-override — api-gateway",
   "endpoint": "/admin/approvals/requests/:request_id/operator-override",
   "method": "POST",
   "requiresAuth": false,
-  "expectedStatus": 201,
+  "expectedStatus": 200,
   "sdk": "api-gateway",
   "sourceFile": "services/api-gateway/src/app.ts",
   "_generated": true,
-  "testability": "manual",
-  "skipReason": "Auto-generated from implemented route scan; payload/expectedResponse inferred from the handler and need review before enabling automated execution.",
+  "testability": "auto",
+  "fieldEnums": {
+    "decision": ["approved", "rejected"]
+  },
+  "statusTransitions": {
+    "entity": "approval.request",
+    "field": "status",
+    "flow": ["pending", "approved", "rejected"],
+    "transitions": [
+      { "from": "pending", "to": "approved", "via": "POST /admin/approvals/requests/:request_id/operator-override" },
+      { "from": "pending", "to": "rejected", "via": "POST /admin/approvals/requests/:request_id/operator-override" }
+    ]
+  },
+  "captureResponse": {
+    "approvals.operator-override.response.success": "success"
+  },
+  "dependsOn": [
+    "POST /api/auth/signup-tenant",
+    "POST /api/approvals/routes",
+    "POST /api/approvals/requests"
+  ],
   "testCases": [
     {
-      "name": "Auto-generated from route scan (review payload before enabling)",
+      "name": "Operator overrides a pending approval request",
       "pathParams": {
-        "request_id": "{{static:REPLACE_WITH_ID}}"
+        "request_id": "{{cache:approvals.requests.create.response.data.request.request_id}}"
       },
       "payload": {
-        "decision": "{{static:sample}}",
-        "reason": "{{static:sample}}",
-        "operator_id": "{{static:REPLACE_WITH_ID}}"
+        "decision": "approved",
+        "reason": "Operator override — SLA breach escalation resolved out-of-band",
+        "operator_id": "{{var:operator_id}}"
       },
-      "expectedStatus": 201
+      "expectedStatus": 200,
+      "headers": {
+        "x-admin-ops-token": "{{var:ADMIN_OPS_TOKEN}}"
+      }
     }
   ]
 }

@@ -10,19 +10,19 @@
   "featureId": "c6a628f9-6d3a-4b36-b075-a3269e98833c",
   "epicId": "93a549d6-9a93-4d82-86bb-bac5167fa960",
   "priority": 45,
-  "testability": "manual",
-  "skipReason": "Requires prior snapshot.",
+  "testability": "auto",
   "dependsOn": [
-    "POST /api/auth/register"
+    "POST /api/auth/signup-tenant",
+    "POST /api/hdk-permissions/snapshots"
   ],
   "testCases": [
     {
       "name": "Get latest snapshot",
       "headers": {
-        "Authorization": "Bearer {{cache:auth.register.response.data.token}}"
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
       },
       "pathParams": {
-        "device_uuid": "{{static:test-device-uuid-001}}"
+        "device_uuid": "{{cache:hdk-permissions.snapshot.response.data.snapshot.device_uuid}}"
       },
       "expectedStatus": 200
     }

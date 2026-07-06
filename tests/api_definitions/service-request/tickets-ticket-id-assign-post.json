@@ -4,24 +4,29 @@
   "method": "POST",
   "requiresAuth": true,
   "dependsOn": [
-    "POST /api/auth/register",
+    "POST /api/auth/signup-tenant",
+    "POST /api/personas",
     "POST /api/service-request/tickets"
   ],
   "expectedStatus": 200,
   "sdk": "sdk-service-request",
   "sourceFile": "packages/sdk-service-request/src/server/routes.ts",
   "_generated": true,
+  "captureResponse": {
+    "service-request.assign.response.data.ticket.ticket_id": "data.ticket.ticket_id",
+    "service-request.assign.response.data.ticket.assignee_persona_id": "data.ticket.assignee_persona_id"
+  },
   "testCases": [
     {
       "name": "Assign an existing ticket to a persona (assignee_persona_id required)",
       "headers": {
-        "Authorization": "Bearer {{cache:auth.register.response.data.token}}"
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
       },
       "pathParams": {
         "ticket_id": "{{cache:service-request.tickets.response.data.ticket.ticket_id}}"
       },
       "payload": {
-        "assignee_persona_id": "{{dynamic:uuid}}"
+        "assignee_persona_id": "{{cache:personas.create.response.data.persona.persona_id}}"
       },
       "expectedStatus": 200
     }

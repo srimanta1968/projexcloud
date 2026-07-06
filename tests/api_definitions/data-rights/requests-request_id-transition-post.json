@@ -2,6 +2,7 @@
   "name": "POST /api/data-rights/requests/:request_id/transition - Advance DSAR state machine",
   "endpoint": "/api/data-rights/requests/:request_id/transition",
   "sdk": "sdk-data-rights",
+  "sourceFile": "packages/sdk-data-rights/src/server/routes.ts",
   "method": "POST",
   "requiresAuth": true,
   "expectedStatus": 200,
@@ -10,24 +11,102 @@
   "featureId": "3eee9beb-21fc-4fd1-bf3f-1c172143a39b",
   "epicId": "93a549d6-9a93-4d82-86bb-bac5167fa960",
   "priority": 60,
-  "testability": "manual",
-  "skipReason": "Requires submitted request_id.",
+  "testability": "auto",
   "dependsOn": [
-    "POST /api/auth/register"
+    "POST /api/auth/signup-tenant",
+    "POST /api/data-rights/requests"
   ],
   "testCases": [
     {
-      "name": "Transition to identity-verified",
+      "name": "Transition submitted -> identity-verified",
       "headers": {
-        "Authorization": "Bearer {{cache:auth.register.response.data.token}}"
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
       },
       "pathParams": {
-        "request_id": "{{static:11111111-1111-1111-1111-111111111111}}"
+        "request_id": "{{cache:data-rights-requests.create.response.data.request.request_id}}"
       },
       "payload": {
-        "to": "{{static:identity-verified}}"
+        "to": "identity-verified",
+        "approval_ref": "{{var:approval_ref}}",
+        "grace_until": "{{dynamic:futuredatetime}}"
       },
       "expectedStatus": 200
     }
-  ]
+  ],
+  "captureResponse": {
+    "data-rights-requests.transition.response.data.request.request_id": "data.request.request_id",
+    "data-rights-requests.transition.response.data.request.status": "data.request.status"
+  },
+  "fieldEnums": {
+    "to": [
+      "submitted",
+      "identity-verified",
+      "approval-pending",
+      "grace-period",
+      "executing",
+      "certificate-issued",
+      "audited",
+      "rejected"
+    ]
+  },
+  "statusTransitions": {
+    "entity": "data_rights.request",
+    "field": "status",
+    "flow": [
+      "submitted",
+      "identity-verified",
+      "approval-pending",
+      "grace-period",
+      "executing",
+      "certificate-issued",
+      "audited"
+    ],
+    "transitions": [
+      {
+        "from": "submitted",
+        "to": "identity-verified",
+        "via": "POST /api/data-rights/requests/:request_id/transition"
+      },
+      {
+        "from": "identity-verified",
+        "to": "approval-pending",
+        "via": "POST /api/data-rights/requests/:request_id/transition"
+      },
+      {
+        "from": "approval-pending",
+        "to": "grace-period",
+        "via": "POST /api/data-rights/requests/:request_id/transition"
+      },
+      {
+        "from": "grace-period",
+        "to": "executing",
+        "via": "POST /api/data-rights/requests/:request_id/transition"
+      },
+      {
+        "from": "executing",
+        "to": "certificate-issued",
+        "via": "POST /api/data-rights/requests/:request_id/transition"
+      },
+      {
+        "from": "certificate-issued",
+        "to": "audited",
+        "via": "POST /api/data-rights/requests/:request_id/transition"
+      },
+      {
+        "from": "submitted",
+        "to": "rejected",
+        "via": "POST /api/data-rights/requests/:request_id/transition"
+      },
+      {
+        "from": "identity-verified",
+        "to": "rejected",
+        "via": "POST /api/data-rights/requests/:request_id/transition"
+      },
+      {
+        "from": "approval-pending",
+        "to": "rejected",
+        "via": "POST /api/data-rights/requests/:request_id/transition"
+      }
+    ]
+  }
 }

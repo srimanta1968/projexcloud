@@ -4,28 +4,31 @@
   "sdk": "sdk-connectors",
   "method": "POST",
   "requiresAuth": true,
-  "expectedStatus": 200,
+  "expectedStatus": 503,
+  "sourceFile": "packages/connector-slack/src/server/routes.ts",
   "taskId": "87827e48-d0bd-4afe-af0b-35475963b37c",
   "sprintId": "8ef1d09e-dd8e-4daf-8d03-54dcd9f812f8",
   "featureId": "4737c8ee-588d-4015-916f-8541f9cfc42d",
   "epicId": "d83f7b6e-821c-4fe1-96e6-910eca8fbbfc",
   "priority": 20,
-  "testability": "manual",
-  "skipReason": "Requires SLACK_CLIENT_ID + SLACK_CLIENT_SECRET env + a real OAuth code from Slack redirect; covered by manual integration test.",
+  "testability": "auto",
   "dependsOn": [
     "POST /api/auth/register"
   ],
   "testCases": [
     {
-      "name": "Install Slack workspace",
+      "name": "OAuth exchange returns 503 when SLACK_CLIENT_ID/SECRET not configured",
       "headers": {
         "Authorization": "Bearer {{cache:auth.register.response.data.token}}"
       },
       "payload": {
-        "code": "{{static:test-oauth-code}}",
-        "redirect_uri": "{{static:https://example.com/slack/callback}}"
+        "code": "test-oauth-code",
+        "redirect_uri": "https://example.com/slack/callback"
       },
       "expectedStatus": 503
     }
-  ]
+  ],
+  "captureResponse": {
+    "connectors.slack-install.response.data.ok": "data.ok"
+  }
 }

@@ -4,38 +4,37 @@
   "method": "POST",
   "requiresAuth": true,
   "dependsOn": [
-    "POST /api/auth/register",
-    "POST /api/tenants",
+    "POST /api/auth/signup-tenant",
     "POST /api/vault/keys"
   ],
   "expectedStatus": 201,
   "sdk": "sdk-engagement",
   "sourceFile": "packages/sdk-engagement/src/server/routes.ts",
   "_generated": true,
-  "testability": "manual",
-  "skipReason": "Requires a tenant and a provisioned app-pool Vault key (parent_key_id); openEncounter issues a per-encounter Vault key before inserting the row.",
+  "testability": "auto",
+  "fieldEnums": {
+    "kind": ["visit", "order", "deal", "session", "capital-call", "support"]
+  },
   "testCases": [
     {
       "name": "Open an encounter (issues per-encounter Vault key)",
       "headers": {
-        "Authorization": "Bearer {{cache:auth.register.response.data.token}}"
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
       },
       "payload": {
-        "tenant_id": "{{cache:tenants.create.response.data.tenant_id}}",
-        "kind": "{{static:visit}}",
-        "retention_policy": "{{static:default-7y}}",
-        "region": "{{static:us-east-1}}",
-        "parent_key_id": "{{cache:vault.keys.create.response.data.key_id}}"
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "kind": "visit",
+        "retention_policy": "default-7y",
+        "region": "us-east-1",
+        "parent_key_id": "{{cache:vault.keys.create.response.data.key_id}}",
+        "parent_encounter_id": null,
+        "address_id": null,
+        "billing_ref": "billing-ref-001"
       },
       "expectedStatus": 201
     }
   ],
-  "serverFieldOptions": {
-    "state": [
-      "open",
-      "in-progress",
-      "closed",
-      "sealed"
-    ]
+  "captureResponse": {
+    "encounters.create.response.data.encounter.encounter_id": "data.encounter.encounter_id"
   }
 }

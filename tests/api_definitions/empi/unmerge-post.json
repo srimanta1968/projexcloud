@@ -2,6 +2,7 @@
   "name": "POST /api/empi/merges/:merge_id/unmerge - compensating reversal",
   "endpoint": "/api/empi/merges/:merge_id/unmerge",
   "sdk": "sdk-identity-resolver",
+  "sourceFile": "packages/sdk-identity-resolver/src/server/routes.ts",
   "method": "POST",
   "requiresAuth": true,
   "taskId": "3dd74dad-c603-4450-bdc8-60f09edc4700",
@@ -23,7 +24,7 @@
         "merge_id": "{{cache:empi.merges.create.response.data.merge.merge_id}}"
       },
       "payload": {
-        "reason": "{{static:Merge reversed - records belong to distinct persons}}"
+        "reason": "Merge reversed - records belong to distinct persons"
       },
       "expectedStatus": 200
     }
@@ -36,5 +37,17 @@
         "reverses_merge_id": "string"
       }
     }
+  },
+  "statusTransitions": {
+    "entity": "candidate_link",
+    "field": "status",
+    "flow": ["open", "merged", "rejected", "superseded"],
+    "transitions": [
+      { "from": "merged", "to": "open", "via": "POST /api/empi/merges/:merge_id/unmerge" }
+    ]
+  },
+  "captureResponse": {
+    "empi.unmerge.response.data.merge.merge_id": "data.merge.merge_id",
+    "empi.unmerge.response.data.merge.reverses_merge_id": "data.merge.reverses_merge_id"
   }
 }

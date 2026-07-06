@@ -1,36 +1,56 @@
 {
   "endpoint": "/api/ai-gateway/complete",
   "sdk": "sdk-ai-gateway",
+  "sourceFile": "packages/sdk-ai-gateway/src/server/handlers/completionController.ts",
   "method": "POST",
   "taskId": "33b1ff5b-534c-4fd3-bc2b-b2ac3e0e7d33",
-  "description": "Non-streaming LLM completion. Pipeline: route resolution → PII redaction → credential unwrap → retry-wrapped provider call → ai_gateway.completion insert + ai-gateway.complete.v1 audit. Closes AC-1.",
+  "description": "Non-streaming LLM completion. Pipeline: route resolution -> PII redaction -> credential unwrap -> retry-wrapped provider call -> ai_gateway.completion insert + ai-gateway.complete.v1 audit. Closes AC-1.",
   "requiresAuth": true,
   "priority": 300,
   "dependsOn": [
-    "POST /api/auth/register"
+    "POST /api/auth/signup-tenant",
+    "POST /api/personas",
+    "POST /api/agent-runtime/agents",
+    "POST /api/agent-runtime/runs"
   ],
   "testability": "manual",
-  "skipReason": "Requires a registered provider adapter + seeded ai_gateway.provider + route_rule fixtures; exercised by AC-1 integration test, not the API runner.",
+  "skipReason": "Terminates in a live third-party model call: getProvider() dispatches to a registered Anthropic/OpenAI adapter (real network call) against a boot-seeded ai_gateway.provider credential. The synthetic JSON runner cannot supply a real provider adapter/key, so this is exercised by the AC-1 integration test. Chain (auth + persona + agent + run) is wired for that harness.",
+  "fieldEnums": {
+    "request.provider_hint": [
+      "anthropic",
+      "openai",
+      "gemini",
+      "bedrock",
+      "local-llama",
+      "local-mistral"
+    ]
+  },
   "testCases": [
     {
-      "name": "Manual: completion records consent + budget + redaction + trace",
+      "name": "Completion records consent + budget + redaction + trace",
       "headers": {
-        "Authorization": "Bearer {{cache:auth.register.response.data.token}}"
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
       },
       "payload": {
         "request": {
-          "model": "{{static:claude-opus-4-7}}",
-          "prompt": "{{static:Hello}}",
+          "model": "claude-opus-4-7",
+          "prompt": "Summarize the onboarding checklist in one sentence.",
           "max_tokens": 100,
-          "task_tag": "{{static:test}}",
-          "provider_hint": "{{static:anthropic}}"
+          "temperature": 0.7,
+          "top_p": 1,
+          "stop_sequences": [],
+          "task_tag": "test",
+          "provider_hint": "anthropic",
+          "tools": [],
+          "stream": false
         },
         "context": {
-          "agent_id": "{{dynamic:uuid}}",
-          "run_id": "{{dynamic:uuid}}",
-          "acting_persona_id": "{{dynamic:uuid}}",
-          "tenant_id": null,
+          "agent_id": "{{cache:agent-runtime-agents.create.response.data.agent_id}}",
+          "run_id": "{{cache:agent-runtime-runs.create.response.data.run_id}}",
+          "acting_persona_id": "{{cache:personas.create.response.data.persona.persona_id}}",
+          "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
           "trace_id": "{{dynamic:uuid}}",
+          "span_id": "{{dynamic:uuid}}",
           "ttl_deadline": "{{dynamic:futuredatetime}}",
           "agent_chain": []
         }

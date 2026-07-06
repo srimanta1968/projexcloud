@@ -3,29 +3,36 @@
   "sdk": "sdk-agent-runtime",
   "method": "POST",
   "taskId": "6e257875-c807-4eda-ac0e-d8b9615ea1af",
-  "description": "Replay an agent run against the recorded model snapshot. Returns {kind:'matched'|'snapshot-drift'|'diverged', ...}. AC-5.",
+  "description": "Replay an agent run against the recorded model snapshot. Returns {kind:'matched'|'snapshot-drift'|'diverged', ...}. AC-5. A freshly-started run has no execution_log_entry rows yet (those are appended only by the internal runtime engine, no HTTP producer), so replaying it returns 404 'no execution log entries'.",
+  "sourceFile": "packages/sdk-agent-runtime/src/server/handlers/replayController.ts",
   "requiresAuth": true,
   "priority": 200,
+  "testability": "auto",
   "dependsOn": [
-    "POST /api/auth/register"
+    "POST /api/auth/register",
+    "POST /api/personas",
+    "POST /api/agent-runtime/agents",
+    "POST /api/agent-runtime/runs"
   ],
-  "testability": "manual",
-  "skipReason": "Replay requires a populated agent_run + execution_log_entry fixture; round-trip exercised by AC-5 chaos drill, not the auto API runner.",
+  "captureResponse": {
+    "agent-runtime-runs.replay.response.data.kind": "data.kind"
+  },
   "testCases": [
     {
-      "name": "Manual: replay returns matched verdict for a clean run",
+      "name": "Replay a freshly-started run (no execution log yet) returns 404",
       "headers": {
         "Authorization": "Bearer {{cache:auth.register.response.data.token}}"
       },
       "pathParams": {
-        "run_id": "{{static:fixture-run-id}}"
+        "run_id": "{{cache:agent-runtime-runs.create.response.data.run_id}}"
       },
       "payload": {
+        "current_model_snapshot_id": null,
         "dryRun": true
       },
-      "expectedStatus": 200,
+      "expectedStatus": 404,
       "expectedResponse": {
-        "success": true
+        "success": false
       }
     }
   ]

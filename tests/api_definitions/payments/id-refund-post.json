@@ -10,24 +10,35 @@
   "featureId": "33deeb13-adc2-4198-b1e1-1315ca492994",
   "epicId": "d83f7b6e-821c-4fe1-96e6-910eca8fbbfc",
   "priority": 50,
-  "testability": "manual",
-  "skipReason": "Depends on a captured charge; covered by Stripe sandbox integration test.",
+  "testability": "auto",
   "dependsOn": [
-    "POST /api/auth/register",
+    "POST /api/auth/signup-tenant",
+    "POST /api/payments/methods",
     "POST /api/payments/charge"
   ],
+  "statusTransitions": {
+    "entity": "refund",
+    "field": "status",
+    "flow": ["pending", "awaiting_approval", "approved", "rejected", "succeeded", "failed"],
+    "transitions": [
+      { "from": "pending", "to": "succeeded", "via": "POST /api/payments/:charge_id/refund" },
+      { "from": "pending", "to": "awaiting_approval", "via": "POST /api/payments/:charge_id/refund" },
+      { "from": "awaiting_approval", "to": "approved", "via": "POST /api/payments/:charge_id/refund" }
+    ]
+  },
   "testCases": [
     {
       "name": "Refund $5.00 USD below approval threshold",
       "headers": {
-        "Authorization": "Bearer {{cache:auth.register.response.data.token}}"
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
       },
       "pathParams": {
         "charge_id": "{{cache:payments.charge.response.data.charge.charge_id}}"
       },
       "payload": {
         "amount": 5,
-        "reason": "customer requested partial refund"
+        "reason": "customer requested partial refund",
+        "approval_threshold": 10000
       },
       "expectedStatus": 201
     }
@@ -40,5 +51,8 @@
         "amount": "string"
       }
     }
+  },
+  "captureResponse": {
+    "payments.refund.response.data.refund.refund_id": "data.refund.refund_id"
   }
 }

@@ -4,7 +4,7 @@
   "method": "POST",
   "requiresAuth": true,
   "dependsOn": [
-    "POST /api/auth/register",
+    "POST /api/auth/signup-tenant",
     "POST /api/social/interactions"
   ],
   "expectedStatus": 200,
@@ -15,18 +15,22 @@
     {
       "name": "Capture an interaction as a CRM lead",
       "headers": {
-        "Authorization": "Bearer {{cache:auth.register.response.data.token}}"
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
       },
       "pathParams": {
         "interaction_id": "{{cache:social.interactions.create.response.data.interaction.interaction_id}}"
       },
       "payload": {
-        "contact_id": "{{dynamic:uuid}}"
+        "contact_id": "{{var:contact_id}}"
       },
       "expectedStatus": 200
     }
   ],
   "expectedResponse": {
     "data": { "interaction": { "interaction_id": "string", "captured_lead_contact_id": "string" } }
+  },
+  "captureResponse": {
+    "social.capture-lead.response.data.interaction.interaction_id": "data.interaction.interaction_id",
+    "social.capture-lead.response.data.interaction.captured_lead_contact_id": "data.interaction.captured_lead_contact_id"
   }
 }

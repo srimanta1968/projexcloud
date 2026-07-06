@@ -10,10 +10,15 @@
   "priority": 55,
   "dependsOn": [
     "POST /api/auth/signup-tenant",
+    "POST /api/assets",
+    "POST /api/analytics/datasets",
     "POST /api/analytics/datasets/:spec_id/build"
   ],
-  "testability": "manual",
-  "skipReason": "Needs a real sub-bearing JWT and a recorded dataset_build. Re-derives the feature rows and exports them to the warehouse/object store (default: registers an Iceberg lakehouse extract + stamps export_ref); a real S3/Iceberg writer is wired via the exporter hook.",
+  "testability": "auto",
+  "captureResponse": {
+    "analytics.export.response.data.build_id": "data.build_id",
+    "analytics.export.response.data.export_ref": "data.export_ref"
+  },
   "testCases": [
     {
       "name": "Export a built dataset to the warehouse",
@@ -24,10 +29,10 @@
         "build_id": "{{cache:analytics.build.response.data.build_id}}"
       },
       "payload": {
-        "target": "{{static:iceberg://warehouse/datasets}}"
+        "target": "iceberg://warehouse/datasets"
       },
       "expectedStatus": 200,
-      "testability": "manual"
+      "testability": "auto"
     }
   ]
 }

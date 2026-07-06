@@ -1,7 +1,8 @@
 {
-  "name": "POST /api/tenant-lifecycle/:tenant_id/sandboxes - Create sandbox sub-pool",
-  "endpoint": "/api/tenant-lifecycle/:tenant_id/sandboxes",
+  "name": "POST /api/tenant-lifecycle/sandbox - Create sandbox sub-tenant",
+  "endpoint": "/api/tenant-lifecycle/sandbox",
   "sdk": "sdk-tenant-lifecycle",
+  "sourceFile": "packages/sdk-tenant-lifecycle/src/server/routes.ts",
   "method": "POST",
   "requiresAuth": true,
   "expectedStatus": 201,
@@ -10,25 +11,37 @@
   "featureId": "a5489f77-208c-47d4-9662-93a2a183a4c1",
   "epicId": "d83f7b6e-821c-4fe1-96e6-910eca8fbbfc",
   "priority": 50,
-  "testability": "manual",
-  "skipReason": "Creates sandbox sub-pool with PII masking; needs full tenant + pool setup.",
+  "testability": "auto",
   "dependsOn": [
-    "POST /api/auth/register"
+    "POST /api/auth/signup-tenant"
   ],
   "testCases": [
     {
-      "name": "Create sandbox",
+      "name": "Create sandbox sub-tenant from caller's tenant_id",
       "headers": {
-        "Authorization": "Bearer {{cache:auth.register.response.data.token}}"
-      },
-      "pathParams": {
-        "tenant_id": "{{static:00000000-0000-0000-0000-000000000099}}"
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
       },
       "payload": {
-        "pool_index": "sandbox-0",
-        "masking_profile_id": "default-pii-mask"
+        "expires_at": "{{dynamic:futuredatetime}}",
+        "sanitization_policy": "default-mask-pii"
       },
       "expectedStatus": 201
     }
-  ]
+  ],
+  "captureResponse": {
+    "tenant-lifecycle.sandbox.response.data.sandbox.sandbox_tenant_id": "data.sandbox.sandbox_tenant_id",
+    "tenant-lifecycle.sandbox.response.data.sandbox.parent_tenant_id": "data.sandbox.parent_tenant_id"
+  },
+  "fieldEnums": {
+    "current_state": ["active", "suspended", "offboarding", "offboarded", "sandbox"]
+  },
+  "statusTransitions": {
+    "entity": "tenant_lifecycle.state",
+    "field": "current_state",
+    "flow": ["active", "sandbox", "offboarded"],
+    "transitions": [
+      { "from": "active", "to": "sandbox", "via": "POST /api/tenant-lifecycle/sandbox" },
+      { "from": "sandbox", "to": "offboarded", "via": "scheduler:runOffboardDeadlineTick" }
+    ]
+  }
 }

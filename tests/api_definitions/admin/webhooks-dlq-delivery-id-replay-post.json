@@ -7,17 +7,29 @@
   "sdk": "api-gateway",
   "sourceFile": "services/api-gateway/src/app.ts",
   "_generated": true,
-  "testability": "manual",
-  "skipReason": "Gated by the ADMIN_OPS_TOKEN (x-admin-ops-token header). Reads no body; delivery_id is a path FK to a dead-lettered webhook delivery.",
+  "testability": "auto",
+  "statusTransitions": {
+    "entity": "webhook.delivery",
+    "field": "status",
+    "flow": ["pending", "dlq", "pending"],
+    "transitions": [
+      { "from": "dlq", "to": "pending", "via": "POST /admin/webhooks/dlq/:delivery_id/replay" }
+    ]
+  },
+  "captureResponse": {
+    "webhooks-admin.replay.response.data.delivery_id": "data.delivery_id",
+    "webhooks-admin.replay.response.data.status": "data.status"
+  },
   "testCases": [
     {
-      "name": "Replay a dead-lettered webhook delivery",
+      "name": "Replay a dead-lettered webhook delivery (operator)",
       "headers": {
-        "x-admin-ops-token": "{{static:ADMIN_OPS_TOKEN}}"
+        "x-admin-ops-token": "{{var:ADMIN_OPS_TOKEN}}"
       },
       "pathParams": {
-        "delivery_id": "{{static:REPLACE_WITH_DELIVERY_ID}}"
+        "delivery_id": "{{var:dlq_delivery_id}}"
       },
+      "payload": {},
       "expectedStatus": 200
     }
   ]

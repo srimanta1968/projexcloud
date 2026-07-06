@@ -10,22 +10,52 @@
   "featureId": "f493450e-8ed8-425c-b905-f8a76a70bdcc",
   "epicId": "00996d23-f667-4a82-9285-7728ba357e7b",
   "priority": 50,
-  "testability": "manual",
-  "skipReason": "Depends on a real impersonation_grant row; covered by integration test alongside request + approve.",
+  "testability": "auto",
   "dependsOn": [
-    "POST /api/auth/register",
-    "POST /api/impersonation/request"
+    "POST /api/auth/signup-tenant",
+    "POST /api/impersonation/request",
+    "POST /api/impersonation/:grant_id/approve"
   ],
   "testCases": [
     {
       "name": "End the active impersonation session",
       "headers": {
-        "Authorization": "Bearer {{cache:auth.register.response.data.token}}"
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
       },
       "pathParams": {
         "grant_id": "{{cache:impersonation.request.response.data.grant.grant_id}}"
       },
+      "payload": {},
       "expectedStatus": 200
     }
-  ]
+  ],
+  "expectedResponse": {
+    "data": {
+      "grant": {
+        "grant_id": "string",
+        "support_user_id": "string",
+        "target_tenant_id": "string",
+        "ticket_ref": "string",
+        "manager_approval_id": "string",
+        "customer_consent_ref": "string",
+        "expires_at": "string",
+        "certificate_audit_id": "string",
+        "status": "string"
+      }
+    }
+  },
+  "statusTransitions": {
+    "entity": "impersonation_grant",
+    "field": "status",
+    "flow": ["pending_approval", "active", "ended"],
+    "transitions": [
+      { "from": null, "to": "pending_approval", "via": "POST /api/impersonation/request" },
+      { "from": "pending_approval", "to": "active", "via": "POST /api/impersonation/:grant_id/approve" },
+      { "from": "active", "to": "ended", "via": "POST /api/impersonation/:grant_id/end" }
+    ]
+  },
+  "captureResponse": {
+    "impersonation.end.response.data.grant.grant_id": "data.grant.grant_id",
+    "impersonation.end.response.data.grant.status": "data.grant.status"
+  }
 }

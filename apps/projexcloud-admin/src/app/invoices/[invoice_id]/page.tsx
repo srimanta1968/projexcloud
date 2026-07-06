@@ -9,8 +9,8 @@ import {
 } from '@projexlight/design-system';
 
 interface InvoiceDetail {
-  invoice: Record<string, unknown> & { invoice_id: string; status: string; total_cents: number; currency: string };
-  line_items: Array<{ line_id: string; sku: string; units: number; rate: number; subtotal_cents: number }>;
+  invoice: Record<string, unknown> & { invoice_id: string; status: string; total: string | number; currency: string };
+  line_items: Array<{ line_id: string; sku: string; units: number; rate: number; amount: string | number }>;
 }
 
 async function fetchDetail(id: string): Promise<InvoiceDetail | null> {
@@ -40,7 +40,7 @@ export default async function InvoiceDetailPage({ params }: { params: { invoice_
       <Link href="/invoices" className="text-sm text-primary hover:underline">← Back to invoices</Link>
       <h1 className="mb-1 mt-2 font-mono text-2xl font-bold">{inv.invoice_id}</h1>
       <div className="mb-4 text-sm text-muted-foreground">
-        Status: <strong>{inv.status}</strong> · Total: {(inv.total_cents / 100).toFixed(2)} {inv.currency}
+        Status: <strong>{inv.status}</strong> · Total: {Number(inv.total).toFixed(2)} {inv.currency}
       </div>
 
       <h2 className="mb-3 mt-6 text-lg font-semibold">Line items</h2>
@@ -63,7 +63,7 @@ export default async function InvoiceDetailPage({ params }: { params: { invoice_
                 <TableCell className="font-mono text-xs">{li.sku}</TableCell>
                 <TableCell className="text-right tabular-nums">{li.units}</TableCell>
                 <TableCell className="text-right tabular-nums">{li.rate}</TableCell>
-                <TableCell className="text-right tabular-nums">{(li.subtotal_cents / 100).toFixed(2)}</TableCell>
+                <TableCell className="text-right tabular-nums">{Number(li.amount).toFixed(2)}</TableCell>
               </TableRow>
             ))}
           </TableBody>

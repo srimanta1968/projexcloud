@@ -2,6 +2,7 @@
   "name": "POST /api/data-rights/executions/:execution_id/result - Record execution result (success/failed)",
   "endpoint": "/api/data-rights/executions/:execution_id/result",
   "sdk": "sdk-data-rights",
+  "sourceFile": "packages/sdk-data-rights/src/server/routes.ts",
   "method": "POST",
   "requiresAuth": true,
   "expectedStatus": 200,
@@ -10,25 +11,69 @@
   "featureId": "3eee9beb-21fc-4fd1-bf3f-1c172143a39b",
   "epicId": "93a549d6-9a93-4d82-86bb-bac5167fa960",
   "priority": 75,
-  "testability": "manual",
-  "skipReason": "Requires pending execution_id.",
+  "testability": "auto",
   "dependsOn": [
-    "POST /api/auth/register"
+    "POST /api/auth/signup-tenant",
+    "POST /api/data-rights/residency/touch",
+    "POST /api/data-rights/requests",
+    "POST /api/data-rights/requests/:request_id/plan-executions"
   ],
   "testCases": [
     {
       "name": "Record success",
       "headers": {
-        "Authorization": "Bearer {{cache:auth.register.response.data.token}}"
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
       },
       "pathParams": {
-        "execution_id": "{{static:11111111-1111-1111-1111-111111111111}}"
+        "execution_id": "{{cache:data-rights-executions.plan.response.data.executions.0.execution_id}}"
       },
       "payload": {
-        "status": "{{static:succeeded}}",
-        "audit_entry_id": "{{static:33333333-3333-3333-3333-333333333333}}"
+        "status": "succeeded",
+        "audit_entry_id": "{{var:audit_entry_id}}",
+        "error_detail": null
       },
       "expectedStatus": 200
     }
-  ]
+  ],
+  "fieldEnums": {
+    "status": [
+      "succeeded",
+      "failed"
+    ]
+  },
+  "statusTransitions": {
+    "entity": "data_rights.execution",
+    "field": "status",
+    "flow": [
+      "pending",
+      "running",
+      "succeeded",
+      "failed"
+    ],
+    "transitions": [
+      {
+        "from": "pending",
+        "to": "succeeded",
+        "via": "POST /api/data-rights/executions/:execution_id/result"
+      },
+      {
+        "from": "pending",
+        "to": "failed",
+        "via": "POST /api/data-rights/executions/:execution_id/result"
+      },
+      {
+        "from": "running",
+        "to": "succeeded",
+        "via": "POST /api/data-rights/executions/:execution_id/result"
+      },
+      {
+        "from": "running",
+        "to": "failed",
+        "via": "POST /api/data-rights/executions/:execution_id/result"
+      }
+    ]
+  },
+  "captureResponse": {
+    "data-rights-executions.result.response.data.execution.execution_id": "data.execution.execution_id"
+  }
 }

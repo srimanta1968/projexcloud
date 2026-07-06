@@ -10,10 +10,18 @@
   "featureId": "027ceadb-5598-4071-8231-2cf5fa941bc2",
   "epicId": "93a549d6-9a93-4d82-86bb-bac5167fa960",
   "priority": 50,
+  "fieldEnums": {
+    "band_kind": ["profile", "preference", "notification_routing"]
+  },
   "dependsOn": [
     "POST /api/auth/register",
+    "POST /api/auth/signup-tenant",
     "POST /api/app-identities"
   ],
+  "captureResponse": {
+    "profile.bands.response.data.band.band_id": "data.band.band_id",
+    "profile.bands.response.data.band.app_identity_id": "data.band.app_identity_id"
+  },
   "testCases": [
     {
       "name": "Upsert profile band",
@@ -22,8 +30,8 @@
       },
       "payload": {
         "app_identity_id": "{{cache:app-identities.create.response.data.app_identity.app_identity_id}}",
-        "band_kind": "{{static:profile}}",
-        "tenant_id": "{{dynamic:uuid}}",
+        "band_kind": "profile",
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
         "fields_envelope": {
           "display_name": "base64envelope=="
         }

@@ -11,7 +11,8 @@
   "epicId": "00996d23-f667-4a82-9285-7728ba357e7b",
   "priority": 30,
   "dependsOn": [
-    "POST /api/auth/register"
+    "POST /api/auth/register",
+    "POST /api/auth/signup-tenant"
   ],
   "testCases": [
     {
@@ -22,11 +23,21 @@
       "payload": {
         "name": "{{dynamic:name}}",
         "version": "1.0.0",
-        "iql_source": "subject.persona(role=\"doctor\") and relationship(type=\"care-team\")"
+        "iql_source": "subject.persona(role=\"doctor\") and relationship(type=\"care-team\")",
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "obligations": {
+          "mask_fields": ["ssn", "dob"],
+          "row_filter": { "care_team": true },
+          "audit_level": "standard",
+          "ttl_seconds": 300
+        }
       },
       "expectedStatus": 201
     }
   ],
+  "fieldEnums": {
+    "obligations.audit_level": ["none", "standard", "detailed", "forensic"]
+  },
   "expectedResponse": {
     "data": {
       "policy": {

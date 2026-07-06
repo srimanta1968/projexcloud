@@ -14,6 +14,15 @@
     "POST /api/auth/register",
     "PUT /api/flags"
   ],
+  "statusTransitions": {
+    "entity": "feature_flags.flag",
+    "field": "kill_switch",
+    "flow": [false, true],
+    "transitions": [
+      { "from": false, "to": true, "via": "POST /api/flags/:flag_id/kill-switch" },
+      { "from": true, "to": false, "via": "POST /api/flags/:flag_id/kill-switch" }
+    ]
+  },
   "testCases": [
     {
       "name": "Engage kill switch",
@@ -28,5 +37,8 @@
       },
       "expectedStatus": 200
     }
-  ]
+  ],
+  "captureResponse": {
+    "flags.kill-switch.response.data.flag.flag_id": "data.flag.flag_id"
+  }
 }

@@ -7,12 +7,22 @@
  "sdk": "sdk-diagnostic-telemetry",
  "sourceFile": "packages/sdk-diagnostic-telemetry/src/server/index.ts",
  "_generated": true,
+ "testability": "auto",
+ "priority": 40,
+ "dependsOn": [
+  "POST /api/auth/register",
+  "POST /api/devices"
+ ],
  "testCases": [
   {
-   "name": "Auto-generated from route scan (review payload before enabling)",
+   "name": "Record a sanitized session-replay event for a registered device",
    "payload": {
     "device_uuid": "{{cache:devices.create.response.data.device.device_uuid}}",
-    "sanitized_event_kind": "{{static:tap}}",
+    "sanitized_event_kind": "tap",
+    "payload": {
+     "x": 120,
+     "y": 340
+    },
     "occurred_at": "{{dynamic:pastdatetime}}"
    },
    "expectedStatus": 201,
@@ -21,8 +31,8 @@
    }
   }
  ],
- "priority": 40,
- "dependsOn": [
-  "POST /api/devices"
- ]
+ "captureResponse": {
+  "diagnostic.session-replay.response.data.event_id": "data.event_id",
+  "diagnostic.session-replay.response.data.device_uuid": "data.device_uuid"
+ }
 }

@@ -6,19 +6,30 @@
   "expectedStatus": 200,
   "sdk": "api-gateway",
   "sourceFile": "services/api-gateway/src/app.ts",
-  "_generated": true,
-  "testability": "manual",
-  "skipReason": "Gated by the ADMIN_OPS_TOKEN (x-admin-ops-token header). Reads no body; tenant_id is a query param and must reference a tenant with an existing audit chain.",
+  "testability": "auto",
+  "dependsOn": [
+    "POST /api/auth/signup-tenant"
+  ],
   "testCases": [
     {
       "name": "Verify a tenant's audit hash-chain",
       "headers": {
-        "x-admin-ops-token": "{{static:ADMIN_OPS_TOKEN}}"
+        "x-admin-ops-token": "{{var:ADMIN_OPS_TOKEN}}"
       },
       "queryParams": {
-        "tenant_id": "{{static:00000000-0000-0000-0000-000000000001}}"
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}"
       },
+      "payload": {},
       "expectedStatus": 200
     }
-  ]
+  ],
+  "expectedResponse": {
+    "data": {
+      "verified": "boolean",
+      "entry_count": "number"
+    }
+  },
+  "captureResponse": {
+    "audit-verify.verify.response.data.verified": "data.verified"
+  }
 }

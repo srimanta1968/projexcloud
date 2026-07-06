@@ -10,23 +10,33 @@
   "featureId": "33deeb13-adc2-4198-b1e1-1315ca492994",
   "epicId": "d83f7b6e-821c-4fe1-96e6-910eca8fbbfc",
   "priority": 30,
-  "testability": "manual",
-  "skipReason": "Depends on a real attached method_id; covered by Stripe sandbox integration test.",
+  "testability": "auto",
   "dependsOn": [
-    "POST /api/auth/register",
+    "POST /api/auth/signup-tenant",
     "POST /api/payments/methods"
   ],
+  "statusTransitions": {
+    "entity": "charge",
+    "field": "status",
+    "flow": ["requires_action", "authorized", "captured", "failed", "refunded", "disputed"],
+    "transitions": [
+      { "from": "requires_action", "to": "captured", "via": "POST /api/payments/charge" },
+      { "from": "requires_action", "to": "failed", "via": "POST /api/payments/charge" },
+      { "from": "captured", "to": "refunded", "via": "POST /api/payments/:charge_id/refund" }
+    ]
+  },
   "testCases": [
     {
       "name": "Charge $25.00 USD",
       "headers": {
-        "Authorization": "Bearer {{cache:auth.register.response.data.token}}"
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
       },
       "payload": {
-        "tenant_id": "{{static:00000000-0000-0000-0000-000000000001}}",
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
         "method_id": "{{cache:payments.methods.create.response.data.method.method_id}}",
         "amount": 25,
         "currency": "USD",
+        "encounter_id": "{{var:encounter_id}}",
         "idempotency_key": "{{dynamic:slug}}"
       },
       "expectedStatus": 201

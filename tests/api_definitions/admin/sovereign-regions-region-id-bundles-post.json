@@ -1,5 +1,5 @@
 {
-  "name": "POST /admin/sovereign/regions/:region_id/bundles \u2014 api-gateway",
+  "name": "POST /admin/sovereign/regions/:region_id/bundles — api-gateway",
   "endpoint": "/admin/sovereign/regions/:region_id/bundles",
   "method": "POST",
   "requiresAuth": false,
@@ -7,20 +7,27 @@
   "sdk": "api-gateway",
   "sourceFile": "services/api-gateway/src/app.ts",
   "_generated": true,
-  "testability": "manual",
-  "skipReason": "Auto-generated from implemented route scan; payload/expectedResponse inferred from the handler and need review before enabling automated execution.",
+  "testability": "auto",
+  "captureResponse": {
+    "sovereign.ship-bundle.response.data.release_id": "data.release_id",
+    "sovereign.ship-bundle.response.data.region_id": "data.region_id"
+  },
+  "dependsOn": ["POST /admin/sovereign/regions"],
   "testCases": [
     {
-      "name": "Auto-generated from route scan (review payload before enabling)",
+      "name": "Ship a signed bundle release to a sovereign region",
       "pathParams": {
-        "region_id": "{{static:REPLACE_WITH_ID}}"
+        "region_id": "{{cache:sovereign.register.response.data.region_id}}"
       },
       "payload": {
-        "version": "{{static:sample}}",
-        "bundle_artifact_ref": "{{static:sample}}",
-        "signature_hex": "{{static:sample}}"
+        "version": "2026.3.0",
+        "bundle_artifact_ref": "oci://registry.projexlight.com/sovereign/eu-sov-fra:2026.3.0",
+        "signature_hex": "deadbeefcafef00dba5eba11c0ffee00"
       },
-      "expectedStatus": 201
+      "expectedStatus": 201,
+      "headers": {
+        "x-admin-ops-token": "{{var:ADMIN_OPS_TOKEN}}"
+      }
     }
   ]
 }

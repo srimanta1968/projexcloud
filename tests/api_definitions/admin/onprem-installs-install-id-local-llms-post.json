@@ -1,5 +1,5 @@
 {
-  "name": "POST /admin/onprem/installs/:install_id/local-llms \u2014 api-gateway",
+  "name": "POST /admin/onprem/installs/:install_id/local-llms — api-gateway",
   "endpoint": "/admin/onprem/installs/:install_id/local-llms",
   "method": "POST",
   "requiresAuth": false,
@@ -7,22 +7,34 @@
   "sdk": "api-gateway",
   "sourceFile": "services/api-gateway/src/app.ts",
   "_generated": true,
-  "testability": "manual",
-  "skipReason": "Auto-generated from implemented route scan; payload/expectedResponse inferred from the handler and need review before enabling automated execution.",
+  "testability": "auto",
+  "fieldEnums": {
+    "backend": ["ollama", "vllm", "text-generation-inference"],
+    "quantization": ["fp16", "int8", "int4", "awq"],
+    "status": ["ready", "loading", "disabled"]
+  },
+  "captureResponse": {
+    "onprem.register-llm.response.data.model_id": "data.model_id",
+    "onprem.register-llm.response.data.install_id": "data.install_id"
+  },
+  "dependsOn": ["POST /admin/onprem/installs"],
   "testCases": [
     {
-      "name": "Auto-generated from route scan (review payload before enabling)",
+      "name": "Register a local LLM model on an on-prem install",
       "pathParams": {
-        "install_id": "{{static:REPLACE_WITH_ID}}"
+        "install_id": "{{cache:onprem.register-install.response.data.install_id}}"
       },
       "payload": {
-        "model_id": "{{static:REPLACE_WITH_ID}}",
-        "backend": "{{static:sample}}",
-        "endpoint_url": "https://example.com",
-        "quantization": "{{static:sample}}",
-        "status": "{{static:sample}}"
+        "model_id": "llama-3.1-8b-instruct",
+        "backend": "vllm",
+        "endpoint_url": "http://vllm.onprem.svc.cluster.local:8000/v1",
+        "quantization": "int8",
+        "status": "loading"
       },
-      "expectedStatus": 201
+      "expectedStatus": 201,
+      "headers": {
+        "x-admin-ops-token": "{{var:ADMIN_OPS_TOKEN}}"
+      }
     }
   ]
 }

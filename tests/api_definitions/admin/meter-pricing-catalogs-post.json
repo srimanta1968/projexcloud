@@ -1,23 +1,30 @@
 {
-  "name": "POST /admin/meter/pricing-catalogs \u2014 api-gateway",
+  "name": "POST /admin/meter/pricing-catalogs — api-gateway",
   "endpoint": "/admin/meter/pricing-catalogs",
   "method": "POST",
   "requiresAuth": false,
-  "expectedStatus": 201,
+  "expectedStatus": 200,
   "sdk": "api-gateway",
   "sourceFile": "services/api-gateway/src/app.ts",
   "_generated": true,
-  "testability": "manual",
-  "skipReason": "Auto-generated from implemented route scan; payload/expectedResponse inferred from the handler and need review before enabling automated execution.",
+  "testability": "auto",
+  "dependsOn": ["POST /api/auth/signup-tenant"],
+  "captureResponse": {
+    "meter-pricing-catalogs.create.response.data.catalog_id": "catalog_id",
+    "meter-pricing-catalogs.create.response.data.version": "version"
+  },
   "testCases": [
     {
-      "name": "Auto-generated from route scan (review payload before enabling)",
-      "payload": {
-        "catalog_id": "{{static:REPLACE_WITH_ID}}",
-        "version": "{{static:sample}}",
-        "operator_id": "{{static:REPLACE_WITH_ID}}"
+      "name": "Create a new draft pricing-catalog version",
+      "headers": {
+        "x-admin-ops-token": "{{var:ADMIN_OPS_TOKEN}}"
       },
-      "expectedStatus": 201
+      "payload": {
+        "catalog_id": "qa-pricing-catalog-v1",
+        "version": 1,
+        "operator_id": "{{var:operator_id}}"
+      },
+      "expectedStatus": 200
     }
   ]
 }

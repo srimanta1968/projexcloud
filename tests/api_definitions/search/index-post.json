@@ -2,6 +2,7 @@
   "name": "POST /api/search/index - Register/ensure per-tenant index",
   "endpoint": "/api/search/index",
   "sdk": "sdk-search",
+  "sourceFile": "packages/sdk-search/src/server/routes.ts",
   "method": "POST",
   "requiresAuth": true,
   "expectedStatus": 201,
@@ -10,20 +11,20 @@
   "featureId": "02447110-6a41-4546-8d10-2107aa023f3a",
   "epicId": "d83f7b6e-821c-4fe1-96e6-910eca8fbbfc",
   "priority": 20,
-  "testability": "manual",
-  "skipReason": "Requires a real OpenSearch cluster (or a registered synthetic client in-process); validated by integration test.",
+  "testability": "auto",
   "dependsOn": [
-    "POST /api/auth/register"
+    "POST /api/auth/signup-tenant"
   ],
   "testCases": [
     {
       "name": "Register encounter entity index",
       "headers": {
-        "Authorization": "Bearer {{cache:auth.register.response.data.token}}"
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
       },
       "payload": {
-        "tenant_id": "{{static:00000000-0000-0000-0000-000000000001}}",
-        "entity_kind": "{{static:encounter}}",
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "entity_kind": "encounter",
+        "opensearch_alias": "ten-0-encounter",
         "field_mappings": {
           "properties": {
             "tenant_id": {
@@ -49,7 +50,18 @@
       }
     }
   },
+  "statusTransitions": {
+    "entity": "index_definition",
+    "field": "status",
+    "flow": ["building", "active", "deprecated", "deleting"],
+    "transitions": [
+      { "from": null, "to": "active", "via": "POST /api/search/index" },
+      { "from": "active", "to": "deprecated", "via": "POST /api/search/index" }
+    ]
+  },
   "captureResponse": {
-    "search.index.create.response.data.definition.index_def_id": "data.definition.index_def_id"
+    "search.index.create.response.data.definition.index_def_id": "data.definition.index_def_id",
+    "search.index.create.response.data.definition.tenant_id": "data.definition.tenant_id",
+    "search.index.create.response.data.definition.opensearch_alias": "data.definition.opensearch_alias"
   }
 }

@@ -10,19 +10,18 @@
   "featureId": "01ca8316-09cf-462d-bf9d-7eeac8745bff",
   "epicId": "d83f7b6e-821c-4fe1-96e6-910eca8fbbfc",
   "priority": 25,
-  "testability": "manual",
-  "skipReason": "FR-NTF-5 quiet-hours upsert requires tenant-scoped JWT (req.auth.tenant_id). The /api/auth/register flow returns a JWT with tenant_id=null, so this endpoint 403s. Re-enable when test harness can mint a tenant-scoped token, or add a setupScript that seeds a tenant + tenant-scoped login.",
+  "testability": "auto",
   "dependsOn": [
-    "POST /api/auth/register"
+    "POST /api/auth/signup-tenant"
   ],
   "testCases": [
     {
       "name": "Set nightly 22:00-06:00 PT quiet window",
       "headers": {
-        "Authorization": "Bearer {{cache:auth.register.response.data.token}}"
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
       },
       "payload": {
-        "persona_id": "{{cache:auth.register.response.data.userId}}",
+        "persona_id": "{{cache:auth.signup-tenant.response.data.userId}}",
         "windows": [
           {
             "dow": 0,
@@ -49,5 +48,8 @@
         "dnd": "boolean"
       }
     }
+  },
+  "captureResponse": {
+    "notifications.quiet-hours.upsert.response.data.quiet_hours.persona_id": "data.quiet_hours.persona_id"
   }
 }

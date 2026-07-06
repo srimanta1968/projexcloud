@@ -4,22 +4,38 @@
   "method": "POST",
   "requiresAuth": true,
   "dependsOn": [
-    "POST /api/auth/register"
+    "POST /api/auth/signup-tenant",
+    "POST /api/campaigns",
+    "POST /api/campaigns/:campaign_id/journeys",
+    "POST /api/personas",
+    "POST /api/campaigns/journeys/:journey_id/runs"
   ],
   "expectedStatus": 200,
   "sdk": "sdk-campaign",
   "sourceFile": "packages/sdk-campaign/src/server/routes.ts",
   "_generated": true,
-  "testability": "manual",
-  "skipReason": "Auto-generated from implemented route scan; payload/expectedResponse inferred from the handler and need review before enabling automated execution.",
+  "testability": "auto",
+  "statusTransitions": {
+    "entity": "campaign.journey_run",
+    "field": "state",
+    "flow": ["active", "paused", "completed", "exited"],
+    "transitions": [
+      { "from": "active", "to": "active", "via": "POST /api/campaigns/runs/:run_id/advance" },
+      { "from": "active", "to": "completed", "via": "POST /api/campaigns/runs/:run_id/advance" }
+    ]
+  },
+  "captureResponse": {
+    "campaigns.advance.response.data.run.run_id": "data.run.run_id",
+    "campaigns.advance.response.data.run.state": "data.run.state"
+  },
   "testCases": [
     {
-      "name": "Auto-generated from route scan (review payload before enabling)",
+      "name": "Advance a journey run by one step",
       "headers": {
-        "Authorization": "Bearer {{cache:auth.register.response.data.token}}"
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
       },
       "pathParams": {
-        "run_id": "{{static:REPLACE_WITH_ID}}"
+        "run_id": "{{cache:campaigns.run.create.response.data.run.run_id}}"
       },
       "payload": {},
       "expectedStatus": 200

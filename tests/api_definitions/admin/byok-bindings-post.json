@@ -1,27 +1,52 @@
 {
-  "name": "POST /admin/byok/bindings \u2014 api-gateway",
+  "name": "POST /admin/byok/bindings — api-gateway",
   "endpoint": "/admin/byok/bindings",
   "method": "POST",
   "requiresAuth": false,
-  "expectedStatus": 201,
+  "expectedStatus": 200,
   "sdk": "api-gateway",
   "sourceFile": "services/api-gateway/src/app.ts",
-  "_generated": true,
-  "testability": "manual",
-  "skipReason": "Auto-generated from implemented route scan; payload/expectedResponse inferred from the handler and need review before enabling automated execution.",
+  "testability": "auto",
+  "dependsOn": [
+    "POST /api/auth/signup-tenant"
+  ],
+  "fieldEnums": {
+    "provider": ["aws-kms", "gcp-kms", "hsm-pkcs11"]
+  },
   "testCases": [
     {
-      "name": "Auto-generated from route scan (review payload before enabling)",
-      "payload": {
-        "tenant_id": "{{static:REPLACE_WITH_ID}}",
-        "provider": "{{static:sample}}",
-        "customer_kms_key_arn": "{{static:sample}}",
-        "tenant_key_id": "{{static:REPLACE_WITH_ID}}",
-        "sla_revoke_propagation_seconds": "{{static:sample}}",
-        "siem_forwarder_endpoint": "{{static:sample}}",
-        "operator_id": "{{static:REPLACE_WITH_ID}}"
+      "name": "Bind a customer CMK (BYOK) for a tenant",
+      "headers": {
+        "x-admin-ops-token": "{{var:ADMIN_OPS_TOKEN}}"
       },
-      "expectedStatus": 201
+      "payload": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "provider": "aws-kms",
+        "customer_kms_key_arn": "arn:aws:kms:us-east-1:111122223333:key/1234abcd-12ab-34cd-56ef-1234567890ab",
+        "tenant_key_id": "{{var:tenant_key_id}}",
+        "sla_revoke_propagation_seconds": 30,
+        "siem_forwarder_endpoint": "https://siem.qa.example.com/ingest",
+        "operator_id": "{{var:operator_id}}"
+      },
+      "expectedStatus": 200
     }
-  ]
+  ],
+  "expectedResponse": {
+    "data": {
+      "binding_id": "string",
+      "tenant_id": "string",
+      "provider": "string",
+      "customer_kms_key_arn": "string",
+      "tenant_key_id": "string",
+      "grant_status": "string",
+      "bound_at": "string",
+      "revoked_at": "string",
+      "sla_revoke_propagation_seconds": "number",
+      "siem_forwarder_endpoint": "string"
+    }
+  },
+  "captureResponse": {
+    "byok-bindings.create.response.data.binding_id": "data.binding_id",
+    "byok-bindings.create.response.data.tenant_id": "data.tenant_id"
+  }
 }

@@ -10,10 +10,11 @@
   "featureId": "83a11862-0f2a-43be-b8bf-c2bec019500d",
   "epicId": "93a549d6-9a93-4d82-86bb-bac5167fa960",
   "priority": 80,
-  "testability": "manual",
-  "skipReason": "Requires seeded human_review_task.",
+  "testability": "auto",
   "dependsOn": [
-    "POST /api/auth/register"
+    "POST /api/auth/register",
+    "PUT /api/hdk-sync/event-type-policies",
+    "POST /api/hdk-sync/conflicts/resolve"
   ],
   "testCases": [
     {
@@ -22,15 +23,43 @@
         "Authorization": "Bearer {{cache:auth.register.response.data.token}}"
       },
       "pathParams": {
-        "task_id": "{{static:11111111-1111-1111-1111-111111111111}}"
+        "task_id": "{{cache:hdk-sync.conflicts-resolve.response.data.human_review_task.task_id}}"
       },
       "payload": {
-        "status": "{{static:resolved}}",
+        "status": "resolved",
         "resolved_value": {
           "decision": "merge"
         }
       },
       "expectedStatus": 200
     }
-  ]
+  ],
+  "fieldEnums": {
+    "status": ["open", "in-review", "resolved", "rejected"]
+  },
+  "statusTransitions": {
+    "entity": "hdk_sync.human_review_task",
+    "field": "status",
+    "flow": ["open", "in-review", "resolved", "rejected"],
+    "transitions": [
+      {
+        "from": "open",
+        "to": "resolved",
+        "via": "POST /api/hdk-sync/human-review/:task_id/resolve"
+      },
+      {
+        "from": "open",
+        "to": "rejected",
+        "via": "POST /api/hdk-sync/human-review/:task_id/resolve"
+      },
+      {
+        "from": "in-review",
+        "to": "resolved",
+        "via": "POST /api/hdk-sync/human-review/:task_id/resolve"
+      }
+    ]
+  },
+  "captureResponse": {
+    "hdk-sync.human-review-resolve.response.data.task.task_id": "data.task.task_id"
+  }
 }

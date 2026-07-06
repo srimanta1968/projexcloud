@@ -1,22 +1,47 @@
 {
-  "name": "POST /api/lead-scoring/models/:id/retire \u2014 sdk-lead-scoring",
+  "name": "POST /api/lead-scoring/models/:id/retire — sdk-lead-scoring",
   "endpoint": "/api/lead-scoring/models/:id/retire",
   "method": "POST",
   "requiresAuth": false,
-  "expectedStatus": 201,
+  "expectedStatus": 200,
   "sdk": "sdk-lead-scoring",
   "sourceFile": "packages/sdk-lead-scoring/src/server/index.ts",
   "_generated": true,
-  "testability": "manual",
-  "skipReason": "Auto-generated from implemented route scan; payload/expectedResponse inferred from the handler and need review before enabling automated execution.",
+  "testability": "auto",
+  "dependsOn": [
+    "POST /api/auth/signup-tenant",
+    "POST /api/lead-scoring/models"
+  ],
+  "statusTransitions": {
+    "entity": "lead_scoring.model",
+    "field": "status",
+    "flow": ["training", "active", "retired"],
+    "transitions": [
+      { "from": "active", "to": "retired", "via": "POST /api/lead-scoring/models/:id/retire" }
+    ]
+  },
   "testCases": [
     {
-      "name": "Auto-generated from route scan (review payload before enabling)",
+      "name": "Retire a model (flip status to retired)",
       "pathParams": {
-        "id": "{{static:REPLACE_WITH_ID}}"
+        "id": "{{cache:lead-scoring.create.response.data.model_id}}"
       },
       "payload": {},
-      "expectedStatus": 201
+      "expectedStatus": 200
     }
-  ]
+  ],
+  "expectedResponse": {
+    "data": {
+      "model_id": "string",
+      "tenant_id": "string",
+      "vertical": "string",
+      "trained_at": "string",
+      "feature_set": "object",
+      "status": "string"
+    }
+  },
+  "captureResponse": {
+    "lead-scoring.retire.response.data.model_id": "data.model_id",
+    "lead-scoring.retire.response.data.status": "data.status"
+  }
 }

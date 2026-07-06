@@ -1,0 +1,36 @@
+{
+  "name": "POST /admin/security/ops-tokens — api-gateway",
+  "endpoint": "/admin/security/ops-tokens",
+  "method": "POST",
+  "requiresAuth": false,
+  "expectedStatus": 201,
+  "sdk": "api-gateway",
+  "sourceFile": "services/api-gateway/src/app.ts",
+  "testability": "auto",
+  "testCases": [
+    {
+      "name": "Mint a short-lived QA ops token",
+      "headers": {
+        "x-admin-ops-token": "{{var:ADMIN_OPS_TOKEN}}"
+      },
+      "payload": {
+        "label": "{{dynamic:name}}",
+        "ttl_seconds": 3600,
+        "reason": "automated qa mint",
+        "created_by": "api-test-runner"
+      },
+      "expectedStatus": 201
+    }
+  ],
+  "expectedResponse": {
+    "data": {
+      "id": "string",
+      "label": "string",
+      "token": "string",
+      "expires_at": "string"
+    }
+  },
+  "captureResponse": {
+    "ops-tokens.create.response.data.id": "data.id"
+  }
+}

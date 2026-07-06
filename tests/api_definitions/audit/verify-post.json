@@ -2,6 +2,7 @@
   "name": "POST /api/audit/verify - Verify per-pool audit hash chain",
   "endpoint": "/api/audit/verify",
   "sdk": "sdk-audit",
+  "sourceFile": "packages/sdk-audit/src/server/handlers/verifyController.ts",
   "method": "POST",
   "requiresAuth": true,
   "expectedStatus": 200,
@@ -13,22 +14,34 @@
     {
       "name": "Verify chain for an empty pool",
       "payload": {
-        "pool_index": "app-healthcare-007"
+        "pool_index": "app-healthcare-007",
+        "from_seq": 1,
+        "to_seq": 100
       },
       "expectedStatus": 200,
       "headers": {
-        "Authorization": "Bearer {{cache:auth.register.response.data.token}}"
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
       }
     }
   ],
   "dependsOn": [
-    "POST /api/auth/register"
+    "POST /api/auth/signup-tenant"
   ],
   "expectedResponse": {
     "data": {
       "pool_index": "string",
+      "from_seq": "number",
+      "to_seq": "number",
+      "entries_checked": "number",
       "ok": "boolean",
-      "entries_checked": "number"
+      "break_at_seq": "number",
+      "break_reason": "string",
+      "head_hash_hex": "string",
+      "verified_at": "string"
     }
+  },
+  "captureResponse": {
+    "audit.verify.response.data.pool_index": "data.pool_index",
+    "audit.verify.response.data.head_hash_hex": "data.head_hash_hex"
   }
 }

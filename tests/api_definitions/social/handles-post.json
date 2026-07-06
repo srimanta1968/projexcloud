@@ -4,26 +4,26 @@
   "method": "POST",
   "requiresAuth": true,
   "dependsOn": [
-    "POST /api/auth/register"
+    "POST /api/auth/signup-tenant"
   ],
   "expectedStatus": 201,
   "sdk": "sdk-social",
   "sourceFile": "packages/sdk-social/src/server/routes.ts",
   "_generated": true,
-  "fieldOptions": {
+  "fieldEnums": {
     "network": ["twitter", "linkedin", "instagram", "facebook", "tiktok"]
   },
   "testCases": [
     {
       "name": "Authorize a social handle for a tenant",
       "headers": {
-        "Authorization": "Bearer {{cache:auth.register.response.data.token}}"
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
       },
       "payload": {
-        "tenant_id": "{{dynamic:uuid}}",
-        "network": "{{static:twitter}}",
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "network": "twitter",
         "external_handle_id": "{{dynamic:name}}",
-        "authorized_persona_id": "{{cache:auth.register.response.data.userId}}"
+        "authorized_persona_id": "{{cache:auth.signup-tenant.response.data.userId}}"
       },
       "expectedStatus": 201
     }

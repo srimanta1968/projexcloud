@@ -4,23 +4,23 @@
   "sdk": "sdk-media",
   "method": "GET",
   "requiresAuth": true,
+  "sourceFile": "packages/sdk-media/src/server/handlers/mediaController.ts",
   "expectedStatus": 200,
   "taskId": "f21e6c99-58bd-48dd-b888-d48edde7a5bd",
   "sprintId": "8ef1d09e-dd8e-4daf-8d03-54dcd9f812f8",
   "featureId": "9396ba53-a104-415c-ba3c-4e2a1b8d2c8a",
   "epicId": "d83f7b6e-821c-4fe1-96e6-910eca8fbbfc",
   "priority": 45,
-  "testability": "manual",
-  "skipReason": "Requires a ready blob (upload URL must have been followed by an actual S3 PUT + mark-ready); covered by integration test.",
+  "testability": "auto",
   "dependsOn": [
-    "POST /api/auth/register",
+    "POST /api/auth/signup-tenant",
     "POST /api/media/upload-url"
   ],
   "testCases": [
     {
       "name": "Issue 10min playback URL for the uploaded blob",
       "headers": {
-        "Authorization": "Bearer {{cache:auth.register.response.data.token}}"
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
       },
       "pathParams": {
         "blob_id": "{{cache:media.upload-url.create.response.data.blob_id}}"
@@ -34,7 +34,8 @@
   "expectedResponse": {
     "data": {
       "url_id": "string",
-      "playback_url": "string"
+      "playback_url": "string",
+      "expires_at": "string"
     }
   }
 }

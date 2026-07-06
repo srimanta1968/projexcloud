@@ -1,26 +1,40 @@
 {
-  "name": "POST /admin/chaos-drill \u2014 pool-federation-runtime",
+  "name": "POST /admin/chaos-drill — pool-federation-runtime",
   "endpoint": "/admin/chaos-drill",
   "method": "POST",
   "requiresAuth": false,
   "expectedStatus": 201,
   "sdk": "pool-federation-runtime",
   "sourceFile": "services/pool-federation-runtime/src/app.ts",
-  "_generated": true,
-  "testability": "manual",
-  "skipReason": "Auto-generated from implemented route scan; payload/expectedResponse inferred from the handler and need review before enabling automated execution.",
+  "testability": "auto",
+  "fieldEnums": {
+    "from_region": ["us-east-1", "us-west-2", "eu-west-1", "ap-south-1"],
+    "to_region": ["us-east-1", "us-west-2", "eu-west-1", "ap-south-1"]
+  },
   "testCases": [
     {
-      "name": "Auto-generated from route scan (review payload before enabling)",
+      "name": "Run an operator chaos-drill failover between regions",
       "headers": {
-        "x-admin-ops-token": "{{static:ADMIN_OPS_TOKEN}}"
+        "x-admin-ops-token": "{{var:FEDERATION_ADMIN_TOKEN}}"
       },
       "payload": {
-        "federation_id": "{{static:REPLACE_WITH_ID}}",
-        "from_region": "{{static:sample}}",
-        "to_region": "{{static:sample}}"
+        "federation_id": "{{var:federation_id}}",
+        "from_region": "us-east-1",
+        "to_region": "us-west-2"
       },
       "expectedStatus": 201
     }
-  ]
+  ],
+  "expectedResponse": {
+    "event_id": "string",
+    "federation_id": "string",
+    "from_region": "string",
+    "to_region": "string",
+    "trigger": "string",
+    "rpo_observed": "number",
+    "rto_observed": "number"
+  },
+  "captureResponse": {
+    "chaos-drill.run.response.event_id": "event_id"
+  }
 }

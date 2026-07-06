@@ -1,37 +1,72 @@
 {
-  "name": "POST /api/connectors/installs - Install connector (OAuth)",
+  "name": "POST /api/connectors/installs - Install connector",
   "endpoint": "/api/connectors/installs",
   "sdk": "sdk-connectors",
   "method": "POST",
   "requiresAuth": true,
   "expectedStatus": 201,
+  "sourceFile": "packages/sdk-connectors/src/server/routes.ts",
   "taskId": "d2a289b2-b611-49de-b16a-f577557d27fb",
   "sprintId": "8ef1d09e-dd8e-4daf-8d03-54dcd9f812f8",
   "featureId": "2a41c785-b26b-4fc0-aefd-372b7fb9782b",
   "epicId": "d83f7b6e-821c-4fe1-96e6-910eca8fbbfc",
   "priority": 20,
-  "testability": "manual",
-  "skipReason": "OAuth requires real vendor app creds (Slack, Salesforce, etc); covered by per-connector integration test.",
+  "testability": "auto",
   "dependsOn": [
-    "POST /api/auth/register"
+    "POST /api/auth/signup-tenant"
   ],
+  "fieldEnums": {
+    "connector_kind": [
+      "slack",
+      "salesforce",
+      "jira",
+      "github",
+      "hubspot",
+      "linear",
+      "microsoft365",
+      "snowflake",
+      "zendesk",
+      "zoom",
+      "gworkspace"
+    ]
+  },
+  "statusTransitions": {
+    "entity": "connectors.install",
+    "field": "status",
+    "flow": [
+      "pending",
+      "active",
+      "paused",
+      "uninstalled"
+    ],
+    "transitions": [
+      {
+        "from": "active",
+        "to": "uninstalled",
+        "via": "POST /api/connectors/installs/:install_id/uninstall"
+      }
+    ]
+  },
   "testCases": [
     {
       "name": "Install slack connector",
       "headers": {
-        "Authorization": "Bearer {{cache:auth.register.response.data.token}}"
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
       },
       "payload": {
-        "tenant_id": "{{static:00000000-0000-0000-0000-000000000001}}",
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
         "connector_kind": "slack",
-        "account_ref": "T0DEMO",
-        "oauth_token": "{{static:xoxb-test-token}}",
-        "scopes": [
-          "channels:read",
-          "chat:write"
-        ]
+        "display_name": "Slack Workspace",
+        "credential_ref": "secret://connectors/slack/demo",
+        "vendor_account_id": "T0DEMO",
+        "installed_by": "{{cache:auth.signup-tenant.response.data.userId}}"
       },
       "expectedStatus": 201
     }
-  ]
+  ],
+  "captureResponse": {
+    "connectors.create.response.data.install.install_id": "data.install.install_id",
+    "connectors.create.response.data.install.tenant_id": "data.install.tenant_id",
+    "connectors.create.response.data.install.status": "data.install.status"
+  }
 }

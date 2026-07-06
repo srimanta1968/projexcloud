@@ -1,24 +1,34 @@
 {
-  "name": "POST /admin/storm/ingest-now \u2014 api-gateway",
+  "name": "POST /admin/storm/ingest-now — api-gateway",
   "endpoint": "/admin/storm/ingest-now",
   "method": "POST",
   "requiresAuth": false,
-  "expectedStatus": 201,
+  "expectedStatus": 200,
   "sdk": "api-gateway",
   "sourceFile": "services/api-gateway/src/app.ts",
-  "_generated": true,
-  "testability": "manual",
-  "skipReason": "Auto-generated from implemented route scan; payload/expectedResponse inferred from the handler and need review before enabling automated execution.",
+  "testability": "auto",
   "testCases": [
     {
-      "name": "Auto-generated from route scan (review payload before enabling)",
+      "name": "Trigger a one-shot storm ingest over a trailing window",
       "headers": {
-        "x-admin-ops-token": "{{static:ADMIN_OPS_TOKEN}}"
+        "x-admin-ops-token": "{{var:ADMIN_OPS_TOKEN}}"
       },
       "payload": {
         "lookback_hours": 1
       },
-      "expectedStatus": 201
+      "expectedStatus": 200
     }
-  ]
+  ],
+  "expectedResponse": {
+    "success": "boolean",
+    "data": {
+      "events_from": "string",
+      "events_ingested": "number",
+      "cells_ingested": "number",
+      "providers_tried": "array"
+    }
+  },
+  "captureResponse": {
+    "storm-ingest.run.response.data.events_ingested": "data.events_ingested"
+  }
 }

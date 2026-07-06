@@ -7,14 +7,29 @@
  "sdk": "sdk-diagnostic-telemetry",
  "sourceFile": "packages/sdk-diagnostic-telemetry/src/server/index.ts",
  "_generated": true,
+ "testability": "auto",
+ "priority": 40,
+ "dependsOn": [
+  "POST /api/auth/register",
+  "POST /api/auth/signup-tenant",
+  "POST /api/devices"
+ ],
  "testCases": [
   {
-   "name": "Auto-generated from route scan (review payload before enabling)",
+   "name": "Record a health snapshot for a registered device",
    "payload": {
     "device_uuid": "{{cache:devices.create.response.data.device.device_uuid}}",
-    "captured_at": "{{dynamic:pastdatetime}}",
+    "permissions": {
+     "camera": true,
+     "location": false
+    },
     "battery_pct": 85,
-    "wifi_state": "{{static:connected}}"
+    "wifi_state": "connected",
+    "sensor_state": {
+     "accelerometer": "ok"
+    },
+    "captured_at": "{{dynamic:pastdatetime}}",
+    "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}"
    },
    "expectedStatus": 201,
    "expectedResponse": {
@@ -22,8 +37,8 @@
    }
   }
  ],
- "priority": 40,
- "dependsOn": [
-  "POST /api/devices"
- ]
+ "captureResponse": {
+  "diagnostic.health.response.data.snapshot_id": "data.snapshot_id",
+  "diagnostic.health.response.data.device_uuid": "data.device_uuid"
+ }
 }

@@ -1,5 +1,5 @@
 {
-  "name": "PATCH /admin/pools/:pool_index/status \u2014 api-gateway",
+  "name": "PATCH /admin/pools/:pool_index/status — api-gateway",
   "endpoint": "/admin/pools/:pool_index/status",
   "method": "PATCH",
   "requiresAuth": false,
@@ -7,18 +7,34 @@
   "sdk": "api-gateway",
   "sourceFile": "services/api-gateway/src/app.ts",
   "_generated": true,
-  "testability": "manual",
-  "skipReason": "Auto-generated from implemented route scan; payload/expectedResponse inferred from the handler and need review before enabling automated execution.",
+  "testability": "auto",
+  "fieldEnums": {
+    "to_status": ["ACTIVE", "MIGRATING", "DRAINING", "MAINTENANCE", "RETIRED", "QUARANTINE"]
+  },
+  "statusTransitions": {
+    "entity": "pool",
+    "field": "status",
+    "flow": ["ACTIVE", "MAINTENANCE", "DRAINING", "RETIRED"],
+    "transitions": [
+      { "from": "ACTIVE", "to": "MAINTENANCE", "via": "PATCH /admin/pools/:pool_index/status" },
+      { "from": "MAINTENANCE", "to": "ACTIVE", "via": "PATCH /admin/pools/:pool_index/status" },
+      { "from": "ACTIVE", "to": "DRAINING", "via": "PATCH /admin/pools/:pool_index/status" },
+      { "from": "DRAINING", "to": "RETIRED", "via": "PATCH /admin/pools/:pool_index/status" }
+    ]
+  },
   "testCases": [
     {
-      "name": "Auto-generated from route scan (review payload before enabling)",
+      "name": "Transition a pool into MAINTENANCE",
+      "headers": {
+        "x-admin-ops-token": "{{var:ADMIN_OPS_TOKEN}}"
+      },
       "pathParams": {
-        "pool_index": "{{static:REPLACE_WITH_ID}}"
+        "pool_index": "{{var:pool_index}}"
       },
       "payload": {
-        "to_status": "{{static:sample}}",
-        "reason": "{{static:sample}}",
-        "operator_id": "{{static:REPLACE_WITH_ID}}"
+        "to_status": "MAINTENANCE",
+        "reason": "Scheduled maintenance window for QA",
+        "operator_id": "{{var:operator_id}}"
       },
       "expectedStatus": 200
     }

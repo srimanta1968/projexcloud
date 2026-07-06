@@ -16,7 +16,7 @@ interface InvoiceRow {
   tenant_id: string;
   period_start: string;
   period_end: string;
-  total_cents: number;
+  total: string | number;
   currency: string;
   status: string;
   finalized_at: string | null;
@@ -83,7 +83,7 @@ export default async function InvoicesPage({
                 </TableCell>
                 <TableCell className="font-mono text-xs">{i.tenant_id}</TableCell>
                 <TableCell>{i.period_start} → {i.period_end}</TableCell>
-                <TableCell className="text-right tabular-nums">{(i.total_cents / 100).toFixed(2)} {i.currency}</TableCell>
+                <TableCell className="text-right tabular-nums">{Number(i.total).toFixed(2)} {i.currency}</TableCell>
                 <TableCell>{i.status}</TableCell>
               </TableRow>
             ))}

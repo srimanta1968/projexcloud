@@ -14,6 +14,18 @@
     "POST /api/auth/register",
     "POST /api/devices"
   ],
+  "fieldEnums": {
+    "reason": ["revoked", "stolen"]
+  },
+  "statusTransitions": {
+    "entity": "device",
+    "field": "status",
+    "flow": ["active", "revoked", "stolen"],
+    "transitions": [
+      { "from": "active", "to": "revoked", "via": "POST /api/devices/:device_uuid/revoke" },
+      { "from": "active", "to": "stolen", "via": "POST /api/devices/:device_uuid/revoke" }
+    ]
+  },
   "testCases": [
     {
       "name": "Revoke device",
@@ -24,9 +36,12 @@
         "device_uuid": "{{cache:devices.create.response.data.device.device_uuid}}"
       },
       "payload": {
-        "reason": "{{static:revoked}}"
+        "reason": "revoked"
       },
       "expectedStatus": 200
     }
-  ]
+  ],
+  "captureResponse": {
+    "devices.revoke.response.data.device.device_uuid": "data.device.device_uuid"
+  }
 }

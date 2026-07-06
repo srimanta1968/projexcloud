@@ -10,20 +10,18 @@
   "featureId": "d3f526f1-243f-4b31-b538-aeffeddca534",
   "epicId": "00996d23-f667-4a82-9285-7728ba357e7b",
   "priority": 45,
-  "testability": "manual",
-  "skipReason": "Depends on tenant seed row; covered by integration test.",
+  "testability": "auto",
   "dependsOn": [
-    "POST /api/auth/register",
-    "POST /api/tenants"
+    "POST /api/auth/signup-tenant"
   ],
   "testCases": [
     {
       "name": "Set fiscal year starting in April with USD",
       "headers": {
-        "Authorization": "Bearer {{cache:auth.register.response.data.token}}"
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
       },
       "pathParams": {
-        "tenant_id": "{{cache:tenants.create.response.data.tenant_id}}"
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}"
       },
       "payload": {
         "year_start_month": 4,
@@ -32,5 +30,11 @@
       },
       "expectedStatus": 201
     }
-  ]
+  ],
+  "fieldEnums": {
+    "period_kind": ["year", "quarter", "month", "week"]
+  },
+  "captureResponse": {
+    "tenants.set-fiscal-calendar.response.data.periods.0.fiscal_period_id": "data.periods.0.fiscal_period_id"
+  }
 }

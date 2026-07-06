@@ -12,11 +12,12 @@
   "priority": 50,
   "dependsOn": [
     "POST /api/auth/register",
+    "POST /api/auth/signup-tenant",
     "PUT /api/flags"
   ],
   "testCases": [
     {
-      "name": "Platform-wide rollout",
+      "name": "Tenant-scoped rollout",
       "headers": {
         "Authorization": "Bearer {{cache:auth.register.response.data.token}}"
       },
@@ -24,6 +25,7 @@
         "flag_id": "{{cache:flags.create.response.data.flag.flag_id}}"
       },
       "payload": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
         "predicate": {},
         "value": true,
         "priority": 100,
@@ -31,5 +33,8 @@
       },
       "expectedStatus": 201
     }
-  ]
+  ],
+  "captureResponse": {
+    "flags.rollout.response.data.rollout.rollout_id": "data.rollout.rollout_id"
+  }
 }

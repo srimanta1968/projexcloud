@@ -4,22 +4,38 @@
   "method": "POST",
   "requiresAuth": true,
   "dependsOn": [
-    "POST /api/auth/register"
+    "POST /api/auth/signup-tenant",
+    "POST /api/content/items"
   ],
   "expectedStatus": 200,
   "sdk": "sdk-content",
   "sourceFile": "packages/sdk-content/src/server/routes.ts",
   "_generated": true,
-  "testability": "manual",
-  "skipReason": "Auto-generated from implemented route scan; payload/expectedResponse inferred from the handler and need review before enabling automated execution.",
+  "testability": "auto",
+  "fieldEnums": {
+    "status": ["draft", "published", "archived"]
+  },
+  "statusTransitions": {
+    "entity": "content.item",
+    "field": "status",
+    "flow": ["draft", "published", "archived"],
+    "transitions": [
+      { "from": "draft", "to": "archived", "via": "POST /api/content/items/:item_id/archive" },
+      { "from": "published", "to": "archived", "via": "POST /api/content/items/:item_id/archive" }
+    ]
+  },
+  "captureResponse": {
+    "content.item.archive.response.data.item.item_id": "data.item.item_id",
+    "content.item.archive.response.data.item.status": "data.item.status"
+  },
   "testCases": [
     {
-      "name": "Auto-generated from route scan (review payload before enabling)",
+      "name": "Archive a draft content item",
       "headers": {
-        "Authorization": "Bearer {{cache:auth.register.response.data.token}}"
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
       },
       "pathParams": {
-        "item_id": "{{static:REPLACE_WITH_ID}}"
+        "item_id": "{{cache:content.item.create.response.data.item.item_id}}"
       },
       "payload": {},
       "expectedStatus": 200

@@ -2,6 +2,7 @@
   "name": "POST /api/break-glass/:grant_id/use - exercise grant, emit certificate-of-action",
   "endpoint": "/api/break-glass/:grant_id/use",
   "sdk": "sdk-approval",
+  "sourceFile": "packages/sdk-approval/src/server/routes.ts",
   "method": "POST",
   "requiresAuth": true,
   "taskId": "e674989a-98de-4f93-99d4-186d56d24d9e",
@@ -9,10 +10,10 @@
   "featureId": "d00b18c5-a75a-4a02-8e0e-b6f941ac60c1",
   "epicId": "0d61fa89-b842-43af-baf9-42454044726f",
   "expectedStatus": 200,
-  "testability": "manual",
-  "skipReason": "Requires an active (approved) break-glass grant; the action must fall within the grant scope. Part of the multi-step request -> decide -> use flow.",
+  "testability": "auto",
   "dependsOn": [
-    "POST /api/auth/register",
+    "POST /api/auth/signup-tenant",
+    "POST /api/approvals/routes",
     "POST /api/break-glass",
     "POST /api/break-glass/:grant_id/decide"
   ],
@@ -20,14 +21,14 @@
     {
       "name": "Exercise the active grant within scope, emitting a certificate",
       "headers": {
-        "Authorization": "Bearer {{cache:auth.register.response.data.token}}"
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
       },
       "pathParams": {
         "grant_id": "{{cache:break-glass.request.response.data.grant.grant_id}}"
       },
       "payload": {
-        "action": "{{static:read}}",
-        "target_id": "{{dynamic:uuid}}"
+        "action": "read",
+        "target_id": "{{var:target_id}}"
       },
       "expectedStatus": 200
     }
@@ -39,5 +40,9 @@
         "cert_hash": "string"
       }
     }
+  },
+  "captureResponse": {
+    "break-glass.use.response.data.certificate.grant_id": "data.certificate.grant_id",
+    "break-glass.use.response.data.certificate.cert_hash": "data.certificate.cert_hash"
   }
 }

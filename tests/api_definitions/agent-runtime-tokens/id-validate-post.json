@@ -3,13 +3,18 @@
   "sdk": "sdk-agent-runtime",
   "method": "POST",
   "taskId": "f83bc787-e516-4ee9-9a86-3a3aa9c2bad9",
-  "description": "Validate a capability token against the args the caller intends to invoke. Checks expiry, single-use, revocation, args binding, signature. Returns valid:true|false with reason.",
+  "description": "Validate a capability token against the args the caller intends to invoke. Checks expiry, single-use, revocation, args binding, signature. Returns valid:true|false with reason. Always HTTP 200 (validity is in the body).",
   "requiresAuth": true,
   "priority": 110,
   "dependsOn": [
     "POST /api/auth/register",
+    "POST /api/agent-runtime/agents",
+    "POST /api/agent-runtime/runs",
     "POST /api/agent-runtime/tokens"
   ],
+  "captureResponse": {
+    "agent-runtime-tokens.validate.response.data.valid": "data.valid"
+  },
   "testCases": [
     {
       "name": "Validate freshly-minted token",
@@ -21,7 +26,7 @@
       },
       "payload": {
         "args": {
-          "first_name": "{{dynamic:name}}"
+          "first_name": "Ada"
         }
       },
       "expectedStatus": 200,

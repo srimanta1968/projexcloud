@@ -1,25 +1,51 @@
 {
-  "name": "POST /admin/active-active/profiles/:profile_id/drills \u2014 api-gateway",
+  "name": "POST /admin/active-active/profiles/:profile_id/drills — api-gateway",
   "endpoint": "/admin/active-active/profiles/:profile_id/drills",
   "method": "POST",
   "requiresAuth": false,
   "expectedStatus": 201,
   "sdk": "api-gateway",
   "sourceFile": "services/api-gateway/src/app.ts",
-  "_generated": true,
-  "testability": "manual",
-  "skipReason": "Auto-generated from implemented route scan; payload/expectedResponse inferred from the handler and need review before enabling automated execution.",
+  "testability": "auto",
+  "dependsOn": [
+    "POST /api/auth/signup-tenant",
+    "POST /admin/active-active/profiles"
+  ],
+  "fieldEnums": {
+    "to_region": ["us-east-1", "us-west-2", "eu-west-1", "ap-south-1"],
+    "from_region": ["us-east-1", "us-west-2", "eu-west-1", "ap-south-1"]
+  },
   "testCases": [
     {
-      "name": "Auto-generated from route scan (review payload before enabling)",
+      "name": "Run a failover drill against a tenant's active-active profile",
+      "headers": {
+        "x-admin-ops-token": "{{var:ADMIN_OPS_TOKEN}}"
+      },
       "pathParams": {
-        "profile_id": "{{static:REPLACE_WITH_ID}}"
+        "profile_id": "{{cache:active-active-profiles.create.response.data.profile_id}}"
       },
       "payload": {
-        "to_region": "{{static:sample}}",
-        "from_region": "{{static:sample}}"
+        "to_region": "us-west-2",
+        "from_region": "us-east-1"
       },
       "expectedStatus": 201
     }
-  ]
+  ],
+  "expectedResponse": {
+    "data": {
+      "drill_id": "string",
+      "profile_id": "string",
+      "from_region": "string",
+      "to_region": "string",
+      "started_at": "string",
+      "rpo_observed_seconds": "number",
+      "rto_observed_seconds": "number",
+      "passed": "boolean",
+      "audit_entry_id": "string",
+      "tier_downgrade_triggered": "boolean"
+    }
+  },
+  "captureResponse": {
+    "active-active-profiles.drill.response.data.drill_id": "data.drill_id"
+  }
 }

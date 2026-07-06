@@ -1,39 +1,51 @@
 {
+  "name": "POST /api/mcp/tools/:tool_id/invoke — sdk-mcp-bridge",
   "endpoint": "/api/mcp/tools/:tool_id/invoke",
   "sdk": "sdk-mcp-bridge",
+  "sourceFile": "packages/sdk-mcp-bridge/src/server/handlers/mcpController.ts",
   "method": "POST",
   "taskId": "ff367642-034d-47f7-b5de-d90f6e395376",
   "description": "Capability-token-gated MCP tool invocation. Validates token against args, marks single-use, opens transport, calls /tools/call, persists mcp.tool_invocation + mcp.tool.invoked.v1. AC-12, FR-MCP-3.",
   "requiresAuth": true,
   "priority": 410,
+  "expectedStatus": 200,
+  "testability": "auto",
   "dependsOn": [
-    "POST /api/auth/register",
-    "POST /api/mcp/server-registrations"
+    "POST /api/auth/signup-tenant",
+    "POST /api/mcp/server-registrations",
+    "POST /api/agent-runtime/runs",
+    "POST /api/agent-runtime/tokens"
   ],
-  "testability": "manual",
-  "skipReason": "Requires a registered MCP server (manual fixture) plus a minted single-use capability_token; neither tool_id nor capability_token_id can be captured in an automated run. AC-12 e2e test drives all three (Slack/Snowflake/Jira). Required body fields filled.",
   "testCases": [
     {
-      "name": "Manual: invoke slack.post-message via mcp-bridge",
+      "name": "Invoke an MCP tool via capability token",
       "headers": {
-        "Authorization": "Bearer {{cache:auth.register.response.data.token}}"
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
       },
       "pathParams": {
-        "tool_id": "{{cache:mcp.server-registrations.create.response.data.tools.0.tool_id}}"
+        "tool_id": "{{cache:mcp-server-registrations.create.response.data.tools.0.tool_id}}"
       },
       "payload": {
-        "agent_run_id": "{{dynamic:uuid}}",
-        "capability_token_id": "{{cache:mcp.capability-tokens.create.response.data.capability_token_id}}",
+        "agent_run_id": "{{cache:agent-runtime-runs.create.response.data.run_id}}",
+        "capability_token_id": "{{cache:agent-runtime-tokens.mint.response.data.token_id}}",
         "args": {
           "channel": "#general",
           "text": "hello from automated test"
         },
-        "trace_id": "{{dynamic:uuid}}"
+        "trace_id": "{{var:trace_id}}"
       },
-      "expectedStatus": 200,
-      "expectedResponse": {
-        "success": true
-      }
+      "expectedStatus": 200
     }
-  ]
+  ],
+  "expectedResponse": {
+    "success": true,
+    "data": {
+      "invocation_id": "string",
+      "outcome": "string",
+      "latency_ms": "number"
+    }
+  },
+  "captureResponse": {
+    "mcp-tools-invoke.create.response.data.invocation_id": "data.invocation_id"
+  }
 }

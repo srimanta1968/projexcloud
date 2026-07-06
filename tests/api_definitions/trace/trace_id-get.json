@@ -6,14 +6,20 @@
   "description": "Trace timeline (G12). Returns trace.trace header + trace.span rows in started_at order. Render budget <5s for 50 spans.",
   "requiresAuth": true,
   "priority": 500,
+  "sourceFile": "packages/sdk-trace/src/server/handlers/traceController.ts",
+  "testability": "auto",
   "dependsOn": [
     "POST /api/auth/register"
   ],
-  "testability": "manual",
-  "skipReason": "Requires populated trace.trace + trace.span fixtures from upstream SDK calls; exercised by AC-10/AC-11 integration tests.",
   "testCases": [
     {
-      "name": "Manual: timeline renders under 5s",
+      "name": "Timeline renders trace header + spans",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.register.response.data.token}}"
+      },
+      "pathParams": {
+        "trace_id": "{{var:trace_id}}"
+      },
       "expectedStatus": 200,
       "expectedResponse": {
         "success": true

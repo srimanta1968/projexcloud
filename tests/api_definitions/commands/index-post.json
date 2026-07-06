@@ -2,6 +2,7 @@
   "name": "POST /api/commands — issue a command to a robot asset/component",
   "endpoint": "/api/commands",
   "sdk": "sdk-command",
+  "sourceFile": "services/api-gateway/src/app.ts",
   "method": "POST",
   "requiresAuth": true,
   "expectedStatus": 201,
@@ -12,10 +13,27 @@
     "POST /api/auth/signup-tenant",
     "POST /api/assets"
   ],
-  "testability": "manual",
-  "skipReason": "Needs a real sub-bearing JWT and a registered asset_id (same as the rest of the P12 asset chain). Authorizes via rebac+policy and persists the command; low/medium risk auto-approve, high/critical land pending.",
+  "testability": "auto",
+  "fieldEnums": {
+    "risk_class": ["low", "medium", "high", "critical"]
+  },
+  "statusTransitions": {
+    "entity": "command.command",
+    "field": "status",
+    "flow": ["pending", "approved", "rejected", "dispatched", "acked", "failed", "expired", "cancelled"],
+    "transitions": [
+      { "from": null, "to": "approved", "via": "POST /api/commands" },
+      { "from": null, "to": "pending", "via": "POST /api/commands" },
+      { "from": "pending", "to": "approved", "via": "POST /api/commands/:command_id/decision" },
+      { "from": "pending", "to": "rejected", "via": "POST /api/commands/:command_id/decision" },
+      { "from": "approved", "to": "dispatched", "via": "INTERNAL sdk-command background dispatcher" },
+      { "from": "dispatched", "to": "acked", "via": "POST /api/commands/:command_id/ack" },
+      { "from": "dispatched", "to": "failed", "via": "POST /api/commands/:command_id/ack" }
+    ]
+  },
   "captureResponse": {
-    "commands.create.response.data.command_id": "data.command_id"
+    "commands.create.response.data.command_id": "data.command_id",
+    "commands.create.response.data.status": "data.status"
   },
   "testCases": [
     {
@@ -26,14 +44,15 @@
       "payload": {
         "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
         "target_asset_id": "{{cache:assets.create.response.data.asset_id}}",
-        "type": "{{static:move}}",
+        "target_component_id": "{{var:component_id}}",
+        "type": "move",
         "params": {
           "x": 1,
           "y": 2
-        }
+        },
+        "risk_class": "low"
       },
-      "expectedStatus": 201,
-      "testability": "manual"
+      "expectedStatus": 201
     }
   ]
 }

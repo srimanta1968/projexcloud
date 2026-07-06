@@ -9,10 +9,14 @@
   "sprintId": "efcf9cbd-5e84-469e-946e-efcabf8c88e1",
   "priority": 50,
   "dependsOn": [
-    "POST /api/auth/signup-tenant"
+    "POST /api/auth/signup-tenant",
+    "POST /api/assets"
   ],
-  "testability": "manual",
-  "skipReason": "Needs a real sub-bearing JWT (tenant context from the token). Registers an ML feature-dataset spec over an asset's sensor time-series.",
+  "testability": "auto",
+  "fieldEnums": {
+    "grain": ["minute", "hour", "day"],
+    "aggregations": ["avg", "min", "max", "last", "count"]
+  },
   "captureResponse": {
     "analytics.dataset.response.data.spec_id": "data.spec_id"
   },
@@ -25,17 +29,23 @@
       "payload": {
         "name": "{{dynamic:name}}",
         "asset_id": "{{cache:assets.create.response.data.asset_id}}",
-        "grain": "{{static:minute}}",
+        "sensor_ids": [],
+        "grain": "minute",
         "aggregations": [
           "avg",
           "min",
           "max",
           "last",
           "count"
-        ]
+        ],
+        "label_source": {
+          "kind": "intervals",
+          "default_label": 0,
+          "intervals": []
+        }
       },
       "expectedStatus": 201,
-      "testability": "manual"
+      "testability": "auto"
     }
   ]
 }

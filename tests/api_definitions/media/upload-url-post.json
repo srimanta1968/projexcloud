@@ -4,28 +4,29 @@
   "sdk": "sdk-media",
   "method": "POST",
   "requiresAuth": true,
+  "sourceFile": "packages/sdk-media/src/server/handlers/mediaController.ts",
   "expectedStatus": 201,
   "taskId": "f21e6c99-58bd-48dd-b888-d48edde7a5bd",
   "sprintId": "8ef1d09e-dd8e-4daf-8d03-54dcd9f812f8",
   "featureId": "9396ba53-a104-415c-ba3c-4e2a1b8d2c8a",
   "epicId": "d83f7b6e-821c-4fe1-96e6-910eca8fbbfc",
   "priority": 30,
-  "testability": "manual",
-  "skipReason": "Requires seeded tenant + active vault tenant key; covered by integration test with sdk-vault setup.",
+  "testability": "auto",
   "dependsOn": [
-    "POST /api/auth/register"
+    "POST /api/auth/signup-tenant"
   ],
   "testCases": [
     {
       "name": "Issue upload URL for a 1MB JPEG",
       "headers": {
-        "Authorization": "Bearer {{cache:auth.register.response.data.token}}"
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
       },
       "payload": {
-        "tenant_id": "{{static:00000000-0000-0000-0000-000000000001}}",
-        "persona_id": "{{cache:auth.register.response.data.userId}}",
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "persona_id": "{{cache:auth.signup-tenant.response.data.userId}}",
         "content_type": "image/jpeg",
-        "byte_size": 1048576
+        "byte_size": 1048576,
+        "ttl_seconds": 900
       },
       "expectedStatus": 201
     }
@@ -35,10 +36,13 @@
       "blob_id": "string",
       "url_id": "string",
       "upload_url": "string",
+      "expires_at": "string",
       "s3_key": "string"
     }
   },
   "captureResponse": {
-    "media.upload-url.create.response.data.blob_id": "data.blob_id"
+    "media.upload-url.create.response.data.blob_id": "data.blob_id",
+    "media.upload-url.create.response.data.url_id": "data.url_id",
+    "media.upload-url.create.response.data.s3_key": "data.s3_key"
   }
 }

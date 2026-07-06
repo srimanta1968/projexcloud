@@ -16,6 +16,10 @@
   "captureResponse": {
     "resources.create.response.data.resource.resource_id": "data.resource.resource_id"
   },
+  "fieldEnums": {
+    "environment": ["dev", "staging", "prod"],
+    "status": ["registered", "quarantined"]
+  },
   "testCases": [
     {
       "name": "Register an owned resource with owner + approver",
@@ -23,11 +27,20 @@
         "Authorization": "Bearer {{cache:auth.register.response.data.token}}"
       },
       "payload": {
-        "resource_id": "{{dynamic:uuid}}",
+        "resource_id": "{{var:resource_id}}",
         "resource_type": "s3_bucket",
         "environment": "dev",
         "owner": "platform-team",
-        "approved_by": "cto"
+        "approved_by": "cto",
+        "team": "platform",
+        "repo": "org/infra-platform",
+        "terraform_module": "modules/s3-bucket",
+        "cloud_account": "123456789012",
+        "cost_center": "CC-1001",
+        "data_classification": "internal",
+        "network_zone": "private",
+        "created_by": "gitops-sync",
+        "expires_at": "{{dynamic:futuredatetime}}"
       },
       "expectedStatus": 201
     }

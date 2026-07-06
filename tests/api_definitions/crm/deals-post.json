@@ -4,7 +4,14 @@
   "method": "POST",
   "requiresAuth": true,
   "dependsOn": [
-    "POST /api/auth/register"
+    "POST /api/auth/signup-tenant",
+    "POST /api/auth/register",
+    "POST /api/app-identities",
+    "POST /api/memberships",
+    "POST /api/personas",
+    "POST /api/crm/contacts",
+    "POST /api/vault/keys",
+    "POST /api/encounters"
   ],
   "expectedStatus": 201,
   "sdk": "sdk-crm",
@@ -17,15 +24,18 @@
     {
       "name": "Create deal on an encounter (tenant_id + encounter_id + name required)",
       "headers": {
-        "Authorization": "Bearer {{cache:auth.register.response.data.token}}"
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
       },
       "payload": {
-        "tenant_id": "{{dynamic:uuid}}",
-        "encounter_id": "{{dynamic:uuid}}",
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "encounter_id": "{{cache:encounters.create.response.data.encounter.encounter_id}}",
+        "contact_id": "{{cache:crm.contacts.response.data.contact.contact_id}}",
         "name": "{{dynamic:name}}",
         "amount": 5000,
         "currency": "USD",
-        "close_probability": 50
+        "close_probability": 50,
+        "custom_fields": { "priority": "high" },
+        "external_refs": { "crm_ref": "DEAL-001" }
       },
       "expectedStatus": 201
     }

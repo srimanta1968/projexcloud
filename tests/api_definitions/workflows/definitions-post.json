@@ -2,6 +2,7 @@
   "name": "POST /api/workflows/definitions - Register/upsert workflow definition",
   "endpoint": "/api/workflows/definitions",
   "sdk": "sdk-workflow",
+  "sourceFile": "packages/sdk-workflow/src/server/handlers/workflowController.ts",
   "method": "POST",
   "requiresAuth": true,
   "expectedStatus": 201,
@@ -10,28 +11,27 @@
   "featureId": "c8c3cd6c-f966-406e-b761-7d6fa53d786a",
   "epicId": "d83f7b6e-821c-4fe1-96e6-910eca8fbbfc",
   "priority": 20,
-  "testability": "manual",
-  "skipReason": "Requires in-process registerStep() handlers to be installed for every step name in step_specs before the def can be registered — covered by integration test where the workflow module is loaded at boot.",
+  "testability": "auto",
   "dependsOn": [
     "POST /api/auth/register"
   ],
   "testCases": [
     {
-      "name": "Register a 2-step workflow with compensation",
+      "name": "Register a 2-step workflow using boot-registered step handlers",
       "headers": {
         "Authorization": "Bearer {{cache:auth.register.response.data.token}}"
       },
       "payload": {
-        "name": "{{static:demo-payment-flow}}",
-        "version": "{{static:1.0.0}}",
-        "namespace": "{{static:admin}}",
+        "name": "qa-workflow-demo",
+        "version": "1.0.0",
+        "namespace": "admin",
         "step_specs": [
           {
-            "name": "{{static:charge-card}}",
-            "compensate": "{{static:void-charge}}"
+            "name": "dunning.send-reminder",
+            "compensate": "dunning.rollback-reminder"
           },
           {
-            "name": "{{static:emit-receipt}}"
+            "name": "dunning.write-off"
           }
         ]
       },
@@ -43,11 +43,15 @@
       "definition": {
         "workflow_def_id": "string",
         "name": "string",
+        "version": "string",
+        "namespace": "string",
+        "step_specs": "array",
         "status": "string"
       }
     }
   },
   "captureResponse": {
-    "workflows.definitions.create.response.data.definition.workflow_def_id": "data.definition.workflow_def_id"
+    "workflows.register.response.data.definition.workflow_def_id": "data.definition.workflow_def_id",
+    "workflows.register.response.data.definition.status": "data.definition.status"
   }
 }

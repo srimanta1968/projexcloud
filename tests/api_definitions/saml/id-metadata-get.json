@@ -3,6 +3,8 @@
   "endpoint": "/saml/:tenant_id/metadata",
   "sdk": "sdk-identity",
   "method": "GET",
+  "sourceFile": "packages/sdk-identity/src/server/handlers/federationController.ts",
+  "description": "Public SAML SP metadata XML for a tenant (FR-IDN-8). No auth; buildSamlSpMetadata() renders the SP EntityDescriptor from the request host + tenant_id and replies application/samlmetadata+xml with 200.",
   "requiresAuth": false,
   "expectedStatus": 200,
   "taskId": "55fcecf8-88d3-4270-ada4-8c34593e2466",
@@ -10,13 +12,15 @@
   "featureId": "f493450e-8ed8-425c-b905-f8a76a70bdcc",
   "epicId": "00996d23-f667-4a82-9285-7728ba357e7b",
   "priority": 15,
-  "testability": "manual",
-  "skipReason": "Vendor-sandbox-dependent (Okta SAML round-trip); covered by AC-12 vendor integration test.",
+  "testability": "auto",
+  "dependsOn": [
+    "POST /api/auth/signup-tenant"
+  ],
   "testCases": [
     {
       "name": "Metadata XML for a known tenant",
       "pathParams": {
-        "tenant_id": "{{static:00000000-0000-0000-0000-000000000001}}"
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}"
       },
       "expectedStatus": 200
     }

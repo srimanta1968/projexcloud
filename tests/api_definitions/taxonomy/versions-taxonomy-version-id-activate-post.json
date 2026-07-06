@@ -4,24 +4,50 @@
   "method": "POST",
   "requiresAuth": true,
   "dependsOn": [
-    "POST /api/auth/register"
+    "POST /api/auth/signup-tenant"
   ],
   "expectedStatus": 200,
   "sdk": "sdk-taxonomy",
   "sourceFile": "packages/sdk-taxonomy/src/server/routes.ts",
   "_generated": true,
-  "testability": "manual",
-  "skipReason": "Auto-generated from implemented route scan; payload/expectedResponse inferred from the handler and need review before enabling automated execution.",
+  "testability": "auto",
+  "captureResponse": {
+    "taxonomy.activate.response.data.activated_version_id": "data.activated_version_id"
+  },
+  "statusTransitions": {
+    "entity": "taxonomy.version",
+    "field": "status",
+    "flow": [
+      "draft",
+      "active",
+      "deprecated",
+      "retired"
+    ],
+    "transitions": [
+      {
+        "from": "draft",
+        "to": "active",
+        "via": "POST /api/taxonomy/versions/:taxonomy_version_id/activate"
+      },
+      {
+        "from": "active",
+        "to": "deprecated",
+        "via": "POST /api/taxonomy/versions/:taxonomy_version_id/activate"
+      }
+    ]
+  },
   "testCases": [
     {
-      "name": "Auto-generated from route scan (review payload before enabling)",
+      "name": "Activate a taxonomy version (demotes prior active version to deprecated)",
       "headers": {
-        "Authorization": "Bearer {{cache:auth.register.response.data.token}}"
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
       },
       "pathParams": {
-        "taxonomy_version_id": "{{static:REPLACE_WITH_ID}}"
+        "taxonomy_version_id": "{{var:taxonomy_version_id}}"
       },
-      "payload": {},
+      "payload": {
+        "taxonomy_version_id": "{{var:taxonomy_version_id}}"
+      },
       "expectedStatus": 200
     }
   ]

@@ -10,10 +10,14 @@
   "priority": 52,
   "dependsOn": [
     "POST /api/auth/signup-tenant",
+    "POST /api/assets",
     "POST /api/analytics/datasets"
   ],
-  "testability": "manual",
-  "skipReason": "Needs a real sub-bearing JWT and a registered dataset spec; materializes the feature windows over a time range and records a dataset_build.",
+  "testability": "auto",
+  "captureResponse": {
+    "analytics.build.response.data.build_id": "data.build_id",
+    "analytics.build.response.data.spec_id": "data.spec_id"
+  },
   "testCases": [
     {
       "name": "Build feature windows for a 1h range",
@@ -28,7 +32,7 @@
         "to": "{{dynamic:datetime}}"
       },
       "expectedStatus": 200,
-      "testability": "manual"
+      "testability": "auto"
     }
   ]
 }
