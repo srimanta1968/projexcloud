@@ -1,6 +1,6 @@
 import { dataService } from '@projexlight/db-runtime';
 import { appendAuditEntry } from '@projexlight/sdk-audit';
-import { envelopeEncrypt } from '@projexlight/sdk-secrets';
+import { envelopeEncrypt, storeSecret, retrieveSecret } from '@projexlight/sdk-secrets';
 import type { ProviderId } from '@projexlight/contracts';
 import { invalidateProviderCache } from './completionService';
 
@@ -19,7 +19,22 @@ import { invalidateProviderCache } from './completionService';
 const SUPPORTED_PROVIDERS: readonly ProviderId[] = ['anthropic', 'openai', 'bedrock', 'gemini'];
 const MIN_REVOKE_REASON_LEN = 6;
 const AUDIT_POOL = process.env.AI_GATEWAY_AUDIT_POOL || 'admin-default';
-const VAULT_REF = process.env.AI_GATEWAY_BYOK_VAULT_REF || 'platform/ai-gateway/tenant-byok';
+// Must be a well-formed secret://{app|pool|tenant}/{id} ref (id: [A-Za-z0-9._-],
+// no slashes) — the previous 'platform/ai-gateway/tenant-byok' failed sdk-secrets
+// validation, 500ing every bind. The platform BYOK-wrapping key is pool-scoped.
+const VAULT_REF = process.env.AI_GATEWAY_BYOK_VAULT_REF || 'secret://pool/ai-gateway-tenant-byok';
+const VAULT_KMS_KEY_ID = process.env.AI_GATEWAY_BYOK_KMS_KEY_ID || 'ai-gateway-tenant-byok';
+
+// The sdk-secrets catalog is in-process; register the wrapping ref on first use
+// so envelopeEncrypt's requireRef() finds it (idempotent).
+let _vaultRefReady = false;
+async function ensureVaultRef(): Promise<void> {
+  if (_vaultRefReady) return;
+  if (!(await retrieveSecret(VAULT_REF))) {
+    await storeSecret({ ref: VAULT_REF, scope: 'pool', kms_key_id: VAULT_KMS_KEY_ID });
+  }
+  _vaultRefReady = true;
+}
 
 export interface TenantCredentialBinding {
   binding_id: string;
@@ -73,6 +88,7 @@ async function wrapEnvelope(raw_key: string): Promise<Buffer> {
   // Reuses the same envelope shape as completionService.unwrapCredential
   // recognises: a JSON blob carrying the wrapped DEK + ciphertext from
   // sdk-secrets envelopeEncrypt.
+  await ensureVaultRef();
   const enc = await envelopeEncrypt(VAULT_REF, Buffer.from(raw_key, 'utf8'));
   return Buffer.from(
     JSON.stringify({

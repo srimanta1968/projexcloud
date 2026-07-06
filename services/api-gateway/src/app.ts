@@ -22,6 +22,7 @@ import {
   installByokInvalidator,
   installAutoSiemForwarder,
   setSiemForwarder,
+  UndecryptableError,
 } from '@projexlight/sdk-vault';
 import {
   migrationsDir as auditMigrations,
@@ -1770,6 +1771,9 @@ const start = async (): Promise<void> => {
         });
         return { success: true, data: rot };
       } catch (e) {
+        if (e instanceof UndecryptableError) {
+          return reply.code(e.status_code ?? 409).send({ success: false, error: (e as Error).message });
+        }
         return reply.code(500).send({ success: false, error: (e as Error).message });
       }
     });
@@ -2267,6 +2271,10 @@ const start = async (): Promise<void> => {
     app.get<{ Params: { invoice_id: string } }>('/admin/invoices/:invoice_id', async (req, reply) => {
       const err = await requireAdmin(req as unknown as { headers: Record<string, unknown> });
       if (err) return reply.code(401).send({ success: false, error: err });
+      const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      if (!UUID_RE.test(req.params.invoice_id)) {
+        return reply.code(404).send({ success: false, error: 'invoice not found' });
+      }
       try {
         const inv = await dataService.query(
           `SELECT * FROM billing.invoice WHERE invoice_id = $1`,
@@ -2329,9 +2337,20 @@ const start = async (): Promise<void> => {
       const err = await requireAdmin(req as unknown as { headers: Record<string, unknown> });
       if (err) return reply.code(401).send({ success: false, error: err });
       try {
-        const { replayDelivery } = await import('@projexlight/sdk-webhook');
-        const r = await replayDelivery(req.params.delivery_id);
-        return { success: true, data: r };
+        const { replayDelivery, DeliveryNotInDlqError, DlqWindowExpiredError } =
+          await import('@projexlight/sdk-webhook');
+        try {
+          const r = await replayDelivery(req.params.delivery_id);
+          return { success: true, data: r };
+        } catch (inner) {
+          if (inner instanceof DeliveryNotInDlqError) {
+            return reply.code(404).send({ success: false, error: (inner as Error).message });
+          }
+          if (inner instanceof DlqWindowExpiredError) {
+            return reply.code(409).send({ success: false, error: (inner as Error).message });
+          }
+          throw inner;
+        }
       } catch (e) {
         return reply.code(500).send({ success: false, error: (e as Error).message });
       }

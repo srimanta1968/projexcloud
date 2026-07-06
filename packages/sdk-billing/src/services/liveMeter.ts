@@ -1,6 +1,6 @@
 import { dataService } from '@projexlight/db-runtime';
 import { applyRate, loadCatalogRates } from './rateEngine';
-import { getUsageReader } from './usageReader';
+import { getUsageReader, tableExists } from './usageReader';
 import type { LiveMeterInput, LiveMeterResult } from '../models/billing.model';
 
 /**
@@ -57,20 +57,26 @@ export async function readLiveMeter(input: LiveMeterInput): Promise<LiveMeterRes
   }
 
   // Lag computed as: now - max(occurred_at). In synthetic mode that's
-  // effectively zero; production reports Redis-counter age.
-  const lagRow = await dataService.one<{ lag_ms: number | null }>(
-    `SELECT EXTRACT(EPOCH FROM (now() - MAX(occurred_at)))::bigint * 1000 AS lag_ms
-       FROM meter.usage_event
-      WHERE tenant_id = $1 AND occurred_at >= $2`,
-    [input.tenant_id, period_start],
-  );
+  // effectively zero; production reports Redis-counter age. usage_event is a
+  // ClickHouse-only table — guard so the Postgres deploy doesn't 500 on a
+  // missing relation.
+  let lag_ms = 0;
+  if (await tableExists('meter', 'usage_event')) {
+    const lagRow = await dataService.one<{ lag_ms: number | null }>(
+      `SELECT EXTRACT(EPOCH FROM (now() - MAX(occurred_at)))::bigint * 1000 AS lag_ms
+         FROM meter.usage_event
+        WHERE tenant_id = $1 AND occurred_at >= $2`,
+      [input.tenant_id, period_start],
+    );
+    lag_ms = lagRow?.lag_ms ?? 0;
+  }
 
   return {
     tenant_id: input.tenant_id,
     as_of: now,
     current_period_start: period_start,
     subtotal: round4(subtotal),
-    lag_ms: lagRow?.lag_ms ?? 0,
+    lag_ms,
     by_sku,
   };
 }
