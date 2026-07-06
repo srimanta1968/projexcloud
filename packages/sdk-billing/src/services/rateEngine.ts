@@ -27,11 +27,16 @@ interface MeterPricingRateRow {
 }
 
 export async function loadCatalogRates(catalog_id: string): Promise<Map<string, PricingRate>> {
+  // meter.pricing_rate columns are: sku, unit, mode, tiers, price, margin_pct,
+  // currency (see sdk-meter 001_init_meter.sql). Alias mode->pricing_mode and
+  // price->rate so the row mapping below is unchanged. included_units/
+  // overage_rate are not modeled in the schema (bundled_subscription overage is
+  // not expressible in P1), so they read as NULL.
   const rows = await dataService.rows<MeterPricingRateRow>(
-    `SELECT sku, pricing_mode, rate::text AS rate, tiers,
+    `SELECT sku, mode AS pricing_mode, price::text AS rate, tiers,
             margin_pct::text AS margin_pct,
-            included_units::text AS included_units,
-            overage_rate::text AS overage_rate
+            NULL::text AS included_units,
+            NULL::text AS overage_rate
        FROM meter.pricing_rate
       WHERE catalog_id = $1`,
     [catalog_id],
