@@ -28,7 +28,10 @@ function fail(req: FastifyRequest, reply: FastifyReply, err: unknown): void {
     return;
   }
   const msg = (err as Error).message;
-  if (msg.includes('not found') || msg.includes('not in running state')) {
+  // "not in running" matches both "...not in running state" and the signal
+  // path's "...not in running/paused state" — the latter previously fell
+  // through to a misleading 500.
+  if (msg.includes('not found') || msg.includes('not in running')) {
     reply.code(409).send({ error: 'InvalidState', details: [msg] });
     return;
   }

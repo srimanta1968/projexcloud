@@ -100,7 +100,20 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
     if (!body.winner_address_id || !body.loser_address_id) {
       return reply.code(400).send({ error: 'ValidationError', details: ['missing fields'] });
     }
-    const record = await mergeAddresses(body.winner_address_id, body.loser_address_id, body.operator_id);
-    return reply.code(200).send({ data: { merge: record } });
+    const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (!UUID_RE.test(body.winner_address_id) || !UUID_RE.test(body.loser_address_id)) {
+      return reply.code(400).send({ error: 'ValidationError', details: ['address ids must be uuids'] });
+    }
+    try {
+      const record = await mergeAddresses(body.winner_address_id, body.loser_address_id, body.operator_id);
+      return reply.code(200).send({ data: { merge: record } });
+    } catch (err) {
+      // FK violation (23503) => a referenced address row doesn't exist.
+      if ((err as { code?: string }).code === '23503') {
+        return reply.code(404).send({ error: 'NotFound', details: ['winner or loser address not found'] });
+      }
+      req.log.error(err);
+      return reply.code(500).send({ error: 'InternalError', details: [(err as Error).message] });
+    }
   });
 }

@@ -43,6 +43,13 @@ class PostgresUsageReader implements UsageReader {
       );
     }
 
+    // usage_event lives only in ClickHouse (the Postgres deploy has neither
+    // usage_rollup nor usage_event until sdk-meter rollups are materialised).
+    // Without this guard the query throws `relation "meter.usage_event" does
+    // not exist` and the caller 500s; with no source table, usage is empty.
+    const hasEvent = await tableExists('meter', 'usage_event');
+    if (!hasEvent) return [];
+
     return dataService.rows<UsageBucket>(
       `SELECT sku,
               dimensions->>'app_id'       AS app_id,
@@ -62,7 +69,7 @@ class PostgresUsageReader implements UsageReader {
   }
 }
 
-async function tableExists(schema: string, table: string): Promise<boolean> {
+export async function tableExists(schema: string, table: string): Promise<boolean> {
   const row = await dataService.one<{ exists: boolean }>(
     `SELECT EXISTS (
        SELECT 1 FROM information_schema.tables
