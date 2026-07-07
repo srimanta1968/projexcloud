@@ -27,7 +27,7 @@ ENGINE = MergeTree
 PARTITION BY toYYYYMMDD(occurred_at)
 ORDER BY (tenant_id, occurred_at, crash_id)
 TTL toDateTime(occurred_at) + INTERVAL 30 DAY
-SETTINGS index_granularity = 8192;
+SETTINGS index_granularity = 8192, allow_nullable_key = 1;
 
 ALTER TABLE diagnostic.crash
   ADD INDEX IF NOT EXISTS crash_device_idx device_uuid TYPE bloom_filter(0.01) GRANULARITY 4;
@@ -47,7 +47,8 @@ CREATE TABLE IF NOT EXISTS diagnostic.crash_daily
 ENGINE = SummingMergeTree(crash_count)
 PARTITION BY toYYYYMM(day)
 ORDER BY (day, tenant_id, app_version, os_version)
-TTL day + INTERVAL 3 YEAR;
+TTL day + INTERVAL 3 YEAR
+SETTINGS allow_nullable_key = 1;
 
 CREATE MATERIALIZED VIEW IF NOT EXISTS diagnostic.crash_daily_mv
 TO diagnostic.crash_daily
@@ -78,7 +79,8 @@ CREATE TABLE IF NOT EXISTS diagnostic.health_snapshot
 ENGINE = MergeTree
 PARTITION BY toYYYYMMDD(captured_at)
 ORDER BY (tenant_id, captured_at, device_uuid)
-TTL toDateTime(captured_at) + INTERVAL 30 DAY;
+TTL toDateTime(captured_at) + INTERVAL 30 DAY
+SETTINGS allow_nullable_key = 1;
 
 CREATE TABLE IF NOT EXISTS diagnostic.health_hourly
 (
@@ -91,7 +93,8 @@ CREATE TABLE IF NOT EXISTS diagnostic.health_hourly
 ENGINE = SummingMergeTree((device_count, low_battery_count))
 PARTITION BY toYYYYMM(hour)
 ORDER BY (hour, tenant_id)
-TTL hour + INTERVAL 1 YEAR;
+TTL hour + INTERVAL 1 YEAR
+SETTINGS allow_nullable_key = 1;
 
 CREATE MATERIALIZED VIEW IF NOT EXISTS diagnostic.health_hourly_mv
 TO diagnostic.health_hourly

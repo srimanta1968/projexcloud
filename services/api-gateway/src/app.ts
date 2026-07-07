@@ -292,6 +292,10 @@ import {
   emit as lineageEmit,
 } from '@projexlight/sdk-lineage';
 import { migrationsDir as semanticMigrations }         from '@projexlight/sdk-semantic';
+// Mount the semantic-service route plugin into the gateway too (single-target testing),
+// while the standalone @projexlight/service-semantic binary keeps running on :8082.
+// Same exported registerRoutes plugin is used by both — no duplication.
+import { registerRoutes as semanticServiceRoutes }      from '@projexlight/service-semantic';
 import { migrationsDir as connectorSnowflakeMigrations } from '@projexlight/connector-snowflake';
 // P9.2 — global SDK catalog RAG store (Epic A). Auto-migrates catalog.* and
 // (best-effort) syncs manifests → pgvector for the build planner + registry MCP.
@@ -339,6 +343,7 @@ import {
 import {
   migrationsDir as poolFederationRuntimeMigrations,
   startFailoverOrchestrator,
+  registerRoutes as poolFedRoutes,
   type OrchestratorHandle,
 } from '@projexlight/service-pool-federation-runtime';
 import {
@@ -464,6 +469,16 @@ app.register(tenantServer.registerRoutes);
 app.register(consentServer.registerRoutes);
 app.register(policyServer.registerRoutes);
 app.register(rebacServer.registerRoutes);
+// semantic-service routes (ontology/bridge/policy/plan) — mounted for single-target tests;
+// also runs standalone on :8082. mountHealth:false so it doesn't clash with the gateway /health.
+app.register(semanticServiceRoutes, { mountHealth: false });
+// pool-federation-runtime routes (/failovers, /routes/:federation_id/:query_class,
+// /admin/chaos-drill) — mounted for single-target tests (Option A); the package
+// also runs standalone on :8083. mountHealth:false so it doesn't clash with the
+// gateway /health, and no orchestrator is threaded in (the gateway runs its own
+// federation orchestrator on /admin/federation/*), so /admin/chaos-drill here
+// degrades to 503 by design.
+app.register(poolFedRoutes, { mountHealth: false });
 app.register(apiKeysServer.registerRoutes);
 // P10/E5 — resource ownership registry read/register API.
 app.register(resourceRegistryServer.registerRoutes);

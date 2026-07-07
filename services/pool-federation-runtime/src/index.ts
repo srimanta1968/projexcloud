@@ -11,6 +11,8 @@ if (require.main === module) {
 }
 
 export { buildApp } from './app';
+export { registerRoutes } from './routes';
+export type { RegisterRoutesOptions } from './routes';
 export { resolveRoute, recordFailover, SovereignIsolationError } from './router';
 export type { RouteCache } from './router';
 export { migrationsDir } from './db';

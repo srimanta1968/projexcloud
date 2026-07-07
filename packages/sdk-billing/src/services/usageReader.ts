@@ -26,6 +26,25 @@ class PostgresUsageReader implements UsageReader {
     period_start: string;
     period_end: string;
   }): Promise<UsageBucket[]> {
+    // Deployed meter schema exposes meter.usage_ledger_day (per-tenant/day rollup with a
+    // sku->units JSONB in total_units). Prefer it — usage_rollup/usage_event don't exist on
+    // this deploy and querying them 500s ("relation ... does not exist").
+    const hasLedger = await tableExists('meter', 'usage_ledger_day');
+    if (hasLedger) {
+      return dataService.rows<UsageBucket>(
+        `SELECT kv.key AS sku,
+                NULL::text AS app_id, NULL::text AS bu_id, NULL::text AS persona_kind,
+                NULL::text AS encounter_id, NULL::text AS actor_kind,
+                SUM((kv.value)::float8)::float8 AS units,
+                0::float8 AS vendor_cost
+           FROM meter.usage_ledger_day d
+           CROSS JOIN LATERAL jsonb_each_text(d.total_units) AS kv(key, value)
+          WHERE d.tenant_id = $1 AND d.day >= $2::date AND d.day <= $3::date
+          GROUP BY kv.key`,
+        [args.tenant_id, args.period_start, args.period_end],
+      );
+    }
+
     // We probe for the table at runtime; older deploys may not have a
     // rollup yet, in which case we fall back to summing usage_event.
     const hasRollup = await tableExists('meter', 'usage_rollup');
