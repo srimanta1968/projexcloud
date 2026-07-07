@@ -8,14 +8,12 @@
   "sourceFile": "services/semantic-service/src/routes.ts",
   "_generated": true,
   "testability": "auto",
-  "dependsOn": [
-    "POST /ontology/register"
-  ],
+  "_fixNote": "Points at a dedicated always-active ontology seeded by tests/setup_scripts/20_seed_semantic_ontology.sql (name = active_ontology_name). Previously chained off POST /ontology/register, but that same registered ontology is deprecated by POST /ontology/:id/deprecate (shared single register producer), so name-active 404'd whenever deprecate ran first. The seeded ontology is untouched by other tests -> run-order independent.",
   "testCases": [
     {
-      "name": "Fetch the active ontology by name (registered + activated above)",
+      "name": "Fetch the active ontology by name (seeded always-active ontology)",
       "pathParams": {
-        "name": "{{cache:ontology.register.response.data.ontology.name}}"
+        "name": "{{var:active_ontology_name}}"
       },
       "expectedStatus": 200
     }

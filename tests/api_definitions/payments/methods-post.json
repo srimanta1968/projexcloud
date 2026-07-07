@@ -11,6 +11,7 @@
   "epicId": "d83f7b6e-821c-4fe1-96e6-910eca8fbbfc",
   "priority": 20,
   "testability": "auto",
+  "_fixNote": "provider_token MUST be unique per run. attachPaymentMethod upserts ON CONFLICT (provider, provider_token); a constant token ('pm_card_visa') makes every run after the first hit DO UPDATE and RETURN the FIRST run's row (owned by that first tenant). POST /api/payments/charge then 403s (TenantOwnership) because the returned method belongs to a different tenant than the current JWT. The {{dynamic:slug}} suffix forces a fresh insert owned by the current signup tenant. The synthetic stripe adapter accepts any non-'decline_' token.",
   "dependsOn": [
     "POST /api/auth/signup-tenant"
   ],
@@ -28,7 +29,7 @@
         "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
         "persona_id": "{{cache:auth.signup-tenant.response.data.userId}}",
         "provider": "stripe",
-        "provider_token": "pm_card_visa",
+        "provider_token": "pm_card_visa_{{dynamic:slug}}",
         "kind": "card",
         "last4": "4242",
         "brand": "visa",
