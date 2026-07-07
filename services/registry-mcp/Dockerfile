@@ -8,9 +8,16 @@
 FROM node:20-alpine AS build
 WORKDIR /workspace
 RUN corepack enable
-COPY pnpm-lock.yaml pnpm-workspace.yaml package.json tsconfig.base.json .npmrc ./
+COPY pnpm-lock.yaml pnpm-workspace.yaml package.json tsconfig.base.json turbo.json .npmrc ./
 COPY packages ./packages
 COPY services ./services
+COPY native ./native
+COPY tools ./tools
+# pnpm -w build == `turbo run build` builds the whole workspace, so the same
+# inputs the api-gateway image needs must be present here too — notably
+# scripts/ (sdk-asset/sdk-trace/sdk-diagnostic-telemetry run
+# `node ../../scripts/copy-ch-migrations.mjs`).
+COPY scripts ./scripts
 RUN pnpm install --frozen-lockfile && pnpm -w build
 
 FROM node:20-alpine AS runtime
