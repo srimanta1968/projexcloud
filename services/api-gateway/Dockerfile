@@ -33,6 +33,9 @@ COPY packages ./packages
 COPY services ./services
 COPY native ./native
 COPY tools ./tools
+# sdk-asset / sdk-trace / sdk-diagnostic-telemetry build scripts run
+# `node ../../scripts/copy-ch-migrations.mjs`, so scripts/ must be in the image.
+COPY scripts ./scripts
 # All @projexlight/* deps are workspace:* so the install never hits the
 # Verdaccio registry referenced by .npmrc — it resolves from the workspace.
 RUN --mount=type=cache,id=pnpm-store,target=/pnpm-store \
