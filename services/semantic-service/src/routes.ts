@@ -37,8 +37,15 @@ import type {
  *   POST /bridge                  — register a cross-domain bridge
  *   GET  /bridge                  — list bridges
  */
-export async function registerRoutes(app: FastifyInstance): Promise<void> {
-  app.get('/health', async () => ({ ok: true, service: 'semantic-service' }));
+export async function registerRoutes(
+  app: FastifyInstance,
+  opts: { mountHealth?: boolean } = {},
+): Promise<void> {
+  // Skip /health when mounted inside an aggregator (the api-gateway already owns /health);
+  // the standalone binary registers it (default). Prevents FST_ERR_DUPLICATED_ROUTE.
+  if (opts.mountHealth !== false) {
+    app.get('/health', async () => ({ ok: true, service: 'semantic-service' }));
+  }
 
   app.post<{ Body: { bundle: DomainOntologyBundle; bundle_ref: string; activate?: boolean } }>(
     '/ontology/register',

@@ -27,13 +27,13 @@ function sha256(content: string): string {
 }
 
 async function ensureChTrackingTable(): Promise<void> {
+  // ClickHouse's client rejects multiple statements in one command() — issue the
+  // CREATE DATABASE and CREATE TABLE as separate commands.
+  await getClickHouse().command({ query: 'CREATE DATABASE IF NOT EXISTS diagnostic' });
   await getClickHouse().command({
-    query: `
-      CREATE DATABASE IF NOT EXISTS diagnostic;
-      CREATE TABLE IF NOT EXISTS diagnostic.ch_migrations (
+    query: `CREATE TABLE IF NOT EXISTS diagnostic.ch_migrations (
         sdk String, filename String, sha256 String, applied_at DateTime DEFAULT now()
-      ) ENGINE = MergeTree ORDER BY (sdk, filename)
-    `,
+      ) ENGINE = MergeTree ORDER BY (sdk, filename)`,
   });
 }
 
