@@ -339,6 +339,7 @@ import {
 import {
   migrationsDir as poolFederationRuntimeMigrations,
   startFailoverOrchestrator,
+  registerRoutes as poolFedRoutes,
   type OrchestratorHandle,
 } from '@projexlight/service-pool-federation-runtime';
 import {
@@ -464,6 +465,13 @@ app.register(tenantServer.registerRoutes);
 app.register(consentServer.registerRoutes);
 app.register(policyServer.registerRoutes);
 app.register(rebacServer.registerRoutes);
+// pool-federation-runtime routes (/failovers, /routes/:federation_id/:query_class,
+// /admin/chaos-drill) — mounted for single-target tests (Option A); the package
+// also runs standalone on :8083. mountHealth:false so it doesn't clash with the
+// gateway /health, and no orchestrator is threaded in (the gateway runs its own
+// federation orchestrator on /admin/federation/*), so /admin/chaos-drill here
+// degrades to 503 by design.
+app.register(poolFedRoutes, { mountHealth: false });
 app.register(apiKeysServer.registerRoutes);
 // P10/E5 — resource ownership registry read/register API.
 app.register(resourceRegistryServer.registerRoutes);
