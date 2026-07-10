@@ -13,9 +13,18 @@ Reads context from env (injected by the runner):
   SETUP_CONTEXT_JSON    - JSON of all resolved {{cache}}/{{var}} values
   ACTIVE_ONTOLOGY_NAME  - name the /ontology/:name/active test looks up
 
+Secure secret export (never printed / logged):
+  SETUP_VARS_OUT           - private 0600 file the runner reads for vars to inject
+                             (e.g. {{var:ADMIN_OPS_TOKEN}}), then shreds+deletes.
+  ADMIN_OPS_BOOTSTRAP_TOKEN - master admin-ops secret, injected into the container
+                             ONLY as an env var from a gitignored/secret source
+                             (never committed, never in test-config). Used solely to
+                             MINT a short-lived per-run token; the master is never
+                             exported or logged.
+
 Contract: IDEMPOTENT (check/tolerate-409) and NON-FATAL (always exits 0; a
 failure here must never abort the suite — seed-dependent tests just fail with a
-clear reason).
+clear reason). SECURITY: minted secrets go ONLY to SETUP_VARS_OUT (never stdout).
 """
 import os
 import sys
@@ -117,11 +126,67 @@ def provision_active_ontology():
         print(f"  [warn] ontology register status={st}: {str(d)[:120]}")
 
 
+def _export_secret_var(key, value):
+    """Hand a secret back to the runner via the private SETUP_VARS_OUT file — NEVER
+    via stdout/logs. The runner injects it as {{var:key}}/{{cache:key}}, redacts its
+    value everywhere, then shreds+deletes the file. If SETUP_VARS_OUT isn't set
+    (older runner), we silently skip rather than risk printing the secret."""
+    out_path = os.environ.get("SETUP_VARS_OUT", "")
+    if not out_path or not value:
+        return False
+    existing = {}
+    try:
+        if os.path.exists(out_path) and os.path.getsize(out_path) > 0:
+            existing = json.loads(open(out_path).read()) or {}
+    except Exception:
+        existing = {}
+    existing[key] = value
+    with open(out_path, "w") as f:
+        json.dump(existing, f)
+    return True
+
+
+def provision_admin_ops_token():
+    """Mint a SHORT-LIVED admin ops-token for this run and export it securely as
+    {{var:ADMIN_OPS_TOKEN}} so the ~56 /admin/* endpoints authenticate on any env
+    (staging/prod) — WITHOUT a static token in test-config.
+
+    Auth: uses ADMIN_OPS_BOOTSTRAP_TOKEN (the env-only master secret) purely to mint;
+    the master is never exported or logged. The minted token is written ONLY to the
+    private SETUP_VARS_OUT file. If the bootstrap secret or export channel is absent
+    (e.g. no secret provisioned for this env), skip silently — endpoints then 401 with
+    a clear reason, and nothing leaks."""
+    bootstrap = os.environ.get("ADMIN_OPS_BOOTSTRAP_TOKEN", "")
+    out_path = os.environ.get("SETUP_VARS_OUT", "")
+    if not bootstrap or not out_path:
+        print("  [skip] admin ops-token: no bootstrap secret / export channel (env not provisioned)")
+        return
+    body = {"label": "qa-run", "ttl_seconds": 1800, "reason": "automated qa mint",
+            "created_by": "api-test-runner"}
+    try:
+        req = urllib.request.Request(
+            BASE + "/admin/security/ops-tokens", data=json.dumps(body).encode(),
+            headers={"Content-Type": "application/json", "x-admin-ops-token": bootstrap})
+        r = urllib.request.urlopen(req, timeout=30)
+        tok = ((json.load(r) or {}).get("data") or {}).get("token")
+    except Exception:
+        tok = None  # deliberately no error detail — could echo the bootstrap secret
+    if not tok:
+        print("  [warn] admin ops-token mint failed (bootstrap secret/endpoint) — continuing")
+        return
+    if _export_secret_var("ADMIN_OPS_TOKEN", tok):
+        print("  [ok] admin ops-token minted + exported securely (value redacted)")
+
+
 def main():
     if not BASE:
         print("  [skip] no API_BASE_URL in context — nothing to provision")
         return
     print(f"[provision] SUT={BASE} tenant={TENANT_ID[:8] if TENANT_ID else '-'}")
+    try:
+        provision_admin_ops_token()
+    except Exception as e:
+        print(f"  [warn] ops-token provisioning error (non-fatal): {type(e).__name__}")
     try:
         provision_vault_tenant_key()
     except Exception as e:

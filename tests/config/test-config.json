@@ -11,17 +11,29 @@
     "development": {
       "baseUrl": "http://localhost:3500",
       "apiUrl": "http://localhost:3500",
-      "description": "Local development - localhost URLs are auto-translated to host.docker.internal in Docker"
+      "description": "Local development - localhost URLs are auto-translated to host.docker.internal in Docker",
+      "variables": {
+        "SMOKE_API_TOKEN": "",
+        "smoke_widget_id": ""
+      }
     },
     "staging": {
       "baseUrl": "https://cloud.projexlight.com",
       "apiUrl": "https://cloud.projexlight.com",
-      "description": "ProjexCloud EC2 deployment (cloud.projexlight.com) — staging/QA target"
+      "description": "ProjexCloud EC2 deployment (cloud.projexlight.com) — staging/QA target",
+      "variables": {
+        "SMOKE_API_TOKEN": "",
+        "smoke_widget_id": ""
+      }
     },
     "production": {
       "baseUrl": "https://www.example.com",
       "apiUrl": "https://api.example.com",
-      "description": "Production environment (read-only tests only)"
+      "description": "Production environment (read-only tests only)",
+      "variables": {
+        "SMOKE_API_TOKEN": "",
+        "smoke_widget_id": ""
+      }
     }
   },
   "activeEnvironment": "development",
@@ -67,7 +79,10 @@
     "new_tenant_key_id": "vk-qa-tenant-rotated",
     "sensor_id": "66666666-6666-6666-6666-666666666666",
     "ADMIN_OPS_TOKEN": "dev-admin-token-please-change",
-    "FEDERATION_ADMIN_TOKEN": "dev-federation-admin-token"
+    "FEDERATION_ADMIN_TOKEN": "dev-federation-admin-token",
+    "invoice_id": "",
+    "smoke_global_v88": "",
+    "smoke_prod_id": ""
   },
   "browser": {
     "headless": true,
@@ -226,5 +241,51 @@
     "apiUrl": "${PROJEXLIGHT_API_URL}",
     "projectId": "${PROJEXLIGHT_PROJECT_ID}",
     "featureUpdateOnFix": true
+  },
+  "_variable_meta": {
+    "invoice_id": {
+      "type": "uuid",
+      "scope": "global",
+      "pending_rewrite": "cache",
+      "producer": "POST /api/billing/invoices/generate - Trigger month-close invoice generation",
+      "source": "auto-scanned",
+      "needs_llm_review": true,
+      "scope_hint": "cache",
+      "referenced_by_count": 1
+    },
+    "SMOKE_API_TOKEN": {
+      "type": "string",
+      "scope": "env",
+      "source": "auto-scanned",
+      "referenced_by_count": 1,
+      "needs_llm_review": true,
+      "scope_hint": "env"
+    },
+    "smoke_global_v88": {
+      "type": "string",
+      "scope": "global",
+      "source": "auto-scanned",
+      "referenced_by_count": 1,
+      "needs_llm_review": true,
+      "scope_hint": "global"
+    },
+    "smoke_prod_id": {
+      "type": "uuid",
+      "scope": "global",
+      "pending_rewrite": "cache",
+      "producer": "POST /api/smoke/var-extraction-v88 - Var extraction smoke test",
+      "source": "auto-scanned",
+      "needs_llm_review": true,
+      "scope_hint": "cache",
+      "referenced_by_count": 1
+    },
+    "smoke_widget_id": {
+      "type": "uuid",
+      "scope": "env",
+      "source": "auto-scanned",
+      "referenced_by_count": 1,
+      "needs_llm_review": true,
+      "scope_hint": "env"
+    }
   }
 }

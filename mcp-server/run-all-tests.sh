@@ -1102,6 +1102,16 @@ run_api_tests() {
     echo "  API Base URL: ${api_base_url:-from test-config.json}"
     echo "  Environment: ${ENV_OVERRIDE:-${TEST_ENVIRONMENT:-development}}"
 
+    # Fallback auth: if no PROJEXLIGHT_API_KEY was resolved (env / .env / Dev MCP
+    # container), use the sessionToken from the project's .projexlight/config.json
+    # (CLI export) so the MCP path can authenticate. PROJEXLIGHT_API_KEY still
+    # takes precedence when present (it routes to the tenant/Bearer path).
+    local session_token="${PROJEXLIGHT_SESSION_TOKEN:-}"
+    if [ -z "$session_token" ] && [ -f "$PROJECT_ROOT/.projexlight/config.json" ]; then
+        session_token=$(jq -r '.sessionToken // empty' "$PROJECT_ROOT/.projexlight/config.json" 2>/dev/null)
+        [ -n "$session_token" ] && echo "  [OK] Using sessionToken from .projexlight/config.json"
+    fi
+
     # Call Test MCP with database mode
     curl -sf -X POST "http://localhost:${test_mcp_port}/run-api-test-by-feature" \
         -H "Content-Type: application/json" \
@@ -1111,6 +1121,7 @@ run_api_tests() {
             \"sprint_id\": \"$sprint_id\",
             \"projexlight_api_url\": \"$api_url\",
             \"projexlight_api_key\": \"$api_key\",
+            \"session_token\": \"$session_token\",
             \"project_id\": \"$project_id\",
             \"api_base_url\": \"$api_base_url\",
             \"environment\": \"${ENV_OVERRIDE:-${TEST_ENVIRONMENT:-development}}\",
@@ -1118,16 +1129,24 @@ run_api_tests() {
             \"save_results\": ${SAVE_RESULTS:-false}
         }" 2>&1 | tee "$RESULTS_DIR/api/test_run.log"
 
-    # Copy results from container
+    # Copy results from container. The Test MCP writes under /results/test-mcp
+    # (RESULTS_BASE_DIR), so the interactive report lands in
+    # test-results/test-mcp/api/report.html — which already surfaces on the host
+    # via the /results mount for the owner project. The docker cp below is a
+    # belt-and-braces relocation (needed for additional projects) and never fails
+    # the run.
     local container_workspace=$(get_container_workspace)
-    local container_results="/results"
+    local container_results="/results/test-mcp"
     if [ "$container_workspace" != "/workspace" ]; then
-        container_results="${container_workspace}/test-results"
+        container_results="${container_workspace}/test-results/test-mcp"
     fi
+    mkdir -p "$RESULTS_DIR/test-mcp"
+    # Copy the whole api/ folder — one timestamped report_<ts>.html per run (history).
+    docker cp "${TEST_MCP_CONTAINER}:${container_results}/api" "$RESULTS_DIR/test-mcp/" 2>/dev/null || true
+    # keep the legacy flat json for any tooling that still reads it
     docker cp "${TEST_MCP_CONTAINER}:${container_results}/api_test_results.json" "$RESULTS_DIR/api/" 2>/dev/null || true
-    docker cp "${TEST_MCP_CONTAINER}:${container_results}/api_test_report.html" "$RESULTS_DIR/api/" 2>/dev/null || true
 
-    print_success "API test results saved to: $RESULTS_DIR/api/"
+    print_success "API test report(s): $RESULTS_DIR/test-mcp/api/ (one report_<timestamp>.html per run)"
 }
 
 run_all_tests() {

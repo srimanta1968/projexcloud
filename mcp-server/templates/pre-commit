@@ -83,50 +83,15 @@ HAS_TODOS=false
 echo -e "${BLUE}🔍 ProjexLight Pre-Commit Duplicate Scan${NC}"
 echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 
-# Self-heal an unhealthy MCP (e.g. the owner project's folder was deleted). Reads
-# /health; if it returns a selfHeal directive (HTTP 503) or is unreachable, runs
-# setup-all.sh from THIS project to recover, then re-checks.
-#   return 0 = healthy   1 = unhealthy and self-heal failed   2 = no setup script here
-mcp_self_heal() {
-    local resp code body
-    resp=$(curl -s -m 5 -w '\n%{http_code}' "${MCP_SERVER_URL}/health" 2>/dev/null)
-    code=$(printf '%s' "$resp" | tail -n1)
-    body=$(printf '%s' "$resp" | sed '$d')
-    [ "$code" = "200" ] && return 0
-    # LOOP GUARD: only ONE self-heal attempt per process tree. If setup-all already
-    # ran in this invocation (env flag set), do not health-check→setup again.
-    if [ -n "$PROJEXLIGHT_SELF_HEAL_ATTEMPTED" ]; then
-        echo -e "${RED}❌ MCP still unhealthy after a self-heal attempt — not retrying (no loop).${NC}"
-        return 1
-    fi
-    local reason="unreachable"
-    printf '%s' "$body" | grep -q '"selfHeal"' && reason="owner_deleted"
-    echo -e "${YELLOW}⚠️  MCP server unhealthy (${reason}) — attempting self-heal (one-shot): cd mcp-server && ./setup-all.sh${NC}"
-    if [ ! -x "${PROJECT_ROOT}/mcp-server/setup-all.sh" ]; then
-        return 2   # not set up in this folder — leave graceful degradation to the caller
-    fi
-    export PROJEXLIGHT_SELF_HEAL_ATTEMPTED=1   # mark before running so children never re-heal
-    ( cd "${PROJECT_ROOT}/mcp-server" && ./setup-all.sh ) || true
-    code=$(curl -s -m 5 -o /dev/null -w '%{http_code}' "${MCP_SERVER_URL}/health" 2>/dev/null || echo 000)
-    if [ "$code" = "200" ]; then
-        echo -e "${GREEN}✅ Self-heal succeeded — MCP healthy.${NC}"
-        return 0
-    fi
-    echo -e "${RED}❌ Self-heal FAILED — MCP still unhealthy.${NC}"
-    echo -e "${RED}   The current project's ProjexLight token may be expired, so it cannot become owner.${NC}"
-    echo -e "${RED}   Refresh this project's CLI export (Portal > project > CLI Export), then re-run:${NC}"
-    echo -e "${RED}     cd mcp-server && ./setup-all.sh${NC}"
-    return 1
-}
-
-# Check MCP health; self-heal if unhealthy (e.g. owner project deleted)
-mcp_self_heal; HEAL_RC=$?
-if [ "$HEAL_RC" = "2" ]; then
-    echo -e "${YELLOW}   MCP not set up in this folder — pre-commit scan skipped (graceful degradation)${NC}"
+# Check if MCP server is running.
+# --connect-timeout/--max-time are REQUIRED: a paused/frozen container keeps the port
+# bound (TCP accept succeeds) but never responds, so a plain `curl -s` would hang the
+# commit forever. With a timeout, curl exits non-zero and we degrade gracefully.
+if ! curl -s --connect-timeout 3 --max-time 8 "${MCP_SERVER_URL}/health" > /dev/null 2>&1; then
+    echo -e "${YELLOW}⚠️  MCP server not running at ${MCP_SERVER_URL}${NC}"
+    echo -e "${YELLOW}   Pre-commit scan skipped (graceful degradation)${NC}"
     echo -e "${YELLOW}   Start MCP server: cd mcp-server && ./setup-all.sh${NC}"
     exit 0
-elif [ "$HEAL_RC" != "0" ]; then
-    exit 1   # was unhealthy and self-heal failed → block with the error printed above
 fi
 
 echo -e "${GREEN}✓ MCP server is running${NC}"
@@ -146,8 +111,9 @@ echo -e "\n${BLUE}📋 Scanning ${FILE_COUNT} staged file(s)...${NC}"
 # Convert file list to JSON array
 FILES_JSON=$(echo "$STAGED_FILES" | jq -R -s -c 'split("\n")[:-1]')
 
-# Send request to MCP server with workspace path and project path for multi-project routing
-SCAN_RESULT=$(curl -s -X POST "${MCP_SERVER_URL}/api/pre-commit-scan" \
+# Send request to MCP server with workspace path and project path for multi-project routing.
+# Bounded by --max-time so a slow/hung scan degrades gracefully (CURL_EXIT!=0 -> allow commit).
+SCAN_RESULT=$(curl -s --connect-timeout 3 --max-time 120 -X POST "${MCP_SERVER_URL}/api/pre-commit-scan" \
     -H "Content-Type: application/json" \
     -d "{\"stagedFiles\": ${FILES_JSON}, \"workspacePath\": \"${PROJECT_ROOT}\", \"projectPath\": \"${PROJECT_PATH}\"}" 2>&1)
 
@@ -167,6 +133,10 @@ DUPLICATE_COUNT=$(echo "$SCAN_RESULT" | jq -r '.duplicates.count // 0' 2>/dev/nu
 WARNING_COUNT=$(echo "$SCAN_RESULT" | jq -r '.warnings | length // 0' 2>/dev/null || echo "0")
 SCANNED_FILES=$(echo "$SCAN_RESULT" | jq -r '.scannedFiles // 0' 2>/dev/null || echo "0")
 SUMMARY=$(echo "$SCAN_RESULT" | jq -r '.summary // "Scan completed"' 2>/dev/null || echo "Scan completed")
+
+# Pre-commit id-chaining gate: producer-created {{var:}} ids that must use {{cache:}}
+API_DEF_BLOCKERS=$(echo "$SCAN_RESULT" | jq -r '.apiDefinitionBlockers // []' 2>/dev/null || echo "[]")
+API_DEF_BLOCKER_COUNT=$(echo "$SCAN_RESULT" | jq -r '.apiDefinitionBlockers | length // 0' 2>/dev/null || echo 0)
 
 echo -e "\n${BLUE}📊 Scan Results:${NC}"
 echo -e "   Files scanned: ${SCANNED_FILES}"
@@ -188,16 +158,25 @@ if [ "$BLOCKING" = "true" ]; then
     HAS_PRECOMMIT_ISSUES=true
 
     echo -e "\n${RED}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    echo -e "${RED}🚨 COMMIT BLOCKED: Duplicate APIs detected${NC}"
+    echo -e "${RED}🚨 COMMIT BLOCKED${NC}"
     echo -e "${RED}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 
-    # Show duplicate details
-    echo -e "\n${RED}Duplicate APIs found:${NC}\n"
-    echo "$SCAN_RESULT" | jq -r '.duplicates.apis[] |
-        "  🚨 \(.newAPI.method) \(.newAPI.endpoint)\n" +
-        "     File: \(.newAPI.filePath)\n" +
-        "     Conflicts with: \(.existingAPI.filePath)\n" +
-        "     Sprint: \(.existingAPI.sprintName // "Unknown")\n"'
+    # Show duplicate details (only when duplicates are the blocker)
+    if [ "$DUPLICATE_COUNT" -gt 0 ]; then
+        echo -e "\n${RED}Duplicate APIs found:${NC}\n"
+        echo "$SCAN_RESULT" | jq -r '.duplicates.apis[] |
+            "  🚨 \(.newAPI.method) \(.newAPI.endpoint)\n" +
+            "     File: \(.newAPI.filePath)\n" +
+            "     Conflicts with: \(.existingAPI.filePath)\n" +
+            "     Sprint: \(.existingAPI.sprintName // "Unknown")\n"'
+    fi
+
+    # Show id-chaining violations (producer-created ids referenced as {{var:}})
+    if [ "$API_DEF_BLOCKER_COUNT" -gt 0 ]; then
+        echo -e "\n${RED}API definition id-chaining violations (ids must use {{cache:}}, not {{var:}}):${NC}\n"
+        echo "$SCAN_RESULT" | jq -r '.apiDefinitionBlockers[] |
+            "  🚨 \(.name) in \(.file)\n     use: \(.suggested_cache)\n"'
+    fi
 
     echo -e "${YELLOW}Action Required:${NC}"
     echo -e "  1. ✅ Reuse existing API (recommended)"
@@ -224,10 +203,15 @@ if [ "$BLOCKING" = "true" ]; then
       "blocking": true,
       "items": $(echo "$SCAN_RESULT" | jq '.duplicates.apis // []')
     },
+    "apiDefinitionBlockers": {
+      "count": ${API_DEF_BLOCKER_COUNT},
+      "blocking": true,
+      "items": ${API_DEF_BLOCKERS}
+    },
     "warnings": $(echo "$SCAN_RESULT" | jq '.warnings // []')
   },
   "action_required": true,
-  "llm_prompt": "Please fix the following pre-commit violations. These are BLOCKING issues that must be resolved before committing:\n\n## Duplicate APIs Detected (${DUPLICATE_COUNT})\n\nThe following APIs conflict with existing endpoints:\n\n$(echo "$SCAN_RESULT" | jq -r '.duplicates.apis[]? | "- **\(.newAPI.method) \(.newAPI.endpoint)** in \(.newAPI.filePath)\n  Conflicts with: \(.existingAPI.filePath)\n  Solution: Either rename your endpoint or reuse the existing API.\n"' | sed 's/"/\\"/g')\n\n## How to Fix\n\n1. **Recommended**: Reuse the existing API instead of creating a duplicate\n2. **Alternative**: Rename your endpoint to make it unique\n3. Search for existing APIs: \`projexlight_search_apis(pattern: 'your-endpoint')\`"
+  "llm_prompt": "Please fix the following pre-commit violations. These are BLOCKING issues that must be resolved before committing:\n\n## Duplicate APIs Detected (${DUPLICATE_COUNT})\n\nThe following APIs conflict with existing endpoints:\n\n$(echo "$SCAN_RESULT" | jq -r '.duplicates.apis[]? | "- **\(.newAPI.method) \(.newAPI.endpoint)** in \(.newAPI.filePath)\n  Conflicts with: \(.existingAPI.filePath)\n  Solution: Either rename your endpoint or reuse the existing API.\n"' | sed 's/"/\\"/g')\n\n## ID-chaining violations — replace each {{var:NAME}} with its {{cache:...}} and add the producer to dependsOn (${API_DEF_BLOCKER_COUNT})\n\n$(echo "$SCAN_RESULT" | jq -r '.apiDefinitionBlockers[]? | "- In \(.file) replace {{var:\(.name)}} with \(.suggested_cache) and add the producer to dependsOn.\n"' | sed 's/"/\\"/g')\n\n## How to Fix\n\n1. **Recommended**: Reuse the existing API instead of creating a duplicate\n2. **Alternative**: Rename your endpoint to make it unique\n3. Search for existing APIs: \`projexlight_search_apis(pattern: 'your-endpoint')\`\n4. For id-chaining: switch each producer-created id from {{var:NAME}} to its {{cache:...}} form and declare the producer in dependsOn"
 }
 EOF
 )
