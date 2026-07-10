@@ -357,8 +357,14 @@ export function startMonthlyDrillScheduler(opts: DrillSchedulerConfig = {}): Dri
     intervalMs: opts.intervalMs ?? 30 * 24 * 60 * 60 * 1000,
   };
   const stats = { runs: 0, last_drill_at: null as string | null };
-  let timer: ReturnType<typeof setInterval> | null = null;
+  let timer: ReturnType<typeof setTimeout> | null = null;
   let stopped = false;
+
+  // Node's setTimeout/setInterval store the delay in a 32-bit signed int.
+  // Any value > 2^31-1 (~24.8 days) silently clamps to 1ms — which turned the
+  // 30-day cadence into a ~1000/sec drill flood that drained the DB pool and
+  // crash-looped the gateway. Chunk long waits below the limit instead.
+  const MAX_TIMER_MS = 2_147_483_647;
 
   async function tick(): Promise<void> {
     if (stopped) return;
@@ -383,15 +389,32 @@ export function startMonthlyDrillScheduler(opts: DrillSchedulerConfig = {}): Dri
     }
   }
 
+  // Self-rescheduling timer that survives delays beyond the 32-bit cap by
+  // splitting them into <=MAX_TIMER_MS chunks, then runs one tick per full
+  // interval and re-arms.
+  function scheduleAfter(remainingMs: number): void {
+    if (stopped) return;
+    const delay = Math.min(remainingMs, MAX_TIMER_MS);
+    timer = setTimeout(() => {
+      if (stopped) return;
+      const left = remainingMs - delay;
+      if (left > 0) {
+        scheduleAfter(left);
+      } else {
+        void tick().finally(() => scheduleAfter(cfg.intervalMs));
+      }
+    }, delay);
+  }
+
   if (cfg.enabled) {
-    timer = setInterval(() => void tick(), cfg.intervalMs);
+    scheduleAfter(cfg.intervalMs);
   }
 
   return {
     stats: () => ({ ...stats }),
     async stop() {
       stopped = true;
-      if (timer) clearInterval(timer);
+      if (timer) clearTimeout(timer);
     },
   };
 }
