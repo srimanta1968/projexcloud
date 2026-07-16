@@ -3,10 +3,17 @@ import { requireAuth } from '@projexlight/sdk-identity';
 import {
   createContact,
   createDeal,
+  createFunnelStage,
   getContact,
+  getDeal,
+  getPipelineBoard,
+  getStaleDeals,
+  listDeals,
+  listFunnelStages,
   logActivity,
   transitionDeal,
   updateContact,
+  updateDeal,
 } from '../services/crmService';
 import type { ActivityKind, DealStage, LifecycleStage } from '../models/crm.model';
 
@@ -99,6 +106,75 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
       const rec = await transitionDeal(req.params.deal_id, body.stage);
       if (!rec) return reply.code(404).send({ error: 'NotFound' });
       return reply.code(200).send({ data: { deal: rec } });
+    },
+  );
+
+  // ---- Pipeline / deal board + stage-aging (TK-3629) ----
+
+  app.get<{ Querystring: { tenant_id?: string; stage?: string; limit?: string; offset?: string } }>(
+    '/api/crm/deals', { preHandler: requireAuth }, async (req, reply) => {
+      if (!req.query.tenant_id) return reply.code(400).send({ error: 'ValidationError', details: ['tenant_id query param required'] });
+      const deals = await listDeals(req.query.tenant_id, {
+        stage: req.query.stage,
+        limit: req.query.limit ? Number(req.query.limit) : undefined,
+        offset: req.query.offset ? Number(req.query.offset) : undefined,
+      });
+      return reply.code(200).send({ data: { deals } });
+    },
+  );
+
+  app.get<{ Params: { deal_id: string }; Querystring: { tenant_id?: string } }>(
+    '/api/crm/deals/:deal_id', { preHandler: requireAuth }, async (req, reply) => {
+      if (!req.query.tenant_id) return reply.code(400).send({ error: 'ValidationError', details: ['tenant_id query param required'] });
+      const deal = await getDeal(req.query.tenant_id, req.params.deal_id);
+      if (!deal) return reply.code(404).send({ error: 'NotFound' });
+      return reply.code(200).send({ data: { deal } });
+    },
+  );
+
+  app.patch<{ Params: { deal_id: string } }>(
+    '/api/crm/deals/:deal_id', { preHandler: requireAuth }, async (req, reply) => {
+      const body = (req.body ?? {}) as { tenant_id?: string };
+      if (!body.tenant_id) return reply.code(400).send({ error: 'ValidationError', details: ['tenant_id is required'] });
+      const deal = await updateDeal(body.tenant_id, req.params.deal_id, body as Parameters<typeof updateDeal>[2]);
+      if (!deal) return reply.code(404).send({ error: 'NotFound' });
+      return reply.code(200).send({ data: { deal } });
+    },
+  );
+
+  app.get<{ Querystring: { tenant_id?: string } }>(
+    '/api/crm/pipeline/board', { preHandler: requireAuth }, async (req, reply) => {
+      if (!req.query.tenant_id) return reply.code(400).send({ error: 'ValidationError', details: ['tenant_id query param required'] });
+      const board = await getPipelineBoard(req.query.tenant_id);
+      return reply.code(200).send({ data: { board } });
+    },
+  );
+
+  app.get<{ Querystring: { tenant_id?: string; business_days?: string } }>(
+    '/api/crm/pipeline/stale', { preHandler: requireAuth }, async (req, reply) => {
+      if (!req.query.tenant_id) return reply.code(400).send({ error: 'ValidationError', details: ['tenant_id query param required'] });
+      const deals = await getStaleDeals(req.query.tenant_id, req.query.business_days ? Number(req.query.business_days) : 5);
+      return reply.code(200).send({ data: { deals } });
+    },
+  );
+
+  app.post('/api/crm/funnel-stages', { preHandler: requireAuth }, async (req, reply) => {
+    const body = req.body as Partial<{
+      tenant_id: string; name: string; sort_order: number; description: string; criteria: string;
+      probability: number; is_default: boolean; is_terminal: boolean; is_won: boolean;
+    }>;
+    if (!body.tenant_id || !body.name) {
+      return reply.code(400).send({ error: 'ValidationError', details: ['tenant_id and name are required'] });
+    }
+    const stage = await createFunnelStage(body as { tenant_id: string; name: string });
+    return reply.code(201).send({ data: { stage } });
+  });
+
+  app.get<{ Querystring: { tenant_id?: string } }>(
+    '/api/crm/funnel-stages', { preHandler: requireAuth }, async (req, reply) => {
+      if (!req.query.tenant_id) return reply.code(400).send({ error: 'ValidationError', details: ['tenant_id query param required'] });
+      const stages = await listFunnelStages(req.query.tenant_id);
+      return reply.code(200).send({ data: { stages } });
     },
   );
 

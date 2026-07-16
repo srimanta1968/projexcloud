@@ -1,0 +1,42 @@
+{
+  "name": "POST /api/crm/funnel-stages - Create a configurable funnel stage",
+  "endpoint": "/api/crm/funnel-stages",
+  "sdk": "sdk-crm",
+  "sourceFile": "packages/sdk-crm/src/server/routes.ts",
+  "method": "POST",
+  "requiresAuth": true,
+  "expectedStatus": 201,
+  "taskId": "ec22c078-7512-4bdc-b2e4-aa5e436c526a",
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "priority": 49,
+  "testability": "auto",
+  "description": "Create a per-tenant configurable pipeline stage (name, sort_order, criteria, default win-probability, is_default/is_terminal/is_won). UNIQUE per (tenant, name). tenant_id and name are required.",
+  "dependsOn": [
+    "POST /api/auth/signup-tenant"
+  ],
+  "testCases": [
+    {
+      "name": "Create a Discovery stage",
+      "headers": { "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}" },
+      "payload": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "name": "{{dynamic:name}}",
+        "sort_order": 1,
+        "description": "Initial qualification",
+        "criteria": "Budget confirmed",
+        "probability": 20,
+        "is_default": false,
+        "is_terminal": false,
+        "is_won": false
+      },
+      "expectedStatus": 201,
+      "expectedResponse": { "data": { "stage": { "stage_id": "string", "name": "string" } } }
+    }
+  ],
+  "captureResponse": {
+    "crm.funnel-stages.create.response.data.stage.stage_id": "data.stage.stage_id"
+  },
+  "errorCases": [
+    { "status": 400, "code": "ValidationError", "message": "tenant_id and name are required", "when": "tenant_id or name missing" }
+  ]
+}

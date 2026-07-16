@@ -1,0 +1,23 @@
+{
+  "name": "GET /api/crm/pipeline/stale - Stale deals (>5 business days)",
+  "endpoint": "/api/crm/pipeline/stale",
+  "sdk": "sdk-crm",
+  "sourceFile": "packages/sdk-crm/src/server/routes.ts",
+  "method": "GET",
+  "requiresAuth": true,
+  "expectedStatus": 200,
+  "taskId": "ec22c078-7512-4bdc-b2e4-aa5e436c526a",
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "priority": 51,
+  "testability": "auto",
+  "description": "Open deals whose current stage has aged past business_days (default 5, weekends excluded) since last_stage_change_at. Business-day aware, not calendar-day. Tenant-scoped.",
+  "dependsOn": ["POST /api/auth/signup-tenant"],
+  "testCases": [{
+    "name": "List stale deals",
+    "headers": {"Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"},
+    "queryParams": {"tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}"},
+    "expectedStatus": 200,
+    "expectedResponse": {"data": {"deals": "array"}}
+  }],
+  "errorCases": [{"status": 400, "code": "ValidationError", "message": "tenant_id query param required", "when": "tenant_id query param missing"}]
+}

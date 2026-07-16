@@ -1,0 +1,23 @@
+{
+  "name": "GET /api/crm/pipeline/board - Pipeline board (stage-grouped)",
+  "endpoint": "/api/crm/pipeline/board",
+  "sdk": "sdk-crm",
+  "sourceFile": "packages/sdk-crm/src/server/routes.ts",
+  "method": "GET",
+  "requiresAuth": true,
+  "expectedStatus": 200,
+  "taskId": "ec22c078-7512-4bdc-b2e4-aa5e436c526a",
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "priority": 50,
+  "testability": "auto",
+  "description": "Pipeline kanban board: open deals grouped by stage with per-stage count + total_amount, ordered by recent activity. Tenant-scoped; empty array when the tenant has no open deals.",
+  "dependsOn": ["POST /api/auth/signup-tenant"],
+  "testCases": [{
+    "name": "Get the pipeline board",
+    "headers": {"Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"},
+    "queryParams": {"tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}"},
+    "expectedStatus": 200,
+    "expectedResponse": {"data": {"board": "array"}}
+  }],
+  "errorCases": [{"status": 400, "code": "ValidationError", "message": "tenant_id query param required", "when": "tenant_id query param missing"}]
+}

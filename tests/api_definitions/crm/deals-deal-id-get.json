@@ -1,0 +1,39 @@
+{
+  "name": "GET /api/crm/deals/:deal_id - Fetch a deal (enriched)",
+  "endpoint": "/api/crm/deals/:deal_id",
+  "sdk": "sdk-crm",
+  "sourceFile": "packages/sdk-crm/src/server/routes.ts",
+  "method": "GET",
+  "requiresAuth": true,
+  "expectedStatus": 200,
+  "taskId": "ec22c078-7512-4bdc-b2e4-aa5e436c526a",
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "priority": 54,
+  "testability": "auto",
+  "description": "Fetch a single deal with enriched pipeline fields (funnel_stage_id, priority, fit, forecast, stage-aging anchors). Tenant-scoped via tenant_id query param. 404 if not found for the tenant.",
+  "dependsOn": [
+    "POST /api/auth/signup-tenant",
+    "POST /api/auth/register",
+    "POST /api/app-identities",
+    "POST /api/memberships",
+    "POST /api/personas",
+    "POST /api/crm/contacts",
+    "POST /api/vault/keys",
+    "POST /api/encounters",
+    "POST /api/crm/deals"
+  ],
+  "testCases": [
+    {
+      "name": "Get the created deal",
+      "headers": { "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}" },
+      "pathParams": { "deal_id": "{{cache:crm.deals.response.data.deal.deal_id}}" },
+      "queryParams": { "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}" },
+      "expectedStatus": 200,
+      "expectedResponse": { "data": { "deal": { "deal_id": "string", "stage": "string" } } }
+    }
+  ],
+  "errorCases": [
+    { "status": 400, "code": "ValidationError", "message": "tenant_id query param required", "when": "tenant_id query param missing" },
+    { "status": 404, "code": "NotFound", "message": "NotFound", "when": "deal_id not found for the tenant" }
+  ]
+}

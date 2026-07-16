@@ -175,7 +175,8 @@ export async function createDeal(input: CreateDealInput): Promise<DealRecord> {
 
 export async function transitionDeal(deal_id: string, stage: DealStage): Promise<DealRecord | null> {
   const rows = await dataService.rows<DealRecord>(
-    `UPDATE crm.deal SET stage = $2, updated_at = now()
+    // Stamp the stage-aging anchors so stale-detection measures time-in-stage.
+    `UPDATE crm.deal SET stage = $2, entered_stage_at = now(), last_stage_change_at = now(), updated_at = now()
       WHERE deal_id = $1
       RETURNING deal_id, tenant_id, encounter_id, contact_id, name, amount, currency,
                 stage, close_probability, custom_fields, external_refs, created_at, updated_at`,
@@ -193,6 +194,183 @@ export async function transitionDeal(deal_id: string, stage: DealStage): Promise
     });
   }
   return deal;
+}
+
+/* ------------------------------------------------- Pipeline / deal board (FR-CRM, TK-3629) */
+
+/** Enriched deal row for pipeline/board/stale views (superset of DealRecord). */
+export interface PipelineDealRow {
+  deal_id: string;
+  tenant_id: string;
+  name: string;
+  amount: number | null;
+  currency: string | null;
+  stage: string;
+  funnel_stage_id: string | null;
+  priority: string | null;
+  fit: string | null;
+  forecast: string | null;
+  close_probability: number | null;
+  entered_stage_at: string | null;
+  last_stage_change_at: string | null;
+  updated_at: string;
+}
+
+const PIPE_COLS = `deal_id, tenant_id, name, amount, currency, stage, funnel_stage_id, priority,
+  fit, forecast, close_probability, entered_stage_at, last_stage_change_at, updated_at`;
+
+/** Fetch a single deal (tenant-scoped, enriched fields). */
+export async function getDeal(tenant_id: string, deal_id: string): Promise<PipelineDealRow | null> {
+  return dataService.one<PipelineDealRow>(
+    `SELECT ${PIPE_COLS} FROM crm.deal WHERE tenant_id = $1 AND deal_id = $2`,
+    [tenant_id, deal_id],
+  );
+}
+
+/** List a tenant's deals, optionally filtered by stage. Paginated. */
+export async function listDeals(
+  tenant_id: string,
+  opts: { stage?: string; limit?: number; offset?: number } = {},
+): Promise<PipelineDealRow[]> {
+  return dataService.rows<PipelineDealRow>(
+    `SELECT ${PIPE_COLS} FROM crm.deal
+      WHERE tenant_id = $1 AND ($2::text IS NULL OR stage = $2)
+      ORDER BY updated_at DESC LIMIT $3 OFFSET $4`,
+    [tenant_id, opts.stage ?? null, opts.limit ?? 100, opts.offset ?? 0],
+  );
+}
+
+/**
+ * Update deal fields (richer pipeline attributes). If the stage changes, the
+ * stage-aging anchors (entered_stage_at / last_stage_change_at) are re-stamped.
+ */
+export async function updateDeal(
+  tenant_id: string,
+  deal_id: string,
+  input: Partial<{
+    name: string; amount: number; currency: string; stage: string; funnel_stage_id: string;
+    priority: string; fit: string; pain: string; impact: string; outcome: string;
+    decision_date: string; offer_version: string; forecast: string; close_probability: number;
+    stakeholders: unknown[];
+  }>,
+): Promise<PipelineDealRow | null> {
+  try {
+    const rows = await dataService.rows<PipelineDealRow>(
+      `UPDATE crm.deal SET
+         name = COALESCE($3, name),
+         amount = COALESCE($4, amount),
+         currency = COALESCE($5, currency),
+         stage = COALESCE($6, stage),
+         funnel_stage_id = COALESCE($7, funnel_stage_id),
+         priority = COALESCE($8, priority),
+         fit = COALESCE($9, fit),
+         pain = COALESCE($10, pain),
+         impact = COALESCE($11, impact),
+         outcome = COALESCE($12, outcome),
+         decision_date = COALESCE($13, decision_date),
+         offer_version = COALESCE($14, offer_version),
+         forecast = COALESCE($15, forecast),
+         close_probability = COALESCE($16, close_probability),
+         stakeholders = COALESCE($17::jsonb, stakeholders),
+         entered_stage_at = CASE WHEN $6 IS NOT NULL AND $6 <> stage THEN now() ELSE entered_stage_at END,
+         last_stage_change_at = CASE WHEN ($6 IS NOT NULL AND $6 <> stage) OR ($7 IS NOT NULL AND $7 IS DISTINCT FROM funnel_stage_id) THEN now() ELSE last_stage_change_at END,
+         updated_at = now()
+       WHERE tenant_id = $1 AND deal_id = $2
+       RETURNING ${PIPE_COLS}`,
+      [tenant_id, deal_id, input.name ?? null, input.amount ?? null, input.currency ?? null,
+       input.stage ?? null, input.funnel_stage_id ?? null, input.priority ?? null, input.fit ?? null,
+       input.pain ?? null, input.impact ?? null, input.outcome ?? null, input.decision_date ?? null,
+       input.offer_version ?? null, input.forecast ?? null, input.close_probability ?? null,
+       input.stakeholders ? JSON.stringify(input.stakeholders) : null],
+    );
+    return rows[0] ?? null;
+  } catch (err) {
+    throw new Error(`[sdk-crm] updateDeal failed: ${(err as Error).message}`);
+  }
+}
+
+export interface BoardColumn { stage: string; count: number; total_amount: number; deals: PipelineDealRow[]; }
+
+/**
+ * Pipeline board: deals grouped by stage, ordered within a stage by most recent
+ * activity. Suitable for a kanban pipeline view. Tenant-scoped.
+ */
+export async function getPipelineBoard(tenant_id: string): Promise<BoardColumn[]> {
+  const deals = await dataService.rows<PipelineDealRow>(
+    `SELECT ${PIPE_COLS} FROM crm.deal WHERE tenant_id = $1
+      AND stage NOT IN ('closed-won','closed-lost')
+      ORDER BY stage, updated_at DESC`,
+    [tenant_id],
+  );
+  const byStage = new Map<string, BoardColumn>();
+  for (const d of deals) {
+    let col = byStage.get(d.stage);
+    if (!col) { col = { stage: d.stage, count: 0, total_amount: 0, deals: [] }; byStage.set(d.stage, col); }
+    col.count += 1;
+    col.total_amount += Number(d.amount ?? 0);
+    col.deals.push(d);
+  }
+  return Array.from(byStage.values());
+}
+
+/**
+ * Stale deals: open deals whose current stage has aged past `businessDays`
+ * business days (Mon–Fri, weekends excluded) since last_stage_change_at (falling
+ * back to created_at for never-transitioned deals). Business-day aware, not
+ * calendar-day. Default threshold 5 business days (TK-3629).
+ */
+export async function getStaleDeals(tenant_id: string, businessDays = 5): Promise<PipelineDealRow[]> {
+  return dataService.rows<PipelineDealRow>(
+    `SELECT ${PIPE_COLS} FROM crm.deal d
+      WHERE d.tenant_id = $1
+        AND d.stage NOT IN ('closed-won','closed-lost')
+        AND (
+          SELECT COUNT(*) FROM generate_series(
+            COALESCE(d.last_stage_change_at, d.created_at)::date, (now() - interval '1 day')::date, interval '1 day'
+          ) AS g(day)
+          WHERE EXTRACT(dow FROM g.day) NOT IN (0, 6)
+        ) > $2
+      ORDER BY COALESCE(d.last_stage_change_at, d.created_at) ASC`,
+    [tenant_id, businessDays],
+  );
+}
+
+/* ---------------------------------------------------------- funnel stages */
+
+export interface FunnelStageRow {
+  stage_id: string;
+  tenant_id: string;
+  name: string;
+  sort_order: number;
+  probability: number | null;
+  is_default: boolean;
+  is_terminal: boolean;
+  is_won: boolean;
+}
+
+/** Create a configurable funnel stage. */
+export async function createFunnelStage(input: {
+  tenant_id: string; name: string; sort_order?: number; description?: string; criteria?: string;
+  probability?: number; is_default?: boolean; is_terminal?: boolean; is_won?: boolean;
+}): Promise<FunnelStageRow> {
+  const rows = await dataService.rows<FunnelStageRow>(
+    `INSERT INTO crm.funnel_stage
+       (tenant_id, name, sort_order, description, criteria, probability, is_default, is_terminal, is_won)
+     VALUES ($1,$2,COALESCE($3,0),$4,$5,$6,COALESCE($7,false),COALESCE($8,false),COALESCE($9,false))
+     RETURNING stage_id, tenant_id, name, sort_order, probability, is_default, is_terminal, is_won`,
+    [input.tenant_id, input.name, input.sort_order ?? null, input.description ?? null, input.criteria ?? null,
+     input.probability ?? null, input.is_default ?? null, input.is_terminal ?? null, input.is_won ?? null],
+  );
+  return rows[0];
+}
+
+/** List a tenant's funnel stages in board order. */
+export async function listFunnelStages(tenant_id: string): Promise<FunnelStageRow[]> {
+  return dataService.rows<FunnelStageRow>(
+    `SELECT stage_id, tenant_id, name, sort_order, probability, is_default, is_terminal, is_won
+       FROM crm.funnel_stage WHERE tenant_id = $1 ORDER BY sort_order ASC, name ASC`,
+    [tenant_id],
+  );
 }
 
 export async function logActivity(input: LogActivityInput): Promise<ActivityRecord> {

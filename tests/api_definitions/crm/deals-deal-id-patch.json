@@ -1,0 +1,54 @@
+{
+  "name": "PATCH /api/crm/deals/:deal_id - Update deal fields",
+  "endpoint": "/api/crm/deals/:deal_id",
+  "sdk": "sdk-crm",
+  "sourceFile": "packages/sdk-crm/src/server/routes.ts",
+  "method": "PATCH",
+  "requiresAuth": true,
+  "expectedStatus": 200,
+  "taskId": "ec22c078-7512-4bdc-b2e4-aa5e436c526a",
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "priority": 55,
+  "testability": "auto",
+  "description": "Update a deal's richer pipeline fields (priority, fit, pain/impact/outcome, decision_date, offer_version, forecast, stakeholders, amount, currency, funnel_stage_id, stage). Changing stage or funnel_stage_id re-stamps the stage-aging anchors (entered_stage_at / last_stage_change_at). tenant_id is required. 404 if not found.",
+  "dependsOn": [
+    "POST /api/auth/signup-tenant",
+    "POST /api/auth/register",
+    "POST /api/app-identities",
+    "POST /api/memberships",
+    "POST /api/personas",
+    "POST /api/crm/contacts",
+    "POST /api/vault/keys",
+    "POST /api/encounters",
+    "POST /api/crm/deals"
+  ],
+  "fieldEnums": {
+    "priority": ["low", "medium", "high", "critical"],
+    "fit": ["poor", "moderate", "strong", "ideal"],
+    "forecast": ["omitted", "pipeline", "best_case", "commit", "closed"]
+  },
+  "testCases": [
+    {
+      "name": "Enrich the deal (priority/fit/forecast)",
+      "headers": { "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}" },
+      "pathParams": { "deal_id": "{{cache:crm.deals.response.data.deal.deal_id}}" },
+      "payload": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "priority": "high",
+        "fit": "strong",
+        "pain": "Manual data entry",
+        "impact": "20h/week saved",
+        "outcome": "Automated pipeline",
+        "forecast": "commit",
+        "close_probability": 70,
+        "stakeholders": ["economic-buyer", "champion"]
+      },
+      "expectedStatus": 200,
+      "expectedResponse": { "data": { "deal": { "deal_id": "string", "priority": "string" } } }
+    }
+  ],
+  "errorCases": [
+    { "status": 400, "code": "ValidationError", "message": "tenant_id is required", "when": "tenant_id missing from body" },
+    { "status": 404, "code": "NotFound", "message": "NotFound", "when": "deal_id not found for the tenant" }
+  ]
+}
