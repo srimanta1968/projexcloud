@@ -5,8 +5,11 @@ import {
   getInstall,
   installConnector,
   listAdapterKinds,
+  listDeadLetters,
   listInstalls,
   listToolManifests,
+  replayDlq,
+  replayDlqForTenant,
   syncConnector,
   uninstallConnector,
 } from '../services/connectorsService';
@@ -107,4 +110,38 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
       }
     },
   );
+
+  // ---- Dead-letter queue (DLQ) — sync failures the manifest advertised ----
+
+  app.get<{ Params: { tenant_id: string }; Querystring: { status?: string; connector_kind?: string; limit?: string } }>(
+    '/api/connectors/tenants/:tenant_id/dlq',
+    { preHandler: requireAuth },
+    async (req, reply) => {
+      const { status, connector_kind, limit } = req.query;
+      const items = await listDeadLetters(req.params.tenant_id, {
+        status: status as 'dlq' | 'retrying' | 'resolved' | 'discarded' | undefined,
+        connector_kind,
+        limit: limit ? Number(limit) : undefined,
+      });
+      return reply.code(200).send({ data: { deadletters: items } });
+    },
+  );
+
+  app.post('/api/connectors/dlq/replay', { preHandler: requireAuth }, async (req, reply) => {
+    const body = req.body as Partial<{ deadletter_id: string; tenant_id: string; connector_kind: string }>;
+    try {
+      if (body.deadletter_id) {
+        const deadletter = await replayDlq({ deadletter_id: body.deadletter_id });
+        if (!deadletter) return reply.code(404).send({ error: 'NotFound', details: ['deadletter_id not found or already resolved'] });
+        return reply.code(200).send({ data: { deadletter } });
+      }
+      if (body.tenant_id) {
+        const replayed_count = await replayDlqForTenant(body.tenant_id, body.connector_kind);
+        return reply.code(200).send({ data: { replayed_count } });
+      }
+      return reply.code(400).send({ error: 'ValidationError', details: ['provide deadletter_id or tenant_id'] });
+    } catch (err) {
+      return reply.code(409).send({ error: 'ReplayFailed', details: [(err as Error).message] });
+    }
+  });
 }

@@ -1,0 +1,43 @@
+{
+  "name": "POST /api/connectors/dlq/replay - Replay dead-lettered sync(s)",
+  "endpoint": "/api/connectors/dlq/replay",
+  "sdk": "sdk-connectors",
+  "method": "POST",
+  "requiresAuth": true,
+  "expectedStatus": 200,
+  "sourceFile": "packages/sdk-connectors/src/server/routes.ts",
+  "taskId": "19e7f6f2-05fa-4223-b39e-4c52890dc678",
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "priority": 30,
+  "testability": "auto",
+  "description": "Replay dead-lettered connector-sync items from the DLQ (connectors.sync_deadletter). With a deadletter_id it replays that single item (404 if unknown or already resolved); with tenant_id (and optional connector_kind) it bulk-replays every still-dead-lettered item for that tenant and returns replayed_count. Replayed items are marked 'retrying', their attempt count is bumped, and next_retry_at is set to now() so the retry/backoff worker re-drives them.",
+  "dependsOn": [
+    "POST /api/auth/signup-tenant"
+  ],
+  "fieldEnums": {
+    "connector_kind": ["slack", "salesforce", "jira", "github", "hubspot", "linear", "microsoft365", "snowflake", "zendesk", "zoom", "gworkspace"]
+  },
+  "testCases": [
+    {
+      "name": "Bulk-replay a tenant's dead-lettered syncs",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "payload": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "connector_kind": "github"
+      },
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "data": {
+          "replayed_count": "number"
+        }
+      }
+    }
+  ],
+  "errorCases": [
+    { "status": 400, "code": "ValidationError", "message": "provide deadletter_id or tenant_id", "when": "neither deadletter_id nor tenant_id is present in the body" },
+    { "status": 404, "code": "NotFound", "message": "deadletter_id not found or already resolved", "when": "a deadletter_id is given but no replayable (dlq/retrying/discarded) row matches" },
+    { "status": 409, "code": "ReplayFailed", "message": "replay failed", "when": "an unexpected database error occurs during replay" }
+  ]
+}

@@ -250,3 +250,122 @@ export async function callConnectorTool(
   if (!adapter) throw new Error(`no adapter registered for ${install.connector_kind}`);
   return adapter.callTool(install, tool_name, args);
 }
+
+/* --------------------------------------------------- Dead-letter queue (DLQ) */
+
+/** A dead-lettered connector-sync payload (connectors.sync_deadletter). */
+export interface DeadLetterRecord {
+  deadletter_id: string;
+  tenant_id: string;
+  install_id: string | null;
+  connector_kind: string;
+  sync_kind: string | null;
+  external_ref: string | null;
+  payload: Record<string, unknown>;
+  error: string | null;
+  error_code: string | null;
+  status: 'dlq' | 'retrying' | 'resolved' | 'discarded';
+  attempts: number;
+  max_attempts: number;
+  next_retry_at: string | null;
+  first_failed_at: string;
+  last_attempt_at: string | null;
+  resolved_at: string | null;
+}
+
+const DLQ_COLS = `deadletter_id, tenant_id, install_id, connector_kind, sync_kind, external_ref,
+  payload, error, error_code, status, attempts, max_attempts, next_retry_at,
+  first_failed_at, last_attempt_at, resolved_at`;
+
+/**
+ * Record a failed connector-sync payload in the DLQ. Called by the sync path
+ * (or the retry worker) when a sync exhausts its inline attempts.
+ */
+export async function deadLetterSync(input: {
+  tenant_id: string;
+  connector_kind: string;
+  install_id?: string;
+  sync_kind?: string;
+  external_ref?: string;
+  payload?: Record<string, unknown>;
+  error?: string;
+  error_code?: string;
+}): Promise<DeadLetterRecord> {
+  const rows = await dataService.rows<DeadLetterRecord>(
+    `INSERT INTO connectors.sync_deadletter
+       (tenant_id, install_id, connector_kind, sync_kind, external_ref, payload, error, error_code)
+     VALUES ($1,$2,$3,$4,$5,$6::jsonb,$7,$8)
+     RETURNING ${DLQ_COLS}`,
+    [
+      input.tenant_id,
+      input.install_id ?? null,
+      input.connector_kind,
+      input.sync_kind ?? null,
+      input.external_ref ?? null,
+      JSON.stringify(input.payload ?? {}),
+      input.error ?? null,
+      input.error_code ?? null,
+    ],
+  );
+  return rows[0];
+}
+
+/** List dead-lettered items for a tenant, newest failure first. */
+export async function listDeadLetters(
+  tenant_id: string,
+  opts: { status?: DeadLetterRecord['status']; connector_kind?: string; limit?: number } = {},
+): Promise<DeadLetterRecord[]> {
+  return dataService.rows<DeadLetterRecord>(
+    `SELECT ${DLQ_COLS}
+       FROM connectors.sync_deadletter
+      WHERE tenant_id = $1
+        AND ($2::text IS NULL OR status = $2)
+        AND ($3::text IS NULL OR connector_kind = $3)
+      ORDER BY first_failed_at DESC
+      LIMIT $4`,
+    [tenant_id, opts.status ?? null, opts.connector_kind ?? null, opts.limit ?? 100],
+  );
+}
+
+/**
+ * Replay a single dead-lettered item: mark it retrying, bump the attempt count
+ * and set next_retry_at=now() so the retry/backoff worker re-drives it. Returns
+ * null if the id is unknown or already resolved. (Manifest: `replayDlq`.)
+ */
+export async function replayDlq(input: { deadletter_id: string }): Promise<DeadLetterRecord | null> {
+  try {
+    const row = await dataService.one<DeadLetterRecord>(
+      `UPDATE connectors.sync_deadletter
+          SET status = 'retrying', attempts = attempts + 1,
+              next_retry_at = now(), last_attempt_at = now(), updated_at = now()
+        WHERE deadletter_id = $1 AND status IN ('dlq','retrying','discarded')
+        RETURNING ${DLQ_COLS}`,
+      [input.deadletter_id],
+    );
+    return row;
+  } catch (err) {
+    throw new Error(`[sdk-connectors] replayDlq failed: ${(err as Error).message}`);
+  }
+}
+
+/**
+ * Bulk-replay every still-dead-lettered item for a tenant (optionally one
+ * connector_kind). Returns how many were re-queued.
+ */
+export async function replayDlqForTenant(tenant_id: string, connector_kind?: string): Promise<number> {
+  try {
+    const rows = await dataService.rows<{ deadletter_id: string }>(
+      `UPDATE connectors.sync_deadletter
+          SET status = 'retrying', attempts = attempts + 1,
+              next_retry_at = now(), last_attempt_at = now(), updated_at = now()
+        WHERE tenant_id = $1
+          AND status IN ('dlq','discarded')
+          AND ($2::text IS NULL OR connector_kind = $2)
+        RETURNING deadletter_id`,
+      [tenant_id, connector_kind ?? null],
+    );
+    return rows.length;
+  } catch (err) {
+    throw new Error(`[sdk-connectors] replayDlqForTenant failed: ${(err as Error).message}`);
+  }
+}

@@ -1,0 +1,44 @@
+{
+  "name": "GET /api/connectors/tenants/:tenant_id/dlq - List dead-lettered syncs",
+  "endpoint": "/api/connectors/tenants/:tenant_id/dlq",
+  "sdk": "sdk-connectors",
+  "method": "GET",
+  "requiresAuth": true,
+  "expectedStatus": 200,
+  "sourceFile": "packages/sdk-connectors/src/server/routes.ts",
+  "taskId": "19e7f6f2-05fa-4223-b39e-4c52890dc678",
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "priority": 31,
+  "testability": "auto",
+  "description": "List dead-lettered connector-sync items for a tenant, newest failure first. Optional query filters: status (dlq/retrying/resolved/discarded), connector_kind, and limit. Returns an empty array when the tenant has no dead-lettered syncs.",
+  "dependsOn": [
+    "POST /api/auth/signup-tenant"
+  ],
+  "fieldEnums": {
+    "status": ["dlq", "retrying", "resolved", "discarded"]
+  },
+  "testCases": [
+    {
+      "name": "List a tenant's DLQ (empty is a valid result)",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "pathParams": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}"
+      },
+      "queryParams": {
+        "status": "dlq",
+        "limit": "50"
+      },
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "data": {
+          "deadletters": "array"
+        }
+      }
+    }
+  ],
+  "errorCases": [
+    { "status": 401, "code": "Unauthorized", "message": "missing or invalid token", "when": "no valid Bearer token is supplied" }
+  ]
+}
