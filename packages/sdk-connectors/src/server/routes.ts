@@ -3,6 +3,7 @@ import { requireAuth } from '@projexlight/sdk-identity';
 import {
   callConnectorTool,
   getInstall,
+  getInstallHealth,
   installConnector,
   listAdapterKinds,
   listDeadLetters,
@@ -69,6 +70,16 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
       const rec = await uninstallConnector(req.params.install_id, body.actor_id ?? 'unknown');
       if (!rec) return reply.code(404).send({ error: 'NotFound' });
       return reply.code(200).send({ data: { install: rec } });
+    },
+  );
+
+  app.get<{ Params: { install_id: string } }>(
+    '/api/connectors/installs/:install_id/health',
+    { preHandler: requireAuth },
+    async (req, reply) => {
+      const health = await getInstallHealth(req.params.install_id);
+      if (!health) return reply.code(404).send({ error: 'NotFound' });
+      return reply.code(200).send({ data: { health } });
     },
   );
 

@@ -5,27 +5,46 @@
   "method": "GET",
   "requiresAuth": true,
   "expectedStatus": 200,
+  "sourceFile": "packages/sdk-connectors/src/server/routes.ts",
   "taskId": "d2a289b2-b611-49de-b16a-f577557d27fb",
   "sprintId": "8ef1d09e-dd8e-4daf-8d03-54dcd9f812f8",
   "featureId": "2a41c785-b26b-4fc0-aefd-372b7fb9782b",
   "epicId": "d83f7b6e-821c-4fe1-96e6-910eca8fbbfc",
   "priority": 30,
-  "testability": "manual",
-  "skipReason": "Route GET /api/connectors/installs/:install_id/health is not implemented in sdk-connectors routes.ts nor the api-gateway; no handler exists to test.",
+  "testability": "auto",
+  "description": "Health snapshot for a connector install: its status, whether an adapter is registered for its kind, tool count, open dead-lettered syncs, last sync cursor timestamp, and an overall healthy flag (active + adapter registered + no open DLQ). 404 if the install does not exist.",
   "dependsOn": [
-    "POST /api/auth/register",
+    "POST /api/auth/signup-tenant",
     "POST /api/connectors/installs"
   ],
   "testCases": [
     {
-      "name": "Health snapshot",
+      "name": "Health snapshot for a freshly installed connector",
       "headers": {
-        "Authorization": "Bearer {{cache:auth.register.response.data.token}}"
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
       },
       "pathParams": {
-        "install_id": "{{static:00000000-0000-0000-0000-000000000abc}}"
+        "install_id": "{{cache:connectors.create.response.data.install.install_id}}"
       },
-      "expectedStatus": 200
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "data": {
+          "health": {
+            "install_id": "string",
+            "connector_kind": "string",
+            "status": "string",
+            "adapter_registered": "boolean",
+            "tool_count": "number",
+            "open_deadletters": "number",
+            "last_synced_at": "string",
+            "healthy": "boolean"
+          }
+        }
+      }
     }
+  ],
+  "errorCases": [
+    { "status": 404, "code": "NotFound", "message": "NotFound", "when": "install_id does not exist" },
+    { "status": 401, "code": "Unauthorized", "message": "missing or invalid token", "when": "no valid Bearer token" }
   ]
 }

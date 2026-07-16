@@ -251,6 +251,50 @@ export async function callConnectorTool(
   return adapter.callTool(install, tool_name, args);
 }
 
+/**
+ * Health view for a connector install: its status, whether an adapter is
+ * registered for its kind, tool count, last sync cursor timestamp, and the
+ * count of dead-lettered syncs still needing attention. Returns null if the
+ * install does not exist.
+ */
+export async function getInstallHealth(install_id: string): Promise<{
+  install_id: string;
+  connector_kind: string;
+  status: string;
+  adapter_registered: boolean;
+  tool_count: number;
+  open_deadletters: number;
+  last_synced_at: string | null;
+  healthy: boolean;
+} | null> {
+  const install = await getInstall(install_id);
+  if (!install) return null;
+  try {
+    const stats = await dataService.one<{ tool_count: string; open_dlq: string; last_synced_at: string | null }>(
+      `SELECT
+         (SELECT COUNT(*) FROM connectors.tool_manifest WHERE install_id = $1)::text AS tool_count,
+         (SELECT COUNT(*) FROM connectors.sync_deadletter
+            WHERE install_id = $1 AND status IN ('dlq','retrying'))::text AS open_dlq,
+         (SELECT MAX(updated_at) FROM connectors.sync_cursor WHERE install_id = $1) AS last_synced_at`,
+      [install_id],
+    );
+    const adapter_registered = adapters.has(install.connector_kind);
+    const open_deadletters = parseInt(stats?.open_dlq ?? '0', 10);
+    return {
+      install_id: install.install_id,
+      connector_kind: install.connector_kind,
+      status: install.status,
+      adapter_registered,
+      tool_count: parseInt(stats?.tool_count ?? '0', 10),
+      open_deadletters,
+      last_synced_at: stats?.last_synced_at ?? null,
+      healthy: install.status === 'active' && adapter_registered && open_deadletters === 0,
+    };
+  } catch (err) {
+    throw new Error(`[sdk-connectors] getInstallHealth failed: ${(err as Error).message}`);
+  }
+}
+
 /* --------------------------------------------------- Dead-letter queue (DLQ) */
 
 /** A dead-lettered connector-sync payload (connectors.sync_deadletter). */
