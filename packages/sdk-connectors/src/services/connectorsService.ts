@@ -1,3 +1,4 @@
+import { createHmac, timingSafeEqual } from 'crypto';
 import { dataService } from '@projexlight/db-runtime';
 import { appendAuditEntry } from '@projexlight/sdk-audit';
 import type {
@@ -292,6 +293,45 @@ export async function getInstallHealth(install_id: string): Promise<{
     };
   } catch (err) {
     throw new Error(`[sdk-connectors] getInstallHealth failed: ${(err as Error).message}`);
+  }
+}
+
+/* ---------------------------------------------- Generic inbound webhooks */
+
+/**
+ * Connector kinds recognised by the generic inbound receiver. A dedicated
+ * connector-<kind> package may also registerAdapter() at boot; both are accepted.
+ */
+export const KNOWN_CONNECTOR_KINDS = new Set<string>([
+  'slack', 'salesforce', 'jira', 'github', 'hubspot', 'linear',
+  'microsoft365', 'snowflake', 'zendesk', 'zoom', 'gworkspace',
+]);
+
+export function isKnownConnectorKind(kind: string): boolean {
+  return KNOWN_CONNECTOR_KINDS.has(kind) || adapters.has(kind);
+}
+
+/**
+ * Verify a generic inbound webhook HMAC. Computes HMAC-SHA256(rawBody) with the
+ * shared CONNECTORS_INBOUND_SECRET and constant-time compares it to the
+ * signature header. Returns false when no secret is configured or the signature
+ * is absent/mismatched (secure default — unsigned events are rejected).
+ *
+ * NOTE: per-connector schemes with their own header/timestamp rules (Slack's
+ * x-slack-signature, GitHub's x-hub-signature-256) are handled by that
+ * connector's dedicated route; this is the generic baseline. Production should
+ * verify the RAW request bytes (wire a rawBody parser) rather than a re-stringified body.
+ */
+export function verifyInboundSignature(rawBody: string, signature: string | undefined): boolean {
+  const secret = process.env.CONNECTORS_INBOUND_SECRET;
+  if (!secret || !signature) return false;
+  const expected = createHmac('sha256', secret).update(rawBody).digest('hex');
+  try {
+    const a = Buffer.from(signature);
+    const b = Buffer.from(expected);
+    return a.length === b.length && timingSafeEqual(a, b);
+  } catch {
+    return false;
   }
 }
 

@@ -5,28 +5,35 @@
   "method": "POST",
   "requiresAuth": false,
   "expectedStatus": 200,
+  "sourceFile": "packages/sdk-connectors/src/server/routes.ts",
   "taskId": "d2a289b2-b611-49de-b16a-f577557d27fb",
   "sprintId": "8ef1d09e-dd8e-4daf-8d03-54dcd9f812f8",
   "featureId": "2a41c785-b26b-4fc0-aefd-372b7fb9782b",
   "epicId": "d83f7b6e-821c-4fe1-96e6-910eca8fbbfc",
   "priority": 40,
-  "testability": "manual",
-  "skipReason": "Route POST /api/connectors/inbound/:kind is not implemented in sdk-connectors routes.ts nor the api-gateway; no generic inbound webhook handler exists to test.",
+  "testability": "auto",
+  "description": "Generic inbound webhook receiver for a connector kind (unauthenticated — signature-gated). Unknown kind -> 404. An unsigned subscription-verification handshake ({ challenge }) is echoed back with 200 (standard across providers). Real event deliveries must carry a valid x-connector-signature HMAC (HMAC-SHA256 over the body with CONNECTORS_INBOUND_SECRET) -> 202 accepted, else 401.",
+  "fieldEnums": {
+    "kind": ["slack", "salesforce", "jira", "github", "hubspot", "linear", "microsoft365", "snowflake", "zendesk", "zoom", "gworkspace"]
+  },
   "testCases": [
     {
-      "name": "Inbound webhook (slack)",
+      "name": "Subscription-verification handshake echoes the challenge",
       "pathParams": {
         "kind": "slack"
       },
       "payload": {
-        "type": "event_callback",
-        "event": {
-          "type": "message",
-          "channel": "C0DEMO",
-          "text": "hello"
-        }
+        "type": "url_verification",
+        "challenge": "verify-token-abc123"
       },
-      "expectedStatus": 200
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "challenge": "verify-token-abc123"
+      }
     }
+  ],
+  "errorCases": [
+    { "status": 404, "code": "UnknownConnectorKind", "message": "no connector kind '<kind>'", "when": "the :kind path segment is not a recognised connector kind" },
+    { "status": 401, "code": "InvalidSignature", "message": "missing or invalid x-connector-signature", "when": "a non-challenge event is posted without a valid HMAC signature" }
   ]
 }

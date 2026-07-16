@@ -5,6 +5,7 @@ import {
   getInstall,
   getInstallHealth,
   installConnector,
+  isKnownConnectorKind,
   listAdapterKinds,
   listDeadLetters,
   listInstalls,
@@ -13,6 +14,7 @@ import {
   replayDlqForTenant,
   syncConnector,
   uninstallConnector,
+  verifyInboundSignature,
 } from '../services/connectorsService';
 
 export async function registerRoutes(app: FastifyInstance): Promise<void> {
@@ -121,6 +123,32 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
       }
     },
   );
+
+  // ---- Generic inbound webhook receiver (unauthenticated; signature-gated) ----
+  // No requireAuth: inbound webhooks come from external providers, not tenant
+  // sessions. The HMAC signature (or the unsigned verification handshake) is the
+  // trust boundary.
+  app.post<{ Params: { kind: string } }>('/api/connectors/inbound/:kind', async (req, reply) => {
+    const kind = req.params.kind;
+    if (!isKnownConnectorKind(kind)) {
+      return reply.code(404).send({ error: 'UnknownConnectorKind', details: [`no connector kind '${kind}'`] });
+    }
+    const body = (req.body ?? {}) as Record<string, unknown>;
+
+    // Subscription-verification handshake — providers (Slack/Stripe/etc.) send an
+    // unsigned challenge when a webhook URL is registered; echo it back.
+    if (typeof body.challenge === 'string') {
+      return reply.code(200).send({ challenge: body.challenge });
+    }
+
+    // Real event delivery must carry a valid HMAC signature.
+    const signature = req.headers['x-connector-signature'] as string | undefined;
+    if (!verifyInboundSignature(JSON.stringify(body), signature)) {
+      return reply.code(401).send({ error: 'InvalidSignature', details: ['missing or invalid x-connector-signature'] });
+    }
+    const event_type = typeof body.type === 'string' ? body.type : null;
+    return reply.code(202).send({ data: { accepted: true, kind, event_type } });
+  });
 
   // ---- Dead-letter queue (DLQ) — sync failures the manifest advertised ----
 
