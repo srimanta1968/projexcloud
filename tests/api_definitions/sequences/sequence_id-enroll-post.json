@@ -1,0 +1,56 @@
+{
+  "name": "POST /api/sequences/:sequence_id/enroll - Enroll a persona (idempotent)",
+  "endpoint": "/api/sequences/:sequence_id/enroll",
+  "sdk": "sdk-sequence",
+  "sourceFile": "packages/sdk-sequence/src/server/routes.ts",
+  "method": "POST",
+  "requiresAuth": true,
+  "expectedStatus": 201,
+  "taskId": "b926ca9e-6297-4c36-9c45-98552dfac81a",
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "priority": 45,
+  "testability": "auto",
+  "description": "Enroll an L4 persona into a sequence (event-based: form_submit/reply/stage_change/manual). Idempotent — if the persona already has an active run in this sequence it returns the existing enrollment (200) and schedules nothing new; otherwise it creates a new enrollment and seeds the first step as a due execution_step (201). The sequence must have at least one step (else 409).",
+  "dependsOn": [
+    "POST /api/auth/signup-tenant",
+    "POST /api/personas",
+    "POST /api/sequences",
+    "POST /api/sequences/:sequence_id/steps"
+  ],
+  "fieldEnums": {
+    "event_type": ["form_submit", "reply", "stage_change", "manual", "booking", "tag_added"]
+  },
+  "statusTransitions": {
+    "entity": "sequence.execution_step",
+    "field": "status",
+    "flow": ["pending", "scheduled", "sending", "sent"],
+    "transitions": [
+      { "from": "pending", "to": "sent", "via": "the step-executor tick loop (TK-3614)" }
+    ]
+  },
+  "testCases": [
+    {
+      "name": "Enroll a persona into the sequence",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "pathParams": {
+        "sequence_id": "{{cache:sequences.create.response.data.sequence.sequence_id}}"
+      },
+      "payload": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "subject_persona_id": "{{cache:personas.create.response.data.persona.persona_id}}",
+        "event_type": "form_submit"
+      },
+      "expectedStatus": 201,
+      "expectedResponse": { "data": { "enrollment": { "enrollment_id": "string", "already_enrolled": "boolean" } } }
+    }
+  ],
+  "captureResponse": {
+    "sequences.enroll.response.data.enrollment.enrollment_id": "data.enrollment.enrollment_id"
+  },
+  "errorCases": [
+    { "status": 400, "code": "ValidationError", "message": "tenant_id and subject_persona_id are required", "when": "tenant_id or subject_persona_id missing" },
+    { "status": 409, "code": "EnrollFailed", "message": "sequence has no steps to enroll into", "when": "the sequence has no steps yet" }
+  ]
+}

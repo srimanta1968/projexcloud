@@ -1,0 +1,47 @@
+{
+  "name": "POST /api/sequences - Create a cadence sequence",
+  "endpoint": "/api/sequences",
+  "sdk": "sdk-sequence",
+  "sourceFile": "packages/sdk-sequence/src/server/routes.ts",
+  "method": "POST",
+  "requiresAuth": true,
+  "expectedStatus": 201,
+  "taskId": "b926ca9e-6297-4c36-9c45-98552dfac81a",
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "priority": 40,
+  "testability": "auto",
+  "description": "Create a multi-touch cadence sequence for a tenant. Steps and triggers are added via sub-resource endpoints. tenant_id and name are required; sequence_type defaults to 'lead'. Returns the created sequence (status defaults to 'active').",
+  "dependsOn": [
+    "POST /api/auth/signup-tenant"
+  ],
+  "fieldEnums": {
+    "sequence_type": ["lead", "customer", "onboarding", "nurture", "custom"]
+  },
+  "testCases": [
+    {
+      "name": "Create a lead welcome cadence",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "payload": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "name": "{{dynamic:name}}",
+        "description": "Welcome cadence for new leads",
+        "sequence_type": "lead",
+        "is_default": false,
+        "metadata": {}
+      },
+      "expectedStatus": 201,
+      "expectedResponse": { "data": { "sequence": { "sequence_id": "string", "status": "string" } } }
+    }
+  ],
+  "captureResponse": {
+    "sequences.create.response.data.sequence.sequence_id": "data.sequence.sequence_id",
+    "sequences.create.response.data.sequence.tenant_id": "data.sequence.tenant_id",
+    "sequences.create.response.data.sequence.status": "data.sequence.status"
+  },
+  "errorCases": [
+    { "status": 400, "code": "ValidationError", "message": "tenant_id and name are required", "when": "tenant_id or name missing from body" },
+    { "status": 401, "code": "Unauthorized", "message": "missing or invalid token", "when": "no valid Bearer token" }
+  ]
+}

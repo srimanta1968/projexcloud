@@ -1,7 +1,10 @@
 /**
  * @projexlight/sdk-sequence — multi-touch cadence orchestration engine (P14·E1).
  *
- * v0 surface (TK-3612): migrationsDir only. The definition/enrollment service
- * and Fastify routes land with TK-3613; the step-executor tick loop with TK-3614.
+ * Surface: migrationsDir (schema, TK-3612) + the definition/enrollment service &
+ * Fastify routes (TK-3613). The step-executor tick loop lands with TK-3614;
+ * reactive control with TK-3616; guardrails with TK-3617.
  */
 export { migrationsDir } from './db';
+export * as server from './server';
+export * from './services/sequenceService';

@@ -1,0 +1,38 @@
+{
+  "name": "GET /api/sequences/:sequence_id - Fetch a sequence",
+  "endpoint": "/api/sequences/:sequence_id",
+  "sdk": "sdk-sequence",
+  "sourceFile": "packages/sdk-sequence/src/server/routes.ts",
+  "method": "GET",
+  "requiresAuth": true,
+  "expectedStatus": 200,
+  "taskId": "b926ca9e-6297-4c36-9c45-98552dfac81a",
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "priority": 43,
+  "testability": "auto",
+  "description": "Fetch a single sequence by id, tenant-scoped via the tenant_id query param. 404 if the sequence does not exist for that tenant.",
+  "dependsOn": [
+    "POST /api/auth/signup-tenant",
+    "POST /api/sequences"
+  ],
+  "testCases": [
+    {
+      "name": "Get the created sequence",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "pathParams": {
+        "sequence_id": "{{cache:sequences.create.response.data.sequence.sequence_id}}"
+      },
+      "queryParams": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}"
+      },
+      "expectedStatus": 200,
+      "expectedResponse": { "data": { "sequence": { "sequence_id": "string" } } }
+    }
+  ],
+  "errorCases": [
+    { "status": 400, "code": "ValidationError", "message": "tenant_id query param required", "when": "tenant_id query param missing" },
+    { "status": 404, "code": "NotFound", "message": "NotFound", "when": "sequence_id not found for the tenant" }
+  ]
+}
