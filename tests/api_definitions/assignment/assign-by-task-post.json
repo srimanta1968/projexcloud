@@ -1,0 +1,57 @@
+{
+  "name": "POST /api/assignment/assign-by-task - Auto-assign a task to a persona",
+  "endpoint": "/api/assignment/assign-by-task",
+  "sdk": "sdk-assignment",
+  "sourceFile": "packages/sdk-assignment/src/server/routes.ts",
+  "method": "POST",
+  "requiresAuth": true,
+  "expectedStatus": 201,
+  "taskId": "3a8718f1-e4b2-43bb-9be6-4ef111490773",
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "priority": 60,
+  "testability": "semi-auto",
+  "setupScript": "assignment_seed_workload_pool.sql",
+  "description": "Auto-assign a task to the best-fit persona. The skill, availability-window and per-day capacity gates always run first; then the chosen strategy selects the winner. strategy='default' (or omitted) keeps the primary->backup + distance + capacity scoring; strategy='round_robin' cycles fairly through eligible candidates via a per-(tenant,pool,strategy) rotation cursor advanced atomically (concurrency-safe, no over-assignment); strategy='fair_share' biases toward the least-loaded candidate, rotating among ties. Returns the proposed assignment (status='proposed') plus the matched territory, distance and a reason string. The three candidate personas are seeded into assignment.workload by the setupScript (workload has no HTTP CRUD and no FK/tenant column). 409 when no eligible persona (empty pool / all at capacity).",
+  "dependsOn": [
+    "POST /api/auth/signup-tenant"
+  ],
+  "fieldEnums": {
+    "strategy": ["default", "round_robin", "fair_share"]
+  },
+  "testCases": [
+    {
+      "name": "Round-robin assign among three eligible, skilled personas",
+      "headers": { "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}" },
+      "payload": {
+        "task_id": "{{dynamic:uuid}}",
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "location": { "lat": 40.7128, "lng": -74.006 },
+        "required_skills": ["plumbing"],
+        "strategy": "round_robin",
+        "pool_key": "default",
+        "candidate_persona_ids": [
+          "a1111111-1111-4111-8111-111111111111",
+          "a2222222-2222-4222-8222-222222222222",
+          "a3333333-3333-4333-8333-333333333333"
+        ]
+      },
+      "expectedStatus": 201,
+      "expectedResponse": {
+        "data": {
+          "assignment": { "assignment_id": "string", "task_id": "string", "persona_id": "string", "status": "string" },
+          "reason": "string"
+        }
+      }
+    }
+  ],
+  "captureResponse": {
+    "assignment.assign-by-task.create.response.data.assignment.assignment_id": "data.assignment.assignment_id",
+    "assignment.assign-by-task.create.response.data.assignment.persona_id": "data.assignment.persona_id"
+  },
+  "errorCases": [
+    { "status": 400, "code": "ValidationError", "message": "task_id and tenant_id are required", "when": "task_id or tenant_id missing from body" },
+    { "status": 400, "code": "ValidationError", "message": "location {lat,lng} is required", "when": "location missing or lat/lng not numbers" },
+    { "status": 400, "code": "ValidationError", "message": "invalid strategy", "when": "strategy is not one of default|round_robin|fair_share" },
+    { "status": 409, "code": "NoEligiblePersona", "message": "no eligible persona for task", "when": "no candidate passes the skill/availability/capacity gates or all raced to capacity" }
+  ]
+}

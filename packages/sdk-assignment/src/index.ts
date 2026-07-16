@@ -25,7 +25,12 @@ export {
 export type {
   AssignByTaskInput,
   AssignByTaskResult,
+  AssignStrategy,
 } from './services/assignmentEngine';
+
+// HTTP surface (EP-335) — mounted by the api-gateway; consumed by
+// sdk-scheduling + lead routing so strategy selection lives in one place.
+export * as server from './server';
 
 // Territory CRUD + geofence helpers (FR-ASN-2).
 export {

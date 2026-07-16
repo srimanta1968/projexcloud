@@ -317,7 +317,7 @@ import {
   optimizeRoute,
   getDispatchBroker,
 } from '@projexlight/sdk-dispatch';
-import { migrationsDir as assignmentMigrations }          from '@projexlight/sdk-assignment';
+import { migrationsDir as assignmentMigrations, server as assignmentServer } from '@projexlight/sdk-assignment';
 import { migrationsDir as leadScoringMigrations }         from '@projexlight/sdk-lead-scoring';
 import {
   migrationsDir as evidenceMigrations,
@@ -525,6 +525,7 @@ app.register(registerTenantLifecycleRoutes);
 app.register(engagementServer.registerRoutes);
 app.register(eventServer.registerRoutes);
 app.register(crmServer.registerRoutes);
+app.register(assignmentServer.registerRoutes);
 app.register(serviceRequestServer.registerRoutes);
 app.register(contentServer.registerRoutes);
 app.register(campaignServer.registerRoutes);

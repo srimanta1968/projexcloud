@@ -44,6 +44,16 @@ interface CandidateWorkload {
   available_to: Date | null;
 }
 
+/**
+ * Selection strategy applied AFTER the skill / availability / capacity gates.
+ *   - 'default'     — primary→backup + distance + capacity scoring (unchanged).
+ *   - 'round_robin' — cycle fairly through eligible candidates via a persisted
+ *                     rotation cursor advanced atomically (concurrency-safe).
+ *   - 'fair_share'  — bias toward the least-loaded eligible candidate, rotating
+ *                     among ties by the same cursor so equal-load personas share.
+ */
+export type AssignStrategy = 'default' | 'round_robin' | 'fair_share';
+
 export interface AssignByTaskInput {
   task_id: string;
   tenant_id: string;
@@ -60,6 +70,17 @@ export interface AssignByTaskInput {
   persona_locations?: Record<string, GeoPoint>;
   /** When set, restricts selection to these personas (skip workload scan). */
   candidate_persona_ids?: string[];
+  /**
+   * Selection strategy. Defaults to 'default' (existing scoring). The
+   * skill/availability/capacity gates always run first, regardless of strategy.
+   */
+  strategy?: AssignStrategy;
+  /**
+   * Logical pool key for the rotation cursor when no territory matched
+   * (or to sub-divide a territory's rotation). Defaults to 'default'.
+   * Ignored by the 'default' strategy.
+   */
+  pool_key?: string;
 }
 
 export interface AssignByTaskResult {
@@ -193,6 +214,125 @@ function rowToAssignment(r: AssignmentInsertRow): AssignmentRef {
   };
 }
 
+/**
+ * Atomically advance the rotation cursor for a (tenant, territory-or-pool,
+ * strategy) scope and return the NEW rotation_index (1 on first use, then
+ * 2,3,…). The unique expression index makes the ON CONFLICT upsert serialize
+ * concurrent callers, so every dispatcher gets a distinct index — the basis
+ * for fair, non-colliding next-in-line selection under concurrency.
+ */
+async function advanceRotationCursor(
+  tenant_id: string,
+  territory_id: string | null,
+  pool_key: string,
+  strategy: Exclude<AssignStrategy, 'default'>,
+): Promise<number> {
+  const row = await dataService.one<{ rotation_index: number }>(
+    `INSERT INTO assignment.rotation_cursor
+        (tenant_id, territory_id, pool_key, strategy, rotation_index, last_assigned_at)
+     VALUES ($1, $2, $3, $4, 1, now())
+     ON CONFLICT (tenant_id, COALESCE(territory_id, ''), pool_key, strategy)
+     DO UPDATE SET rotation_index = assignment.rotation_cursor.rotation_index + 1,
+                   updated_at = now()
+     RETURNING rotation_index`,
+    [tenant_id, territory_id, pool_key, strategy],
+  );
+  return row ? row.rotation_index : 1;
+}
+
+/** Record who the advanced cursor landed on (bookkeeping / ops triage). */
+async function stampRotationWinner(
+  tenant_id: string,
+  territory_id: string | null,
+  pool_key: string,
+  strategy: Exclude<AssignStrategy, 'default'>,
+  persona_id: string,
+): Promise<void> {
+  await dataService.query(
+    `UPDATE assignment.rotation_cursor
+        SET last_assigned_persona_id = $5::uuid, last_assigned_at = now(), updated_at = now()
+      WHERE tenant_id = $1
+        AND COALESCE(territory_id, '') = COALESCE($2, '')
+        AND pool_key = $3
+        AND strategy = $4`,
+    [tenant_id, territory_id, pool_key, strategy, persona_id],
+  );
+}
+
+/**
+ * Pick the next-in-line eligible candidate for a rotation strategy.
+ *   - round_robin: deterministic stable order (persona_id) cycled by the cursor.
+ *   - fair_share:  least-loaded first (highest capacity_remaining); the cursor
+ *                  rotates only among the equally-least-loaded top group so no
+ *                  single idle persona is starved or hammered.
+ * The cursor is advanced atomically BEFORE selection, so two concurrent calls
+ * with the same eligible set land on different indices (unless len === 1).
+ */
+async function selectByRotation(
+  input: AssignByTaskInput,
+  strategy: Exclude<AssignStrategy, 'default'>,
+  eligible: ScoredCandidate[],
+  territory_id: string | null,
+): Promise<ScoredCandidate> {
+  const pool_key = input.pool_key ?? 'default';
+  let pool: ScoredCandidate[];
+  if (strategy === 'fair_share') {
+    const byLoad = [...eligible].sort((a, b) => {
+      if (a.capacity_remaining !== b.capacity_remaining) return b.capacity_remaining - a.capacity_remaining;
+      return a.persona_id < b.persona_id ? -1 : a.persona_id > b.persona_id ? 1 : 0;
+    });
+    const top = byLoad[0].capacity_remaining;
+    pool = byLoad.filter((c) => c.capacity_remaining === top);
+  } else {
+    pool = [...eligible].sort((a, b) => (a.persona_id < b.persona_id ? -1 : a.persona_id > b.persona_id ? 1 : 0));
+  }
+  const idx = await advanceRotationCursor(input.tenant_id, territory_id, pool_key, strategy);
+  const winner = pool[(idx - 1) % pool.length];
+  await stampRotationWinner(input.tenant_id, territory_id, pool_key, strategy, winner.persona_id);
+  return winner;
+}
+
+/**
+ * Atomically insert the proposed assignment and increment the winner's
+ * open_tasks under a hard capacity ceiling. If the capacity-guarded UPDATE
+ * touches 0 rows the persona raced to capacity — the whole transaction rolls
+ * back (no over-assignment), and the caller re-selects the next candidate.
+ */
+async function insertAssignmentAtomic(
+  task_id: string,
+  persona_id: string,
+): Promise<AssignmentInsertRow> {
+  return dataService.tx<AssignmentInsertRow>(async (q) => {
+    const ins = await q<AssignmentInsertRow>(
+      `INSERT INTO assignment.assignment
+         (assignment_id, task_id, persona_id, status)
+       VALUES ($1, $2, $3::uuid, 'proposed')
+       RETURNING assignment_id, task_id, persona_id::text, assigned_at,
+                 accepted_at, status`,
+      [randomUUID(), task_id, persona_id],
+    );
+    const upd = await q(
+      `UPDATE assignment.workload
+          SET open_tasks = open_tasks + 1
+        WHERE persona_id = $1::uuid
+          AND open_tasks < capacity_per_day`,
+      [persona_id],
+    );
+    if (upd.rowCount === 0) {
+      throw new CapacityRaceError(persona_id);
+    }
+    return ins.rows[0];
+  });
+}
+
+/** Thrown when a chosen persona hit capacity between scoring and insert. */
+class CapacityRaceError extends Error {
+  constructor(public persona_id: string) {
+    super(`[sdk-assignment] persona ${persona_id} at capacity (concurrency race)`);
+    this.name = 'CapacityRaceError';
+  }
+}
+
 export async function assignByTask(input: AssignByTaskInput): Promise<AssignByTaskResult> {
   // 1. Resolve territories.
   const territories = await findTerritoriesAt(input.tenant_id, input.location);
@@ -235,32 +375,48 @@ export async function assignByTask(input: AssignByTaskInput): Promise<AssignByTa
     );
   }
 
-  const winner = candidates[0];
+  const strategy: AssignStrategy = input.strategy ?? 'default';
   const territoryMatch = territories[0];
+  const territoryId = territoryMatch?.territory_id ?? null;
 
-  // 6. Atomic insert + workload increment.
-  const assignmentRow = await dataService.tx<AssignmentInsertRow>(async (q) => {
-    const ins = await q<AssignmentInsertRow>(
-      `INSERT INTO assignment.assignment
-         (assignment_id, task_id, persona_id, status)
-       VALUES ($1, $2, $3::uuid, 'proposed')
-       RETURNING assignment_id, task_id, persona_id::text, assigned_at,
-                 accepted_at, status`,
-      [randomUUID(), input.task_id, winner.persona_id],
-    );
-    await q(
-      `UPDATE assignment.workload
-          SET open_tasks = open_tasks + 1
-        WHERE persona_id = $1::uuid
-          AND open_tasks < capacity_per_day`,
-      [winner.persona_id],
-    );
-    return ins.rows[0];
-  });
+  // 6. Select the winner per strategy, then atomically insert under the
+  //    capacity ceiling. If the chosen persona raced to capacity between
+  //    scoring and insert, drop it and re-select the next-in-line so we
+  //    never over-assign — regardless of strategy.
+  let eligibleRemaining = [...candidates];
+  let winner: ScoredCandidate | null = null;
+  let assignmentRow: AssignmentInsertRow | null = null;
+  while (eligibleRemaining.length > 0) {
+    const pick =
+      strategy === 'default'
+        ? eligibleRemaining[0]
+        : await selectByRotation(input, strategy, eligibleRemaining, territoryId);
+    try {
+      assignmentRow = await insertAssignmentAtomic(input.task_id, pick.persona_id);
+      winner = pick;
+      break;
+    } catch (err) {
+      if (err instanceof CapacityRaceError) {
+        eligibleRemaining = eligibleRemaining.filter((c) => c.persona_id !== pick.persona_id);
+        continue;
+      }
+      throw err;
+    }
+  }
 
-  const reason = territoryMatch
+  if (!winner || !assignmentRow) {
+    throw new Error(
+      `[sdk-assignment] no eligible persona for task ${input.task_id}: ` +
+      `all ${candidates.length} candidate(s) raced to capacity (concurrency).`,
+    );
+  }
+
+  const strategyLabel =
+    strategy === 'round_robin' ? 'round-robin' : strategy === 'fair_share' ? 'fair-share' : null;
+  const baseReason = territoryMatch
     ? (winner.is_primary ? 'primary-territory' : 'backup-territory')
     : `radius-skill-scan${input.fallback_radius_km ? `@${input.fallback_radius_km}km` : ''}`;
+  const reason = strategyLabel ? `${strategyLabel}:${baseReason}` : baseReason;
 
   try {
     await appendAuditEntry({
