@@ -44,12 +44,23 @@ export interface ActiveActiveEmitter {
   }): Promise<void> | void;
 }
 
-let _emitter: ActiveActiveEmitter = (event) => {
-  console.log(`[active-active] would emit ${event.event_type} profile=${event.profile_id} (no emitter)`);
+let _warnedNoEmitter = false;
+let _emitter: ActiveActiveEmitter = () => {
+  // No emitter wired (e.g. api-gateway boot didn't call setActiveActiveEmitter).
+  // Warn ONCE instead of logging per drill/failover event — the scheduler runs
+  // for every profile on every tick and would otherwise flood the logs.
+  if (!_warnedNoEmitter) {
+    _warnedNoEmitter = true;
+    console.warn(
+      '[active-active] no event emitter wired — failover/drill events are being dropped. ' +
+        'Call setActiveActiveEmitter() at boot to publish them. (shown once)',
+    );
+  }
 };
 
 export function setActiveActiveEmitter(emitter: ActiveActiveEmitter): void {
   _emitter = emitter;
+  _warnedNoEmitter = false;
 }
 
 export interface ActivateProfileInput {
@@ -256,13 +267,15 @@ export async function runFailoverDrill(input: RunFailoverDrillInput): Promise<Fa
   const auditEntryId = `aud_${crypto.randomBytes(8).toString('hex')}`;
   const t0 = Date.now();
 
-  await pool.query(
+  const inserted = await pool.query<{ started_at: Date }>(
     `INSERT INTO active_active.failover_drill
        (drill_id, profile_id, from_region, to_region,
         rpo_observed_seconds, audit_entry_id)
-     VALUES ($1, $2, $3, $4, $5, $6)`,
+     VALUES ($1, $2, $3, $4, $5, $6)
+     RETURNING started_at`,
     [drillId, input.profile_id, fromRegion, input.to_region, rpoObserved, auditEntryId],
   );
+  const startedAt = inserted.rows[0].started_at;
 
   // Simulate the failover work. In a real drill: cut traffic, promote
   // replica, resume writes. Here: a tiny sleep so RTO is measurable.
@@ -295,15 +308,20 @@ export async function runFailoverDrill(input: RunFailoverDrillInput): Promise<Fa
     }
   }
 
-  const { rows: done } = await pool.query<{ resumed_at: Date; started_at: Date }>(
+  // Compute resumed_at here and persist it explicitly, rather than reading it
+  // back from an UPDATE ... RETURNING. On an active-active pool the read-back
+  // could land on a replica that hasn't seen the INSERT yet, returning zero
+  // rows — which previously crashed with "Cannot read properties of undefined
+  // (reading 'resumed_at')". started_at came from the INSERT above.
+  const resumedAt = new Date();
+  await pool.query(
     `UPDATE active_active.failover_drill
-        SET resumed_at = now(),
-            rto_observed_seconds = $2,
-            passed = $3,
-            tier_downgrade_triggered = $4
-      WHERE drill_id = $1
-      RETURNING resumed_at, started_at`,
-    [drillId, rtoObserved, passed, tierDowngradeTriggered],
+        SET resumed_at = $2,
+            rto_observed_seconds = $3,
+            passed = $4,
+            tier_downgrade_triggered = $5
+      WHERE drill_id = $1`,
+    [drillId, resumedAt.toISOString(), rtoObserved, passed, tierDowngradeTriggered],
   );
 
   await _emitter({
@@ -318,7 +336,7 @@ export async function runFailoverDrill(input: RunFailoverDrillInput): Promise<Fa
       rto_observed_seconds: rtoObserved,
       passed,
     },
-    occurred_at: done[0].resumed_at.toISOString(),
+    occurred_at: resumedAt.toISOString(),
   });
 
   return {
@@ -326,8 +344,8 @@ export async function runFailoverDrill(input: RunFailoverDrillInput): Promise<Fa
     profile_id: input.profile_id,
     from_region: fromRegion,
     to_region: input.to_region,
-    started_at: done[0].started_at.toISOString(),
-    resumed_at: done[0].resumed_at.toISOString(),
+    started_at: startedAt.toISOString(),
+    resumed_at: resumedAt.toISOString(),
     rpo_observed_seconds: rpoObserved,
     rto_observed_seconds: rtoObserved,
     passed,
