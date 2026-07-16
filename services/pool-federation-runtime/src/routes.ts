@@ -140,15 +140,28 @@ export async function registerRoutes(
         message: `trigger must be one of ${FAILOVER_TRIGGERS.join(',')}`,
       });
     }
-    const event = await recordFailover({
-      event_id: body.event_id,
-      federation_id: body.federation_id,
-      from_region: body.from_region,
-      to_region: body.to_region,
-      trigger: body.trigger,
-      rpo_observed: body.rpo_observed,
-      rto_observed: body.rto_observed,
-    });
-    return reply.code(201).send(event);
+    try {
+      const event = await recordFailover({
+        event_id: body.event_id,
+        federation_id: body.federation_id,
+        from_region: body.from_region,
+        to_region: body.to_region,
+        trigger: body.trigger,
+        rpo_observed: body.rpo_observed,
+        rto_observed: body.rto_observed,
+      });
+      return reply.code(201).send(event);
+    } catch (err) {
+      // Duplicate event_id (PK) — the event was already recorded; that's a
+      // conflict, not a server error.
+      if ((err as { code?: string }).code === '23505') {
+        return reply.code(409).send({
+          error: 'duplicate_event',
+          message: `failover event_id '${body.event_id}' already recorded`,
+        });
+      }
+      req.log.error(err);
+      return reply.code(500).send({ error: (err as Error).message });
+    }
   });
 }
