@@ -204,7 +204,7 @@ The response includes:
 
 ---
 
-Project: cf30e9b7... | Tasks: 53
+Project: cf30e9b7... | Tasks: 20
 
 ## Notes
 

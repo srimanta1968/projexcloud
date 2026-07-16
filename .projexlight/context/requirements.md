@@ -1,4 +1,4 @@
-# Requirements - Sprint 2
+# Requirements - Sprint3
 
 ## Project: ProjexCloud
 
@@ -8,680 +8,205 @@ The single canonical architecture: a shared horizontal platform — services, ag
 
 ## Epics
 
-### P10 · E4 — Fail-Closed PDP & Audited Break-Glass
+### P14 · E1 — sdk-sequence: Multi-Touch Cadence Orchestration Engine
 
-Formalize fail-closed-on-evaluator-error for sensitive resource classes, short-TTL cached decisions for low-risk, and an explicit audited break-glass path via sdk-approval (scoped, time-bounded, certificate-of-action). Implements Architecture v3.2 §11A.6.
+New reusable SDK for stateful, multi-touch outreach sequences. Ported from projex_crm's proven engine (outreach-sequence, sequence-step-executor, send-queue, send-window, outreach-orchestrator) into ProjexCloud SDK conventions (Fastify routes + db-runtime + migrationsDir). Fills the gap left by sdk-campaign (v0.1.0, journeys only). Emits sends through sdk-notification adapters. Foundation for InboundCRM cadences.
 
-### P10 · E1 — Obligation-Based Authorization (Mask/Filter/TTL on Decisions)
+### P14 · E2 — sdk-scheduling: Calendar, Booking & No-Show Engine
 
-Extend the access mesh so policy decisions return obligations (mask_fields, row_filter, audit_level, ttl_seconds), not just ALLOW/DENY. Server-side enforcement of masking/filtering; UI visibility becomes advisory only. Closes the field-leak risk (critique Scenario 7). Implements Architecture v3.2 §11A.3 + P16 + OC-11.
+New reusable SDK for meeting scheduling. No calendar SDK exists today (only connectors). Ported from projex_crm calendar.service/booking-notification/followup-scheduling/public-booking: availability slotting with IANA timezones, ICS invites, booking links, reminders, and no-show rescue. Integrates connector-gworkspace/microsoft365 for two-way sync.
 
-### P10 · E2 — Platform Principal Token (Minted, Audience-Bound Internal Identity)
+### P14 · E3 — sdk-deliverability: Suppression, Bounce & Reply Intelligence
 
-Gateway mints a signed, short-TTL, audience-bound token from the resolved IdentityContext; downstream services verify it instead of trusting forwarded headers. Closes the confused-deputy class (Scenario 5). Implements Architecture v3.2 §11A.4 + P17.
+New reusable SDK for email deliverability, complementing sdk-notification (send) and sdk-consent (legal basis). Ported from projex_crm webhook-security suppressionService, bounce-sync workers, inbox-sync and unsubscribe: reason-tagged suppression list, provider bounce/complaint webhook verification (SendGrid/Mailgun/Postmark), IMAP inbound reply sync, and bounce-rate auto-pause.
 
-### P10 · E3 — Consent-Gated Authorization (Purpose-Bound, Fail-Closed)
+### P14 · E4 — sdk-crm & sdk-notification Extensions: Inbound Pipeline & Unified Send
 
-Wire sdk-consent receipts into the sdk-policy decision as a first-class purpose-gated input; missing/revoked receipt fails closed for purpose-bound resources. Includes the healthcare purpose taxonomy (HIPAA TPO + 42 CFR Part 2). Implements Architecture v3.2 §11A.5 + P18; Required for the healthcare vertical (§11A.10).
-
-### P10 · E5 — Resource Ownership Registry (GitOps, No-Owner-No-Resource)
-
-A platform.resource_registry where every infra resource carries owner/team/repo/terraform_module/cost_center/classification/expiry; GitOps reconciler quarantines orphan/expired resources; OC-12 lint blocks unregistered resources. Implements Architecture v3.2 §11A.8 + OC-12.
-
-### P10 · E6 — Healthcare EMPI / Probabilistic MDM
-
-Extend sdk-identity-resolver with probabilistic patient matching for multi-source data: confidence scores, POSSIBLY_SAME candidate links (never forced merges), sdk-approval-governed steward review, reversible merge/unmerge as compensating events, and match-quality calibration. Required for the healthcare vertical (Architecture v3.2 §11A.10).
-
-### P10 · E7 — Non-Breaking Integration & Regression Hardening
-
-Guarantee the P10 changes are additive and break no existing SDK/service: optional obligations/token, additive-only DB migrations, cross-SDK integration & regression suite, and a CI gate requiring full build + isolation/chaos suites green.
-
-### P10 · E8 — Observability, Audit & Lineage Taxonomy + Telemetry Portal
-
-Implement the critique's 8-type observability taxonomy over the existing audit/trace/lineage/meter spine: end-to-end OpenTelemetry tracing, Grafana/Prometheus dashboards, security detection over the SIEM forwarder, plus MDM and consent observability. Addresses Analyze2 §3.11 and Reality Report v2 §4.7.
-
-### P10 · E9 — Principal Context Enrichment (Device Posture · Network Zone · Purpose)
-
-Add device_trust, network_zone, and purpose as first-class context fields on the resolved principal so policy and consent can condition on them. Addresses Reality Report v2 §7.10; purpose feeds the E3 consent-gating decision input.
+Extend existing SDKs rather than duplicate. Enrich sdk-crm (v0.1.0) with funnel/pipeline richness, richer deal fields, stage-aging and mandatory NEXT-action enforcement (from projex_crm funnel.service). Route email send through sdk-notification's existing SES/SMTP/Twilio adapters so email + SMS unify under one transport.
 
 ## Features
 
-### Obligations on the policy decision (sdk-policy)
+### Availability & Slotting
 
-Add an optional obligations object to EvaluatePolicyResult: mask_fields[], row_filter{}, audit_level, ttl_seconds. Backward compatible — absent obligations = today's behavior.
+Business-hours + IANA-timezone slot generation, double-book prevention, and meeting types (15-min fit / 30-min demo / 30-min decision / 60-min onboarding). Ports calendar.service availability.
 
-**Acceptance Criteria:**
-EvaluatePolicyResult carries an optional obligations object
-Existing allow/deny callers compile and behave unchanged
-Obligations are emitted in the DecisionRecord audit
+### Booking Lifecycle & ICS
 
-### Server-side obligation enforcement helper
+Create/confirm/reschedule/cancel bookings, scheduling links, and ICS invite generation + confirmation emails to both parties. Ports booking-notification + followup-scheduling + public-booking.
 
-Shared library that applies mask_fields and row_filter to a result set before serialization, called by gateway and data-reading SDKs.
+### Frequency Caps & Circuit Breaker
 
-**Acceptance Criteria:**
-Helper masks declared fields server-side
-Helper injects row filters into queries/results
-Helper is unit-tested against leak cases
+Per-lead cooldown, max-messages, dedup and circuit-breaker guardrails with an audit log. Ports outreach-orchestrator guard engine.
 
-### Candidate links (POSSIBLY_SAME) + confidence scoring
+### Sequence Definition & Enrollment
 
-Represent uncertain matches as POSSIBLY_SAME candidate links with confidence and provenance — never a forced merge.
+CRUD for sequences, templates and steps; event-based enrollment (form-submit, reply, stage-change) via triggers. Ports outreach-sequence + sequence-trigger; drops the base-agent registration coupling.
 
-**Acceptance Criteria:**
-Candidate links carry confidence + provenance
-No automatic destructive merge occurs
-Links queryable by confidence band
+### Step Executor & Send-Window Scheduler
 
-### Probabilistic matching engine
+Durable tick loop that advances sequence_execution_steps, gates by send-window/quiet-hours, enqueues sends idempotently, and emits via sdk-notification. Ports sequence-step-executor + send-queue + send-window.
 
-Add probabilistic matching over name/DOB/address/phone/external IDs alongside the existing deterministic resolver.
+### Reactive Control: pause / stop / replace-CTA
 
-**Acceptance Criteria:**
-Probabilistic matcher returns candidate matches
-Deterministic path unchanged
-Configurable match thresholds
+Pause-on-reply, stop-on-opt-out, stop-on-payment, and replace-CTA-on-booking. Cancels queued steps and records reason. Ports sequence-cancellation + reply/booking triggers.
 
-### OC-11 lint rule + gateway/SDK wiring
+### Reminders & No-Show Rescue
 
-Lint rule fails any governed-data handler that reads an obligation-bearing decision but serializes raw rows. Wire enforcement into api-gateway read paths.
+Timed 24h/2h/15m pre-meeting reminders, +10-min no-show detection, and rescue/rebook flow. New behavior beyond projex_crm's confirmation-only reminders.
 
-**Acceptance Criteria:**
-Lint flags raw serialization of obligation-bearing reads
-Gateway applies obligations on governed reads
-CI blocks on OC-11 violations
+### Two-Way Calendar Provider Sync
 
-### Gateway principal-token minting
+Real Google/Microsoft two-way sync via connector-gworkspace/microsoft365 (replaces projex_crm's simulated sync), with event IDs and reschedule/cancel propagation.
 
-api-gateway mints a signed, audience-bound, short-TTL JWT from the resolved IdentityContext (sub, app_id, tenant_id, personas, scopes, aud, exp).
+### Suppression List & Opt-Out
 
-**Acceptance Criteria:**
-Gateway issues a signed principal token post-auth
-Token is audience-bound and short-TTL
-Token claims derive only from verified IdentityContext
+Token-based public unsubscribe with reason codes, DNC, and reason-tagged suppression list with pre-send enforcement. Tenant + optional cross-org global scope. Ports unsubscribe + suppressionService.
 
-### Downstream token verification middleware
+### Bounce/Complaint Webhook Processing
 
-Shared middleware verifies iss/aud/exp/signature and rejects forwarded user headers as identity sources.
+HMAC-verified provider webhooks (SendGrid/Mailgun/Postmark), hard/soft bounce + complaint classification, and auto-suppression. Ports webhook-security + bounce-sync workers.
 
-**Acceptance Criteria:**
-Services verify token signature and claims
-Forwarded identity headers are ignored
-Invalid/expired tokens are rejected with audit
+### Inbound Reply Sync (IMAP)
 
-### Signing-key management & rotation (sdk-vault)
+IMAP polling with In-Reply-To/References thread-matching, reply capture, and reply events that pause sequences. Ports inbox-sync.
 
-Principal-token signing keys are issued and rotated through sdk-vault; rotation does not invalidate in-flight short-TTL tokens.
+### Deliverability Guard & Reputation
 
-**Acceptance Criteria:**
-Signing key sourced from sdk-vault
-Key rotation scheduled and audited
-Rotation overlap honors token TTL
+Per-account bounce-rate threshold auto-pause and reputation signals surfaced to callers. Ports the account-level auto-pause logic.
 
-### Consent receipt as policy decision input
+### sdk-crm Pipeline & Deal Enrichment
 
-Pass active consent receipts + requested purpose into sdk-policy evaluation as a first-class input.
+Extend sdk-crm with configurable funnel stages, richer deal fields (priority, fit, pain/impact/outcome, stakeholders, decision date, offer version, forecast), and stage-aging detection. From projex_crm funnel.service.
 
-**Acceptance Criteria:**
-Policy input includes purpose + consent receipts
-Decision considers consent presence/expiry
-Consent-derived denials carry reason=consent_absent
+### sdk-crm NEXT-Action Enforcement
 
-### Purpose-gated fail-closed enforcement
+Model a mandatory NEXT action (type, owner, due-time, purpose, intended outcome) on non-terminal records and a save-gate that blocks save/stage-advance when NEXT is missing.
 
-For purpose-bound resources, missing or revoked consent yields DENY (fail closed), with audited reason.
+### sdk-notification Email-Send Routing
 
-**Acceptance Criteria:**
-Purpose-bound resource without consent denies
-Revocation immediately affects decisions
-All consent denials are audited
-
-### Healthcare purpose taxonomy (HIPAA TPO + 42 CFR Part 2)
-
-Register healthcare purpose codes (treatment/payment/operations/research/marketing) and 42 CFR Part 2 segmented-consent handling for substance-use records.
-
-**Acceptance Criteria:**
-TPO purpose codes registered
-Part 2 segmented consent enforced
-Marketing purpose denied for PHI without explicit consent
-
-### Fail-closed PDP on evaluator error
-
-On evaluator unavailability, sensitive-class access denies; low-risk classes may serve short-TTL cached decisions.
-
-**Acceptance Criteria:**
-Evaluator error denies sensitive access
-Low-risk cached decisions bounded by TTL
-Degraded decisions audited
-
-### Audited break-glass via sdk-approval
-
-Explicit emergency access path: scoped, time-bounded, approval-gated, certificate-of-action, fully audited.
-
-**Acceptance Criteria:**
-Break-glass requires sdk-approval grant
-Access is scoped and time-bounded
-Certificate-of-action + audit emitted
-
-### resource_registry schema + read API (sdk-resource-registry)
-
-Schema with owner/team/repo/terraform_module/cloud_account/cost_center/classification/network_zone/created_by/approved_by/expires_at; thin read API surfaces ownership to admin app.
-
-**Acceptance Criteria:**
-resource_registry table created (additive migration)
-Read API returns ownership for a resource_id
-Non-null owner + approved_by required
-
-### GitOps reconciler + orphan quarantine + OC-12 lint
-
-Terraform/OpenTofu state diff quarantines live-but-unregistered or past-expiry resources and raises ownership alerts; OC-12 lint blocks unregistered provisioning.
-
-**Acceptance Criteria:**
-Orphan/expired resources are quarantined
-Ownership alert raised on violation
-OC-12 lint blocks unregistered resources
-
-### Steward review queue (sdk-approval-governed)
-
-High-risk/ambiguous matches queue to a steward surface; stewards adjudicate via sdk-approval delegation.
-
-**Acceptance Criteria:**
-Ambiguous matches queue for stewardship
-Steward decision recorded with reason
-Delegation governed by sdk-approval
-
-### Reversible merge/unmerge as compensating events
-
-Merges and unmerges are event-sourced and reversible; no destructive deletes.
-
-**Acceptance Criteria:**
-Merge emits a reversible event
-Unmerge emits a compensating event
-Full history preserved + auditable
-
-### Match-quality calibration & monitoring
-
-Track match precision/recall and calibration (e.g., ECE); surface unresolved-identity and merge-reversal metrics.
-
-**Acceptance Criteria:**
-Calibration metric computed and surfaced
-Unresolved/merge-reversal metrics exposed
-Threshold drift alerts emitted
-
-### Additive-only contracts & migrations (back-compat)
-
-Ensure obligations/token/consent-input are optional in @projexlight/contracts and all DB migrations are additive; no breaking schema changes.
-
-**Acceptance Criteria:**
-New contract fields are optional/additive
-Migrations are additive-only (no drops/renames)
-Existing consumers compile unchanged
-
-### Cross-SDK integration & regression suite
-
-Integration tests across identity-resolver → policy(+obligations) → consent → gateway(token) → audit, asserting no regression in existing flows.
-
-**Acceptance Criteria:**
-End-to-end happy-path test green
-Pre-P10 behavior preserved where obligations absent
-Cross-tenant isolation tests still pass
-
-### CI gate: full build + isolation/chaos suites green
-
-CI requires pnpm -w build plus the agent-isolation/chaos suites to pass before P10 changes merge.
-
-**Acceptance Criteria:**
-CI runs full workspace build
-Isolation/chaos suites execute and pass
-Merge blocked on red
-
-### End-to-end OTel tracing (frontend -> gateway -> policy -> MDM -> DB)
-
-Instrument OpenTelemetry spans across the full request path and propagate trace context through policy/MDM/consent calls.
-
-**Acceptance Criteria:**
-Single trace spans frontend->gateway->policy->MDM->DB
-Trace context propagated across SDK calls
-
-### Grafana/Prometheus dashboards by observability taxonomy
-
-Prometheus exporters + Grafana dashboards organized by the 8 observability types (infra, service, security, data, MDM, policy, consent, audit).
-
-**Acceptance Criteria:**
-Prometheus metrics exported
-Dashboards grouped by taxonomy
-
-### Security observability + detection rules over SIEM forwarder
-
-Detection rules over audit/trace streams (auth failures, privilege change, suspicious access) routed to SIEM/XDR via the existing vault SIEM forwarder.
-
-**Acceptance Criteria:**
-Detection rules defined
-Alerts routed to SIEM/XDR
-
-### MDM + consent observability metrics
-
-Surface MDM observability (match confidence, unresolved identities, merge reversals) and consent observability (consent checked, purpose, receipt id).
-
-**Acceptance Criteria:**
-MDM match/unresolved/reversal metrics exposed
-Consent decision metrics exposed
-
-### Add device_trust + network_zone to principal context
-
-Add device_trust and network_zone as first-class fields on IdentityContext/principal; capture them at the gateway.
-
-**Acceptance Criteria:**
-Fields present on principal
-Captured at gateway, additive/optional
-
-### Propagate purpose into decision context
-
-Thread requested purpose through to the policy/consent decision input (consumed by E3 consent-gating).
-
-**Acceptance Criteria:**
-Purpose available to policy + consent
-Backward compatible when absent
+Route the ported email-send transport through sdk-notification's existing SES/SMTP adapters (and Twilio for SMS) so sdk-sequence delivers all channels through one notification surface with templates + quiet hours.
 
 ## Tasks
 
-### Create resource_registry table (additive migration)
+### sdk-sequence: schema + migrations (sequences, steps, templates, triggers)
 
-Schema: resource_id/type/environment/owner/team/repo/terraform_module/cloud_account/cost_center/data_classification/network_zone/created_by/approved_by/expires_at.
-
-**Acceptance Criteria:**
-- Additive migration
-- owner + approved_by non-null
-
-### POSSIBLY_SAME candidate-link model + confidence/provenance
-
-Model uncertain matches as POSSIBLY_SAME links carrying confidence and provenance; never a forced merge.
+Create db-runtime migrations for sequence.sequence, .step, .template, .execution_step, .trigger, ported/adapted from projex_crm outreach_* tables. Expose migrationsDir.
 
 **Acceptance Criteria:**
-- Links carry confidence + provenance
-- No auto destructive merge
+- Migrations apply cleanly on boot
+- Tables cover steps, templates, triggers, execution state
 
-### Verify migrations are additive-only (no drops/renames)
+### sdk-deliverability: suppression list + opt-out tokens (schema + service)
 
-Audit all P10 DB migrations to be additive-only; no column drops/renames that break running services.
-
-**Acceptance Criteria:**
-- No destructive migrations
-- Auto-migrate on deploy stays green
-
-### Extend EvaluatePolicyResult with optional obligations
-
-Add optional obligations { mask_fields[], row_filter{}, audit_level, ttl_seconds } to policy.model.ts EvaluatePolicyResult. Absent obligations must preserve today's allow/deny behavior exactly.
+Reason-tagged suppression list, token unsubscribe, DNC; tenant + optional global scope. Port unsubscribe + suppressionService.
 
 **Acceptance Criteria:**
-- obligations is optional and additive
-- allow/deny-only callers unchanged
-- type exported from @projexlight/contracts
 
-### Emit obligations into DecisionRecord audit
+### sdk-crm: funnel stages + richer deal fields + stage-aging (schema)
 
-Persist the returned obligations on the DecisionRecord so policy observability can see mask/filter/audit_level/ttl per decision.
+Extend sdk-crm schema with configurable funnel stages and deal fields (priority, fit, pain/impact/outcome, stakeholders, decision_date, offer_version, forecast); stage-aging support.
 
 **Acceptance Criteria:**
-- DecisionRecord stores obligations
-- Audit query surfaces obligations
 
-### Build obligation enforcement helper (mask + row_filter)
+### sdk-scheduling: public booking + confirmation routes
 
-Shared library that applies mask_fields and row_filter to a result set before serialization; consumed by gateway and data-reading SDKs.
+Public unauthenticated booking page endpoints (slug/book) and confirmation flow. Port public-booking.routes.
 
 **Acceptance Criteria:**
-- Masks declared fields server-side
-- Injects row filters
-- Pure + unit-testable
 
-### Wire obligation enforcement into api-gateway read paths
+### sdk-deliverability: provider bounce/complaint webhooks (HMAC verify + classify + auto-suppress)
 
-api-gateway applies the enforcement helper on governed reads so masking/filtering happens centrally.
+SendGrid/Mailgun/Postmark webhook verification, hard/soft/complaint classification, auto-suppression. Port webhook-security + bounce-sync.
 
 **Acceptance Criteria:**
-- Gateway applies obligations on governed reads
-- No regression for non-governed reads
 
-### Mint signed audience-bound principal token at gateway
+### sdk-sequence: definition & enrollment service + Fastify routes
 
-api-gateway mints a signed short-TTL JWT from the resolved IdentityContext (sub, app_id, tenant_id, personas, scopes, aud, exp) after authentication.
+Port outreach-sequence + sequence-trigger CRUD/enrollment into a Fastify server.registerRoutes surface; drop base-agent coupling. Event-based enrollment (form-submit, reply, stage-change).
 
 **Acceptance Criteria:**
-- Signed token issued post-auth
-- Audience-bound + short TTL
 
-### Derive token claims from verified IdentityContext only
+### sdk-sequence: step executor tick loop (send-window gating + idempotent enqueue)
 
-Token claims must come solely from the server-resolved IdentityContext, never from user-supplied input.
+Port sequence-step-executor + send-queue + send-window; durable tick that advances execution steps, respects quiet hours, and enqueues idempotently. Emit via sdk-notification.
 
 **Acceptance Criteria:**
-- No user-supplied claim trusted
 
-### Principal-token verification middleware (iss/aud/exp/sig)
+### sdk-sequence: reactive control (pause-on-reply, stop-on-optout/payment, replace-CTA)
 
-Shared middleware verifying issuer, audience, expiry and signature for downstream services.
-
-**Acceptance Criteria:**
-- Verifies sig + claims
-- Rejects invalid/expired with audit
-
-### Reject forwarded identity headers as identity source
-
-Services must ignore user-forwarded identity headers and trust only the verified principal token.
+Port sequence-cancellation + reply/booking triggers; pause/stop/replace with reason capture and queued-step cancellation.
 
 **Acceptance Criteria:**
-- Forwarded identity headers ignored
 
-### Source + rotate signing key via sdk-vault
+### sdk-sequence: frequency-cap + circuit-breaker guard with audit log
 
-Principal-token signing keys issued and rotated through sdk-vault.
-
-**Acceptance Criteria:**
-- Key from sdk-vault
-- Rotation audited
-
-### Honor TTL overlap during key rotation
-
-Rotation must not invalidate in-flight short-TTL tokens (dual-key verification window).
+Port outreach-orchestrator guard engine: per-lead cooldown, max-messages, dedup, circuit breaker, guard audit log.
 
 **Acceptance Criteria:**
-- In-flight tokens stay valid through rotation
 
-### Add purpose + consent receipts to policy evaluation input
+### sdk-scheduling: availability slotting + schema (business hours, IANA tz, meeting types)
 
-Pass requested purpose and active consent receipts into sdk-policy evaluation as a first-class input.
-
-**Acceptance Criteria:**
-- Input carries purpose + receipts
-- Decision considers consent presence/expiry
-
-### Set reason=consent_absent on consent-derived denials
-
-Denials caused by missing/expired consent carry a distinct, auditable reason code.
+Port calendar.service availability with tz math, double-book prevention, meeting types (15/30/30/60). Add scheduling schema (appointments, scheduling_links).
 
 **Acceptance Criteria:**
-- Distinct reason code surfaced + audited
 
-### Fail-closed deny for purpose-bound resource without consent
+### sdk-scheduling: booking lifecycle + ICS + scheduling links
 
-For purpose-bound resources, a missing/revoked receipt yields DENY (fail closed).
-
-**Acceptance Criteria:**
-- No consent -> deny for purpose-bound resource
-
-### Propagate consent revocation into live decisions
-
-Revoking consent immediately affects subsequent decisions.
+Create/confirm/reschedule/cancel bookings; ICS invite generation; confirmation emails to both parties (via sdk-notification). Port booking-notification + followup-scheduling.
 
 **Acceptance Criteria:**
-- Revocation reflected in next decision
 
-### Register HIPAA TPO purpose codes
+### sdk-scheduling: timed reminders + no-show detection & rebook
 
-Register treatment/payment/operations/research/marketing purpose codes in sdk-consent.
-
-**Acceptance Criteria:**
-- TPO codes registered
-- Marketing denied for PHI without explicit consent
-
-### Enforce 42 CFR Part 2 segmented consent for substance-use records
-
-Segmented-consent handling for Part 2 substance-use data, distinct from general PHI consent.
+24h/2h/15m pre-meeting reminders; +10-min no-show marking; rescue/rebook task creation.
 
 **Acceptance Criteria:**
-- Part 2 records gated separately
 
-### Fail-closed on evaluator error for sensitive classes
+### sdk-scheduling: two-way Google/Microsoft sync via connectors
 
-On policy evaluator unavailability, sensitive-class access denies.
-
-**Acceptance Criteria:**
-- Evaluator error -> deny sensitive
-- Degraded decisions audited
-
-### Short-TTL cached decisions for low-risk classes
-
-Low-risk classes may serve bounded short-TTL cached decisions during evaluator outage.
+Replace simulated sync with real connector-gworkspace/microsoft365 two-way sync; store external event IDs; propagate reschedule/cancel.
 
 **Acceptance Criteria:**
-- Cache bounded by TTL
 
-### Break-glass grant via sdk-approval (scoped, time-bounded)
+### sdk-deliverability: pre-send suppression enforcement API
 
-Emergency access requires an sdk-approval grant; access is scoped and time-bounded.
-
-**Acceptance Criteria:**
-- Requires approval
-- Scoped + time-bounded
-
-### Emit certificate-of-action + audit on break-glass
-
-Every break-glass use emits a certificate-of-action and full audit record.
+isSuppressed/suppress/unsuppress/list surface enforced before every send across channels.
 
 **Acceptance Criteria:**
-- Certificate + audit emitted
 
-### GitOps reconciler: quarantine orphan/expired resources
+### sdk-deliverability: IMAP inbound reply sync + reply events
 
-Terraform/OpenTofu state diff quarantines live-but-unregistered or past-expiry resources and raises ownership alerts.
-
-**Acceptance Criteria:**
-- Orphan/expired quarantined
-- Alert raised
-
-### Probabilistic matcher over name/DOB/address/phone/ext-ID
-
-Add probabilistic matching alongside the deterministic resolver for multi-source patient data.
+IMAP polling with In-Reply-To/References thread-matching; capture replies; emit reply events that pause sequences. Port inbox-sync.
 
 **Acceptance Criteria:**
-- Returns candidate matches
-- Deterministic path unchanged
 
-### Configurable thresholds; deterministic path unchanged
+### sdk-deliverability: bounce-rate auto-pause + reputation signals
 
-Match thresholds are configurable; deterministic resolution remains the default fast path.
+Per-account bounce-rate threshold auto-pause; expose reputation signals to callers.
 
 **Acceptance Criteria:**
-- Thresholds configurable
 
-### Steward review queue surface
+### sdk-crm: pipeline/deal service + Fastify routes + stage-aging detection
 
-High-risk/ambiguous matches queue to a steward review surface.
-
-**Acceptance Criteria:**
-- Ambiguous matches queued
-
-### Steward adjudication via sdk-approval delegation
-
-Stewards adjudicate queued matches; delegation governed by sdk-approval; decision recorded with reason.
+Port funnel.service pipeline/deal CRUD + board queries + 5-business-day stale detection into sdk-crm.
 
 **Acceptance Criteria:**
-- Decision recorded + reason
-- Delegation via sdk-approval
 
-### Merge as reversible event
+### sdk-crm: NEXT-action model + save-gate enforcement
 
-Merging two records emits a reversible, event-sourced merge event (no destructive delete).
+Mandatory NEXT action (type, owner, due-time, purpose, outcome) on non-terminal records; save-gate blocks save/stage-advance when missing.
 
 **Acceptance Criteria:**
-- Merge emits reversible event
 
-### Unmerge compensating event (no destructive delete)
+### sdk-notification: route sequence email/SMS sends through SES/SMTP/Twilio adapters
 
-Unmerge emits a compensating event restoring prior state; full history preserved.
-
-**Acceptance Criteria:**
-- Unmerge compensates
-- History preserved + auditable
-
-### Compute + surface calibration (ECE) metric
-
-Compute expected-calibration-error and surface it for match quality.
+Adapter glue so sdk-sequence delivers email (SES/SMTP) and SMS (Twilio) via sdk-notification with templates + quiet hours; unify channels under one transport.
 
 **Acceptance Criteria:**
-- ECE computed + surfaced
 
-### Unresolved/merge-reversal metrics + drift alerts
+### sdk-sequence: executor integration tests (send-window, dedup, retry)
 
-Expose unresolved-identity and merge-reversal metrics; alert on threshold drift.
-
-**Acceptance Criteria:**
-- Metrics exposed
-- Drift alerts emitted
-
-### Instrument OTel spans across the request path
-
-Add OpenTelemetry spans at frontend, gateway, policy, MDM and DB boundaries.
+Tests for due-step send inside window, deferral outside quiet hours, and no duplicate send on retry.
 
 **Acceptance Criteria:**
-- Spans emitted at each boundary
-
-### Propagate trace context through policy/MDM/consent calls
-
-Thread W3C trace context across internal SDK calls so one trace_id spans the path.
-
-**Acceptance Criteria:**
-- Single trace_id end-to-end
-
-### Wire Prometheus metric exporters
-
-Expose Prometheus metrics for infra/service/policy/consent/MDM/audit signals.
-
-**Acceptance Criteria:**
-- Metrics scrapeable by Prometheus
-
-### Define security detection rules over audit/trace streams
-
-Rules for auth failures, privilege change, suspicious access.
-
-**Acceptance Criteria:**
-- Detection rules defined
-
-### Route detections to SIEM/XDR via vault forwarder
-
-Reuse the existing vault SIEM forwarder to route detections to SIEM/XDR.
-
-**Acceptance Criteria:**
-- Detections routed to SIEM/XDR
-
-### Expose MDM match-confidence/unresolved/reversal metrics
-
-Surface EMPI observability: match confidence distribution, unresolved identities, merge reversals.
-
-**Acceptance Criteria:**
-- MDM metrics exposed
-
-### Expose consent-checked/purpose/receipt metrics
-
-Surface consent observability: consent checked, purpose, receipt id.
-
-**Acceptance Criteria:**
-- Consent decision metrics exposed
-
-### Add device_trust + network_zone fields to principal
-
-Add optional device_trust and network_zone fields to IdentityContext/principal (additive, backward compatible).
-
-**Acceptance Criteria:**
-- Fields optional/additive
-- No change when absent
-
-### Capture device posture + network zone at gateway
-
-Populate device_trust and network_zone at the gateway during principal resolution.
-
-**Acceptance Criteria:**
-- Gateway populates fields
-
-### Thread purpose through to policy/consent decision input
-
-Make requested purpose available to policy and consent evaluation (consumed by E3 consent-gating).
-
-**Acceptance Criteria:**
-- Purpose available to policy + consent
-- Backward compatible
-
-### Resource-ownership read API (sdk-resource-registry)
-
-Thin read API surfacing ownership for a resource_id to the admin app.
-
-**Acceptance Criteria:**
-- GET ownership by resource_id
-
-### Query candidate links by confidence band
-
-API to retrieve candidate links filtered by confidence band.
-
-**Acceptance Criteria:**
-- Filter by confidence band
-
-### Unit tests for masking/row-filter leak cases
-
-Test suite asserting masked fields never reach the wire and row filters are enforced even when callers forget to apply them.
-
-**Acceptance Criteria:**
-- Leak cases covered
-- Row-filter bypass cases covered
-
-### Cross-SDK e2e: resolver -> policy -> consent -> gateway -> audit
-
-Integration test covering the full P10 path; asserts existing flows still pass.
-
-**Acceptance Criteria:**
-- End-to-end happy path green
-- Cross-tenant isolation tests pass
-
-### Assert pre-P10 behavior preserved when obligations absent
-
-Regression test: with no obligations/consent-input/token, behavior matches pre-P10 exactly.
-
-**Acceptance Criteria:**
-- No behavior change when features unused
-
-### CI gate: pnpm -w build
-
-CI runs the full workspace build and blocks merge on failure.
-
-**Acceptance Criteria:**
-- Full build runs in CI
-- Merge blocked on red
-
-### CI gate: agent-isolation/chaos suites + block on red
-
-CI runs the agent-isolation and chaos suites for the affected SDKs and blocks merge on failure.
-
-**Acceptance Criteria:**
-- Isolation/chaos suites run
-- Merge blocked on red
-
-### Add OC-11 lint rule for raw serialization of governed reads
-
-Lint rule that fails any governed-data handler reading an obligation-bearing decision but serializing raw rows.
-
-**Acceptance Criteria:**
-- Lint flags raw serialization
-- CI blocks on OC-11 violation
-
-### OC-12 lint blocks unregistered provisioning
-
-Lint/policy that blocks provisioning a resource without a registry row (no owner = no resource).
-
-**Acceptance Criteria:**
-- Unregistered provisioning blocked
-
-### Make obligations/token/consent fields optional in contracts
-
-Ensure new fields in @projexlight/contracts are optional/additive so existing consumers compile unchanged.
-
-**Acceptance Criteria:**
-- New fields optional/additive
-- Existing consumers compile unchanged
-
-### Build Grafana dashboards for the 8 observability types
-
-Dashboards grouped by infra/service/security/data/MDM/policy/consent/audit.
-
-**Acceptance Criteria:**
-- Dashboards grouped by taxonomy
 

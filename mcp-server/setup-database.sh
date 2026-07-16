@@ -204,7 +204,7 @@ version: '3.8'
 
 services:
   postgres:
-    image: postgis/postgis:18-master
+    image: postgis/postgis:18-3.6
     container_name: projexlight-postgres
     environment:
       - POSTGRES_USER=${DB_USER}
@@ -236,7 +236,7 @@ version: '3.8'
 
 services:
   mysql:
-    image: mysql:8.0
+    image: mysql:8.4
     container_name: projexlight-mysql
     environment:
       - MYSQL_ROOT_PASSWORD=${DB_PASS}
@@ -271,7 +271,7 @@ version: '3.8'
 
 services:
   mariadb:
-    image: mariadb:10.11
+    image: mariadb:11.8
     container_name: projexlight-mariadb
     environment:
       - MYSQL_ROOT_PASSWORD=${DB_PASS}
@@ -306,7 +306,7 @@ version: '3.8'
 
 services:
   mongodb:
-    image: mongo:6.0
+    image: mongo:8.0
     container_name: projexlight-mongodb
     environment:
       - MONGO_INITDB_ROOT_USERNAME=${DB_USER}
@@ -336,7 +336,7 @@ version: '3.8'
 
 services:
   redis:
-    image: redis:7-alpine
+    image: redis:8-alpine
     container_name: projexlight-redis
     command: redis-server --requirepass ${DB_PASS}
     ports:
@@ -362,7 +362,7 @@ version: '3.8'
 
 services:
   cassandra:
-    image: cassandra:4.1
+    image: cassandra:5.0
     container_name: projexlight-cassandra
     environment:
       - CASSANDRA_CLUSTER_NAME=projexlight

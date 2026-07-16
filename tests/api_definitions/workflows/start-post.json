@@ -14,6 +14,9 @@
   "testability": "auto",
   "dependsOn": [
     "POST /api/auth/register",
+    "POST /api/personas",
+    "POST /policy/:id/evaluate",
+    "POST /scim/v2/Users",
     "POST /api/workflows/definitions"
   ],
   "testCases": [
@@ -27,11 +30,11 @@
         "version": "1.0.0",
         "namespace": "admin",
         "envelope": {
-          "persona_id": "{{var:person_id}}",
-          "trace_id": "{{var:trace_id}}",
+          "persona_id": "{{cache:personas.create.response.data.persona.persona_id}}",
+          "trace_id": "{{cache:policy.evaluate.response.data.trace_id}}",
           "actor": {
             "kind": "service",
-            "id": "{{var:person_id}}"
+            "id": "{{cache:scim.create.response.data.person_id}}"
           }
         },
         "input": {

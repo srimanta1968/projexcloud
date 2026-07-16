@@ -6,19 +6,32 @@
   "_instructions": {
     "activeEnvironment": "Set to 'development' for local testing, 'staging' or 'production' for remote environments",
     "urlNote": "URLs are automatically translated: localhost -> host.docker.internal when running in Docker containers",
-    "usage": "1. Update baseUrl/apiUrl to match your app ports, 2. Set activeEnvironment, 3. Run ./run-all-tests.sh"
+    "usage": "1. Update baseUrl/apiUrl to match your app ports, 2. Set activeEnvironment, 3. Run ./run-all-tests.sh",
+    "variables": "Reference variables in api_definitions as {{var:name}} (payload/headers/path/query) and {{baseUrl}}/{{apiUrl}} anywhere. Resolved at runtime AFTER {{cache:...}} dependency lookup. Put SAME-across-all-envs values in the top-level 'variables'; put values that DIFFER per environment in that environment's 'variables' (env overrides global on name clash)."
+  },
+
+  "variables": {
+    "_comment": "GLOBAL variables — apply to EVERY environment. Add values that are identical across environments (api_version, fixed header values, well-known sentinel IDs). Example: \"api_version\": \"v2\".",
+    "_example_api_version": "v2"
   },
 
   "environments": {
     "development": {
       "baseUrl": "http://localhost:3000",
       "apiUrl": "http://localhost:3000",
-      "description": "Local development - localhost URLs are auto-translated to host.docker.internal in Docker"
+      "description": "Local development - localhost URLs are auto-translated to host.docker.internal in Docker",
+      "variables": {
+        "_comment": "PER-ENVIRONMENT variables — override/extend the global ones for THIS env. Add values that differ per environment (seeded tenant_id/person_id/persona_id UUIDs from this env's DB). Example: \"tenant_id\": \"<dev-uuid>\".",
+        "_example_tenant_id": "REPLACE_WITH_DEV_TENANT_UUID"
+      }
     },
     "staging": {
       "baseUrl": "https://staging.example.com",
       "apiUrl": "https://api.staging.example.com",
-      "description": "Staging environment for pre-production testing"
+      "description": "Staging environment for pre-production testing",
+      "variables": {
+        "_comment": "Per-environment variables for staging (seeded IDs from the staging DB)."
+      }
     },
     "production": {
       "baseUrl": "https://www.example.com",

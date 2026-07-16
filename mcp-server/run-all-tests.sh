@@ -25,6 +25,13 @@
 #                       (e.g., development, staging, production, qa, regression)
 #                       URLs are read from environments.<name>.baseUrl and apiUrl
 #
+# Force-run:
+#   --include-manual  - Run endpoints even if their definition is testability:
+#                       manual/skip (aliases: --all-including-manual, --force-all).
+#                       Plumbed to both MCPs (env PROJEX_INCLUDE_MANUAL + payload
+#                       include_manual). Use to verify whether "manual" endpoints
+#                       actually fail on a real 3rd-party dependency vs a config gap.
+#
 # Test-user credentials (written into tests/config/test-config.json before run):
 #   --login-email <email>     Override testCredentials.default.email. Useful
 #                             when a test flow actually sends mail (password
@@ -133,10 +140,18 @@ ensure_test_config() {
         cat > "$CONFIG_FILE" << 'TESTCONFIGEOF'
 {
   "version": "1.0.0",
+  "variables": {
+    "_comment": "GLOBAL variables — apply to EVERY environment. Referenced in api_definitions as {{var:name}} (payload/headers/path/query) and resolved at runtime AFTER cache/dependency lookup. Put values that are the SAME across all environments here (e.g. api_version, fixed header values, well-known sentinel IDs).",
+    "_example_api_version": "v2"
+  },
   "environments": {
     "development": {
       "baseUrl": "http://localhost:3000",
-      "apiUrl": "http://localhost:5000"
+      "apiUrl": "http://localhost:5000",
+      "variables": {
+        "_comment": "PER-ENVIRONMENT variables — override/extend the global ones for THIS environment (env wins on name clash). Put values that DIFFER per environment here (e.g. seeded tenant_id/person_id/persona_id UUIDs from this env's database).",
+        "_example_tenant_id": "REPLACE_WITH_DEV_TENANT_UUID"
+      }
     }
   },
   "activeEnvironment": "development",
@@ -1115,19 +1130,24 @@ run_api_tests() {
             \"api_base_url\": \"$api_base_url\",
             \"environment\": \"${ENV_OVERRIDE:-${TEST_ENVIRONMENT:-development}}\",
             \"generate_report\": true,
+            \"include_manual\": ${INCLUDE_MANUAL:-false},
             \"save_results\": ${SAVE_RESULTS:-false}
         }" 2>&1 | tee "$RESULTS_DIR/api/test_run.log"
 
-    # Copy results from container
+    # Copy results from container. The Test MCP writes under /results/test-mcp
+    # (RESULTS_BASE_DIR); the interactive report lands in test-results/test-mcp/api/report.html
+    # and surfaces on the host via the /results mount. This cp is belt-and-braces.
     local container_workspace=$(get_container_workspace)
-    local container_results="/results"
+    local container_results="/results/test-mcp"
     if [ "$container_workspace" != "/workspace" ]; then
-        container_results="${container_workspace}/test-results"
+        container_results="${container_workspace}/test-results/test-mcp"
     fi
+    mkdir -p "$RESULTS_DIR/test-mcp"
+    # Copy the whole api/ folder — one timestamped report_<ts>.html per run (history).
+    docker cp "${TEST_MCP_CONTAINER}:${container_results}/api" "$RESULTS_DIR/test-mcp/" 2>/dev/null || true
     docker cp "${TEST_MCP_CONTAINER}:${container_results}/api_test_results.json" "$RESULTS_DIR/api/" 2>/dev/null || true
-    docker cp "${TEST_MCP_CONTAINER}:${container_results}/api_test_report.html" "$RESULTS_DIR/api/" 2>/dev/null || true
 
-    print_success "API test results saved to: $RESULTS_DIR/api/"
+    print_success "API test report(s): $RESULTS_DIR/test-mcp/api/ (one report_<timestamp>.html per run)"
 }
 
 run_all_tests() {
@@ -1392,6 +1412,11 @@ while [[ $# -gt 0 ]]; do
             RUN_API_TESTS="true"
             shift
             ;;
+        --include-manual|--all-including-manual|--force-all)
+            # Force-run endpoints even if their definition is testability: manual/skip.
+            INCLUDE_MANUAL="true"
+            shift
+            ;;
         *)
             FEATURE_OR_CATEGORY="$1"
             shift
@@ -1404,6 +1429,11 @@ export TEST_MODE
 export RUN_UI_TESTS
 export RUN_API_TESTS
 export ENV_OVERRIDE
+# Plumb the force-run flag to both MCPs: env var (Dev MCP api_tester reads
+# PROJEX_INCLUDE_MANUAL) + JSON field include_manual in the Test MCP payloads.
+INCLUDE_MANUAL="${INCLUDE_MANUAL:-false}"
+export INCLUDE_MANUAL
+export PROJEX_INCLUDE_MANUAL="$INCLUDE_MANUAL"
 
 # Self-heal the shared MCP if its owner project was deleted (one-shot, never loops).
 MCP_SERVER_URL="${MCP_SERVER_URL:-http://localhost:8766}"

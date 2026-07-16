@@ -402,80 +402,6 @@ sync_credentials_if_needed() {
     fi
 }
 
-# Ensure THIS project's registry entry has COMPLETE metadata (owner OR guest).
-#
-# On a fresh/empty registry the container self-registers a BARE entry
-# (projectId+apiKey+sprintId+isOwner) with projectPath/expiresAt null and
-# projectName=UUID. Null projectPath breaks set_context-by-path and trips the
-# owner-guard. This mirrors setup-all.sh's complete_project_metadata, placed here
-# too because setup-dev-mcp.sh is the lower-level script that setup-all.sh (via
-# setup_dev_mcp) and direct users both invoke. Multi-project safe: keyed on this
-# project's mcp-config.json projectId, patches only .[$pid], leaves others alone.
-complete_project_metadata() {
-    local port=${MCP_DEV_PORT:-$DEFAULT_PORT}
-    check_health || return 0
-    command -v jq &> /dev/null || return 0
-    local reg="$REGISTRY_FILE"
-    local cfg="$SCRIPT_DIR/mcp-config.json"
-    [ -f "$reg" ] || return 0
-    [ -f "$cfg" ] || return 0
-
-    local pid; pid=$(jq -r '.projectId // ""' "$cfg" 2>/dev/null)
-    [ -z "$pid" ] && return 0
-    local entry_exists; entry_exists=$(jq -r --arg p "$pid" 'has($p)' "$reg" 2>/dev/null)
-    [ "$entry_exists" = "true" ] || return 0
-
-    local exp env sid name unix_path
-    exp=$(jq -r '.expiresAt // ""' "$cfg" 2>/dev/null)
-    env=$(jq -r '.environment // .activeEnvironment // "prod"' "$cfg" 2>/dev/null)
-    sid=$(jq -r '.sprintId // ""' "$cfg" 2>/dev/null)
-    name=$(basename "$(dirname "$SCRIPT_DIR")")
-    unix_path=$(cd "$(dirname "$SCRIPT_DIR")" && pwd)
-    if [[ "$unix_path" =~ ^([A-Za-z]):(.*)$ ]]; then
-        local drive="${BASH_REMATCH[1]}" rest="${BASH_REMATCH[2]}"
-        rest="${rest//\\//}"; unix_path="/${drive,,}${rest}"
-    fi
-
-    # Skip if already complete.
-    local cur_path cur_exp cur_name
-    cur_path=$(jq -r --arg p "$pid" '.[$p].projectPath // ""' "$reg" 2>/dev/null)
-    cur_exp=$(jq -r --arg p "$pid" '.[$p].expiresAt // ""' "$reg" 2>/dev/null)
-    cur_name=$(jq -r --arg p "$pid" '.[$p].projectName // ""' "$reg" 2>/dev/null)
-    if [ "$cur_path" = "$unix_path" ] && [ -n "$cur_exp" ] && [ "$cur_name" = "$name" ]; then
-        return 0
-    fi
-
-    print_msg "$YELLOW" "[SYNC] Completing registry metadata (projectPath/expiresAt/projectName)..."
-    cp "$reg" "${reg}.bak" 2>/dev/null || true
-    local tmp="${reg}.tmp"
-    if jq --arg p "$pid" --arg path "$unix_path" --arg exp "$exp" \
-          --arg env "$env" --arg sid "$sid" --arg name "$name" '
-            if (.[$p] == null) then . else
-              .[$p].projectPath = $path
-              | .[$p].workspacePath = $path
-              | (if $exp != "" then .[$p].expiresAt = $exp else . end)
-              | .[$p].environment = $env
-              | (if $sid != "" then .[$p].sprintId = $sid else . end)
-              | (if ($name != "" and $name != $p) then .[$p].projectName = $name else . end)
-              | .[$p].tokenStatus = "active"
-            end' "$reg" > "$tmp"; then
-        mv "$tmp" "$reg"
-        docker restart "$CONTAINER_NAME" > /dev/null 2>&1 || true
-        local i
-        for i in $(seq 1 20); do
-            sleep 2
-            curl -sf "http://localhost:${port}/api/projects" > /dev/null 2>&1 && {
-                print_msg "$GREEN" "[SYNC] Registry metadata completed after $((i*2))s"; return 0; }
-        done
-        print_msg "$YELLOW" "[SYNC] Container slow to become ready after metadata completion"
-        return 0
-    else
-        rm -f "$tmp"
-        print_msg "$RED" "[SYNC] Failed to complete registry metadata via jq"
-        return 1
-    fi
-}
-
 create_sample_config() {
     cat > "$SCRIPT_DIR/mcp-config.json" << 'EOF'
 {
@@ -546,8 +472,6 @@ start_server() {
     if wait_for_health; then
         # Auto-sync credentials if mcp-config.json has changed
         sync_credentials_if_needed
-        # Ensure the registry entry has complete metadata (path/expiresAt/name).
-        complete_project_metadata
     else
         print_msg "$YELLOW" "[WARN] Server started but health check timed out - may still be initializing"
     fi
@@ -636,9 +560,6 @@ sync_credentials() {
     fi
 
     sync_credentials_if_needed
-    # Ensure the registry entry has complete metadata (path/expiresAt/name) even
-    # when the apiKey already matches (fixes the bare fresh self-registration).
-    complete_project_metadata
 
     print_msg "$GREEN" "[OK] Credential sync complete"
 }

@@ -9,7 +9,9 @@
   "sourceFile": "packages/sdk-trace/src/server/handlers/traceController.ts",
   "testability": "auto",
   "dependsOn": [
-    "POST /api/auth/signup-tenant"
+    "POST /api/auth/signup-tenant",
+    "POST /api/personas",
+    "POST /policy/:id/evaluate"
   ],
   "fieldEnums": {
     "format": ["pdf", "json"]
@@ -22,8 +24,8 @@
       },
       "payload": {
         "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
-        "requestor_persona_id": "{{var:person_id}}",
-        "trace_id": "{{var:trace_id}}",
+        "requestor_persona_id": "{{cache:personas.create.response.data.persona.persona_id}}",
+        "trace_id": "{{cache:policy.evaluate.response.data.trace_id}}",
         "format": "pdf"
       },
       "expectedStatus": 201,

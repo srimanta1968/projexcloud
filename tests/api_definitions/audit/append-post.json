@@ -25,9 +25,9 @@
         "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
         "org_id": "{{cache:auth.signup-tenant.response.data.org_id}}",
         "app_id": "{{cache:auth.signup-tenant.response.data.app_id}}",
-        "bu_id": "{{var:bu_id}}",
+        "bu_id": "{{cache:tenants.create-bu.response.data.bu.bu_id}}",
         "subject_kind": "user",
-        "subject_id": "{{var:person_id}}"
+        "subject_id": "{{cache:scim.create.response.data.person_id}}"
       },
       "expectedStatus": 201,
       "headers": {
@@ -36,7 +36,9 @@
     }
   ],
   "dependsOn": [
-    "POST /api/auth/signup-tenant"
+    "POST /api/auth/signup-tenant",
+    "POST /api/tenants/:tenant_id/bus",
+    "POST /scim/v2/Users"
   ],
   "fieldEnums": {
     "actor_kind": ["human", "service", "agent"],

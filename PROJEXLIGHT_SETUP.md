@@ -1,4 +1,4 @@
-# Sprint 2 - ProjexLight
+# Sprint3 - ProjexLight
 
 ## Prerequisites
 
@@ -74,8 +74,8 @@ Read .claude/instructions/bootstrap.md and start
 
 ## Project Info
 
-- **Sprint:** Sprint 2
-- **Tasks:** 53
+- **Sprint:** Sprint3
+- **Tasks:** 20
 - **CLI Tool:** claude
 
 ## Key Files

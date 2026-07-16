@@ -276,11 +276,9 @@ check_credential_sync() {
         return 0  # Project not registered yet
     fi
 
-    # Compare first 50 chars (API keys can be long)
-    local config_prefix="${config_api_key:0:50}"
-    local registered_prefix="${registered_api_key:0:50}"
-
-    if [ "$config_prefix" != "$registered_prefix" ]; then
+    # Bug A fix: compare the FULL key, not a 50-char prefix. Prefix compare
+    # misses tail-only drift and falsely reports "in sync", leaving credentials stale.
+    if [ "$config_api_key" != "$registered_api_key" ]; then
         warn "API key mismatch detected!"
         warn "  Config key starts with: ${config_api_key:0:20}..."
         warn "  Registered key starts with: ${registered_api_key:0:20}..."
@@ -288,6 +286,79 @@ check_credential_sync() {
     fi
 
     return 0  # Match
+}
+
+# Ensure THIS project's registry entry has COMPLETE metadata (owner OR guest).
+#
+# Why this exists: on a fresh/empty registry the container self-registers a BARE
+# entry (projectId+apiKey+sprintId+isOwner) but leaves projectPath, expiresAt and
+# projectName empty (projectName defaults to the UUID). A null projectPath then
+# (a) breaks set_context-by-path and (b) trips the owner-guard in register_project.
+#
+# Multi-project safe: setup-all.sh is always run from ONE project's mcp-server dir,
+# so CONFIG_FILE.projectId identifies exactly which entry to complete, and
+# get_unix_project_path gives THAT project's root (the same value written into
+# PROJECT_PATH_MAPPINGS for this project). We patch ONLY .[$pid] and never touch the
+# other registered projects, so owner + guests each get completed by their own run.
+complete_project_metadata() {
+    check_dev_mcp || return 0
+    command -v jq &> /dev/null || return 0
+    local reg="$REGISTRY_FILE"
+    [ -f "$reg" ] || return 0
+    [ -f "$CONFIG_FILE" ] || return 0
+
+    local pid; pid=$(jq -r '.projectId // ""' "$CONFIG_FILE" 2>/dev/null)
+    [ -z "$pid" ] && return 0
+    # Only complete an entry that already exists for THIS project's id (owner or
+    # guest). Registration itself is handled by register_project; we just fill gaps.
+    local entry_exists; entry_exists=$(jq -r --arg p "$pid" 'has($p)' "$reg" 2>/dev/null)
+    [ "$entry_exists" = "true" ] || return 0
+
+    local unix_path exp env sid name
+    unix_path=$(get_unix_project_path)
+    exp=$(jq -r '.expiresAt // ""' "$CONFIG_FILE" 2>/dev/null)
+    env=$(jq -r '.environment // .activeEnvironment // "prod"' "$CONFIG_FILE" 2>/dev/null)
+    sid=$(jq -r '.sprintId // ""' "$CONFIG_FILE" 2>/dev/null)
+    name="$PROJECT_NAME"
+
+    # Skip if already complete (path matches, expiresAt present, name not the UUID).
+    local cur_path cur_exp cur_name
+    cur_path=$(jq -r --arg p "$pid" '.[$p].projectPath // ""' "$reg" 2>/dev/null)
+    cur_exp=$(jq -r --arg p "$pid" '.[$p].expiresAt // ""' "$reg" 2>/dev/null)
+    cur_name=$(jq -r --arg p "$pid" '.[$p].projectName // ""' "$reg" 2>/dev/null)
+    if [ "$cur_path" = "$unix_path" ] && [ -n "$cur_exp" ] && [ "$cur_name" = "$name" ]; then
+        return 0
+    fi
+
+    log "Completing owner registry metadata (projectPath/expiresAt/projectName)..."
+    cp "$reg" "${reg}.bak" 2>/dev/null || true
+    local tmp="${reg}.tmp"
+    if jq --arg p "$pid" --arg path "$unix_path" --arg exp "$exp" \
+          --arg env "$env" --arg sid "$sid" --arg name "$name" '
+            if (.[$p] == null) then . else
+              .[$p].projectPath   = $path
+              | .[$p].workspacePath = $path
+              | (if $exp != "" then .[$p].expiresAt = $exp else . end)
+              | .[$p].environment = $env
+              | (if $sid != "" then .[$p].sprintId = $sid else . end)
+              | (if ($name != "" and $name != $p) then .[$p].projectName = $name else . end)
+              | .[$p].tokenStatus = "active"
+            end' "$reg" > "$tmp"; then
+        mv "$tmp" "$reg"
+        docker restart "$DEV_MCP_CONTAINER" > /dev/null 2>&1 || true
+        local i
+        for i in $(seq 1 20); do
+            sleep 2
+            curl -sf "http://localhost:${DEV_MCP_PORT}/api/projects" > /dev/null 2>&1 && {
+                log "Owner metadata completed and reloaded after $((i*2))s"; return 0; }
+        done
+        warn "Container slow to become ready after metadata completion (file already written)"
+        return 0
+    else
+        rm -f "$tmp"
+        warn "Failed to complete owner metadata via jq"
+        return 1
+    fi
 }
 
 # Overwrite apiKey in the persisted registered_projects.json and restart the
@@ -316,8 +387,22 @@ _overwrite_persisted_apikey_and_restart() {
     cp "$persisted_file" "${persisted_file}.bak" 2>/dev/null || true
 
     local tmp_file="${persisted_file}.tmp"
+    # Bug A fix: refresh metadata (expiresAt/environment/sprintId/projectName),
+    # not just apiKey. Otherwise a refreshed token keeps the OLD expiresAt and the
+    # server marks tokenStatus="expired" even though the key is valid.
+    local cfg_exp cfg_env cfg_sid cfg_name
+    cfg_exp=$(jq -r '.expiresAt // ""' "$CONFIG_FILE" 2>/dev/null)
+    cfg_env=$(jq -r '.environment // .activeEnvironment // "prod"' "$CONFIG_FILE" 2>/dev/null)
+    cfg_sid=$(jq -r '.sprintId // ""' "$CONFIG_FILE" 2>/dev/null)
+    cfg_name="$PROJECT_NAME"
     if ! jq --arg pid "$project_id" --arg key "$new_api_key" \
-            '.[$pid].apiKey = $key' "$persisted_file" > "$tmp_file"; then
+            --arg exp "$cfg_exp" --arg env "$cfg_env" --arg sid "$cfg_sid" --arg pn "$cfg_name" \
+            '.[$pid].apiKey = $key
+             | (if $exp != "" then .[$pid].expiresAt = $exp else . end)
+             | .[$pid].environment = $env
+             | (if $sid != "" then .[$pid].sprintId = $sid else . end)
+             | (if ($pn != "" and $pn != $pid) then .[$pid].projectName = $pn else . end)
+             | .[$pid].tokenStatus = "active"' "$persisted_file" > "$tmp_file"; then
         warn "Failed to update persisted apiKey via jq"
         rm -f "$tmp_file"
         return 1
@@ -410,10 +495,15 @@ auto_fix_credentials() {
     if ! check_credential_sync; then
         warn "Credential mismatch detected - auto-fixing..."
         sync_credentials
-        return $?
+        # apiKey sync already refreshes metadata; still ensure completeness below.
+    else
+        info "Credentials are in sync"
     fi
 
-    info "Credentials are in sync"
+    # Always ensure the owner entry has complete metadata (projectPath/expiresAt/
+    # projectName). The container's fresh self-registration leaves these empty even
+    # when the apiKey matches, which breaks set_context-by-path.
+    complete_project_metadata
     return 0
 }
 
@@ -1210,11 +1300,19 @@ register_project() {
     # Guard: a guest must never register under the OWNER's projectId (mis-set
     # mcp-config.json). The server also rejects this (400), but fail early + clearly.
     if [ "$is_owner" != "true" ] && command -v jq &> /dev/null; then
-        local projects_json owner_id owner_path
+        local projects_json owner_id owner_path owner_path_norm unix_project_path_cmp
         projects_json=$(curl -sf "http://localhost:${DEV_MCP_PORT}/api/projects" 2>/dev/null || echo "")
         owner_id=$(echo "$projects_json" | jq -r '.projects[]? | select(.isOwner==true) | .projectId' 2>/dev/null | head -1)
         owner_path=$(echo "$projects_json" | jq -r '.projects[]? | select(.isOwner==true) | .projectPath' 2>/dev/null | head -1)
-        if [ -n "$owner_id" ] && [ "$owner_id" = "$project_id" ] && [ "$owner_path" != "$unix_project_path" ]; then
+        # Normalize BOTH sides to the same Unix form before comparing. The Dev MCP
+        # self-registers the owner with a Windows-style path (C:/Users/...), while
+        # unix_project_path is /c/Users/...; a raw string compare falsely flags the
+        # owner as a mismatched guest ("path differs") even though it is the same
+        # directory. to_unix_path handles C:\..., C:/..., and already-Unix paths;
+        # trailing slashes are stripped so /path and /path/ compare equal.
+        owner_path_norm="$(to_unix_path "${owner_path%/}")"
+        unix_project_path_cmp="${unix_project_path%/}"
+        if [ -n "$owner_id" ] && [ "$owner_id" = "$project_id" ] && [ "$owner_path_norm" != "$unix_project_path_cmp" ]; then
             error "This project's id ($project_id) is the OWNER's id, but the path differs"
             error "($unix_project_path vs owner $owner_path). A guest cannot register under the"
             error "owner's id — fix this project's mcp-config.json / .projexlight/config.json projectId."
@@ -1808,8 +1906,11 @@ case "${1:-}" in
         else
             warn "Credential mismatch detected - syncing..."
             sync_credentials
-            log "Done! Try your MCP tool call again."
         fi
+        # Complete owner metadata (projectPath/expiresAt/projectName) even when the
+        # apiKey matches — fixes the bare fresh self-registration that breaks set_context.
+        complete_project_metadata
+        log "Done! Try your MCP tool call again."
         ;;
     --install-hooks)
         install_hooks
