@@ -1,0 +1,32 @@
+{
+  "name": "GET /api/handoffs/:handoff_id - Fetch one handoff",
+  "endpoint": "/api/handoffs/:handoff_id",
+  "sdk": "sdk-handoff",
+  "sourceFile": "packages/sdk-handoff/src/server/routes.ts",
+  "method": "GET",
+  "requiresAuth": true,
+  "expectedStatus": 200,
+  "taskId": "d2404591-7116-4f3e-94bf-d6490a5947a9",
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "priority": 44,
+  "testability": "auto",
+  "description": "Fetch a single handoff by id, tenant-scoped via the required tenant_id query param. Returns the full record including lifecycle timestamps (submitted_at/accepted_at/rejected_at/completed_at). 404 when the handoff is not found for the tenant.",
+  "dependsOn": [
+    "POST /api/auth/signup-tenant",
+    "POST /api/handoffs"
+  ],
+  "testCases": [
+    {
+      "name": "Get the created handoff",
+      "headers": { "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}" },
+      "pathParams": { "handoff_id": "{{cache:handoff.handoffs.create.response.data.handoff.handoff_id}}" },
+      "queryParams": { "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}" },
+      "expectedStatus": 200,
+      "expectedResponse": { "data": { "handoff": { "handoff_id": "string", "status": "string" } } }
+    }
+  ],
+  "errorCases": [
+    { "status": 400, "code": "ValidationError", "message": "tenant_id query param required", "when": "tenant_id query param missing" },
+    { "status": 404, "code": "NotFound", "message": "NotFound", "when": "handoff_id not found for the tenant" }
+  ]
+}

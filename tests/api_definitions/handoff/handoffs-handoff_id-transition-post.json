@@ -1,0 +1,40 @@
+{
+  "name": "POST /api/handoffs/:handoff_id/transition - Advance handoff status",
+  "endpoint": "/api/handoffs/:handoff_id/transition",
+  "sdk": "sdk-handoff",
+  "sourceFile": "packages/sdk-handoff/src/server/routes.ts",
+  "method": "POST",
+  "requiresAuth": true,
+  "expectedStatus": 200,
+  "taskId": "d2404591-7116-4f3e-94bf-d6490a5947a9",
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "priority": 46,
+  "testability": "auto",
+  "description": "Advance a handoff's status. Valid transitions: draft->pending (submit), pending->accepted|rejected, accepted->completed; a handoff may be cancelled from any non-terminal state. The matching lifecycle timestamp is stamped, reject_reason recorded when rejecting, and a lifecycle event emitted (handoff.submitted/accepted/rejected/completed/cancelled.v1). tenant_id and status are required. 409 InvalidTransition when the transition is not allowed from the current state; 404 if not found.",
+  "dependsOn": [
+    "POST /api/auth/signup-tenant",
+    "POST /api/handoffs"
+  ],
+  "fieldEnums": {
+    "status": ["draft", "pending", "accepted", "rejected", "completed", "cancelled"]
+  },
+  "testCases": [
+    {
+      "name": "Submit the draft handoff (draft -> pending)",
+      "headers": { "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}" },
+      "pathParams": { "handoff_id": "{{cache:handoff.handoffs.create.response.data.handoff.handoff_id}}" },
+      "payload": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "status": "pending"
+      },
+      "expectedStatus": 200,
+      "expectedResponse": { "data": { "handoff": { "handoff_id": "string", "status": "string" } } }
+    }
+  ],
+  "errorCases": [
+    { "status": 400, "code": "ValidationError", "message": "tenant_id and status are required", "when": "tenant_id or status missing from body" },
+    { "status": 400, "code": "ValidationError", "message": "invalid status", "when": "status is not one of draft|pending|accepted|rejected|completed|cancelled" },
+    { "status": 404, "code": "NotFound", "message": "NotFound", "when": "handoff_id not found for the tenant" },
+    { "status": 409, "code": "InvalidTransition", "message": "invalid transition <from> -> <to>", "when": "the requested transition is not allowed from the current status" }
+  ]
+}

@@ -318,6 +318,11 @@ import {
   getDispatchBroker,
 } from '@projexlight/sdk-dispatch';
 import { migrationsDir as assignmentMigrations, server as assignmentServer } from '@projexlight/sdk-assignment';
+// P14/P15 InboundCRM SDK batch — routes + migrations were built but not yet
+// wired into the gateway boot; mount them here so their schemas land in the
+// live DB and their HTTP surfaces are reachable.
+import { migrationsDir as sequenceMigrations, server as sequenceServer } from '@projexlight/sdk-sequence';
+import { migrationsDir as handoffMigrations, server as handoffServer } from '@projexlight/sdk-handoff';
 import { migrationsDir as leadScoringMigrations }         from '@projexlight/sdk-lead-scoring';
 import {
   migrationsDir as evidenceMigrations,
@@ -526,6 +531,8 @@ app.register(engagementServer.registerRoutes);
 app.register(eventServer.registerRoutes);
 app.register(crmServer.registerRoutes);
 app.register(assignmentServer.registerRoutes);
+app.register(sequenceServer.registerRoutes);
+app.register(handoffServer.registerRoutes);
 app.register(serviceRequestServer.registerRoutes);
 app.register(contentServer.registerRoutes);
 app.register(campaignServer.registerRoutes);
@@ -1145,6 +1152,10 @@ const start = async (): Promise<void> => {
       { sdk: 'sdk-catalog-index',       dir: catalogIndexMigrations },
       // P9.2 / Epic B — ETL ingest landing table (ingest.record).
       { sdk: 'sdk-ingest',              dir: ingestMigrations },
+      // P14/P15 — InboundCRM SDK batch. Self-contained schemas (no cross-SDK
+      // hard FKs; deal_id/subject refs are loose), so ordering is unconstrained.
+      { sdk: 'sdk-sequence',            dir: sequenceMigrations },
+      { sdk: 'sdk-handoff',             dir: handoffMigrations },
     ]);
 
     // P9.2 — incremental catalog sync (Epic A, TK-3461). OPT-IN: embedding the

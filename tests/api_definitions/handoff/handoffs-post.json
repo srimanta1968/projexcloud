@@ -1,0 +1,38 @@
+{
+  "name": "POST /api/handoffs - Create a Sales->Delivery handoff (draft)",
+  "endpoint": "/api/handoffs",
+  "sdk": "sdk-handoff",
+  "sourceFile": "packages/sdk-handoff/src/server/routes.ts",
+  "method": "POST",
+  "requiresAuth": true,
+  "expectedStatus": 201,
+  "taskId": "d2404591-7116-4f3e-94bf-d6490a5947a9",
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "priority": 40,
+  "testability": "auto",
+  "description": "Create a Sales->Delivery handoff record in status 'draft'. tenant_id and from_persona_id (the sales persona handing off) are required; deal_id (loose ref to crm.deal), cs_owner/backup personas, kickoff_ref, and the prework/promises/risks/integrations/milestones JSONB arrays are optional. Emits handoff.created.v1. The record then moves through the lifecycle via POST /api/handoffs/:handoff_id/transition.",
+  "dependsOn": [
+    "POST /api/auth/signup-tenant"
+  ],
+  "testCases": [
+    {
+      "name": "Create a draft handoff for the signup tenant",
+      "headers": { "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}" },
+      "payload": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "from_persona_id": "{{cache:auth.signup-tenant.response.data.userId}}",
+        "kickoff_ref": "kickoff-2026-Q3",
+        "promises": ["go-live in 30 days"],
+        "risks": ["data migration scope unknown"]
+      },
+      "expectedStatus": 201,
+      "expectedResponse": { "data": { "handoff": { "handoff_id": "string", "status": "string" } } }
+    }
+  ],
+  "captureResponse": {
+    "handoff.handoffs.create.response.data.handoff.handoff_id": "data.handoff.handoff_id"
+  },
+  "errorCases": [
+    { "status": 400, "code": "ValidationError", "message": "tenant_id and from_persona_id are required", "when": "tenant_id or from_persona_id missing from body" }
+  ]
+}

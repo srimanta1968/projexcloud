@@ -396,6 +396,15 @@ export const EVENT_TYPE_REGISTRY: Record<string, EventTypeMetadata> = {
   'assignment.accepted.v1':                   { event_type: 'assignment.accepted.v1',                   retention_class: 'operational', conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
   'assignment.rejected.v1':                   { event_type: 'assignment.rejected.v1',                   retention_class: 'operational', conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
 
+  /* --- sdk-handoff (P15·E2) — Sales→Delivery handoff lifecycle --- */
+  'handoff.created.v1':                       { event_type: 'handoff.created.v1',                       retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+  'handoff.updated.v1':                       { event_type: 'handoff.updated.v1',                       retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+  'handoff.submitted.v1':                     { event_type: 'handoff.submitted.v1',                     retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+  'handoff.accepted.v1':                      { event_type: 'handoff.accepted.v1',                      retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+  'handoff.rejected.v1':                      { event_type: 'handoff.rejected.v1',                      retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+  'handoff.completed.v1':                     { event_type: 'handoff.completed.v1',                     retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+  'handoff.cancelled.v1':                     { event_type: 'handoff.cancelled.v1',                     retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+
   /* --- sdk-lead-scoring (§5.4) --- */
   'lead-scoring.scored.v1':                   { event_type: 'lead-scoring.scored.v1',                   retention_class: 'operational', conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
   'lead-scoring.model.trained.v1':            { event_type: 'lead-scoring.model.trained.v1',            retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
