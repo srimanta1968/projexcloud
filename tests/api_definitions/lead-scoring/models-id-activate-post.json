@@ -2,22 +2,31 @@
   "name": "POST /api/lead-scoring/models/:id/activate — sdk-lead-scoring",
   "endpoint": "/api/lead-scoring/models/:id/activate",
   "method": "POST",
-  "requiresAuth": false,
+  "requiresAuth": true,
   "expectedStatus": 200,
   "sdk": "sdk-lead-scoring",
   "sourceFile": "packages/sdk-lead-scoring/src/server/index.ts",
   "_generated": true,
   "testability": "auto",
   "dependsOn": [
+    "POST /api/auth/register",
     "POST /api/auth/signup-tenant",
     "POST /api/lead-scoring/models"
   ],
   "statusTransitions": {
     "entity": "lead_scoring.model",
     "field": "status",
-    "flow": ["training", "active", "retired"],
+    "flow": [
+      "training",
+      "active",
+      "retired"
+    ],
     "transitions": [
-      { "from": "training", "to": "active", "via": "POST /api/lead-scoring/models/:id/activate" }
+      {
+        "from": "training",
+        "to": "active",
+        "via": "POST /api/lead-scoring/models/:id/activate"
+      }
     ]
   },
   "testCases": [
@@ -27,7 +36,10 @@
         "id": "{{cache:lead-scoring.create.response.data.model_id}}"
       },
       "payload": {},
-      "expectedStatus": 200
+      "expectedStatus": 200,
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.register.response.data.token}}"
+      }
     }
   ],
   "expectedResponse": {

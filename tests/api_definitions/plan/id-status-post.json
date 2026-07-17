@@ -2,29 +2,58 @@
   "name": "POST /plan/:id/status — semantic-service",
   "endpoint": "/plan/:id/status",
   "method": "POST",
-  "requiresAuth": false,
+  "requiresAuth": true,
   "expectedStatus": 200,
   "sdk": "semantic-service",
   "sourceFile": "services/semantic-service/src/routes.ts",
   "_generated": true,
   "testability": "auto",
   "dependsOn": [
+    "POST /api/auth/register",
     "POST /api/auth/signup-tenant",
     "POST /ontology/register",
     "POST /intent/plan"
   ],
   "fieldEnums": {
-    "status": ["proposed", "approved", "executing", "completed", "abandoned"]
+    "status": [
+      "proposed",
+      "approved",
+      "executing",
+      "completed",
+      "abandoned"
+    ]
   },
   "statusTransitions": {
     "entity": "plan",
     "field": "status",
-    "flow": ["proposed", "approved", "executing", "completed", "abandoned"],
+    "flow": [
+      "proposed",
+      "approved",
+      "executing",
+      "completed",
+      "abandoned"
+    ],
     "transitions": [
-      { "from": "proposed", "to": "approved", "via": "POST /plan/:id/status" },
-      { "from": "approved", "to": "executing", "via": "POST /plan/:id/status" },
-      { "from": "executing", "to": "completed", "via": "POST /plan/:id/status" },
-      { "from": "proposed", "to": "abandoned", "via": "POST /plan/:id/status" }
+      {
+        "from": "proposed",
+        "to": "approved",
+        "via": "POST /plan/:id/status"
+      },
+      {
+        "from": "approved",
+        "to": "executing",
+        "via": "POST /plan/:id/status"
+      },
+      {
+        "from": "executing",
+        "to": "completed",
+        "via": "POST /plan/:id/status"
+      },
+      {
+        "from": "proposed",
+        "to": "abandoned",
+        "via": "POST /plan/:id/status"
+      }
     ]
   },
   "captureResponse": {
@@ -40,7 +69,10 @@
       "payload": {
         "status": "approved"
       },
-      "expectedStatus": 200
+      "expectedStatus": 200,
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.register.response.data.token}}"
+      }
     }
   ]
 }

@@ -3,7 +3,7 @@
   "endpoint": "/api/personas/:persona_id/deactivate",
   "sdk": "sdk-persona",
   "method": "POST",
-  "requiresAuth": false,
+  "requiresAuth": true,
   "expectedStatus": 200,
   "sourceFile": "services/api-gateway/src/app.ts",
   "testability": "auto",
@@ -20,7 +20,10 @@
         "persona_id": "{{cache:personas.create.response.data.persona.persona_id}}"
       },
       "payload": {},
-      "expectedStatus": 200
+      "expectedStatus": 200,
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.register.response.data.token}}"
+      }
     }
   ],
   "captureResponse": {
@@ -29,9 +32,16 @@
   "statusTransitions": {
     "entity": "persona.persona",
     "field": "status",
-    "flow": ["active", "inactive"],
+    "flow": [
+      "active",
+      "inactive"
+    ],
     "transitions": [
-      { "from": "active", "to": "inactive", "via": "POST /api/personas/:persona_id/deactivate" }
+      {
+        "from": "active",
+        "to": "inactive",
+        "via": "POST /api/personas/:persona_id/deactivate"
+      }
     ]
   }
 }

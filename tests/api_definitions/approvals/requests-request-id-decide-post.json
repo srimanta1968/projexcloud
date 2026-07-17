@@ -3,7 +3,7 @@
   "endpoint": "/api/approvals/requests/:request_id/decide",
   "sdk": "sdk-approval",
   "method": "POST",
-  "requiresAuth": false,
+  "requiresAuth": true,
   "expectedStatus": 200,
   "sourceFile": "services/api-gateway/src/app.ts",
   "taskId": "096441a3-9cf9-40e1-90ee-d0e0019da684",
@@ -13,6 +13,7 @@
   "priority": 45,
   "testability": "auto",
   "dependsOn": [
+    "POST /api/auth/register",
     "POST /api/auth/signup-tenant",
     "POST /api/approvals/routes",
     "POST /api/approvals/requests"
@@ -28,22 +29,40 @@
         "comment": "Approved after finance review",
         "decider_persona_id": "{{cache:auth.signup-tenant.response.data.userId}}"
       },
-      "expectedStatus": 200
+      "expectedStatus": 200,
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.register.response.data.token}}"
+      }
     }
   ],
   "expectedResponse": {
     "success": "boolean"
   },
   "fieldEnums": {
-    "decision": ["approved", "rejected"]
+    "decision": [
+      "approved",
+      "rejected"
+    ]
   },
   "statusTransitions": {
     "entity": "approval.request",
     "field": "status",
-    "flow": ["pending", "approved", "rejected"],
+    "flow": [
+      "pending",
+      "approved",
+      "rejected"
+    ],
     "transitions": [
-      { "from": "pending", "to": "approved", "via": "POST /api/approvals/requests/:request_id/decide" },
-      { "from": "pending", "to": "rejected", "via": "POST /api/approvals/requests/:request_id/decide" }
+      {
+        "from": "pending",
+        "to": "approved",
+        "via": "POST /api/approvals/requests/:request_id/decide"
+      },
+      {
+        "from": "pending",
+        "to": "rejected",
+        "via": "POST /api/approvals/requests/:request_id/decide"
+      }
     ]
   },
   "captureResponse": {

@@ -2,12 +2,15 @@
   "name": "POST /api/ingest/:entity/batch — sdk-ingest",
   "endpoint": "/api/ingest/:entity/batch",
   "method": "POST",
-  "requiresAuth": false,
+  "requiresAuth": true,
   "expectedStatus": 200,
   "sdk": "sdk-ingest",
   "sourceFile": "packages/sdk-ingest/src/server.ts",
   "fieldEnums": {
-    "mode": ["upsert", "insert"]
+    "mode": [
+      "upsert",
+      "insert"
+    ]
   },
   "captureResponse": {
     "ingest.batch.response.entity": "entity",
@@ -30,7 +33,13 @@
           }
         ]
       },
-      "expectedStatus": 200
+      "expectedStatus": 200,
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.register.response.data.token}}"
+      }
     }
+  ],
+  "dependsOn": [
+    "POST /api/auth/register"
   ]
 }

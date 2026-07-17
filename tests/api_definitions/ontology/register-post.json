@@ -2,14 +2,18 @@
   "name": "POST /ontology/register — semantic-service",
   "endpoint": "/ontology/register",
   "method": "POST",
-  "requiresAuth": false,
+  "requiresAuth": true,
   "expectedStatus": 200,
   "sdk": "semantic-service",
   "sourceFile": "services/semantic-service/src/routes.ts",
   "_generated": true,
   "testability": "auto",
   "fieldEnums": {
-    "cardinality": ["1:1", "1:N", "N:N"]
+    "cardinality": [
+      "1:1",
+      "1:N",
+      "N:N"
+    ]
   },
   "captureResponse": {
     "ontology.register.response.data.ontology.ontology_id": "data.ontology.ontology_id",
@@ -28,12 +32,16 @@
           "object_types": [
             {
               "name": "Patient",
-              "attribute_schema": { "mrn": "string" },
+              "attribute_schema": {
+                "mrn": "string"
+              },
               "backed_by": "persona.persona_ext:patient_chart"
             },
             {
               "name": "Encounter",
-              "attribute_schema": { "code": "string" },
+              "attribute_schema": {
+                "code": "string"
+              },
               "backed_by": "clinical.encounter"
             }
           ],
@@ -59,7 +67,13 @@
         "bundle_ref": "@projexlight/contracts@3.1.0",
         "activate": true
       },
-      "expectedStatus": 200
+      "expectedStatus": 200,
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.register.response.data.token}}"
+      }
     }
+  ],
+  "dependsOn": [
+    "POST /api/auth/register"
   ]
 }

@@ -2,21 +2,31 @@
   "name": "POST /ontology/:id/deprecate — semantic-service",
   "endpoint": "/ontology/:id/deprecate",
   "method": "POST",
-  "requiresAuth": false,
+  "requiresAuth": true,
   "expectedStatus": 200,
   "sdk": "semantic-service",
   "sourceFile": "services/semantic-service/src/routes.ts",
   "_generated": true,
   "testability": "auto",
   "dependsOn": [
+    "POST /api/auth/register",
     "POST /ontology/register"
   ],
   "statusTransitions": {
     "entity": "semantic.ontology",
     "field": "status",
-    "flow": ["draft", "active", "deprecated", "retired"],
+    "flow": [
+      "draft",
+      "active",
+      "deprecated",
+      "retired"
+    ],
     "transitions": [
-      { "from": "active", "to": "deprecated", "via": "POST /ontology/:id/deprecate" }
+      {
+        "from": "active",
+        "to": "deprecated",
+        "via": "POST /ontology/:id/deprecate"
+      }
     ]
   },
   "captureResponse": {
@@ -31,7 +41,10 @@
       "payload": {
         "reason": "superseded by healthcare-core 2.0.0"
       },
-      "expectedStatus": 200
+      "expectedStatus": 200,
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.register.response.data.token}}"
+      }
     }
   ]
 }

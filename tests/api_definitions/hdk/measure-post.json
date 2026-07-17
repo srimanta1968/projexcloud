@@ -2,18 +2,27 @@
   "name": "POST /api/hdk/measure — hdk-measure",
   "endpoint": "/api/hdk/measure",
   "method": "POST",
-  "requiresAuth": false,
+  "requiresAuth": true,
   "expectedStatus": 201,
   "sdk": "hdk-measure",
   "sourceFile": "packages/hdk-measure/src/server/index.ts",
   "_generated": true,
   "testability": "auto",
   "dependsOn": [
+    "POST /api/auth/register",
     "POST /api/auth/signup-tenant"
   ],
   "fieldEnums": {
-    "kind": ["area", "distance", "volume"],
-    "accuracy_class": ["high", "medium", "low"]
+    "kind": [
+      "area",
+      "distance",
+      "volume"
+    ],
+    "accuracy_class": [
+      "high",
+      "medium",
+      "low"
+    ]
   },
   "captureResponse": {
     "measure.create.response.data.measurement_id": "data.measurement_id",
@@ -32,7 +41,10 @@
         "captured_at": "{{dynamic:pastdatetime}}",
         "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}"
       },
-      "expectedStatus": 201
+      "expectedStatus": 201,
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.register.response.data.token}}"
+      }
     }
   ]
 }

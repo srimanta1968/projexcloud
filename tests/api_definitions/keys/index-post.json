@@ -3,17 +3,23 @@
   "endpoint": "/api/keys",
   "sdk": "sdk-api-keys",
   "method": "POST",
-  "requiresAuth": false,
+  "requiresAuth": true,
   "expectedStatus": 200,
   "sourceFile": "services/api-gateway/src/app.ts",
   "testability": "auto",
   "dependsOn": [
+    "POST /api/auth/register",
     "POST /api/auth/signup-tenant"
   ],
   "statusTransitions": {
     "entity": "api-key",
     "field": "status",
-    "flow": ["active", "rotating", "revoked", "expired"],
+    "flow": [
+      "active",
+      "rotating",
+      "revoked",
+      "expired"
+    ],
     "transitions": [
       {
         "from": "none",
@@ -30,7 +36,10 @@
         "name": "production-integration-key",
         "scope": "crm.contact.read"
       },
-      "expectedStatus": 200
+      "expectedStatus": 200,
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.register.response.data.token}}"
+      }
     }
   ],
   "expectedResponse": {

@@ -4,12 +4,13 @@
   "sdk": "sdk-command",
   "sourceFile": "services/api-gateway/src/app.ts",
   "method": "POST",
-  "requiresAuth": false,
+  "requiresAuth": true,
   "expectedStatus": 200,
   "taskId": "16d543f8-4b54-44a9-b3d6-a3fa7ddfa83d",
   "sprintId": "efcf9cbd-5e84-469e-946e-efcabf8c88e1",
   "priority": 46,
   "dependsOn": [
+    "POST /api/auth/register",
     "POST /api/auth/signup-tenant",
     "POST /api/assets",
     "POST /api/assets/:asset_id/credentials",
@@ -19,10 +20,22 @@
   "statusTransitions": {
     "entity": "command.command",
     "field": "status",
-    "flow": ["dispatched", "acked", "failed"],
+    "flow": [
+      "dispatched",
+      "acked",
+      "failed"
+    ],
     "transitions": [
-      { "from": "dispatched", "to": "acked", "via": "POST /api/commands/:command_id/ack" },
-      { "from": "dispatched", "to": "failed", "via": "POST /api/commands/:command_id/ack" }
+      {
+        "from": "dispatched",
+        "to": "acked",
+        "via": "POST /api/commands/:command_id/ack"
+      },
+      {
+        "from": "dispatched",
+        "to": "failed",
+        "via": "POST /api/commands/:command_id/ack"
+      }
     ]
   },
   "captureResponse": {

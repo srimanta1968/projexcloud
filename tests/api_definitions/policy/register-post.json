@@ -2,13 +2,14 @@
   "name": "POST /policy/register — semantic-service",
   "endpoint": "/policy/register",
   "method": "POST",
-  "requiresAuth": false,
+  "requiresAuth": true,
   "expectedStatus": 200,
   "sdk": "semantic-service",
   "sourceFile": "services/semantic-service/src/routes.ts",
   "_generated": true,
   "testability": "auto",
   "dependsOn": [
+    "POST /api/auth/register",
     "POST /api/auth/signup-tenant",
     "POST /ontology/register"
   ],
@@ -23,15 +24,26 @@
         "iql_source": "ALLOW Doctor WITH care-team(Patient) TO write Prescription",
         "activate": true
       },
-      "expectedStatus": 200
+      "expectedStatus": 200,
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.register.response.data.token}}"
+      }
     }
   ],
   "statusTransitions": {
     "entity": "semantic.policy",
     "field": "status",
-    "flow": ["draft", "active", "deprecated"],
+    "flow": [
+      "draft",
+      "active",
+      "deprecated"
+    ],
     "transitions": [
-      { "from": "draft", "to": "active", "via": "POST /policy/register" }
+      {
+        "from": "draft",
+        "to": "active",
+        "via": "POST /policy/register"
+      }
     ]
   },
   "expectedResponse": {

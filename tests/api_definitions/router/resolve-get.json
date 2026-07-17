@@ -4,14 +4,17 @@
   "sdk": "sdk-pool-router",
   "sourceFile": "packages/sdk-pool-router/src/server/routes.ts",
   "method": "GET",
-  "requiresAuth": false,
+  "requiresAuth": true,
   "expectedStatus": 200,
   "taskId": "305c2da5-7f7a-41fc-891b-649893334afd",
   "sprintId": "8ef1d09e-dd8e-4daf-8d03-54dcd9f812f8",
   "featureId": "afd054e4-fdcd-47cc-9d22-61e3e0bbee99",
   "epicId": "56951d24-67ef-4f13-8b0d-008a1601953a",
   "testability": "auto",
-  "dependsOn": ["POST /api/auth/signup-tenant"],
+  "dependsOn": [
+    "POST /api/auth/register",
+    "POST /api/auth/signup-tenant"
+  ],
   "testCases": [
     {
       "name": "Resolve a signed-up tenant + its default app to the assigned pool",
@@ -19,7 +22,10 @@
         "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
         "app_id": "{{cache:auth.signup-tenant.response.data.app_id}}"
       },
-      "expectedStatus": 200
+      "expectedStatus": 200,
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.register.response.data.token}}"
+      }
     }
   ],
   "expectedResponse": {

@@ -2,13 +2,14 @@
   "name": "GET /api/evidence/capture — sdk-evidence",
   "endpoint": "/api/evidence/capture",
   "method": "GET",
-  "requiresAuth": false,
+  "requiresAuth": true,
   "expectedStatus": 200,
   "sdk": "sdk-evidence",
   "sourceFile": "packages/sdk-evidence/src/server/index.ts",
   "_generated": true,
   "testability": "auto",
   "dependsOn": [
+    "POST /api/auth/register",
     "POST /api/encounters",
     "POST /api/evidence/capture"
   ],
@@ -18,7 +19,10 @@
       "queryParams": {
         "encounter_id": "{{cache:encounters.create.response.data.encounter.encounter_id}}"
       },
-      "expectedStatus": 200
+      "expectedStatus": 200,
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.register.response.data.token}}"
+      }
     }
   ]
 }

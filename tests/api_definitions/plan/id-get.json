@@ -2,13 +2,14 @@
   "name": "GET /plan/:id — semantic-service",
   "endpoint": "/plan/:id",
   "method": "GET",
-  "requiresAuth": false,
+  "requiresAuth": true,
   "expectedStatus": 200,
   "sdk": "semantic-service",
   "sourceFile": "services/semantic-service/src/routes.ts",
   "_generated": true,
   "testability": "auto",
   "dependsOn": [
+    "POST /api/auth/register",
     "POST /api/auth/signup-tenant",
     "POST /ontology/register",
     "POST /intent/plan"
@@ -19,7 +20,10 @@
       "pathParams": {
         "id": "{{cache:intent.plan.response.data.plan_id}}"
       },
-      "expectedStatus": 200
+      "expectedStatus": 200,
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.register.response.data.token}}"
+      }
     }
   ]
 }

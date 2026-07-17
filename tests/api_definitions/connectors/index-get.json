@@ -3,10 +3,11 @@
   "endpoint": "/api/connectors",
   "sdk": "sdk-connectors",
   "method": "GET",
-  "requiresAuth": false,
+  "requiresAuth": true,
   "expectedStatus": 200,
   "sourceFile": "services/api-gateway/src/app.ts",
   "dependsOn": [
+    "POST /api/auth/register",
     "POST /api/auth/signup-tenant"
   ],
   "testability": "auto",
@@ -16,7 +17,10 @@
       "queryParams": {
         "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}"
       },
-      "expectedStatus": 200
+      "expectedStatus": 200,
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.register.response.data.token}}"
+      }
     }
   ]
 }

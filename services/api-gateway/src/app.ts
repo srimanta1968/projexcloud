@@ -404,6 +404,7 @@ import { server as hdkMapServer }         from '@projexlight/hdk-map';
 import { config } from './config';
 import { eventRegistryRoutes } from './routes/events';
 import { obligationEnforcementPlugin } from './plugins/obligationEnforcement';
+import { registerAuthGate } from './plugins/authGate';
 
 /**
  * api-gateway — the prototype service binary that hosts every SDK's server
@@ -432,6 +433,12 @@ app.register(cors, {
 app.register(obligationEnforcementPlugin);
 // P7 FR-DSP-2 — WebSocket plugin for dispatch live updates.
 app.register(websocket);
+
+// Default-deny auth gate. Registered on the root instance BEFORE any route or
+// SDK router so its onRequest hook is inherited everywhere. Flips the gateway
+// from per-route opt-in auth to default-deny (valid tenant JWT required unless
+// the path is explicitly public / admin-self-guarded / a WS upgrade).
+registerAuthGate(app);
 
 app.get('/health', async (): Promise<{ status: string; service: string; timestamp: string }> => {
   return { status: 'ok', service: config.appName, timestamp: new Date().toISOString() };

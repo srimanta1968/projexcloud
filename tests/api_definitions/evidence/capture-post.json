@@ -2,13 +2,14 @@
   "name": "POST /api/evidence/capture — sdk-evidence",
   "endpoint": "/api/evidence/capture",
   "method": "POST",
-  "requiresAuth": false,
+  "requiresAuth": true,
   "expectedStatus": 201,
   "sdk": "sdk-evidence",
   "sourceFile": "packages/sdk-evidence/src/server/index.ts",
   "_generated": true,
   "testability": "auto",
   "dependsOn": [
+    "POST /api/auth/register",
     "POST /api/auth/signup-tenant",
     "POST /api/personas",
     "POST /api/devices",
@@ -18,7 +19,11 @@
     "POST /api/encounters"
   ],
   "fieldEnums": {
-    "retention_class": ["transient", "operational", "regulated"]
+    "retention_class": [
+      "transient",
+      "operational",
+      "regulated"
+    ]
   },
   "captureResponse": {
     "evidence.capture.response.data.capture.capture_id": "data.capture.capture_id",
@@ -46,7 +51,10 @@
         "retention_class": "regulated",
         "retention_expires_at": "{{dynamic:futuredatetime}}"
       },
-      "expectedStatus": 201
+      "expectedStatus": 201,
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.register.response.data.token}}"
+      }
     }
   ]
 }
