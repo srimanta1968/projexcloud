@@ -322,7 +322,7 @@ import { migrationsDir as assignmentMigrations, server as assignmentServer } fro
 // P14/P15 InboundCRM SDK batch — routes + migrations were built but not yet
 // wired into the gateway boot; mount them here so their schemas land in the
 // live DB and their HTTP surfaces are reachable.
-import { migrationsDir as sequenceMigrations, server as sequenceServer } from '@projexlight/sdk-sequence';
+import { migrationsDir as sequenceMigrations, server as sequenceServer, startSequenceExecutor } from '@projexlight/sdk-sequence';
 import { migrationsDir as handoffMigrations, server as handoffServer } from '@projexlight/sdk-handoff';
 import { migrationsDir as incidentMigrations, server as incidentServer } from '@projexlight/sdk-incident';
 import { migrationsDir as leadScoringMigrations }         from '@projexlight/sdk-lead-scoring';
@@ -3689,6 +3689,15 @@ const start = async (): Promise<void> => {
       batchSize: parseInt(process.env.WEBHOOK_DELIVERY_BATCH_SIZE || '50', 10),
     });
 
+    // P14·E1 scheduler: sdk-sequence step-executor tick. OFF by default (opt-in)
+    // — the app must first wire a step sender (sdk-notification bridge) via
+    // setSequenceStepSender, else touches emit through the default no-op.
+    const sequenceExecutor = startSequenceExecutor({
+      enabled: process.env.SEQUENCE_EXECUTOR_ENABLED === 'true',
+      intervalMs: parseInt(process.env.SEQUENCE_EXECUTOR_INTERVAL_MS || '30000', 10),
+      batchSize: parseInt(process.env.SEQUENCE_EXECUTOR_BATCH_SIZE || '50', 10),
+    });
+
     // P15·E5 scheduler: sdk-connectors sync retry/backoff worker. OFF by default
     // (opt-in) since connector adapters make outbound calls on each re-drive.
     const connectorsRetryWorker = startConnectorsRetryWorker({
@@ -3738,6 +3747,7 @@ const start = async (): Promise<void> => {
       mediaTranscoder.stop();
       webhookDelivery.stop();
       connectorsRetryWorker.stop();
+      sequenceExecutor.stop();
       approvalSlaTimer.stop();
       tenantLifecycleScheduler.stop();
       workflowDurableWorker.stop();

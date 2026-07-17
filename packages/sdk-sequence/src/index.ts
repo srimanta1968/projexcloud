@@ -8,3 +8,18 @@
 export { migrationsDir } from './db';
 export * as server from './server';
 export * from './services/sequenceService';
+export {
+  runSequenceTick,
+  startSequenceExecutor,
+  setSequenceStepSender,
+  _resetSequenceStepSender,
+  nextSendableTime,
+} from './services/stepExecutor';
+export type {
+  ExecutableStep,
+  SendOutcome,
+  SequenceStepSender,
+  SendWindow,
+  TickResult,
+  ExecutorOptions,
+} from './services/stepExecutor';

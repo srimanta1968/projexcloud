@@ -9,6 +9,7 @@ import {
   getSequence,
   listSequences,
 } from '../services/sequenceService';
+import { runSequenceTick } from '../services/stepExecutor';
 
 /**
  * sdk-sequence Fastify routes (P14·E1, TK-3613). CRUD for sequences / templates
@@ -119,6 +120,17 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
       } catch (err) {
         return reply.code(409).send({ error: 'EnrollFailed', details: [(err as Error).message] });
       }
+    },
+  );
+
+  // Durable step-executor tick: advance due execution steps (send-window gated,
+  // idempotent next-step enqueue). Also runs on a timer when
+  // SEQUENCE_EXECUTOR_ENABLED; this endpoint drives one tick on demand.
+  app.post<{ Body: { batch_size?: number } }>(
+    '/api/sequences/tick', { preHandler: requireAuth }, async (req, reply) => {
+      const body = (req.body ?? {}) as { batch_size?: number };
+      const result = await runSequenceTick(body.batch_size ?? 50);
+      return reply.code(200).send({ data: result });
     },
   );
 }

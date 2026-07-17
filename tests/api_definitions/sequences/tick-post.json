@@ -1,0 +1,33 @@
+{
+  "name": "POST /api/sequences/tick - Run one step-executor tick",
+  "endpoint": "/api/sequences/tick",
+  "sdk": "sdk-sequence",
+  "sourceFile": "packages/sdk-sequence/src/server/routes.ts",
+  "method": "POST",
+  "requiresAuth": true,
+  "expectedStatus": 200,
+  "taskId": "de32936f-3be7-4cf5-897f-0197947c8799",
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "priority": 40,
+  "testability": "auto",
+  "description": "Drive one durable step-executor tick on demand: claims up to batch_size (default 50) due execution steps (status pending/scheduled/deferred, next_run_at past) with FOR UPDATE SKIP LOCKED, gates each send against the sequence's send-window / quiet hours (deferring out-of-window touches to the next open slot), emits in-window touches via the pluggable step sender ('wait' actions just complete), and idempotently enqueues the next step (dedupe_key + ON CONFLICT DO NOTHING). The same logic runs on a timer when SEQUENCE_EXECUTOR_ENABLED. Returns per-tick counts; all zero when nothing is due.",
+  "dependsOn": [
+    "POST /api/auth/signup-tenant"
+  ],
+  "testCases": [
+    {
+      "name": "Run a tick (nothing due -> zero counts)",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "payload": { "batch_size": 50 },
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "data": { "claimed": "number", "sent": "number", "deferred": "number", "waited": "number", "failed": "number", "enqueued": "number" }
+      }
+    }
+  ],
+  "errorCases": [
+    { "status": 401, "code": "Unauthorized", "message": "missing or invalid token", "when": "no valid Bearer token is supplied" }
+  ]
+}
