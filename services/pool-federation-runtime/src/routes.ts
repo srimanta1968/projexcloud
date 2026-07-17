@@ -1,3 +1,4 @@
+import { timingSafeEqual } from 'crypto';
 import type { FastifyInstance } from 'fastify';
 import { resolveRoute, recordFailover, type RouteCache } from './router';
 import type { OrchestratorHandle } from './failoverOrchestrator';
@@ -68,13 +69,22 @@ export async function registerRoutes(
 
   // P7 AC-6 — chaos drill endpoint. Operator-triggered; records a chaos-drill
   // failover_event with measured RPO/RTO so the monthly drill produces
-  // auditable numbers. Auth via FEDERATION_ADMIN_TOKEN header.
+  // auditable numbers. Auth via the shared ADMIN_OPS_TOKEN header (consolidated
+  // from the former FEDERATION_ADMIN_TOKEN — one operator secret across the
+  // platform). The gateway validates the same header for its /admin/federation/*
+  // routes; this standalone path uses a constant-time env compare (no DB here).
   app.post<{
     Body: { federation_id?: string; from_region?: string; to_region?: string };
   }>('/admin/chaos-drill', async (req, reply) => {
-    const token = process.env.FEDERATION_ADMIN_TOKEN;
+    const token = process.env.ADMIN_OPS_TOKEN;
     const presented = req.headers['x-admin-ops-token'];
-    if (!token || presented !== token) {
+    const presentedStr = Array.isArray(presented) ? presented[0] : presented;
+    const ok =
+      !!token &&
+      typeof presentedStr === 'string' &&
+      presentedStr.length === token.length &&
+      timingSafeEqual(Buffer.from(presentedStr), Buffer.from(token));
+    if (!ok) {
       return reply.code(401).send({ error: 'admin token required' });
     }
     if (!orchestrator) {
