@@ -1,0 +1,37 @@
+# ClickHouse overlay for the prod stack (OLAP meter/telemetry rollups).
+# Merged via: -f docker-compose.prod.yml -f docker-compose.clickhouse.yml
+services:
+  clickhouse:
+    image: clickhouse/clickhouse-server:24-alpine
+    container_name: projexcloud_clickhouse
+    profiles: ["", "default", "selfhosted"]
+    environment:
+      CLICKHOUSE_DB: ${CLICKHOUSE_DATABASE:-meter}
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: "1"
+    ulimits:
+      nofile: { soft: 262144, hard: 262144 }
+    mem_limit: 1400m
+    # ClickHouse needs SYS_NICE for thread priorities; without it every
+    # get_mempolicy() call fails and it retries in a hot loop.
+    cap_add: [SYS_NICE]
+    # Guardrail: never let OLAP starve postgres/gateway on this 2-core box.
+    cpus: "1.5"
+    volumes:
+      - clickhouse_data:/var/lib/clickhouse
+      - ../../infra/clickhouse/init:/docker-entrypoint-initdb.d:ro
+      - ../../infra/clickhouse/config.d/logging.xml:/etc/clickhouse-server/config.d/logging.xml:ro
+      - ../../infra/clickhouse/config.d/tuning.xml:/etc/clickhouse-server/config.d/tuning.xml:ro
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8123/ping"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+    networks: [projex]
+  api-gateway:
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+        required: false
+volumes:
+  clickhouse_data:
