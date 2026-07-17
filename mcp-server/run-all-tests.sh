@@ -25,13 +25,6 @@
 #                       (e.g., development, staging, production, qa, regression)
 #                       URLs are read from environments.<name>.baseUrl and apiUrl
 #
-# Force-run:
-#   --include-manual  - Run endpoints even if their definition is testability:
-#                       manual/skip (aliases: --all-including-manual, --force-all).
-#                       Plumbed to both MCPs (env PROJEX_INCLUDE_MANUAL + payload
-#                       include_manual). Use to verify whether "manual" endpoints
-#                       actually fail on a real 3rd-party dependency vs a config gap.
-#
 # Test-user credentials (written into tests/config/test-config.json before run):
 #   --login-email <email>     Override testCredentials.default.email. Useful
 #                             when a test flow actually sends mail (password
@@ -140,18 +133,10 @@ ensure_test_config() {
         cat > "$CONFIG_FILE" << 'TESTCONFIGEOF'
 {
   "version": "1.0.0",
-  "variables": {
-    "_comment": "GLOBAL variables — apply to EVERY environment. Referenced in api_definitions as {{var:name}} (payload/headers/path/query) and resolved at runtime AFTER cache/dependency lookup. Put values that are the SAME across all environments here (e.g. api_version, fixed header values, well-known sentinel IDs).",
-    "_example_api_version": "v2"
-  },
   "environments": {
     "development": {
       "baseUrl": "http://localhost:3000",
-      "apiUrl": "http://localhost:5000",
-      "variables": {
-        "_comment": "PER-ENVIRONMENT variables — override/extend the global ones for THIS environment (env wins on name clash). Put values that DIFFER per environment here (e.g. seeded tenant_id/person_id/persona_id UUIDs from this env's database).",
-        "_example_tenant_id": "REPLACE_WITH_DEV_TENANT_UUID"
-      }
+      "apiUrl": "http://localhost:5000"
     }
   },
   "activeEnvironment": "development",
@@ -1117,6 +1102,16 @@ run_api_tests() {
     echo "  API Base URL: ${api_base_url:-from test-config.json}"
     echo "  Environment: ${ENV_OVERRIDE:-${TEST_ENVIRONMENT:-development}}"
 
+    # Fallback auth: if no PROJEXLIGHT_API_KEY was resolved (env / .env / Dev MCP
+    # container), use the sessionToken from the project's .projexlight/config.json
+    # (CLI export) so the MCP path can authenticate. PROJEXLIGHT_API_KEY still
+    # takes precedence when present (it routes to the tenant/Bearer path).
+    local session_token="${PROJEXLIGHT_SESSION_TOKEN:-}"
+    if [ -z "$session_token" ] && [ -f "$PROJECT_ROOT/.projexlight/config.json" ]; then
+        session_token=$(jq -r '.sessionToken // empty' "$PROJECT_ROOT/.projexlight/config.json" 2>/dev/null)
+        [ -n "$session_token" ] && echo "  [OK] Using sessionToken from .projexlight/config.json"
+    fi
+
     # Call Test MCP with database mode
     curl -sf -X POST "http://localhost:${test_mcp_port}/run-api-test-by-feature" \
         -H "Content-Type: application/json" \
@@ -1126,17 +1121,20 @@ run_api_tests() {
             \"sprint_id\": \"$sprint_id\",
             \"projexlight_api_url\": \"$api_url\",
             \"projexlight_api_key\": \"$api_key\",
+            \"session_token\": \"$session_token\",
             \"project_id\": \"$project_id\",
             \"api_base_url\": \"$api_base_url\",
             \"environment\": \"${ENV_OVERRIDE:-${TEST_ENVIRONMENT:-development}}\",
             \"generate_report\": true,
-            \"include_manual\": ${INCLUDE_MANUAL:-false},
             \"save_results\": ${SAVE_RESULTS:-false}
         }" 2>&1 | tee "$RESULTS_DIR/api/test_run.log"
 
     # Copy results from container. The Test MCP writes under /results/test-mcp
-    # (RESULTS_BASE_DIR); the interactive report lands in test-results/test-mcp/api/report.html
-    # and surfaces on the host via the /results mount. This cp is belt-and-braces.
+    # (RESULTS_BASE_DIR), so the interactive report lands in
+    # test-results/test-mcp/api/report.html — which already surfaces on the host
+    # via the /results mount for the owner project. The docker cp below is a
+    # belt-and-braces relocation (needed for additional projects) and never fails
+    # the run.
     local container_workspace=$(get_container_workspace)
     local container_results="/results/test-mcp"
     if [ "$container_workspace" != "/workspace" ]; then
@@ -1145,6 +1143,7 @@ run_api_tests() {
     mkdir -p "$RESULTS_DIR/test-mcp"
     # Copy the whole api/ folder — one timestamped report_<ts>.html per run (history).
     docker cp "${TEST_MCP_CONTAINER}:${container_results}/api" "$RESULTS_DIR/test-mcp/" 2>/dev/null || true
+    # keep the legacy flat json for any tooling that still reads it
     docker cp "${TEST_MCP_CONTAINER}:${container_results}/api_test_results.json" "$RESULTS_DIR/api/" 2>/dev/null || true
 
     print_success "API test report(s): $RESULTS_DIR/test-mcp/api/ (one report_<timestamp>.html per run)"
@@ -1412,11 +1411,6 @@ while [[ $# -gt 0 ]]; do
             RUN_API_TESTS="true"
             shift
             ;;
-        --include-manual|--all-including-manual|--force-all)
-            # Force-run endpoints even if their definition is testability: manual/skip.
-            INCLUDE_MANUAL="true"
-            shift
-            ;;
         *)
             FEATURE_OR_CATEGORY="$1"
             shift
@@ -1429,11 +1423,6 @@ export TEST_MODE
 export RUN_UI_TESTS
 export RUN_API_TESTS
 export ENV_OVERRIDE
-# Plumb the force-run flag to both MCPs: env var (Dev MCP api_tester reads
-# PROJEX_INCLUDE_MANUAL) + JSON field include_manual in the Test MCP payloads.
-INCLUDE_MANUAL="${INCLUDE_MANUAL:-false}"
-export INCLUDE_MANUAL
-export PROJEX_INCLUDE_MANUAL="$INCLUDE_MANUAL"
 
 # Self-heal the shared MCP if its owner project was deleted (one-shot, never loops).
 MCP_SERVER_URL="${MCP_SERVER_URL:-http://localhost:8766}"
