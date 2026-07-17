@@ -405,6 +405,12 @@ export const EVENT_TYPE_REGISTRY: Record<string, EventTypeMetadata> = {
   'handoff.completed.v1':                     { event_type: 'handoff.completed.v1',                     retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
   'handoff.cancelled.v1':                     { event_type: 'handoff.cancelled.v1',                     retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
 
+  /* --- sdk-incident (P15·E3) — exception/incident lifecycle + SLA --- */
+  'incident.opened.v1':                       { event_type: 'incident.opened.v1',                       retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+  'incident.updated.v1':                      { event_type: 'incident.updated.v1',                      retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+  'incident.transitioned.v1':                 { event_type: 'incident.transitioned.v1',                 retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+  'incident.sla.breached.v1':                 { event_type: 'incident.sla.breached.v1',                 retention_class: 'operational', conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+
   /* --- sdk-lead-scoring (§5.4) --- */
   'lead-scoring.scored.v1':                   { event_type: 'lead-scoring.scored.v1',                   retention_class: 'operational', conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
   'lead-scoring.model.trained.v1':            { event_type: 'lead-scoring.model.trained.v1',            retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },

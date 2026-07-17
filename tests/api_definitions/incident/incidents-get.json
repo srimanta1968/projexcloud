@@ -1,0 +1,33 @@
+{
+  "name": "GET /api/incidents - List tenant incidents",
+  "endpoint": "/api/incidents",
+  "sdk": "sdk-incident",
+  "sourceFile": "packages/sdk-incident/src/server/routes.ts",
+  "method": "GET",
+  "requiresAuth": true,
+  "expectedStatus": 200,
+  "taskId": "da328f90-4933-4b2f-a642-e410a5b39ec9",
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "priority": 52,
+  "testability": "auto",
+  "description": "List incidents for a tenant, most-recently-updated first. Tenant-scoped via the required tenant_id query param; optionally filtered by status, severity and/or owner_persona_id, with limit/offset paging (defaults 50/0).",
+  "dependsOn": [
+    "POST /api/auth/signup-tenant"
+  ],
+  "fieldEnums": {
+    "status": ["open", "investigating", "mitigated", "resolved", "closed", "cancelled"],
+    "severity": ["low", "medium", "high", "critical"]
+  },
+  "testCases": [
+    {
+      "name": "List incidents for the signup tenant",
+      "headers": { "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}" },
+      "queryParams": { "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}" },
+      "expectedStatus": 200,
+      "expectedResponse": { "data": { "incidents": [] } }
+    }
+  ],
+  "errorCases": [
+    { "status": 400, "code": "ValidationError", "message": "tenant_id query param required", "when": "tenant_id query param missing" }
+  ]
+}

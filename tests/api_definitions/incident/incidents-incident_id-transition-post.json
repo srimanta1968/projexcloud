@@ -1,0 +1,40 @@
+{
+  "name": "POST /api/incidents/:incident_id/transition - Advance incident status",
+  "endpoint": "/api/incidents/:incident_id/transition",
+  "sdk": "sdk-incident",
+  "sourceFile": "packages/sdk-incident/src/server/routes.ts",
+  "method": "POST",
+  "requiresAuth": true,
+  "expectedStatus": 200,
+  "taskId": "da328f90-4933-4b2f-a642-e410a5b39ec9",
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "priority": 56,
+  "testability": "auto",
+  "description": "Advance an incident's status. Valid transitions: open->investigating|mitigated, investigating->mitigated|resolved, mitigated->resolved|investigating, resolved->closed|investigating (regression re-open); an incident may be cancelled while pre-resolved. resolved stamps resolved_at, closed/cancelled stamp closed_at. Emits incident.transitioned.v1 (from/to). tenant_id and status required. 409 InvalidTransition when not allowed from the current state; 404 if not found.",
+  "dependsOn": [
+    "POST /api/auth/signup-tenant",
+    "POST /api/incidents"
+  ],
+  "fieldEnums": {
+    "status": ["open", "investigating", "mitigated", "resolved", "closed", "cancelled"]
+  },
+  "testCases": [
+    {
+      "name": "Start investigating (open -> investigating)",
+      "headers": { "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}" },
+      "pathParams": { "incident_id": "{{cache:incident.incidents.create.response.data.incident.incident_id}}" },
+      "payload": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "status": "investigating"
+      },
+      "expectedStatus": 200,
+      "expectedResponse": { "data": { "incident": { "incident_id": "string", "status": "string" } } }
+    }
+  ],
+  "errorCases": [
+    { "status": 400, "code": "ValidationError", "message": "tenant_id and status are required", "when": "tenant_id or status missing from body" },
+    { "status": 400, "code": "ValidationError", "message": "invalid status", "when": "status is not one of open|investigating|mitigated|resolved|closed|cancelled" },
+    { "status": 404, "code": "NotFound", "message": "NotFound", "when": "incident_id not found for the tenant" },
+    { "status": 409, "code": "InvalidTransition", "message": "invalid transition <from> -> <to>", "when": "the requested transition is not allowed from the current status" }
+  ]
+}

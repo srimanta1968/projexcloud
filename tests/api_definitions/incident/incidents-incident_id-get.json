@@ -1,0 +1,32 @@
+{
+  "name": "GET /api/incidents/:incident_id - Fetch one incident",
+  "endpoint": "/api/incidents/:incident_id",
+  "sdk": "sdk-incident",
+  "sourceFile": "packages/sdk-incident/src/server/routes.ts",
+  "method": "GET",
+  "requiresAuth": true,
+  "expectedStatus": 200,
+  "taskId": "da328f90-4933-4b2f-a642-e410a5b39ec9",
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "priority": 54,
+  "testability": "auto",
+  "description": "Fetch a single incident by id, tenant-scoped via the required tenant_id query param. Returns the full record including root_cause/recovery/verification notes and lifecycle timestamps. 404 when the incident is not found for the tenant.",
+  "dependsOn": [
+    "POST /api/auth/signup-tenant",
+    "POST /api/incidents"
+  ],
+  "testCases": [
+    {
+      "name": "Get the created incident",
+      "headers": { "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}" },
+      "pathParams": { "incident_id": "{{cache:incident.incidents.create.response.data.incident.incident_id}}" },
+      "queryParams": { "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}" },
+      "expectedStatus": 200,
+      "expectedResponse": { "data": { "incident": { "incident_id": "string", "status": "string" } } }
+    }
+  ],
+  "errorCases": [
+    { "status": 400, "code": "ValidationError", "message": "tenant_id query param required", "when": "tenant_id query param missing" },
+    { "status": 404, "code": "NotFound", "message": "NotFound", "when": "incident_id not found for the tenant" }
+  ]
+}

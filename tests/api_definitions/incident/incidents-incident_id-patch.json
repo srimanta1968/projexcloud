@@ -1,0 +1,40 @@
+{
+  "name": "PATCH /api/incidents/:incident_id - Update incident + assign owner",
+  "endpoint": "/api/incidents/:incident_id",
+  "sdk": "sdk-incident",
+  "sourceFile": "packages/sdk-incident/src/server/routes.ts",
+  "method": "PATCH",
+  "requiresAuth": true,
+  "expectedStatus": 200,
+  "taskId": "da328f90-4933-4b2f-a642-e410a5b39ec9",
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "priority": 55,
+  "testability": "auto",
+  "description": "Update editable incident fields (title, description, severity, affected_records, root_cause, recovery, verification, owner_persona_id assignment, subject_ref, sla_due_at, metadata). Status is NOT editable here — use the transition endpoint. tenant_id is required. Emits incident.updated.v1. 404 if not found.",
+  "dependsOn": [
+    "POST /api/auth/signup-tenant",
+    "POST /api/incidents"
+  ],
+  "fieldEnums": {
+    "severity": ["low", "medium", "high", "critical"]
+  },
+  "testCases": [
+    {
+      "name": "Assign an owner + record root cause",
+      "headers": { "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}" },
+      "pathParams": { "incident_id": "{{cache:incident.incidents.create.response.data.incident.incident_id}}" },
+      "payload": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "owner_persona_id": "{{cache:auth.signup-tenant.response.data.userId}}",
+        "root_cause": "Upstream feed schema drift",
+        "severity": "critical"
+      },
+      "expectedStatus": 200,
+      "expectedResponse": { "data": { "incident": { "incident_id": "string", "owner_persona_id": "string" } } }
+    }
+  ],
+  "errorCases": [
+    { "status": 400, "code": "ValidationError", "message": "tenant_id is required", "when": "tenant_id missing from body" },
+    { "status": 404, "code": "NotFound", "message": "NotFound", "when": "incident_id not found for the tenant" }
+  ]
+}

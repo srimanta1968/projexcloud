@@ -323,6 +323,7 @@ import { migrationsDir as assignmentMigrations, server as assignmentServer } fro
 // live DB and their HTTP surfaces are reachable.
 import { migrationsDir as sequenceMigrations, server as sequenceServer } from '@projexlight/sdk-sequence';
 import { migrationsDir as handoffMigrations, server as handoffServer } from '@projexlight/sdk-handoff';
+import { migrationsDir as incidentMigrations, server as incidentServer } from '@projexlight/sdk-incident';
 import { migrationsDir as leadScoringMigrations }         from '@projexlight/sdk-lead-scoring';
 import {
   migrationsDir as evidenceMigrations,
@@ -533,6 +534,7 @@ app.register(crmServer.registerRoutes);
 app.register(assignmentServer.registerRoutes);
 app.register(sequenceServer.registerRoutes);
 app.register(handoffServer.registerRoutes);
+app.register(incidentServer.registerRoutes);
 app.register(serviceRequestServer.registerRoutes);
 app.register(contentServer.registerRoutes);
 app.register(campaignServer.registerRoutes);
@@ -1156,6 +1158,7 @@ const start = async (): Promise<void> => {
       // hard FKs; deal_id/subject refs are loose), so ordering is unconstrained.
       { sdk: 'sdk-sequence',            dir: sequenceMigrations },
       { sdk: 'sdk-handoff',             dir: handoffMigrations },
+      { sdk: 'sdk-incident',            dir: incidentMigrations },
     ]);
 
     // P9.2 — incremental catalog sync (Epic A, TK-3461). OPT-IN: embedding the
