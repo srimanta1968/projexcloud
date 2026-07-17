@@ -1,0 +1,33 @@
+{
+  "name": "POST /api/sequences/guards/outcome - Record a channel send outcome",
+  "endpoint": "/api/sequences/guards/outcome",
+  "sdk": "sdk-sequence",
+  "sourceFile": "packages/sdk-sequence/src/server/routes.ts",
+  "method": "POST",
+  "requiresAuth": true,
+  "expectedStatus": 200,
+  "taskId": "8265f9aa-fbaf-4126-9c75-9aef4b054f42",
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "priority": 48,
+  "testability": "auto",
+  "description": "Record a send outcome for the per-(tenant, channel) circuit breaker. success=true resets the failure streak and closes a half-open breaker; success=false increments the streak and opens the breaker once breaker_failure_threshold is reached. Returns the breaker state (closed/open/half_open) + failure/success counts. tenant_id, channel and success (boolean) are required.",
+  "dependsOn": [
+    "POST /api/auth/signup-tenant"
+  ],
+  "testCases": [
+    {
+      "name": "Record a successful send (breaker stays closed)",
+      "headers": { "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}" },
+      "payload": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "channel": "email",
+        "success": true
+      },
+      "expectedStatus": 200,
+      "expectedResponse": { "data": { "breaker": { "state": "string", "failure_count": "number", "success_count": "number" } } }
+    }
+  ],
+  "errorCases": [
+    { "status": 400, "code": "ValidationError", "message": "tenant_id, channel and success (boolean) are required", "when": "tenant_id, channel or success missing/not-a-boolean" }
+  ]
+}

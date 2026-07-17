@@ -1,0 +1,34 @@
+{
+  "name": "POST /api/sequences/guards/check - Evaluate frequency + breaker guards",
+  "endpoint": "/api/sequences/guards/check",
+  "sdk": "sdk-sequence",
+  "sourceFile": "packages/sdk-sequence/src/server/routes.ts",
+  "method": "POST",
+  "requiresAuth": true,
+  "expectedStatus": 200,
+  "taskId": "8265f9aa-fbaf-4126-9c75-9aef4b054f42",
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "priority": 47,
+  "testability": "auto",
+  "description": "Evaluate the send guards for a prospective touch and record the decision to the guard audit log. Blocks on: per-lead cooldown (min gap since the subject's last sent touch), max-messages over the rolling window, duplicate content (dedupe_hash already allowed in-window), or an open circuit breaker for the (tenant, channel). A fresh subject with no history is allowed. tenant_id, subject_persona_id and channel are required.",
+  "dependsOn": [
+    "POST /api/auth/signup-tenant",
+    "POST /api/personas"
+  ],
+  "testCases": [
+    {
+      "name": "Fresh subject is allowed",
+      "headers": { "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}" },
+      "payload": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "subject_persona_id": "{{cache:personas.create.response.data.persona.persona_id}}",
+        "channel": "email"
+      },
+      "expectedStatus": 200,
+      "expectedResponse": { "data": { "allowed": "boolean", "reason": "null" } }
+    }
+  ],
+  "errorCases": [
+    { "status": 400, "code": "ValidationError", "message": "tenant_id, subject_persona_id and channel are required", "when": "tenant_id, subject_persona_id or channel missing from body" }
+  ]
+}

@@ -1,4 +1,5 @@
 import { dataService } from '@projexlight/db-runtime';
+import { checkFrequencyGuards, recordChannelOutcome } from './guardEngine';
 
 /**
  * sdk-sequence step-executor tick loop (P14·E1). Port of the outreach
@@ -126,6 +127,7 @@ export interface TickResult {
   deferred: number;
   waited: number;
   failed: number;
+  skipped: number;
   enqueued: number;
 }
 
@@ -170,7 +172,7 @@ export async function runSequenceTick(batchSize = 50): Promise<TickResult> {
     [batchSize],
   );
 
-  const result: TickResult = { claimed: claimed.length, sent: 0, deferred: 0, waited: 0, failed: 0, enqueued: 0 };
+  const result: TickResult = { claimed: claimed.length, sent: 0, deferred: 0, waited: 0, failed: 0, skipped: 0, enqueued: 0 };
 
   for (const step of claimed) {
     // 'wait' actions have no send — complete and advance immediately.
@@ -199,12 +201,35 @@ export async function runSequenceTick(batchSize = 50): Promise<TickResult> {
       continue;
     }
 
+    // Frequency-cap + circuit-breaker guards (logged to guard_log). A blocked
+    // touch is skipped and the cadence advances to the next step.
+    const channel = step.channel ?? 'email';
+    const guard = await checkFrequencyGuards({
+      tenant_id: step.tenant_id,
+      subject_persona_id: step.subject_persona_id,
+      channel,
+      execution_step_id: step.execution_step_id,
+    });
+    if (!guard.allowed) {
+      await markSkipped(step.execution_step_id, guard.reason ?? 'guard');
+      result.skipped++;
+      if (await enqueueNextStep(step)) result.enqueued++;
+      continue;
+    }
+
     // Emit via the pluggable sender.
     let outcome: SendOutcome;
     try {
       outcome = await _sender(step);
     } catch (err) {
       outcome = { delivered: false, error: (err as Error).message };
+    }
+
+    // Feed the circuit breaker (best-effort — never fail the tick on breaker I/O).
+    try {
+      await recordChannelOutcome(step.tenant_id, channel, outcome.delivered);
+    } catch (err) {
+      console.warn('[sdk-sequence] breaker outcome record failed:', (err as Error).message);
     }
 
     if (outcome.delivered) {
@@ -229,6 +254,15 @@ async function markStatus(execution_step_id: string, status: 'sent', result: Rec
             result = $3::jsonb, updated_at = now()
       WHERE execution_step_id = $1`,
     [execution_step_id, status, JSON.stringify(result)],
+  );
+}
+
+async function markSkipped(execution_step_id: string, reason: string): Promise<void> {
+  await dataService.query(
+    `UPDATE sequence.execution_step
+        SET status = 'skipped', control_reason = $2, updated_at = now()
+      WHERE execution_step_id = $1`,
+    [execution_step_id, reason],
   );
 }
 

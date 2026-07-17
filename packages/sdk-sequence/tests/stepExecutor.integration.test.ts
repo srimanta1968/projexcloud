@@ -19,6 +19,7 @@ import {
   _resetSequenceStepSender,
   type ExecutableStep,
 } from '../src/services/stepExecutor';
+import { upsertGuardConfig } from '../src/services/guardEngine';
 
 const RUN = process.env.SEQUENCE_IT === '1';
 const suite = RUN ? describe : describe.skip;
@@ -57,11 +58,17 @@ async function cleanup(): Promise<void> {
   await dataService.query(`DELETE FROM sequence.execution_step WHERE tenant_id = $1`, [TENANT]);
   await dataService.query(`DELETE FROM sequence.step WHERE tenant_id = $1`, [TENANT]);
   await dataService.query(`DELETE FROM sequence.sequence WHERE tenant_id = $1`, [TENANT]);
+  await dataService.query(`DELETE FROM sequence.guard_log WHERE tenant_id = $1`, [TENANT]);
+  await dataService.query(`DELETE FROM sequence.circuit_breaker WHERE tenant_id = $1`, [TENANT]);
 }
 
 suite('sdk-sequence step executor (integration)', () => {
-  beforeAll(() => {
+  beforeAll(async () => {
     initPool(process.env.DATABASE_URL ? { connectionString: process.env.DATABASE_URL } : {});
+    // Isolate executor behavior (send / defer / retry) from the frequency guards:
+    // permissive config so cooldown/max-message caps never interfere here. The
+    // guards themselves are covered by guardEngine.integration.test.ts.
+    await upsertGuardConfig(TENANT, { cooldown_seconds: 0, max_messages: 1_000_000 });
     setSequenceStepSender(async (step) => {
       sendCount++;
       sentSteps.push(step);

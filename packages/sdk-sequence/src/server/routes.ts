@@ -17,6 +17,11 @@ import {
   replaceCta,
   type ReactiveAction,
 } from '../services/reactiveControl';
+import {
+  checkFrequencyGuards,
+  recordChannelOutcome,
+  listGuardLog,
+} from '../services/guardEngine';
 
 /**
  * sdk-sequence Fastify routes (P14·E1, TK-3613). CRUD for sequences / templates
@@ -178,6 +183,46 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
           return reply.code(400).send({ error: 'ValidationError', details: ['invalid action'] });
       }
       return reply.code(200).send({ data: { action: body.action, enrollment_id, affected } });
+    },
+  );
+
+  // Guard engine: evaluate frequency-cap + circuit-breaker guards for a
+  // prospective send. Logged to the guard audit trail.
+  app.post('/api/sequences/guards/check', { preHandler: requireAuth }, async (req, reply) => {
+    const body = (req.body ?? {}) as {
+      tenant_id?: string; subject_persona_id?: string; channel?: string; dedupe_hash?: string;
+    };
+    if (!body.tenant_id || !body.subject_persona_id || !body.channel) {
+      return reply.code(400).send({ error: 'ValidationError', details: ['tenant_id, subject_persona_id and channel are required'] });
+    }
+    const decision = await checkFrequencyGuards({
+      tenant_id: body.tenant_id,
+      subject_persona_id: body.subject_persona_id,
+      channel: body.channel,
+      dedupe_hash: body.dedupe_hash,
+    });
+    return reply.code(200).send({ data: decision });
+  });
+
+  // Record a channel send outcome to drive the per-(tenant,channel) breaker.
+  app.post('/api/sequences/guards/outcome', { preHandler: requireAuth }, async (req, reply) => {
+    const body = (req.body ?? {}) as { tenant_id?: string; channel?: string; success?: boolean };
+    if (!body.tenant_id || !body.channel || typeof body.success !== 'boolean') {
+      return reply.code(400).send({ error: 'ValidationError', details: ['tenant_id, channel and success (boolean) are required'] });
+    }
+    const breaker = await recordChannelOutcome(body.tenant_id, body.channel, body.success);
+    return reply.code(200).send({ data: { breaker } });
+  });
+
+  // Guard decision audit log for a tenant.
+  app.get<{ Querystring: { tenant_id?: string; decision?: string; limit?: string } }>(
+    '/api/sequences/guards/log', { preHandler: requireAuth }, async (req, reply) => {
+      if (!req.query.tenant_id) return reply.code(400).send({ error: 'ValidationError', details: ['tenant_id query param required'] });
+      const entries = await listGuardLog(req.query.tenant_id, {
+        decision: req.query.decision === 'allow' || req.query.decision === 'block' ? req.query.decision : undefined,
+        limit: req.query.limit ? Number(req.query.limit) : undefined,
+      });
+      return reply.code(200).send({ data: { entries } });
     },
   );
 }

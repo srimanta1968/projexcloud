@@ -30,3 +30,18 @@ export {
   replaceCta,
 } from './services/reactiveControl';
 export type { ReactiveAction, ReactiveControlInput } from './services/reactiveControl';
+export {
+  checkFrequencyGuards,
+  recordChannelOutcome,
+  loadGuardConfig,
+  upsertGuardConfig,
+  listGuardLog,
+} from './services/guardEngine';
+export type {
+  GuardConfig,
+  GuardDecision,
+  GuardReason,
+  GuardCheckInput,
+  BreakerState,
+  GuardLogEntry,
+} from './services/guardEngine';
