@@ -12,10 +12,11 @@ import {
   listToolManifests,
   replayDlq,
   replayDlqForTenant,
-  syncConnector,
+  syncConnectorResilient,
   uninstallConnector,
   verifyInboundSignature,
 } from '../services/connectorsService';
+import { reconcileSyncState, runRetryTick } from '../services/syncRetryWorker';
 
 export async function registerRoutes(app: FastifyInstance): Promise<void> {
   app.get('/api/connectors/kinds', { preHandler: requireAuth }, async (_req, reply) => {
@@ -99,8 +100,10 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
     { preHandler: requireAuth },
     async (req, reply) => {
       try {
-        const result = await syncConnector(req.params.install_id);
-        return reply.code(200).send({ data: result });
+        const result = await syncConnectorResilient(req.params.install_id);
+        // Transient sync failures are dead-lettered (202) and retried by the
+        // worker; a clean sync returns 200. Only config errors fall through.
+        return reply.code(result.status === 'ok' ? 200 : 202).send({ data: result });
       } catch (err) {
         return reply.code(409).send({ error: 'SyncFailed', details: [(err as Error).message] });
       }
@@ -183,4 +186,27 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
       return reply.code(409).send({ error: 'ReplayFailed', details: [(err as Error).message] });
     }
   });
+
+  // Reconcile duplicate / partial DLQ state for a tenant: collapse superseded
+  // duplicates and discard orphaned entries whose install is gone.
+  app.post<{ Params: { tenant_id: string } }>(
+    '/api/connectors/tenants/:tenant_id/dlq/reconcile',
+    { preHandler: requireAuth },
+    async (req, reply) => {
+      const result = await reconcileSyncState(req.params.tenant_id);
+      return reply.code(200).send({ data: result });
+    },
+  );
+
+  // Run one retry-worker tick on demand (drain due dead-letters through backoff).
+  // The same logic also runs on a timer when CONNECTORS_RETRY_WORKER_ENABLED.
+  app.post<{ Body: { batch_size?: number } }>(
+    '/api/connectors/dlq/retry-tick',
+    { preHandler: requireAuth },
+    async (req, reply) => {
+      const body = (req.body ?? {}) as { batch_size?: number };
+      const result = await runRetryTick(body.batch_size ?? 20);
+      return reply.code(200).send({ data: result });
+    },
+  );
 }

@@ -227,6 +227,42 @@ export async function syncConnector(install_id: string): Promise<{ records_synce
 }
 
 /**
+ * Resilient sync: run syncConnector, but on a transient adapter failure record
+ * the failure in the DLQ (status 'dlq', picked up by the retry/backoff worker)
+ * instead of surfacing a hard error. This replaces the old fail-once-with-409
+ * behavior — a failed sync is now retried with backoff and eventually
+ * dead-lettered rather than lost.
+ *
+ * Genuine configuration errors (unknown install / no adapter registered) are
+ * NOT transient and are re-thrown so the caller can return a 4xx.
+ */
+export async function syncConnectorResilient(install_id: string): Promise<
+  | { status: 'ok'; records_synced: number; conflicts: number }
+  | { status: 'deadlettered'; deadletter_id: string; error: string }
+> {
+  try {
+    const result = await syncConnector(install_id);
+    return { status: 'ok', ...result };
+  } catch (err) {
+    // Distinguish a transient sync failure from a config error: if the install
+    // + adapter both resolve, the failure came from adapter.sync() — dead-letter
+    // it. Otherwise it is a genuine 4xx and is re-thrown.
+    const install = await getInstall(install_id);
+    if (!install) throw err;
+    if (!adapters.has(install.connector_kind)) throw err;
+    const dl = await deadLetterSync({
+      tenant_id: install.tenant_id,
+      install_id: install.install_id,
+      connector_kind: install.connector_kind,
+      sync_kind: 'full',
+      error: (err as Error).message,
+      error_code: 'SyncFailed',
+    });
+    return { status: 'deadlettered', deadletter_id: dl.deadletter_id, error: (err as Error).message };
+  }
+}
+
+/**
  * Invoke a tool exposed by an installed connector. The framework verifies
  * the tool exists in the install's manifest before delegating; the adapter
  * is responsible for SKU metering and credential resolution.

@@ -202,6 +202,7 @@ import {
 import {
   migrationsDir as connectorsMigrations,
   server as connectorsServer,
+  startSyncRetryWorker as startConnectorsRetryWorker,
 } from '@projexlight/sdk-connectors';
 // Vendor connector packs register adapters at import time and ship their own migrations.
 import { migrationsDir as connectorSalesforceMigrations }   from '@projexlight/connector-salesforce';
@@ -3688,6 +3689,14 @@ const start = async (): Promise<void> => {
       batchSize: parseInt(process.env.WEBHOOK_DELIVERY_BATCH_SIZE || '50', 10),
     });
 
+    // P15·E5 scheduler: sdk-connectors sync retry/backoff worker. OFF by default
+    // (opt-in) since connector adapters make outbound calls on each re-drive.
+    const connectorsRetryWorker = startConnectorsRetryWorker({
+      enabled: process.env.CONNECTORS_RETRY_WORKER_ENABLED === 'true',
+      intervalMs: parseInt(process.env.CONNECTORS_RETRY_INTERVAL_MS || '30000', 10),
+      batchSize: parseInt(process.env.CONNECTORS_RETRY_BATCH_SIZE || '20', 10),
+    });
+
     // P4 schedulers: sdk-approval SLA timer (FR-APP-5).
     const approvalSlaTimer = startSlaTimer({
       enabled: process.env.APPROVAL_SLA_TIMER_ENABLED !== 'false',
@@ -3728,6 +3737,7 @@ const start = async (): Promise<void> => {
       poolResidencyReconciler.stop();
       mediaTranscoder.stop();
       webhookDelivery.stop();
+      connectorsRetryWorker.stop();
       approvalSlaTimer.stop();
       tenantLifecycleScheduler.stop();
       workflowDurableWorker.stop();

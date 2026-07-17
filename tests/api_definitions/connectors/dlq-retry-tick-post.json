@@ -1,0 +1,33 @@
+{
+  "name": "POST /api/connectors/dlq/retry-tick - Run one retry-worker tick",
+  "endpoint": "/api/connectors/dlq/retry-tick",
+  "sdk": "sdk-connectors",
+  "method": "POST",
+  "requiresAuth": true,
+  "expectedStatus": 200,
+  "sourceFile": "packages/sdk-connectors/src/server/routes.ts",
+  "taskId": "e17da8c8-e873-4414-b68b-6eeaa47accee",
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "priority": 34,
+  "testability": "auto",
+  "description": "Drain one batch of due connector-sync dead-letters on demand: claims up to batch_size (default 20) entries in status dlq/retrying whose next_retry_at is past (FOR UPDATE SKIP LOCKED, concurrency-safe), re-drives each install's sync, and settles it — resolved on success, re-queued with exponential backoff on failure, or discarded once attempts reach max_attempts. The same logic runs on a timer when CONNECTORS_RETRY_WORKER_ENABLED. Returns per-tick counts; all zero when nothing is due.",
+  "dependsOn": [
+    "POST /api/auth/signup-tenant"
+  ],
+  "testCases": [
+    {
+      "name": "Run a retry tick (nothing due -> zero counts)",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "payload": { "batch_size": 20 },
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "data": { "claimed": "number", "resolved": "number", "requeued": "number", "discarded": "number" }
+      }
+    }
+  ],
+  "errorCases": [
+    { "status": 401, "code": "Unauthorized", "message": "missing or invalid token", "when": "no valid Bearer token is supplied" }
+  ]
+}
