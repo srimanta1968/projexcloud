@@ -1,0 +1,45 @@
+<clickhouse>
+    <!--
+      Sizing for the 1400m container on a 2-core/3.9GB host.
+
+      ClickHouse ships tuned for a dedicated ~64GB server and does not shrink to
+      fit a cgroup limit. Left at defaults it asks for 18GB of cache (8G
+      uncompressed + 5G mark + 5G index-mark) inside a 1.37GB container, so
+      merges of its OWN system log tables could never complete. Each failed
+      merge leaked ~1.46MiB into MemoryTracking (the tracker is not decremented
+      on a failed allocation), so the tracker reached 179GiB in 8h; past that
+      every allocation failed, and the merge scheduler retried forever ->
+      200% CPU and 1.15TB of I/O spent merging logs about being busy.
+
+      The self-telemetry tables below WERE the entire workload: ~1.1GB of parts
+      while all application data was 632 bytes. They are off, not merely bounded.
+      query_log/part_log stay: cheap, and needed to debug real queries.
+    -->
+    <metric_log remove="1"/>
+    <asynchronous_metric_log remove="1"/>
+    <text_log remove="1"/>
+    <trace_log remove="1"/>
+    <processors_profile_log remove="1"/>
+    <query_views_log remove="1"/>
+
+    <!-- Caches sized for the container, not for a 64GB box. -->
+    <mark_cache_size>268435456</mark_cache_size>
+    <uncompressed_cache_size>0</uncompressed_cache_size>
+    <index_mark_cache_size>134217728</index_mark_cache_size>
+    <max_server_memory_usage>1073741824</max_server_memory_usage>
+
+    <!--
+      background_pool_size is deliberately left at its default (16). Three
+      merge_tree thresholds (number_of_free_entries_in_pool_to_execute_mutation
+      =20, _to_execute_optimize_entire_partition=25, _to_lower_max_size_of_merge
+      =8) are validated at boot against background_pool_size *
+      background_merges_mutations_concurrency_ratio; lowering the pool without
+      lowering all three makes ClickHouse refuse to start (BAD_ARGUMENTS/36).
+      It buys nothing here anyway - with the log tables off there is almost no
+      merge work, and idle threads are cheap. The ~700 threads came from the
+      schedule pool below, which has no such invariant.
+    -->
+    <background_schedule_pool_size>16</background_schedule_pool_size>
+    <max_thread_pool_size>256</max_thread_pool_size>
+    <max_concurrent_queries>16</max_concurrent_queries>
+</clickhouse>
