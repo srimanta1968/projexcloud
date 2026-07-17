@@ -14,7 +14,10 @@
     "POST /policy/:id/evaluate"
   ],
   "fieldEnums": {
-    "format": ["pdf", "json"]
+    "format": [
+      "pdf",
+      "json"
+    ]
   },
   "testCases": [
     {
@@ -39,5 +42,43 @@
     "trace.exports.response.data.trace_id": "data.trace_id",
     "trace.exports.response.data.tenant_id": "data.tenant_id",
     "trace.exports.response.data.artifact_s3_key": "data.artifact_s3_key"
-  }
+  },
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "Authorization header absent or not Bearer form (requireAuth)"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "Bearer token fails JWT verification (requireAuth)"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "Required: tenant_id, requestor_persona_id, trace_id, format (pdf|json)",
+      "when": "any of tenant_id/requestor_persona_id/trace_id/format missing"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "format must be pdf or json",
+      "when": "format present but not 'pdf' or 'json'"
+    },
+    {
+      "status": 404,
+      "code": "NotFound",
+      "message": "trace_id <id> not found",
+      "when": "exportTrace/getTraceTimeline throws an Error whose message includes 'not found'"
+    },
+    {
+      "status": 500,
+      "code": "ExportFailed",
+      "message": "Export failed",
+      "when": "any other error thrown by exportTrace (insert failure, etc.)"
+    }
+  ]
 }

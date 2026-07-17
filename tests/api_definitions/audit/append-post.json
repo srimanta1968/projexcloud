@@ -41,8 +41,16 @@
     "POST /scim/v2/Users"
   ],
   "fieldEnums": {
-    "actor_kind": ["human", "service", "agent"],
-    "retention_class": ["transient", "operational", "regulated"]
+    "actor_kind": [
+      "human",
+      "service",
+      "agent"
+    ],
+    "retention_class": [
+      "transient",
+      "operational",
+      "regulated"
+    ]
   },
   "expectedResponse": {
     "data": {
@@ -59,5 +67,38 @@
   "captureResponse": {
     "audit.append.response.data.entry_id": "data.entry_id",
     "audit.append.response.data.entry_hash": "data.entry_hash"
-  }
+  },
+  "description": "Appends a hash-chained immutable entry to a per-pool audit chain, updating audit.chain_head in the same transaction; returns 201 with the new entry id/seq/hashes. actor_id comes from the JWT subject (defaults \"unknown\"); actor_kind defaults \"human\". Edge cases: missing pool_index/event_type/payload, actor_kind outside [human,service,agent], retention_class outside [transient,operational,regulated], and an event_type not in the canonical EVENT_TYPE_REGISTRY (rejected 400 before any write).",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "Authorization header absent or not Bearer form (requireAuth)"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "Bearer token fails JWT verification (requireAuth)"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "details[]: pool_index/event_type/payload required, actor_kind must be one of human,service,agent, retention_class must be one of transient,operational,regulated, or body must be an object",
+      "when": "validateAppendInput fails"
+    },
+    {
+      "status": 400,
+      "code": "UnregisteredEventType",
+      "message": "Unregistered event_type: <type>. Add it to EVENT_TYPE_REGISTRY first.",
+      "when": "appendAuditEntry throws for an event_type not in EVENT_TYPE_REGISTRY"
+    },
+    {
+      "status": 500,
+      "code": "InternalError",
+      "message": "InternalError",
+      "when": "any other error thrown by appendAuditEntry (DB failure, etc.)"
+    }
+  ]
 }

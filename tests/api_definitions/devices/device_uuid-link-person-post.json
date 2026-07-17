@@ -17,7 +17,11 @@
     "POST /scim/v2/Users"
   ],
   "fieldEnums": {
-    "status": ["active", "suspended", "revoked"]
+    "status": [
+      "active",
+      "suspended",
+      "revoked"
+    ]
   },
   "testCases": [
     {
@@ -36,5 +40,26 @@
   ],
   "captureResponse": {
     "devices.link-person.response.data.link.link_id": "data.link.link_id"
-  }
+  },
+  "description": "Links a person to a device (device_uuid path param) via linkPerson, returning 200 with the created link record. Requires person_id in the body; no not-found guard on device_uuid (an unknown device passes through to the service layer). Edge cases: missing person_id, auth failures.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "Authorization header absent or not Bearer form (requireAuth)"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "Bearer token fails JWT verification (requireAuth)"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "missing person_id",
+      "when": "person_id missing from body"
+    }
+  ]
 }

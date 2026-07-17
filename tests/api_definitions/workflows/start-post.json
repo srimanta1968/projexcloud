@@ -46,15 +46,32 @@
     }
   ],
   "fieldEnums": {
-    "envelope.actor.kind": ["human", "service", "agent", "support_impersonator"]
+    "envelope.actor.kind": [
+      "human",
+      "service",
+      "agent",
+      "support_impersonator"
+    ]
   },
   "statusTransitions": {
     "entity": "workflow.run",
     "field": "status",
-    "flow": ["running", "completed", "compensated"],
+    "flow": [
+      "running",
+      "completed",
+      "compensated"
+    ],
     "transitions": [
-      { "from": "running", "to": "completed", "via": "POST /api/workflows/start" },
-      { "from": "running", "to": "compensated", "via": "POST /api/workflows/start" }
+      {
+        "from": "running",
+        "to": "completed",
+        "via": "POST /api/workflows/start"
+      },
+      {
+        "from": "running",
+        "to": "compensated",
+        "via": "POST /api/workflows/start"
+      }
     ]
   },
   "expectedResponse": {
@@ -68,5 +85,44 @@
   "captureResponse": {
     "workflows.start.response.data.run_id": "data.run_id",
     "workflows.start.response.data.status": "data.status"
-  }
+  },
+  "description": "Starts a run of a registered workflow definition, resolving the active definition by name (+ optional version/namespace, default namespace \"admin\"), drives the runtime engine, and returns 201 with run_id/status/steps/output. The envelope is inherited from the JWT (tenant_id/sub) when not supplied. Edge cases: missing name (only required field), a name/version/namespace with no matching active definition (404), and a step whose handler is not registered in-process (400).",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "Authorization header absent or not Bearer form (requireAuth)"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "Bearer token fails JWT verification (requireAuth)"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "details[]: name is required / body must be an object",
+      "when": "validateStartRun fails"
+    },
+    {
+      "status": 404,
+      "code": "WorkflowDefinitionNotFound",
+      "message": "No active workflow definition for name=... version=... namespace=...",
+      "when": "startRun finds no active definition"
+    },
+    {
+      "status": 400,
+      "code": "StepHandlerNotFound",
+      "message": "step handler not registered",
+      "when": "executeRun hits a step with no in-process handler"
+    },
+    {
+      "status": 500,
+      "code": "InternalError",
+      "message": "InternalError",
+      "when": "any other unmapped error"
+    }
+  ]
 }

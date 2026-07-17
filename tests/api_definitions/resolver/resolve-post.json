@@ -34,5 +34,26 @@
     "resolver.resolve.response.data.identity_context.person_id": "data.identity_context.person_id",
     "resolver.resolve.response.data.identity_context.tenant_id": "data.identity_context.tenant_id",
     "resolver.resolve.response.data.identity_context.projection_version": "data.identity_context.projection_version"
-  }
+  },
+  "description": "Resolves and returns the full IdentityContext for a person in a tenant/app (personas, role closure, consents, pool indices) from the Redis/Postgres projection with a live-compose fallback on projection miss. Requires person_id, app_id and tenant_id; optional bypass_cache boolean skips the projection cache. Any missing required field yields 400; an internal resolve failure falls through to Fastify default 500.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "Authorization header absent or not Bearer form (requireAuth)"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "Bearer token fails JWT verification (requireAuth)"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "missing required fields",
+      "when": "person_id, app_id or tenant_id missing/falsy in body"
+    }
+  ]
 }

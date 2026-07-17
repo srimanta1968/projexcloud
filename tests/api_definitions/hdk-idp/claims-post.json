@@ -34,5 +34,26 @@
       },
       "expectedStatus": 201
     }
+  ],
+  "description": "Registers (upserts) a device identity claim binding a device_uuid to a person_id, optionally storing a biometric template envelope and/or PIN envelope (base64 blobs). Requires device_uuid and person_id; envelopes are optional (a claim with neither credential is accepted). Idempotent upsert on (device_uuid, person_id): a repeat call COALESCE-updates envelopes (a null envelope does NOT overwrite an existing one) and returns 201 — no duplicate/conflict error. Edge cases: empty-string vs missing fields, non-base64 envelopes, repeat registrations.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "Authorization header absent or not Bearer form (requireAuth)"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "Bearer token fails JWT verification (requireAuth)"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "missing fields",
+      "when": "device_uuid or person_id missing/falsy in body"
+    }
   ]
 }

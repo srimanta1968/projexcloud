@@ -59,5 +59,49 @@
         "success": true
       }
     }
+  ],
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "Authorization header absent or not Bearer form (requireAuth)"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "Bearer token fails JWT verification (requireAuth)"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "Missing required: request, context",
+      "when": "body.request or body.context absent"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "request.model and request.prompt are required",
+      "when": "request.model or request.prompt missing"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "context.agent_id, context.run_id, and context.trace_id are required",
+      "when": "any of context.agent_id/run_id/trace_id missing"
+    },
+    {
+      "status": 503,
+      "code": "ProviderUnavailable",
+      "message": "provider not available / no route matches and no provider_hint supplied",
+      "when": "complete() throws an Error whose message includes 'not available' or 'no route matches'"
+    },
+    {
+      "status": 500,
+      "code": "CompletionFailed",
+      "message": "Completion failed",
+      "when": "any other error thrown by complete() (kill-switch, provider adapter failure, DB insert failure)"
+    }
   ]
 }

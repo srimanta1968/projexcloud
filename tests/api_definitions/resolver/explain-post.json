@@ -46,5 +46,26 @@
     "resolver.explain.response.data.provenance.attribute": "data.provenance.attribute",
     "resolver.explain.response.data.provenance.source_sdk": "data.provenance.source_sdk",
     "resolver.explain.response.data.provenance.projection_version": "data.provenance.projection_version"
-  }
+  },
+  "description": "Returns provenance metadata (source SDK, computed_at, projection_version) for a single resolved identity attribute of a person within a tenant/app context. Requires person_id, app_id, tenant_id and attribute — any missing field yields 400. attribute is NOT enum-validated: an unrecognized attribute returns 200 with source_sdk=\"sdk-identity\" via the explain() default branch. A downstream resolve failure surfaces as Fastify default 500 (no explicit branch).",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "Authorization header absent or not Bearer form (requireAuth)"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "Bearer token fails JWT verification (requireAuth)"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "missing required fields",
+      "when": "person_id, app_id, tenant_id or attribute missing/falsy in body"
+    }
+  ]
 }

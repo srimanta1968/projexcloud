@@ -57,5 +57,56 @@
   },
   "captureResponse": {
     "payments.distribute.response.data.distribution.distribution_id": "data.distributions.0.distribution_id"
-  }
+  },
+  "description": "Appends immutable, hash-chained distribution ledger entries splitting a captured charge among parties. The caller tenant is taken from the JWT (never the body); the body charge_id is overwritten with the path param. Requires a 3-letter ISO-4217 currency and a non-empty splits[] where each split has a string party_persona_id and a positive-number share. The charge must exist, be owned by the caller tenant, and be in status \"captured\"; the batch share sum and the cumulative-of-all-prior-distributions must not exceed the charge amount. Edge cases: cross-tenant charge, missing charge, non-captured status, zero/negative shares, empty splits, wrong-length currency, over-subscription.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "Authorization header absent or not Bearer form (requireAuth)"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "Bearer token fails JWT verification (requireAuth)"
+    },
+    {
+      "status": 403,
+      "code": "Forbidden",
+      "message": "JWT missing tenant_id claim",
+      "when": "req.auth.tenant_id absent after auth"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "charge_id required / currency must be ISO-4217 3-letter / splits must be a non-empty array / splits[i].party_persona_id required / splits[i].share must be a positive number",
+      "when": "validateDistribute fails"
+    },
+    {
+      "status": 404,
+      "code": "ChargeNotFound",
+      "message": "Charge <charge_id> not found",
+      "when": "no charge row for the path charge_id"
+    },
+    {
+      "status": 403,
+      "code": "TenantOwnership",
+      "message": "caller tenant does not own resource tenant",
+      "when": "charge belongs to a different tenant than the JWT tenant"
+    },
+    {
+      "status": 409,
+      "code": "DistributionOversubscribed",
+      "message": "cumulative distribution would exceed charge amount",
+      "when": "prior distributions + this batch exceed the charge amount"
+    },
+    {
+      "status": 500,
+      "code": "InternalError",
+      "message": "InternalError",
+      "when": "default fallthrough (also, due to a fail()-matcher case mismatch, a non-captured status or batch-sum-exceeds-amount currently lands here instead of 409)"
+    }
+  ]
 }

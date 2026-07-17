@@ -51,5 +51,38 @@
   "captureResponse": {
     "relationships.create.response.data.relationship.relationship_id": "data.relationship.relationship_id",
     "relationships.create.response.data.relationship.status": "data.relationship.status"
-  }
+  },
+  "description": "Creates a new relationship edge between two personas, returning 201 with the created relationship. Requires non-empty kind, persona_a and persona_b (trimmed), and persona_a must differ from persona_b (self-edges rejected). Optional fields (scope, consent_ref, expires_at, reattest_due_at, cross_tenant) are coerced/ignored if wrong type. A DB check-constraint violation maps to 400; other insert failures return 500.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "Authorization header absent or not Bearer form (requireAuth)"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "Bearer token fails JWT verification (requireAuth)"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "details[] lists failing fields: kind/persona_a/persona_b required, persona_a and persona_b must differ, or body must be an object",
+      "when": "body not an object, a required field empty/missing, or persona_a === persona_b"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "raw DB check-constraint message",
+      "when": "createRelationship() throws an error whose message includes \"check constraint\""
+    },
+    {
+      "status": 500,
+      "code": "InternalError",
+      "message": "InternalError",
+      "when": "createRelationship() throws any other error or an error escapes the controller"
+    }
+  ]
 }

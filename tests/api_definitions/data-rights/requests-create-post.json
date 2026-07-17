@@ -75,5 +75,32 @@
   },
   "captureResponse": {
     "data-rights-requests.create.response.data.request.request_id": "data.request.request_id"
-  }
+  },
+  "description": "Submits a DSAR (Data Subject Access Request) and creates a new data_rights.request row in submitted status. Requires person_id and kind; optional tenant_id, jurisdiction, and approval_policy. kind must be one of the six DSAR kinds (access, erasure, rectification, restriction, objection, portability) — any other value is rejected 400. Returns 201 with the created request; edge cases: missing person_id, missing kind, invalid/unknown kind.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "Authorization header absent or not Bearer form (requireAuth)"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "Bearer token fails JWT verification (requireAuth)"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "missing fields",
+      "when": "person_id or kind missing from body"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "invalid kind",
+      "when": "kind not in the six DSAR kinds"
+    }
+  ]
 }

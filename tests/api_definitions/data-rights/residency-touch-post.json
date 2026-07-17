@@ -36,5 +36,26 @@
   ],
   "captureResponse": {
     "data-rights-residency.touch.response.data.residency.residency_id": "data.residency.residency_id"
-  }
+  },
+  "description": "Upserts (touches) a person_pool_residency record for a person+pool, returning 200 with the record. Requires person_id, pool_index and tenant_id; data_classes is optional and defaults to an empty array. Edge cases: each of the three required fields missing.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "Authorization header absent or not Bearer form (requireAuth)"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "Bearer token fails JWT verification (requireAuth)"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "missing fields",
+      "when": "person_id, pool_index or tenant_id missing from body"
+    }
+  ]
 }
