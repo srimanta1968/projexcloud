@@ -10,6 +10,13 @@ import {
   listSequences,
 } from '../services/sequenceService';
 import { runSequenceTick } from '../services/stepExecutor';
+import {
+  pauseEnrollment,
+  resumeEnrollment,
+  stopEnrollment,
+  replaceCta,
+  type ReactiveAction,
+} from '../services/reactiveControl';
 
 /**
  * sdk-sequence Fastify routes (P14·E1, TK-3613). CRUD for sequences / templates
@@ -131,6 +138,46 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
       const body = (req.body ?? {}) as { batch_size?: number };
       const result = await runSequenceTick(body.batch_size ?? 50);
       return reply.code(200).send({ data: result });
+    },
+  );
+
+  // Reactive control for an enrollment: pause-on-reply, stop-on-optout/payment,
+  // resume, and replace-CTA — with reason/event capture + queued-step cancellation.
+  const REACTIVE_ACTIONS: ReactiveAction[] = ['pause', 'resume', 'stop', 'replace_cta'];
+  app.post<{ Params: { enrollment_id: string } }>(
+    '/api/sequences/enrollments/:enrollment_id/control', { preHandler: requireAuth }, async (req, reply) => {
+      const body = (req.body ?? {}) as {
+        tenant_id?: string; action?: ReactiveAction; reason?: string; event?: string; template_id?: string;
+      };
+      if (!body.tenant_id || !body.action) {
+        return reply.code(400).send({ error: 'ValidationError', details: ['tenant_id and action are required'] });
+      }
+      if (!REACTIVE_ACTIONS.includes(body.action)) {
+        return reply.code(400).send({ error: 'ValidationError', details: ['invalid action'] });
+      }
+      const { enrollment_id } = req.params;
+      const ctl = { reason: body.reason, event: body.event };
+      let affected: number;
+      switch (body.action) {
+        case 'pause':
+          affected = await pauseEnrollment(body.tenant_id, enrollment_id, ctl);
+          break;
+        case 'resume':
+          affected = await resumeEnrollment(body.tenant_id, enrollment_id);
+          break;
+        case 'stop':
+          affected = await stopEnrollment(body.tenant_id, enrollment_id, ctl);
+          break;
+        case 'replace_cta':
+          if (!body.template_id) {
+            return reply.code(400).send({ error: 'ValidationError', details: ['template_id is required for replace_cta'] });
+          }
+          affected = await replaceCta(body.tenant_id, enrollment_id, { template_id: body.template_id, ...ctl });
+          break;
+        default:
+          return reply.code(400).send({ error: 'ValidationError', details: ['invalid action'] });
+      }
+      return reply.code(200).send({ data: { action: body.action, enrollment_id, affected } });
     },
   );
 }

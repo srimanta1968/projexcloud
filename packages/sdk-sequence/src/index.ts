@@ -23,3 +23,10 @@ export type {
   TickResult,
   ExecutorOptions,
 } from './services/stepExecutor';
+export {
+  pauseEnrollment,
+  resumeEnrollment,
+  stopEnrollment,
+  replaceCta,
+} from './services/reactiveControl';
+export type { ReactiveAction, ReactiveControlInput } from './services/reactiveControl';
