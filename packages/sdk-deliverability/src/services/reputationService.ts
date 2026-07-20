@@ -87,17 +87,19 @@ export async function recordSendOutcome(input: RecordOutcomeInput): Promise<Repu
   );
   const row = rows[0];
   const d = deriveStatus(Number(row.sent_count), Number(row.bounce_count), Number(row.complaint_count));
-  // Never auto-un-pause: a paused channel stays paused until an explicit resume.
-  const nextStatus = row.status === 'paused' ? 'paused' : d.status;
+  // Status always reflects the current cumulative rate: a channel auto-pauses when the
+  // rate crosses threshold AND auto-recovers (paused -> good/watch) once enough clean
+  // volume dilutes the rate back below it. resumeChannel is the immediate manual override.
   const updated = await dataService.rows<ReputationRow>(
     `UPDATE deliverability.reputation
         SET bounce_rate = $3, complaint_rate = $4, status = $5,
-            paused_at = CASE WHEN $5 = 'paused' AND paused_at IS NULL THEN now() ELSE paused_at END,
-            pause_reason = CASE WHEN $5 = 'paused' THEN COALESCE(pause_reason, $6) ELSE pause_reason END,
+            paused_at = CASE WHEN $5 = 'paused' THEN COALESCE(paused_at, now()) ELSE NULL END,
+            pause_reason = CASE WHEN $5 = 'paused' THEN $6 ELSE NULL END,
+            resumed_at = CASE WHEN $5 <> 'paused' AND status = 'paused' THEN now() ELSE resumed_at END,
             computed_at = now(), updated_at = now()
       WHERE tenant_id = $1 AND channel = $2
       RETURNING ${REP_COLS}`,
-    [input.tenantId, channel, d.bounceRate, d.complaintRate, nextStatus, d.reason],
+    [input.tenantId, channel, d.bounceRate, d.complaintRate, d.status, d.reason],
   );
   return updated[0];
 }
