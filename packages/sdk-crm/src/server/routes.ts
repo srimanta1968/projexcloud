@@ -23,6 +23,12 @@ import {
   checkSaveGate,
   DealNotFoundError,
 } from '../services/nextActionService';
+import {
+  checkStageTransition,
+  guardedTransition,
+  StageTransitionError,
+  DealNotFoundError as StageDealNotFoundError,
+} from '../services/stageGuardService';
 
 const STAGES: DealStage[] = ['qualifying', 'proposal', 'negotiation', 'closed-won', 'closed-lost'];
 const ACTIVITY_KINDS: ActivityKind[] = ['call', 'email', 'meeting', 'note', 'task'];
@@ -111,9 +117,32 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
       if (!body.stage || !STAGES.includes(body.stage)) {
         return reply.code(400).send({ error: 'ValidationError', details: ['invalid stage'] });
       }
-      const rec = await transitionDeal(req.params.deal_id, body.stage);
-      if (!rec) return reply.code(404).send({ error: 'NotFound' });
-      return reply.code(200).send({ data: { deal: rec } });
+      try {
+        // Guarded: validity + criteria + terminal gating. Emits the event only on a permitted move.
+        const rec = await guardedTransition(req.params.deal_id, body.stage);
+        if (!rec) return reply.code(404).send({ error: 'NotFound' });
+        return reply.code(200).send({ data: { deal: rec } });
+      } catch (err) {
+        if (err instanceof StageDealNotFoundError) return reply.code(404).send({ error: 'NotFound', details: ['deal not found'] });
+        if (err instanceof StageTransitionError) return reply.code(409).send({ error: 'InvalidTransition', details: [(err as Error).message] });
+        throw err;
+      }
+    },
+  );
+
+  // Stage-guard verdict: may this deal move to :to_stage? (validity + criteria + terminal gating).
+  app.get<{ Params: { deal_id: string }; Querystring: { tenant_id?: string; to_stage?: string } }>(
+    '/api/crm/deals/:deal_id/stage-guard', { preHandler: requireAuth }, async (req, reply) => {
+      if (!req.query.tenant_id) return reply.code(400).send({ error: 'ValidationError', details: ['tenant_id query param required'] });
+      const to = req.query.to_stage as DealStage | undefined;
+      if (!to || !STAGES.includes(to)) return reply.code(400).send({ error: 'ValidationError', details: ['to_stage query param must be a valid stage'] });
+      try {
+        const gate = await checkStageTransition(req.params.deal_id, to);
+        return reply.code(200).send({ data: { gate } });
+      } catch (err) {
+        if (err instanceof StageDealNotFoundError) return reply.code(404).send({ error: 'NotFound', details: ['deal not found'] });
+        throw err;
+      }
     },
   );
 
