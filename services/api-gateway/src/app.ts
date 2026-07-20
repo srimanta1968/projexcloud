@@ -128,6 +128,7 @@ import {
   makeSequenceStepSender,
   setPreSendGuard,
   setSmsConsentHandler,
+  setDeliveryReputationHook,
 } from '@projexlight/sdk-notification';
 import {
   migrationsDir as paymentMigrations,
@@ -327,7 +328,7 @@ import { migrationsDir as assignmentMigrations, server as assignmentServer } fro
 // live DB and their HTTP surfaces are reachable.
 import { migrationsDir as sequenceMigrations, server as sequenceServer, startSequenceExecutor, setSequenceStepSender } from '@projexlight/sdk-sequence';
 import { migrationsDir as schedulingMigrations, server as schedulingServer, startSchedulingReminderWorker } from '@projexlight/sdk-scheduling';
-import { migrationsDir as deliverabilityMigrations, server as deliverabilityServer, startReplySyncWorker, suppressionService as deliverabilitySuppression, isChannelPaused } from '@projexlight/sdk-deliverability';
+import { migrationsDir as deliverabilityMigrations, server as deliverabilityServer, startReplySyncWorker, suppressionService as deliverabilitySuppression, reputationService as deliverabilityReputation, isChannelPaused } from '@projexlight/sdk-deliverability';
 import { migrationsDir as handoffMigrations, server as handoffServer } from '@projexlight/sdk-handoff';
 import { migrationsDir as incidentMigrations, server as incidentServer } from '@projexlight/sdk-incident';
 import { migrationsDir as leadScoringMigrations }         from '@projexlight/sdk-lead-scoring';
@@ -3736,6 +3737,11 @@ const start = async (): Promise<void> => {
         return { action: 'resubscribed' };
       }
       return { action: 'none' };
+    });
+
+    // Delivery-status callbacks feed the deliverability reputation counters (TK-3636).
+    setDeliveryReputationHook(async ({ tenant_id, channel, delivered, bounced, complained }) => {
+      await deliverabilityReputation.recordSendOutcome({ tenantId: tenant_id, channel, delivered, bounced, complained });
     });
 
     const sequenceExecutor = startSequenceExecutor({

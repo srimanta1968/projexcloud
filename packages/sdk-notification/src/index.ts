@@ -22,6 +22,12 @@ export {
   listInboundSms,
 } from './services/smsInboundService';
 export type { KeywordIntent, SmsConsentEvent } from './services/smsInboundService';
+export {
+  classifyDeliveryStatus,
+  processDeliveryCallback,
+  setDeliveryReputationHook,
+  listDeliveryReceipts,
+} from './services/deliveryCallbackService';
 export type {
   UnifiedDispatchInput,
   UnifiedDispatchResult,

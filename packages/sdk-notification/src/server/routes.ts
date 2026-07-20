@@ -20,6 +20,10 @@ import {
   upsertSmsSettings,
   listInboundSms,
 } from '../services/smsInboundService';
+import {
+  processDeliveryCallback,
+  listDeliveryReceipts,
+} from '../services/deliveryCallbackService';
 
 const DISPATCH_CHANNELS: NotificationChannel[] = ['email', 'sms', 'whatsapp', 'push', 'slack'];
 
@@ -135,6 +139,37 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
         intent: req.query.intent, limit: req.query.limit ? Number(req.query.limit) : undefined,
       });
       return reply.code(200).send({ data: { messages } });
+    },
+  );
+
+  /* ---------------------------- delivery-status callbacks (TK-3636) */
+  // PUBLIC delivery-status webhook (Twilio/SES/SendGrid). Normalizes the status, maps it
+  // to markDelivered by provider_message_id (sent->delivered fires once), records an
+  // idempotent receipt, and feeds reputation. Unknown ids handled gracefully. tenant_id
+  // via ?tenant_id=. Signature-verified when a per-tenant secret is configured.
+  app.post<{ Params: { provider: string }; Querystring: { tenant_id?: string } }>(
+    '/api/notifications/webhooks/delivery/:provider', async (req, reply) => {
+      const tenantId = req.query.tenant_id;
+      if (!tenantId) return reply.code(400).send({ error: 'ValidationError', details: ['tenant_id query param required'] });
+      const provider = String(req.params.provider).toLowerCase();
+      const rawBody = JSON.stringify(req.body ?? {});
+      const signature = (req.headers['x-twilio-signature'] ?? req.headers['x-webhook-signature'] ?? req.headers['signature']) as string | undefined;
+      const { verified, enforced } = await verifyInboundSmsSignature(tenantId, rawBody, signature);
+      if (enforced && !verified) {
+        return reply.code(401).send({ error: 'InvalidSignature', details: ['delivery callback signature verification failed'] });
+      }
+      const result = await processDeliveryCallback({ tenantId, provider, payload: req.body, signatureVerified: verified });
+      return reply.code(200).send({ data: result });
+    },
+  );
+
+  app.get<{ Querystring: { tenant_id?: string; status?: string; limit?: string } }>(
+    '/api/notifications/delivery-receipts', { preHandler: requireAuth }, async (req, reply) => {
+      if (!req.query.tenant_id) return reply.code(400).send({ error: 'ValidationError', details: ['tenant_id query param required'] });
+      const receipts = await listDeliveryReceipts(req.query.tenant_id, {
+        status: req.query.status, limit: req.query.limit ? Number(req.query.limit) : undefined,
+      });
+      return reply.code(200).send({ data: { receipts } });
     },
   );
 }
