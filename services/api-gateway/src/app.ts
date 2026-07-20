@@ -330,7 +330,7 @@ import { migrationsDir as sequenceMigrations, server as sequenceServer, startSeq
 import { migrationsDir as schedulingMigrations, server as schedulingServer, startSchedulingReminderWorker } from '@projexlight/sdk-scheduling';
 import { migrationsDir as deliverabilityMigrations, server as deliverabilityServer, startReplySyncWorker, suppressionService as deliverabilitySuppression, reputationService as deliverabilityReputation, isChannelPaused } from '@projexlight/sdk-deliverability';
 import { migrationsDir as offerCatalogMigrations, server as offerCatalogServer } from '@projexlight/sdk-offer-catalog';
-import { migrationsDir as handoffMigrations, server as handoffServer } from '@projexlight/sdk-handoff';
+import { migrationsDir as handoffMigrations, server as handoffServer, registerHandoffSaga } from '@projexlight/sdk-handoff';
 import { migrationsDir as incidentMigrations, server as incidentServer } from '@projexlight/sdk-incident';
 import { migrationsDir as leadScoringMigrations }         from '@projexlight/sdk-lead-scoring';
 import {
@@ -3808,6 +3808,11 @@ const start = async (): Promise<void> => {
       intervalMs: parseInt(process.env.WORKFLOW_DURABLE_WORKER_INTERVAL_MS || '5000', 10),
       batchSize: parseInt(process.env.WORKFLOW_DURABLE_WORKER_BATCH_SIZE || '20', 10),
     });
+
+    // P15·E2 (TK-3647): register the sales→delivery handoff saga as an sdk-workflow
+    // definition + in-process step/compensation handlers. No new engine — the durable
+    // worker above drives it. Idempotent; the definition is inserted once.
+    await registerHandoffSaga().catch((err) => app.log.warn({ err }, 'registerHandoffSaga failed'));
 
     app.addHook('onClose', async (): Promise<void> => {
       rotationScheduler.stop();

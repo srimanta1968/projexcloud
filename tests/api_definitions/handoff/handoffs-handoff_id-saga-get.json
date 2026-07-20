@@ -1,0 +1,32 @@
+{
+  "name": "GET /api/handoffs/:handoff_id/saga - Inspect the handoff saga phase projection",
+  "endpoint": "/api/handoffs/:handoff_id/saga",
+  "sdk": "sdk-handoff",
+  "sourceFile": "packages/sdk-handoff/src/server/routes.ts",
+  "method": "GET",
+  "requiresAuth": true,
+  "expectedStatus": 200,
+  "taskId": "8770bb7c-418a-4013-93f1-e0d86f2c1849",
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "priority": 48,
+  "testability": "auto",
+  "description": "List the per-phase saga projection for a handoff (handoff.saga_step rows): each row is one saga phase (kickoff/prework/promises/risks/milestones) with its status ('done' once the sdk-workflow step succeeded, 'compensated' if a later failure rolled it back), the driving workflow run_id and created_at. Returns an empty list if the saga has not been started. tenant_id query param is required.",
+  "dependsOn": [
+    "POST /api/auth/signup-tenant",
+    "POST /api/handoffs",
+    "POST /api/handoffs/:handoff_id/saga/start"
+  ],
+  "testCases": [
+    {
+      "name": "Read the saga projection after starting it",
+      "headers": { "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}" },
+      "pathParams": { "handoff_id": "{{cache:handoff.handoffs.create.response.data.handoff.handoff_id}}" },
+      "queryParams": { "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}" },
+      "expectedStatus": 200,
+      "expectedResponse": { "data": { "steps": "array" } }
+    }
+  ],
+  "errorCases": [
+    { "status": 400, "code": "ValidationError", "message": "tenant_id query param required", "when": "tenant_id query param missing" }
+  ]
+}

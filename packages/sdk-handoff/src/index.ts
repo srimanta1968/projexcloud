@@ -17,6 +17,14 @@ export {
   InvalidHandoffTransition,
 } from './services/handoffService';
 
+// Durable saga (driven by sdk-workflow) — registered + started by the gateway.
+export {
+  registerHandoffSaga,
+  startHandoffSaga,
+  listHandoffSagaSteps,
+  SAGA_PHASES,
+} from './services/handoffSaga';
+
 export {
   HANDOFF_TRANSITIONS,
   HANDOFF_TRANSITION_EVENT,
