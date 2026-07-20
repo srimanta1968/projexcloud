@@ -52,6 +52,7 @@ const PUBLIC_PREFIX = [
   '/saml/', // SAML SSO metadata + ACS, driven by the IdP/browser
   '/api/connectors/inbound/', // signature-verified inbound webhooks
   '/api/deliverability/webhooks/', // provider bounce/complaint webhooks (HMAC-verified in handler)
+  '/api/notifications/webhooks/', // inbound SMS (Twilio) webhooks (HMAC-verified in handler)
 ];
 
 /** Prefixes that self-guard via the ADMIN_OPS_TOKEN header — bypass the JWT gate. */

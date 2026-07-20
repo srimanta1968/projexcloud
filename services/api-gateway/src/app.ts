@@ -127,6 +127,7 @@ import {
   registerSlackOutboundAdapter,
   makeSequenceStepSender,
   setPreSendGuard,
+  setSmsConsentHandler,
 } from '@projexlight/sdk-notification';
 import {
   migrationsDir as paymentMigrations,
@@ -3722,6 +3723,19 @@ const start = async (): Promise<void> => {
         if (await isChannelPaused(tenant_id, channel)) return { blocked: true, reason: 'channel paused for reputation' };
       } catch { /* fail-open: never block a send on a guard error */ }
       return { blocked: false };
+    });
+
+    // Inbound SMS STOP/START keywords propagate to the sms suppression list (TK-3634/3634).
+    setSmsConsentHandler(async ({ tenant_id, from_number, intent }) => {
+      if (intent === 'opt_out') {
+        await deliverabilitySuppression.suppress({ tenantId: tenant_id, channel: 'sms', address: from_number, reason: 'optout', source: 'sms:STOP' });
+        return { action: 'suppressed' };
+      }
+      if (intent === 'opt_in') {
+        await deliverabilitySuppression.unsuppress({ tenantId: tenant_id, channel: 'sms', address: from_number });
+        return { action: 'resubscribed' };
+      }
+      return { action: 'none' };
     });
 
     const sequenceExecutor = startSequenceExecutor({

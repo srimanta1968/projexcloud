@@ -14,6 +14,14 @@ export {
   setSequenceDestinationResolver,
   setPreSendGuard,
 } from './services/dispatchService';
+export {
+  classifyKeyword,
+  processInboundSms,
+  setSmsConsentHandler,
+  upsertSmsSettings,
+  listInboundSms,
+} from './services/smsInboundService';
+export type { KeywordIntent, SmsConsentEvent } from './services/smsInboundService';
 export type {
   UnifiedDispatchInput,
   UnifiedDispatchResult,

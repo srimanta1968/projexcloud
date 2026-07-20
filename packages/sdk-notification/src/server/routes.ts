@@ -14,6 +14,12 @@ import {
 } from './handlers/emailProviderController';
 import { unifiedDispatch } from '../services/dispatchService';
 import type { NotificationChannel } from '../models/notification.model';
+import {
+  processInboundSms,
+  verifyInboundSmsSignature,
+  upsertSmsSettings,
+  listInboundSms,
+} from '../services/smsInboundService';
 
 const DISPATCH_CHANNELS: NotificationChannel[] = ['email', 'sms', 'whatsapp', 'push', 'slack'];
 
@@ -83,4 +89,52 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
     try { await verifyEmailProviderHandler(req, reply); }
     catch (err) { req.log.error(err); if (!reply.sent) reply.code(500).send({ error: 'InternalError' }); }
   });
+
+  /* -------------------------------- inbound SMS + STOP/HELP/START (TK-3634) */
+  // Configure a tenant's inbound-SMS settings (signing secret + auto-reply text).
+  app.post('/api/notifications/sms-settings', { preHandler: requireAuth }, async (req, reply) => {
+    const body = req.body as Partial<{ tenant_id: string; signing_secret: string; help_reply: string; opt_out_reply: string; opt_in_reply: string }>;
+    if (!body.tenant_id) return reply.code(400).send({ error: 'ValidationError', details: ['tenant_id is required'] });
+    const settings = await upsertSmsSettings({
+      tenantId: body.tenant_id, signingSecret: body.signing_secret, helpReply: body.help_reply,
+      optOutReply: body.opt_out_reply, optInReply: body.opt_in_reply,
+    });
+    return reply.code(201).send({ data: { settings: { tenant_id: settings.tenant_id, help_reply: settings.help_reply } } });
+  });
+
+  // PUBLIC inbound SMS webhook (Twilio). HMAC-verified when a signing secret is
+  // configured, else accepted. Classifies STOP/START/HELP (case-insensitive) and routes
+  // the intent to the consent pipeline; HELP returns the configured auto-reply. tenant_id
+  // is carried on the per-tenant webhook URL via ?tenant_id=. Idempotent per message SID.
+  app.post<{ Querystring: { tenant_id?: string } }>(
+    '/api/notifications/webhooks/sms/inbound', async (req, reply) => {
+      const tenantId = req.query.tenant_id;
+      if (!tenantId) return reply.code(400).send({ error: 'ValidationError', details: ['tenant_id query param required'] });
+      const b = (req.body ?? {}) as Record<string, string>;
+      const from = b.From ?? b.from;
+      if (!from) return reply.code(400).send({ error: 'ValidationError', details: ['From is required'] });
+      const rawBody = JSON.stringify(req.body ?? {});
+      const signature = (req.headers['x-twilio-signature'] ?? req.headers['x-webhook-signature']) as string | undefined;
+      const { verified, enforced } = await verifyInboundSmsSignature(tenantId, rawBody, signature);
+      if (enforced && !verified) {
+        return reply.code(401).send({ error: 'InvalidSignature', details: ['inbound SMS signature verification failed'] });
+      }
+      const result = await processInboundSms({
+        tenantId, provider: 'twilio', fromNumber: from, toNumber: b.To ?? b.to,
+        body: b.Body ?? b.body, messageSid: b.MessageSid ?? b.message_sid, signatureVerified: verified,
+      });
+      return reply.code(200).send({ data: result });
+    },
+  );
+
+  // List a tenant's inbound SMS (optionally by keyword intent).
+  app.get<{ Querystring: { tenant_id?: string; intent?: string; limit?: string } }>(
+    '/api/notifications/sms-inbound', { preHandler: requireAuth }, async (req, reply) => {
+      if (!req.query.tenant_id) return reply.code(400).send({ error: 'ValidationError', details: ['tenant_id query param required'] });
+      const messages = await listInboundSms(req.query.tenant_id, {
+        intent: req.query.intent, limit: req.query.limit ? Number(req.query.limit) : undefined,
+      });
+      return reply.code(200).send({ data: { messages } });
+    },
+  );
 }
