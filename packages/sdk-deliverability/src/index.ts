@@ -11,3 +11,5 @@ export * as suppressionService from './services/suppressionService';
 export * as webhookService from './services/webhookService';
 export * as replyService from './services/replyService';
 export { startReplySyncWorker, setImapFetcher, setReplyNotifier } from './services/replyService';
+export * as reputationService from './services/reputationService';
+export { isChannelPaused } from './services/reputationService';

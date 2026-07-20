@@ -25,6 +25,13 @@ import {
   captureReply,
   listReplyEvents,
 } from '../services/replyService';
+import {
+  recordSendOutcome,
+  getReputation,
+  listReputation,
+  resumeChannel,
+  type RepChannel,
+} from '../services/reputationService';
 
 /**
  * sdk-deliverability Fastify routes (P14·E3, TK-3624). The pre-send suppression
@@ -252,4 +259,44 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
       return reply.code(200).send({ data: { events } });
     },
   );
+
+  /* ------------------------- bounce-rate auto-pause + reputation (TK-3627) */
+  const REP_CHANNELS: RepChannel[] = ['email', 'sms'];
+
+  // Record send outcomes (sent/delivered/bounced/complained) for a channel and recompute
+  // the reputation status — auto-pauses when the bounce/complaint rate crosses threshold.
+  app.post('/api/deliverability/reputation/record', { preHandler: requireAuth }, async (req, reply) => {
+    const body = req.body as Partial<{ tenant_id: string; channel: RepChannel; sent: number; delivered: number; bounced: number; complained: number }>;
+    if (!body.tenant_id) return reply.code(400).send({ error: 'ValidationError', details: ['tenant_id is required'] });
+    if (body.channel && !REP_CHANNELS.includes(body.channel)) {
+      return reply.code(400).send({ error: 'ValidationError', details: ['channel must be email or sms'] });
+    }
+    const reputation = await recordSendOutcome({
+      tenantId: body.tenant_id, channel: body.channel, sent: body.sent, delivered: body.delivered,
+      bounced: body.bounced, complained: body.complained,
+    });
+    return reply.code(200).send({ data: { reputation } });
+  });
+
+  // Reputation signals for a tenant (all channels, or a single channel via ?channel=).
+  app.get<{ Querystring: { tenant_id?: string; channel?: RepChannel } }>(
+    '/api/deliverability/reputation', { preHandler: requireAuth }, async (req, reply) => {
+      if (!req.query.tenant_id) return reply.code(400).send({ error: 'ValidationError', details: ['tenant_id query param required'] });
+      if (req.query.channel) {
+        const reputation = await getReputation(req.query.tenant_id, req.query.channel);
+        return reply.code(200).send({ data: { reputation } });
+      }
+      const reputations = await listReputation(req.query.tenant_id);
+      return reply.code(200).send({ data: { reputations } });
+    },
+  );
+
+  // Manually resume a paused channel (human override) — clears the pause + resets the window.
+  app.post('/api/deliverability/reputation/resume', { preHandler: requireAuth }, async (req, reply) => {
+    const body = (req.body ?? {}) as { tenant_id?: string; channel?: RepChannel };
+    if (!body.tenant_id) return reply.code(400).send({ error: 'ValidationError', details: ['tenant_id is required'] });
+    const reputation = await resumeChannel(body.tenant_id, body.channel ?? 'email');
+    if (!reputation) return reply.code(404).send({ error: 'NotFound', details: ['no reputation row for that tenant/channel'] });
+    return reply.code(200).send({ data: { reputation } });
+  });
 }
