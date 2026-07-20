@@ -136,6 +136,12 @@ export async function invokeToolHandler(
   reply: FastifyReply,
 ): Promise<void> {
   const body = req.body;
+  // Reject a malformed tool_id (e.g. a literal ":tool_id" path placeholder) with a clean
+  // 400 rather than letting it reach the UUID query and 500 (Postgres 22P02).
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(req.params.tool_id ?? '')) {
+    reply.code(400).send({ success: false, error: 'tool_id must be a valid UUID' });
+    return;
+  }
   if (!body?.agent_run_id || !body?.capability_token_id || body?.args === undefined || !body?.trace_id) {
     reply.code(400).send({
       success: false,
