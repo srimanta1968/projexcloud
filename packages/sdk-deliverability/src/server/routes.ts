@@ -18,6 +18,13 @@ import {
   listBounceEvents,
   type Provider,
 } from '../services/webhookService';
+import {
+  createMailbox,
+  listMailboxes,
+  runReplySync,
+  captureReply,
+  listReplyEvents,
+} from '../services/replyService';
 
 /**
  * sdk-deliverability Fastify routes (P14·E3, TK-3624). The pre-send suppression
@@ -167,6 +174,78 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
     '/api/deliverability/bounce-events', { preHandler: requireAuth }, async (req, reply) => {
       if (!req.query.tenant_id) return reply.code(400).send({ error: 'ValidationError', details: ['tenant_id query param required'] });
       const events = await listBounceEvents(req.query.tenant_id, {
+        classification: req.query.classification,
+        limit: req.query.limit ? Number(req.query.limit) : undefined,
+      });
+      return reply.code(200).send({ data: { events } });
+    },
+  );
+
+  /* ------------------------------------- IMAP inbound reply sync (TK-3626) */
+  app.post('/api/deliverability/mailboxes', { preHandler: requireAuth }, async (req, reply) => {
+    const body = req.body as Partial<{
+      tenant_id: string; imap_host: string; username: string; host_persona_id: string;
+      imap_port: number; secret_ref: string; folder: string; use_tls: boolean;
+    }>;
+    if (!body.tenant_id || !body.imap_host || !body.username) {
+      return reply.code(400).send({ error: 'ValidationError', details: ['tenant_id, imap_host and username are required'] });
+    }
+    const mailbox = await createMailbox({
+      tenantId: body.tenant_id, imapHost: body.imap_host, username: body.username,
+      hostPersonaId: body.host_persona_id, imapPort: body.imap_port, secretRef: body.secret_ref,
+      folder: body.folder, useTls: body.use_tls,
+    });
+    return reply.code(201).send({ data: { mailbox } });
+  });
+
+  app.get<{ Querystring: { tenant_id?: string } }>(
+    '/api/deliverability/mailboxes', { preHandler: requireAuth }, async (req, reply) => {
+      if (!req.query.tenant_id) return reply.code(400).send({ error: 'ValidationError', details: ['tenant_id query param required'] });
+      const mailboxes = await listMailboxes(req.query.tenant_id);
+      return reply.code(200).send({ data: { mailboxes } });
+    },
+  );
+
+  // Poll a mailbox once over IMAP (fetch via the pluggable fetcher; no-op without a live client).
+  app.post<{ Params: { mailbox_id: string } }>(
+    '/api/deliverability/mailboxes/:mailbox_id/sync', { preHandler: requireAuth }, async (req, reply) => {
+      const body = (req.body ?? {}) as { tenant_id?: string };
+      if (!body.tenant_id) return reply.code(400).send({ error: 'ValidationError', details: ['tenant_id is required'] });
+      try {
+        const result = await runReplySync(body.tenant_id, req.params.mailbox_id);
+        return reply.code(200).send({ data: result });
+      } catch (err) {
+        return reply.code(404).send({ error: 'NotFound', details: [(err as Error).message] });
+      }
+    },
+  );
+
+  // Ingest a single inbound reply (what the IMAP worker calls per message; also the
+  // direct-capture surface). Classifies + records + fires pause-on-reply for human replies.
+  app.post<{ Params: { mailbox_id: string } }>(
+    '/api/deliverability/mailboxes/:mailbox_id/replies', { preHandler: requireAuth }, async (req, reply) => {
+      const body = req.body as Partial<{
+        tenant_id: string; message_id: string; from_address: string; subject: string; snippet: string;
+        in_reply_to: string; references: string; subject_persona_id: string; headers: Record<string, string>;
+      }>;
+      if (!body.tenant_id || !body.message_id) {
+        return reply.code(400).send({ error: 'ValidationError', details: ['tenant_id and message_id are required'] });
+      }
+      const result = await captureReply({
+        tenantId: body.tenant_id, mailboxId: req.params.mailbox_id, subjectPersonaId: body.subject_persona_id,
+        message: {
+          message_id: body.message_id, from_address: body.from_address, subject: body.subject,
+          snippet: body.snippet, in_reply_to: body.in_reply_to, references: body.references, headers: body.headers,
+        },
+      });
+      return reply.code(201).send({ data: { reply: result } });
+    },
+  );
+
+  app.get<{ Querystring: { tenant_id?: string; classification?: string; limit?: string } }>(
+    '/api/deliverability/reply-events', { preHandler: requireAuth }, async (req, reply) => {
+      if (!req.query.tenant_id) return reply.code(400).send({ error: 'ValidationError', details: ['tenant_id query param required'] });
+      const events = await listReplyEvents(req.query.tenant_id, {
         classification: req.query.classification,
         limit: req.query.limit ? Number(req.query.limit) : undefined,
       });

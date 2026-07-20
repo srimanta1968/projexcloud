@@ -1,0 +1,55 @@
+{
+  "sdk": "sdk-deliverability",
+  "sourceFile": "packages/sdk-deliverability/src/server/routes.ts",
+  "requiresAuth": true,
+  "taskId": "3c5b06a9-c838-459d-a5c9-6f446489293a",
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "featureId": "0d077452-9613-46a5-9709-a9d3f71a8156",
+  "epicId": "287f42d8-2045-4105-8948-5e1f25fba3ba",
+  "testability": "auto",
+  "name": "POST /api/deliverability/mailboxes - Register an IMAP mailbox",
+  "endpoint": "/api/deliverability/mailboxes",
+  "method": "POST",
+  "expectedStatus": 201,
+  "priority": 30,
+  "description": "Register a tenant mailbox for inbound reply sync (upsert per tenant+username+folder). The reply worker polls it incrementally over IMAP by UID. tenant_id, imap_host and username are required; the IMAP secret is a vault ref (never raw).",
+  "dependsOn": [
+    "POST /api/auth/signup-tenant"
+  ],
+  "captureResponse": {
+    "deliverability.mailbox.create.response.data.mailbox.mailbox_id": "data.mailbox.mailbox_id"
+  },
+  "testCases": [
+    {
+      "name": "Register an inbox",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "payload": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "imap_host": "imap.example.com",
+        "imap_port": 993,
+        "username": "replies-{{dynamic:uuid}}@example.com",
+        "secret_ref": "vault://imap/{{dynamic:uuid}}",
+        "folder": "INBOX",
+        "use_tls": true
+      },
+      "expectedStatus": 201,
+      "expectedResponse": {
+        "data": {
+          "mailbox": {
+            "mailbox_id": "string"
+          }
+        }
+      }
+    }
+  ],
+  "errorCases": [
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "tenant_id, imap_host and username are required",
+      "when": "required field missing"
+    }
+  ]
+}
