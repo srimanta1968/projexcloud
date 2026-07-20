@@ -16,9 +16,17 @@ import {
   updateDeal,
 } from '../services/crmService';
 import type { ActivityKind, DealStage, LifecycleStage } from '../models/crm.model';
+import {
+  setNextAction,
+  getOpenNextAction,
+  completeNextAction,
+  checkSaveGate,
+  DealNotFoundError,
+} from '../services/nextActionService';
 
 const STAGES: DealStage[] = ['qualifying', 'proposal', 'negotiation', 'closed-won', 'closed-lost'];
 const ACTIVITY_KINDS: ActivityKind[] = ['call', 'email', 'meeting', 'note', 'task'];
+const NEXT_ACTION_TYPES = ['call', 'email', 'meeting', 'task', 'linkedin', 'sms', 'proposal', 'other'];
 
 export async function registerRoutes(app: FastifyInstance): Promise<void> {
   app.post('/api/crm/contacts', { preHandler: requireAuth }, async (req, reply) => {
@@ -201,4 +209,65 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
     });
     return reply.code(201).send({ data: { activity: rec } });
   });
+
+  /* --------------------------------------------- NEXT-action + save-gate (TK-3630) */
+  // Set (replace) the deal's open NEXT action.
+  app.post<{ Params: { deal_id: string } }>(
+    '/api/crm/deals/:deal_id/next-action', { preHandler: requireAuth }, async (req, reply) => {
+      const body = req.body as Partial<{
+        tenant_id: string; action_type: string; owner_persona_id: string; due_at: string; purpose: string;
+      }>;
+      if (!body.tenant_id || !body.due_at) {
+        return reply.code(400).send({ error: 'ValidationError', details: ['tenant_id and due_at are required'] });
+      }
+      if (body.action_type && !NEXT_ACTION_TYPES.includes(body.action_type)) {
+        return reply.code(400).send({ error: 'ValidationError', details: [`action_type must be one of ${NEXT_ACTION_TYPES.join(', ')}`] });
+      }
+      try {
+        const next_action = await setNextAction({
+          tenantId: body.tenant_id, dealId: req.params.deal_id, actionType: body.action_type,
+          ownerPersonaId: body.owner_persona_id, dueAt: body.due_at, purpose: body.purpose,
+        });
+        return reply.code(201).send({ data: { next_action } });
+      } catch (err) {
+        if (err instanceof DealNotFoundError) return reply.code(404).send({ error: 'NotFound', details: ['deal not found'] });
+        throw err;
+      }
+    },
+  );
+
+  // Get the deal's current open NEXT action.
+  app.get<{ Params: { deal_id: string }; Querystring: { tenant_id?: string } }>(
+    '/api/crm/deals/:deal_id/next-action', { preHandler: requireAuth }, async (req, reply) => {
+      if (!req.query.tenant_id) return reply.code(400).send({ error: 'ValidationError', details: ['tenant_id query param required'] });
+      const next_action = await getOpenNextAction(req.query.tenant_id, req.params.deal_id);
+      if (!next_action) return reply.code(404).send({ error: 'NotFound', details: ['no open NEXT action for this deal'] });
+      return reply.code(200).send({ data: { next_action } });
+    },
+  );
+
+  // Complete the open NEXT action with an outcome.
+  app.post<{ Params: { deal_id: string } }>(
+    '/api/crm/deals/:deal_id/next-action/complete', { preHandler: requireAuth }, async (req, reply) => {
+      const body = (req.body ?? {}) as { tenant_id?: string; outcome?: string };
+      if (!body.tenant_id) return reply.code(400).send({ error: 'ValidationError', details: ['tenant_id is required'] });
+      const next_action = await completeNextAction(body.tenant_id, req.params.deal_id, body.outcome);
+      if (!next_action) return reply.code(404).send({ error: 'NotFound', details: ['no open NEXT action to complete'] });
+      return reply.code(200).send({ data: { next_action } });
+    },
+  );
+
+  // Save-gate verdict: is this deal allowed to save/advance? (terminal, or has open NEXT action).
+  app.get<{ Params: { deal_id: string }; Querystring: { tenant_id?: string } }>(
+    '/api/crm/deals/:deal_id/save-gate', { preHandler: requireAuth }, async (req, reply) => {
+      if (!req.query.tenant_id) return reply.code(400).send({ error: 'ValidationError', details: ['tenant_id query param required'] });
+      try {
+        const gate = await checkSaveGate(req.query.tenant_id, req.params.deal_id);
+        return reply.code(200).send({ data: { gate } });
+      } catch (err) {
+        if (err instanceof DealNotFoundError) return reply.code(404).send({ error: 'NotFound', details: ['deal not found'] });
+        throw err;
+      }
+    },
+  );
 }

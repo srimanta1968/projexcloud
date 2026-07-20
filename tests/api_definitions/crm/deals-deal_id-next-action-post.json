@@ -1,0 +1,74 @@
+{
+  "sdk": "sdk-crm",
+  "sourceFile": "packages/sdk-crm/src/server/routes.ts",
+  "requiresAuth": true,
+  "taskId": "7b73e8fb-544f-49dd-abc9-361c4510a3f4",
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "featureId": "b15ed3e2-02a0-4584-ac69-61da0250fc92",
+  "epicId": "f7f7186e-8f69-4e44-97b8-212928e870f6",
+  "testability": "auto",
+  "name": "POST /api/crm/deals/:deal_id/next-action - Set the NEXT action",
+  "endpoint": "/api/crm/deals/:deal_id/next-action",
+  "method": "POST",
+  "expectedStatus": 201,
+  "priority": 50,
+  "description": "Set (replace) the deal's single open NEXT action: type, owner, due-time and purpose. Any prior open action is cancelled so there is always exactly one open. tenant_id and due_at are required; 404 if the deal does not exist.",
+  "dependsOn": [
+    "POST /api/auth/signup-tenant",
+    "POST /api/personas",
+    "POST /api/crm/deals"
+  ],
+  "fieldEnums": {
+    "action_type": [
+      "call",
+      "email",
+      "meeting",
+      "task",
+      "linkedin",
+      "sms",
+      "proposal",
+      "other"
+    ]
+  },
+  "testCases": [
+    {
+      "name": "Set a follow-up call as the next action",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "pathParams": {
+        "deal_id": "{{cache:crm.deals.response.data.deal.deal_id}}"
+      },
+      "payload": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "action_type": "call",
+        "owner_persona_id": "{{cache:personas.create.response.data.persona.persona_id}}",
+        "due_at": "{{dynamic:futuredatetime}}",
+        "purpose": "Confirm budget and timeline"
+      },
+      "expectedStatus": 201,
+      "expectedResponse": {
+        "data": {
+          "next_action": {
+            "next_action_id": "string",
+            "status": "string"
+          }
+        }
+      }
+    }
+  ],
+  "errorCases": [
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "tenant_id and due_at are required",
+      "when": "required field missing"
+    },
+    {
+      "status": 404,
+      "code": "NotFound",
+      "message": "deal not found",
+      "when": "no deal for tenant"
+    }
+  ]
+}

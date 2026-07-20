@@ -1,0 +1,57 @@
+{
+  "sdk": "sdk-crm",
+  "sourceFile": "packages/sdk-crm/src/server/routes.ts",
+  "requiresAuth": true,
+  "taskId": "7b73e8fb-544f-49dd-abc9-361c4510a3f4",
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "featureId": "b15ed3e2-02a0-4584-ac69-61da0250fc92",
+  "epicId": "f7f7186e-8f69-4e44-97b8-212928e870f6",
+  "testability": "auto",
+  "name": "GET /api/crm/deals/:deal_id/save-gate - Save-gate verdict",
+  "endpoint": "/api/crm/deals/:deal_id/save-gate",
+  "method": "GET",
+  "expectedStatus": 200,
+  "priority": 52,
+  "description": "The save-gate verdict: a non-terminal deal may save/advance only if it has an open NEXT action; terminal deals (closed-won/lost or an is_terminal funnel stage) are always allowed. Returns {allowed, reason, is_terminal, has_open_next_action}. tenant_id query param required.",
+  "dependsOn": [
+    "POST /api/auth/signup-tenant",
+    "POST /api/crm/deals",
+    "POST /api/crm/deals/:deal_id/next-action"
+  ],
+  "testCases": [
+    {
+      "name": "Save-gate allows (open next action present)",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "pathParams": {
+        "deal_id": "{{cache:crm.deals.response.data.deal.deal_id}}"
+      },
+      "queryParams": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}"
+      },
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "data": {
+          "gate": {
+            "allowed": "boolean"
+          }
+        }
+      }
+    }
+  ],
+  "errorCases": [
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "tenant_id query param required",
+      "when": "tenant_id missing"
+    },
+    {
+      "status": 404,
+      "code": "NotFound",
+      "message": "deal not found",
+      "when": "no deal for tenant"
+    }
+  ]
+}
