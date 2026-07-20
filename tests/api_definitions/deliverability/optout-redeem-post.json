@@ -1,0 +1,52 @@
+{
+  "sdk": "sdk-deliverability",
+  "sourceFile": "packages/sdk-deliverability/src/server/routes.ts",
+  "requiresAuth": true,
+  "taskId": "299c5b7c-6abb-4fb5-9c09-174d9f607981",
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "featureId": "38948f60-76b4-47b0-9635-8f9dc024f792",
+  "epicId": "287f42d8-2045-4105-8948-5e1f25fba3ba",
+  "testability": "auto",
+  "name": "POST /api/deliverability/optout/redeem - Redeem an opt-out token",
+  "endpoint": "/api/deliverability/optout/redeem",
+  "method": "POST",
+  "expectedStatus": 200,
+  "priority": 15,
+  "description": "Redeem an opt-out token (one-time): verify by hash, mark it used, add the suppression, and write an opt-out audit event. Returns 410 if the token is unknown, already used, or expired. token required.",
+  "dependsOn": [
+    "POST /api/auth/signup-tenant",
+    "POST /api/deliverability/optout-tokens"
+  ],
+  "testCases": [
+    {
+      "name": "Redeem the opt-out token",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "payload": {
+        "token": "{{cache:deliverability.optout-token.create.response.data.token}}",
+        "feedback": "Too many emails"
+      },
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "data": {
+          "redeemed": "boolean"
+        }
+      }
+    }
+  ],
+  "errorCases": [
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "token is required",
+      "when": "token missing"
+    },
+    {
+      "status": 410,
+      "code": "Gone",
+      "message": "token is unknown, already used, or expired",
+      "when": "token invalid/used/expired"
+    }
+  ]
+}

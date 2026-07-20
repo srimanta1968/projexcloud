@@ -6,4 +6,5 @@
  * provider bounce/complaint webhooks with TK-3625; IMAP reply-sync with TK-3626.
  */
 export { migrationsDir } from './db';
+export * as server from './server';
 export * as suppressionService from './services/suppressionService';

@@ -324,6 +324,7 @@ import { migrationsDir as assignmentMigrations, server as assignmentServer } fro
 // live DB and their HTTP surfaces are reachable.
 import { migrationsDir as sequenceMigrations, server as sequenceServer, startSequenceExecutor } from '@projexlight/sdk-sequence';
 import { migrationsDir as schedulingMigrations, server as schedulingServer, startSchedulingReminderWorker } from '@projexlight/sdk-scheduling';
+import { migrationsDir as deliverabilityMigrations, server as deliverabilityServer } from '@projexlight/sdk-deliverability';
 import { migrationsDir as handoffMigrations, server as handoffServer } from '@projexlight/sdk-handoff';
 import { migrationsDir as incidentMigrations, server as incidentServer } from '@projexlight/sdk-incident';
 import { migrationsDir as leadScoringMigrations }         from '@projexlight/sdk-lead-scoring';
@@ -543,6 +544,7 @@ app.register(crmServer.registerRoutes);
 app.register(assignmentServer.registerRoutes);
 app.register(sequenceServer.registerRoutes);
 app.register(schedulingServer.registerRoutes);
+app.register(deliverabilityServer.registerRoutes);
 app.register(handoffServer.registerRoutes);
 app.register(incidentServer.registerRoutes);
 app.register(serviceRequestServer.registerRoutes);
@@ -1168,6 +1170,7 @@ const start = async (): Promise<void> => {
       // hard FKs; deal_id/subject refs are loose), so ordering is unconstrained.
       { sdk: 'sdk-sequence',            dir: sequenceMigrations },
       { sdk: 'sdk-scheduling',          dir: schedulingMigrations },
+      { sdk: 'sdk-deliverability',      dir: deliverabilityMigrations },
       { sdk: 'sdk-handoff',             dir: handoffMigrations },
       { sdk: 'sdk-incident',            dir: incidentMigrations },
     ]);
