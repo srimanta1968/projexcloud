@@ -12,6 +12,7 @@ export {
   unifiedDispatch,
   makeSequenceStepSender,
   setSequenceDestinationResolver,
+  setPreSendGuard,
 } from './services/dispatchService';
 export type {
   UnifiedDispatchInput,

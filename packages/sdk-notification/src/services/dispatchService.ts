@@ -26,7 +26,7 @@ export interface UnifiedDispatchInput {
 }
 
 export interface UnifiedDispatchResult {
-  status: 'sent' | 'deferred' | 'failed';
+  status: 'sent' | 'deferred' | 'failed' | 'suppressed';
   provider?: string;
   provider_message_id?: string | null;
   delivered_status?: string;
@@ -34,11 +34,26 @@ export interface UnifiedDispatchResult {
 }
 
 /**
+ * Pluggable pre-send guard. The app wires this to sdk-deliverability (isSuppressed +
+ * reputation isChannelPaused) so a suppressed recipient or a paused channel is skipped
+ * BEFORE the provider is called. Default allows everything (no deliverability wired).
+ */
+export type PreSendGuard = (args: { tenant_id: string; channel: NotificationChannel; destination: string }) => Promise<{ blocked: boolean; reason?: string }>;
+const defaultGuard: PreSendGuard = async () => ({ blocked: false });
+let _guard: PreSendGuard = defaultGuard;
+export function setPreSendGuard(guard: PreSendGuard): void { _guard = guard; }
+export function _resetPreSendGuard(): void { _guard = defaultGuard; }
+
+/**
  * Route one message through the channel's provider chain (with failover), deferring if
  * the recipient persona is in quiet hours. Never throws — a provider failure returns
  * status:'failed' with the reason.
  */
 export async function unifiedDispatch(input: UnifiedDispatchInput): Promise<UnifiedDispatchResult> {
+  // Pre-send guard first: a suppressed recipient / paused channel never reaches a provider.
+  const guard: { blocked: boolean; reason?: string } = await _guard({ tenant_id: input.tenant_id, channel: input.channel, destination: input.destination }).catch(() => ({ blocked: false }));
+  if (guard.blocked) return { status: 'suppressed', reason: guard.reason ?? 'blocked by pre-send guard' };
+
   if (input.respect_quiet_hours && input.subject_persona_id) {
     const record = await getQuietHours(input.subject_persona_id).catch(() => null);
     const q = isInQuietHours(record);

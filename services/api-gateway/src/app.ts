@@ -126,6 +126,7 @@ import {
   registerFcmPushAdapter,
   registerSlackOutboundAdapter,
   makeSequenceStepSender,
+  setPreSendGuard,
 } from '@projexlight/sdk-notification';
 import {
   migrationsDir as paymentMigrations,
@@ -325,7 +326,7 @@ import { migrationsDir as assignmentMigrations, server as assignmentServer } fro
 // live DB and their HTTP surfaces are reachable.
 import { migrationsDir as sequenceMigrations, server as sequenceServer, startSequenceExecutor, setSequenceStepSender } from '@projexlight/sdk-sequence';
 import { migrationsDir as schedulingMigrations, server as schedulingServer, startSchedulingReminderWorker } from '@projexlight/sdk-scheduling';
-import { migrationsDir as deliverabilityMigrations, server as deliverabilityServer, startReplySyncWorker } from '@projexlight/sdk-deliverability';
+import { migrationsDir as deliverabilityMigrations, server as deliverabilityServer, startReplySyncWorker, suppressionService as deliverabilitySuppression, isChannelPaused } from '@projexlight/sdk-deliverability';
 import { migrationsDir as handoffMigrations, server as handoffServer } from '@projexlight/sdk-handoff';
 import { migrationsDir as incidentMigrations, server as incidentServer } from '@projexlight/sdk-incident';
 import { migrationsDir as leadScoringMigrations }         from '@projexlight/sdk-lead-scoring';
@@ -3710,6 +3711,18 @@ const start = async (): Promise<void> => {
     // transport (email SES/SMTP, SMS Twilio, quiet-hours-aware). The default resolver
     // is a no-op (emit-only) until the app wires setSequenceDestinationResolver.
     setSequenceStepSender(makeSequenceStepSender());
+
+    // Pre-send guard: skip a suppressed recipient / reputation-paused channel BEFORE the
+    // provider is called (bridges sdk-notification's transport to sdk-deliverability).
+    setPreSendGuard(async ({ tenant_id, channel, destination }) => {
+      if (channel !== 'email' && channel !== 'sms') return { blocked: false };
+      try {
+        const suppressed = await deliverabilitySuppression.isSuppressed({ tenantId: tenant_id, channel, address: destination });
+        if (suppressed) return { blocked: true, reason: 'recipient is suppressed' };
+        if (await isChannelPaused(tenant_id, channel)) return { blocked: true, reason: 'channel paused for reputation' };
+      } catch { /* fail-open: never block a send on a guard error */ }
+      return { blocked: false };
+    });
 
     const sequenceExecutor = startSequenceExecutor({
       enabled: process.env.SEQUENCE_EXECUTOR_ENABLED === 'true',
