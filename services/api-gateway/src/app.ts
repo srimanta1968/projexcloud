@@ -323,6 +323,7 @@ import { migrationsDir as assignmentMigrations, server as assignmentServer } fro
 // wired into the gateway boot; mount them here so their schemas land in the
 // live DB and their HTTP surfaces are reachable.
 import { migrationsDir as sequenceMigrations, server as sequenceServer, startSequenceExecutor } from '@projexlight/sdk-sequence';
+import { migrationsDir as schedulingMigrations, server as schedulingServer } from '@projexlight/sdk-scheduling';
 import { migrationsDir as handoffMigrations, server as handoffServer } from '@projexlight/sdk-handoff';
 import { migrationsDir as incidentMigrations, server as incidentServer } from '@projexlight/sdk-incident';
 import { migrationsDir as leadScoringMigrations }         from '@projexlight/sdk-lead-scoring';
@@ -541,6 +542,7 @@ app.register(eventServer.registerRoutes);
 app.register(crmServer.registerRoutes);
 app.register(assignmentServer.registerRoutes);
 app.register(sequenceServer.registerRoutes);
+app.register(schedulingServer.registerRoutes);
 app.register(handoffServer.registerRoutes);
 app.register(incidentServer.registerRoutes);
 app.register(serviceRequestServer.registerRoutes);
@@ -1165,6 +1167,7 @@ const start = async (): Promise<void> => {
       // P14/P15 — InboundCRM SDK batch. Self-contained schemas (no cross-SDK
       // hard FKs; deal_id/subject refs are loose), so ordering is unconstrained.
       { sdk: 'sdk-sequence',            dir: sequenceMigrations },
+      { sdk: 'sdk-scheduling',          dir: schedulingMigrations },
       { sdk: 'sdk-handoff',             dir: handoffMigrations },
       { sdk: 'sdk-incident',            dir: incidentMigrations },
     ]);
