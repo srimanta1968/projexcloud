@@ -1,0 +1,73 @@
+{
+  "sdk": "sdk-scheduling",
+  "sourceFile": "packages/sdk-scheduling/src/server/routes.ts",
+  "requiresAuth": true,
+  "taskId": "b1b6ed6d-9513-4dc2-8791-dbea3fbb4ecd",
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "featureId": "9219a230-d47e-41f0-8f7a-8adb6065437f",
+  "epicId": "4df864ec-e460-4cc9-a58a-92baadec5269",
+  "testability": "auto",
+  "name": "POST /api/scheduling/appointments/:appointment_id/reschedule - Move a booking",
+  "endpoint": "/api/scheduling/appointments/:appointment_id/reschedule",
+  "method": "POST",
+  "expectedStatus": 200,
+  "priority": 61,
+  "description": "Move an appointment to a new window. Double-book prevention runs on the new window (excluding this appointment); ICS SEQUENCE is bumped so calendar clients accept the change; a reschedule notice fires. end_time must be after start_time (400). Cancelled/completed appointments cannot be moved (409).",
+  "dependsOn": [
+    "POST /api/auth/signup-tenant",
+    "POST /api/personas",
+    "POST /api/scheduling/meeting-types",
+    "POST /api/scheduling/appointments"
+  ],
+  "testCases": [
+    {
+      "name": "Reschedule 2h later",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "pathParams": {
+        "appointment_id": "{{cache:scheduling.appointment.create.response.data.appointment.appointment_id}}"
+      },
+      "payload": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "start_time": "{{dynamic:futuredatetime+2h}}",
+        "end_time": "{{dynamic:futuredatetime+2h30m}}",
+        "timezone": "America/New_York"
+      },
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "data": {
+          "appointment": {
+            "appointment_id": "string"
+          }
+        }
+      }
+    }
+  ],
+  "errorCases": [
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "tenant_id, start_time and end_time are required",
+      "when": "required field missing"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "end_time must be after start_time",
+      "when": "end<=start"
+    },
+    {
+      "status": 404,
+      "code": "NotFound",
+      "message": "appointment not found",
+      "when": "no appointment"
+    },
+    {
+      "status": 409,
+      "code": "DoubleBooking",
+      "message": "the host already has an appointment overlapping this window",
+      "when": "new window overlaps another appointment"
+    }
+  ]
+}

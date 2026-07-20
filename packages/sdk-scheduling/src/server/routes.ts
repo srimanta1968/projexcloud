@@ -12,6 +12,18 @@ import {
   DoubleBookingError,
   InvalidTimeRangeError,
 } from '../services/availabilityService';
+import {
+  confirmBooking,
+  rescheduleBooking,
+  cancelBooking,
+  generateAppointmentIcs,
+  listBookingEvents,
+  createSchedulingLink,
+  listSchedulingLinks,
+  getSchedulingLink,
+  AppointmentNotFoundError,
+  InvalidBookingTransitionError,
+} from '../services/bookingService';
 
 /**
  * sdk-scheduling Fastify routes (P14·E2, TK-3618). Availability slotting foundation:
@@ -166,6 +178,117 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
       const appointment = await getAppointment(req.query.tenant_id, req.params.appointment_id);
       if (!appointment) return reply.code(404).send({ error: 'NotFound' });
       return reply.code(200).send({ data: { appointment } });
+    },
+  );
+
+  /* --------------------------------------------------- booking lifecycle (TK-3624) */
+  // Small helper: map booking-service errors to HTTP responses uniformly.
+  const sendBookingError = (reply: import('fastify').FastifyReply, err: unknown): unknown => {
+    if (err instanceof AppointmentNotFoundError) return reply.code(404).send({ error: 'NotFound', details: ['appointment not found'] });
+    if (err instanceof InvalidBookingTransitionError) return reply.code(409).send({ error: 'InvalidTransition', details: [(err as Error).message] });
+    if (err instanceof InvalidTimeRangeError) return reply.code(400).send({ error: 'ValidationError', details: ['end_time must be after start_time'] });
+    if (err instanceof DoubleBookingError) return reply.code(409).send({ error: 'DoubleBooking', details: ['the host already has an appointment overlapping this window'] });
+    throw err;
+  };
+
+  app.post<{ Params: { appointment_id: string } }>(
+    '/api/scheduling/appointments/:appointment_id/confirm', { preHandler: requireAuth }, async (req, reply) => {
+      const body = (req.body ?? {}) as { tenant_id?: string };
+      if (!body.tenant_id) return reply.code(400).send({ error: 'ValidationError', details: ['tenant_id is required'] });
+      try {
+        const appointment = await confirmBooking(body.tenant_id, req.params.appointment_id);
+        return reply.code(200).send({ data: { appointment } });
+      } catch (err) { return sendBookingError(reply, err); }
+    },
+  );
+
+  app.post<{ Params: { appointment_id: string } }>(
+    '/api/scheduling/appointments/:appointment_id/reschedule', { preHandler: requireAuth }, async (req, reply) => {
+      const body = (req.body ?? {}) as { tenant_id?: string; start_time?: string; end_time?: string; timezone?: string };
+      if (!body.tenant_id || !body.start_time || !body.end_time) {
+        return reply.code(400).send({ error: 'ValidationError', details: ['tenant_id, start_time and end_time are required'] });
+      }
+      try {
+        const appointment = await rescheduleBooking(body.tenant_id, req.params.appointment_id, {
+          start_time: body.start_time, end_time: body.end_time, timezone: body.timezone,
+        });
+        return reply.code(200).send({ data: { appointment } });
+      } catch (err) { return sendBookingError(reply, err); }
+    },
+  );
+
+  app.post<{ Params: { appointment_id: string } }>(
+    '/api/scheduling/appointments/:appointment_id/cancel', { preHandler: requireAuth }, async (req, reply) => {
+      const body = (req.body ?? {}) as { tenant_id?: string; reason?: string };
+      if (!body.tenant_id) return reply.code(400).send({ error: 'ValidationError', details: ['tenant_id is required'] });
+      try {
+        const appointment = await cancelBooking(body.tenant_id, req.params.appointment_id, body.reason);
+        return reply.code(200).send({ data: { appointment } });
+      } catch (err) { return sendBookingError(reply, err); }
+    },
+  );
+
+  // ICS invite for the appointment's current state (text/calendar attachment body).
+  app.get<{ Params: { appointment_id: string }; Querystring: { tenant_id?: string } }>(
+    '/api/scheduling/appointments/:appointment_id/ics', { preHandler: requireAuth }, async (req, reply) => {
+      if (!req.query.tenant_id) return reply.code(400).send({ error: 'ValidationError', details: ['tenant_id query param required'] });
+      try {
+        const ics = await generateAppointmentIcs(req.query.tenant_id, req.params.appointment_id);
+        return reply.code(200)
+          .header('content-type', 'text/calendar; charset=utf-8')
+          .header('content-disposition', `attachment; filename="appointment-${req.params.appointment_id}.ics"`)
+          .send(ics);
+      } catch (err) { return sendBookingError(reply, err); }
+    },
+  );
+
+  // Booking lifecycle timeline (created/confirmed/rescheduled/cancelled/notified).
+  app.get<{ Params: { appointment_id: string }; Querystring: { tenant_id?: string } }>(
+    '/api/scheduling/appointments/:appointment_id/events', { preHandler: requireAuth }, async (req, reply) => {
+      if (!req.query.tenant_id) return reply.code(400).send({ error: 'ValidationError', details: ['tenant_id query param required'] });
+      const events = await listBookingEvents(req.query.tenant_id, req.params.appointment_id);
+      return reply.code(200).send({ data: { events } });
+    },
+  );
+
+  /* ------------------------------------------------------ scheduling links (TK-3624) */
+  app.post('/api/scheduling/scheduling-links', { preHandler: requireAuth }, async (req, reply) => {
+    const body = req.body as Partial<{
+      tenant_id: string; host_persona_id: string; slug: string; meeting_type_id: string;
+      title: string; description: string; max_days_ahead: number; min_notice_minutes: number; expires_at: string;
+    }>;
+    if (!body.tenant_id || !body.host_persona_id || !body.slug) {
+      return reply.code(400).send({ error: 'ValidationError', details: ['tenant_id, host_persona_id and slug are required'] });
+    }
+    try {
+      const link = await createSchedulingLink({
+        tenant_id: body.tenant_id, host_persona_id: body.host_persona_id, slug: body.slug,
+        meeting_type_id: body.meeting_type_id, title: body.title, description: body.description,
+        max_days_ahead: body.max_days_ahead, min_notice_minutes: body.min_notice_minutes, expires_at: body.expires_at,
+      });
+      return reply.code(201).send({ data: { link } });
+    } catch (err) {
+      if ((err as { code?: string }).code === '23505') {
+        return reply.code(409).send({ error: 'Conflict', details: ['a scheduling link with this slug already exists'] });
+      }
+      throw err;
+    }
+  });
+
+  app.get<{ Querystring: { tenant_id?: string } }>(
+    '/api/scheduling/scheduling-links', { preHandler: requireAuth }, async (req, reply) => {
+      if (!req.query.tenant_id) return reply.code(400).send({ error: 'ValidationError', details: ['tenant_id query param required'] });
+      const links = await listSchedulingLinks(req.query.tenant_id);
+      return reply.code(200).send({ data: { links } });
+    },
+  );
+
+  app.get<{ Params: { link_id: string }; Querystring: { tenant_id?: string } }>(
+    '/api/scheduling/scheduling-links/:link_id', { preHandler: requireAuth }, async (req, reply) => {
+      if (!req.query.tenant_id) return reply.code(400).send({ error: 'ValidationError', details: ['tenant_id query param required'] });
+      const link = await getSchedulingLink(req.query.tenant_id, req.params.link_id);
+      if (!link) return reply.code(404).send({ error: 'NotFound' });
+      return reply.code(200).send({ data: { link } });
     },
   );
 }

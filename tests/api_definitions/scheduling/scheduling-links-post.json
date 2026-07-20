@@ -1,0 +1,67 @@
+{
+  "sdk": "sdk-scheduling",
+  "sourceFile": "packages/sdk-scheduling/src/server/routes.ts",
+  "requiresAuth": true,
+  "taskId": "b1b6ed6d-9513-4dc2-8791-dbea3fbb4ecd",
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "featureId": "9219a230-d47e-41f0-8f7a-8adb6065437f",
+  "epicId": "4df864ec-e460-4cc9-a58a-92baadec5269",
+  "testability": "auto",
+  "name": "POST /api/scheduling/scheduling-links - Create a public booking link",
+  "endpoint": "/api/scheduling/scheduling-links",
+  "method": "POST",
+  "expectedStatus": 201,
+  "priority": 57,
+  "description": "Create a shareable public booking link (Calendly-style) binding a host + meeting type to a globally-unique slug. tenant_id, host_persona_id and slug are required; a duplicate slug returns 409. max_days_ahead / min_notice_minutes bound the self-book window.",
+  "dependsOn": [
+    "POST /api/auth/signup-tenant",
+    "POST /api/personas",
+    "POST /api/scheduling/meeting-types"
+  ],
+  "captureResponse": {
+    "scheduling.scheduling-link.create.response.data.link.link_id": "data.link.link_id",
+    "scheduling.scheduling-link.create.response.data.link.slug": "data.link.slug"
+  },
+  "testCases": [
+    {
+      "name": "Create a booking link",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "payload": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "host_persona_id": "{{cache:personas.create.response.data.persona.persona_id}}",
+        "meeting_type_id": "{{cache:scheduling.meeting-type.create.response.data.meeting_type.meeting_type_id}}",
+        "slug": "book-{{dynamic:uuid}}",
+        "title": "Book a discovery call",
+        "description": "30-minute discovery call",
+        "max_days_ahead": 30,
+        "min_notice_minutes": 120,
+        "expires_at": "{{dynamic:futuredatetime+30d}}"
+      },
+      "expectedStatus": 201,
+      "expectedResponse": {
+        "data": {
+          "link": {
+            "link_id": "string",
+            "slug": "string"
+          }
+        }
+      }
+    }
+  ],
+  "errorCases": [
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "tenant_id, host_persona_id and slug are required",
+      "when": "required field missing"
+    },
+    {
+      "status": 409,
+      "code": "Conflict",
+      "message": "a scheduling link with this slug already exists",
+      "when": "slug already used (UNIQUE)"
+    }
+  ]
+}
