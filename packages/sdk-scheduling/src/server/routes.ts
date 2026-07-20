@@ -31,6 +31,13 @@ import {
   runNoShowScan,
   rebookAppointment,
 } from '../services/reminderService';
+import {
+  createCalendarConnection,
+  listCalendarConnections,
+  getCalendarConnection,
+  runCalendarSync,
+  pushAppointment,
+} from '../services/calendarSyncService';
 
 /**
  * sdk-scheduling Fastify routes (P14·E2, TK-3618). Availability slotting foundation:
@@ -358,6 +365,74 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
       } catch (err) {
         if (err instanceof InvalidTimeRangeError) return reply.code(400).send({ error: 'ValidationError', details: ['end_time must be after start_time'] });
         if (err instanceof DoubleBookingError) return reply.code(409).send({ error: 'DoubleBooking', details: ['the host already has an appointment overlapping this window'] });
+        return reply.code(404).send({ error: 'NotFound', details: [(err as Error).message] });
+      }
+    },
+  );
+
+  /* -------------------------------------- two-way calendar provider sync (TK-3622) */
+  app.post('/api/scheduling/calendar-connections', { preHandler: requireAuth }, async (req, reply) => {
+    const body = req.body as Partial<{
+      tenant_id: string; host_persona_id: string; provider: string; connector_install_id: string;
+      external_calendar_id: string; direction: string; metadata: Record<string, unknown>;
+    }>;
+    if (!body.tenant_id || !body.host_persona_id || !body.provider) {
+      return reply.code(400).send({ error: 'ValidationError', details: ['tenant_id, host_persona_id and provider are required'] });
+    }
+    if (!['google', 'microsoft', 'caldav'].includes(body.provider)) {
+      return reply.code(400).send({ error: 'ValidationError', details: ['provider must be google, microsoft or caldav'] });
+    }
+    const connection = await createCalendarConnection({
+      tenant_id: body.tenant_id, host_persona_id: body.host_persona_id, provider: body.provider,
+      connector_install_id: body.connector_install_id, external_calendar_id: body.external_calendar_id,
+      direction: body.direction, metadata: body.metadata,
+    });
+    return reply.code(201).send({ data: { connection } });
+  });
+
+  app.get<{ Querystring: { tenant_id?: string; host_persona_id?: string } }>(
+    '/api/scheduling/calendar-connections', { preHandler: requireAuth }, async (req, reply) => {
+      if (!req.query.tenant_id) return reply.code(400).send({ error: 'ValidationError', details: ['tenant_id query param required'] });
+      const connections = await listCalendarConnections(req.query.tenant_id, req.query.host_persona_id);
+      return reply.code(200).send({ data: { connections } });
+    },
+  );
+
+  app.get<{ Params: { connection_id: string }; Querystring: { tenant_id?: string } }>(
+    '/api/scheduling/calendar-connections/:connection_id', { preHandler: requireAuth }, async (req, reply) => {
+      if (!req.query.tenant_id) return reply.code(400).send({ error: 'ValidationError', details: ['tenant_id query param required'] });
+      const connection = await getCalendarConnection(req.query.tenant_id, req.params.connection_id);
+      if (!connection) return reply.code(404).send({ error: 'NotFound' });
+      return reply.code(200).send({ data: { connection } });
+    },
+  );
+
+  // Run a two-way sync for a connection (push unmapped appointments + pull provider changes).
+  app.post<{ Params: { connection_id: string } }>(
+    '/api/scheduling/calendar-connections/:connection_id/sync', { preHandler: requireAuth }, async (req, reply) => {
+      const body = (req.body ?? {}) as { tenant_id?: string };
+      if (!body.tenant_id) return reply.code(400).send({ error: 'ValidationError', details: ['tenant_id is required'] });
+      try {
+        const result = await runCalendarSync(body.tenant_id, req.params.connection_id);
+        return reply.code(200).send({ data: result });
+      } catch (err) {
+        return reply.code(404).send({ error: 'NotFound', details: [(err as Error).message] });
+      }
+    },
+  );
+
+  // Push a single appointment to a connection's external calendar (propagates create/
+  // update/cancel; how reschedule/cancel reach the provider).
+  app.post<{ Params: { appointment_id: string } }>(
+    '/api/scheduling/appointments/:appointment_id/calendar-push', { preHandler: requireAuth }, async (req, reply) => {
+      const body = (req.body ?? {}) as { tenant_id?: string; connection_id?: string };
+      if (!body.tenant_id || !body.connection_id) {
+        return reply.code(400).send({ error: 'ValidationError', details: ['tenant_id and connection_id are required'] });
+      }
+      try {
+        const result = await pushAppointment(body.tenant_id, body.connection_id, req.params.appointment_id);
+        return reply.code(200).send({ data: result });
+      } catch (err) {
         return reply.code(404).send({ error: 'NotFound', details: [(err as Error).message] });
       }
     },
