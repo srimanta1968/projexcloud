@@ -12,5 +12,6 @@ export { migrationsDir } from './db';
 export * as server from './server';
 export * from './services/availabilityService';
 export * from './services/bookingService';
+export * from './services/reminderService';
 export { generateIcs } from './services/ics';
 export type { IcsEventInput, IcsAttendee } from './services/ics';

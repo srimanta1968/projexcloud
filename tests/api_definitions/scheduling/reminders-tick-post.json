@@ -1,0 +1,46 @@
+{
+  "sdk": "sdk-scheduling",
+  "sourceFile": "packages/sdk-scheduling/src/server/routes.ts",
+  "requiresAuth": true,
+  "taskId": "f01aa1e1-dc3c-46a8-984e-3ce8f749c2b0",
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "featureId": "afd11775-0799-4702-8f94-c2e12c001ea1",
+  "epicId": "4df864ec-e460-4cc9-a58a-92baadec5269",
+  "testability": "auto",
+  "name": "POST /api/scheduling/reminders/tick - Drain due reminders",
+  "endpoint": "/api/scheduling/reminders/tick",
+  "method": "POST",
+  "expectedStatus": 200,
+  "priority": 67,
+  "description": "Drain due reminders on demand: claim pending reminder rows whose remind_at has passed (FOR UPDATE SKIP LOCKED), fire the reminder notice for each still-active appointment, and mark rows sent/skipped. Also runs on a timer when SCHEDULING_WORKER_ENABLED. batch_size optional. Returns {claimed, sent, skipped}.",
+  "dependsOn": [
+    "POST /api/auth/signup-tenant"
+  ],
+  "testCases": [
+    {
+      "name": "Run a reminder tick",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "payload": {
+        "batch_size": 50
+      },
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "data": {
+          "claimed": "number",
+          "sent": "number",
+          "skipped": "number"
+        }
+      }
+    }
+  ],
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "missing or invalid token",
+      "when": "no valid Bearer token"
+    }
+  ]
+}

@@ -24,6 +24,13 @@ import {
   AppointmentNotFoundError,
   InvalidBookingTransitionError,
 } from '../services/bookingService';
+import {
+  scheduleReminders,
+  listReminders,
+  runReminderTick,
+  runNoShowScan,
+  rebookAppointment,
+} from '../services/reminderService';
 
 /**
  * sdk-scheduling Fastify routes (P14·E2, TK-3618). Availability slotting foundation:
@@ -289,6 +296,70 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
       const link = await getSchedulingLink(req.query.tenant_id, req.params.link_id);
       if (!link) return reply.code(404).send({ error: 'NotFound' });
       return reply.code(200).send({ data: { link } });
+    },
+  );
+
+  /* ------------------------------------------- reminders + no-show + rebook (TK-3621) */
+  // Schedule the reminder fan-out (default 24h/2h/15m) for an appointment.
+  app.post<{ Params: { appointment_id: string } }>(
+    '/api/scheduling/appointments/:appointment_id/reminders', { preHandler: requireAuth }, async (req, reply) => {
+      const body = (req.body ?? {}) as { tenant_id?: string; offsets_minutes?: number[] };
+      if (!body.tenant_id) return reply.code(400).send({ error: 'ValidationError', details: ['tenant_id is required'] });
+      try {
+        const reminders = await scheduleReminders(
+          body.tenant_id, req.params.appointment_id,
+          Array.isArray(body.offsets_minutes) && body.offsets_minutes.length ? body.offsets_minutes : undefined,
+        );
+        return reply.code(201).send({ data: { reminders } });
+      } catch (err) {
+        return reply.code(404).send({ error: 'NotFound', details: [(err as Error).message] });
+      }
+    },
+  );
+
+  app.get<{ Params: { appointment_id: string }; Querystring: { tenant_id?: string } }>(
+    '/api/scheduling/appointments/:appointment_id/reminders', { preHandler: requireAuth }, async (req, reply) => {
+      if (!req.query.tenant_id) return reply.code(400).send({ error: 'ValidationError', details: ['tenant_id query param required'] });
+      const reminders = await listReminders(req.query.tenant_id, req.params.appointment_id);
+      return reply.code(200).send({ data: { reminders } });
+    },
+  );
+
+  // On-demand reminder drain (also runs on a timer when SCHEDULING_WORKER_ENABLED).
+  app.post<{ Body: { batch_size?: number } }>(
+    '/api/scheduling/reminders/tick', { preHandler: requireAuth }, async (req, reply) => {
+      const body = (req.body ?? {}) as { batch_size?: number };
+      const result = await runReminderTick(body.batch_size ?? 50);
+      return reply.code(200).send({ data: result });
+    },
+  );
+
+  // On-demand no-show scan: mark confirmed appointments past end_time + grace as no_show.
+  app.post<{ Body: { grace_minutes?: number; batch_size?: number } }>(
+    '/api/scheduling/no-show/scan', { preHandler: requireAuth }, async (req, reply) => {
+      const body = (req.body ?? {}) as { grace_minutes?: number; batch_size?: number };
+      const result = await runNoShowScan(body.grace_minutes ?? 10, body.batch_size ?? 100);
+      return reply.code(200).send({ data: result });
+    },
+  );
+
+  // Rescue/rebook a (no-show/cancelled) appointment into a new confirmed slot.
+  app.post<{ Params: { appointment_id: string } }>(
+    '/api/scheduling/appointments/:appointment_id/rebook', { preHandler: requireAuth }, async (req, reply) => {
+      const body = (req.body ?? {}) as { tenant_id?: string; start_time?: string; end_time?: string; timezone?: string };
+      if (!body.tenant_id || !body.start_time || !body.end_time) {
+        return reply.code(400).send({ error: 'ValidationError', details: ['tenant_id, start_time and end_time are required'] });
+      }
+      try {
+        const appointment = await rebookAppointment(body.tenant_id, req.params.appointment_id, {
+          start_time: body.start_time, end_time: body.end_time, timezone: body.timezone,
+        });
+        return reply.code(201).send({ data: { appointment } });
+      } catch (err) {
+        if (err instanceof InvalidTimeRangeError) return reply.code(400).send({ error: 'ValidationError', details: ['end_time must be after start_time'] });
+        if (err instanceof DoubleBookingError) return reply.code(409).send({ error: 'DoubleBooking', details: ['the host already has an appointment overlapping this window'] });
+        return reply.code(404).send({ error: 'NotFound', details: [(err as Error).message] });
+      }
     },
   );
 }

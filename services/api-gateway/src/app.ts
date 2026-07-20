@@ -323,7 +323,7 @@ import { migrationsDir as assignmentMigrations, server as assignmentServer } fro
 // wired into the gateway boot; mount them here so their schemas land in the
 // live DB and their HTTP surfaces are reachable.
 import { migrationsDir as sequenceMigrations, server as sequenceServer, startSequenceExecutor } from '@projexlight/sdk-sequence';
-import { migrationsDir as schedulingMigrations, server as schedulingServer } from '@projexlight/sdk-scheduling';
+import { migrationsDir as schedulingMigrations, server as schedulingServer, startSchedulingReminderWorker } from '@projexlight/sdk-scheduling';
 import { migrationsDir as handoffMigrations, server as handoffServer } from '@projexlight/sdk-handoff';
 import { migrationsDir as incidentMigrations, server as incidentServer } from '@projexlight/sdk-incident';
 import { migrationsDir as leadScoringMigrations }         from '@projexlight/sdk-lead-scoring';
@@ -3708,6 +3708,16 @@ const start = async (): Promise<void> => {
       batchSize: parseInt(process.env.SEQUENCE_EXECUTOR_BATCH_SIZE || '50', 10),
     });
 
+    // P14·E2 scheduler: sdk-scheduling reminder drain + no-show scan. OFF by
+    // default (opt-in) — the app must wire a booking notifier (setBookingNotifier)
+    // for reminders to actually deliver, else they emit through the default no-op.
+    const schedulingReminderWorker = startSchedulingReminderWorker({
+      enabled: process.env.SCHEDULING_WORKER_ENABLED === 'true',
+      intervalMs: parseInt(process.env.SCHEDULING_WORKER_INTERVAL_MS || '60000', 10),
+      batchSize: parseInt(process.env.SCHEDULING_WORKER_BATCH_SIZE || '50', 10),
+      noShowGraceMinutes: parseInt(process.env.SCHEDULING_NO_SHOW_GRACE_MINUTES || '10', 10),
+    });
+
     // P15·E5 scheduler: sdk-connectors sync retry/backoff worker. OFF by default
     // (opt-in) since connector adapters make outbound calls on each re-drive.
     const connectorsRetryWorker = startConnectorsRetryWorker({
@@ -3758,6 +3768,7 @@ const start = async (): Promise<void> => {
       webhookDelivery.stop();
       connectorsRetryWorker.stop();
       sequenceExecutor.stop();
+      schedulingReminderWorker.stop();
       approvalSlaTimer.stop();
       tenantLifecycleScheduler.stop();
       workflowDurableWorker.stop();

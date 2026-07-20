@@ -1,0 +1,76 @@
+{
+  "sdk": "sdk-scheduling",
+  "sourceFile": "packages/sdk-scheduling/src/server/routes.ts",
+  "requiresAuth": true,
+  "taskId": "f01aa1e1-dc3c-46a8-984e-3ce8f749c2b0",
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "featureId": "afd11775-0799-4702-8f94-c2e12c001ea1",
+  "epicId": "4df864ec-e460-4cc9-a58a-92baadec5269",
+  "testability": "auto",
+  "name": "POST /api/scheduling/appointments/:appointment_id/rebook - Rescue/rebook",
+  "endpoint": "/api/scheduling/appointments/:appointment_id/rebook",
+  "method": "POST",
+  "expectedStatus": 201,
+  "priority": 69,
+  "description": "Rescue/rebook a (no-show or cancelled) appointment into a NEW confirmed appointment at a new window, cloning host/subject/meeting-type/title and linking back via rescheduled_from. Double-book prevention runs on the new window (409 on overlap; 400 if end<=start). Reminders are scheduled for the new slot. tenant_id, start_time, end_time required.",
+  "dependsOn": [
+    "POST /api/auth/signup-tenant",
+    "POST /api/personas",
+    "POST /api/scheduling/meeting-types",
+    "POST /api/scheduling/appointments"
+  ],
+  "captureResponse": {
+    "scheduling.appointment.rebook.response.data.appointment.appointment_id": "data.appointment.appointment_id"
+  },
+  "testCases": [
+    {
+      "name": "Rebook 3h later",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "pathParams": {
+        "appointment_id": "{{cache:scheduling.appointment.create.response.data.appointment.appointment_id}}"
+      },
+      "payload": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "start_time": "{{dynamic:futuredatetime+3h}}",
+        "end_time": "{{dynamic:futuredatetime+3h30m}}",
+        "timezone": "America/New_York"
+      },
+      "expectedStatus": 201,
+      "expectedResponse": {
+        "data": {
+          "appointment": {
+            "appointment_id": "string"
+          }
+        }
+      }
+    }
+  ],
+  "errorCases": [
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "tenant_id, start_time and end_time are required",
+      "when": "required field missing"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "end_time must be after start_time",
+      "when": "end<=start"
+    },
+    {
+      "status": 409,
+      "code": "DoubleBooking",
+      "message": "the host already has an appointment overlapping this window",
+      "when": "new window overlaps another appointment"
+    },
+    {
+      "status": 404,
+      "code": "NotFound",
+      "message": "appointment not found",
+      "when": "no appointment for tenant"
+    }
+  ]
+}

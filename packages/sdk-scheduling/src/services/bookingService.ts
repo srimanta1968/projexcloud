@@ -149,6 +149,15 @@ async function fireNotifier(kind: BookingNotifyKind, appt: AppointmentRow, reaso
   }
 }
 
+/**
+ * Fire a booking notice for an appointment (public wrapper around the internal
+ * notifier). Used by the reminder worker to send pre-meeting reminders through the
+ * same pluggable notifier + booking_event audit path as the lifecycle actions.
+ */
+export async function sendBookingNotice(kind: BookingNotifyKind, appointment: AppointmentRow, reason?: string): Promise<void> {
+  return fireNotifier(kind, appointment, reason);
+}
+
 /* -------------------------------------------------------------- lifecycle actions */
 
 /** Confirm a pending/confirmed appointment (idempotent) and fire the confirmation notice. */
