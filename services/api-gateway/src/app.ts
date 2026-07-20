@@ -3766,7 +3766,16 @@ const start = async (): Promise<void> => {
     });
 
     await app.listen({ port: config.port, host: '0.0.0.0' });
-    console.log(`api-gateway listening on :${config.port}`);
+    // Prominent, greppable startup banner so it's obvious which port the gateway
+    // bound (it shares `pnpm run dev` output with the portals). Override the port
+    // via GATEWAY_PORT in the root .env.
+    console.log(
+      `\n${'='.repeat(60)}\n` +
+        `  🚀 api-gateway listening on http://localhost:${config.port}\n` +
+        `     health: http://localhost:${config.port}/health\n` +
+        `     (set GATEWAY_PORT in root .env to change this port)\n` +
+        `${'='.repeat(60)}\n`,
+    );
   } catch (err) {
     app.log.error(err);
     process.exit(1);
