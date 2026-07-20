@@ -329,6 +329,7 @@ import { migrationsDir as assignmentMigrations, server as assignmentServer } fro
 import { migrationsDir as sequenceMigrations, server as sequenceServer, startSequenceExecutor, setSequenceStepSender } from '@projexlight/sdk-sequence';
 import { migrationsDir as schedulingMigrations, server as schedulingServer, startSchedulingReminderWorker } from '@projexlight/sdk-scheduling';
 import { migrationsDir as deliverabilityMigrations, server as deliverabilityServer, startReplySyncWorker, suppressionService as deliverabilitySuppression, reputationService as deliverabilityReputation, isChannelPaused } from '@projexlight/sdk-deliverability';
+import { migrationsDir as offerCatalogMigrations, server as offerCatalogServer } from '@projexlight/sdk-offer-catalog';
 import { migrationsDir as handoffMigrations, server as handoffServer } from '@projexlight/sdk-handoff';
 import { migrationsDir as incidentMigrations, server as incidentServer } from '@projexlight/sdk-incident';
 import { migrationsDir as leadScoringMigrations }         from '@projexlight/sdk-lead-scoring';
@@ -549,6 +550,7 @@ app.register(assignmentServer.registerRoutes);
 app.register(sequenceServer.registerRoutes);
 app.register(schedulingServer.registerRoutes);
 app.register(deliverabilityServer.registerRoutes);
+app.register(offerCatalogServer.registerRoutes);
 app.register(handoffServer.registerRoutes);
 app.register(incidentServer.registerRoutes);
 app.register(serviceRequestServer.registerRoutes);
@@ -1175,6 +1177,7 @@ const start = async (): Promise<void> => {
       { sdk: 'sdk-sequence',            dir: sequenceMigrations },
       { sdk: 'sdk-scheduling',          dir: schedulingMigrations },
       { sdk: 'sdk-deliverability',      dir: deliverabilityMigrations },
+      { sdk: 'sdk-offer-catalog',       dir: offerCatalogMigrations },
       { sdk: 'sdk-handoff',             dir: handoffMigrations },
       { sdk: 'sdk-incident',            dir: incidentMigrations },
     ]);

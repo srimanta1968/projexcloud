@@ -1,0 +1,57 @@
+{
+  "sdk": "sdk-offer-catalog",
+  "sourceFile": "packages/sdk-offer-catalog/src/server/routes.ts",
+  "requiresAuth": true,
+  "taskId": "1a62f247-b638-412d-a317-e9da3dbd6dc4",
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "featureId": "50face32-51ba-4a44-8641-d2d1ee5d96c9",
+  "epicId": "9a0f06fa-f1a9-4292-8bc5-715ec836bbc8",
+  "testability": "auto",
+  "name": "GET /api/offers/:offer_id/current - Resolve current version",
+  "endpoint": "/api/offers/:offer_id/current",
+  "method": "GET",
+  "expectedStatus": 200,
+  "priority": 13,
+  "description": "Resolve the current version for an offer with a fallback chain: the live version if present, else the most recent beta, else the most recent draft. Returns {version, source} (source=live|beta|draft|none). tenant_id query param required.",
+  "dependsOn": [
+    "POST /api/auth/signup-tenant",
+    "POST /api/offers",
+    "POST /api/offers/:offer_id/versions/:version_id/activate"
+  ],
+  "fieldEnums": {
+    "source": [
+      "live",
+      "beta",
+      "draft",
+      "none"
+    ]
+  },
+  "testCases": [
+    {
+      "name": "Resolve current (live after activate)",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "pathParams": {
+        "offer_id": "{{cache:offers.create.response.data.offer.offer_id}}"
+      },
+      "queryParams": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}"
+      },
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "data": {
+          "source": "string"
+        }
+      }
+    }
+  ],
+  "errorCases": [
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "tenant_id query param required",
+      "when": "tenant_id missing"
+    }
+  ]
+}
