@@ -20,6 +20,10 @@ export {
   setSmsConsentHandler,
   upsertSmsSettings,
   listInboundSms,
+  propagateSmsConsent,
+  getSmsConsent,
+  listSmsConsent,
+  normalizeE164,
 } from './services/smsInboundService';
 export type { KeywordIntent, SmsConsentEvent } from './services/smsInboundService';
 export {

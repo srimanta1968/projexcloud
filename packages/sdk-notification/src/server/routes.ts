@@ -19,6 +19,8 @@ import {
   verifyInboundSmsSignature,
   upsertSmsSettings,
   listInboundSms,
+  propagateSmsConsent,
+  listSmsConsent,
 } from '../services/smsInboundService';
 import {
   processDeliveryCallback,
@@ -139,6 +141,32 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
         intent: req.query.intent, limit: req.query.limit ? Number(req.query.limit) : undefined,
       });
       return reply.code(200).send({ data: { messages } });
+    },
+  );
+
+  /* ------------------------- SMS opt-out propagation to consent (TK-3635) */
+  // Propagate an SMS opt-out/opt-in to suppression + consent + event (idempotent, PII-safe).
+  app.post('/api/notifications/sms-consent', { preHandler: requireAuth }, async (req, reply) => {
+    const body = req.body as Partial<{ tenant_id: string; phone: string; action: 'opt_out' | 'opt_in'; source: string; purpose: string }>;
+    if (!body.tenant_id || !body.phone || !body.action) {
+      return reply.code(400).send({ error: 'ValidationError', details: ['tenant_id, phone and action are required'] });
+    }
+    if (body.action !== 'opt_out' && body.action !== 'opt_in') {
+      return reply.code(400).send({ error: 'ValidationError', details: ['action must be opt_out or opt_in'] });
+    }
+    const result = await propagateSmsConsent({
+      tenantId: body.tenant_id, phone: body.phone, action: body.action, source: body.source ?? 'api', purpose: body.purpose,
+    });
+    return reply.code(200).send({ data: { consent: result } });
+  });
+
+  app.get<{ Querystring: { tenant_id?: string; status?: string; limit?: string } }>(
+    '/api/notifications/sms-consent', { preHandler: requireAuth }, async (req, reply) => {
+      if (!req.query.tenant_id) return reply.code(400).send({ error: 'ValidationError', details: ['tenant_id query param required'] });
+      const consents = await listSmsConsent(req.query.tenant_id, {
+        status: req.query.status, limit: req.query.limit ? Number(req.query.limit) : undefined,
+      });
+      return reply.code(200).send({ data: { consents } });
     },
   );
 

@@ -1,5 +1,6 @@
-import { createHmac, timingSafeEqual } from 'crypto';
+import { createHmac, createHash, timingSafeEqual } from 'crypto';
 import { dataService } from '@projexlight/db-runtime';
+import { emitEvent } from '@projexlight/sdk-audit';
 
 /**
  * @projexlight/sdk-notification — inbound SMS + STOP/HELP/START keyword handler (P14·E4, TK-3634).
@@ -97,6 +98,113 @@ export async function verifyInboundSmsSignature(
   return { verified, enforced: true };
 }
 
+/* ------------------------------------------- consent propagation (TK-3635) */
+
+/** Normalize a phone number to E.164-ish (digits + leading +). */
+export function normalizeE164(phone: string): string {
+  const digits = String(phone ?? '').replace(/[^\d+]/g, '');
+  return digits.startsWith('+') ? digits : `+${digits}`;
+}
+function phoneHash(phone: string): string {
+  return createHash('sha256').update(`sms:${normalizeE164(phone)}`).digest('hex');
+}
+function phoneLast4(phone: string): string {
+  const digits = String(phone ?? '').replace(/\D/g, '');
+  return digits.slice(-4);
+}
+
+export interface SmsConsentRow {
+  tenant_id: string;
+  phone_hash: string;
+  phone_last4: string | null;
+  status: string;
+  purpose: string;
+  reason: string | null;
+  source: string | null;
+  updated_at: string;
+}
+
+export interface PropagateConsentInput {
+  tenantId: string;
+  phone: string;
+  action: 'opt_out' | 'opt_in';
+  source?: string;
+  purpose?: string;
+}
+export interface PropagateConsentResult {
+  status: 'opted_out' | 'opted_in';
+  phone_last4: string;
+  suppression_action: string | null;
+  changed: boolean;
+}
+
+/**
+ * Propagate an SMS opt-out/opt-in to BOTH the suppression list (via the wired consent
+ * handler → sdk-deliverability) AND the local consent record, emitting an opt-out/opt-in
+ * event. PII-safe (hash + last4, never plaintext) and idempotent per (tenant, number):
+ * a duplicate STOP/START leaves state unchanged (changed=false) and re-emits nothing.
+ */
+export async function propagateSmsConsent(input: PropagateConsentInput): Promise<PropagateConsentResult> {
+  const status = input.action === 'opt_out' ? 'opted_out' : 'opted_in';
+  const hash = phoneHash(input.phone);
+  const last4 = phoneLast4(input.phone);
+  const purpose = input.purpose ?? 'marketing';
+
+  // Idempotency: only act + emit when the status actually transitions.
+  const prior = await dataService.one<{ status: string }>(
+    `SELECT status FROM notification.sms_consent WHERE tenant_id = $1 AND phone_hash = $2`,
+    [input.tenantId, hash],
+  );
+  const changed = prior?.status !== status;
+
+  await dataService.rows(
+    `INSERT INTO notification.sms_consent
+       (tenant_id, phone_hash, phone_last4, channel, status, purpose, reason, source, opted_out_at, opted_in_at)
+     VALUES ($1,$2,$3,'sms',$4,$5,$6,$7,
+             CASE WHEN $4 = 'opted_out' THEN now() END, CASE WHEN $4 = 'opted_in' THEN now() END)
+     ON CONFLICT (tenant_id, phone_hash) DO UPDATE SET
+       status = EXCLUDED.status, purpose = EXCLUDED.purpose, reason = EXCLUDED.reason, source = EXCLUDED.source,
+       phone_last4 = COALESCE(EXCLUDED.phone_last4, notification.sms_consent.phone_last4),
+       opted_out_at = CASE WHEN EXCLUDED.status = 'opted_out' THEN now() ELSE notification.sms_consent.opted_out_at END,
+       opted_in_at = CASE WHEN EXCLUDED.status = 'opted_in' THEN now() ELSE notification.sms_consent.opted_in_at END,
+       updated_at = now()`,
+    [input.tenantId, hash, last4, status, purpose, input.action === 'opt_out' ? 'sms_stop' : 'sms_start', input.source ?? null],
+  );
+
+  // Suppression side (reason-tagged) + consent revoke via the wired handler.
+  let suppressionAction: string | null = null;
+  if (changed) {
+    const r = await _consentHandler({ tenant_id: input.tenantId, from_number: input.phone, intent: input.action }).catch(() => undefined);
+    suppressionAction = r?.action ?? (input.action === 'opt_out' ? 'suppressed' : 'resubscribed');
+    // Opt-out/opt-in event — PII-safe payload (hash + last4 only). Best-effort.
+    await emitEvent({
+      event_type: input.action === 'opt_out' ? 'notification.sms.optout.v1' : 'notification.sms.optin.v1',
+      tenant_id: input.tenantId,
+      payload: { phone_hash: hash, phone_last4: last4, purpose, source: input.source ?? null },
+    } as never).catch(() => undefined);
+  }
+  return { status, phone_last4: last4, suppression_action: suppressionAction, changed };
+}
+
+/** Get the consent state for a number (tenant-scoped). */
+export async function getSmsConsent(tenantId: string, phone: string): Promise<SmsConsentRow | null> {
+  return dataService.one<SmsConsentRow>(
+    `SELECT tenant_id, phone_hash, phone_last4, status, purpose, reason, source, updated_at
+       FROM notification.sms_consent WHERE tenant_id = $1 AND phone_hash = $2`,
+    [tenantId, phoneHash(phone)],
+  );
+}
+/** List a tenant's SMS consent states, newest first. */
+export async function listSmsConsent(tenantId: string, opts: { status?: string; limit?: number } = {}): Promise<SmsConsentRow[]> {
+  return dataService.rows<SmsConsentRow>(
+    `SELECT tenant_id, phone_hash, phone_last4, status, purpose, reason, source, updated_at
+       FROM notification.sms_consent
+      WHERE tenant_id = $1 AND ($2::text IS NULL OR status = $2)
+      ORDER BY updated_at DESC LIMIT $3`,
+    [tenantId, opts.status ?? null, opts.limit ?? 100],
+  );
+}
+
 /* ----------------------------------------------------------------- process */
 
 export interface InboundSmsInput {
@@ -132,8 +240,11 @@ export async function processInboundSms(input: InboundSmsInput): Promise<Inbound
 
   let action: string | null = null;
   if (intent === 'opt_out' || intent === 'opt_in') {
-    const r = await _consentHandler({ tenant_id: input.tenantId, from_number: input.fromNumber, intent }).catch(() => undefined);
-    action = r?.action ?? (intent === 'opt_out' ? 'suppressed' : 'resubscribed');
+    // Propagate to suppression + consent + event (idempotent, PII-safe).
+    const prop = await propagateSmsConsent({
+      tenantId: input.tenantId, phone: input.fromNumber, action: intent, source: 'sms:inbound',
+    }).catch(() => undefined);
+    action = prop?.suppression_action ?? (intent === 'opt_out' ? 'suppressed' : 'resubscribed');
   }
 
   const rows = await dataService.rows<{ inbound_id: string }>(
