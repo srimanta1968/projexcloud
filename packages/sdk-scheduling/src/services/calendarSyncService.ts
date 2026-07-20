@@ -63,6 +63,43 @@ const defaultProvider: CalendarProvider = {
 };
 let _provider: CalendarProvider = defaultProvider;
 
+/**
+ * Raised when a provider call fails (e.g. the OAuth grant is missing the calendar
+ * scope). Carries a remediation hint and marks the connection status='error' so the
+ * failure surfaces clearly rather than silently dropping the sync.
+ */
+export class CalendarProviderError extends Error {
+  remediation: string;
+  constructor(message: string, remediation = 'Re-authorize the calendar connection with the required calendar scope.') {
+    super(message);
+    this.name = 'CalendarProviderError';
+    this.remediation = remediation;
+  }
+}
+
+// Wrap a provider call: on failure persist status='error' + last_error on the connection
+// and rethrow as a CalendarProviderError so the route can return a clear 422 remediation.
+async function withProviderErrorGuard<T>(connection_id: string, fn: () => Promise<T>): Promise<T> {
+  try {
+    return await fn();
+  } catch (err) {
+    const message = (err as Error).message || 'calendar provider call failed';
+    await dataService.rows(
+      `UPDATE scheduling.calendar_connection SET status = 'error', last_error = $2, updated_at = now()
+        WHERE connection_id = $1`,
+      [connection_id, message],
+    ).catch(() => undefined);
+    if (err instanceof CalendarProviderError) throw err;
+    const scopeLike = /scope|permission|forbidden|401|403|unauthor/i.test(message);
+    throw new CalendarProviderError(
+      message,
+      scopeLike
+        ? 'The connection is missing the required calendar scope — re-authorize it with calendar read/write access.'
+        : 'Calendar provider sync failed — check the connection and retry.',
+    );
+  }
+}
+
 /** Install the calendar provider gateway (app bridges to sdk-connectors adapters). */
 export function setCalendarProvider(provider: CalendarProvider): void {
   _provider = provider;
@@ -166,14 +203,14 @@ export async function pushAppointment(
   const operation: 'create' | 'update' | 'cancel' =
     appt.status === 'cancelled' ? 'cancel' : existing ? 'update' : 'create';
 
-  const result = await _provider.writeEvent({
+  const result = await withProviderErrorGuard(connection_id, () => _provider.writeEvent({
     provider: conn.provider,
     connector_install_id: conn.connector_install_id,
     external_calendar_id: conn.external_calendar_id,
     external_event_id: existing?.external_event_id ?? null,
     appointment: appt,
     operation,
-  });
+  }));
 
   await dataService.rows(
     `INSERT INTO scheduling.calendar_sync_map
@@ -231,12 +268,12 @@ export async function runCalendarSync(tenant_id: string, connection_id: string):
   let pulled = 0;
   let applied = 0;
   if (conn.direction === 'inbound' || conn.direction === 'both') {
-    const res = await _provider.listChanges({
+    const res = await withProviderErrorGuard(connection_id, () => _provider.listChanges({
       provider: conn.provider,
       connector_install_id: conn.connector_install_id,
       external_calendar_id: conn.external_calendar_id,
       sync_token: conn.sync_token,
-    });
+    }));
     pulled = res.changes.length;
     for (const change of res.changes) {
       const map = await dataService.one<{ appointment_id: string }>(

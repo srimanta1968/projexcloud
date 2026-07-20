@@ -37,6 +37,7 @@ import {
   getCalendarConnection,
   runCalendarSync,
   pushAppointment,
+  CalendarProviderError,
 } from '../services/calendarSyncService';
 
 /**
@@ -416,6 +417,9 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
         const result = await runCalendarSync(body.tenant_id, req.params.connection_id);
         return reply.code(200).send({ data: result });
       } catch (err) {
+        if (err instanceof CalendarProviderError) {
+          return reply.code(422).send({ error: 'CalendarProviderError', details: [err.message], remediation: err.remediation });
+        }
         return reply.code(404).send({ error: 'NotFound', details: [(err as Error).message] });
       }
     },
@@ -433,6 +437,9 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
         const result = await pushAppointment(body.tenant_id, body.connection_id, req.params.appointment_id);
         return reply.code(200).send({ data: result });
       } catch (err) {
+        if (err instanceof CalendarProviderError) {
+          return reply.code(422).send({ error: 'CalendarProviderError', details: [err.message], remediation: err.remediation });
+        }
         return reply.code(404).send({ error: 'NotFound', details: [(err as Error).message] });
       }
     },
