@@ -10,9 +10,13 @@ import {
   listOfferVersions,
   requestPublishApproval,
   recordPublishDecision,
+  setOfferFeature,
+  listOfferFeatures,
   OfferVersionNotFoundError,
   PublishNotApprovedError,
 } from '../services/offerCatalogService';
+
+const FEATURE_STATUSES = ['included', 'excluded', 'beta', 'roadmap', 'add_on', 'deprecated'];
 
 /**
  * sdk-offer-catalog Fastify routes (P15·E1, TK-3641). Offer + version create,
@@ -127,6 +131,38 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
       if (!req.query.tenant_id) return reply.code(400).send({ error: 'ValidationError', details: ['tenant_id query param required'] });
       const resolved = await resolveCurrentVersion(req.query.tenant_id, req.params.offer_id);
       return reply.code(200).send({ data: resolved });
+    },
+  );
+
+  // Feature-status matrix (TK-3644): set a feature's status within a version.
+  app.post<{ Params: { offer_id: string; version_id: string } }>(
+    '/api/offers/:offer_id/versions/:version_id/features', { preHandler: requireAuth }, async (req, reply) => {
+      const body = req.body as Partial<{ tenant_id: string; feature_key: string; name: string; status: string; value: string; sort_order: number }>;
+      if (!body.tenant_id || !body.feature_key || !body.name) {
+        return reply.code(400).send({ error: 'ValidationError', details: ['tenant_id, feature_key and name are required'] });
+      }
+      if (body.status && !FEATURE_STATUSES.includes(body.status)) {
+        return reply.code(400).send({ error: 'ValidationError', details: [`status must be one of ${FEATURE_STATUSES.join(', ')}`] });
+      }
+      try {
+        const feature = await setOfferFeature({
+          tenantId: body.tenant_id, versionId: req.params.version_id, featureKey: body.feature_key,
+          name: body.name, status: body.status, value: body.value, sortOrder: body.sort_order,
+        });
+        return reply.code(201).send({ data: { feature } });
+      } catch (err) {
+        if (err instanceof OfferVersionNotFoundError) return reply.code(404).send({ error: 'NotFound', details: ['offer version not found'] });
+        throw err;
+      }
+    },
+  );
+
+  // Read a version's feature-status matrix.
+  app.get<{ Params: { offer_id: string; version_id: string }; Querystring: { tenant_id?: string } }>(
+    '/api/offers/:offer_id/versions/:version_id/features', { preHandler: requireAuth }, async (req, reply) => {
+      if (!req.query.tenant_id) return reply.code(400).send({ error: 'ValidationError', details: ['tenant_id query param required'] });
+      const features = await listOfferFeatures(req.query.tenant_id, req.params.version_id);
+      return reply.code(200).send({ data: { features } });
     },
   );
 

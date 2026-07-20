@@ -189,6 +189,42 @@ export async function resolveCurrentVersion(tenantId: string, offerId: string): 
   return { version: null, source: 'none' };
 }
 
+/* ------------------------------------------------- feature-status matrix (TK-3644) */
+
+export interface OfferFeatureRow {
+  offer_feature_id: string; tenant_id: string; offer_version_id: string; feature_key: string;
+  name: string; status: string; value: string | null; sort_order: number;
+}
+export interface SetFeatureInput {
+  tenantId: string; versionId: string; featureKey: string; name: string;
+  status?: string; value?: string; sortOrder?: number;
+}
+const FEAT_COLS = `offer_feature_id, tenant_id, offer_version_id, feature_key, name, status, value, sort_order`;
+
+/** Set (upsert) one feature's status within a version (matrix cell). Idempotent per (version, feature_key). */
+export async function setOfferFeature(input: SetFeatureInput): Promise<OfferFeatureRow> {
+  const target = await getOfferVersion(input.tenantId, input.versionId);
+  if (!target) throw new OfferVersionNotFoundError();
+  const rows = await dataService.rows<OfferFeatureRow>(
+    `INSERT INTO offer_catalog.offer_feature (tenant_id, offer_version_id, feature_key, name, status, value, sort_order)
+     VALUES ($1,$2,$3,$4,COALESCE($5,'included'),$6,COALESCE($7,0))
+     ON CONFLICT (offer_version_id, feature_key)
+     DO UPDATE SET name = EXCLUDED.name, status = EXCLUDED.status, value = EXCLUDED.value, sort_order = EXCLUDED.sort_order
+     RETURNING ${FEAT_COLS}`,
+    [input.tenantId, input.versionId, input.featureKey, input.name, input.status ?? null, input.value ?? null, input.sortOrder ?? null],
+  );
+  return rows[0];
+}
+
+/** List a version's feature-status matrix (by sort order). */
+export async function listOfferFeatures(tenantId: string, versionId: string): Promise<OfferFeatureRow[]> {
+  return dataService.rows<OfferFeatureRow>(
+    `SELECT ${FEAT_COLS} FROM offer_catalog.offer_feature
+      WHERE tenant_id = $1 AND offer_version_id = $2 ORDER BY sort_order ASC, feature_key ASC`,
+    [tenantId, versionId],
+  );
+}
+
 /** List an offer's versions, newest first. */
 export async function listOfferVersions(tenantId: string, offerId: string): Promise<OfferVersionRow[]> {
   return dataService.rows<OfferVersionRow>(
