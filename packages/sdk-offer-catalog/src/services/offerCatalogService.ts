@@ -189,6 +189,60 @@ export async function resolveCurrentVersion(tenantId: string, offerId: string): 
   return { version: null, source: 'none' };
 }
 
+/* ------------------------------------ version-stamp + stale-reference guard (TK-3643) */
+
+export interface VersionStamp {
+  offer_id: string;
+  offer_version_id: string;
+  version: string;
+  status: string;
+  stamped_at: string;
+}
+/** Raised when an offer has no current (live/beta/draft) version to stamp. */
+export class NoCurrentVersionError extends Error {
+  constructor() { super('NO_CURRENT_VERSION'); this.name = 'NoCurrentVersionError'; }
+}
+
+/**
+ * Return the version another record should pin (version-stamp): the current version via
+ * resolveCurrentVersion (live, else fallback). A consumer stores offer_version_id in its
+ * reference and later revalidates it with checkVersionReference.
+ */
+export async function stampVersion(tenantId: string, offerId: string): Promise<VersionStamp> {
+  const resolved = await resolveCurrentVersion(tenantId, offerId);
+  if (!resolved.version) throw new NoCurrentVersionError();
+  const v = resolved.version;
+  return { offer_id: offerId, offer_version_id: v.offer_version_id, version: v.version, status: v.status, stamped_at: new Date(v.activated_at ?? v.created_at).toISOString() };
+}
+
+export interface StaleReferenceResult {
+  stale: boolean;
+  reason: string;
+  referenced_offer_version_id: string;
+  current_offer_version_id: string | null;
+  current_source: string;
+}
+
+/**
+ * The net-new stale-reference guard: given a pinned offer_version_id, report whether it is
+ * still the current version. A reference to a superseded (retired/older) version is stale.
+ * Callable by CRM at quote/version-stamp time to reject a stale pin.
+ */
+export async function checkVersionReference(tenantId: string, offerId: string, referencedVersionId: string): Promise<StaleReferenceResult> {
+  const resolved = await resolveCurrentVersion(tenantId, offerId);
+  const currentId = resolved.version?.offer_version_id ?? null;
+  const stale = currentId !== referencedVersionId;
+  return {
+    stale,
+    reason: stale
+      ? (currentId ? `referenced version is superseded by the current version` : `offer has no current version`)
+      : `referenced version is current`,
+    referenced_offer_version_id: referencedVersionId,
+    current_offer_version_id: currentId,
+    current_source: resolved.source,
+  };
+}
+
 /* ------------------------------------------------- feature-status matrix (TK-3644) */
 
 export interface OfferFeatureRow {

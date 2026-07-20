@@ -12,8 +12,11 @@ import {
   recordPublishDecision,
   setOfferFeature,
   listOfferFeatures,
+  stampVersion,
+  checkVersionReference,
   OfferVersionNotFoundError,
   PublishNotApprovedError,
+  NoCurrentVersionError,
 } from '../services/offerCatalogService';
 
 const FEATURE_STATUSES = ['included', 'excluded', 'beta', 'roadmap', 'add_on', 'deprecated'];
@@ -131,6 +134,32 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
       if (!req.query.tenant_id) return reply.code(400).send({ error: 'ValidationError', details: ['tenant_id query param required'] });
       const resolved = await resolveCurrentVersion(req.query.tenant_id, req.params.offer_id);
       return reply.code(200).send({ data: resolved });
+    },
+  );
+
+  // Version-stamp (TK-3643): the version a consumer should pin (current, with fallback).
+  app.get<{ Params: { offer_id: string }; Querystring: { tenant_id?: string } }>(
+    '/api/offers/:offer_id/version-stamp', { preHandler: requireAuth }, async (req, reply) => {
+      if (!req.query.tenant_id) return reply.code(400).send({ error: 'ValidationError', details: ['tenant_id query param required'] });
+      try {
+        const stamp = await stampVersion(req.query.tenant_id, req.params.offer_id);
+        return reply.code(200).send({ data: { stamp } });
+      } catch (err) {
+        if (err instanceof NoCurrentVersionError) return reply.code(404).send({ error: 'NotFound', details: ['offer has no current version to stamp'] });
+        throw err;
+      }
+    },
+  );
+
+  // Stale-reference guard: is a pinned offer_version_id still current? (CRM quote-time).
+  app.post<{ Params: { offer_id: string } }>(
+    '/api/offers/:offer_id/check-reference', { preHandler: requireAuth }, async (req, reply) => {
+      const body = (req.body ?? {}) as { tenant_id?: string; offer_version_id?: string };
+      if (!body.tenant_id || !body.offer_version_id) {
+        return reply.code(400).send({ error: 'ValidationError', details: ['tenant_id and offer_version_id are required'] });
+      }
+      const result = await checkVersionReference(body.tenant_id, req.params.offer_id, body.offer_version_id);
+      return reply.code(200).send({ data: { reference: result } });
     },
   );
 
