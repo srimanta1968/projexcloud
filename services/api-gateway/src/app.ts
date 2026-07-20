@@ -125,6 +125,7 @@ import {
   registerApnsPushAdapter,
   registerFcmPushAdapter,
   registerSlackOutboundAdapter,
+  makeSequenceStepSender,
 } from '@projexlight/sdk-notification';
 import {
   migrationsDir as paymentMigrations,
@@ -322,7 +323,7 @@ import { migrationsDir as assignmentMigrations, server as assignmentServer } fro
 // P14/P15 InboundCRM SDK batch — routes + migrations were built but not yet
 // wired into the gateway boot; mount them here so their schemas land in the
 // live DB and their HTTP surfaces are reachable.
-import { migrationsDir as sequenceMigrations, server as sequenceServer, startSequenceExecutor } from '@projexlight/sdk-sequence';
+import { migrationsDir as sequenceMigrations, server as sequenceServer, startSequenceExecutor, setSequenceStepSender } from '@projexlight/sdk-sequence';
 import { migrationsDir as schedulingMigrations, server as schedulingServer, startSchedulingReminderWorker } from '@projexlight/sdk-scheduling';
 import { migrationsDir as deliverabilityMigrations, server as deliverabilityServer, startReplySyncWorker } from '@projexlight/sdk-deliverability';
 import { migrationsDir as handoffMigrations, server as handoffServer } from '@projexlight/sdk-handoff';
@@ -3705,6 +3706,11 @@ const start = async (): Promise<void> => {
     // P14·E1 scheduler: sdk-sequence step-executor tick. OFF by default (opt-in)
     // — the app must first wire a step sender (sdk-notification bridge) via
     // setSequenceStepSender, else touches emit through the default no-op.
+    // P14·E4 (TK-3631): bridge sdk-sequence step sends to sdk-notification's unified
+    // transport (email SES/SMTP, SMS Twilio, quiet-hours-aware). The default resolver
+    // is a no-op (emit-only) until the app wires setSequenceDestinationResolver.
+    setSequenceStepSender(makeSequenceStepSender());
+
     const sequenceExecutor = startSequenceExecutor({
       enabled: process.env.SEQUENCE_EXECUTOR_ENABLED === 'true',
       intervalMs: parseInt(process.env.SEQUENCE_EXECUTOR_INTERVAL_MS || '30000', 10),

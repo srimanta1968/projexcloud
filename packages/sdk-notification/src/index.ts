@@ -9,6 +9,18 @@ export {
 } from './services/notificationService';
 export { getQuietHours, setQuietHours, isInQuietHours } from './services/quietHours';
 export {
+  unifiedDispatch,
+  makeSequenceStepSender,
+  setSequenceDestinationResolver,
+} from './services/dispatchService';
+export type {
+  UnifiedDispatchInput,
+  UnifiedDispatchResult,
+  SequenceStepLike,
+  SequenceDestinationResolver,
+  ResolvedDestination,
+} from './services/dispatchService';
+export {
   bindEmailProvider,
   rotateEmailProvider,
   revokeEmailProvider,
