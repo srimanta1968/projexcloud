@@ -77,6 +77,50 @@ export async function getOfferVersion(tenantId: string, versionId: string): Prom
 export class OfferVersionNotFoundError extends Error {
   constructor() { super('OFFER_VERSION_NOT_FOUND'); this.name = 'OfferVersionNotFoundError'; }
 }
+/** Raised when a version's publish request is not approved (pending/rejected). */
+export class PublishNotApprovedError extends Error {
+  constructor(status: string) { super(`publish gate not satisfied: approval is '${status}'`); this.name = 'PublishNotApprovedError'; }
+}
+
+/* ----------------------------------------------- publish gate (sdk-approval) */
+
+export interface PublishApprovalContext { tenant_id: string; offer_id: string; offer_version_id: string; }
+/** Creates the approval request (subject = offer_version_id) and returns its ref. */
+export type PublishApprovalCreator = (ctx: PublishApprovalContext) => Promise<{ approval_ref: string }>;
+// Default: a synthetic ref, request stays 'pending' until decided. The gateway wires this
+// to sdk-approval (a route targeting subject_kind='offer_version').
+let _approvalCreator: PublishApprovalCreator = async (ctx) => ({ approval_ref: `offerpub:${ctx.offer_version_id}` });
+export function setPublishApprovalCreator(creator: PublishApprovalCreator): void { _approvalCreator = creator; }
+export function _resetPublishApprovalCreator(): void {
+  _approvalCreator = async (ctx) => ({ approval_ref: `offerpub:${ctx.offer_version_id}` });
+}
+
+/** File a publish request for a version (subject = version): status -> pending, ref stored. */
+export async function requestPublishApproval(tenantId: string, offerId: string, versionId: string): Promise<{ approval_ref: string; approval_status: string }> {
+  const target = await getOfferVersion(tenantId, versionId);
+  if (!target) throw new OfferVersionNotFoundError();
+  const { approval_ref } = await _approvalCreator({ tenant_id: tenantId, offer_id: offerId, offer_version_id: versionId });
+  await dataService.rows(
+    `UPDATE offer_catalog.offer_version
+        SET approval_status = 'pending', approval_ref = $3, approval_requested_at = now()
+      WHERE tenant_id = $1 AND offer_version_id = $2`,
+    [tenantId, versionId, approval_ref],
+  );
+  return { approval_ref, approval_status: 'pending' };
+}
+
+/** Record the approval decision for a version (from sdk-approval): approved | rejected. */
+export async function recordPublishDecision(tenantId: string, versionId: string, decision: 'approved' | 'rejected'): Promise<OfferVersionRow> {
+  const rows = await dataService.rows<OfferVersionRow>(
+    `UPDATE offer_catalog.offer_version
+        SET approval_status = $3, approval_decided_at = now()
+      WHERE tenant_id = $1 AND offer_version_id = $2
+      RETURNING ${VER_COLS}`,
+    [tenantId, versionId, decision],
+  );
+  if (!rows[0]) throw new OfferVersionNotFoundError();
+  return rows[0];
+}
 
 /**
  * Activate a version: atomically demote the prior live version for this offer (-> retired)
@@ -85,12 +129,15 @@ export class OfferVersionNotFoundError extends Error {
  */
 export async function activateOfferVersion(tenantId: string, offerId: string, versionId: string): Promise<OfferVersionRow> {
   const result = await dataService.tx<OfferVersionRow>(async (q) => {
-    const target = await q<{ offer_version_id: string }>(
-      `SELECT offer_version_id FROM offer_catalog.offer_version
+    const target = await q<{ offer_version_id: string; approval_status: string }>(
+      `SELECT offer_version_id, approval_status FROM offer_catalog.offer_version
         WHERE tenant_id = $1 AND offer_id = $2 AND offer_version_id = $3 FOR UPDATE`,
       [tenantId, offerId, versionId],
     );
     if (!target.rows[0]) throw new OfferVersionNotFoundError();
+    // Publish gate: only an approved (or not-required) request may activate.
+    const approval = target.rows[0].approval_status;
+    if (approval === 'pending' || approval === 'rejected') throw new PublishNotApprovedError(approval);
     // Demote the current live version (if any, and not the target itself).
     await q(
       `UPDATE offer_catalog.offer_version SET status = 'retired'

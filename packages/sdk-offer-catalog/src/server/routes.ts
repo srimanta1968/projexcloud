@@ -8,7 +8,10 @@ import {
   activateOfferVersion,
   resolveCurrentVersion,
   listOfferVersions,
+  requestPublishApproval,
+  recordPublishDecision,
   OfferVersionNotFoundError,
+  PublishNotApprovedError,
 } from '../services/offerCatalogService';
 
 /**
@@ -76,6 +79,40 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
       if (!body.tenant_id) return reply.code(400).send({ error: 'ValidationError', details: ['tenant_id is required'] });
       try {
         const version = await activateOfferVersion(body.tenant_id, req.params.offer_id, req.params.version_id);
+        return reply.code(200).send({ data: { version } });
+      } catch (err) {
+        if (err instanceof OfferVersionNotFoundError) return reply.code(404).send({ error: 'NotFound', details: ['offer version not found'] });
+        if (err instanceof PublishNotApprovedError) return reply.code(409).send({ error: 'PublishNotApproved', details: [(err as Error).message] });
+        throw err;
+      }
+    },
+  );
+
+  // Publish gate (TK-3642): file an approval request (subject = offer_version_id).
+  app.post<{ Params: { offer_id: string; version_id: string } }>(
+    '/api/offers/:offer_id/versions/:version_id/publish-request', { preHandler: requireAuth }, async (req, reply) => {
+      const body = (req.body ?? {}) as { tenant_id?: string };
+      if (!body.tenant_id) return reply.code(400).send({ error: 'ValidationError', details: ['tenant_id is required'] });
+      try {
+        const result = await requestPublishApproval(body.tenant_id, req.params.offer_id, req.params.version_id);
+        return reply.code(201).send({ data: { publish: result } });
+      } catch (err) {
+        if (err instanceof OfferVersionNotFoundError) return reply.code(404).send({ error: 'NotFound', details: ['offer version not found'] });
+        throw err;
+      }
+    },
+  );
+
+  // Record the approval decision (from sdk-approval): approved | rejected.
+  app.post<{ Params: { offer_id: string; version_id: string } }>(
+    '/api/offers/:offer_id/versions/:version_id/publish-decision', { preHandler: requireAuth }, async (req, reply) => {
+      const body = (req.body ?? {}) as { tenant_id?: string; decision?: 'approved' | 'rejected' };
+      if (!body.tenant_id || !body.decision) return reply.code(400).send({ error: 'ValidationError', details: ['tenant_id and decision are required'] });
+      if (body.decision !== 'approved' && body.decision !== 'rejected') {
+        return reply.code(400).send({ error: 'ValidationError', details: ['decision must be approved or rejected'] });
+      }
+      try {
+        const version = await recordPublishDecision(body.tenant_id, req.params.version_id, body.decision);
         return reply.code(200).send({ data: { version } });
       } catch (err) {
         if (err instanceof OfferVersionNotFoundError) return reply.code(404).send({ error: 'NotFound', details: ['offer version not found'] });
