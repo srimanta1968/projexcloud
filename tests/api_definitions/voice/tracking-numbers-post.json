@@ -1,0 +1,54 @@
+{
+  "name": "POST /api/voice/tracking-numbers - Provision a Twilio tracking number",
+  "endpoint": "/api/voice/tracking-numbers",
+  "sdk": "connector-twilio-voice",
+  "sourceFile": "packages/connector-twilio-voice/src/server/routes.ts",
+  "method": "POST",
+  "requiresAuth": true,
+  "expectedStatus": 201,
+  "taskId": "a89d6c67-d5dd-4933-9148-db8e91b4493a",
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "priority": 60,
+  "testability": "auto",
+  "description": "Provision a Twilio tracking number and pin it to the tenant so inbound calls can be attributed to the campaign/source that owns the number. The upstream purchase goes through a pluggable provider (setTwilioVoiceProvider); when no live Twilio client is injected the built-in stub mints a synthetic SID and E.164 number, so this endpoint works without Twilio credentials. Supply phone_number to claim a specific number, or area_code to let the provider pick one. Edge cases: re-provisioning the SAME upstream SID for the same install is idempotent via UNIQUE(install_id, external_id) and returns the existing row (friendly_name/purpose/assigned_persona_id are refreshed); a DIFFERENT SID resolving to a number the tenant already holds ACTIVE returns 409, because a partial unique index allows only one active claim per (tenant, phone_number); released rows are retained so historical calls stay attributable; 400 when tenant_id or install_id is missing; 422 with a remediation hint when the upstream provisioning call fails.",
+  "dependsOn": [
+    "POST /api/auth/signup-tenant"
+  ],
+  "fieldEnums": {
+    "status": ["active", "released", "deleted-upstream"]
+  },
+  "testCases": [
+    {
+      "name": "Provision a tracking number for the signup tenant",
+      "headers": { "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}" },
+      "payload": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "install_id": "{{dynamic:uuid}}",
+        "friendly_name": "Inbound campaign line",
+        "purpose": "google-ads-q3",
+        "area_code": "415",
+        "assigned_persona_id": "{{cache:auth.signup-tenant.response.data.userId}}"
+      },
+      "expectedStatus": 201,
+      "expectedResponse": {
+        "data": {
+          "tracking_number": {
+            "tracking_number_id": "string",
+            "phone_number": "string",
+            "external_id": "string",
+            "status": "string"
+          }
+        }
+      }
+    }
+  ],
+  "captureResponse": {
+    "voice.tracking-numbers.create.response.data.tracking_number.tracking_number_id": "data.tracking_number.tracking_number_id"
+  },
+  "errorCases": [
+    { "status": 400, "code": "ValidationError", "message": "tenant_id and install_id are required", "when": "tenant_id or install_id missing from body" },
+    { "status": 401, "code": "Unauthorized", "message": "Unauthorized", "when": "Authorization bearer token missing or invalid" },
+    { "status": 409, "code": "NumberAlreadyProvisioned", "message": "<number> is already provisioned and active for this tenant", "when": "the tenant already holds an active claim on that phone number under a different upstream SID" },
+    { "status": 422, "code": "ProviderError", "message": "number provisioning failed: <upstream message>", "when": "the injected Twilio provider rejects the purchase (bad credentials, region not permitted)" }
+  ]
+}

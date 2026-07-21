@@ -333,6 +333,7 @@ import { migrationsDir as deliverabilityMigrations, server as deliverabilityServ
 import { migrationsDir as offerCatalogMigrations, server as offerCatalogServer } from '@projexlight/sdk-offer-catalog';
 import { migrationsDir as handoffMigrations, server as handoffServer, registerHandoffSaga, setHandoffApprovalCreator } from '@projexlight/sdk-handoff';
 import { migrationsDir as incidentMigrations, server as incidentServer } from '@projexlight/sdk-incident';
+import { migrationsDir as twilioVoiceMigrations, server as twilioVoiceServer } from '@projexlight/connector-twilio-voice';
 import { migrationsDir as leadScoringMigrations }         from '@projexlight/sdk-lead-scoring';
 import {
   migrationsDir as evidenceMigrations,
@@ -554,6 +555,7 @@ app.register(deliverabilityServer.registerRoutes);
 app.register(offerCatalogServer.registerRoutes);
 app.register(handoffServer.registerRoutes);
 app.register(incidentServer.registerRoutes);
+app.register(twilioVoiceServer.registerRoutes);
 app.register(serviceRequestServer.registerRoutes);
 app.register(contentServer.registerRoutes);
 app.register(campaignServer.registerRoutes);
@@ -1181,6 +1183,7 @@ const start = async (): Promise<void> => {
       { sdk: 'sdk-offer-catalog',       dir: offerCatalogMigrations },
       { sdk: 'sdk-handoff',             dir: handoffMigrations },
       { sdk: 'sdk-incident',            dir: incidentMigrations },
+      { sdk: 'connector-twilio-voice',  dir: twilioVoiceMigrations },
     ]);
 
     // P9.2 — incremental catalog sync (Epic A, TK-3461). OPT-IN: embedding the

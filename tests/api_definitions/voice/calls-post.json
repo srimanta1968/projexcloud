@@ -1,0 +1,67 @@
+{
+  "name": "POST /api/voice/calls - Place an outbound call with recording + AMD",
+  "endpoint": "/api/voice/calls",
+  "sdk": "connector-twilio-voice",
+  "sourceFile": "packages/connector-twilio-voice/src/server/routes.ts",
+  "method": "POST",
+  "requiresAuth": true,
+  "expectedStatus": 201,
+  "taskId": "a89d6c67-d5dd-4933-9148-db8e91b4493a",
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "priority": 61,
+  "testability": "auto",
+  "description": "Place an outbound call. The request always sets a statusCallback URL and, by default, requests recording plus answering-machine detection (AMD) — recording because the SOP requires it, AMD because it is what lets the status webhook tell a human answer from a voicemail. Both can be disabled per call (e.g. where recording consent was refused). A mirror row is written in status 'queued' before Twilio's callbacks begin arriving; the status/recording webhooks then complete it. Caller-id resolution order: explicit from_number, else the referenced tracking_number_id (must be active), else the tenant's most recently provisioned ACTIVE tracking number. Edge cases: 400 NoCallerIdAvailable when none of those resolve — the call is rejected rather than dialled from an arbitrary number; 400 when tenant_id, install_id or to_number is missing; 422 with remediation when the upstream call request fails; repeat callbacks for the same Call SID are idempotent via UNIQUE(install_id, external_id).",
+  "dependsOn": [
+    "POST /api/auth/signup-tenant",
+    "POST /api/voice/tracking-numbers"
+  ],
+  "fieldEnums": {
+    "status": ["queued", "initiated", "ringing", "in-progress", "completed", "busy", "no-answer", "canceled", "failed"],
+    "direction": ["inbound", "outbound"]
+  },
+  "statusTransitions": {
+    "queued -> initiated -> ringing -> in-progress": "Twilio call progress, delivered to POST /api/voice/webhooks/twilio/status",
+    "in-progress -> completed": "call ended normally (status webhook stamps ended_at + duration)",
+    "queued -> busy|no-answer|canceled|failed": "call never connected (terminal, delivered by the status webhook)"
+  },
+  "testCases": [
+    {
+      "name": "Place a recorded call from the provisioned tracking number",
+      "headers": { "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}" },
+      "payload": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "install_id": "{{dynamic:uuid}}",
+        "to_number": "+14155550123",
+        "from_number": "+14155550100",
+        "tracking_number_id": "{{cache:voice.tracking-numbers.create.response.data.tracking_number.tracking_number_id}}",
+        "subject_persona_id": "{{cache:auth.signup-tenant.response.data.userId}}",
+        "initiated_by_persona_id": "{{cache:auth.signup-tenant.response.data.userId}}",
+        "record": true,
+        "machine_detection": true,
+        "metadata": { "campaign": "google-ads-q3" }
+      },
+      "expectedStatus": 201,
+      "expectedResponse": {
+        "data": {
+          "call": {
+            "voice_call_id": "string",
+            "external_id": "string",
+            "status": "string",
+            "from_number": "string",
+            "to_number": "string"
+          }
+        }
+      }
+    }
+  ],
+  "captureResponse": {
+    "voice.calls.create.response.data.call.voice_call_id": "data.call.voice_call_id",
+    "voice.calls.create.response.data.call.external_id": "data.call.external_id"
+  },
+  "errorCases": [
+    { "status": 400, "code": "ValidationError", "message": "tenant_id, install_id and to_number are required", "when": "tenant_id, install_id or to_number missing from body" },
+    { "status": 400, "code": "NoCallerIdAvailable", "message": "no from_number and no active tracking number to call from", "when": "no from_number given and the tenant has no active tracking number" },
+    { "status": 401, "code": "Unauthorized", "message": "Unauthorized", "when": "Authorization bearer token missing or invalid" },
+    { "status": 422, "code": "ProviderError", "message": "call placement failed: <upstream message>", "when": "the injected Twilio provider rejects the call (bad credentials, non-voice from number, geo-permission block)" }
+  ]
+}
