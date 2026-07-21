@@ -12,6 +12,8 @@ export { migrationsDir } from './db';
 export * as server from './server';
 export * from './services/availabilityService';
 export * from './services/bookingService';
+// Public (anonymous) booking via a shared link — TK-3620.
+export * from './services/publicBookingService';
 export * from './services/reminderService';
 export * from './services/calendarSyncService';
 export { generateIcs } from './services/ics';

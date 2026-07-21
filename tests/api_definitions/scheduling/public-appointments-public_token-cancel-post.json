@@ -1,0 +1,44 @@
+{
+  "name": "POST /api/scheduling/public/appointments/:public_token/cancel - Invitee cancels their booking",
+  "endpoint": "/api/scheduling/public/appointments/:public_token/cancel",
+  "sdk": "sdk-scheduling",
+  "sourceFile": "packages/sdk-scheduling/src/server/publicRoutes.ts",
+  "method": "POST",
+  "requiresAuth": false,
+  "expectedStatus": 200,
+  "taskId": "ca26e4ff-f683-4905-aaa3-2a85ad87b90d",
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "priority": 75,
+  "testability": "auto",
+  "description": "PUBLIC: the invitee cancels a booking they made through a shared link, freeing the host's slot, stamping cancelled_at with the optional reason, recording a booking_event and firing the cancellation notice. Like confirm, AUTHORISATION IS THE TOKEN — the path parameter is the high-entropy public_token issued at booking, never the appointment_id, because accepting an id would let anyone cancel a stranger's meeting by guessing UUIDs. Edge cases: an unknown or wrong token is a flat 404 revealing nothing; cancelling an already-cancelled appointment fails the lifecycle guard rather than silently succeeding; the freed window becomes bookable again immediately, since the double-book check ignores cancelled rows; reason is optional and is persisted to cancel_reason for the host's records.",
+  "dependsOn": [
+    "POST /api/auth/signup-tenant",
+    "POST /api/scheduling/meeting-types",
+    "POST /api/scheduling/scheduling-links",
+    "POST /api/scheduling/public/links/:slug/book",
+    "POST /api/scheduling/public/appointments/:public_token/confirm"
+  ],
+  "fieldEnums": {
+    "status": ["pending", "confirmed", "cancelled", "completed", "no_show"]
+  },
+  "statusTransitions": {
+    "pending|confirmed -> cancelled": "POST /api/scheduling/public/appointments/:public_token/cancel (stamps cancelled_at + cancel_reason; frees the slot)"
+  },
+  "testCases": [
+    {
+      "name": "Invitee cancels their booking with their token",
+      "headers": { "Content-Type": "application/json" },
+      "pathParams": { "public_token": "{{cache:scheduling.public.book.response.data.public_token}}" },
+      "payload": {
+        "reason": "Something came up - will rebook next week"
+      },
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "data": { "appointment": { "appointment_id": "string", "status": "string" } }
+      }
+    }
+  ],
+  "errorCases": [
+    { "status": 404, "code": "NotFound", "message": "NotFound", "when": "the token is unknown or wrong — including when a raw appointment_id is passed instead of the token" }
+  ]
+}

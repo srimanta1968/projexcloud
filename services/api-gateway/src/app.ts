@@ -559,6 +559,7 @@ app.register(crmServer.registerRoutes);
 app.register(assignmentServer.registerRoutes);
 app.register(sequenceServer.registerRoutes);
 app.register(schedulingServer.registerRoutes);
+app.register(schedulingServer.registerPublicRoutes);
 app.register(deliverabilityServer.registerRoutes);
 app.register(offerCatalogServer.registerRoutes);
 app.register(handoffServer.registerRoutes);

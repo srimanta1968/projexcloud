@@ -1,0 +1,45 @@
+{
+  "name": "GET /api/scheduling/public/links/:slug/availability - Open slots for a public link",
+  "endpoint": "/api/scheduling/public/links/:slug/availability",
+  "sdk": "sdk-scheduling",
+  "sourceFile": "packages/sdk-scheduling/src/server/publicRoutes.ts",
+  "method": "GET",
+  "requiresAuth": false,
+  "expectedStatus": 200,
+  "taskId": "ca26e4ff-f683-4905-aaa3-2a85ad87b90d",
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "priority": 73,
+  "testability": "auto",
+  "description": "PUBLIC: open slots on one date for a shared booking link, computed from the host's availability rules in their IANA timezone with buffers applied and existing appointments excluded. Slot length comes from the link's meeting type. No auth — the caller is an anonymous prospect — so the gateway allowlists /api/scheduling/public/. The requested date is clamped to the link's max_days_ahead window, so an anonymous caller cannot walk the host's calendar arbitrarily far into the future; a date far in the past is rejected too. The minimum-notice rule is NOT applied to the date probe itself (only to the actual booking), so today's page can still render today's later slots. Edge cases: 400 when the date query param is missing or outside the window; unknown/deactivated/expired slug is an indistinguishable 404; a date with no configured availability rule returns an empty slots array with total_available 0 rather than an error.",
+  "dependsOn": [
+    "POST /api/auth/signup-tenant",
+    "POST /api/scheduling/meeting-types",
+    "POST /api/scheduling/availability-rules",
+    "POST /api/scheduling/scheduling-links"
+  ],
+  "testCases": [
+    {
+      "name": "Anonymous visitor lists open slots for a date inside the window",
+      "pathParams": { "slug": "{{cache:scheduling.scheduling-link.create.response.data.link.slug}}" },
+      "queryParams": { "date": "{{dynamic:futuredate}}" },
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "data": {
+          "availability": {
+            "date": "string",
+            "timezone": "string",
+            "slot_minutes": "number",
+            "slots": "array",
+            "total_available": "number"
+          }
+        }
+      }
+    }
+  ],
+  "errorCases": [
+    { "status": 400, "code": "ValidationError", "message": "date query param required (YYYY-MM-DD)", "when": "the date query param is absent" },
+    { "status": 400, "code": "BookingWindowError", "message": "start_time is beyond the link's <n>-day booking window", "when": "the requested date exceeds the link's max_days_ahead" },
+    { "status": 400, "code": "BookingWindowError", "message": "date is in the past", "when": "the requested date is more than a day in the past" },
+    { "status": 404, "code": "NotFound", "message": "NotFound", "when": "slug unknown, link deactivated, or link expired" }
+  ]
+}
