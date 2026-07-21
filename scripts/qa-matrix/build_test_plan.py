@@ -230,6 +230,18 @@ P.append('<p class="legend" style="margin-top:24px">Regenerate: '
 P.append('</main></body></html>')
 
 os.makedirs(os.path.dirname(OUT), exist_ok=True)
+html_out = "".join(P)
 with open(OUT, "w", encoding="utf-8") as f:
-    f.write("".join(P))
-print(f"wrote {OUT} | waves={n_waves} apis={total_apis} cases={total_cases}")
+    f.write(html_out)
+
+# Mirror into the customer-facing portals (served at /docs/api/test-plan.html).
+PORTAL_DIRS = [
+    os.path.join(ROOT, "apps", "tenant-workspace", "public", "docs", "api"),
+    os.path.join(ROOT, "apps", "tenant-admin", "public", "docs", "api"),
+]
+for pdir in PORTAL_DIRS:
+    os.makedirs(pdir, exist_ok=True)
+    with open(os.path.join(pdir, "test-plan.html"), "w", encoding="utf-8") as f:
+        f.write(html_out)
+
+print(f"wrote {OUT} (+ portal mirror) | waves={n_waves} apis={total_apis} cases={total_cases}")

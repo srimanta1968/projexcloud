@@ -51,6 +51,11 @@ RESOURCE_SDK = {
     "social": "sdk-social", "storm": "sdk-storm", "taxonomy": "sdk-taxonomy",
     "trace": "sdk-trace", "vault": "sdk-vault", "webhooks": "sdk-webhook",
     "workflows": "sdk-workflow", "x": "sdk-capability",
+    # P14/P15 InboundCRM SDK batch (Sprint3).
+    "sequences": "sdk-sequence", "sequence-templates": "sdk-sequence",
+    "scheduling": "sdk-scheduling", "deliverability": "sdk-deliverability",
+    "offers": "sdk-offer-catalog", "handoff": "sdk-handoff",
+    "incident": "sdk-incident", "voice": "connector-twilio-voice",
 }
 
 def infer_sdk(rel_path):
@@ -102,6 +107,16 @@ for dirpath, _dirs, files in os.walk(API_DIR):
             epic_ids.add(epic_id)
         if feature_id:
             feature_ids.add(feature_id)
+        # Def-level QA documentation fields (MUST-39/40/42/43). fieldEnums is the
+        # request-field enum map (superset of the older fieldOptions); errorCases
+        # is the handler-derived error catalogue; statusTransitions is the
+        # lifecycle state machine.
+        doc = {
+            "description": d.get("description", ""),
+            "errorCases": d.get("errorCases", None),
+            "fieldEnums": d.get("fieldEnums", None) or d.get("fieldOptions", None),
+            "statusTransitions": d.get("statusTransitions", None),
+        }
         tcs = d.get("testCases") or []
         # Flatten: one row per test case (or one row if none / manual).
         if not tcs:
@@ -116,6 +131,7 @@ for dirpath, _dirs, files in os.walk(API_DIR):
                 "generated": generated, "sourceFile": source_file,
                 "fieldOptions": d.get("fieldOptions", None),
                 "serverFieldOptions": d.get("serverFieldOptions", None),
+                **doc,
             })
         for tc in tcs:
             rows.append({
@@ -130,6 +146,7 @@ for dirpath, _dirs, files in os.walk(API_DIR):
                 "generated": generated, "sourceFile": source_file,
                 "fieldOptions": d.get("fieldOptions", None),
                 "serverFieldOptions": d.get("serverFieldOptions", None),
+                **doc,
             })
 
 os.makedirs(OUT_DIR, exist_ok=True)

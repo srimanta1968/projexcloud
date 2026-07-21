@@ -18,6 +18,7 @@ export function MarketingHeader(): JSX.Element {
         <Link href="/pricing" className="hover:text-primary">Pricing</Link>
         <Link href="/security" className="hover:text-primary">Security</Link>
         <a href="/docs/user/tenant-getting-started.html" className="hover:text-primary">Docs</a>
+        <a href="/docs/api/index.html" className="hover:text-primary">API</a>
       </nav>
 
       <div className="flex items-center gap-2">

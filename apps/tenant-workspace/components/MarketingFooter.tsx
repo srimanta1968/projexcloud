@@ -18,6 +18,8 @@ export function MarketingFooter(): JSX.Element {
           <div className={COL_TITLE}>For Developers</div>
           <a href="/docs/user/tenant-getting-started.html" className={COL_LINK}>Getting started</a>
           <a href="/docs/user/tenant-admin-guide.html" className={COL_LINK}>Tenant admin guide</a>
+          <a href="/docs/api/index.html" className={COL_LINK}>API reference</a>
+          <a href="/docs/api/test-plan.html" className={COL_LINK}>API test plan</a>
         </div>
         <div>
           <div className={COL_TITLE}>Company</div>
