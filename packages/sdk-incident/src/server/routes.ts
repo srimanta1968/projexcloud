@@ -9,6 +9,8 @@ import {
   updateIncident,
   InvalidIncidentTransition,
 } from '../services/incidentService';
+import { appendEvidence, listEvidence, IncidentNotFound } from '../services/evidenceService';
+import { EVIDENCE_KINDS, type EvidenceKind } from '../models/evidence.model';
 import type { CreateIncidentInput, IncidentStatus, UpdateIncidentInput } from '../models/incident.model';
 
 const STATUSES: IncidentStatus[] = ['open', 'investigating', 'mitigated', 'resolved', 'closed', 'cancelled'];
@@ -92,6 +94,56 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
         }
         throw err;
       }
+    },
+  );
+
+  // ---- Evidence timeline (append-only, notarised into sdk-audit) ----
+
+  // Append one timeline entry. The entry is written to the sdk-audit hash chain and
+  // the receipt (entry id/seq/hash) is returned with the row. Entries cannot be
+  // edited or deleted afterwards — there is deliberately no PATCH/DELETE here.
+  app.post<{ Params: { incident_id: string } }>(
+    '/api/incidents/:incident_id/evidence', { preHandler: requireAuth }, async (req, reply) => {
+      const body = (req.body ?? {}) as {
+        tenant_id?: string; kind?: EvidenceKind; body?: string;
+        evidence_ref?: string; recorded_by_persona_id?: string;
+        occurred_at?: string; metadata?: Record<string, unknown>;
+      };
+      if (!body.tenant_id || !body.kind || !body.body) {
+        return reply.code(400).send({ error: 'ValidationError', details: ['tenant_id, kind and body are required'] });
+      }
+      if (!EVIDENCE_KINDS.includes(body.kind)) {
+        return reply.code(400).send({ error: 'ValidationError', details: [`kind must be one of ${EVIDENCE_KINDS.join('|')}`] });
+      }
+      try {
+        const evidence = await appendEvidence({
+          tenant_id: body.tenant_id,
+          incident_id: req.params.incident_id,
+          kind: body.kind,
+          body: body.body,
+          evidence_ref: body.evidence_ref ?? null,
+          recorded_by_persona_id: body.recorded_by_persona_id ?? null,
+          occurred_at: body.occurred_at ?? null,
+          metadata: body.metadata,
+        });
+        return reply.code(201).send({ data: { evidence } });
+      } catch (err) {
+        if (err instanceof IncidentNotFound) return reply.code(404).send({ error: 'NotFound', message: err.message });
+        throw err;
+      }
+    },
+  );
+
+  // Read the timeline, oldest first, optionally filtered to one kind.
+  app.get<{ Params: { incident_id: string }; Querystring: { tenant_id?: string; kind?: string; limit?: string; offset?: string } }>(
+    '/api/incidents/:incident_id/evidence', { preHandler: requireAuth }, async (req, reply) => {
+      if (!req.query.tenant_id) return reply.code(400).send({ error: 'ValidationError', details: ['tenant_id query param required'] });
+      const evidence = await listEvidence(req.query.tenant_id, req.params.incident_id, {
+        kind: req.query.kind,
+        limit: req.query.limit ? Number(req.query.limit) : undefined,
+        offset: req.query.offset ? Number(req.query.offset) : undefined,
+      });
+      return reply.code(200).send({ data: { evidence } });
     },
   );
 }
