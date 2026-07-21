@@ -1,0 +1,44 @@
+{
+  "name": "POST /api/voice/webhooks/twilio/recording - Twilio recording-status callback",
+  "endpoint": "/api/voice/webhooks/twilio/recording",
+  "sdk": "connector-twilio-voice",
+  "sourceFile": "packages/connector-twilio-voice/src/server/webhookRoutes.ts",
+  "method": "POST",
+  "requiresAuth": false,
+  "expectedStatus": 200,
+  "taskId": "236427cb-527c-48d9-9146-b9de48d89bb9",
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "priority": 67,
+  "testability": "auto",
+  "description": "PUBLIC signed webhook: Twilio posts here once a call recording is ready, carrying RecordingSid, RecordingUrl and RecordingDuration. Authentication is by X-Twilio-Signature exactly as for the status callback (fail-closed once TWILIO_AUTH_TOKEN is set, permissive when unconfigured so local/test runs work unsigned); the gateway allowlists the /api/voice/webhooks/ prefix past the default-deny authGate. The recording fields are merged onto the existing call row — COALESCE means a re-delivery of the same recording is idempotent and a callback missing a field never nulls a value already stored. Edge cases: an unrecognised or absent CallSid is acknowledged with 202 rather than 404 so Twilio stops retrying; recordings can arrive AFTER the call is already completed, which is normal and does not alter the call status; 401 InvalidSignature only when a token is configured and the signature does not verify.",
+  "dependsOn": [
+    "POST /api/auth/signup-tenant",
+    "POST /api/voice/tracking-numbers",
+    "POST /api/voice/calls"
+  ],
+  "testCases": [
+    {
+      "name": "Recording ready for the placed call",
+      "headers": { "Content-Type": "application/json" },
+      "payload": {
+        "CallSid": "{{cache:voice.calls.create.response.data.call.external_id}}",
+        "RecordingSid": "RE{{dynamic:slug}}",
+        "RecordingUrl": "https://api.twilio.com/2010-04-01/Recordings/RE{{dynamic:slug}}",
+        "RecordingDuration": "40"
+      },
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "data": {
+          "matched": "boolean",
+          "voice_call_id": "string",
+          "recording_sid": "string",
+          "recording_duration_seconds": "number"
+        }
+      }
+    }
+  ],
+  "errorCases": [
+    { "status": 202, "code": "Accepted", "message": "unknown CallSid <sid>", "when": "the CallSid is not in the mirror, or the payload has no CallSid — acknowledged so Twilio stops retrying" },
+    { "status": 401, "code": "InvalidSignature", "message": "InvalidSignature", "when": "TWILIO_AUTH_TOKEN is configured and X-Twilio-Signature is missing, wrong, or computed over different params" }
+  ]
+}

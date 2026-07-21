@@ -36,6 +36,21 @@ export {
   CALL_COLS,
 } from './services/callService';
 
+// Status / recording webhook ingestion + AMD -> voicemail classification (TK-3653).
+export {
+  verifyTwilioSignature,
+  applyStatusCallback,
+  applyRecordingCallback,
+  normalizeAnsweredBy,
+  setVoiceCallEventHandler,
+} from './services/webhookService';
+export type {
+  StatusCallbackResult,
+  RecordingCallbackResult,
+  VoiceCallEventHandler,
+  VoiceCallEventKind,
+} from './services/webhookService';
+
 export {
   setTwilioVoiceProvider,
   getTwilioVoiceProvider,

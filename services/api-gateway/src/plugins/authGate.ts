@@ -53,6 +53,7 @@ const PUBLIC_PREFIX = [
   '/api/connectors/inbound/', // signature-verified inbound webhooks
   '/api/deliverability/webhooks/', // provider bounce/complaint webhooks (HMAC-verified in handler)
   '/api/notifications/webhooks/', // inbound SMS (Twilio) webhooks (HMAC-verified in handler)
+  '/api/voice/webhooks/', // Twilio voice status/recording callbacks (X-Twilio-Signature verified in handler)
 ];
 
 /** Prefixes that self-guard via the ADMIN_OPS_TOKEN header — bypass the JWT gate. */

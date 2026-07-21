@@ -556,6 +556,7 @@ app.register(offerCatalogServer.registerRoutes);
 app.register(handoffServer.registerRoutes);
 app.register(incidentServer.registerRoutes);
 app.register(twilioVoiceServer.registerRoutes);
+app.register(twilioVoiceServer.registerWebhookRoutes);
 app.register(serviceRequestServer.registerRoutes);
 app.register(contentServer.registerRoutes);
 app.register(campaignServer.registerRoutes);
