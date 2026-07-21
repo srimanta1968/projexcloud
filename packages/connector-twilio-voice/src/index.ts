@@ -51,6 +51,20 @@ export type {
   VoiceCallEventKind,
 } from './services/webhookService';
 
+// Recording-consent gate (TK-3654) — fails closed when no decision is available.
+export {
+  setRecordingConsentChecker,
+  resolveRecordingConsent,
+  mayRecord,
+  withheldReason,
+} from './services/recordingConsent';
+export type {
+  ConsentDecision,
+  RecordingConsentChecker,
+  RecordingConsentContext,
+  RecordingConsentResult,
+} from './services/recordingConsent';
+
 export {
   setTwilioVoiceProvider,
   getTwilioVoiceProvider,

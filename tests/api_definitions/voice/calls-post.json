@@ -10,14 +10,15 @@
   "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
   "priority": 61,
   "testability": "auto",
-  "description": "Place an outbound call. The request always sets a statusCallback URL and, by default, requests recording plus answering-machine detection (AMD) — recording because the SOP requires it, AMD because it is what lets the status webhook tell a human answer from a voicemail. Both can be disabled per call (e.g. where recording consent was refused). A mirror row is written in status 'queued' before Twilio's callbacks begin arriving; the status/recording webhooks then complete it. Caller-id resolution order: explicit from_number, else the referenced tracking_number_id (must be active), else the tenant's most recently provisioned ACTIVE tracking number. Edge cases: 400 NoCallerIdAvailable when none of those resolve — the call is rejected rather than dialled from an arbitrary number; 400 when tenant_id, install_id or to_number is missing; 422 with remediation when the upstream call request fails; repeat callbacks for the same Call SID are idempotent via UNIQUE(install_id, external_id).",
+  "description": "Place an outbound call. The request always sets a statusCallback URL and, by default, requests recording plus answering-machine detection (AMD) — recording because the SOP requires it, AMD because it is what lets the status webhook tell a human answer from a voicemail. RECORDING CONSENT GATE (TK-3654): when record is requested the call is checked against sdk-consent FIRST, and recording is withheld AT SOURCE — Twilio is never asked to record — unless there is an affirmative grant. Denial and the absence of any decision both withhold (recording_withheld_reason = consent_denied / consent_unknown), so an unconfigured environment never silently records anyone; the decision is persisted on the row as recording_consent (true/false/null) with its receipt id. Response field payload.record therefore reflects what was ACTUALLY requested upstream, which may be false even when the caller sent record:true. A mirror row is written in status 'queued' before Twilio's callbacks begin arriving; the status/recording webhooks then complete it. Caller-id resolution order: explicit from_number, else the referenced tracking_number_id (must be active), else the tenant's most recently provisioned ACTIVE tracking number. Edge cases: 400 NoCallerIdAvailable when none of those resolve — the call is rejected rather than dialled from an arbitrary number; 400 when tenant_id, install_id or to_number is missing; 422 with remediation when the upstream call request fails; repeat callbacks for the same Call SID are idempotent via UNIQUE(install_id, external_id).",
   "dependsOn": [
     "POST /api/auth/signup-tenant",
     "POST /api/voice/tracking-numbers"
   ],
   "fieldEnums": {
     "status": ["queued", "initiated", "ringing", "in-progress", "completed", "busy", "no-answer", "canceled", "failed"],
-    "direction": ["inbound", "outbound"]
+    "direction": ["inbound", "outbound"],
+    "recording_withheld_reason": ["consent_denied", "consent_unknown", "not_requested"]
   },
   "statusTransitions": {
     "queued -> initiated -> ringing -> in-progress": "Twilio call progress, delivered to POST /api/voice/webhooks/twilio/status",

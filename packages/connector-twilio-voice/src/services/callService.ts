@@ -2,6 +2,7 @@ import { dataService } from '@projexlight/db-runtime';
 import { emitEvent } from '@projexlight/sdk-audit';
 import { getTwilioVoiceProvider, TwilioVoiceProviderError } from '../provider';
 import { getTrackingNumber, recordingCallbackUrl, statusCallbackUrl } from './numberService';
+import { mayRecord, resolveRecordingConsent, withheldReason } from './recordingConsent';
 import type { PlaceCallInput, VoiceCallRecord } from '../models/voice.model';
 
 /**
@@ -20,7 +21,8 @@ export const CALL_COLS = `
   to_number, tracking_number_id, subject_persona_id, initiated_by_persona_id,
   status, answered_by, duration_seconds, recording_url, recording_sid,
   recording_duration_seconds, is_voicemail, voicemail_transcript, error_code,
-  payload, started_at, answered_at, ended_at, last_sync_at`;
+  payload, started_at, answered_at, ended_at, last_sync_at,
+  recording_consent, recording_consent_receipt_id, recording_withheld_reason`;
 
 /** Thrown when no caller-id can be resolved for the outbound leg. */
 export class NoCallerIdAvailable extends Error {
@@ -50,8 +52,22 @@ export async function placeCall(input: PlaceCallInput): Promise<VoiceCallRecord>
   const from_number = await resolveCallerId(input);
   if (!from_number) throw new NoCallerIdAvailable();
 
-  const record = input.record ?? true;
   const machine_detection = input.machine_detection ?? true;
+
+  // Recording is gated on an sdk-consent decision (TK-3654). Withholding at the
+  // SOURCE — never asking Twilio to record — is stronger than discarding the
+  // recording afterwards: without consent no audio is ever captured.
+  const requested = input.record ?? true;
+  const consent = requested
+    ? await resolveRecordingConsent({
+        tenant_id: input.tenant_id,
+        subject_persona_id: input.subject_persona_id ?? null,
+        to_number: input.to_number,
+        from_number: from_number.phone_number,
+      })
+    : { decision: 'unknown' as const, receipt_id: null };
+  const record = requested && mayRecord(consent.decision);
+  const withheld = requested ? withheldReason(consent.decision) : 'not_requested';
 
   let placed;
   try {
@@ -73,9 +89,10 @@ export async function placeCall(input: PlaceCallInput): Promise<VoiceCallRecord>
   const rec = await dataService.one<VoiceCallRecord>(
     `INSERT INTO connector_twilio_voice.voice_call
        (install_id, tenant_id, external_id, direction, from_number, to_number,
-        tracking_number_id, subject_persona_id, initiated_by_persona_id, status, payload)
+        tracking_number_id, subject_persona_id, initiated_by_persona_id, status, payload,
+        recording_consent, recording_consent_receipt_id, recording_withheld_reason)
      VALUES ($1, $2, $3, 'outbound', $4, $5, $6, $7, $8, $9,
-             COALESCE($10::jsonb, '{}'::jsonb))
+             COALESCE($10::jsonb, '{}'::jsonb), $11, $12, $13)
      ON CONFLICT (install_id, external_id) DO UPDATE SET last_sync_at = now()
      RETURNING ${CALL_COLS}`,
     [
@@ -88,7 +105,16 @@ export async function placeCall(input: PlaceCallInput): Promise<VoiceCallRecord>
       input.subject_persona_id ?? null,
       input.initiated_by_persona_id ?? null,
       normalizeStatus(placed.status) ?? 'queued',
-      JSON.stringify({ ...(input.metadata ?? {}), record, machine_detection }),
+      JSON.stringify({
+        ...(input.metadata ?? {}),
+        record,
+        record_requested: requested,
+        machine_detection,
+        recording_consent_decision: consent.decision,
+      }),
+      consent.decision === 'granted' ? true : consent.decision === 'denied' ? false : null,
+      consent.receipt_id ?? null,
+      withheld,
     ],
   );
   if (!rec) throw new Error('[connector-twilio-voice] voice_call insert returned no row');
@@ -106,6 +132,8 @@ export async function placeCall(input: PlaceCallInput): Promise<VoiceCallRecord>
       to_number: rec.to_number,
       from_number: rec.from_number,
       record,
+      record_requested: requested,
+      recording_consent_decision: consent.decision,
       machine_detection,
     },
   });

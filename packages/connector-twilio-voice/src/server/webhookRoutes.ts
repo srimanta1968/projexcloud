@@ -70,6 +70,9 @@ export async function registerWebhookRoutes(app: FastifyInstance): Promise<void>
         voice_call_id: result.call!.voice_call_id,
         recording_sid: result.call!.recording_sid,
         recording_duration_seconds: result.call!.recording_duration_seconds,
+        // Consent gate outcome: the audio pointer is stored only on a grant.
+        recording_stored: !!result.call!.recording_url,
+        recording_withheld_reason: result.call!.recording_withheld_reason,
       },
     });
   });

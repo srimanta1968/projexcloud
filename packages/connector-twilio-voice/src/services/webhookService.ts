@@ -165,6 +165,13 @@ export interface RecordingCallbackResult {
  * RecordingDuration / CallSid). Idempotent: re-delivery of the same recording
  * overwrites with identical values. An unknown Call SID is acknowledged, not
  * raised.
+ *
+ * CONSENT GATE (TK-3654): the recording_url is the pointer to the actual audio,
+ * so it is stored ONLY when the call carries an affirmative consent grant.
+ * Denied and "no decision" both withhold it and stamp recording_withheld_reason.
+ * The SID and duration ARE retained even when withheld — knowing that a
+ * recording exists upstream is what makes it possible to honour a later deletion
+ * request, and that metadata is not itself the recording.
  */
 export async function applyRecordingCallback(params: Record<string, string>): Promise<RecordingCallbackResult> {
   const sid = params.CallSid || params.callSid;
@@ -173,22 +180,33 @@ export async function applyRecordingCallback(params: Record<string, string>): Pr
   const existing = await findCallBySid(sid);
   if (!existing) return { matched: false, ignored_reason: `unknown CallSid ${sid}` };
 
+  const consentGranted = existing.recording_consent === true;
+  const recordingUrl = consentGranted ? (params.RecordingUrl || null) : null;
+  const withheld = consentGranted
+    ? existing.recording_withheld_reason
+    : existing.recording_consent === false ? 'consent_denied' : 'consent_unknown';
+
   const duration = params.RecordingDuration ? Number(params.RecordingDuration) : null;
   const rec = await dataService.one<VoiceCallRecord>(
     `UPDATE connector_twilio_voice.voice_call
         SET recording_url              = COALESCE($2, recording_url),
             recording_sid              = COALESCE($3, recording_sid),
             recording_duration_seconds = COALESCE($4, recording_duration_seconds),
+            recording_withheld_reason  = $6,
             payload                    = payload || $5::jsonb,
             last_sync_at               = now()
       WHERE voice_call_id = $1
       RETURNING ${CALL_COLS}`,
     [
       existing.voice_call_id,
-      params.RecordingUrl || null,
+      recordingUrl,
       params.RecordingSid || null,
       Number.isFinite(duration as number) ? duration : null,
-      JSON.stringify({ last_recording_callback: params }),
+      JSON.stringify({
+        last_recording_callback: params,
+        recording_url_withheld: !consentGranted,
+      }),
+      withheld,
     ],
   );
   if (!rec) return { matched: false, ignored_reason: 'call disappeared mid-update' };
@@ -206,6 +224,8 @@ export async function applyRecordingCallback(params: Record<string, string>): Pr
       recording_sid: rec.recording_sid,
       recording_duration_seconds: rec.recording_duration_seconds,
       is_voicemail: rec.is_voicemail,
+      recording_stored: !!rec.recording_url,
+      recording_withheld_reason: rec.recording_withheld_reason,
     },
   });
 

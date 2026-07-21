@@ -64,7 +64,7 @@ import {
 } from '@projexlight/sdk-meter';
 import { server as secretsServer } from '@projexlight/sdk-secrets';
 import { migrationsDir as tenantMigrations, server as tenantServer, createTenant as tenantCreate, listTenants as tenantList, ensureApp as appEnsure } from '@projexlight/sdk-tenant';
-import { migrationsDir as consentMigrations, server as consentServer } from '@projexlight/sdk-consent';
+import { migrationsDir as consentMigrations, server as consentServer, checkConsent } from '@projexlight/sdk-consent';
 import { migrationsDir as assetMigrations, registerAsset as assetRegister, getTwin as assetGetTwin, bootstrapAssetClickHouseSchema, ingestReadings as assetIngestReadings, startSensorRollupJob, runSensorRollup, queryReadings as assetQueryReadings } from '@projexlight/sdk-asset';
 import {
   migrationsDir as commandMigrations,
@@ -187,6 +187,8 @@ import {
 import {
   migrationsDir as crmMigrations,
   server as crmServer,
+  logCall as crmLogCall,
+  logVoicemail as crmLogVoicemail,
 } from '@projexlight/sdk-crm';
 import {
   migrationsDir as serviceRequestMigrations,
@@ -333,7 +335,13 @@ import { migrationsDir as deliverabilityMigrations, server as deliverabilityServ
 import { migrationsDir as offerCatalogMigrations, server as offerCatalogServer } from '@projexlight/sdk-offer-catalog';
 import { migrationsDir as handoffMigrations, server as handoffServer, registerHandoffSaga, setHandoffApprovalCreator } from '@projexlight/sdk-handoff';
 import { migrationsDir as incidentMigrations, server as incidentServer } from '@projexlight/sdk-incident';
-import { migrationsDir as twilioVoiceMigrations, server as twilioVoiceServer } from '@projexlight/connector-twilio-voice';
+import {
+  migrationsDir as twilioVoiceMigrations,
+  server as twilioVoiceServer,
+  setRecordingConsentChecker,
+  setVoiceCallEventHandler,
+  isVoicemailOutcome,
+} from '@projexlight/connector-twilio-voice';
 import { migrationsDir as leadScoringMigrations }         from '@projexlight/sdk-lead-scoring';
 import {
   migrationsDir as evidenceMigrations,
@@ -981,6 +989,20 @@ app.register(async (instance) => {
     );
   });
 });
+
+/**
+ * Map a Twilio call status onto the sdk-crm call_disposition vocabulary
+ * (P15·E4/E5 bridge). 'canceled' maps to 'failed': the leg never connected, and
+ * 'no_answer' would wrongly imply the far end was reached and did not pick up.
+ */
+function crmDisposition(status: string): 'answered' | 'no_answer' | 'busy' | 'failed' {
+  switch (status) {
+    case 'completed': return 'answered';
+    case 'busy': return 'busy';
+    case 'no-answer': return 'no_answer';
+    default: return 'failed';   // canceled | failed | anything unexpected
+  }
+}
 
 const start = async (): Promise<void> => {
   try {
@@ -3750,6 +3772,69 @@ const start = async (): Promise<void> => {
     // Delivery-status callbacks feed the deliverability reputation counters (TK-3636).
     setDeliveryReputationHook(async ({ tenant_id, channel, delivered, bounced, complained }) => {
       await deliverabilityReputation.recordSendOutcome({ tenantId: tenant_id, channel, delivered, bounced, complained });
+    });
+
+    // P15·E4 (TK-3654) — recording-consent gate. connector-twilio-voice carries no
+    // sdk-consent dependency, so the lookup is injected here. The connector fails
+    // CLOSED: anything that is not an affirmative grant (no subject persona, no
+    // receipt, a lookup error) withholds the recording, so an unconfigured
+    // purpose never silently records anyone.
+    const recordingPurposeId = process.env.VOICE_RECORDING_CONSENT_PURPOSE_ID || 'call_recording';
+    setRecordingConsentChecker(async ({ tenant_id, subject_persona_id }) => {
+      if (!subject_persona_id) return { decision: 'unknown' };
+      const result = await checkConsent({
+        person_id: subject_persona_id,
+        purpose_id: recordingPurposeId,
+        processor: process.env.VOICE_RECORDING_CONSENT_PROCESSOR || 'connector-twilio-voice',
+        jurisdiction: process.env.VOICE_RECORDING_CONSENT_JURISDICTION || 'us',
+      });
+      void tenant_id;
+      // An expired or revoked receipt reads as granted:false — an explicit denial.
+      return result.granted
+        ? { decision: 'granted', receipt_id: result.receipt_id }
+        : { decision: result.receipt_id ? 'denied' : 'unknown' };
+    });
+
+    // P15·E4 (TK-3654) — bridge telephony call events into the sdk-crm timeline.
+    // The encounter is the CRM anchor and the connector does not know it, so it
+    // travels on the call metadata (placeCall metadata.encounter_id); without it
+    // there is nothing to attach the activity to, so the event is skipped rather
+    // than logged against a fabricated encounter.
+    setVoiceCallEventHandler(async (call, kind) => {
+      if (kind === 'status' && !['completed', 'busy', 'no-answer', 'canceled', 'failed'].includes(call.status)) {
+        return; // only log once the call has actually finished
+      }
+      const payload = (call.payload ?? {}) as Record<string, unknown>;
+      const encounter_id = typeof payload.encounter_id === 'string' ? payload.encounter_id : null;
+      const actor_persona_id = call.initiated_by_persona_id ?? call.subject_persona_id;
+      if (!encounter_id || !actor_persona_id) return;
+
+      const common = {
+        encounter_id,
+        actor_persona_id,
+        call_direction: call.direction,
+        call_duration_seconds: call.duration_seconds,
+        phone_number: call.direction === 'inbound' ? call.from_number : call.to_number,
+        // Only ever propagate a recording pointer the consent gate actually stored.
+        recording_url: call.recording_url,
+        recording_consent: call.recording_consent,
+        external_call_id: call.external_id,
+      };
+
+      if (call.is_voicemail || isVoicemailOutcome(call.answered_by)) {
+        await crmLogVoicemail({
+          ...common,
+          call_disposition: 'voicemail',
+          voicemail_transcript: call.voicemail_transcript,
+          summary: `Voicemail reached on ${call.direction} call`,
+        });
+        return;
+      }
+      await crmLogCall({
+        ...common,
+        call_disposition: crmDisposition(call.status),
+        summary: `${call.direction} call ${call.status}`,
+      });
     });
 
     const sequenceExecutor = startSequenceExecutor({

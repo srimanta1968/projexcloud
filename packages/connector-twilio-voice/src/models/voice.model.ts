@@ -89,6 +89,10 @@ export interface VoiceCallRecord {
   is_voicemail: boolean;
   voicemail_transcript: string | null;
   error_code: string | null;
+  /** sdk-consent decision for recording: true=granted, false=denied, null=no decision. */
+  recording_consent: boolean | null;
+  recording_consent_receipt_id: string | null;
+  recording_withheld_reason: 'consent_denied' | 'consent_unknown' | 'not_requested' | null;
   payload: Record<string, unknown>;
   started_at: string;
   answered_at: string | null;
