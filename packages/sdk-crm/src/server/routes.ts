@@ -15,7 +15,16 @@ import {
   updateContact,
   updateDeal,
 } from '../services/crmService';
-import type { ActivityKind, DealStage, LifecycleStage } from '../models/crm.model';
+// ACTIVITY_KINDS is the single source of truth in the model (widened with
+// 'voicemail' by migration 003) — do not re-declare the list here.
+import { ACTIVITY_KINDS } from '../models/crm.model';
+import type { ActivityKind, DealStage, LifecycleStage, LogCallInput, LogVoicemailInput } from '../models/crm.model';
+import {
+  logCall,
+  logVoicemail,
+  listCallActivities,
+  InvalidCallActivity,
+} from '../services/callActivityService';
 import {
   setNextAction,
   getOpenNextAction,
@@ -31,7 +40,6 @@ import {
 } from '../services/stageGuardService';
 
 const STAGES: DealStage[] = ['qualifying', 'proposal', 'negotiation', 'closed-won', 'closed-lost'];
-const ACTIVITY_KINDS: ActivityKind[] = ['call', 'email', 'meeting', 'note', 'task'];
 const NEXT_ACTION_TYPES = ['call', 'email', 'meeting', 'task', 'linkedin', 'sms', 'proposal', 'other'];
 
 export async function registerRoutes(app: FastifyInstance): Promise<void> {
@@ -238,6 +246,59 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
     });
     return reply.code(201).send({ data: { activity: rec } });
   });
+
+  /* ------------------------------------------ call / voicemail activity (TK-3656) */
+
+  // Log a call with its disposition on the contact/lead timeline. Idempotent on
+  // external_call_id so telephony webhook retries update rather than duplicate.
+  app.post('/api/crm/activities/call', { preHandler: requireAuth }, async (req, reply) => {
+    const body = (req.body ?? {}) as Partial<LogCallInput>;
+    if (!body.encounter_id || !body.actor_persona_id) {
+      return reply.code(400).send({ error: 'ValidationError', details: ['encounter_id and actor_persona_id are required'] });
+    }
+    try {
+      const activity = await logCall(body as LogCallInput);
+      return reply.code(201).send({ data: { activity } });
+    } catch (err) {
+      if (err instanceof InvalidCallActivity) {
+        return reply.code(400).send({ error: 'ValidationError', details: err.details });
+      }
+      throw err;
+    }
+  });
+
+  // Log a voicemail (with optional transcript) on the timeline.
+  app.post('/api/crm/activities/voicemail', { preHandler: requireAuth }, async (req, reply) => {
+    const body = (req.body ?? {}) as Partial<LogVoicemailInput>;
+    if (!body.encounter_id || !body.actor_persona_id) {
+      return reply.code(400).send({ error: 'ValidationError', details: ['encounter_id and actor_persona_id are required'] });
+    }
+    try {
+      const activity = await logVoicemail(body as LogVoicemailInput);
+      return reply.code(201).send({ data: { activity } });
+    } catch (err) {
+      if (err instanceof InvalidCallActivity) {
+        return reply.code(400).send({ error: 'ValidationError', details: err.details });
+      }
+      throw err;
+    }
+  });
+
+  // Read the call/voicemail timeline for an encounter.
+  app.get<{ Querystring: { encounter_id?: string; kind?: string; call_disposition?: string; limit?: string; offset?: string } }>(
+    '/api/crm/activities/calls', { preHandler: requireAuth }, async (req, reply) => {
+      if (!req.query.encounter_id) {
+        return reply.code(400).send({ error: 'ValidationError', details: ['encounter_id query param required'] });
+      }
+      const activities = await listCallActivities(req.query.encounter_id, {
+        kind: req.query.kind,
+        call_disposition: req.query.call_disposition,
+        limit: req.query.limit ? Number(req.query.limit) : undefined,
+        offset: req.query.offset ? Number(req.query.offset) : undefined,
+      });
+      return reply.code(200).send({ data: { activities } });
+    },
+  );
 
   /* --------------------------------------------- NEXT-action + save-gate (TK-3630) */
   // Set (replace) the deal's open NEXT action.
