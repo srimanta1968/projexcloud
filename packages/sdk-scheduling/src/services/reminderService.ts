@@ -199,9 +199,14 @@ export async function rebookAppointment(
     [tenant_id, created.appointment_id, appointment_id],
   );
   await dataService.rows(
+    // Build the JSON in JS and cast the parameter, rather than concatenating a
+    // string in SQL: `'{"a":"' || $3 || '"}'` yields TEXT, which Postgres will
+    // not implicitly coerce into the jsonb column (42804), and it would emit
+    // malformed JSON for any value containing a quote. Same shape as
+    // bookingService.recordEvent.
     `INSERT INTO scheduling.booking_event (tenant_id, appointment_id, event_type, detail)
-     VALUES ($1,$2,'created','{"rescued_from":"' || $3 || '"}')`,
-    [tenant_id, created.appointment_id, appointment_id],
+     VALUES ($1,$2,'created',$3::jsonb)`,
+    [tenant_id, created.appointment_id, JSON.stringify({ rescued_from: appointment_id })],
   );
   await scheduleReminders(tenant_id, created.appointment_id);
   return created;
