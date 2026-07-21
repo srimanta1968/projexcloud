@@ -49,7 +49,13 @@ WAVES = [
         "search", "webhooks", "workflows"]),
     (5, "W5 · Engagement (Domain Layer)", [
         "sdk-engagement", "sdk-crm", "sdk-campaign", "sdk-lead-scoring", "sdk-social",
-        "sdk-content", "sdk-service-request", "sdk-event", "sdk-approval"]),
+        "sdk-content", "sdk-service-request", "sdk-event", "sdk-approval",
+        # P14/P15 InboundCRM SDK batch (Sprint3) — engagement-domain SDKs that
+        # sit on the same W5 dependency layer (auth + persona + crm already up).
+        "sdk-sequence", "sequences", "sequence-templates",
+        "sdk-scheduling", "scheduling", "sdk-deliverability", "deliverability",
+        "sdk-offer-catalog", "offers", "sdk-handoff", "handoff",
+        "sdk-incident", "incident", "connector-twilio-voice", "voice"]),
     (6, "W6 · Knowledge, Semantic & Agent Runtime", [
         "semantic-service", "agent-runtime-agents", "agent-runtime-runs",
         "agent-runtime-tokens", "sdk-agent-runtime", "ai-gateway", "sdk-ai-gateway",

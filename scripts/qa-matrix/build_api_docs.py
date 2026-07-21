@@ -105,9 +105,16 @@ pre{background:#0b0f14;border:1px solid var(--line);border-radius:8px;padding:10
 .planlink{display:inline-block;background:#10261a;border:1px solid #2d8a4e;color:#3fb950;border-radius:8px;padding:6px 12px;margin-top:10px;font-weight:600}
 .planlink:hover{text-decoration:none;background:#15311f}
 code{background:#0b0f14;border:1px solid var(--line);border-radius:5px;padding:0 4px;font-family:ui-monospace,Consolas,monospace}
+.apidesc{margin:2px 0 12px;color:#c9d1d9;font-size:13.5px;line-height:1.6;border-left:3px solid var(--accent);padding:4px 0 4px 12px;background:#11161d;border-radius:0 6px 6px 0}
+.errsec{margin:14px 0 6px}
+.errhead{font-size:11px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);margin:0 0 5px}
+table.errtable{margin:0 0 4px;font-size:12.5px}
+table.errtable th{background:#241c22;color:#f0b8b0;position:static}
+table.errtable td{vertical-align:top}
+.httpcode{display:inline-block;min-width:34px;text-align:center;font-weight:700;font-family:ui-monospace,Consolas,monospace;color:#f85149;background:#2a1416;border:1px solid #5c2327;border-radius:6px;padding:1px 6px}
 """
 
-def render_api(method, endpoint, rows):
+def render_api(method, endpoint, rows, public=False):
     r0 = rows[0]
     eid, fid = r0.get("epicId", ""), r0.get("featureId", "")
     e = epic_by_id.get(eid, {})
@@ -121,6 +128,9 @@ def render_api(method, endpoint, rows):
                  f'<span class="uri">{esc(endpoint)}</span>'
                  f'<span class="badge">{esc(auth)}{" · manual" if manual else ""}</span></summary>')
     parts.append('<div class="body">')
+    # QA-facing description (what it does + edge cases) — MUST-42.
+    if r0.get("description"):
+        parts.append(f'<p class="apidesc">{esc(r0.get("description"))}</p>')
     # context
     epic_link = f'<a href="{url(e.get("short_id",""))}">{esc(e.get("short_id",""))}</a> {esc(e.get("title",""))}' if e else "—"
     feat_link = f'<a href="{url(f.get("short_id",""))}">{esc(f.get("short_id",""))}</a> {esc(f.get("title",""))}' if f else "—"
@@ -130,9 +140,13 @@ def render_api(method, endpoint, rows):
     wbadge = (f'<a class="wavebadge" href="test-plan.html">W{esc(r0.get("testWave"))} · test wave</a>'
               if r0.get("testWave") is not None else "")
     parts.append(f'<div class="k">SDK / service</div><div><b>{esc(r0.get("sdk",""))}</b>{wbadge}</div>')
-    parts.append(f'<div class="k">Epic</div><div>{epic_link}</div>')
-    parts.append(f'<div class="k">Feature</div><div>{feat_link}</div>')
-    parts.append(f'<div class="k">Scenario(s)</div><div>{sc_html}</div>')
+    # Epic / Feature / Scenario are internal ProjexLight planning artifacts (they
+    # link to the internal projexlight.com planning tool) — omitted from the
+    # public/prod build so customer-facing docs carry no internal traceability.
+    if not public:
+        parts.append(f'<div class="k">Epic</div><div>{epic_link}</div>')
+        parts.append(f'<div class="k">Feature</div><div>{feat_link}</div>')
+        parts.append(f'<div class="k">Scenario(s)</div><div>{sc_html}</div>')
     if manual and r0.get("skipReason"):
         parts.append(f'<div class="k">Testability</div><div class="manual">manual — {esc(r0.get("skipReason"))}</div>')
     if r0.get("dependsOn"):
@@ -149,11 +163,13 @@ def render_api(method, endpoint, rows):
             )
             for k, vals in fo.items()
         )
-    if r0.get("fieldOptions"):
+    # fieldEnums (MUST-39) is the canonical enum map; fieldOptions is the legacy name.
+    _enums = r0.get("fieldEnums") or r0.get("fieldOptions")
+    if _enums:
         parts.append('<div class="k">Request field options</div>'
                      '<div>{rows}<div class="note">Allowed values (enum / DB-CHECK) for these '
                      '<b>request</b> fields you send — QA should exercise each option.</div></div>'
-                     .format(rows=_opts_rows(r0["fieldOptions"])))
+                     .format(rows=_opts_rows(_enums)))
     if r0.get("serverFieldOptions"):
         parts.append('<div class="k">Server-managed values</div>'
                      '<div>{rows}<div class="note">Set by the server (not sent in the request) — '
@@ -162,6 +178,40 @@ def render_api(method, endpoint, rows):
                      .format(rows=_opts_rows(r0["serverFieldOptions"])))
     parts.append(f'<div class="k">Source spec</div><div><span class="muted">{esc(r0.get("file",""))}</span></div>')
     parts.append('</div>')
+    # Error codes with explanation (MUST-43) — the handler-derived error catalogue.
+    ecs = r0.get("errorCases") or []
+    if ecs:
+        rows_html = []
+        for ec in ecs:
+            if not isinstance(ec, dict):
+                continue
+            st = esc(ec.get("status", ""))
+            code = esc(ec.get("code", "") or "—")
+            msg = esc(ec.get("message", "") or "—")
+            when = esc(ec.get("when", "") or "—")
+            rows_html.append(
+                f'<tr><td><span class="httpcode">{st}</span></td>'
+                f'<td><code>{code}</code></td><td>{msg}</td><td>{when}</td></tr>')
+        if rows_html:
+            parts.append('<div class="errsec"><div class="errhead">Error responses</div>'
+                         '<table class="errtable"><tr><th>HTTP</th><th>Code</th>'
+                         '<th>Message</th><th>When it happens</th></tr>'
+                         + "".join(rows_html) + '</table>'
+                         '<div class="note">Enumerated from the handler — every error the '
+                         'endpoint can return, with the condition that triggers it.</div></div>')
+    # Status / lifecycle transitions (MUST-40).
+    st_obj = r0.get("statusTransitions")
+    if st_obj:
+        if isinstance(st_obj, dict) and not any(k in st_obj for k in ("flow", "transitions")):
+            trs = "".join(
+                f'<tr><td><code>{esc(k)}</code></td><td>{esc(v)}</td></tr>'
+                for k, v in st_obj.items())
+            parts.append('<div class="errsec"><div class="errhead">Status transitions</div>'
+                         '<table class="errtable"><tr><th>Transition</th><th>Triggered by</th></tr>'
+                         + trs + '</table></div>')
+        else:
+            parts.append('<div class="errsec"><div class="errhead">Status transitions</div>'
+                         f'<div>{code_block(st_obj)}</div></div>')
     # per test case
     for r in rows:
         title = r.get("case") or "request"
@@ -191,56 +241,85 @@ def render_api(method, endpoint, rows):
     return "".join(parts)
 
 # ---- build page ----
-P = []
-P.append(f'<!doctype html><html lang="en"><head><meta charset="utf-8">'
-         f'<meta name="viewport" content="width=device-width,initial-scale=1">'
-         f'<title>ProjexCloud API Reference</title><style>{CSS}</style></head><body>')
-P.append('<div class="layout">')
+# public=True is the customer/prod build: it omits the internal ProjexLight
+# planning surface (the Epic index, the "Epics" sidebar entry, the epics stat,
+# and the per-API Epic/Feature/Scenario rows — all of which link to the internal
+# projexlight.com planning tool). public=False keeps them for the internal QA copy.
+def build_page(public=False):
+    P = []
+    P.append(f'<!doctype html><html lang="en"><head><meta charset="utf-8">'
+             f'<meta name="viewport" content="width=device-width,initial-scale=1">'
+             f'<title>ProjexCloud API Reference</title><style>{CSS}</style></head><body>')
+    P.append('<div class="layout">')
 
-# sidebar
-P.append('<aside><h1>ProjexCloud API</h1><div class="sub">v3.1 · QA reference</div>')
-P.append('<h2>SDKs / services</h2>')
-for s in sdk_names:
-    P.append(f'<a href="#{sdk_anchor(s)}">{esc(s)} <span class="cnt">({len(by_sdk[s])})</span></a>')
-P.append('<h2>Epics</h2><a href="#epics">All 34 epics ▾</a>')
-P.append('</aside>')
+    # sidebar
+    P.append('<aside><h1>ProjexCloud API</h1><div class="sub">v3.1 · API reference</div>')
+    P.append('<h2>SDKs / services</h2>')
+    for s in sdk_names:
+        P.append(f'<a href="#{sdk_anchor(s)}">{esc(s)} <span class="cnt">({len(by_sdk[s])})</span></a>')
+    if not public:
+        P.append('<h2>Epics</h2><a href="#epics">All 34 epics ▾</a>')
+    P.append('</aside>')
 
-# main
-P.append('<main>')
-P.append('<div class="hero"><h1>ProjexCloud — API Reference</h1>'
-         '<p>Every documented API by SDK: URI, method, auth, payload, parameters and expected response. '
-         'Generated from <code>tests/api_definitions/</code> + ProjexLight epics/features/scenarios.</p>'
-         '<div class="stats">'
-         f'<div class="stat"><b>{len(sdk_names)}</b><span>SDKs / services</span></div>'
-         f'<div class="stat"><b>{total_apis}</b><span>documented APIs</span></div>'
-         f'<div class="stat"><b>{len(apis)}</b><span>test cases</span></div>'
-         f'<div class="stat"><b>{len(documented_epics)} / {len(epic_by_id)}</b><span>epics with APIs</span></div>'
-         '</div>'
-         '<a class="planlink" href="test-plan.html">▶ QA Test Plan — dependency-ordered test waves &amp; what to test first ↗</a>'
-         '</div>')
+    # main
+    P.append('<main>')
+    src_note = ('Generated from <code>tests/api_definitions/</code>.' if public
+                else 'Generated from <code>tests/api_definitions/</code> + ProjexLight epics/features/scenarios.')
+    stats = [
+        f'<div class="stat"><b>{len(sdk_names)}</b><span>SDKs / services</span></div>',
+        f'<div class="stat"><b>{total_apis}</b><span>documented APIs</span></div>',
+        f'<div class="stat"><b>{len(apis)}</b><span>test cases</span></div>',
+    ]
+    if not public:
+        stats.append(f'<div class="stat"><b>{len(documented_epics)} / {len(epic_by_id)}</b><span>epics with APIs</span></div>')
+    P.append('<div class="hero"><h1>ProjexCloud — API Reference</h1>'
+             '<p>Every documented API by SDK: URI, method, auth, payload, parameters, expected response, '
+             'the enumerated <b>error responses</b> (code + when it happens) and any <b>status transitions</b>. '
+             + src_note + '</p>'
+             '<div class="stats">' + "".join(stats) + '</div>'
+             '<a class="planlink" href="test-plan.html">▶ QA Test Plan — dependency-ordered test waves &amp; what to test first ↗</a>'
+             '</div>')
 
-# epic index
-P.append('<h2 class="sdk" id="epics">Epic index (34)</h2>')
-P.append('<table><tr><th>Epic</th><th>Title</th><th>Primary SDK / source</th><th># documented APIs</th></tr>')
-for eid, e in sorted(epic_by_id.items(), key=lambda kv: kv[1].get("short_id", "ZZ")):
-    n = epic_api_count.get(eid, 0)
-    link = f'<a href="{url(e.get("short_id",""))}">{esc(e.get("short_id",""))}</a>'
-    sm = esc(e.get("source_module") or "—")
-    nb = f'{n}' if n else '<span class="muted">— (no automated API spec)</span>'
-    P.append(f'<tr><td>{link}</td><td>{esc(e.get("title",""))}</td><td>{sm}</td><td>{nb}</td></tr>')
-P.append('</table>')
+    # epic index (internal only)
+    if not public:
+        P.append('<h2 class="sdk" id="epics">Epic index (34)</h2>')
+        P.append('<table><tr><th>Epic</th><th>Title</th><th>Primary SDK / source</th><th># documented APIs</th></tr>')
+        for eid, e in sorted(epic_by_id.items(), key=lambda kv: kv[1].get("short_id", "ZZ")):
+            n = epic_api_count.get(eid, 0)
+            link = f'<a href="{url(e.get("short_id",""))}">{esc(e.get("short_id",""))}</a>'
+            sm = esc(e.get("source_module") or "—")
+            nb = f'{n}' if n else '<span class="muted">— (no automated API spec)</span>'
+            P.append(f'<tr><td>{link}</td><td>{esc(e.get("title",""))}</td><td>{sm}</td><td>{nb}</td></tr>')
+        P.append('</table>')
 
-# per-SDK sections
-for s in sdk_names:
-    P.append(f'<h2 class="sdk" id="{sdk_anchor(s)}">{esc(s)}</h2>')
-    P.append(f'<div class="sdkmeta">{len(by_sdk[s])} API(s)</div>')
-    for (method, endpoint) in sorted(by_sdk[s].keys(), key=lambda x: (x[1], x[0])):
-        P.append(render_api(method, endpoint, by_sdk[s][(method, endpoint)]))
+    # per-SDK sections
+    for s in sdk_names:
+        P.append(f'<h2 class="sdk" id="{sdk_anchor(s)}">{esc(s)}</h2>')
+        P.append(f'<div class="sdkmeta">{len(by_sdk[s])} API(s)</div>')
+        for (method, endpoint) in sorted(by_sdk[s].keys(), key=lambda x: (x[1], x[0])):
+            P.append(render_api(method, endpoint, by_sdk[s][(method, endpoint)], public=public))
 
-P.append('</main></div></body></html>')
+    P.append('</main></div></body></html>')
+    return "".join(P)
 
 os.makedirs(OUT_DIR, exist_ok=True)
 out = os.path.join(OUT_DIR, "index.html")
+internal_html = build_page(public=False)
 with open(out, "w", encoding="utf-8") as f:
-    f.write("".join(P))
-print(f"wrote {out}  |  sdks={len(sdk_names)} apis={total_apis} cases={len(apis)} epics={len(epic_by_id)}")
+    f.write(internal_html)
+
+# Mirror the PUBLIC build (no internal epic/feature/scenario references) into the
+# customer-facing portals — reachable at /docs/api/index.html (same static-docs
+# pattern as /docs/user/*.html). Kept in sync on every regeneration.
+public_html = build_page(public=True)
+PORTAL_DIRS = [
+    os.path.join(ROOT, "apps", "tenant-workspace", "public", "docs", "api"),
+    os.path.join(ROOT, "apps", "tenant-admin", "public", "docs", "api"),
+]
+for pdir in PORTAL_DIRS:
+    os.makedirs(pdir, exist_ok=True)
+    with open(os.path.join(pdir, "index.html"), "w", encoding="utf-8") as f:
+        f.write(public_html)
+
+print(f"wrote {out} (full) + portal mirror (public, no epics) | "
+      f"sdks={len(sdk_names)} apis={total_apis} cases={len(apis)} epics={len(epic_by_id)}")
