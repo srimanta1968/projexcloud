@@ -35,5 +35,37 @@
         "success": false
       }
     }
+  ],
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "No Authorization: Bearer <jwt> header on a requireAuth route"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "Bearer token fails verifyJwt (bad signature, malformed, or exp in the past)"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "Missing path param: run_id",
+      "when": "The :run_id path segment resolves to an empty value"
+    },
+    {
+      "status": 404,
+      "code": "NotFound",
+      "message": "<run> not found | no execution log entries",
+      "when": "replayRun throws an error whose message contains \"not found\" or \"no execution log entries\" — the run does not exist, or it exists but recorded no replayable steps"
+    },
+    {
+      "status": 500,
+      "code": "InternalError",
+      "message": "Replay failed",
+      "when": "replayRun throws for any other reason (model snapshot unavailable, deterministic re-execution error, database unreachable)"
+    }
   ]
 }

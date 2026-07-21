@@ -18,10 +18,22 @@
   "statusTransitions": {
     "entity": "command.command",
     "field": "status",
-    "flow": ["pending", "approved", "rejected"],
+    "flow": [
+      "pending",
+      "approved",
+      "rejected"
+    ],
     "transitions": [
-      { "from": "pending", "to": "approved", "via": "POST /api/commands/:command_id/decision" },
-      { "from": "pending", "to": "rejected", "via": "POST /api/commands/:command_id/decision" }
+      {
+        "from": "pending",
+        "to": "approved",
+        "via": "POST /api/commands/:command_id/decision"
+      },
+      {
+        "from": "pending",
+        "to": "rejected",
+        "via": "POST /api/commands/:command_id/decision"
+      }
     ]
   },
   "captureResponse": {
@@ -42,6 +54,51 @@
         "reason": "operator confirmed safe"
       },
       "expectedStatus": 200
+    }
+  ],
+  "description": "Approves or rejects a risky command that was gated into the pending state at issue time; the decision is audited with the approving subject and optional reason. Returns 200 with the updated command. approved is a mandatory boolean, so the string \"true\" is rejected. tenant_id and decided_by come solely from the JWT tenant_id and sub claims - there is no body override. Edge cases: a token missing either claim is a 400; an unknown command_id and a command that is no longer pending (already approved, rejected, dispatched, or belonging to another tenant) are collapsed into the same 409 \"command not found or not pending\" - there is no 404 path, and this also makes a replayed decision a 409; reason is optional.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "Authorization header absent or not in Bearer form (requireAuth / gateway default-deny authGate)"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "Bearer token fails JWT verification or is expired (requireAuth / gateway default-deny authGate)"
+    },
+    {
+      "status": 400,
+      "code": "tenant context required",
+      "message": "tenant context required",
+      "when": "The JWT carries no tenant_id claim"
+    },
+    {
+      "status": 400,
+      "code": "approver identity required",
+      "message": "approver identity required",
+      "when": "The JWT carries no sub claim to record as decided_by"
+    },
+    {
+      "status": 400,
+      "code": "approved (boolean) is required",
+      "message": "approved (boolean) is required",
+      "when": "Body is absent or approved is not a JSON boolean"
+    },
+    {
+      "status": 409,
+      "code": "command not found or not pending",
+      "message": "command not found or not pending",
+      "when": "applyCommandApprovalDecision returned null - the command does not exist in this tenant, or it is no longer pending (already decided/dispatched). Replayed decisions land here"
+    },
+    {
+      "status": 500,
+      "code": "<underlying error message>",
+      "message": "Decision processing failed",
+      "when": "applyCommandApprovalDecision throws - non-UUID command_id (Postgres 22P02), audit-write failure, or database error"
     }
   ]
 }

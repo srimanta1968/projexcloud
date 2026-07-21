@@ -2,6 +2,27 @@
   "name": "POST /admin/sovereign/bundles/:release_id/applied — api-gateway",
   "endpoint": "/admin/sovereign/bundles/:release_id/applied",
   "method": "POST",
+  "description": "Marks a previously shipped sovereign bundle release as applied in the target region, closing the ship→apply loop, and returns { success: true, data: <release> }. Takes no request body — the release_id path param is the entire input. QA edge cases: an unknown release_id is a clean 404 \"release not found\" because markSovereignBundleApplied() returning null is handled explicitly; release_id is not format-validated, so arbitrary strings are looked up and simply miss (or fail a uuid cast and become a 500 if the column is a UUID); re-marking an already-applied release depends on whether markSovereignBundleApplied still returns the row — assert the returned status rather than assuming clean idempotency; sending a body is harmless and ignored.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "admin token required",
+      "when": "requireAdmin() found no valid x-admin-ops-token header — missing, or matching neither env ADMIN_OPS_TOKEN nor an active admin.ops_token hash (30s cache TTL applies to revocations)"
+    },
+    {
+      "status": 404,
+      "code": "NotFound",
+      "message": "release not found",
+      "when": "markSovereignBundleApplied(release_id) returns null/undefined — no release row matches that release_id"
+    },
+    {
+      "status": 500,
+      "code": "InternalServerError",
+      "message": "<update error message>",
+      "when": "markSovereignBundleApplied() throws — release_id failing a uuid cast, or Postgres unavailable"
+    }
+  ],
   "requiresAuth": false,
   "expectedStatus": 200,
   "sdk": "api-gateway",

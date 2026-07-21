@@ -2,6 +2,27 @@
   "name": "POST /admin/sovereign/regions — api-gateway",
   "endpoint": "/admin/sovereign/regions",
   "method": "POST",
+  "description": "Registers a sovereign-cloud region under a compliance regime with its operator partner and KMS provider, returning 200 { success: true, data: <region> }. terminal_federation is optional and marks a region that may not federate onward. QA edge cases: region_id, regime, operator_partner, kms_provider and operator_id are required by a falsy check (empty strings rejected); regime is typed as fedramp-high|il5|pipl|eu-sovereign|uae-trd but is NOT validated at runtime by the route, so an out-of-enum regime is only caught by the DB check constraint and comes back as a 500 rather than a 400; re-posting an existing region_id has no conflict branch, so it either updates or raises a unique violation as a 500 — never a 409; terminal_federation is optional and defaults inside registerSovereignRegion, so omitting it does not clear a previously set value in a predictable way.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "admin token required",
+      "when": "requireAdmin() found no valid x-admin-ops-token header — missing, or matching neither env ADMIN_OPS_TOKEN nor an active admin.ops_token hash (30s cache TTL applies to revocations)"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "region_id, regime, operator_partner, kms_provider, operator_id required",
+      "when": "any of region_id, regime, operator_partner, kms_provider or operator_id is missing, null, or an empty string"
+    },
+    {
+      "status": 500,
+      "code": "InternalServerError",
+      "message": "<registration error message>",
+      "when": "registerSovereignRegion() throws — regime outside the allowed enum hitting a DB check constraint, a unique violation on an already-registered region_id, or Postgres unavailable"
+    }
+  ],
   "requiresAuth": false,
   "expectedStatus": 200,
   "sdk": "api-gateway",

@@ -26,5 +26,26 @@
       },
       "expectedStatus": 200
     }
+  ],
+  "description": "Returns the most recent permission-surface snapshot captured for a device - the newest hdk_permissions.surface_snapshot row for that device_uuid by taken_at DESC - including snapshot_id, tenant_id, persona_id, the permission_set JSONB and taken_at. Edge cases: unlike the sibling claims list, a device with no snapshot yet returns 404 NotFound rather than an empty payload, so this must be exercised after a POST /api/hdk-permissions/snapshots for the same device_uuid; device_uuid is a TEXT column, so any non-matching string including a non-UUID yields a clean 404 rather than a cast error; only one row is ever returned no matter how many snapshots exist, and ties on taken_at are broken arbitrarily; the lookup is keyed solely on device_uuid - the row's tenant_id is returned but is never checked against the caller's JWT tenant.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "Authorization header absent or not in \"Bearer <token>\" form (requireAuth preHandler)"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "Bearer token fails verifyJwt (bad signature, malformed, or exp in the past) (requireAuth preHandler)"
+    },
+    {
+      "status": 404,
+      "code": "NotFound",
+      "message": "NotFound",
+      "when": "no surface_snapshot row exists for the given device_uuid (latestSnapshot returns null)"
+    }
   ]
 }

@@ -39,5 +39,32 @@
         "status": "string"
       }
     ]
-  }
+  },
+  "description": "Gateway-composed member list for a tenant: reads identity.tenant_membership (status='active' only) and resolves each member's display name from the L2 profile band, falling back to the person's email alias and finally the literal 'Member'. Returns membership_id as persona_id plus role_template_id, bu_id and status. Edge cases: ?tenant_id= is REQUIRED (400 if absent) and is caller-asserted from the query string rather than the JWT; suspended/terminated members are silently excluded; results are hard-capped at LIMIT 500 with no paging cursor, so tenants above 500 active members are truncated with no indication; a tenant_id that is not a UUID fails the ::uuid cast and returns 500.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "Gateway default-deny authGate (AUTH_GATE_MODE=enforce): path is not on the public allowlist and no bearer token was sent"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "authGate ran requireAuth and the JWT failed verification or had expired"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "tenant_id required",
+      "when": "?tenant_id= query param is absent or empty"
+    },
+    {
+      "status": 500,
+      "code": "InternalError",
+      "message": "<postgres error text>",
+      "when": "tenant_id is not a valid UUID (::uuid cast fails), or the membership/profile query errors"
+    }
+  ]
 }

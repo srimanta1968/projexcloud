@@ -46,5 +46,32 @@
   },
   "captureResponse": {
     "webhooks.publish.response.data.deliveries_enqueued": "data.deliveries_enqueued"
-  }
+  },
+  "description": "Manually publishes an event into the webhook outbox for fan-out to every matching subscription. Returns 202 Accepted — delivery is asynchronous, so 202 means the event was ENQUEUED, not that any endpoint received it. Edge cases: tenant_id must be a UUID and event_type, event_id and a payload OBJECT are all required (a payload that is a string or array fails the typeof check); event_id is caller-supplied and acts as the outbox idempotency key, so reusing one deduplicates a repeat publish while a fresh id on retry fans the event out twice; publishing an event_type with zero subscriptions is still a successful 202 with an empty fan-out.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "Authorization header absent or not in 'Bearer <jwt>' form (requireAuth preHandler)"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "JWT signature invalid, malformed, or exp has elapsed"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "tenant_id must be a UUID / event_type is required / event_id is required / payload object is required",
+      "when": "any validatePublish check fails; all failures are returned together in details[]"
+    },
+    {
+      "status": 500,
+      "code": "InternalError",
+      "message": "InternalError",
+      "when": "Unexpected service/DB failure (connection loss, or a constraint the handler does not map)"
+    }
+  ]
 }

@@ -23,12 +23,45 @@
         "structure": {
           "root": "topics",
           "children": [
-            { "code": "news", "label": "News" },
-            { "code": "guides", "label": "Guides" }
+            {
+              "code": "news",
+              "label": "News"
+            },
+            {
+              "code": "guides",
+              "label": "Guides"
+            }
           ]
         }
       },
       "expectedStatus": 200
+    }
+  ],
+  "description": "Upserts a tenant's named taxonomy tree. tenant_id and name are required; structure is optional and defaults to {} — so a PUT with no structure BLANKS the stored tree rather than leaving it untouched, the main destructive edge case here. Idempotent by (tenant_id, name): re-PUTting overwrites and returns 200, never 201, so it is safe to replay but cannot be used for partial updates. Edge cases: tenant_id comes from the body, not the JWT, and is not checked against the caller's tenant; a non-UUID or non-existent tenant_id fails in Postgres as a 500; structure is stored as opaque JSON and its shape is never validated.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "Authorization header absent or not in 'Bearer <jwt>' form (requireAuth preHandler)"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "JWT signature invalid, malformed, or exp has elapsed"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "missing fields",
+      "when": "tenant_id or name is absent/empty"
+    },
+    {
+      "status": 500,
+      "code": "Internal Server Error",
+      "message": "Internal Server Error",
+      "when": "tenant_id is not a valid UUID or violates the tenant foreign key — the route has no try/catch, so the rejection surfaces as Fastify's default 500"
     }
   ]
 }

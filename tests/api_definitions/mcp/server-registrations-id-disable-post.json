@@ -50,5 +50,38 @@
   },
   "captureResponse": {
     "mcp-server-registrations.disable.response.data.registration_id": "data.registration_id"
-  }
+  },
+  "description": "Disables an MCP server registration, recording the acting subject and the supplied reason on the audit trail; returns 200 with { registration_id, disabled: true }. reason is mandatory. The actor defaults to the literal \"system\" when the JWT carries no sub claim. Edge cases: reason missing or an empty string is a 400; an unknown registration id is a 404 (the service throws a \"not found\" error which the handler maps); disabling an already-disabled registration succeeds again (idempotent - no conflict check); the handler does not verify the registration belongs to the caller's tenant; a non-UUID id fails the Postgres UUID cast and is reported as a generic 500; requires a valid JWT.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "Authorization header absent or not in Bearer form (requireAuth / gateway default-deny authGate)"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "Bearer token fails JWT verification or is expired (requireAuth / gateway default-deny authGate)"
+    },
+    {
+      "status": 400,
+      "code": "reason is required",
+      "message": "reason is required",
+      "when": "Body is absent or reason is missing/empty"
+    },
+    {
+      "status": 404,
+      "code": "<service \"not found\" message>",
+      "message": "server_registration not found",
+      "when": "disableMcpServer throws an error whose message contains \"not found\" - no registration exists for the supplied id"
+    },
+    {
+      "status": 500,
+      "code": "Disable failed",
+      "message": "Disable failed",
+      "when": "Any other disableMcpServer failure, including a non-UUID id that fails the Postgres UUID cast"
+    }
+  ]
 }

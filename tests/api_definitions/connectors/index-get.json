@@ -11,6 +11,7 @@
     "POST /api/auth/signup-tenant"
   ],
   "testability": "auto",
+  "description": "Tenant-scoped connector install summary served directly by the api-gateway (not sdk-connectors): selects vendor, install_id, status, last_synced_at, last_error and installed_at from connectors.install for the tenant_id query param, ordered by vendor. QA edge cases: the handler swallows ALL database errors and returns { success: true, data: [] } — that fallback exists because connectors.install is absent in some deploys, so an empty array can mean 'no installs', 'table missing', or 'query failed', and this endpoint can never return a 5xx from the query path; the only rejection is a missing tenant_id (400); tenant_id is cast to ::uuid, so a non-UUID value is caught by the same swallow and also returns an empty list rather than a 400; there is no limit or pagination, and no filter by status, so uninstalled/errored installs are included and must be filtered client-side.",
   "testCases": [
     {
       "name": "List connector installs for a tenant (tenant-scoped query)",
@@ -21,6 +22,26 @@
       "headers": {
         "Authorization": "Bearer {{cache:auth.register.response.data.token}}"
       }
+    }
+  ],
+  "errorCases": [
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "tenant_id required",
+      "when": "the tenant_id query param is absent or empty"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "no Authorization header, or it is not of the form 'Bearer <jwt>' (api-gateway default-deny authGate, AUTH_GATE_MODE=enforce)"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "the bearer JWT fails verifyJwt — bad signature, wrong JWT_SECRET, or exp already elapsed (api-gateway default-deny authGate, AUTH_GATE_MODE=enforce)"
     }
   ]
 }

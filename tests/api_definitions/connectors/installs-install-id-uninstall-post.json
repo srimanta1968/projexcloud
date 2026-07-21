@@ -28,6 +28,7 @@
       }
     ]
   },
+  "description": "Uninstalls a connector install, flipping its status and recording the acting persona. actor_id is read from the body and silently defaults to the literal string 'unknown' when omitted — it is never validated, so a bad or missing actor still succeeds and the audit trail records 'unknown', which is worth asserting. QA edge cases: an unknown install_id returns 404 NotFound; whether uninstalling an ALREADY-uninstalled install is idempotent (200 again) or returns 404 depends on whether the underlying UPDATE still matches the row, so cover the repeat call explicitly; the row is not deleted, so GET /installs/:install_id continues to return 200 afterwards with the terminal status — do not assert a 404 on the subsequent read.",
   "testCases": [
     {
       "name": "Uninstall a connector install",
@@ -46,5 +47,25 @@
   "captureResponse": {
     "connectors.uninstall.response.data.install.install_id": "data.install.install_id",
     "connectors.uninstall.response.data.install.status": "data.install.status"
-  }
+  },
+  "errorCases": [
+    {
+      "status": 404,
+      "code": "NotFound",
+      "message": "NotFound",
+      "when": "uninstallConnector returns null — no matching connectors.install row for the :install_id path param"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "no Authorization header, or it is not of the form 'Bearer <jwt>' (requireAuth preHandler)"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "the bearer JWT fails verifyJwt — bad signature, wrong JWT_SECRET, or exp already elapsed (requireAuth preHandler)"
+    }
+  ]
 }

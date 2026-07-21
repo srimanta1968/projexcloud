@@ -11,6 +11,7 @@
   "sdk": "sdk-connectors",
   "sourceFile": "packages/sdk-connectors/src/server/routes.ts",
   "testability": "auto",
+  "description": "Triggers a resilient sync for one connector install. The status code encodes the outcome: 200 when the sync completed cleanly, and 202 when it failed transiently — in which case the item has been dead-lettered into connectors.sync_deadletter and will be re-driven by the retry/backoff worker. Only configuration-class errors escape as a 409. QA edge cases: the 200-vs-202 split is the thing to assert, because a 202 is NOT a success — it means the sync failed and was queued for retry, and a test that accepts any 2xx will pass against a completely broken connector; an unknown install_id is a 409 SyncFailed ('install <id> not found'), NOT a 404, and an install whose connector_kind has no registered adapter is also a 409 ('no adapter registered for <kind>'); syncing is not idempotent — each call performs real vendor work and can add another dead-letter row; concurrent syncs on one install are not guarded against.",
   "testCases": [
     {
       "name": "Sync a connector install (slack stub returns 0 records when unconfigured)",
@@ -27,5 +28,31 @@
   "captureResponse": {
     "connectors.sync.response.data.records_synced": "data.records_synced",
     "connectors.sync.response.data.conflicts": "data.conflicts"
-  }
+  },
+  "errorCases": [
+    {
+      "status": 409,
+      "code": "SyncFailed",
+      "message": "install <install_id> not found",
+      "when": "the :install_id path param matches no connectors.install row — surfaced as 409, not 404"
+    },
+    {
+      "status": 409,
+      "code": "SyncFailed",
+      "message": "no adapter registered for <connector_kind>",
+      "when": "the install's connector_kind has no adapter registered in this gateway build"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "no Authorization header, or it is not of the form 'Bearer <jwt>' (requireAuth preHandler)"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "the bearer JWT fails verifyJwt — bad signature, wrong JWT_SECRET, or exp already elapsed (requireAuth preHandler)"
+    }
+  ]
 }

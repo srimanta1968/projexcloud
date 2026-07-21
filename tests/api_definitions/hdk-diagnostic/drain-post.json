@@ -27,5 +27,32 @@
       },
       "expectedStatus": 200
     }
+  ],
+  "description": "Drains the persistent hdk-diagnostic outbox: claims up to `limit` rows from hdk_diagnostic.event where drained_at IS NULL (oldest received_at first, FOR UPDATE SKIP LOCKED), stamps drained_at = now(), and returns the claimed rows plus their count with 200. The body is optional - an absent body or absent `limit` defaults to 1000. Edge cases: draining an empty outbox returns 200 with events: [] and count: 0, never 404; the drain is destructive and NOT idempotent - an immediate second call returns the next batch rather than the same one, because the first call already stamped drained_at; concurrent callers never receive overlapping rows (SKIP LOCKED); a non-numeric or negative `limit` is passed straight into SQL LIMIT and fails at the database rather than in a validation branch; there is no tenant scoping on this route, so it drains the outbox across all devices and tenants.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "Authorization header absent or not in \"Bearer <token>\" form (requireAuth preHandler)"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "Bearer token fails verifyJwt (bad signature, malformed, or exp in the past) (requireAuth preHandler)"
+    },
+    {
+      "status": 400,
+      "code": "FST_ERR_CTP_EMPTY_JSON_BODY",
+      "message": "Body cannot be empty when content-type is set to application/json",
+      "when": "Content-Type: application/json declared but the request body is empty or unparseable (Fastify JSON body parser, before the handler runs)"
+    },
+    {
+      "status": 500,
+      "code": "InternalServerError",
+      "message": "Internal Server Error",
+      "when": "drainQueue SQL fails - e.g. limit is a non-numeric string or a negative number (invalid LIMIT), or the Postgres pool is unavailable; the route has no try/catch so the rejection becomes Fastify default 500"
+    }
   ]
 }

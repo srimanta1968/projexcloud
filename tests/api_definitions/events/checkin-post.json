@@ -2,6 +2,33 @@
   "name": "POST /api/events/checkin — sdk-event",
   "endpoint": "/api/events/checkin",
   "method": "POST",
+  "description": "Checks a ticket in at the door by its qr_token, atomically transitioning the ticket issued -> used and inserting a checkin row; a UNIQUE constraint on checkin.ticket_id backstops double check-in. qr_token and checked_in_by_persona_id are required; device_uuid is optional and stored as null when absent. Edge cases: missing required fields -> 400; an unknown token, a ticket that was never issued, and a ticket already checked in all collapse into the same 409 CannotCheckIn with 'Ticket not found, not issued, or already used' - so a duplicate scan is a 409, never a silent success; if the parent session row cannot be read the emitted audit records tenant 'unknown' but the check-in still succeeds.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "Authorization header absent or not in the form \"Bearer <jwt>\""
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "JWT signature invalid, malformed, or past its exp claim"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "missing fields",
+      "when": "body omits qr_token or checked_in_by_persona_id"
+    },
+    {
+      "status": 409,
+      "code": "CannotCheckIn",
+      "message": "Ticket not found, not issued, or already used",
+      "when": "the conditional UPDATE matches no ticket: unknown qr_token, ticket status is not \"issued\", or the ticket was already checked in"
+    }
+  ],
   "requiresAuth": true,
   "dependsOn": [
     "POST /api/auth/register",

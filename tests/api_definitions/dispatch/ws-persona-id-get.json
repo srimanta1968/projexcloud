@@ -22,5 +22,14 @@
       },
       "expectedStatus": 200
     }
+  ],
+  "description": "P7 FR-DSP-2 — WebSocket live-updates channel. On upgrade the connection subscribes to the in-process dispatch broker for :persona_id (server-side filtering, so the socket only receives that dispatcher's events) and is immediately sent a {kind:'hello', persona_id, emitted_at} frame; subsequent dispatch events stream as JSON frames until close, when the subscription is torn down. QA edge cases: this is a WebSocket-only route (@fastify/websocket `websocket: true` with no wsHandler), so a plain HTTP GET without the Upgrade/Connection/Sec-WebSocket-Key handshake headers gets 404 with an EMPTY body — an HTTP-only test harness cannot assert 200 here and must either perform a real upgrade or expect 404. :persona_id is accepted verbatim from the path with NO validation, NO existence check and NO tenant scoping: an unknown, non-UUID or empty-ish persona_id still upgrades successfully and simply yields a channel that never emits, so there is no 400 or 404 for a bad id. /api/dispatch/ws/ is on the authGate.ts WS bypass list (WS auth belongs in Sec-WebSocket-Protocol, tracked as follow-up hardening), so NO bearer token is required and no 401 is produced — matching requiresAuth:false. Subscribing twice for the same persona opens two independent sockets that each receive every event (no dedupe), and broker delivery is best-effort: a send on a socket closing mid-flight is swallowed rather than surfaced as an error.",
+  "errorCases": [
+    {
+      "status": 404,
+      "code": "NotFound",
+      "message": "(empty response body - reply.code(404).send() is called with no payload)",
+      "when": "The request is a plain HTTP GET rather than a WebSocket upgrade — @fastify/websocket's default non-upgrade handler replies reply.code(404).send() with an empty body for a `websocket: true` route that defines no wsHandler"
+    }
   ]
 }

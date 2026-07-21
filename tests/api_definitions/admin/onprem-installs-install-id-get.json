@@ -2,6 +2,27 @@
   "name": "GET /admin/onprem/installs/:install_id — api-gateway",
   "endpoint": "/admin/onprem/installs/:install_id",
   "method": "GET",
+  "description": "Reads a single on-prem install record by install_id, returning { success: true, data: <install> }. QA edge cases: an unknown install_id is a clean 404 \"install not found\" because getOnpremInstall() returning null is handled explicitly; the lookup is NOT wrapped in try/catch, so an install_id that fails a Postgres uuid cast (any non-UUID path segment, when the column is a UUID) escapes to the Fastify default 500 body ({ statusCode, error, message }) rather than a 400 or 404 — a common surprise in negative tests; the response is the install row only and does not include its bundles, local LLMs or billing reports, which have their own sub-resources; the route is cross-customer and ops-token gated, so no ownership check is applied to install_id.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "admin token required",
+      "when": "requireAdmin() found no valid x-admin-ops-token header — missing, or matching neither env ADMIN_OPS_TOKEN nor an active admin.ops_token hash (30s cache TTL applies to revocations)"
+    },
+    {
+      "status": 404,
+      "code": "NotFound",
+      "message": "install not found",
+      "when": "getOnpremInstall(install_id) returns null/undefined — no install row matches that install_id"
+    },
+    {
+      "status": 500,
+      "code": "InternalServerError",
+      "message": "Internal Server Error",
+      "when": "the lookup throws — most commonly install_id failing a uuid cast, or Postgres unavailable; unhandled by the route, so Fastify default error serialization applies"
+    }
+  ],
   "requiresAuth": false,
   "expectedStatus": 200,
   "sdk": "api-gateway",

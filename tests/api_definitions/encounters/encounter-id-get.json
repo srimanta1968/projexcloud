@@ -12,6 +12,7 @@
   "sourceFile": "packages/sdk-engagement/src/server/routes.ts",
   "_generated": true,
   "testability": "auto",
+  "description": "Fetches one encounter by encounter_id, returning the full row: state, vault_key_ref, opened_at/closed_at/sealed_at, retention_policy, retention_expires_at, and the parent/address/billing references. QA edge cases: an unknown encounter_id returns a bare 404 { error: 'NotFound' } with no details array, and a malformed (non-UUID) id returns the same 404 shape, so status alone does not separate them; the query is NOT tenant-scoped — it selects purely on encounter_id, so an authenticated caller from tenant A who learns an id belonging to tenant B reads that row, which is the cross-tenant assertion worth writing here; sealed encounters remain readable (sealing shreds the Vault key, it does not delete the metadata row), so a sealed encounter returns 200 with sealed_at set and a vault_key_ref that no longer resolves to usable key material.",
   "testCases": [
     {
       "name": "Fetch an encounter by id",
@@ -22,6 +23,26 @@
         "encounter_id": "{{cache:encounters.create.response.data.encounter.encounter_id}}"
       },
       "expectedStatus": 200
+    }
+  ],
+  "errorCases": [
+    {
+      "status": 404,
+      "code": "NotFound",
+      "message": "NotFound",
+      "when": "no engagement.encounter row matches the :encounter_id path param (unknown, or malformed id)"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "no Authorization header, or it is not of the form 'Bearer <jwt>' (requireAuth preHandler)"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "the bearer JWT fails verifyJwt — bad signature, wrong JWT_SECRET, or exp already elapsed (requireAuth preHandler)"
     }
   ]
 }

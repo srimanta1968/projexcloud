@@ -38,5 +38,43 @@
         "success": true
       }
     }
+  ],
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "Authorization header absent or not in Bearer form (requireAuth)"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "Bearer token fails JWT verification (requireAuth)"
+    },
+    {
+      "status": 400,
+      "code": "MissingRequiredField",
+      "message": "Missing required field: run_id, agent_id, acting_persona_id, tool_sku, args, tenant_scope are required",
+      "when": "any of run_id, agent_id, acting_persona_id, tool_sku or tenant_scope is falsy, or args is undefined (args:null and args:{} are accepted - only undefined fails)"
+    },
+    {
+      "status": 403,
+      "code": "scope_violation",
+      "message": "scope_violation",
+      "when": "mintToken raises ScopeViolationError because the requested tool_sku is outside the agent definition allowed scope; the body also carries requested_sku, agent_id, exception_id and approval_request_id"
+    },
+    {
+      "status": 500,
+      "code": "MintFailed",
+      "message": "Mint failed",
+      "when": "mintToken throws anything other than ScopeViolationError - unknown agent_id or run_id foreign key, non-UUID identifiers failing the uuid cast, signing-key failure, or any DB error"
+    },
+    {
+      "status": 500,
+      "code": "InternalError",
+      "message": "InternalError",
+      "when": "the handler throws outside its own try/catch and the route wrapper catch fires"
+    }
   ]
 }

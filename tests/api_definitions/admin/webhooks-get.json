@@ -2,6 +2,21 @@
   "name": "GET /admin/webhooks — api-gateway",
   "endpoint": "/admin/webhooks",
   "method": "GET",
+  "description": "Operator cross-tenant listing of webhook endpoints — endpoint_id, tenant_id, url, status, failure_streak, last_success_at, last_failure_at, created_at — newest-first and capped at 200 rows, with an optional tenant_id query filter. QA edge cases: omitting tenant_id returns endpoints across ALL tenants, which is the point of this route; the 200-row cap has no pagination or cursor, so the tail is invisible on a busy platform; a tenant_id that is not a valid UUID fails the ::uuid cast and returns 500 with the raw driver message rather than a 400; a tenant_id that is valid but unknown is a 200 with an empty array, never 404; disabled and healthy endpoints are returned together with no status filter, and failure_streak is the field to watch for endpoints heading toward the DLQ.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "admin token required",
+      "when": "requireAdmin() found no valid x-admin-ops-token header — missing, or matching neither env ADMIN_OPS_TOKEN nor an active admin.ops_token hash (30s cache TTL applies to revocations)"
+    },
+    {
+      "status": 500,
+      "code": "InternalServerError",
+      "message": "<database error message>",
+      "when": "the SELECT against webhook.endpoint throws — the tenant_id query param not castable to uuid, or Postgres unavailable"
+    }
+  ],
   "requiresAuth": false,
   "expectedStatus": 200,
   "sdk": "api-gateway",

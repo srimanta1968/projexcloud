@@ -13,5 +13,14 @@
       "name": "Health probe returns ok",
       "expectedStatus": 200
     }
+  ],
+  "description": "Liveness probe for the api-gateway. Returns 200 {status:'ok', service:<config.appName>, timestamp:<ISO 8601>} from a handler that only reads process config and the clock — it performs no database, Redis or ClickHouse check, so it stays 200 even when a downstream dependency is degraded (it is a liveness, not a readiness, signal). QA edge cases: '/health' is on the authGate.ts PUBLIC_EXACT allowlist (and the isHealth() suffix rule additionally exempts every '*/health' path), so it is intentionally unauthenticated — sending no token, a garbage token or an expired token all still return 200, and asserting a 401 here would be wrong. There are no path params, query params or body, and unknown query strings are ignored rather than rejected, so there is no 400 branch; the response is fully idempotent apart from `timestamp`, which advances on every call. Only GET is routed — other verbs fall through to Fastify's default 404 for the method/URL pair. Not tenant-scoped and not paginated. The handler contains no throw and no reply.code() other than the implicit 200, so it has no client-error surface at all.",
+  "errorCases": [
+    {
+      "status": 404,
+      "code": "Not Found",
+      "message": "Route <METHOD>:/health not found",
+      "when": "A verb other than GET is used — Fastify's default not-found handler responds; the handler itself has no error path and cannot return 4xx or 5xx"
+    }
   ]
 }

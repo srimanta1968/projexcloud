@@ -26,5 +26,32 @@
       },
       "expectedStatus": 201
     }
+  ],
+  "description": "Creates a service-request queue for a tenant with a display name and an optional numeric routing priority, returning the created queue with 201. Edge cases: tenant_id and name are both mandatory and a missing one produces the generic \"missing fields\" ValidationError; priority is optional and defaulted by the service when omitted; name uniqueness is not enforced at the route, so repeated calls with the same name create duplicate queues unless a database unique constraint rejects it (which surfaces as a 500, not a 409); tenant_id is taken from the body rather than the JWT, so this route does not itself prevent creating a queue under another tenant id — it only requires a valid token.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "No Authorization: Bearer <jwt> header on a requireAuth route"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "Bearer token fails verifyJwt (bad signature, malformed, or exp in the past)"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "missing fields",
+      "when": "tenant_id or name is absent or empty in the request body"
+    },
+    {
+      "status": 500,
+      "code": "InternalError",
+      "message": "Internal Server Error",
+      "when": "createQueue throws — e.g. tenant_id violates a foreign key, a unique constraint on the queue name is hit, or the database is unreachable"
+    }
   ]
 }

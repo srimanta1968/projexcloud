@@ -2,6 +2,27 @@
   "name": "PUT /admin/meter/pricing-catalogs/:catalog_id/rates/:sku — api-gateway",
   "endpoint": "/admin/meter/pricing-catalogs/:catalog_id/rates/:sku",
   "method": "PUT",
+  "description": "Upserts the price rate for a single SKU inside a pricing catalog (P7 Y-11), keyed by the catalog_id and sku path params, returning 200 { success: true, data: <upserted rate> }. Because it is an upsert it is idempotent: repeating the same PUT overwrites rather than conflicting. price, margin_pct and tiers are optional and coerced to null when omitted, so a body with only unit/mode/operator_id clears any previously set price and margin. QA edge cases: unit, mode and operator_id are required and empty strings count as missing; mode is not validated against an enum in the route, so an unsupported mode reaches the DB check constraint and returns 500 rather than 400; a catalog_id that does not exist is NOT a 404 — the FK violation surfaces as a 500; tiers is accepted as arbitrary unvalidated JSON; writing to a retired or non-draft catalog is not blocked by this handler.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "admin token required",
+      "when": "requireAdmin() found no valid x-admin-ops-token header — missing, or matching neither env ADMIN_OPS_TOKEN nor an active admin.ops_token hash (30s cache TTL applies to revocations)"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "unit, mode, operator_id required",
+      "when": "unit, mode or operator_id is missing, null, or an empty string in the body"
+    },
+    {
+      "status": 500,
+      "code": "InternalServerError",
+      "message": "<database error message>",
+      "when": "upsertPricingRate() throws — catalog_id does not exist (foreign-key violation), mode/unit violates a check constraint, tiers is not storable as jsonb, or Postgres unavailable"
+    }
+  ],
   "requiresAuth": false,
   "expectedStatus": 200,
   "sdk": "api-gateway",

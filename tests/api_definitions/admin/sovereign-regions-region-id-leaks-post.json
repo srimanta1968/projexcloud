@@ -2,6 +2,27 @@
   "name": "POST /admin/sovereign/regions/:region_id/leaks — api-gateway",
   "endpoint": "/admin/sovereign/regions/:region_id/leaks",
   "method": "POST",
+  "description": "Ingests a data-sovereignty leak alert for a region — an egress attempt, a cross-region route, or a policy violation — with a severity and an optional incident_ref, returning 201 { success: true, data: <alert> }. QA edge cases: only kind and severity are required (falsy check); incident_ref is optional and explicitly allowed to be null; neither kind nor severity is validated against its enum in the route despite the TypeScript union, so an out-of-enum kind or severity is caught only by the DB check constraint and returns 500 rather than 400; an unknown region_id is an FK violation and therefore a 500, not a 404; every call appends a new alert row — there is no dedup on (region, kind, incident_ref), so replaying the same alert produces duplicates.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "admin token required",
+      "when": "requireAdmin() found no valid x-admin-ops-token header — missing, or matching neither env ADMIN_OPS_TOKEN nor an active admin.ops_token hash (30s cache TTL applies to revocations)"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "kind + severity required",
+      "when": "kind or severity is missing, null, or an empty string in the body"
+    },
+    {
+      "status": 500,
+      "code": "InternalServerError",
+      "message": "<ingest error message>",
+      "when": "ingestSovereignLeakAlert() throws — kind or severity outside the allowed enum hitting a DB check constraint, region_id not matching a registered region (FK violation), or Postgres unavailable"
+    }
+  ],
   "requiresAuth": false,
   "expectedStatus": 201,
   "sdk": "api-gateway",

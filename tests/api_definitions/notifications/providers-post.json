@@ -9,7 +9,9 @@
   "featureId": "e9e9b8ee-101b-4a6c-8100-538b861781a8",
   "epicId": "f9bd4029-5fd6-4dc1-bfce-00af515b8294",
   "priority": 30,
-  "dependsOn": ["POST /api/auth/signup-tenant"],
+  "dependsOn": [
+    "POST /api/auth/signup-tenant"
+  ],
   "captureResponse": {
     "notifications.providers.create.response.data.provider.binding_id": "data.provider.binding_id"
   },
@@ -48,6 +50,49 @@
     }
   ],
   "fieldEnums": {
-    "kind": ["smtp", "sendgrid", "ses"]
-  }
+    "kind": [
+      "smtp",
+      "sendgrid",
+      "ses"
+    ]
+  },
+  "description": "Binds the tenant's outbound email provider (BYO smtp | sendgrid | ses). The tenant comes from the JWT — there is NO tenant_id body field — and the credential is envelope-encrypted by the service and never echoed back in any response. Edge cases: a JWT with no tenant_id claim is 403 Forbidden, not 401; kind is whitelist-checked and credential must be at least 4 characters, and both failures are collected into a single 400; config defaults to {} and from_address is optional, so an SMTP binding with no host can be created and only fails later at verify/send time; fallback_on_error is honoured only when it is a real boolean; service rejections whose message matches unsupported|too short|must be at least|not found|invalid are mapped to 400 ValidationError.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "Authorization header absent or not in 'Bearer <jwt>' form (requireAuth preHandler)"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "JWT signature invalid, malformed, or exp has elapsed"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "kind must be one of smtp, sendgrid, ses / credential is required (min 4 chars)",
+      "when": "kind is not whitelisted or credential is missing/shorter than 4 chars; both are returned together in details[]"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "<service error matching unsupported|too short|must be at least|not found|invalid>",
+      "when": "bindEmailProvider threw an error whose message matches the fail() mapper pattern (e.g. unsupported provider config, secret-backend rejection)"
+    },
+    {
+      "status": 403,
+      "code": "Forbidden",
+      "message": "JWT missing tenant_id claim",
+      "when": "the verified JWT carries no tenant_id claim"
+    },
+    {
+      "status": 500,
+      "code": "InternalError",
+      "message": "InternalError",
+      "when": "Unexpected service/DB failure (connection loss, or a constraint the handler does not map)"
+    }
+  ]
 }

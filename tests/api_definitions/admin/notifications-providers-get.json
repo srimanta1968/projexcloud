@@ -3,6 +3,21 @@
   "endpoint": "/admin/notifications/providers",
   "sdk": "sdk-notification",
   "method": "GET",
+  "description": "Reads the currently configured platform-default email provider as { success: true, data: <provider> }. QA edge cases: when no platform provider has ever been configured, getPlatformEmailProvider() resolves to null/undefined and the route still returns 200 with a null data field — it does NOT return 404, so tests must assert on data being null rather than on the status code; the stored credential is never returned in plaintext (it lives behind the secrets envelope), so the response exposes kind, from_address and config only; this is a singleton read with no parameters, and any query string is ignored; the route is ops-token gated and returns 401 before touching the store.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "admin token required",
+      "when": "x-admin-ops-token header is missing, empty, or matches neither the env ADMIN_OPS_TOKEN break-glass secret (constant-time compare) nor the SHA-256 hash of any active row in admin.ops_token; revoked/expired DB tokens keep working until the per-replica cache expires (ADMIN_OPS_TOKEN_CACHE_TTL_MS, default 30s) unless a Redis invalidation broadcast lands first"
+    },
+    {
+      "status": 500,
+      "code": "InternalServerError",
+      "message": "<provider read error message>",
+      "when": "getPlatformEmailProvider() throws — the secrets/credential store being unreachable or Postgres unavailable"
+    }
+  ],
   "requiresAuth": false,
   "taskId": "fe15de08-f239-480c-8a0c-26631abb6682",
   "sprintId": "efcf9cbd-5e84-469e-946e-efcabf8c88e1",

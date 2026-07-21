@@ -11,6 +11,7 @@
   "sourceFile": "packages/sdk-taxonomy/src/server/routes.ts",
   "_generated": true,
   "testability": "auto",
+  "setupScript": "taxonomy_seed_prompt_template.sql",
   "testCases": [
     {
       "name": "Lookup active prompt template by purpose_tag (tenant with platform fallback)",
@@ -33,6 +34,39 @@
         "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}"
       },
       "expectedStatus": 400
+    }
+  ],
+  "description": "Looks up the active prompt template for a purpose_tag, optionally narrowed by template name, resolving a tenant-specific override before the platform default. Edge cases: purpose_tag is a required query param and its absence is a 400 while name is optional — supplying a name that does not exist narrows the lookup to nothing and returns 404 rather than falling back to the unnamed template for that purpose_tag; tenant_id is optional and defaults to null, selecting the global template, so a tenant with no override silently receives the global one; only active templates are matched, so a deactivated template reads as 404; the response uses the {success, data} envelope; any datastore error collapses into a generic 500 \"Lookup failed\".",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "No Authorization: Bearer <jwt> header on a requireAuth route"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "Bearer token fails verifyJwt (bad signature, malformed, or exp in the past)"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "Missing query param: purpose_tag",
+      "when": "The purpose_tag query param is absent"
+    },
+    {
+      "status": 404,
+      "code": "NotFound",
+      "message": "No active prompt template for purpose_tag",
+      "when": "No active prompt template matches the purpose_tag (and name, when supplied) at either the tenant or the global level"
+    },
+    {
+      "status": 500,
+      "code": "InternalError",
+      "message": "Lookup failed",
+      "when": "lookupPromptTemplate throws — database unreachable or the query fails"
     }
   ]
 }

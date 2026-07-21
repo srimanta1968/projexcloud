@@ -19,6 +19,7 @@
       "slack.thread.reply"
     ]
   },
+  "description": "Invokes one tool exposed by a connector install, passing args through to the adapter and returning its result. QA edge cases: only tool_name is validated at the edge (400 if absent) — args defaults to {} and is never schema-checked, so a call with wrong or missing arguments reaches the vendor and comes back as a 409 ToolCallFailed rather than a 400; every downstream failure collapses into that single 409, so assert on details to separate them — unknown install ('install <id> not found'), an install whose status is not active ('install <id> is <status>', i.e. an uninstalled or errored connector), a tool_name absent from the manifest ('tool <name> not in manifest for install <id>'), and a missing adapter ('no adapter registered for <kind>'); note the not-found and inactive-install cases are 409s, never 404 or 423; the call is not idempotent — it performs real vendor-side work, so retries can double-apply an effect.",
   "testCases": [
     {
       "name": "Invoke a connector tool by name (slack stub returns NotConfigured payload with 200)",
@@ -40,5 +41,55 @@
   ],
   "captureResponse": {
     "connectors.tools-call.response.data.result.ok": "data.result.ok"
-  }
+  },
+  "errorCases": [
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "missing tool_name",
+      "when": "body.tool_name is absent or empty"
+    },
+    {
+      "status": 409,
+      "code": "ToolCallFailed",
+      "message": "install <install_id> not found",
+      "when": "the :install_id path param matches no connectors.install row — surfaced as 409, not 404"
+    },
+    {
+      "status": 409,
+      "code": "ToolCallFailed",
+      "message": "install <install_id> is <status>",
+      "when": "the install exists but its status is not 'active' (e.g. uninstalled, error)"
+    },
+    {
+      "status": 409,
+      "code": "ToolCallFailed",
+      "message": "tool <tool_name> not in manifest for install <install_id>",
+      "when": "the requested tool_name is not present in the install's synced tool manifest"
+    },
+    {
+      "status": 409,
+      "code": "ToolCallFailed",
+      "message": "no adapter registered for <connector_kind>",
+      "when": "the install's connector_kind has no adapter registered in this gateway build"
+    },
+    {
+      "status": 409,
+      "code": "ToolCallFailed",
+      "message": "<adapter or vendor error message>",
+      "when": "the adapter itself throws — vendor API rejection, invalid args, expired credential_ref, network failure"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "no Authorization header, or it is not of the form 'Bearer <jwt>' (requireAuth preHandler)"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "the bearer JWT fails verifyJwt — bad signature, wrong JWT_SECRET, or exp already elapsed (requireAuth preHandler)"
+    }
+  ]
 }

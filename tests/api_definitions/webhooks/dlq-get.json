@@ -27,5 +27,32 @@
   "expectedResponse": {
     "success": true,
     "data": "array"
-  }
+  },
+  "description": "Gateway-composed dead-letter queue view for a tenant, delegating to sdk-webhook's listDlq with a FIXED limit of 100 — there is no ?limit= override and no paging cursor on this route, so a tenant with a deeper DLQ is silently truncated at 100 rows. Edge cases: ?tenant_id= is REQUIRED (400 if absent) and is caller-asserted from the query string rather than derived from the JWT; an empty DLQ returns 200 with an empty data array, never 404; a tenant_id that is not a valid UUID fails inside the SDK query and returns 500 with the raw Postgres message.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "Gateway default-deny authGate (AUTH_GATE_MODE=enforce): path is not on the public allowlist and no bearer token was sent"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "authGate ran requireAuth and the JWT failed verification or had expired"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "tenant_id required",
+      "when": "?tenant_id= query param is absent or empty"
+    },
+    {
+      "status": 500,
+      "code": "InternalError",
+      "message": "<postgres error text>",
+      "when": "tenant_id is not a valid UUID, or listDlq fails"
+    }
+  ]
 }

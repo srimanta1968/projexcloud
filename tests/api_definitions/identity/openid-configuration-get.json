@@ -20,5 +20,14 @@
     "issuer": "string",
     "jwks_uri": "string",
     "userinfo_endpoint": "string"
-  }
+  },
+  "description": "Serves the OIDC discovery document describing this gateway as an identity provider — issuer, authorization/token/userinfo endpoints and jwks_uri. Served under /.well-known/ so it is on the gateway public allowlist and needs no bearer token. Edge cases: the issuer is built from the request itself — x-forwarded-proto (falling back to the connection protocol) plus the Host header — so a request arriving with a spoofed or missing Host produces a discovery document advertising the wrong issuer, and the handler falls back to the literal \"localhost:3000\" when Host is absent; behind nginx the proxy must set x-forwarded-proto or the advertised URLs come back as http on an https deployment; the response is not cached and the handler has no validation or not-found branch.",
+  "errorCases": [
+    {
+      "status": 500,
+      "code": "InternalError",
+      "message": "InternalError",
+      "when": "buildOidcDiscovery throws while assembling the document; caught by the route wrapper"
+    }
+  ]
 }

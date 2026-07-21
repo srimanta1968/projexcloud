@@ -2,6 +2,21 @@
   "name": "GET /admin/pools — api-gateway",
   "endpoint": "/admin/pools",
   "method": "GET",
+  "description": "Lists every routing pool for the projexcloud-admin /pools page — pool_index, region, isolation_class, status, replication_role, replicates_from_pool_index and timestamps — ordered by region then pool_index, as { success: true, data: rows }. QA edge cases: no filtering, no pagination and no LIMIT, so the whole routing.pool table comes back and response size grows with the fleet; pools in every status (ACTIVE, MIGRATING, DRAINING, MAINTENANCE, RETIRED, QUARANTINE) are returned together with no status filter, so tests expecting only live pools must filter client-side; an empty table is a 200 with data: [], never 404; the route is ops-token gated rather than JWT gated and is fully cross-tenant.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "admin token required",
+      "when": "requireAdmin() found no valid x-admin-ops-token header — missing, or matching neither env ADMIN_OPS_TOKEN nor an active admin.ops_token hash (30s cache TTL applies to revocations)"
+    },
+    {
+      "status": 500,
+      "code": "InternalServerError",
+      "message": "<database error message>",
+      "when": "the SELECT against routing.pool throws — Postgres unavailable, pool exhausted, or the routing schema missing"
+    }
+  ],
   "requiresAuth": false,
   "expectedStatus": 200,
   "sdk": "api-gateway",

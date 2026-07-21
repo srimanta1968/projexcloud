@@ -3,6 +3,57 @@
   "endpoint": "/api/role-templates",
   "sdk": "sdk-rebac",
   "method": "POST",
+  "description": "Creates a per-app role template in tenant.role_template with an optional inheritance parent and an opaque JSONB permissions map. Despite the 'sdk-rebac' label the route is served by sdk-tenant (packages/sdk-tenant/src/server/routes.ts -> createRoleTemplateHandler). Requires app_id and name; tenant_id omitted means a platform-default template (tenant_id NULL), tenant_id present means a tenant override. QA edge cases: uniqueness is enforced by two PARTIAL unique indexes — (app_id, name) WHERE tenant_id IS NULL and (tenant_id, app_id, name) WHERE tenant_id IS NOT NULL — so re-POSTing the same triple returns 409 Conflict, while the same (app_id, name) is legitimately allowed once globally and once per tenant. app_id is a TEXT FK to tenant.app and tenant_id/parent_role_template_id are UUID FKs; an unknown value trips the FK and is reported as 400 ValidationError (never 404), whereas a malformed UUID for tenant_id or parent_role_template_id yields 500 because uncaught() only text-matches FK/duplicate/not-found. permissions is stored verbatim with no schema validation (unknown keys, non-boolean values and arbitrary nesting all persist); a non-object permissions value is silently coerced to {} rather than rejected. No cycle check exists on parent_role_template_id. Auth is a plain valid-JWT check — the caller's tenant claim is never compared to the body tenant_id, so cross-tenant template creation is not blocked at this layer.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "No Authorization header or a non-Bearer scheme. Enforced by the gateway default-deny authGate (/api/role-templates is not on the public allowlist) and by the route's requireAuth preHandler."
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "verifyJwt() rejects the bearer token — bad signature, wrong secret, or expired exp."
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "body must be an object",
+      "when": "Request body is null, absent, or not a JSON object."
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "app_id is required",
+      "when": "app_id is missing, not a string, or empty."
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "name is required",
+      "when": "name is missing, not a string, or empty. Both messages appear together in details[] when both are absent."
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "insert or update on table \"role_template\" violates foreign key constraint",
+      "when": "app_id has no row in tenant.app, tenant_id has no row in tenant.tenant, or parent_role_template_id has no row in tenant.role_template. uncaught() maps all FK violations to 400."
+    },
+    {
+      "status": 409,
+      "code": "Conflict",
+      "message": "duplicate key value violates unique constraint \"role_template_tenant_uniq\"",
+      "when": "A template with the same (tenant_id, app_id, name) already exists — or the same (app_id, name) among platform defaults, which violates role_template_global_uniq. This makes the endpoint non-idempotent: the second identical POST fails rather than returning the existing row."
+    },
+    {
+      "status": 500,
+      "code": "InternalError",
+      "message": "InternalError",
+      "when": "Any DB error not matching the FK/duplicate/not-found text — chiefly tenant_id or parent_role_template_id being a non-UUID string ('invalid input syntax for type uuid'), or a connection-pool failure. Also emitted by the route-level try/catch in sdk-tenant registerRoutes when nothing has been sent yet."
+    }
+  ],
   "requiresAuth": true,
   "expectedStatus": 201,
   "taskId": "3110bd0c-3e81-4c5e-b386-58d8fa15f1b9",

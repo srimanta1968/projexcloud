@@ -33,5 +33,38 @@
       },
       "expectedStatus": 400
     }
+  ],
+  "description": "Looks up the active extraction schema for a document_kind, resolving the tenant-specific override first and falling back to the platform-default schema when tenant_id is omitted or has no override. Edge cases: document_kind is a required query param and its absence is a 400; tenant_id is optional and defaults to null, which selects the global schema — passing a tenant with no override transparently returns the global one rather than 404; a document_kind with no active schema at either level returns 404 with a success:false envelope (note this SDK uses {success, data} rather than the {data} envelope used elsewhere); only the active version is returned, so a schema that exists but was deactivated reads as 404; all datastore failures collapse into a generic 500 \"Lookup failed\" with no detail.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "No Authorization: Bearer <jwt> header on a requireAuth route"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "Bearer token fails verifyJwt (bad signature, malformed, or exp in the past)"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "Missing query param: document_kind",
+      "when": "The document_kind query param is absent"
+    },
+    {
+      "status": 404,
+      "code": "NotFound",
+      "message": "No active extraction schema for document_kind",
+      "when": "No active extraction schema exists for the document_kind at either the tenant or the global level"
+    },
+    {
+      "status": 500,
+      "code": "InternalError",
+      "message": "Lookup failed",
+      "when": "lookupExtractionSchema throws — database unreachable or the query fails"
+    }
   ]
 }

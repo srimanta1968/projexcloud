@@ -4,6 +4,33 @@
   "sdk": "sdk-identity-resolver",
   "sourceFile": "packages/sdk-identity-resolver/src/server/routes.ts",
   "method": "POST",
+  "description": "Performs a direct reversible merge of two person records (steward/ops path, bypassing the approval queue). surviving_person_id and merged_person_id are both required; link_id optionally ties the merge back to the candidate link that motivated it and reason is free text. decided_by is taken from the JWT persona, never the body. Edge cases: either person id missing -> 400; a non-existent person id, or merging a record into itself, is not guarded at the route and fails inside mergeRecords ('empi: merge failed' or an FK error) as a 500 InternalError; the merge is reversible only through the unmerge endpoint; repeating the same merge creates a second merge row, so the endpoint is not idempotent.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "Authorization header absent or not in the form \"Bearer <jwt>\""
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "JWT signature invalid, malformed, or past its exp claim"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "surviving_person_id, merged_person_id are required",
+      "when": "body omits surviving_person_id or merged_person_id"
+    },
+    {
+      "status": 500,
+      "code": "InternalError",
+      "message": "empi: merge failed",
+      "when": "the merge insert returns no row — unknown person ids, a self-merge, or an FK/constraint violation"
+    }
+  ],
   "requiresAuth": true,
   "taskId": "f01a9d81-9d1c-46e2-95f2-7dc193e70aa5",
   "sprintId": "efcf9cbd-5e84-469e-946e-efcabf8c88e1",

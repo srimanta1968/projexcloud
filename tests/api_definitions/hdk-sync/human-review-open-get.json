@@ -21,5 +21,20 @@
       },
       "expectedStatus": 200
     }
+  ],
+  "description": "Lists the open human-review tasks produced when a conflict's policy is 'human-review'. Optional ?assignee_persona_id= narrows the queue to one reviewer; omitting it returns every open task. Edge cases: an empty queue is 200 with data.tasks = [], never 404; an assignee_persona_id matching nobody also yields an empty list rather than an error; there is no paging or limit parameter, so a large backlog is returned in full.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "Authorization header absent or not in 'Bearer <jwt>' form (requireAuth preHandler)"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "JWT signature invalid, malformed, or exp has elapsed"
+    }
   ]
 }

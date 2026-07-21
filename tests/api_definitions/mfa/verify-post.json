@@ -36,5 +36,32 @@
     "mfa.verify.response.data.person_id": "data.person_id",
     "mfa.verify.response.data.mfa_level": "data.mfa_level"
   },
-  "testability": "auto"
+  "testability": "auto",
+  "description": "Completes an MFA challenge issued by POST /api/mfa/challenge and returns 200 with { verified, person_id, mfa_level: 2 }, also stamping identity.credential.last_used_at for that person and credential kind. This path is deliberately PUBLIC — it is on the gateway authGate allowlist and has no requireAuth preHandler, because the caller is mid-login and has no full JWT yet. Both challenge_id and response are required. Edge cases: a challenge is SINGLE-USE — it is deleted from the in-process store on the first verify attempt whether or not it succeeded, so replaying the same challenge_id returns challenge_not_found_or_expired; challenges also expire on their TTL and are purged on every call, and do not survive a restart or reach another replica; for totp any 6-digit numeric string is accepted in dev, while webauthn/sms_otp require the exact issued secret; a failed verification is reported as 401 (not 200 with verified:false).",
+  "errorCases": [
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "challenge_id and response are required",
+      "when": "Body is missing either challenge_id or response (empty strings are falsy and count as missing)"
+    },
+    {
+      "status": 401,
+      "code": "MfaFailed",
+      "message": "challenge_not_found_or_expired",
+      "when": "No live challenge for that challenge_id — unknown id, TTL expired and purged, already consumed by a previous verify, or issued by a different gateway process"
+    },
+    {
+      "status": 401,
+      "code": "MfaFailed",
+      "message": "invalid_response",
+      "when": "The challenge exists but the response does not match — not a 6-digit code for totp, or not the exact issued secret for webauthn/sms_otp"
+    },
+    {
+      "status": 500,
+      "code": "InternalError",
+      "message": "InternalError",
+      "when": "The identity.credential last_used_at UPDATE fails after a successful match, or verifyMfaChallenge throws unexpectedly"
+    }
+  ]
 }

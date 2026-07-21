@@ -19,5 +19,26 @@
   ],
   "dependsOn": [
     "POST /api/auth/register"
+  ],
+  "description": "Lists every registered cross-domain bridge (semantic.cross_domain_bridge) as {success:true, data:[...]} with bridge_id, from_object_type_id, to_object_type_id, access_mode and requires_cross_tenant_consent. QA edge cases: the handler takes no query parameters — it is a global, unfiltered, unpaginated read, so there is no tenant scoping, no limit/offset and no ordering guarantee; a fresh database legitimately returns 200 with an empty data array rather than a 404. It is a pure read (idempotent, safe to re-run) and there are no validation branches, so the only client-side failure is authentication: /bridge is not on the gateway public allowlist, so the default-deny auth gate requires a valid tenant JWT. Because the route has no try/catch, a datastore failure surfaces as Fastify's default 500 envelope ({statusCode, error:'Internal Server Error', message}) rather than the {success:false} shape used by the write endpoints.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "No Authorization: Bearer header — /bridge is not on the authGate.ts public allowlist, so requireAuth rejects the request before the route handler"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "Bearer token fails verifyJwt (bad signature, malformed, or expired)"
+    },
+    {
+      "status": 500,
+      "code": "Internal Server Error",
+      "message": "Internal Server Error",
+      "when": "listBridges() throws (semantic schema missing, DB pool unavailable) — uncaught, so Fastify's default error handler responds"
+    }
   ]
 }

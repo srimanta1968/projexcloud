@@ -36,5 +36,32 @@
   "captureResponse": {
     "role-assignments.revoke.response.data.assignment.assignment_id": "data.assignment.assignment_id",
     "role-assignments.revoke.response.data.assignment.revoked_at": "data.assignment.revoked_at"
-  }
+  },
+  "description": "Revokes an active role assignment by stamping persona.role_assignment.revoked_at = now() and emitting identity.role.revoked.v1; returns 200 with the revoked assignment record. The UPDATE is guarded by `revoked_at IS NULL`, so it only affects assignments that are still active. Edge cases: revoking is NOT idempotent from the caller's view — a second revoke of the same assignment matches zero rows and returns 404, as does an assignment_id that never existed; a non-UUID assignment_id is rejected by Postgres and surfaces as an uncaught 500; there is no tenant/persona ownership check in this handler beyond the JWT gate, so scoping relies on the caller holding the assignment_id. Requires a valid tenant JWT.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "No Authorization: Bearer header — the gateway default-deny authGate runs requireAuth on every non-allowlisted path"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "Bearer token fails verifyJwt (bad signature, malformed, or exp in the past)"
+    },
+    {
+      "status": 404,
+      "code": "NotFound",
+      "message": "NotFound",
+      "when": "No persona.role_assignment row with that assignment_id and revoked_at IS NULL — unknown id, or the assignment was already revoked"
+    },
+    {
+      "status": 500,
+      "code": "Internal Server Error",
+      "message": "Fastify default error payload from the uncaught service throw",
+      "when": "revokeRoleAssignment throws — assignment_id is not a valid UUID, or the UPDATE / audit emit fails"
+    }
+  ]
 }

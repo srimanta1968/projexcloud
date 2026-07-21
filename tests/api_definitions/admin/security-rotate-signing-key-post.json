@@ -2,6 +2,21 @@
   "name": "POST /admin/security/rotate-signing-key — api-gateway",
   "endpoint": "/admin/security/rotate-signing-key",
   "method": "POST",
+  "description": "P6A emergency rotation of the principal-token signing key, performed immediately rather than on the scheduled interval and always flagged emergency: true. The retired key is kept for a TTL-overlap window so short-lived tokens already in flight stay verifiable, and the rotation emits an audited event. Returns 200 { success: true, data: <rotation result> }. QA edge cases: BOTH body fields are optional with defaults — reason falls back to \"manual emergency rotation\" and actor_id to \"ops-emergency\" — so an empty body {} is a valid successful request and there is NO 400 branch on this route at all; whitespace-only values are trimmed to empty and therefore also fall back to the defaults; the call is genuinely state-changing and not idempotent (each invocation rotates again), so repeated calls in a shared environment churn the key and shorten the overlap window for previously issued tokens.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "admin token required",
+      "when": "x-admin-ops-token header is missing, empty, or matches neither the env ADMIN_OPS_TOKEN break-glass secret (constant-time compare) nor the SHA-256 hash of any active row in admin.ops_token; revoked/expired DB tokens keep working until the per-replica cache expires (ADMIN_OPS_TOKEN_CACHE_TTL_MS, default 30s) unless a Redis invalidation broadcast lands first"
+    },
+    {
+      "status": 500,
+      "code": "InternalServerError",
+      "message": "<rotation error message>",
+      "when": "signingKeyRotationHandle.rotateNow() throws — the vault-sourced PRINCIPAL_TOKEN_WRAP_KEY being unavailable, the key-material write failing, or the audit event emission failing"
+    }
+  ],
   "requiresAuth": false,
   "expectedStatus": 200,
   "sdk": "api-gateway",

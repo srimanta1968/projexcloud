@@ -2,6 +2,21 @@
   "name": "POST /admin/storm/ingest-now — api-gateway",
   "endpoint": "/admin/storm/ingest-now",
   "method": "POST",
+  "description": "Forces an immediate out-of-band run of the storm-overlay ingestor instead of waiting for its hourly cadence, walking the provider fallback chain (NOAA → DTN → Weather Underground → synthetic) and upserting storm.event / storm.intensity_cell rows for the trailing window. lookback_hours defaults to 24 and defines the [now - lookback_hours, now] range. QA edge cases: no validation on lookback_hours — a negative value inverts the window (since > until) and simply ingests nothing, a huge value asks the upstream provider for a very wide range and can time out into a 500; the upsert is idempotent so re-running the same window does not duplicate rows; success returns HTTP 200 with { success: true, data: <ingest result> }, and a provider outage is NOT a 4xx because the synthetic provider is the last fallback.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "admin token required",
+      "when": "x-admin-ops-token header is missing, empty, or matches neither the env ADMIN_OPS_TOKEN break-glass secret (constant-time compare) nor the SHA-256 hash of any active row in admin.ops_token; revoked/expired DB tokens keep working until the per-replica cache expires (ADMIN_OPS_TOKEN_CACHE_TTL_MS, default 30s) unless a Redis invalidation broadcast lands first"
+    },
+    {
+      "status": 500,
+      "code": "InternalServerError",
+      "message": "<ingest error message>",
+      "when": "ingestStormOnce() throws — every provider in the fallback chain failed, the upstream call timed out, or the storm.* upsert failed"
+    }
+  ],
   "requiresAuth": false,
   "expectedStatus": 200,
   "sdk": "api-gateway",

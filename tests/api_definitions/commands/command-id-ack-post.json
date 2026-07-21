@@ -59,5 +59,62 @@
       },
       "expectedStatus": 200
     }
+  ],
+  "description": "Ingests a command acknowledgement/result FROM the robot edge agent. Unlike the other command routes this handler has no requireAuth preHandler: the bearer token is expected to be the per-robot scoped credential minted by POST /api/assets/:asset_id/credentials and is verified inside ackCommandWithCredential rather than as a JWT. Note that the api-gateway default-deny authGate still fronts this path, so in enforce mode the request must additionally satisfy the gate. ok is a mandatory boolean; code, message and data are optional detail. Edge cases: an empty, expired or revoked credential is a 401; a credential that is valid but not scoped to this command's asset is a 403; a command in a state other than dispatched (already acked, still pending, cancelled) is a 409, which also makes the call non-idempotent - a replayed ack conflicts; ok sent as the string \"true\" fails the strict boolean check with a 400.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "Authorization header absent or not in Bearer form (requireAuth / gateway default-deny authGate)"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "Bearer token fails JWT verification or is expired (requireAuth / gateway default-deny authGate)"
+    },
+    {
+      "status": 400,
+      "code": "ok (boolean) is required",
+      "message": "ok (boolean) is required",
+      "when": "Body is absent or ok is not a JSON boolean (the string \"true\" is rejected)"
+    },
+    {
+      "status": 401,
+      "code": "missing credential",
+      "message": "missing credential",
+      "when": "No Bearer token on the request, so no robot credential was presented to ackCommandWithCredential"
+    },
+    {
+      "status": 401,
+      "code": "invalid, expired, or revoked key",
+      "message": "invalid, expired, or revoked key",
+      "when": "The presented robot credential fails verifyKey - unknown, past its expires_at, or revoked"
+    },
+    {
+      "status": 403,
+      "code": "credential not scoped to this command",
+      "message": "credential not scoped to this command",
+      "when": "The credential lacks the command-ack scope or the scope for this command's target_asset_id"
+    },
+    {
+      "status": 404,
+      "code": "command not found",
+      "message": "command not found",
+      "when": "No command with that id exists within the tenant that owns the presented credential"
+    },
+    {
+      "status": 409,
+      "code": "command not in dispatched state",
+      "message": "command not in dispatched state",
+      "when": "The command is not in the dispatched state - already acked, still pending approval, or cancelled. Replayed acks land here"
+    },
+    {
+      "status": 500,
+      "code": "<underlying error message>",
+      "message": "Ack processing failed",
+      "when": "ackCommandWithCredential throws - non-UUID command_id (Postgres 22P02) or database error"
+    }
   ]
 }

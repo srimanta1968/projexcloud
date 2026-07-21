@@ -11,6 +11,7 @@
   "sdk": "sdk-connectors",
   "sourceFile": "packages/sdk-connectors/src/server/routes.ts",
   "testability": "auto",
+  "description": "Fetches one connector install by install_id, returning its full record (tenant, kind, display name, status, vendor account, credential reference, sync metadata). QA edge cases: an unknown install_id returns a bare 404 { error: 'NotFound' } with no details array, and a malformed (non-UUID) install_id returns the same 404, so the two cases cannot be told apart by status; an uninstalled connector is still readable — uninstall flips status rather than deleting the row, so this returns 200 with the terminal status instead of 404; the lookup is by install_id alone with no tenant predicate, so an authenticated caller holding another tenant's install_id reads that record.",
   "testCases": [
     {
       "name": "Read a connector install by id",
@@ -21,6 +22,26 @@
         "install_id": "{{cache:connectors.create.response.data.install.install_id}}"
       },
       "expectedStatus": 200
+    }
+  ],
+  "errorCases": [
+    {
+      "status": 404,
+      "code": "NotFound",
+      "message": "NotFound",
+      "when": "no connectors.install row matches the :install_id path param (unknown, or malformed id)"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "no Authorization header, or it is not of the form 'Bearer <jwt>' (requireAuth preHandler)"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "the bearer JWT fails verifyJwt — bad signature, wrong JWT_SECRET, or exp already elapsed (requireAuth preHandler)"
     }
   ]
 }

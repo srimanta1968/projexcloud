@@ -4,7 +4,7 @@
   "method": "POST",
   "requiresAuth": true,
   "dependsOn": [
-    "POST /api/auth/register"
+    "POST /api/auth/signup-tenant"
   ],
   "expectedStatus": 201,
   "sdk": "sdk-vault",
@@ -12,14 +12,25 @@
   "_generated": true,
   "testability": "auto",
   "fieldEnums": {
-    "tier": ["root", "app", "pool", "tenant", "person", "device", "encounter"],
-    "algorithm": ["AES-256-GCM", "ChaCha20-Poly1305"]
+    "tier": [
+      "root",
+      "app",
+      "pool",
+      "tenant",
+      "person",
+      "device",
+      "encounter"
+    ],
+    "algorithm": [
+      "AES-256-GCM",
+      "ChaCha20-Poly1305"
+    ]
   },
   "testCases": [
     {
       "name": "Issue a root-tier vault key",
       "headers": {
-        "Authorization": "Bearer {{cache:auth.register.response.data.token}}"
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
       },
       "payload": {
         "tier": "root",
@@ -32,5 +43,62 @@
   ],
   "captureResponse": {
     "vault.keys.create.response.data.key_id": "data.key_id"
-  }
+  },
+  "description": "Issues a new vault key at the requested tier of the key hierarchy and returns 201 with the key record. tier, kms_ref and region are mandatory; every non-root tier additionally requires parent_key_id, which is re-checked by a database trigger. algorithm is optional and silently defaults to AES-256-GCM - any value other than ChaCha20-Poly1305 is coerced rather than rejected. Edge cases: a tier outside the canonical list is rejected with the valid values echoed back; a non-root tier without parent_key_id is rejected before the database is touched; a parent_key_id whose tier is not the legal parent of the requested tier, or which does not exist, is surfaced as a 400 from the service layer rather than a 404; kms_ref and region are trimmed, so whitespace-only values count as missing; requires a valid JWT.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "Authorization header absent or not in Bearer form (requireAuth / gateway default-deny authGate)"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "Bearer token fails JWT verification or is expired (requireAuth / gateway default-deny authGate)"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "body must be an object",
+      "when": "Request body is absent or not a JSON object"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "tier is required / tier must be one of <KEY_TIERS>",
+      "when": "tier is missing or is not one of the canonical key tiers"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "kms_ref is required",
+      "when": "kms_ref is absent or whitespace-only"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "region is required",
+      "when": "region is absent or whitespace-only"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "parent_key_id is required for non-root tiers",
+      "when": "tier is not \"root\" and parent_key_id is not a string"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "Invalid parent tier ... / Parent key ...",
+      "when": "issueKey rejects the parent - the parent key does not exist, or its tier is not the legal parent of the requested tier"
+    },
+    {
+      "status": 500,
+      "code": "InternalError",
+      "message": "InternalError",
+      "when": "Any other issueKey failure (KMS unavailable, database error, hierarchy trigger failure)"
+    }
+  ]
 }

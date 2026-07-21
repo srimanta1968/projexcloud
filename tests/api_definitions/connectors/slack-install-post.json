@@ -15,6 +15,7 @@
   "dependsOn": [
     "POST /api/auth/register"
   ],
+  "description": "Exchanges a Slack OAuth authorisation code for a workspace access token via oauth.v2.access, using SLACK_CLIENT_ID / SLACK_CLIENT_SECRET from the environment. On success the caller is expected to feed the returned team_id and access_token into POST /api/connectors/installs — this endpoint does NOT create the install itself, which is the integration gap worth testing. QA edge cases: a missing environment configuration is a 503 NotConfigured, distinct from the 400 you get for a missing code, so an unconfigured environment fails loudly rather than silently; Slack's own rejections (invalid_code, code_already_used, bad redirect_uri) come back as HTTP 400 SlackError with Slack's error string in details, NOT as a 401 — and because OAuth codes are single-use, replaying the same code returns invalid_code, so this call is explicitly non-idempotent; only a thrown transport error (network failure, malformed Slack response) becomes a 500 InternalError; redirect_uri is optional and passed through unvalidated.",
   "testCases": [
     {
       "name": "OAuth exchange returns 503 when SLACK_CLIENT_ID/SECRET not configured",
@@ -30,5 +31,43 @@
   ],
   "captureResponse": {
     "connectors.slack-install.response.data.ok": "data.ok"
-  }
+  },
+  "errorCases": [
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "code required",
+      "when": "body.code is absent, empty, or not a string"
+    },
+    {
+      "status": 503,
+      "code": "NotConfigured",
+      "message": "SLACK_CLIENT_ID/SECRET env not set",
+      "when": "either SLACK_CLIENT_ID or SLACK_CLIENT_SECRET is unset in the gateway environment"
+    },
+    {
+      "status": 400,
+      "code": "SlackError",
+      "message": "<Slack error code, e.g. invalid_code / code_already_used / bad_redirect_uri>",
+      "when": "Slack responds with ok:false to the oauth.v2.access exchange — including replaying an already-consumed single-use code"
+    },
+    {
+      "status": 500,
+      "code": "InternalError",
+      "message": "InternalError",
+      "when": "the oauthExchange call throws — network failure reaching slack.com or an unparseable response"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "no Authorization header, or it is not of the form 'Bearer <jwt>' (requireAuth preHandler)"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "the bearer JWT fails verifyJwt — bad signature, wrong JWT_SECRET, or exp already elapsed (requireAuth preHandler)"
+    }
+  ]
 }

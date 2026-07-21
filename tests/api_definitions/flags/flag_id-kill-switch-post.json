@@ -3,6 +3,33 @@
   "endpoint": "/api/flags/:flag_id/kill-switch",
   "sdk": "sdk-feature-flags",
   "method": "POST",
+  "description": "Engages or releases a flag's kill switch. body.engaged is required and must be a real boolean - the check is `typeof !== 'boolean'`, so the strings \"true\"/\"false\", 0/1 and null are all rejected 400. Edge cases: an unknown flag_id -> 404; setting the switch to the value it already holds is accepted and the call is idempotent; while engaged, evaluate() short-circuits every rollout and returns the type-appropriate off value (false for boolean, 0 for numeric, null otherwise) with kill_switch_engaged true, so QA should assert the evaluate response shape immediately after flipping this.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "Authorization header absent or not in the form \"Bearer <jwt>\""
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "JWT signature invalid, malformed, or past its exp claim"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "missing engaged",
+      "when": "body.engaged is absent or is not a JSON boolean (strings such as \"true\" are rejected)"
+    },
+    {
+      "status": 404,
+      "code": "NotFound",
+      "message": "NotFound",
+      "when": "no feature_flags.flag row exists for the given flag_id"
+    }
+  ],
   "requiresAuth": true,
   "expectedStatus": 200,
   "taskId": "cbf65711-e8e1-41ad-84e6-7aa87b76d5a6",

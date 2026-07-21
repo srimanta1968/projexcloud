@@ -15,7 +15,10 @@
     "POST /api/resources"
   ],
   "fieldEnums": {
-    "status": ["registered", "quarantined"]
+    "status": [
+      "registered",
+      "quarantined"
+    ]
   },
   "testCases": [
     {
@@ -34,5 +37,26 @@
     "data": {
       "resources": []
     }
-  }
+  },
+  "description": "Lists resource-ownership registry records for the admin \"who owns what\" view, filterable by owner, status, environment, resource_type and team with limit/offset paging (P10/E5). Requires a valid tenant JWT (requireAuth). Edge cases: every filter is optional, so an unfiltered call returns the whole registry - this is a platform-wide registry and the caller JWT tenant is never applied as a filter, so tenant scoping is not enforced on this route; limit and offset are passed through parseInt, so a non-numeric or empty value becomes NaN and surfaces as a 500 InternalError rather than a 400; an unknown status or owner value simply matches nothing and returns 200 with an empty resources array, never a 404; filters combine with AND, so contradictory filters yield an empty list.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "Authorization header absent or not in Bearer form (requireAuth)"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "Bearer token fails JWT verification (requireAuth)"
+    },
+    {
+      "status": 500,
+      "code": "InternalError",
+      "message": "InternalError",
+      "when": "listResources throws - NaN limit/offset from a non-numeric query value, or any DB error"
+    }
+  ]
 }

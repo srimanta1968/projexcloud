@@ -36,5 +36,37 @@
         }
       }
     }
+  ],
+  "errorCases": [
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "SAML_ADAPTER=<kind> but <package> is not installed. Run: pnpm --filter @projexlight/sdk-identity add <package>",
+      "when": "SAML_ADAPTER is node-saml or saml2-js but the corresponding library is not installed (error message contains \"not installed\")"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "SAML response missing NameID",
+      "when": "A real adapter parsed the AuthnResponse but the profile carried no NameID (error message contains \"NameID\")"
+    },
+    {
+      "status": 401,
+      "code": "SamlSignatureFailed",
+      "message": "<signature/cert verification error from the adapter>",
+      "when": "The adapter rejects the assertion signature, or requires idp_cert and identity.federation_config has none for this tenant (message contains \"signature\" or \"cert\")"
+    },
+    {
+      "status": 404,
+      "code": "NotFound",
+      "message": "<not found error from consumeSamlAssertion>",
+      "when": "A downstream lookup reports \"not found\" while resolving the person/app identity"
+    },
+    {
+      "status": 500,
+      "code": "InternalError",
+      "message": "InternalError",
+      "when": "Any other failure — notably the default mock adapter rejecting a body with no name_id (\"mock adapter requires name_id in body\" matches none of the 400/401 filters), JIT person-insert failure, alias merge failure, or a DB error reading identity.federation_config"
+    }
   ]
 }

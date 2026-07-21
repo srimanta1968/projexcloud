@@ -12,6 +12,7 @@
   "priority": 15,
   "testability": "manual",
   "skipReason": "Effect is observable in the audit ledger payload (credential_source field) and the persisted ai_gateway.completion.billed_cost (0 for BYOK). Covered by integration test referenced in PRD AC-4.",
+  "description": "Internal (non-HTTP) contract for completionService.emitCompletionEvent, which stamps credential_source ('tenant' or 'platform') into the ai-gateway.complete.v1 / ai-gateway.stream.v1 audit payload so the meter ingest worker knows which SKUs to emit (FR-BYOK-9 / AC-4). On a BYOK call the tenant pays the provider directly, so billed_cost is 0, the ai-gateway.tokens.* markup SKU is suppressed, and only the governance SKU is emitted; on a platform-credential call both SKUs are emitted and billed_cost carries the margin. QA edge cases: the entire emit is wrapped in try/catch and only console.errors on failure, so an audit-ledger outage NEVER fails or degrades the completion — the completion still returns 200 while the billing event is silently lost, which is the revenue-leak scenario to watch for; consequently this function has no error return path of its own; the effect is observable only in the audit ledger payload (credential_source) and the persisted ai_gateway.completion.billed_cost, not in any HTTP response body.",
   "testCases": [
     {
       "name": "Tenant credential completion stamps credential_source=tenant and bills 0 markup",
@@ -44,5 +45,6 @@
   ],
   "expectedResponse": {
     "success": true
-  }
+  },
+  "errorCases": []
 }

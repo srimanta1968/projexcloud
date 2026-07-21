@@ -31,5 +31,32 @@
     "data": {
       "keys": "array"
     }
-  }
+  },
+  "description": "Lists the API keys belonging to a tenant, identified by the required tenant_id query param, returning metadata only (the plaintext secret is never re-exposed after issue). Edge cases: tenant_id is mandatory and is trimmed, so a whitespace-only value is treated as missing and returns 400; a tenant with no keys returns 200 with an empty keys array rather than 404; tenant_id is read from the query string and not cross-checked against the JWT tenant_id, so scoping is by the supplied parameter — any authenticated caller who knows a tenant_id can enumerate that tenant's key metadata; the listing has no pagination or limit, so tenants with many keys return the full set in one response, and revoked/rotated keys remain in the listing with their status rather than being filtered out.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "No Authorization: Bearer <jwt> header on a requireAuth route"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "Bearer token fails verifyJwt (bad signature, malformed, or exp in the past)"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "tenant_id query param is required",
+      "when": "The tenant_id query param is missing or trims to an empty string"
+    },
+    {
+      "status": 500,
+      "code": "InternalError",
+      "message": "InternalError",
+      "when": "listKeys throws — e.g. tenant_id is not a valid UUID and the query cast fails, or the database is unreachable"
+    }
+  ]
 }

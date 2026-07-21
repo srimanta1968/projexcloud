@@ -18,9 +18,19 @@
   "statusTransitions": {
     "entity": "webhook.delivery",
     "field": "status",
-    "flow": ["pending", "delivering", "succeeded", "failed", "dlq"],
+    "flow": [
+      "pending",
+      "delivering",
+      "succeeded",
+      "failed",
+      "dlq"
+    ],
     "transitions": [
-      { "from": "dlq", "to": "pending", "via": "POST /api/webhooks/deliveries/:delivery_id/replay" }
+      {
+        "from": "dlq",
+        "to": "pending",
+        "via": "POST /api/webhooks/deliveries/:delivery_id/replay"
+      }
     ]
   },
   "testCases": [
@@ -46,5 +56,38 @@
   },
   "captureResponse": {
     "webhooks.replay.response.data.delivery.delivery_id": "data.delivery.delivery_id"
-  }
+  },
+  "description": "Replays a dead-lettered delivery by resetting it to pending with attempts=0, next_attempt_at=now() and dlq_until cleared. Takes no body. Edge cases: BOTH an unknown delivery_id AND a delivery whose status is not 'dlq' return the SAME 404 DeliveryNotInDlq — so a delivery that already succeeded or is still pending is reported as 'not in DLQ', and a SECOND replay of the same delivery also 404s because the first replay moved it out of dlq status; a delivery whose dlq_until has already passed returns 409 DlqWindowExpired, the expiry case to test; the response is the updated delivery row, not the downstream endpoint's response.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "Authorization header absent or not in 'Bearer <jwt>' form (requireAuth preHandler)"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "JWT signature invalid, malformed, or exp has elapsed"
+    },
+    {
+      "status": 404,
+      "code": "DeliveryNotInDlq",
+      "message": "Delivery <delivery_id> is not in DLQ",
+      "when": "no delivery row matches :delivery_id, OR the row exists but its status is not dlq (already delivered, still pending, or already replayed)"
+    },
+    {
+      "status": 409,
+      "code": "DlqWindowExpired",
+      "message": "Delivery <delivery_id> replay window has expired",
+      "when": "the delivery is in dlq but its dlq_until timestamp is in the past"
+    },
+    {
+      "status": 500,
+      "code": "InternalError",
+      "message": "InternalError",
+      "when": "Unexpected service/DB failure (connection loss, or a constraint the handler does not map)"
+    }
+  ]
 }

@@ -37,5 +37,43 @@
         "trigger": "chaos-drill"
       }
     }
+  ],
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "When the plugin is mounted inside the api-gateway: /failovers is not on the authGate.ts public allowlist, so the default-deny gate rejects a request with no Authorization: Bearer header. Not produced by the standalone :8083 binary, which has no auth gate"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "Gateway-mounted only: the bearer token fails verifyJwt (bad signature, malformed, or expired)"
+    },
+    {
+      "status": 400,
+      "code": "invalid_trigger",
+      "message": "trigger must be one of chaos-drill,production-failover,operator-initiated",
+      "when": "body.trigger is missing, not a string, or outside the sanctioned FAILOVER_TRIGGERS set — the only field-level validation in the handler"
+    },
+    {
+      "status": 409,
+      "code": "duplicate_event",
+      "message": "failover event_id '<event_id>' already recorded",
+      "when": "The INSERT into federation.failover_event violates the event_id primary key (Postgres 23505) — replaying the same event_id"
+    },
+    {
+      "status": 500,
+      "code": "InternalError",
+      "message": "<Postgres error message from the INSERT, e.g. null value in column violates not-null constraint / violates foreign key constraint on federation_id / invalid input syntax>",
+      "when": "recordFailover throws for any non-23505 reason — omitted event_id/federation_id/from_region/to_region/rpo_observed/rto_observed (none are pre-validated), an unknown federation_id, wrong types for the RPO/RTO numerics, or the DB being unavailable"
+    },
+    {
+      "status": 500,
+      "code": "Internal Server Error",
+      "message": "Internal Server Error",
+      "when": "No JSON body is sent at all — the handler dereferences body.trigger without a null guard, so a missing body throws before validation and Fastify's default error handler responds"
+    }
   ]
 }

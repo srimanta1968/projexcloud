@@ -3,6 +3,39 @@
   "endpoint": "/api/analytics/builds/:build_id/export",
   "sdk": "sdk-analytics",
   "method": "POST",
+  "description": "Exports an already-materialized dataset build to the warehouse / object store, optionally targeting a named destination via body.target (omitting it uses the configured default). Edge cases: an unknown build_id or a build owned by another tenant returns 404; the body is entirely optional; re-exporting the same build is allowed and simply overwrites/re-emits the artifact; large builds and object-store failures surface as 500.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "Authorization header absent or not in the form \"Bearer <jwt>\""
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "JWT signature invalid, malformed, or past its exp claim"
+    },
+    {
+      "status": 400,
+      "code": "BadRequest",
+      "message": "tenant context required",
+      "when": "the verified JWT carries no tenant_id claim"
+    },
+    {
+      "status": 404,
+      "code": "NotFound",
+      "message": "dataset build not found",
+      "when": "build_id does not exist or belongs to a different tenant"
+    },
+    {
+      "status": 500,
+      "code": "InternalError",
+      "message": "<error message from exportDatasetBuild>",
+      "when": "the service/DB call throws (bad asset/sensor reference, ClickHouse or Postgres failure)"
+    }
+  ],
   "requiresAuth": true,
   "expectedStatus": 200,
   "taskId": "a7937433-469c-40dc-836f-7c3b3ced4a40",

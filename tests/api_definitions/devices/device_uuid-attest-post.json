@@ -15,7 +15,12 @@
     "POST /api/devices"
   ],
   "fieldEnums": {
-    "method": ["secure-enclave", "key-attestation", "safetynet", "play-integrity"]
+    "method": [
+      "secure-enclave",
+      "key-attestation",
+      "safetynet",
+      "play-integrity"
+    ]
   },
   "testCases": [
     {
@@ -37,5 +42,38 @@
   ],
   "captureResponse": {
     "devices.attest.response.data.attestation.attestation_id": "data.attestation.attestation_id"
-  }
+  },
+  "description": "Records a device attestation, returning 201 with the attestation record. method is validated against the closed set secure-enclave | key-attestation | safetynet | play-integrity, and signature_envelope is a base64 string decoded into bytes and stored verbatim. Edge cases: an unrecognised method is a 400; the handler does not pre-check that the device exists, so attesting an unregistered device_uuid trips the attestation foreign key and escapes as an unhandled 500; expires_at is optional, defaults to null, and a past expiry is accepted without validation; verified is optional and defaults to false, so a bare attestation is recorded as unverified; every call appends a new attestation row, so the operation is not idempotent - repeat attestations accumulate; requires a valid JWT.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "Authorization header absent or not in Bearer form (requireAuth / gateway default-deny authGate)"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "Bearer token fails JWT verification or is expired (requireAuth / gateway default-deny authGate)"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "missing fields",
+      "when": "method or signature_envelope is absent or an empty string"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "invalid method",
+      "when": "method is not one of secure-enclave, key-attestation, safetynet, play-integrity"
+    },
+    {
+      "status": 500,
+      "code": "Internal Server Error",
+      "message": "insert or update on table \"attestation\" violates foreign key constraint",
+      "when": "device_uuid does not reference a registered device (or is not a valid UUID) - the insert has no pre-check, so the Postgres error escapes unhandled"
+    }
+  ]
 }

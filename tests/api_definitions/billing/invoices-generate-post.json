@@ -58,18 +58,95 @@
     }
   },
   "fieldEnums": {
-    "actor_kind": ["human", "agent", "service"]
+    "actor_kind": [
+      "human",
+      "agent",
+      "service"
+    ]
   },
   "statusTransitions": {
     "entity": "invoice",
     "field": "status",
-    "flow": ["draft", "finalized", "paid", "void", "failed"],
+    "flow": [
+      "draft",
+      "finalized",
+      "paid",
+      "void",
+      "failed"
+    ],
     "transitions": [
-      { "from": "draft", "to": "finalized", "via": "POST /api/billing/invoices/generate" }
+      {
+        "from": "draft",
+        "to": "finalized",
+        "via": "POST /api/billing/invoices/generate"
+      }
     ]
   },
   "captureResponse": {
     "billing-invoices.generate.response.data.invoice.invoice_id": "data.invoice.invoice_id",
     "billing-invoices.generate.response.data.invoice.status": "data.invoice.status"
-  }
+  },
+  "description": "Generates an invoice for the caller's tenant over a closed billing period using a named rate catalog, returning 201 with the invoice and its line items. tenant_id is always taken from the verified JWT and never from the body, because invoice generation exposes financial PII. Edge cases: catalog_id is required and period_start/period_end must both be YYYY-MM-DD; period_start must be <= period_end so an inverted range is a 400; all validation failures are accumulated into one details array; a catalog_id that does not resolve raises CatalogNotFoundError and returns 404; generating for a period with no metered usage yields a zero-total invoice rather than an error; there is no idempotency key, so repeating the call for the same tenant/period/catalog produces another invoice.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "No Authorization: Bearer <jwt> header on a requireAuth route"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "Bearer token fails verifyJwt (bad signature, malformed, or exp in the past)"
+    },
+    {
+      "status": 403,
+      "code": "Forbidden",
+      "message": "JWT missing tenant_id claim",
+      "when": "Token verifies but carries no tenant_id claim; billing surfaces refuse to run unscoped"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "tenant_id must be a UUID",
+      "when": "The tenant_id claim injected from the JWT is not a well-formed UUID"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "catalog_id is required",
+      "when": "catalog_id is missing or blank in the body"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "period_start must be YYYY-MM-DD",
+      "when": "period_start is missing or not in YYYY-MM-DD form"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "period_end must be YYYY-MM-DD",
+      "when": "period_end is missing or not in YYYY-MM-DD form"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "period_start must be <= period_end",
+      "when": "Both dates parse but the range is inverted"
+    },
+    {
+      "status": 404,
+      "code": "CatalogNotFound",
+      "message": "Rate catalog not found",
+      "when": "generateInvoice throws CatalogNotFoundError because catalog_id does not resolve to a catalog"
+    },
+    {
+      "status": 500,
+      "code": "InternalError",
+      "message": "InternalError",
+      "when": "Invoice generation throws for any other reason (usage aggregation failure, ClickHouse/Postgres unreachable)"
+    }
+  ]
 }

@@ -4,6 +4,33 @@
   "sdk": "sdk-identity-resolver",
   "sourceFile": "packages/sdk-identity-resolver/src/server/routes.ts",
   "method": "POST",
+  "description": "Reverses a prior merge by writing a compensating merge record; the reversing persona comes from the JWT and reason (the only body field, optional) is recorded with it. Edge cases: the entire body is optional, so an empty POST is valid; an unknown merge_id throws 'empi: merge <id> not found' and surfaces as a 500 InternalError, NOT a 404; unmerging a merge that has already been reversed is not guarded at the route and produces either a second compensation row or an 'empi: unmerge failed' 500, so this is not a safe retry; reversal counts feed the EMPI reversal-rate metric.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "Authorization header absent or not in the form \"Bearer <jwt>\""
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "JWT signature invalid, malformed, or past its exp claim"
+    },
+    {
+      "status": 500,
+      "code": "InternalError",
+      "message": "empi: merge <merge_id> not found",
+      "when": "the merge_id in the path matches no merge row — surfaced as a 500, not a 404"
+    },
+    {
+      "status": 500,
+      "code": "InternalError",
+      "message": "empi: unmerge failed",
+      "when": "the compensating insert returns no row (e.g. the merge was already reversed)"
+    }
+  ],
   "requiresAuth": true,
   "taskId": "3dd74dad-c603-4450-bdc8-60f09edc4700",
   "sprintId": "efcf9cbd-5e84-469e-946e-efcabf8c88e1",

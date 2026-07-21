@@ -50,5 +50,38 @@
       },
       "expectedStatus": 200
     }
+  ],
+  "description": "Activates a taxonomy version by id, making it the live version and recording the JWT subject as the actor (falling back to \"system\" when the token carries no sub). Edge cases: an unknown taxonomy_version_id is detected only by string-matching \"not found\" in the thrown error message and returned as 404 — any other service error, including attempting to activate a version that is already active or one belonging to a superseded taxonomy, collapses into a generic 500 \"Activation failed\" with no distinguishing detail; activation supersedes the previously active version rather than erroring, so ordering matters; a malformed (non-UUID) id fails the query cast and also surfaces as 500; the route's own missing-path-param 400 is effectively unreachable because Fastify will not match the route without the segment.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "No Authorization: Bearer <jwt> header on a requireAuth route"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "Bearer token fails verifyJwt (bad signature, malformed, or exp in the past)"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "Missing path param: taxonomy_version_id",
+      "when": "The :taxonomy_version_id path segment resolves to an empty value (not normally reachable — Fastify would not match the route)"
+    },
+    {
+      "status": 404,
+      "code": "NotFound",
+      "message": "<error message containing \"not found\">",
+      "when": "activateTaxonomyVersion throws an error whose message contains \"not found\" — the taxonomy version id does not exist"
+    },
+    {
+      "status": 500,
+      "code": "InternalError",
+      "message": "Activation failed",
+      "when": "activateTaxonomyVersion throws for any other reason (invalid state transition, constraint violation, database unreachable)"
+    }
   ]
 }

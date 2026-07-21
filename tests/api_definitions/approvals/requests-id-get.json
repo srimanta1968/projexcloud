@@ -37,5 +37,32 @@
       },
       "steps": "array"
     }
-  }
+  },
+  "description": "Reads one approval request with its steps and current status. Edge cases: an unknown :request_id returns 404 NotFound with the id echoed in details[]; the read is not tenant-filtered, so any authenticated caller holding a request_id can read it; a non-UUID :request_id reaches the query and is routed through the shared fail() mapper, which matches none of the typed errors and therefore returns 500 InternalError rather than 400.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "Authorization header absent or not in 'Bearer <jwt>' form (requireAuth preHandler)"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "JWT signature invalid, malformed, or exp has elapsed"
+    },
+    {
+      "status": 404,
+      "code": "NotFound",
+      "message": "Request <request_id> not found",
+      "when": "no approval.request row matches :request_id"
+    },
+    {
+      "status": 500,
+      "code": "InternalError",
+      "message": "InternalError",
+      "when": "Unexpected service/DB failure (connection loss, or a constraint the handler does not map)"
+    }
+  ]
 }

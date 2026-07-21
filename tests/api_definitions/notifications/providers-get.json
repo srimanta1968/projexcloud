@@ -9,7 +9,10 @@
   "featureId": "e9e9b8ee-101b-4a6c-8100-538b861781a8",
   "epicId": "f9bd4029-5fd6-4dc1-bfce-00af515b8294",
   "priority": 32,
-  "dependsOn": ["POST /api/auth/signup-tenant", "POST /api/notifications/providers"],
+  "dependsOn": [
+    "POST /api/auth/signup-tenant",
+    "POST /api/notifications/providers"
+  ],
   "testCases": [
     {
       "name": "List the tenant's email providers (metadata only)",
@@ -22,6 +25,39 @@
           "providers": []
         }
       }
+    }
+  ],
+  "description": "Lists the email provider bindings configured for the caller's tenant. The tenant is derived from the JWT, never from a query param, so this endpoint is inherently tenant-scoped and cannot be made to read another tenant's providers. Secrets are never returned — only binding metadata. Edge cases: a JWT with no tenant_id claim is 403 rather than 401; a tenant with no providers configured returns 200 with data.providers = [], not 404; there are no filter, limit or paging parameters, so every binding the service query selects is returned in one response.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "Authorization header absent or not in 'Bearer <jwt>' form (requireAuth preHandler)"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "JWT signature invalid, malformed, or exp has elapsed"
+    },
+    {
+      "status": 403,
+      "code": "Forbidden",
+      "message": "JWT missing tenant_id claim",
+      "when": "the verified JWT carries no tenant_id claim"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "<service error matching unsupported|too short|must be at least|not found|invalid>",
+      "when": "listEmailProviders threw an error whose message matches the fail() mapper pattern"
+    },
+    {
+      "status": 500,
+      "code": "InternalError",
+      "message": "InternalError",
+      "when": "Unexpected service/DB failure (connection loss, or a constraint the handler does not map)"
     }
   ]
 }

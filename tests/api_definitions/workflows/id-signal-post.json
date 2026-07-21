@@ -42,5 +42,56 @@
   },
   "captureResponse": {
     "workflows.signal.response.data.signaled": "data.signaled"
-  }
+  },
+  "description": "Delivers a named signal (with an optional payload) to an in-progress workflow run identified by the run_id path param, returning {signaled:true}. Requires a valid tenant JWT (requireAuth). Edge cases: signal_name is mandatory and payload defaults to {} when omitted; there is a hard state precondition - the run must be in running or paused state, so signalling a completed, failed or compensated run is a 409 InvalidState, and an unknown run_id also surfaces as a 409 rather than a 404 because fail() maps both \"not found\" and \"not in running\" onto the same status; the endpoint is not idempotent - re-sending the same signal_name delivers it again, so a retry after a timeout can double-advance the run; if the signal advances the run into a step whose handler is not registered in this process the call fails with 400 StepHandlerNotFound; the caller JWT tenant is not compared to the run envelope, so cross-tenant signalling is not blocked here.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "Authorization header absent or not in Bearer form (requireAuth)"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "Bearer token fails JWT verification (requireAuth)"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "signal_name is required",
+      "when": "validateSignal fails - signal_name absent or empty"
+    },
+    {
+      "status": 400,
+      "code": "StepHandlerNotFound",
+      "message": "No step handler registered for '<name>'",
+      "when": "the signal advances the run to a step whose handler is not registered in this process (StepHandlerNotFoundError)"
+    },
+    {
+      "status": 400,
+      "code": "WorkflowMissingHandlers",
+      "message": "Workflow definition missing step handlers: <names>",
+      "when": "the run definition resolves to steps with no registered handlers (WorkflowDefinitionMissingHandlersError)"
+    },
+    {
+      "status": 404,
+      "code": "WorkflowDefinitionNotFound",
+      "message": "Workflow definition <name> not found",
+      "when": "signal raises WorkflowDefinitionNotFoundError because the run definition is no longer registered"
+    },
+    {
+      "status": 409,
+      "code": "InvalidState",
+      "message": "<message containing \"not found\" or \"not in running\">",
+      "when": "the run_id does not exist, or the run is not in running/paused state (completed, failed or compensated) - both collapse to this status"
+    },
+    {
+      "status": 500,
+      "code": "InternalError",
+      "message": "InternalError",
+      "when": "signal throws any other error - engine failure or a DB error"
+    }
+  ]
 }

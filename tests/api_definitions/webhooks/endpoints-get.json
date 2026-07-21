@@ -27,5 +27,32 @@
   "expectedResponse": {
     "success": true,
     "data": "array"
-  }
+  },
+  "description": "Gateway-composed list of a tenant's registered webhook endpoints, delegating to sdk-webhook's listEndpointsForTenant. Note the POST counterpart on this same path is mounted by sdk-webhook's own router, not here. Edge cases: ?tenant_id= is REQUIRED (400 if absent) and is caller-asserted from the query string rather than derived from the JWT; a tenant with no endpoints returns 200 with an empty data array, never 404; there is no paging or limit parameter on this route; a tenant_id that is not a valid UUID fails inside the SDK query and returns 500 with the raw Postgres message.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "Gateway default-deny authGate (AUTH_GATE_MODE=enforce): path is not on the public allowlist and no bearer token was sent"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "authGate ran requireAuth and the JWT failed verification or had expired"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "tenant_id required",
+      "when": "?tenant_id= query param is absent or empty"
+    },
+    {
+      "status": 500,
+      "code": "InternalError",
+      "message": "<postgres error text>",
+      "when": "tenant_id is not a valid UUID, or listEndpointsForTenant fails"
+    }
+  ]
 }

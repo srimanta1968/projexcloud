@@ -2,18 +2,26 @@
   "name": "GET /routes/:federation_id/:query_class — pool-federation-runtime",
   "endpoint": "/routes/:federation_id/:query_class",
   "method": "GET",
-  "requiresAuth": false,
+  "requiresAuth": true,
   "expectedStatus": 200,
   "sdk": "pool-federation-runtime",
   "sourceFile": "services/pool-federation-runtime/src/app.ts",
   "_generated": true,
   "testability": "auto",
+  "note": "The federation route plugin is mounted inside the api-gateway, whose global auth hook requires a bearer token on /routes even though the standalone binary does not — hence requiresAuth:true. setupScript seeds a federation.route for federation_id 'fed-us-east-1' (test-config var) + query_class 'resolver'.",
+  "setupScript": "federation_seed_route.sql",
+  "dependsOn": [
+    "POST /api/auth/signup-tenant"
+  ],
   "fieldEnums": {
     "query_class": ["resolver", "dsar", "analytics", "lineage"]
   },
   "testCases": [
     {
       "name": "Resolve a sanctioned cross-pool route",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
       "pathParams": {
         "federation_id": "{{var:federation_id}}",
         "query_class": "resolver"
@@ -22,6 +30,39 @@
         "bypass_cache": "false"
       },
       "expectedStatus": 200
+    }
+  ],
+  "description": "Resolves a sanctioned cross-pool federation route: given a federation_id and one of the four sanctioned query classes, returns the federation.route row as {route_id, federation_id, query_class, target_pool_indexes[], execution_plan, created_at, last_used_at}. Reads are cache-first (60s TTL) when a route cache is wired in, falling back to Postgres on miss and writing through; pass ?bypass_cache=true to force the DB read. QA edge cases: query_class is whitelist-validated against exactly ['resolver','dsar','analytics','lineage'] — anything else, including correct-looking values in the wrong case ('Resolver') or a typo, is 400 invalid_query_class, and that check runs BEFORE any lookup. federation_id is not validated at all, so an unknown or malformed federation_id falls through to a 404 route_not_found rather than a 400 — that is the missing-FK signal for this endpoint. bypass_cache is compared strictly to the string 'true', so 'false', '1', 'TRUE' and an omitted param all mean cache-enabled; a stale cache entry can therefore serve a route that was just deleted until the TTL expires, which is why the bypass flag exists. The call is idempotent for the caller but does write asynchronously — it fire-and-forgets an UPDATE of last_used_at, so consecutive reads return a changing last_used_at. Single-row lookup (LIMIT 1), no pagination, no tenant scoping. When mounted standalone on :8083 the route is unauthenticated, but inside the api-gateway /routes/* is not on the authGate.ts public allowlist, so the default-deny gate requires a valid tenant JWT — hence requiresAuth:true. The handler has no try/catch, so a datastore failure surfaces as Fastify's default 500 envelope.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "Gateway-mounted deployment: no Authorization: Bearer header — /routes/* is not on the authGate.ts public allowlist. Not produced by the standalone :8083 binary"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "Gateway-mounted deployment: the bearer token fails verifyJwt (bad signature, malformed, or expired)"
+    },
+    {
+      "status": 400,
+      "code": "invalid_query_class",
+      "message": "query_class must be one of resolver,dsar,analytics,lineage",
+      "when": ":query_class is not one of the four SANCTIONED_CLASSES (checked before any lookup; case-sensitive)"
+    },
+    {
+      "status": 404,
+      "code": "route_not_found",
+      "message": "route_not_found",
+      "when": "resolveRoute returns null — no federation.route row exists for the (federation_id, query_class) pair, including an unknown or malformed federation_id"
+    },
+    {
+      "status": 500,
+      "code": "Internal Server Error",
+      "message": "Internal Server Error",
+      "when": "resolveRoute throws — the federation.route query fails, the route cache backend errors, or the DB pool is unavailable; the handler has no catch so Fastify's default error handler responds"
     }
   ]
 }

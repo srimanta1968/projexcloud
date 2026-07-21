@@ -2,6 +2,27 @@
   "name": "POST /admin/approvals/requests/:request_id/operator-override — api-gateway",
   "endpoint": "/admin/approvals/requests/:request_id/operator-override",
   "method": "POST",
+  "description": "Operator break-glass override of a pending approval request: forces the decision to approved or rejected, stamps resolved_at, and rewrites the reason as \"[operator-override by <operator_id>] <reason>\" so the override is self-evident in the audit trail. Returns a bare { success: true } with no data. QA edge cases: the UPDATE is guarded by \"WHERE request_id = $1 AND status = 'pending'\", but the handler NEVER inspects the affected row count — so overriding an unknown request_id, or one that is already approved/rejected, still returns 200 { success: true } while changing nothing. There is no 404 and no 409; QA must verify the effect by re-reading the request rather than trusting the status code. decision, reason and operator_id are all required by a falsy check, and decision is not enum-validated in the route, so a value other than approved/rejected is written straight into status.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "admin token required",
+      "when": "requireAdmin() found no valid x-admin-ops-token header — missing, or matching neither env ADMIN_OPS_TOKEN nor an active admin.ops_token hash (30s cache TTL applies to revocations)"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "decision + reason + operator_id required",
+      "when": "any of decision, reason or operator_id is missing, null, or an empty string"
+    },
+    {
+      "status": 500,
+      "code": "InternalServerError",
+      "message": "<database error message>",
+      "when": "the UPDATE on approval.request throws — request_id not castable to the column type, a decision value rejected by the status check constraint, or Postgres unavailable"
+    }
+  ],
   "requiresAuth": false,
   "expectedStatus": 200,
   "sdk": "api-gateway",

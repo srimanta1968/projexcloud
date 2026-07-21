@@ -2,6 +2,27 @@
   "name": "POST /api/admin/asset/rollup/backfill — sensor rollup backfill (operator)",
   "endpoint": "/api/admin/asset/rollup/backfill",
   "method": "POST",
+  "description": "Operator-triggered sensor rollup backfill (P12·E1) that recomputes the 1-minute and 1-hour ClickHouse rollups for a trailing window, off the hot path. The window is [from, to]; when omitted, to defaults to now and from to now - lookback_hours (default 24). The recompute is delete-then-reinsert, so it is idempotent and safe to re-run over the same range. QA edge cases: the route hard-requires ClickHouse — with config.clickhouse.enabled false every authenticated call returns 409 before any work happens, which is the single most common false failure in a Postgres-only test environment; from/to are passed to new Date() with no validation, so an unparseable string yields \"Invalid Date\" and surfaces as a 500 from the query rather than a 400; from later than to produces an empty window and a zero-count success; very wide windows are not capped and can exhaust the ClickHouse container.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "admin token required",
+      "when": "x-admin-ops-token header is missing, empty, or matches neither the env ADMIN_OPS_TOKEN break-glass secret (constant-time compare) nor the SHA-256 hash of any active row in admin.ops_token; revoked/expired DB tokens keep working until the per-replica cache expires (ADMIN_OPS_TOKEN_CACHE_TTL_MS, default 30s) unless a Redis invalidation broadcast lands first"
+    },
+    {
+      "status": 409,
+      "code": "Conflict",
+      "message": "ClickHouse not enabled",
+      "when": "config.clickhouse.enabled is false — the deployment has no ClickHouse, checked immediately after auth and before the body is read"
+    },
+    {
+      "status": 500,
+      "code": "InternalServerError",
+      "message": "<rollup error message>",
+      "when": "runSensorRollup() throws — unparseable from/to producing an Invalid Date, ClickHouse unreachable, or the delete/insert of the rollup tables failing"
+    }
+  ],
   "requiresAuth": false,
   "expectedStatus": 200,
   "taskId": "c87c2262-c4fa-42ec-990d-800cda93e91d",

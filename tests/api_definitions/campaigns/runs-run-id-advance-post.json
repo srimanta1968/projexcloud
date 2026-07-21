@@ -2,6 +2,27 @@
   "name": "POST /api/campaigns/runs/:run_id/advance — sdk-campaign",
   "endpoint": "/api/campaigns/runs/:run_id/advance",
   "method": "POST",
+  "description": "Advances a journey run by one step, marking it completed once current_step walks past the journey's step count. Edge cases: an unknown run_id returns 404; a run whose state is already anything other than 'active' (e.g. completed) is returned unchanged with 200 rather than erroring, so repeated advances on a finished run are a safe no-op; if the parent journey row is missing the run is immediately completed; each call on an active run is a real state change, so the endpoint is not idempotent while the run is active.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "Authorization header absent or not in the form \"Bearer <jwt>\""
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "JWT signature invalid, malformed, or past its exp claim"
+    },
+    {
+      "status": 404,
+      "code": "NotFound",
+      "message": "NotFound",
+      "when": "no campaign.journey_run row exists for the given run_id"
+    }
+  ],
   "requiresAuth": true,
   "dependsOn": [
     "POST /api/auth/signup-tenant",

@@ -26,5 +26,20 @@
       },
       "expectedStatus": 200
     }
+  ],
+  "description": "Lists every device identity claim registered for one device_uuid, returning claim_id, device_uuid, person_id, the biometric_template_envelope and pin_envelope blobs, last_used_at and created_at. A device may carry several claims, one per bound person. Edge cases: an unknown or never-registered device_uuid returns 200 with claims: [] and never 404; device_uuid is a TEXT column, so any string including a non-UUID is a legal lookup key that simply matches nothing (no cast error); the result set is unpaginated and unordered, so a device with many bound persons returns every row in whatever order Postgres yields; the query filters on device_uuid alone with no tenant or persona predicate, so the caller's JWT tenant does not narrow the results.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "Authorization header absent or not in \"Bearer <token>\" form (requireAuth preHandler)"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "Bearer token fails verifyJwt (bad signature, malformed, or exp in the past) (requireAuth preHandler)"
+    }
   ]
 }

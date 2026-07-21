@@ -76,5 +76,37 @@
     "mcp-server-registrations.create.response.data.server.registration_id": "data.server.registration_id",
     "mcp-server-registrations.create.response.data.server.tenant_id": "data.server.tenant_id",
     "mcp-server-registrations.create.response.data.tools.0.tool_id": "data.tools.0.tool_id"
-  }
+  },
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "Authorization header absent or not in Bearer form (requireAuth / gateway default-deny authGate)"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "Bearer token fails JWT verification or is expired (requireAuth / gateway default-deny authGate)"
+    },
+    {
+      "status": 400,
+      "code": "Required: tenant_id, display_name, transport, endpoint_url, credential_envelope_b64",
+      "message": "Required: tenant_id, display_name, transport, endpoint_url, credential_envelope_b64",
+      "when": "Body is absent or any of tenant_id, display_name, transport, endpoint_url, credential_envelope_b64 is missing/empty"
+    },
+    {
+      "status": 502,
+      "code": "<probe failure message>",
+      "message": "MCP tool-discovery probe failed",
+      "when": "registerMcpServer throws with a message containing \"probe failed\" - endpoint_url is unreachable, is not an MCP server, or the supplied credential envelope was rejected"
+    },
+    {
+      "status": 500,
+      "code": "Register failed",
+      "message": "Register failed",
+      "when": "Any other registerMcpServer failure (database error, envelope decode/storage failure)"
+    }
+  ]
 }

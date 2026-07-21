@@ -25,5 +25,43 @@
         "success": true
       }
     }
+  ],
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "Authorization header absent or not in Bearer form (requireAuth)"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "Bearer token fails JWT verification (requireAuth)"
+    },
+    {
+      "status": 400,
+      "code": "MissingPathParam",
+      "message": "Missing path param: trace_id",
+      "when": "trace_id resolves falsy (defensive - an empty path segment normally route-misses to 404 first)"
+    },
+    {
+      "status": 404,
+      "code": "NotFound",
+      "message": "<service message containing \"not found\">",
+      "when": "getTraceTimeline throws for an unknown trace_id"
+    },
+    {
+      "status": 500,
+      "code": "LookupFailed",
+      "message": "Lookup failed",
+      "when": "getTraceTimeline throws any other error - a non-UUID trace_id failing the uuid cast, or any DB error"
+    },
+    {
+      "status": 500,
+      "code": "InternalError",
+      "message": "InternalError",
+      "when": "the handler throws outside its own try/catch and the route wrapper catch fires"
+    }
   ]
 }

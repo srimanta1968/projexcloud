@@ -42,5 +42,50 @@
     "vault.encrypt.response.data.iv_b64": "data.iv_b64",
     "vault.encrypt.response.data.tag_b64": "data.tag_b64",
     "vault.encrypt.response.data.ref": "data.ref"
-  }
+  },
+  "description": "Envelope-encrypts a base64 plaintext under the KMS key behind the supplied secret reference, returning 200 with the base64 bundle (ciphertext_b64, wrapped_dek_b64, iv_b64, tag_b64) needed by POST /api/vault/decrypt. ref is trimmed and must be non-empty; plaintext_b64 must be a non-empty string. Edge cases: an empty plaintext_b64 is rejected as missing, so encrypting empty content is not supported; a ref that is syntactically wrong or has not been registered in the secret registry is surfaced as a 400 (not a 404); the plaintext is base64-decoded leniently, so non-base64 input is not rejected outright; each call mints a fresh DEK/IV, so encrypting the same plaintext twice yields different bundles; requires a valid JWT.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "Authorization header absent or not in Bearer form (requireAuth / gateway default-deny authGate)"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "Bearer token fails JWT verification or is expired (requireAuth / gateway default-deny authGate)"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "body must be an object",
+      "when": "Request body is absent or not a JSON object"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "ref is required",
+      "when": "ref is absent or whitespace-only"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "plaintext_b64 is required",
+      "when": "plaintext_b64 is absent or an empty string"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "Secret reference not registered ... / Invalid secret reference ...",
+      "when": "envelopeEncrypt rejects ref - the secret reference is malformed or has never been registered"
+    },
+    {
+      "status": 500,
+      "code": "InternalError",
+      "message": "InternalError",
+      "when": "Any other envelopeEncrypt failure (KMS unavailable, wrap failure)"
+    }
+  ]
 }

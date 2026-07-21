@@ -26,8 +26,13 @@
         "iql_source": "subject.persona(role=\"doctor\") and relationship(type=\"care-team\")",
         "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
         "obligations": {
-          "mask_fields": ["ssn", "dob"],
-          "row_filter": { "care_team": true },
+          "mask_fields": [
+            "ssn",
+            "dob"
+          ],
+          "row_filter": {
+            "care_team": true
+          },
           "audit_level": "standard",
           "ttl_seconds": 300
         }
@@ -36,7 +41,12 @@
     }
   ],
   "fieldEnums": {
-    "obligations.audit_level": ["none", "standard", "detailed", "forensic"]
+    "obligations.audit_level": [
+      "none",
+      "standard",
+      "detailed",
+      "forensic"
+    ]
   },
   "expectedResponse": {
     "data": {
@@ -49,5 +59,44 @@
   },
   "captureResponse": {
     "policies.create.response.data.policy.policy_id": "data.policy.policy_id"
-  }
+  },
+  "description": "Creates a versioned policy bundle (name + version + IQL source, with optional obligations) per FR-POL-4 and returns 201. Requires a valid tenant JWT (requireAuth). Edge cases: name, version and iql_source are all mandatory presence checks; obligations, when present, must be an object and each sub-field is type-checked - mask_fields must be an array of strings, row_filter must be an object, audit_level must be one of the allowed levels, and ttl_seconds must be a non-negative number (0 is allowed, -1 is a 400); a syntactically invalid IQL body is a 400 IQLParseError raised by the parser rather than the validator, so it is a distinct failure mode from ValidationError; re-creating the same name+version pair trips the unique constraint and is a 409 Conflict, so the endpoint is not idempotent - bump the version to publish a change.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "Authorization header absent or not in Bearer form (requireAuth)"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "Bearer token fails JWT verification (requireAuth)"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "name is required / iql_source is required / version is required / obligations must be an object / obligations.mask_fields must be an array of strings / obligations.row_filter must be an object / obligations.audit_level must be one of <list> / obligations.ttl_seconds must be a non-negative number",
+      "when": "validateCreatePolicy fails; details[] carries every failed rule"
+    },
+    {
+      "status": 400,
+      "code": "IQLParseError",
+      "message": "<parser error message>",
+      "when": "createPolicy throws a parse error whose message starts with \"Unknown IQL\" or \"Unexpected\", or otherwise contains \"IQL\""
+    },
+    {
+      "status": 409,
+      "code": "Conflict",
+      "message": "policy with this name+version already exists",
+      "when": "the INSERT trips a duplicate-key constraint on name+version"
+    },
+    {
+      "status": 500,
+      "code": "InternalError",
+      "message": "InternalError",
+      "when": "createPolicy throws any other error - a DB failure or unmapped service error"
+    }
+  ]
 }

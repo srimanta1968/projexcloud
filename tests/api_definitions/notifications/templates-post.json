@@ -49,6 +49,57 @@
     "notifications.templates.create.response.data.template.code": "data.template.code"
   },
   "fieldEnums": {
-    "channel": ["email", "sms", "whatsapp", "push", "slack"]
-  }
+    "channel": [
+      "email",
+      "sms",
+      "whatsapp",
+      "push",
+      "slack"
+    ]
+  },
+  "description": "Creates a notification template. tenant_id is FORCED from the caller's JWT unless the body sets platform_default:true, in which case the body is used verbatim to create a platform-wide default. Edge cases: a JWT with no tenant_id claim is 403 rather than 401; locale_bundles is required and must contain AT LEAST ONE locale — an empty object {} is rejected; channel is whitelist-checked against email/sms/whatsapp/push/slack; version is optional free text; the (tenant, code, channel, version) tuple is unique, so re-creating the same template returns 409 Conflict rather than upserting — bump version to publish a revision; template placeholders are not validated against any payload schema at create time.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "Authorization header absent or not in 'Bearer <jwt>' form (requireAuth preHandler)"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "JWT signature invalid, malformed, or exp has elapsed"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "code is required / channel must be one of email, sms, whatsapp, push, slack / locale_bundles is required and must include at least one locale",
+      "when": "any validateCreateTemplate check fails; all failures are returned together in details[]"
+    },
+    {
+      "status": 403,
+      "code": "Forbidden",
+      "message": "JWT missing tenant_id claim",
+      "when": "the verified JWT carries no tenant_id claim"
+    },
+    {
+      "status": 409,
+      "code": "Conflict",
+      "message": "Template already exists for that (tenant, code, channel, version)",
+      "when": "a template already exists for the same (tenant_id, code, channel, version) — duplicate key"
+    },
+    {
+      "status": 404,
+      "code": "TemplateNotFound",
+      "message": "Template not found",
+      "when": "the service raises TemplateNotFoundError while resolving a base/parent template"
+    },
+    {
+      "status": 500,
+      "code": "InternalError",
+      "message": "InternalError",
+      "when": "Unexpected service/DB failure (connection loss, or a constraint the handler does not map)"
+    }
+  ]
 }

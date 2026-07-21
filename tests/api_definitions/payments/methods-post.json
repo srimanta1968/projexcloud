@@ -16,8 +16,18 @@
     "POST /api/auth/signup-tenant"
   ],
   "fieldEnums": {
-    "provider": ["stripe", "razorpay", "plaid", "ach"],
-    "kind": ["card", "bank-account", "upi", "wallet"]
+    "provider": [
+      "stripe",
+      "razorpay",
+      "plaid",
+      "ach"
+    ],
+    "kind": [
+      "card",
+      "bank-account",
+      "upi",
+      "wallet"
+    ]
   },
   "testCases": [
     {
@@ -51,5 +61,38 @@
   },
   "captureResponse": {
     "payments.methods.create.response.data.method.method_id": "data.method.method_id"
-  }
+  },
+  "description": "Attaches a tokenized payment method to a persona and returns 201 with the stored method. Requires a valid tenant JWT (requireAuth); tenant_id is forced from the JWT tenant_id claim and any body tenant_id is overwritten, so a method cannot be attached to another tenant. Edge cases: a JWT without a tenant_id claim (for example a login with no tenant selected) is a 403 rather than a 500; provider must be one of the allowed providers and kind one of the allowed kinds, so an unknown value is a 400 listing the permitted set; provider_token is required and is additionally screened for raw-card-number shape - sending a PAN instead of a provider token is refused per FR-PAY-2 as a 400 and nothing is stored; persona_id is presence-checked only, so a non-existent persona surfaces from the service rather than the validator; validation accumulates, so one 400 may list several messages in details[]; the endpoint is not idempotent - re-posting the same provider_token attaches another method.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "Authorization header absent or not in Bearer form (requireAuth)"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "Bearer token fails JWT verification (requireAuth)"
+    },
+    {
+      "status": 403,
+      "code": "Forbidden",
+      "message": "JWT missing tenant_id claim",
+      "when": "req.auth.tenant_id is absent after auth - the token carries no tenant scope"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "tenant_id is required / persona_id is required / provider must be one of <list> / provider_token is required / kind must be one of <list> / provider_token looks like a raw card number; refusing per FR-PAY-2 (use the provider token only)",
+      "when": "validateAttachMethod fails; details[] carries every failed rule"
+    },
+    {
+      "status": 500,
+      "code": "InternalError",
+      "message": "InternalError",
+      "when": "attachPaymentMethod throws an unmapped error - provider API failure, an unsatisfied persona foreign key, or any DB error"
+    }
+  ]
 }

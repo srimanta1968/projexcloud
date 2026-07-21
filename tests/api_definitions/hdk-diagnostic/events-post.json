@@ -33,5 +33,38 @@
       },
       "expectedStatus": 202
     }
+  ],
+  "description": "Captures a single device diagnostic event into the persistent hdk_diagnostic.event outbox (device_uuid, category, JSONB payload, occurred_at) and returns 202 with the generated event_id; a downstream drain worker later ships it to long-term storage. device_uuid and category are required; payload defaults to {} and occurred_at defaults to now() when omitted. Edge cases: an empty-string device_uuid or category is rejected by the falsy missing-fields check; duplicate submissions are NOT deduplicated - each call inserts a new row with a fresh event_id, so client retries create duplicates; an unparseable occurred_at becomes an Invalid Date and fails at the INSERT rather than in validation; payload is stringified into jsonb so oversized payloads are bounded only by the Fastify body limit; there is no FK on device_uuid and no tenant scoping, so events for an unknown device are accepted.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "Authorization header absent or not in \"Bearer <token>\" form (requireAuth preHandler)"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "Bearer token fails verifyJwt (bad signature, malformed, or exp in the past) (requireAuth preHandler)"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "missing fields",
+      "when": "device_uuid or category missing/empty in the body"
+    },
+    {
+      "status": 400,
+      "code": "FST_ERR_CTP_EMPTY_JSON_BODY",
+      "message": "Body cannot be empty when content-type is set to application/json",
+      "when": "Content-Type: application/json declared but the request body is empty or unparseable (Fastify JSON body parser, before the handler runs)"
+    },
+    {
+      "status": 500,
+      "code": "InternalServerError",
+      "message": "Internal Server Error",
+      "when": "captureEvent INSERT fails - e.g. occurred_at is not a parseable date (Invalid Date) or the Postgres pool is unavailable; insertion errors deliberately propagate rather than silently dropping telemetry"
+    }
   ]
 }

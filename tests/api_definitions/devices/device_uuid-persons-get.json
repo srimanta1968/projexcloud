@@ -15,7 +15,11 @@
     "POST /api/devices"
   ],
   "fieldEnums": {
-    "status": ["active", "suspended", "revoked"]
+    "status": [
+      "active",
+      "suspended",
+      "revoked"
+    ]
   },
   "testCases": [
     {
@@ -27,6 +31,27 @@
         "device_uuid": "{{cache:devices.create.response.data.device.device_uuid}}"
       },
       "expectedStatus": 200
+    }
+  ],
+  "description": "Lists the person links for one device - every person that has been associated with this device_uuid, with each link's status and first/last used timestamps - returning 200 with { data: { links } }. Read-only and unpaginated: a device with many linked persons returns every row. Edge cases: an unregistered device_uuid, or one with no links yet, returns 200 with an empty links array rather than a 404; links whose status is no longer active are included in the listing; devices are platform-scoped so no tenant filter is applied; a non-UUID device_uuid reaches the Postgres UUID cast unguarded and surfaces as a 500; requires a valid JWT.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "Authorization header absent or not in Bearer form (requireAuth / gateway default-deny authGate)"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "Bearer token fails JWT verification or is expired (requireAuth / gateway default-deny authGate)"
+    },
+    {
+      "status": 500,
+      "code": "Internal Server Error",
+      "message": "invalid input syntax for type uuid",
+      "when": "device_uuid is not a valid UUID - no format guard, so Postgres 22P02 escapes as an unhandled 500"
     }
   ]
 }

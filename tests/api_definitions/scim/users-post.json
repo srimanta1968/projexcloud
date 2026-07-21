@@ -50,5 +50,62 @@
       },
       "expectedStatus": 201
     }
+  ],
+  "description": "SCIM 2.0 user provisioning (FR-IDN-9): find-or-create an identity.person from the primary email alias and upsert an identity.tenant_membership for the resolved tenant, mapping user.active to membership status active|suspended. Returns 201 with the SCIM User representation when a new person was created and 200 when an existing email alias was matched, which makes repeated pushes from Okta/Azure AD idempotent. Tenant scoping comes from scimBearerAuth (Authorization: Bearer matched against identity.federation_config.scim_bearer_envelope where protocol='scim' and jit_enabled), falling back to the x-tenant-id header in dev when the stored envelope is NULL. Edge cases: the body's schemas array MUST include urn:ietf:params:scim:schemas:core:2.0:User; a user with no emails[] entry is rejected; /scim/* is NOT on the gateway public allowlist, so the Bearer must also be a valid tenant JWT to clear the default-deny authGate before scimBearerAuth runs.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "No Authorization: Bearer header — the gateway default-deny authGate runs requireAuth on every non-allowlisted path"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "Bearer token fails verifyJwt (bad signature, malformed, or exp in the past)"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing SCIM Bearer token",
+      "when": "scimBearerAuth finds no Authorization: Bearer <token> header (SCIM error payload with schemas urn:ietf:params:scim:api:messages:2.0:Error)"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "SCIM Bearer token not recognized",
+      "when": "No identity.federation_config row with protocol=scim, jit_enabled=TRUE and a matching (or NULL) scim_bearer_envelope hash"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "No SCIM Bearer token resolved and no x-tenant-id header set",
+      "when": "req.scimContext.tenant_id is unset and no x-tenant-id header was supplied"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "schemas must include SCIM 2.0 User",
+      "when": "Body is missing, or schemas[] does not contain urn:ietf:params:scim:schemas:core:2.0:User"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "SCIM user must include at least one email",
+      "when": "emails[] is absent or empty, so provisionScimUser cannot derive the email alias (message contains \"must include\")"
+    },
+    {
+      "status": 404,
+      "code": "NotFound",
+      "message": "<not found error from provisionScimUser>",
+      "when": "A downstream lookup during provisioning reports \"not found\""
+    },
+    {
+      "status": 500,
+      "code": "InternalError",
+      "message": "InternalError",
+      "when": "Any other provisioning failure — person insert returning no row (\"Failed to provision SCIM person\"), alias merge failure, or the tenant_membership upsert failing (e.g. tenant_id is not a valid UUID / violates its FK)"
+    }
   ]
 }

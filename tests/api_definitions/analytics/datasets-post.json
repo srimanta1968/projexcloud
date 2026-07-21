@@ -3,6 +3,39 @@
   "endpoint": "/api/analytics/datasets",
   "sdk": "sdk-analytics",
   "method": "POST",
+  "description": "Registers an ML feature/training-dataset spec (name + asset_id required; optional sensor_ids, grain, aggregations, label_source). tenant_id is taken from the JWT claim and never from the body, so specs are strictly tenant-scoped and a token without a tenant claim is rejected 400. Edge cases: missing name or asset_id -> 400; an empty or omitted sensor_ids means the spec covers every sensor on the asset; the route does not pre-validate that asset_id/sensor_ids exist, so a bad reference surfaces as a 500 from the insert; the call is NOT idempotent - repeating it with the same name creates another spec.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "Authorization header absent or not in the form \"Bearer <jwt>\""
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "JWT signature invalid, malformed, or past its exp claim"
+    },
+    {
+      "status": 400,
+      "code": "BadRequest",
+      "message": "tenant context required",
+      "when": "the verified JWT carries no tenant_id claim"
+    },
+    {
+      "status": 400,
+      "code": "BadRequest",
+      "message": "name and asset_id are required",
+      "when": "body omits name or asset_id (or sends them empty)"
+    },
+    {
+      "status": 500,
+      "code": "InternalError",
+      "message": "<error message from createDatasetSpec>",
+      "when": "the service/DB call throws (bad asset/sensor reference, ClickHouse or Postgres failure)"
+    }
+  ],
   "requiresAuth": true,
   "expectedStatus": 201,
   "taskId": "1e108f10-9db0-467e-8457-e966deb347bf",

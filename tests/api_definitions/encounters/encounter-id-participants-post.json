@@ -13,6 +13,7 @@
   "sourceFile": "packages/sdk-engagement/src/server/routes.ts",
   "_generated": true,
   "testability": "auto",
+  "description": "Adds a persona to an encounter as a participant with a role, optionally flagged required. The insert is an upsert on (encounter_id, persona_id, role) that clears left_at on conflict, so re-adding a participant who previously left rejoins them rather than erroring. Also performs a sdk-data-rights residency touch recording that the persona's data now lives in this app pool. QA edge cases: because of the ON CONFLICT the call IS idempotent per (encounter, persona, role) — repeat POSTs return 201 with the same participant_id, so tests must not expect a duplicate-key 409; the same persona added under a DIFFERENT role creates a second, separate participant row; the handler validates only persona_id and role, and never checks that the encounter exists or that its state still allows joins — an unknown encounter_id hits the foreign key and surfaces as an uncaught Fastify 500, and adding a participant to an already-closed or sealed encounter is accepted with 201; required defaults to false when omitted, which matters because only required participants can later block a close; the residency touch is try/catch-wrapped and non-fatal.",
   "testCases": [
     {
       "name": "Add a participant persona to the encounter",
@@ -32,5 +33,31 @@
   ],
   "captureResponse": {
     "encounters.add-participant.response.data.participant.participant_id": "data.participant.participant_id"
-  }
+  },
+  "errorCases": [
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "missing fields",
+      "when": "persona_id or role is missing or empty in the body"
+    },
+    {
+      "status": 500,
+      "code": "InternalServerError",
+      "message": "<database error message>",
+      "when": "the INSERT violates the encounter_id foreign key (unknown encounter) or encounter_id/persona_id is not a valid UUID — not caught by the handler, so Fastify returns its default 500"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "no Authorization header, or it is not of the form 'Bearer <jwt>' (requireAuth preHandler)"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "the bearer JWT fails verifyJwt — bad signature, wrong JWT_SECRET, or exp already elapsed (requireAuth preHandler)"
+    }
+  ]
 }

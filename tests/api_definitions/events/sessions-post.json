@@ -2,6 +2,27 @@
   "name": "POST /api/events/sessions — sdk-event",
   "endpoint": "/api/events/sessions",
   "method": "POST",
+  "description": "Opens an event session (a schedulable, ticketable occurrence) on an encounter. tenant_id, encounter_id, title, capacity, starts_at and ends_at are all required - note capacity is checked with `== null`, so 0 is accepted and immediately makes the session unsellable; address_id is optional. Edge cases: any missing required field -> 400; starts_at/ends_at are passed straight to `new Date()` with no ordering or validity check, so an inverted or unparseable range is stored rather than rejected; a negative capacity is not rejected at the route; an unknown encounter_id fails the FK inside the insert and surfaces as an unhandled 500; sold_count starts at 0 and the session emits event.session.opened.v1 (audit failures are swallowed).",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "Authorization header absent or not in the form \"Bearer <jwt>\""
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "JWT signature invalid, malformed, or past its exp claim"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "missing fields",
+      "when": "body omits tenant_id, encounter_id, title, capacity, starts_at, or ends_at"
+    }
+  ],
   "requiresAuth": true,
   "dependsOn": [
     "POST /api/auth/register",

@@ -35,5 +35,38 @@
       "steps": "array",
       "compensations": "array"
     }
-  }
+  },
+  "description": "Queries the full state of one workflow run by run_id - run header plus its steps and any compensations. Requires a valid tenant JWT (requireAuth). Edge cases: the lookup is by run_id alone and the caller JWT tenant is never compared to the run envelope, so any authenticated caller can read any run including its step payloads - tenant scoping must be tested explicitly; a well-formed but unknown run_id returns 404 NotFound with the id echoed in details[]; runs in every state (running, paused, completed, failed, compensated) return 200, so the caller must inspect the status field rather than expecting a non-200 for a failed run; a non-UUID run_id fails the uuid cast and is routed through fail(), whose \"not found\" matcher can turn a driver error into a 409 InvalidState, otherwise it is a 500.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "Authorization header absent or not in Bearer form (requireAuth)"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "Bearer token fails JWT verification (requireAuth)"
+    },
+    {
+      "status": 404,
+      "code": "NotFound",
+      "message": "Run <run_id> not found",
+      "when": "getRun returns no record for the run_id"
+    },
+    {
+      "status": 409,
+      "code": "InvalidState",
+      "message": "<error message containing \"not found\" or \"not in running\">",
+      "when": "getRun throws an error whose message matches the fail() state matcher"
+    },
+    {
+      "status": 500,
+      "code": "InternalError",
+      "message": "InternalError",
+      "when": "getRun throws any other error - a non-UUID run_id failing the uuid cast, or any DB error"
+    }
+  ]
 }

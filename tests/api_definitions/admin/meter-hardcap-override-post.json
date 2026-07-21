@@ -2,6 +2,27 @@
   "name": "POST /admin/meter/hardcap/override — api-gateway",
   "endpoint": "/admin/meter/hardcap/override",
   "method": "POST",
+  "description": "Grants a time-boxed operator override of a metering hard cap for one tenant + SKU, lifting the block until the \"until\" timestamp with a mandatory operator_id and reason for the audit trail; the x-trace-id request header is threaded through when present. Returns 200 { success: true, data: <override> }. QA edge cases: all five of tenant_id, sku, until, operator_id and reason are required with a falsy check — an override can never be unattributed or open-ended; \"until\" is passed through as a string with no parsing or future-dating check in the route, so an unparseable timestamp or one already in the past is not a 400 and either fails the timestamptz cast as a 500 or is stored as an immediately-expired override that silently does nothing; sku is not validated against the known SKU set; re-issuing an override for the same tenant+sku typically supersedes or duplicates depending on applyHardCapOverride, with no 409 branch in the route.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "admin token required",
+      "when": "x-admin-ops-token header is missing, empty, or matches neither the env ADMIN_OPS_TOKEN break-glass secret (constant-time compare) nor the SHA-256 hash of any active row in admin.ops_token; revoked/expired DB tokens keep working until the per-replica cache expires (ADMIN_OPS_TOKEN_CACHE_TTL_MS, default 30s) unless a Redis invalidation broadcast lands first"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "tenant_id, sku, until, operator_id, reason are all required",
+      "when": "any of tenant_id, sku, until, operator_id or reason is missing, null, or an empty string"
+    },
+    {
+      "status": 500,
+      "code": "InternalServerError",
+      "message": "<override error message>",
+      "when": "applyHardCapOverride() throws — \"until\" not castable to a timestamp, tenant_id not a valid UUID or not an existing tenant, an unknown sku failing a constraint, or Postgres unavailable"
+    }
+  ],
   "requiresAuth": false,
   "expectedStatus": 200,
   "sdk": "api-gateway",

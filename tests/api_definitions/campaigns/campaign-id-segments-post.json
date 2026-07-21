@@ -2,6 +2,21 @@
   "name": "POST /api/campaigns/:campaign_id/segments — sdk-campaign",
   "endpoint": "/api/campaigns/:campaign_id/segments",
   "method": "POST",
+  "description": "Creates (inserts) a segment under a campaign with an audience DSL document. The handler performs no body validation - an omitted dsl defaults to {} - so the only client-side edge cases are the path param and the campaign FK. Edge cases: an unknown or non-UUID campaign_id fails the FK/cast inside the insert and surfaces as an unhandled 500 rather than a 404; every call inserts a new segment row (there is no upsert on campaign_id), so this is not idempotent; population_estimate is left null until the compute endpoint is called.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "Authorization header absent or not in the form \"Bearer <jwt>\""
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "JWT signature invalid, malformed, or past its exp claim"
+    }
+  ],
   "requiresAuth": true,
   "dependsOn": [
     "POST /api/auth/signup-tenant",

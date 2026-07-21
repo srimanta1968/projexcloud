@@ -43,5 +43,26 @@
         "via": "POST /api/personas/:persona_id/deactivate"
       }
     ]
-  }
+  },
+  "description": "Deactivates a persona by setting persona.status = 'suspended'. Takes no body. Edge cases: idempotent — suspending an already-suspended persona is a no-op that still returns {success:true}; the UPDATE row count is not checked, so an unknown :persona_id ALSO returns {success:true} and this endpoint can never report 404; a non-UUID :persona_id fails the query and returns 500; there is no re-activation counterpart on this route.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "Gateway default-deny authGate (AUTH_GATE_MODE=enforce): path is not on the public allowlist and no bearer token was sent"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "authGate ran requireAuth and the JWT failed verification or had expired"
+    },
+    {
+      "status": 500,
+      "code": "InternalError",
+      "message": "<postgres error text>",
+      "when": ":persona_id is not a valid UUID, or the status UPDATE fails"
+    }
+  ]
 }

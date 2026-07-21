@@ -13,6 +13,7 @@
     "POST /api/auth/signup-tenant",
     "POST /api/hdk/watermark"
   ],
+  "description": "Fetches a single watermark application from hdk_watermark.application by its application id and returns it as { success: true, data }. QA edge cases: an unknown id returns 404 \"not found\", and a malformed id returns the same 404, so status alone does not distinguish them; the lookup is not tenant-filtered, so any authenticated caller holding an id can read the record; the response carries the stored payload_envelope bytes, so tests should assert the round-trip of the exact bytes POSTed (remembering the base64-vs-utf8 sniffing performed on write).",
   "testCases": [
     {
       "name": "Fetch one watermark application by id",
@@ -23,6 +24,26 @@
       "headers": {
         "Authorization": "Bearer {{cache:auth.register.response.data.token}}"
       }
+    }
+  ],
+  "errorCases": [
+    {
+      "status": 404,
+      "code": "NotFound",
+      "message": "not found",
+      "when": "no hdk_watermark.application row matches the :id path param (unknown, deleted, or malformed id)"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "no Authorization header, or it is not of the form 'Bearer <jwt>' (api-gateway default-deny authGate, AUTH_GATE_MODE=enforce)"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "the bearer JWT fails verifyJwt — bad signature, wrong JWT_SECRET, or exp already elapsed (api-gateway default-deny authGate, AUTH_GATE_MODE=enforce)"
     }
   ]
 }

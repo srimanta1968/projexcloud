@@ -27,7 +27,7 @@
       "payload": {
         "kind": "care-team",
         "persona_a": "{{cache:personas.create.response.data.persona.persona_id}}",
-        "persona_b": "{{cache:personas.create.response.data.persona.persona_id}}",
+        "persona_b": "{{var:persona_id}}",
         "scope": {
           "encounter_kind": "primary-care"
         },
@@ -52,7 +52,7 @@
     "relationships.create.response.data.relationship.relationship_id": "data.relationship.relationship_id",
     "relationships.create.response.data.relationship.status": "data.relationship.status"
   },
-  "description": "Creates a new relationship edge between two personas, returning 201 with the created relationship. Requires non-empty kind, persona_a and persona_b (trimmed), and persona_a must differ from persona_b (self-edges rejected). Optional fields (scope, consent_ref, expires_at, reattest_due_at, cross_tenant) are coerced/ignored if wrong type. A DB check-constraint violation maps to 400; other insert failures return 500.",
+  "description": "Creates a new relationship edge between two personas, returning 201 with the created relationship. Requires non-empty kind, persona_a and persona_b (trimmed), and persona_a must differ from persona_b (self-edges rejected). Optional fields (scope, consent_ref, expires_at, reattest_due_at, cross_tenant) are coerced/ignored if wrong type. A DB check-constraint violation maps to 400; other insert failures return 500. NOTE on persona_b: the endpoint needs TWO DISTINCT personas, but the dependency graph is one node per METHOD+ENDPOINT so it cannot call POST /api/personas twice; persona_a therefore comes from the real producer and persona_b uses the seeded {{var:persona_id}}. That is safe here because rebac.relationship has NO foreign keys on persona_a/persona_b (verified) — they are loose UUIDs and the only rule enforced is that the two differ. Using the same producer for both was a real defect: it always resolved to one id and the request 400'd on every run.",
   "errorCases": [
     {
       "status": 401,

@@ -57,9 +57,76 @@
     }
   },
   "fieldEnums": {
-    "actor_kind": ["human", "agent", "service"]
+    "actor_kind": [
+      "human",
+      "agent",
+      "service"
+    ]
   },
   "captureResponse": {
     "billing-reprice.dry-run.response.data.dry_run.dry_run_id": "data.dry_run.dry_run_id"
-  }
+  },
+  "description": "Simulates repricing the caller's tenant over a period by replaying recorded usage against a target rate catalog and comparing it to a baseline catalog, returning 201 with the delta — no invoice is written and no state changes. tenant_id is forced from the verified JWT. Edge cases: baseline_catalog_id and target_catalog_id are both required and may legitimately be the same value, which yields a zero delta; period_start and period_end must both be YYYY-MM-DD; unlike invoice generation this validator does not enforce period_start <= period_end, so an inverted range passes validation and simply produces an empty usage window; either catalog id failing to resolve raises CatalogNotFoundError and returns 404; being a dry run the call is fully idempotent and repeatable.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "No Authorization: Bearer <jwt> header on a requireAuth route"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "Bearer token fails verifyJwt (bad signature, malformed, or exp in the past)"
+    },
+    {
+      "status": 403,
+      "code": "Forbidden",
+      "message": "JWT missing tenant_id claim",
+      "when": "Token verifies but carries no tenant_id claim; billing surfaces refuse to run unscoped"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "tenant_id must be a UUID",
+      "when": "The tenant_id claim injected from the JWT is not a well-formed UUID"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "period_start must be YYYY-MM-DD",
+      "when": "period_start is missing or not in YYYY-MM-DD form"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "period_end must be YYYY-MM-DD",
+      "when": "period_end is missing or not in YYYY-MM-DD form"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "baseline_catalog_id is required",
+      "when": "baseline_catalog_id is missing or blank"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "target_catalog_id is required",
+      "when": "target_catalog_id is missing or blank"
+    },
+    {
+      "status": 404,
+      "code": "CatalogNotFound",
+      "message": "Rate catalog not found",
+      "when": "runRepriceDryRun throws CatalogNotFoundError because the baseline or target catalog id does not resolve"
+    },
+    {
+      "status": 500,
+      "code": "InternalError",
+      "message": "InternalError",
+      "when": "The dry run throws for any other reason (usage replay failure, datastore unreachable)"
+    }
+  ]
 }

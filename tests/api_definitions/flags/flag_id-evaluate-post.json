@@ -3,6 +3,21 @@
   "endpoint": "/api/flags/:flag_id/evaluate",
   "sdk": "sdk-feature-flags",
   "method": "POST",
+  "description": "Evaluates a flag for an evaluation context (tenant_id, persona_id, bu_id, arbitrary attributes) and returns resolved_value, matched_rollout_id and kill_switch_engaged. Resolution order: kill switch first, then active rollouts ordered tenant-specific-first by ascending priority whose predicate matches and whose deterministic percentage bucket (hashed on persona_id, else tenant_id, else 'anon') falls under rollout_percent, then the flag's default_value. Edge cases: the entire body is optional and an unknown flag_id does NOT 404 - it fails open with 200 and resolved_value null, matched_rollout_id null, kill_switch_engaged false, so tests must assert the body rather than the status; percentage bucketing is stable per (flag, subject), so repeated calls for the same subject return the same answer; every evaluation is sampled for telemetry.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "Authorization header absent or not in the form \"Bearer <jwt>\""
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "JWT signature invalid, malformed, or past its exp claim"
+    }
+  ],
   "requiresAuth": true,
   "expectedStatus": 200,
   "taskId": "cbf65711-e8e1-41ad-84e6-7aa87b76d5a6",

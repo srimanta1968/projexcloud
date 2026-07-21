@@ -37,5 +37,32 @@
     "role-assignments.create.response.data.assignment.assignment_id": "data.assignment.assignment_id",
     "role-assignments.create.response.data.assignment.persona_id": "data.assignment.persona_id",
     "role-assignments.create.response.data.assignment.role_template_id": "data.assignment.role_template_id"
-  }
+  },
+  "description": "Assigns a role template to an L4 persona, inserting a persona.role_assignment row and emitting the identity.role.assigned.v1 audit event; returns 201 with the created assignment (assignment_id, persona_id, role_template_id, assigned_at, revoked_at=null, assigned_by). Only persona_id and role_template_id are validated as present — assigned_by is optional and stored as NULL when omitted. Edge cases: the endpoint is NOT idempotent, so repeating the same body creates a second active assignment for the same persona/role pair; a persona_id or role_template_id that does not exist (or is not a UUID) is not pre-checked and fails at the Postgres FK/cast layer as an uncaught 500; empty-string values are falsy and are rejected as missing fields. Requires a valid tenant JWT.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "No Authorization: Bearer header — the gateway default-deny authGate runs requireAuth on every non-allowlisted path"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "Bearer token fails verifyJwt (bad signature, malformed, or exp in the past)"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "missing fields",
+      "when": "persona_id or role_template_id is absent, empty, or otherwise falsy in the body"
+    },
+    {
+      "status": 500,
+      "code": "Internal Server Error",
+      "message": "Fastify default error payload from the uncaught service throw",
+      "when": "assignRole throws and is not caught by the route — persona_id/role_template_id violates the FK to persona.persona / role template, is not a valid UUID, or the audit emit / DB insert fails"
+    }
+  ]
 }

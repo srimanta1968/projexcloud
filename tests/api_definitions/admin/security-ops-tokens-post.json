@@ -2,6 +2,27 @@
   "name": "POST /admin/security/ops-tokens — api-gateway",
   "endpoint": "/admin/security/ops-tokens",
   "method": "POST",
+  "description": "Mints a new DB-backed admin ops token so an operator can grant scoped, optionally time-boxed access (e.g. a short-lived QA token) without rotating the shared env secret or redeploying the gateway. Returns 201 with the issued record — the plaintext token is returned EXACTLY ONCE and only its SHA-256 hash is stored, so it is unrecoverable afterwards. On success the local cache is wiped and a Redis invalidation is broadcast to peer replicas, and a security.admin_ops_token.issued.v1 audit event is emitted. QA edge cases: label is the only required field (trimmed, so whitespace-only is rejected as 400); ttl_seconds is optional and null means a non-expiring token — it is not range-checked, so 0 or a negative value is accepted and yields an already-expired token; the route is itself admin-gated, so minting requires an existing valid token (env break-glass or another DB token); labels are not unique, so duplicate labels are allowed.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "admin token required",
+      "when": "x-admin-ops-token header is missing, empty, or matches neither the env ADMIN_OPS_TOKEN break-glass secret (constant-time compare) nor the SHA-256 hash of any active row in admin.ops_token; revoked/expired DB tokens keep working until the per-replica cache expires (ADMIN_OPS_TOKEN_CACHE_TTL_MS, default 30s) unless a Redis invalidation broadcast lands first"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "label is required",
+      "when": "the label field is missing, null, empty, or whitespace-only (it is trimmed before the check)"
+    },
+    {
+      "status": 500,
+      "code": "InternalServerError",
+      "message": "<issue error message>",
+      "when": "issueOpsToken() throws, or the post-issue cache invalidation/audit-event emission fails — e.g. Postgres unavailable or the admin.ops_token insert failing"
+    }
+  ],
   "requiresAuth": false,
   "expectedStatus": 201,
   "sdk": "api-gateway",

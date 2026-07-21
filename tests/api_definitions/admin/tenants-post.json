@@ -2,6 +2,33 @@
   "name": "POST /admin/tenants — api-gateway",
   "endpoint": "/admin/tenants",
   "method": "POST",
+  "description": "Provisions a new tenant under an already-existing app and returns 201 { data: { tenant } }. app_id, display_name and region are mandatory; isolation_tier defaults to \"S\" and module_subscriptions defaults to []. QA edge cases: this is NOT idempotent — calling it twice creates two tenants; app_id must reference a row created by POST /admin/apps first or the tenant_app_id_fkey foreign key fires and the handler translates any error message containing \"foreign key\" into a 400 ValidationError rather than a 500; empty-string values for the three required fields are falsy and rejected as missing; isolation_tier outside S|P|G is not validated in the handler and reaches the DB check constraint (500); the route is ops-token gated, not JWT gated, so tenant callers cannot self-provision.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "admin token required",
+      "when": "x-admin-ops-token header is missing, empty, or matches neither the env ADMIN_OPS_TOKEN break-glass secret (constant-time compare) nor the SHA-256 hash of any active row in admin.ops_token; revoked/expired DB tokens keep working until the per-replica cache expires (ADMIN_OPS_TOKEN_CACHE_TTL_MS, default 30s) unless a Redis invalidation broadcast lands first"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "app_id, display_name, region are required",
+      "when": "any of app_id, display_name or region is missing, null, or an empty string (falsy check on the parsed body; a missing body is treated as {})"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "<foreign key violation message>",
+      "when": "tenantCreate() fails and the error message contains \"foreign key\" — typically app_id does not exist in the app table (tenant_app_id_fkey)"
+    },
+    {
+      "status": 500,
+      "code": "InternalServerError",
+      "message": "<database error message>",
+      "when": "tenantCreate() throws for any reason that is not a foreign-key violation — e.g. isolation_tier/region check-constraint violation, unique violation, or Postgres unavailable"
+    }
+  ],
   "requiresAuth": false,
   "expectedStatus": 201,
   "sdk": "api-gateway",

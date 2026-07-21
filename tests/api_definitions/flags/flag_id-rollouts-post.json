@@ -3,6 +3,27 @@
   "endpoint": "/api/flags/:flag_id/rollouts",
   "sdk": "sdk-feature-flags",
   "method": "POST",
+  "description": "Creates or updates a rollout rule for a flag: an optional tenant_id (null means the rule applies to every tenant), a predicate matched against the evaluation context, the value to serve, a priority (lower wins, evaluated tenant-specific-first) and an active flag. Only value is required, and it is checked with `=== undefined`, so an explicit null IS a valid value. Edge cases: omitting value -> 400; an unknown flag_id is not verified at this route, so a rollout can be attached to a flag that does not exist; predicate contents are not schema-validated; two rules with the same priority resolve in an unspecified order; the response is 201 even when the call updated an existing rollout.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "Authorization header absent or not in the form \"Bearer <jwt>\""
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "JWT signature invalid, malformed, or past its exp claim"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "missing value",
+      "when": "body.value is undefined (an explicit null is accepted)"
+    }
+  ],
   "requiresAuth": true,
   "expectedStatus": 201,
   "taskId": "cbf65711-e8e1-41ad-84e6-7aa87b76d5a6",

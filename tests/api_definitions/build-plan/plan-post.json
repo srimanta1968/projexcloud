@@ -8,6 +8,62 @@
   "sprintId": "8ef1d09e-dd8e-4daf-8d03-54dcd9f812f8",
   "description": "Planner v2: retrieve-then-compose. Embeds the intent locally (bge-small), retrieves top-K candidate SDKs, injects the foundation/AIM tier + dependency closure, then composes a plan from candidates only. Returns { plan: { summary, recommended_sdks[], custom_work[], clarifying_questions[], vertical_pack, complexity }, meta: { catalog_size, provider, audit_status, retrieval } }.",
   "requiresAuth": true,
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "unauthorized",
+      "message": "unauthorized",
+      "when": "The Authorization header is absent. NOTE: this is a Next.js App Router route (apps/tenant-workspace/app/api/build/plan/route.ts), NOT a gateway-mounted Fastify route, so the api-gateway authGate does not apply. It only checks that the header EXISTS — the token is never verified, so an expired/garbage/non-Bearer value still passes."
+    },
+    {
+      "status": 400,
+      "code": "IntentRequired",
+      "message": "intent is required",
+      "when": "body.intent is missing, null, or trims to the empty string (whitespace-only counts as empty)."
+    },
+    {
+      "status": 400,
+      "code": "IntentTooLong",
+      "message": "intent exceeds 2000 characters",
+      "when": "The trimmed intent is longer than 2000 characters — oversized-input guard that keeps the compose prompt bounded."
+    },
+    {
+      "status": 422,
+      "code": "NoCandidateSdks",
+      "message": "no candidate SDKs matched the intent; try describing the app differently",
+      "when": "After retrieve (top-K=20) + foundation injection + dependency expansion, resolveCandidates() returns an empty list — nothing in the catalog scored against the intent."
+    },
+    {
+      "status": 500,
+      "code": "CatalogLoadFailed",
+      "message": "failed to load SDK catalog: <underlying error>",
+      "when": "loadCatalogWithMeta() throws while reading sdk-capability.json manifests off disk (unreadable dir, malformed manifest JSON)."
+    },
+    {
+      "status": 500,
+      "code": "CatalogEmpty",
+      "message": "no SDK manifests found at <packagesDir> (tried PROJEXCLOUD_PACKAGES_DIR env, cwd/packages, cwd/../../packages). cwd=<cwd>",
+      "when": "The catalog loads but is empty — the packages directory could not be resolved from PROJEXCLOUD_PACKAGES_DIR, cwd/packages, or cwd/../../packages. Typical in a container where the portal image does not ship packages/."
+    },
+    {
+      "status": 502,
+      "code": "PlanComposeFailed",
+      "message": "<LLM provider error message>",
+      "when": "generateBuildPlan() throws for any reason other than a missing provider/key — upstream LLM HTTP error, timeout, or an unparseable plan response."
+    },
+    {
+      "status": 503,
+      "code": "LlmProviderUnavailable",
+      "message": "No LLM provider configured / <PROVIDER>_API_KEY is not set",
+      "when": "generateBuildPlan() throws with a message containing 'No LLM provider' or 'API_KEY is not set' — the planner LLM is unconfigured. Deliberately distinguished from 502 so callers can tell config gaps from upstream failures."
+    },
+    {
+      "status": 500,
+      "code": "InternalError",
+      "message": "Internal Server Error",
+      "when": "await req.json() throws on a malformed or non-JSON body — this is not caught by the route, so the Next.js runtime returns a bare 500."
+    }
+  ],
   "priority": 40,
   "dependsOn": [
     "POST /api/auth/register"

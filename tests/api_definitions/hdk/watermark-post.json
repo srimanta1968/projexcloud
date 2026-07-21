@@ -23,6 +23,7 @@
     "watermark.create.response.data.application_id": "data.application_id",
     "watermark.create.response.data.variant_id": "data.variant_id"
   },
+  "description": "Records a watermark application (visible / invisible / cryptographic) against a media variant, persisting the payload envelope as bytes in hdk_watermark.application and returning 201. payload_envelope is accepted as either base64 or plain utf8 — the service sniffs the string and decodes base64 only when it matches the base64 alphabet AND its length is a multiple of 4, otherwise it stores the raw utf8 bytes. QA edge cases: that sniffing is the subtle one — a short plain-text value that happens to be pure base64 characters with length %4 === 0 will be silently base64-decoded, so byte-length assertions must account for it; an envelope that decodes to zero bytes is rejected as empty even though the field was non-empty; oversized envelopes are rejected above HDK_WATERMARK_MAX_PAYLOAD_BYTES (default 16384 bytes, measured AFTER decoding, not on the string length); every failure — missing field, bad scheme, empty envelope, oversize envelope, insert failure — returns 400, so assert the message; the write is not idempotent (repeat POSTs create additional application rows); tenant_id is optional and defaults to null, so no tenant scoping is enforced on write; the route relies on the gateway default-deny authGate for authentication.",
   "testCases": [
     {
       "name": "Record a watermark application",
@@ -36,6 +37,56 @@
       "headers": {
         "Authorization": "Bearer {{cache:auth.register.response.data.token}}"
       }
+    }
+  ],
+  "errorCases": [
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "variant_id, scheme, payload_envelope are required",
+      "when": "any of variant_id, scheme or payload_envelope is missing from the body (route-level guard)"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "[hdk-watermark] invalid scheme '<scheme>'",
+      "when": "scheme is present but not one of 'visible', 'invisible', 'cryptographic'"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "[hdk-watermark] payload_envelope must be Buffer or string",
+      "when": "payload_envelope is supplied as a non-string, non-Buffer type (number, object, array)"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "[hdk-watermark] payload_envelope is empty",
+      "when": "payload_envelope decodes to zero bytes (e.g. an empty base64 string or whitespace only)"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "[hdk-watermark] payload_envelope size <n> exceeds limit <MAX_PAYLOAD_BYTES>",
+      "when": "the decoded envelope exceeds HDK_WATERMARK_MAX_PAYLOAD_BYTES (default 16384 bytes)"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "[hdk-watermark] insert failed",
+      "when": "the INSERT into hdk_watermark.application returns no row (e.g. variant_id violates a foreign key) — the thrown error is caught and reported as 400"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "no Authorization header, or it is not of the form 'Bearer <jwt>' (api-gateway default-deny authGate, AUTH_GATE_MODE=enforce)"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "the bearer JWT fails verifyJwt — bad signature, wrong JWT_SECRET, or exp already elapsed (api-gateway default-deny authGate, AUTH_GATE_MODE=enforce)"
     }
   ]
 }

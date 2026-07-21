@@ -2,6 +2,27 @@
   "name": "POST /admin/federation/iceberg-backend — api-gateway",
   "endpoint": "/admin/federation/iceberg-backend",
   "method": "POST",
+  "description": "Hot-reloads the active Iceberg backend driver in the running gateway without a restart, so ops can flip drivers (nessie ↔ glue) or refresh credentials in place. Returns { success: true, data: { driver } } echoing the now-active driver. QA edge cases: the change is process-local and in-memory — in a multi-replica deployment only the replica that served the request is reconfigured, and the setting does not survive a restart; driver is the only required field and is not checked against an enum by the route, so an unknown/misconfigured driver is rejected by bootstrapIcebergBackend() and mapped to 400 (not 500) along with any credential/connection setup error it throws; a successful call has no 201 semantics and returns plain 200.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "admin token required",
+      "when": "x-admin-ops-token header is missing, empty, or matches neither the env ADMIN_OPS_TOKEN break-glass secret (constant-time compare) nor the SHA-256 hash of any active row in admin.ops_token; revoked/expired DB tokens keep working until the per-replica cache expires (ADMIN_OPS_TOKEN_CACHE_TTL_MS, default 30s) unless a Redis invalidation broadcast lands first"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "driver is required",
+      "when": "the driver field is missing, null, or an empty string in the body"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "<bootstrap error message>",
+      "when": "bootstrapIcebergBackend() throws — unknown driver name, missing or invalid credentials, or malformed backend configuration; every throw from bootstrap is mapped to 400, never 500"
+    }
+  ],
   "requiresAuth": false,
   "expectedStatus": 200,
   "sdk": "api-gateway",

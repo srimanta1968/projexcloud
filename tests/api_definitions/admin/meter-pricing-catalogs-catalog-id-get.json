@@ -2,6 +2,27 @@
   "name": "GET /admin/meter/pricing-catalogs/:catalog_id — api-gateway",
   "endpoint": "/admin/meter/pricing-catalogs/:catalog_id",
   "method": "GET",
+  "description": "Fetches one pricing catalog plus its associated rates by catalog_id, returning { success: true, data: { catalog, ... } }. QA edge cases: a catalog_id that does not exist yields 404 \"catalog not found\" — the handler explicitly checks result.catalog for null, so a catalog row that exists with zero rates is still a 200 (empty rate collection), not a 404; catalog_id is taken from the path verbatim with no format validation, so arbitrary strings are looked up and simply miss; getPricingCatalog() itself is NOT inside a try/catch, so a database error escapes to the Fastify default 500 shape rather than the { success: false, error } envelope; the route is ops-token gated and returns 401 before ever touching the DB.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "admin token required",
+      "when": "requireAdmin() found no valid x-admin-ops-token header — missing, or matching neither env ADMIN_OPS_TOKEN nor an active admin.ops_token hash (30s cache TTL applies to revocations)"
+    },
+    {
+      "status": 404,
+      "code": "NotFound",
+      "message": "catalog not found",
+      "when": "getPricingCatalog(catalog_id) returns a result whose catalog is null/undefined — no row with that catalog_id exists"
+    },
+    {
+      "status": 500,
+      "code": "InternalServerError",
+      "message": "Internal Server Error",
+      "when": "getPricingCatalog() throws (Postgres unavailable, missing pricing tables) — unhandled by the route, so Fastify default error serialization applies"
+    }
+  ],
   "requiresAuth": false,
   "expectedStatus": 200,
   "sdk": "api-gateway",

@@ -3,6 +3,45 @@
   "endpoint": "/api/analytics/datasets/:spec_id/build",
   "sdk": "sdk-analytics",
   "method": "POST",
+  "description": "Materializes a feature window for a dataset spec over the [from, to] time range, producing a build row with lineage. Both from and to are required. Edge cases: a spec_id that does not exist or belongs to another tenant returns 404 (tenant scoping is applied inside the lookup); an inverted or zero-width from/to window is not rejected at the route and yields an empty/zero-row build; oversized windows and downstream warehouse failures surface as 500; builds are not idempotent - repeating the same window creates another build row in the reproducibility ledger.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "Authorization header absent or not in the form \"Bearer <jwt>\""
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "JWT signature invalid, malformed, or past its exp claim"
+    },
+    {
+      "status": 400,
+      "code": "BadRequest",
+      "message": "tenant context required",
+      "when": "the verified JWT carries no tenant_id claim"
+    },
+    {
+      "status": 400,
+      "code": "BadRequest",
+      "message": "from and to are required",
+      "when": "body omits either the from or the to window bound"
+    },
+    {
+      "status": 404,
+      "code": "NotFound",
+      "message": "dataset spec not found",
+      "when": "spec_id does not exist or belongs to a different tenant"
+    },
+    {
+      "status": 500,
+      "code": "InternalError",
+      "message": "<error message from buildDatasetFromSpec>",
+      "when": "the service/DB call throws (bad asset/sensor reference, ClickHouse or Postgres failure)"
+    }
+  ],
   "requiresAuth": true,
   "expectedStatus": 200,
   "taskId": "1e108f10-9db0-467e-8457-e966deb347bf",

@@ -33,5 +33,32 @@
         "owner": "string"
       }
     }
-  }
+  },
+  "description": "Ownership lookup for a single registry entry by its resource_id path param, used by the admin app. Requires a valid tenant JWT (requireAuth). Edge cases: resource_id is an opaque registry key rather than a generated UUID, so an unknown id returns 404 NotFound with the id echoed in details[]; the caller JWT tenant is never compared to the record - this is a platform-wide registry, so any authenticated caller can read any ownership row; a resource in a decommissioned or retired status is still returned as 200, so the caller must inspect the status field rather than expecting a 404; any DB failure is caught and reported as 500 InternalError.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "Authorization header absent or not in Bearer form (requireAuth)"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "Bearer token fails JWT verification (requireAuth)"
+    },
+    {
+      "status": 404,
+      "code": "NotFound",
+      "message": "No registry row for <resource_id>",
+      "when": "getOwnership returns no record for the resource_id"
+    },
+    {
+      "status": 500,
+      "code": "InternalError",
+      "message": "InternalError",
+      "when": "getOwnership throws - any DB error"
+    }
+  ]
 }

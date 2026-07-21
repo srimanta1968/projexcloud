@@ -2,6 +2,27 @@
   "name": "POST /api/crm/deals — sdk-crm",
   "endpoint": "/api/crm/deals",
   "method": "POST",
+  "description": "Creates a deal on an encounter. tenant_id, encounter_id and name are required; contact_id, amount, currency, close_probability, custom_fields and external_refs are optional. Edge cases: any of the three required fields missing or empty -> 400; amount and close_probability are not range-checked here (negative or >100 values pass the route); a non-existent encounter_id or contact_id fails the FK inside the insert and surfaces as an unhandled 500; deal names are not unique, so repeat POSTs create duplicates - the endpoint is not idempotent.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "Authorization header absent or not in the form \"Bearer <jwt>\""
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "JWT signature invalid, malformed, or past its exp claim"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "missing fields",
+      "when": "body omits tenant_id, encounter_id, or name (details: [\"missing fields\"])"
+    }
+  ],
   "requiresAuth": true,
   "dependsOn": [
     "POST /api/auth/signup-tenant",

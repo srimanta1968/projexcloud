@@ -37,5 +37,32 @@
         "Authorization": "Bearer {{cache:auth.register.response.data.token}}"
       }
     }
+  ],
+  "description": "Registers a cross-domain bridge between two semantic object types, returning 200 {success:true, data:{bridge_id, from_object_type_id, to_object_type_id, access_mode, requires_cross_tenant_consent}} and emitting a semantic.bridge.created.v1 audit entry. QA edge cases: the INSERT is ON CONFLICT (from_object_type_id, to_object_type_id) DO UPDATE, so re-posting the same pair is idempotent on identity — it returns the SAME bridge_id (never 409) but overwrites access_mode and requires_cross_tenant_consent, which is the way to test duplicate handling. Only from_object_type_id and to_object_type_id are checked for presence; access_mode defaults to 'read-only' and requires_cross_tenant_consent defaults to true when omitted. Everything past that check is wrapped in one catch that maps ANY thrown error to 400, so missing-FK cases (an object_type_id that does not exist), malformed UUIDs, an access_mode outside {read-only, read-write} rejected by the column constraint, and a self-referencing bridge all surface as 400 with the raw Postgres message in `error` — never 404 and never 500. Empty-string ids are falsy and hit the required-fields branch instead. The bridge is global (no tenant_id column), so it is not tenant-scoped; the path is not on the gateway public allowlist, so a valid tenant JWT is required.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "No Authorization: Bearer header — /bridge is not on the authGate.ts public allowlist, so requireAuth rejects before the handler"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "Bearer token fails verifyJwt (bad signature, malformed, or expired)"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "from_object_type_id and to_object_type_id required",
+      "when": "Body is missing/empty, or either id is absent or an empty string"
+    },
+    {
+      "status": 400,
+      "code": "BridgeCreateFailed",
+      "message": "<Postgres error message from the INSERT, e.g. invalid input syntax for type uuid / violates foreign key constraint / violates check constraint>",
+      "when": "createBridge throws — malformed UUID, object_type_id that does not exist, access_mode outside the allowed enum, or any other DB failure; the handler's catch maps every error to 400"
+    }
   ]
 }

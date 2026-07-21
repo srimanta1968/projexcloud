@@ -2,6 +2,27 @@
   "name": "POST /admin/active-active/profiles/:profile_id/drills — api-gateway",
   "endpoint": "/admin/active-active/profiles/:profile_id/drills",
   "method": "POST",
+  "description": "Runs a failover drill against an active-active profile, moving traffic to to_region (optionally declaring from_region) and recording the measured result; returns 201 { success: true, data: <drill> }. QA edge cases: only to_region is required — from_region is optional and inferred when omitted, so a minimal body is just { to_region }; there is no validation that to_region is one of the profile's paired_regions, nor that it differs from from_region, so a drill to an unpaired region is not a 400 and either succeeds meaninglessly or fails as a 500; an unknown profile_id has no 404 branch and surfaces as a 500 with the raw message; the drill is a real state-changing operation and is NOT idempotent — every call records a new drill row and may actually move traffic, so it should not be replayed casually in a shared environment.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "admin token required",
+      "when": "requireAdmin() found no valid x-admin-ops-token header — missing, or matching neither env ADMIN_OPS_TOKEN nor an active admin.ops_token hash (30s cache TTL applies to revocations)"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "to_region required",
+      "when": "to_region is missing, null, or an empty string in the body (from_region is optional and never required)"
+    },
+    {
+      "status": 500,
+      "code": "InternalServerError",
+      "message": "<drill error message>",
+      "when": "runFailoverDrill() throws — unknown profile_id (there is no 404 branch), to_region not paired with the profile, the target region being unreachable, or the drill record write failing"
+    }
+  ],
   "requiresAuth": false,
   "expectedStatus": 201,
   "sdk": "api-gateway",

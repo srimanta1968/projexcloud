@@ -38,5 +38,26 @@
     "auth.register.response.data.userId": "data.user.id",
     "auth.register.response.data.email": "data.user.email",
     "auth.register.response.data.token": "data.tokens.accessToken"
-  }
+  },
+  "description": "Creates a canonical identity.person plus an email alias and a password credential, then returns 201 with the person id and a freshly minted six-layer JWT that carries no tenant scope. Public - the gateway authGate allowlists /api/auth/register. Edge cases: email must match the email regex and password must be at least 8 characters, so a 7-character password is a 400; given_name, family_name and display_name are each capped at 120 characters and an oversized value is a 400; phone is optional but regex-checked when present; re-registering an email that already exists is a 409 UserExists, not a 200 - the endpoint is not idempotent; validation accumulates, so one 400 may list several messages in details[].",
+  "errorCases": [
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "email is required / email is invalid / password is required / password must be at least 8 characters / given_name|family_name|display_name must be 120 characters or fewer / phone is invalid",
+      "when": "validateRegisterInput fails; details[] carries every failed rule"
+    },
+    {
+      "status": 409,
+      "code": "UserExists",
+      "message": "A person with this email already exists",
+      "when": "registerPerson raises PersonExistsError because the email alias is already taken"
+    },
+    {
+      "status": 500,
+      "code": "InternalError",
+      "message": "InternalError",
+      "when": "any other throw - password hashing, JWT signing, or a DB error"
+    }
+  ]
 }

@@ -1,5 +1,5 @@
 {
-  "name": "POST /api/commands \u2014 issue a command to a robot asset/component",
+  "name": "POST /api/commands — issue a command to a robot asset/component",
   "endpoint": "/api/commands",
   "sdk": "sdk-command",
   "sourceFile": "services/api-gateway/src/app.ts",
@@ -95,6 +95,51 @@
         "risk_class": "high"
       },
       "expectedStatus": 201
+    }
+  ],
+  "description": "Issues a command to a robot asset or one of its components. The request is authorized through ReBAC plus policy inside sdk-command; commands whose risk_class is high enough land in a pending state awaiting approval via POST /api/commands/:command_id/decision instead of dispatching immediately. Returns 201 with the command record. tenant_id falls back to the JWT tenant_id claim; the issuer is always the JWT sub. Edge cases: a token with no tenant_id or no sub is a 400; target_asset_id and type are both mandatory; a ReBAC/policy denial is a 403 carrying the authorization error message; an unknown target_asset_id or target_component_id is not pre-checked and surfaces as a generic 500; params and risk_class are optional.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "Authorization header absent or not in Bearer form (requireAuth / gateway default-deny authGate)"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "Bearer token fails JWT verification or is expired (requireAuth / gateway default-deny authGate)"
+    },
+    {
+      "status": 400,
+      "code": "tenant_id required",
+      "message": "tenant_id required",
+      "when": "Neither body.tenant_id nor the JWT tenant_id claim is present"
+    },
+    {
+      "status": 400,
+      "code": "issuer identity required",
+      "message": "issuer identity required",
+      "when": "The JWT carries no sub claim to record as issued_by"
+    },
+    {
+      "status": 400,
+      "code": "target_asset_id and type are required",
+      "message": "target_asset_id and type are required",
+      "when": "body.target_asset_id or body.type is absent or empty"
+    },
+    {
+      "status": 403,
+      "code": "<CommandAuthorizationError message>",
+      "message": "Command authorization denied",
+      "when": "issueCommand throws CommandAuthorizationError - the issuer lacks the ReBAC relation or the policy engine denied this command type/risk class for the asset"
+    },
+    {
+      "status": 500,
+      "code": "<underlying error message>",
+      "message": "Command issuance failed",
+      "when": "Any other issueCommand failure - unknown/non-UUID target_asset_id, unknown target_component_id, or database error"
     }
   ]
 }

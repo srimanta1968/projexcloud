@@ -27,5 +27,26 @@
       },
       "expectedStatus": 200
     }
+  ],
+  "description": "Returns the append-only per-field shred history for a person as { data: { history } } with status 200. Read-only and unpaginated - the full log is returned, so a person with a long shred history returns every row. Edge cases: an unknown person_id (or one that has never been shredded) returns 200 with an empty history array rather than a 404; the same field shredded repeatedly yields one entry per shred call; a non-UUID person_id reaches the Postgres UUID cast unguarded and surfaces as a 500; no tenant scoping is applied; requires a valid JWT.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "Authorization header absent or not in Bearer form (requireAuth / gateway default-deny authGate)"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "Bearer token fails JWT verification or is expired (requireAuth / gateway default-deny authGate)"
+    },
+    {
+      "status": 500,
+      "code": "Internal Server Error",
+      "message": "invalid input syntax for type uuid",
+      "when": "person_id is not a valid UUID - no format guard, so Postgres 22P02 escapes as an unhandled 500"
+    }
   ]
 }

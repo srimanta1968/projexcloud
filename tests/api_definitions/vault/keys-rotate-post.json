@@ -22,23 +22,59 @@
       },
       "expectedStatus": 200,
       "headers": {
-        "Authorization": "Bearer {{cache:auth.register.response.data.token}}"
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
       }
     }
   ],
   "dependsOn": [
-    "POST /api/auth/register",
+    "POST /api/auth/signup-tenant",
     "POST /api/vault/keys"
   ],
   "statusTransitions": {
     "entity": "vault.key",
     "field": "state",
-    "flow": ["issued", "active", "rotated", "shredded"],
+    "flow": [
+      "issued",
+      "active",
+      "rotated",
+      "shredded"
+    ],
     "transitions": [
-      { "from": "active", "to": "rotated", "via": "POST /api/vault/keys/:key_id/rotate" }
+      {
+        "from": "active",
+        "to": "rotated",
+        "via": "POST /api/vault/keys/:key_id/rotate"
+      }
     ]
   },
   "captureResponse": {
     "vault.rotate.response.data.key_id": "data.key_id"
-  }
+  },
+  "description": "Rotates the key identified by :key_id, minting a new key version and returning 200 with the updated key record. The request body is optional; reason, when present, is recorded on the rotation audit trail. Edge cases: an unknown key_id and a key that exists but is not in a rotatable state (for example already shredded or retired) are collapsed into the same 404 - the handler matches on the \"not found\" / \"not in a rotatable\" substrings, so a state-precondition failure is indistinguishable from a missing key by status code alone; rotation is NOT idempotent (each successful call produces a new version); a non-UUID key_id fails the Postgres UUID cast and is reported as a generic 500; requires a valid JWT.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "Authorization header absent or not in Bearer form (requireAuth / gateway default-deny authGate)"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "Bearer token fails JWT verification or is expired (requireAuth / gateway default-deny authGate)"
+    },
+    {
+      "status": 404,
+      "code": "NotFound",
+      "message": "key not found / key is not in a rotatable state",
+      "when": "rotateKey throws with a message containing \"not found\" or \"not in a rotatable\" - the key does not exist or its current status forbids rotation"
+    },
+    {
+      "status": 500,
+      "code": "InternalError",
+      "message": "InternalError",
+      "when": "Any other rotateKey failure, including a non-UUID key_id (Postgres 22P02) and KMS/database errors"
+    }
+  ]
 }

@@ -2,6 +2,27 @@
   "name": "POST /admin/active-active/profiles — api-gateway",
   "endpoint": "/admin/active-active/profiles",
   "method": "POST",
+  "description": "Activates an active-active multi-region profile for a tenant (P8 Variant D): home region, the list of paired regions, the contractual addendum that authorizes it, optional RPO/RTO targets and optional per-stream replication overrides (sync | async | single-region). Returns 201 { success: true, data: <profile> }. QA edge cases: tenant_id, home_region, contract_addendum_ref are falsy-checked and paired_regions must pass Array.isArray — note an EMPTY array passes the guard, so [] is accepted and produces a profile with no pairs; there is no check that home_region is excluded from paired_regions or that any region actually exists, so nonsense regions are only caught (if at all) at the DB layer as a 500; rpo_target_seconds/rto_target_seconds are unvalidated (negative and zero accepted); replication_overrides values are not enum-checked in the route; re-activating an existing tenant profile has no conflict branch and may raise a unique violation as a 500 rather than 409.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "admin token required",
+      "when": "requireAdmin() found no valid x-admin-ops-token header — missing, or matching neither env ADMIN_OPS_TOKEN nor an active admin.ops_token hash (30s cache TTL applies to revocations)"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "tenant_id, home_region, paired_regions[], contract_addendum_ref required",
+      "when": "tenant_id, home_region or contract_addendum_ref is missing/empty, or paired_regions is not an array (an empty array passes this guard)"
+    },
+    {
+      "status": 500,
+      "code": "InternalServerError",
+      "message": "<activation error message>",
+      "when": "activateActiveActiveProfile() throws — tenant_id not a valid UUID or not an existing tenant, an unknown region, replication_overrides values outside sync|async|single-region hitting a check constraint, a unique violation on an existing profile, or Postgres unavailable"
+    }
+  ],
   "requiresAuth": false,
   "expectedStatus": 201,
   "sdk": "api-gateway",

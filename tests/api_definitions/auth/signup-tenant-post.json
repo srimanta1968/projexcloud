@@ -42,6 +42,32 @@
     "auth.signup-tenant.response.data.org_id": "data.org_id"
   },
   "fieldEnums": {
-    "region": ["us-east-1", "us-west-2", "eu-west-1", "ap-south-1"]
-  }
+    "region": [
+      "us-east-1",
+      "us-west-2",
+      "eu-west-1",
+      "ap-south-1"
+    ]
+  },
+  "description": "Self-serve onboarding: creates the person, their org, a default app, a trial tenant and the admin membership in one transaction, then returns 201 with a JWT already scoped to the new tenant and app. Public - the gateway authGate allowlists /api/auth/signup-tenant. Edge cases: email format and an 8-character minimum password are enforced, company_name is required and capped at 80 characters, and given_name/family_name/display_name are each capped at 120 - each violation is a 400 and details[] may list several at once; signing up with an email that already has a person is a 409 UserExists and the whole org/app/tenant transaction rolls back, so no partial tenant is left behind; the endpoint is not idempotent - retrying with a fresh email creates a second org and tenant.",
+  "errorCases": [
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "email is required / email is invalid / password is required / password must be at least 8 characters / company_name is required / company_name must be 80 characters or fewer / given_name|family_name|display_name must be 120 characters or fewer / phone is invalid",
+      "when": "validateSignupTenantInput fails; details[] carries every failed rule"
+    },
+    {
+      "status": 409,
+      "code": "UserExists",
+      "message": "A person with this email already exists",
+      "when": "signupTenant raises PersonExistsError; the org/app/tenant/membership transaction is rolled back"
+    },
+    {
+      "status": 500,
+      "code": "InternalError",
+      "message": "InternalError",
+      "when": "any other throw - the org/app/tenant/membership transaction fails, JWT signing fails, or a DB error"
+    }
+  ]
 }

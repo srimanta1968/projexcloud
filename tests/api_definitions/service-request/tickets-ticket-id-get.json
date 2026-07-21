@@ -23,5 +23,32 @@
       },
       "expectedStatus": 200
     }
+  ],
+  "description": "Fetches a single service-request ticket by its path ticket_id and returns the full ticket record. Edge cases: an unknown ticket_id returns 404 NotFound with no body detail; a malformed (non-UUID) ticket_id makes the lookup query fail on type cast and surfaces as a 500 rather than a 400, since the route performs no id-format validation; the handler does not compare the ticket's tenant against the caller's JWT tenant_id, so scoping relies on ticket ids being unguessable — a valid ticket_id from another tenant is still readable by any authenticated caller.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "No Authorization: Bearer <jwt> header on a requireAuth route"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "Bearer token fails verifyJwt (bad signature, malformed, or exp in the past)"
+    },
+    {
+      "status": 404,
+      "code": "NotFound",
+      "message": "NotFound",
+      "when": "getTicket returns no row for the supplied ticket_id"
+    },
+    {
+      "status": 500,
+      "code": "InternalError",
+      "message": "Internal Server Error",
+      "when": "getTicket throws — e.g. ticket_id is not a valid UUID and the query cast fails, or the database is unreachable"
+    }
   ]
 }

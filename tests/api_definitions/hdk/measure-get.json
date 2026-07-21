@@ -13,6 +13,7 @@
     "POST /api/auth/signup-tenant",
     "POST /api/hdk/measure"
   ],
+  "description": "Lists every measurement recorded for one capture, filtered by the required capture_id query param and returned as { success: true, data: [...] }. QA edge cases: omitting capture_id is a 400, but an unknown or non-existent capture_id is NOT — it returns 200 with an empty array, so \"no such capture\" and \"capture with zero measurements\" are indistinguishable; there is no limit/offset parameter, so the endpoint returns the full unpaginated set for a capture; there is no tenant scoping on the query, so results are keyed purely by capture_id.",
   "testCases": [
     {
       "name": "List measurements for a capture",
@@ -23,6 +24,26 @@
       "headers": {
         "Authorization": "Bearer {{cache:auth.register.response.data.token}}"
       }
+    }
+  ],
+  "errorCases": [
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "capture_id query param required",
+      "when": "the capture_id query param is absent or an empty string"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "no Authorization header, or it is not of the form 'Bearer <jwt>' (api-gateway default-deny authGate, AUTH_GATE_MODE=enforce)"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "the bearer JWT fails verifyJwt — bad signature, wrong JWT_SECRET, or exp already elapsed (api-gateway default-deny authGate, AUTH_GATE_MODE=enforce)"
     }
   ]
 }

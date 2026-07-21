@@ -11,6 +11,7 @@
   "sdk": "sdk-connectors",
   "sourceFile": "packages/sdk-connectors/src/server/routes.ts",
   "testability": "auto",
+  "description": "Returns the tool manifests advertised by a connector install — the MCP-style tool definitions the agent runtime can invoke through POST /installs/:install_id/tools/call. QA edge cases: an unknown install_id returns 200 with an empty tools array rather than a 404, so this endpoint cannot be used to test install existence; an install whose adapter has never synced also returns an empty array, meaning \"unknown install\", \"no adapter\" and \"not yet synced\" are all indistinguishable; the returned tool_name values are exactly the strings /tools/call validates against, so a name absent from this manifest produces a 409 ToolCallFailed there; the listing is unpaginated and not tenant-scoped.",
   "testCases": [
     {
       "name": "List tool manifest for an install",
@@ -21,6 +22,20 @@
         "install_id": "{{cache:connectors.create.response.data.install.install_id}}"
       },
       "expectedStatus": 200
+    }
+  ],
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "no Authorization header, or it is not of the form 'Bearer <jwt>' (requireAuth preHandler)"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "the bearer JWT fails verifyJwt — bad signature, wrong JWT_SECRET, or exp already elapsed (requireAuth preHandler)"
     }
   ]
 }

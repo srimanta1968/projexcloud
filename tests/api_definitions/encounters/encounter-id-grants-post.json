@@ -13,6 +13,7 @@
   "sourceFile": "packages/sdk-engagement/src/server/routes.ts",
   "_generated": true,
   "testability": "auto",
+  "description": "Issues an Encounter Grant (FR-EN-5): a time- and scope-bounded authorisation letting a non-participant persona invoke listed methods on the encounter until expires_at, computed as now() + ttl_ms. Returns 201 with the grant and emits engagement.encounter.grant.issued.v1 (regulated retention). QA edge cases: all four of grantee_persona_id, issuer_persona_id, scope and ttl_ms are required, and the ttl_ms check is falsy-based — ttl_ms: 0 is therefore rejected as a missing field rather than treated as an immediate expiry, which is the boundary case to cover; a negative ttl_ms passes validation and produces a grant whose expires_at is already in the past, so it never appears in the grants listing and never authorises anything; nothing validates the shape of scope, so a scope without a methods array is accepted and yields a grant that authorises nothing at check time; issuing is not idempotent and there is no cap — repeated POSTs stack multiple concurrent grants for the same grantee, and the check endpoint uses only the most recently issued one; the encounter's existence and state are not verified, so an unknown encounter_id trips the foreign key as an uncaught 500 and granting on a sealed encounter succeeds.",
   "testCases": [
     {
       "name": "Issue a scope-bounded encounter grant",
@@ -26,7 +27,9 @@
         "grantee_persona_id": "{{cache:personas.create.response.data.persona.persona_id}}",
         "issuer_persona_id": "{{cache:personas.create.response.data.persona.persona_id}}",
         "scope": {
-          "methods": ["chart.read"]
+          "methods": [
+            "chart.read"
+          ]
         },
         "ttl_ms": 28800000,
         "capability_token_ref": "cap-token-ref-001"
@@ -36,5 +39,31 @@
   ],
   "captureResponse": {
     "encounters.issue-grant.response.data.grant.grant_id": "data.grant.grant_id"
-  }
+  },
+  "errorCases": [
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "missing fields",
+      "when": "any of grantee_persona_id, issuer_persona_id, scope or ttl_ms is missing/falsy in the body — note ttl_ms: 0 is treated as missing"
+    },
+    {
+      "status": 500,
+      "code": "InternalServerError",
+      "message": "<database error message>",
+      "when": "the INSERT violates the encounter_id foreign key (unknown encounter), scope is not serialisable to jsonb, or an id is not a valid UUID — not caught by the handler"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "no Authorization header, or it is not of the form 'Bearer <jwt>' (requireAuth preHandler)"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "the bearer JWT fails verifyJwt — bad signature, wrong JWT_SECRET, or exp already elapsed (requireAuth preHandler)"
+    }
+  ]
 }

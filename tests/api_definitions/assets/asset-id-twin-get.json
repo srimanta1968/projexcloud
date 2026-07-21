@@ -26,5 +26,32 @@
       },
       "expectedStatus": 200
     }
+  ],
+  "description": "Returns the full digital twin for one asset - the asset row plus its component tree and sensor definitions - with status 200. Read-only. The handler scopes by asset_id only and never compares the twin's tenant against the JWT, so it is not tenant-isolated. Edge cases: an unknown asset_id returns 404; an asset registered with no components returns 200 with an empty component tree rather than 404; a non-UUID asset_id fails the Postgres UUID cast inside the try block and is reported as a generic 500 rather than a 400; requires a valid JWT.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "Authorization header absent or not in Bearer form (requireAuth / gateway default-deny authGate)"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "Bearer token fails JWT verification or is expired (requireAuth / gateway default-deny authGate)"
+    },
+    {
+      "status": 404,
+      "code": "asset not found",
+      "message": "asset not found",
+      "when": "No asset exists for the supplied asset_id"
+    },
+    {
+      "status": 500,
+      "code": "<underlying error message>",
+      "message": "Twin lookup failed",
+      "when": "assetGetTwin throws - includes a non-UUID asset_id (Postgres 22P02) and database errors"
+    }
   ]
 }

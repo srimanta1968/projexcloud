@@ -41,6 +41,64 @@
     }
   },
   "fieldEnums": {
-    "group_by": ["app_id", "bu_id", "persona_kind", "encounter_id", "sku", "actor_kind"]
-  }
+    "group_by": [
+      "app_id",
+      "bu_id",
+      "persona_kind",
+      "encounter_id",
+      "sku",
+      "actor_kind"
+    ]
+  },
+  "description": "Produces a showback/chargeback breakdown of the caller's tenant usage across a period, optionally grouped by dimensions such as app_id and bu_id via the group_by query param. tenant_id is always taken from the verified JWT so one tenant can never pull another tenant's cost allocation. Edge cases: period_start and period_end are both required in YYYY-MM-DD form; the validator does not enforce start <= end, so an inverted range returns an empty breakdown rather than a 400; an unrecognised group_by dimension is not rejected at validation and either collapses the grouping or surfaces from the aggregation as a 500; a period with no usage returns 200 with empty groups rather than 404; results are computed on demand and unpaginated, so wide periods with many groups return a large single payload.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "No Authorization: Bearer <jwt> header on a requireAuth route"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "Bearer token fails verifyJwt (bad signature, malformed, or exp in the past)"
+    },
+    {
+      "status": 403,
+      "code": "Forbidden",
+      "message": "JWT missing tenant_id claim",
+      "when": "Token verifies but carries no tenant_id claim; billing surfaces refuse to run unscoped"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "tenant_id must be a UUID",
+      "when": "The tenant_id claim injected from the JWT is not a well-formed UUID"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "period_start must be YYYY-MM-DD",
+      "when": "period_start is missing or not in YYYY-MM-DD form"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "period_end must be YYYY-MM-DD",
+      "when": "period_end is missing or not in YYYY-MM-DD form"
+    },
+    {
+      "status": 404,
+      "code": "CatalogNotFound",
+      "message": "Rate catalog not found",
+      "when": "computeShowback throws CatalogNotFoundError while resolving the tenant's rate catalog"
+    },
+    {
+      "status": 500,
+      "code": "InternalError",
+      "message": "InternalError",
+      "when": "The aggregation throws or the usage store is unreachable"
+    }
+  ]
 }

@@ -2,6 +2,33 @@
   "name": "POST /admin/chaos-drill — pool-federation-runtime",
   "endpoint": "/admin/chaos-drill",
   "method": "POST",
+  "description": "Standalone pool-federation-runtime chaos-drill endpoint (P7 AC-6) that records a chaos-drill failover_event with measured RPO/RTO, returning 201 with the event. IMPORTANT for QA: this route plugin is also mounted inside the api-gateway with mountHealth:false and NO orchestrator threaded in — because the gateway runs its own orchestrator on /admin/federation/chaos-drill — so against the gateway every authenticated request returns 503 by design, before body validation. Only the standalone binary on :8083 can actually run the drill. Auth differs from the rest of /admin: it is a constant-time compare against the env ADMIN_OPS_TOKEN only, with a length pre-check, so DB-issued admin.ops_token values are NOT accepted here and an unset ADMIN_OPS_TOKEN makes every call 401. Guard order is auth → orchestrator presence → field validation.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "admin token required",
+      "when": "x-admin-ops-token is missing, is not a string, has a different length than env ADMIN_OPS_TOKEN, fails the constant-time compare, or ADMIN_OPS_TOKEN itself is unset; DB-backed ops tokens are not consulted by this route"
+    },
+    {
+      "status": 503,
+      "code": "ServiceUnavailable",
+      "message": "orchestrator not available in this deployment",
+      "when": "the route plugin was mounted without an orchestrator — always the case for the api-gateway mount; checked after auth and before body validation, so it masks any 400"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "federation_id, from_region, to_region required",
+      "when": "any of federation_id, from_region or to_region is missing, null, or an empty string (only reachable in the standalone deployment where an orchestrator exists)"
+    },
+    {
+      "status": 500,
+      "code": "InternalServerError",
+      "message": "<drill error message>",
+      "when": "orchestrator.runChaosDrill() throws — unknown federation or region, or the failover_event write failing"
+    }
+  ],
   "requiresAuth": false,
   "expectedStatus": 201,
   "sdk": "pool-federation-runtime",

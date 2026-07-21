@@ -2,6 +2,21 @@
   "name": "GET /admin/approvals/breaches — api-gateway",
   "endpoint": "/admin/approvals/breaches",
   "method": "GET",
+  "description": "Operator SLA-breach report: pending approval requests whose elapsed time since requested_at exceeds their route's SLA, exposing request_id, tenant_id, route_id, a subject_ref built as subject_kind:subject_id, requested_at, status, elapsed_minutes and sla_minutes, worst-breach-first and capped at 100 rows. QA edge cases: only requests with status = \"pending\" are considered, so a request that breached its SLA and was later approved or rejected disappears from this report entirely; routes whose computed sla_minutes is 0 (no per-step SLA set, since the value is COALESCE'd to 0) are excluded by the sla_minutes > 0 filter and can never breach; the comparison is strictly greater-than, so a request exactly at its SLA is not yet a breach; elapsed_minutes is computed from now() at query time and therefore changes between calls; cross-tenant with no tenant filter and no pagination past 100 rows.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "admin token required",
+      "when": "requireAdmin() found no valid x-admin-ops-token header — missing, or matching neither env ADMIN_OPS_TOKEN nor an active admin.ops_token hash (30s cache TTL applies to revocations)"
+    },
+    {
+      "status": 500,
+      "code": "InternalServerError",
+      "message": "<database error message>",
+      "when": "the breach query throws — jsonb_array_elements failing on a malformed route steps column, or Postgres unavailable"
+    }
+  ],
   "requiresAuth": false,
   "expectedStatus": 200,
   "sdk": "api-gateway",

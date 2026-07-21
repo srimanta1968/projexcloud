@@ -3,6 +3,33 @@
   "endpoint": "/api/flags",
   "sdk": "sdk-feature-flags",
   "method": "PUT",
+  "description": "Creates or updates (upserts) a feature flag definition keyed by flag_id, with an optional description, kind, default_value, kill_switch and schema_ref. kind, when supplied, must be one of boolean, variant, numeric or json. Edge cases: a missing flag_id -> 400; an unrecognised kind -> 400, but omitting kind entirely is allowed and leaves the existing/default kind in place; default_value is not validated against kind or schema_ref, so a boolean flag can be given a string default; the operation is a true upsert and therefore idempotent, and it answers 200 (not 201) even when creating; flags are global rather than tenant-scoped - per-tenant behaviour is expressed through rollouts.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "Authorization header absent or not in the form \"Bearer <jwt>\""
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "JWT signature invalid, malformed, or past its exp claim"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "missing flag_id",
+      "when": "body omits flag_id (details: [\"missing flag_id\"])"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "invalid kind",
+      "when": "body.kind is present but is not one of boolean|variant|numeric|json"
+    }
+  ],
   "requiresAuth": true,
   "expectedStatus": 200,
   "taskId": "cbf65711-e8e1-41ad-84e6-7aa87b76d5a6",

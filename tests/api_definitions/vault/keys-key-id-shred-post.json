@@ -30,13 +30,59 @@
   "statusTransitions": {
     "entity": "vault.key",
     "field": "state",
-    "flow": ["issued", "active", "rotated", "shredded"],
+    "flow": [
+      "issued",
+      "active",
+      "rotated",
+      "shredded"
+    ],
     "transitions": [
-      { "from": "active", "to": "shredded", "via": "POST /api/vault/keys/:key_id/shred" },
-      { "from": "rotated", "to": "shredded", "via": "POST /api/vault/keys/:key_id/shred" }
+      {
+        "from": "active",
+        "to": "shredded",
+        "via": "POST /api/vault/keys/:key_id/shred"
+      },
+      {
+        "from": "rotated",
+        "to": "shredded",
+        "via": "POST /api/vault/keys/:key_id/shred"
+      }
     ]
   },
   "captureResponse": {
     "vault.shred.response.data.key_id": "data.key_id"
-  }
+  },
+  "description": "Cryptographically shreds the key identified by :key_id - the key material is destroyed and everything encrypted under it becomes permanently unrecoverable. A non-empty reason in the body is mandatory and is recorded on the audit trail. Returns 200 with the shredded key record. Edge cases: a missing or empty reason is rejected with 400 before any state change; an unknown key_id and an already-shredded key both return 404 (the handler maps \"not found\" and \"already shredded\" onto the same status), so the operation is not idempotent from the caller's point of view - the first call succeeds and every replay 404s; a non-UUID key_id fails the Postgres UUID cast and is reported as a generic 500; requires a valid JWT.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "Authorization header absent or not in Bearer form (requireAuth / gateway default-deny authGate)"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "Bearer token fails JWT verification or is expired (requireAuth / gateway default-deny authGate)"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "reason is required for shred",
+      "when": "Body is absent or reason is missing/empty"
+    },
+    {
+      "status": 404,
+      "code": "NotFound",
+      "message": "key not found / key already shredded",
+      "when": "shredKey throws with a message containing \"not found\" or \"already shredded\""
+    },
+    {
+      "status": 500,
+      "code": "InternalError",
+      "message": "InternalError",
+      "when": "Any other shredKey failure, including a non-UUID key_id (Postgres 22P02) and KMS/database errors"
+    }
+  ]
 }

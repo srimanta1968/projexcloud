@@ -4,6 +4,27 @@
   "sdk": "sdk-identity-resolver",
   "sourceFile": "packages/sdk-identity-resolver/src/server/routes.ts",
   "method": "GET",
+  "description": "Queries probabilistic EMPI candidate links, filtered by confidence band (high|medium|low) or an explicit min/max score range, optionally narrowed by status (open|merged|rejected|superseded) and capped by limit. Edge cases: every query param is optional - an unfiltered call returns links across all bands; min/max arrive as strings and are parsed with parseFloat/parseInt, so non-numeric values become NaN and silently widen rather than 400; an unrecognised band or status is passed straight through to the query and simply matches nothing; no matches returns 200 with an empty array, never a 404; any query failure is caught and flattened to a bare 500 InternalError.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "Authorization header absent or not in the form \"Bearer <jwt>\""
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "JWT signature invalid, malformed, or past its exp claim"
+    },
+    {
+      "status": 500,
+      "code": "InternalError",
+      "message": "<error message from queryCandidateLinksByBand>",
+      "when": "the candidate-link query throws (bad band range, DB failure) — caught and returned as a bare InternalError"
+    }
+  ],
   "requiresAuth": true,
   "expectedStatus": 200,
   "taskId": "b7e4f451-6a5f-4ea9-80f6-03aa64bbbf21",

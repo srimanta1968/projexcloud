@@ -2,6 +2,21 @@
   "name": "GET /admin/audit/entries — api-gateway",
   "endpoint": "/admin/audit/entries",
   "method": "GET",
+  "description": "Browses the audit chain across tenants with optional tenant_id, actor_id, from and to filters, returning entry_id, tenant_id, actor_kind, actor_id, event_type, occurred_at and seq, newest-first. limit defaults to 100 and is clamped to a maximum of 500 — a larger value is silently reduced rather than rejected. QA edge cases: a non-numeric limit makes parseInt return NaN, and Math.min(NaN, 500) is NaN, which is passed as the LIMIT parameter and fails in Postgres as a 500 — so limit=abc is a server error, not a 400; there is no offset or cursor, so paging deeper than the limit is impossible; tenant_id must be a valid UUID or the ::uuid cast fails as a 500, and from/to must be castable to timestamptz for the same reason; with no filters the route returns entries across ALL tenants, which is deliberate for an operator surface.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "admin token required",
+      "when": "requireAdmin() found no valid x-admin-ops-token header — missing, or matching neither env ADMIN_OPS_TOKEN nor an active admin.ops_token hash (30s cache TTL applies to revocations)"
+    },
+    {
+      "status": 500,
+      "code": "InternalServerError",
+      "message": "<database error message>",
+      "when": "the SELECT against audit.entry throws — a non-numeric limit producing NaN, tenant_id not castable to uuid, from/to not castable to timestamptz, or Postgres unavailable"
+    }
+  ],
   "requiresAuth": false,
   "expectedStatus": 200,
   "sdk": "api-gateway",

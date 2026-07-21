@@ -11,7 +11,11 @@
   "epicId": "93a549d6-9a93-4d82-86bb-bac5167fa960",
   "priority": 50,
   "fieldEnums": {
-    "band_kind": ["profile", "preference", "notification_routing"]
+    "band_kind": [
+      "profile",
+      "preference",
+      "notification_routing"
+    ]
   },
   "dependsOn": [
     "POST /api/auth/register",
@@ -37,6 +41,39 @@
         }
       },
       "expectedStatus": 200
+    }
+  ],
+  "description": "Upserts an L2 profile band: inserts a new profile.band_l2 row or, on conflict with an existing (app_identity_id, band_kind), replaces its fields_envelope and bumps updated_at. Returns 200 in both cases, so the call is fully idempotent and repeat PUTs never conflict. app_identity_id, band_kind and tenant_id are all mandatory; fields_envelope is optional and defaults to an empty object, which effectively clears the band. Edge cases: unrecognised band_kind is a 400; an empty-string tenant_id is treated as missing; a non-existent app_identity_id or tenant_id trips a foreign-key violation that escapes as an unhandled 500; requires a valid JWT.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "Authorization header absent or not in Bearer form (requireAuth / gateway default-deny authGate)"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "Bearer token fails JWT verification or is expired (requireAuth / gateway default-deny authGate)"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "missing required fields",
+      "when": "app_identity_id, band_kind or tenant_id is absent or empty"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "invalid band_kind",
+      "when": "band_kind is not one of profile, preference, notification_routing"
+    },
+    {
+      "status": 500,
+      "code": "Internal Server Error",
+      "message": "insert or update on table \"band_l2\" violates foreign key constraint",
+      "when": "app_identity_id or tenant_id references a row that does not exist - the upsert has no pre-check, so the FK violation escapes unhandled"
     }
   ]
 }

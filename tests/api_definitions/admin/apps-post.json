@@ -2,6 +2,27 @@
   "name": "POST /admin/apps — api-gateway",
   "endpoint": "/admin/apps",
   "method": "POST",
+  "description": "Provisions the parent app (and its owning org) that a tenant references via tenant.app_id, returning 201 { data: { app } }. Deliberately idempotent: appEnsure() returns the existing app unchanged when app_id already exists, so replaying the same body is safe and still answers 201 (not 409). This exists because without it there is no admin path to create the first app and POST /admin/tenants always fails its FK. QA edge cases: app_id and display_name are required and empty strings are rejected as missing; org_name is optional and only used on first creation — re-posting with a different org_name does NOT re-parent an existing app; changing display_name on a replay may or may not update depending on appEnsure semantics, so assert against the returned row rather than the request body.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "admin token required",
+      "when": "x-admin-ops-token header is missing, empty, or matches neither the env ADMIN_OPS_TOKEN break-glass secret (constant-time compare) nor the SHA-256 hash of any active row in admin.ops_token; revoked/expired DB tokens keep working until the per-replica cache expires (ADMIN_OPS_TOKEN_CACHE_TTL_MS, default 30s) unless a Redis invalidation broadcast lands first"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "app_id, display_name are required",
+      "when": "app_id or display_name is missing, null, or an empty string"
+    },
+    {
+      "status": 500,
+      "code": "InternalServerError",
+      "message": "<database error message>",
+      "when": "appEnsure() throws — e.g. Postgres unavailable or a constraint violation on the app/org insert"
+    }
+  ],
   "requiresAuth": false,
   "expectedStatus": 201,
   "sdk": "api-gateway",

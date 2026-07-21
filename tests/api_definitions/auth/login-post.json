@@ -35,5 +35,32 @@
     "auth.login.response.data.email": "data.email",
     "auth.login.response.data.tenant_id": "data.tenant_id",
     "auth.login.response.data.token": "data.token"
-  }
+  },
+  "description": "Verifies an email + password credential and mints a six-layer JWT. Public - the gateway authGate allowlists /api/auth/login, so no bearer token is needed. An optional tenant_id selects the tenant context from the person memberships, and an optional app_id auto-mints the L2 AppIdentity on first per-app login. Edge cases: only presence of email and password is validated (no format or length rule), so a blank value is a 400 but a syntactically invalid email reaches the credential check and returns 401; a wrong password and an unknown email return the same 401 InvalidCredentials, so there is no user enumeration; a valid credential plus a tenant_id the person has no active membership in is a 403, distinct from the 401; omitting tenant_id yields a token with tenant_id null and skips both the membership check and the AppIdentity mint; passing app_id without tenant_id silently skips the mint.",
+  "errorCases": [
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "email is required / password is required",
+      "when": "validateLoginInput fails - email or password absent or empty; details[] carries every failed rule"
+    },
+    {
+      "status": 401,
+      "code": "InvalidCredentials",
+      "message": "Invalid email or password",
+      "when": "verifyEmailPassword raises InvalidCredentialsError - unknown email or wrong password"
+    },
+    {
+      "status": 403,
+      "code": "NoMembership",
+      "message": "Person <person_id> has no active membership in tenant <tenant_id>",
+      "when": "a tenant_id was supplied but the authenticated person has no matching active membership"
+    },
+    {
+      "status": 500,
+      "code": "InternalError",
+      "message": "InternalError",
+      "when": "any other throw - projection-version read, AppIdentity mint, JWT signing, or a DB error"
+    }
+  ]
 }

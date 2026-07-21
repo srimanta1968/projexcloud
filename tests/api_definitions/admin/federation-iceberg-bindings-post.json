@@ -2,6 +2,27 @@
   "name": "POST /admin/federation/iceberg-bindings — api-gateway",
   "endpoint": "/admin/federation/iceberg-bindings",
   "method": "POST",
+  "description": "Registers (or updates) a federation.iceberg_table_binding row mapping a ClickHouse source table onto an Iceberg table_ref within a catalog. Upsert on binding_id: ON CONFLICT DO UPDATE rewrites catalog_id, table_ref, source_clickhouse_table, partition_strategy and z_order_cols, so a repeat post is an update and still returns 201. partition_strategy defaults to {} and is stored as jsonb; z_order_cols defaults to []. QA edge cases: binding_id, catalog_id and table_ref are required (empty strings count as missing); catalog_id is a foreign key onto federation.iceberg_catalog, so binding to a catalog that was never registered surfaces as a 500 with the raw FK message, NOT a 400 or 404 — register the catalog first; partition_strategy is JSON.stringify-ed without shape validation, so any object is accepted; source_clickhouse_table is optional and stored as NULL when omitted.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "admin token required",
+      "when": "x-admin-ops-token header is missing, empty, or matches neither the env ADMIN_OPS_TOKEN break-glass secret (constant-time compare) nor the SHA-256 hash of any active row in admin.ops_token; revoked/expired DB tokens keep working until the per-replica cache expires (ADMIN_OPS_TOKEN_CACHE_TTL_MS, default 30s) unless a Redis invalidation broadcast lands first"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "binding_id, catalog_id, table_ref are required",
+      "when": "any of binding_id, catalog_id or table_ref is missing, null, or an empty string"
+    },
+    {
+      "status": 500,
+      "code": "InternalServerError",
+      "message": "<database error message>",
+      "when": "the INSERT ... ON CONFLICT into federation.iceberg_table_binding throws — most commonly a foreign-key violation because catalog_id does not exist, or Postgres unavailable"
+    }
+  ],
   "requiresAuth": false,
   "expectedStatus": 201,
   "sdk": "api-gateway",

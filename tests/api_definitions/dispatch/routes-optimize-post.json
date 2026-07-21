@@ -33,5 +33,38 @@
   "captureResponse": {
     "dispatch-routes.optimize.response.data.route_id": "route_id",
     "dispatch-routes.optimize.response.data.persona_id": "persona_id"
-  }
+  },
+  "description": "P7 FR-DSP-3 — optimizes a dispatcher's stop order for a set of tasks: loads each task's lat/lng, runs nearest-neighbour plus a 2-opt improvement pass, estimates drive time from DISPATCH_AVG_SPEED_KMH (default 35), persists a dispatch.route row and returns {route_id, persona_id, stops[], optimized_at, total_drive_mins} at 200. QA edge cases: validation is a single branch — persona_id must be present AND task_ids must be a non-empty array, so {} , a missing persona_id, task_ids:[] and task_ids as a string all return the same 400. Beyond that there is no 404 path: task_ids that do not exist, or exist but have null lat/lng, are silently dropped by loadStops, and if that leaves zero stops the optimizer throws and the handler returns 500 — so a bad-FK test surfaces as 500, not 404. A single valid stop short-circuits the algorithm and returns a one-stop route with total_drive_mins 0. start_task_id is optional and, when it does not match any loaded stop, falls back to the first stop rather than erroring. persona_id is cast to ::uuid on INSERT, so a non-UUID persona_id also produces a 500. Not idempotent — every call mints a fresh route_id (dsr_<hex>) and inserts a new row; there is no dedupe on (persona_id, task_ids) and no cap on how many task_ids may be sent. No pagination. persona_id comes from the body and is not checked against the caller's JWT tenant, but the path is not on the gateway public allowlist so a valid tenant JWT is required.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "No Authorization: Bearer header — authGate.ts default-deny gate rejects /api/dispatch/routes/optimize before the handler"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "Bearer token fails verifyJwt (bad signature, malformed, or expired)"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "persona_id and task_ids[] are required",
+      "when": "Body missing, persona_id absent/empty, task_ids not an array, or task_ids is an empty array"
+    },
+    {
+      "status": 500,
+      "code": "RouteOptimizeFailed",
+      "message": "[route-optimizer] no stops have lat/lng — refusing to optimize an empty route",
+      "when": "None of the supplied task_ids resolve to a task with coordinates (unknown task ids, or tasks whose lat/lng are null)"
+    },
+    {
+      "status": 500,
+      "code": "RouteOptimizeFailed",
+      "message": "<error message from the DB, e.g. invalid input syntax for type uuid for persona_id, or a dispatch.route insert/FK failure>",
+      "when": "loadStops or the INSERT INTO dispatch.route throws — non-UUID persona_id, missing dispatch schema, or DB pool unavailable"
+    }
+  ]
 }

@@ -9,13 +9,27 @@
   },
   "environments": {
     "development": {
-      "baseUrl": "http://localhost:4000",
+      "baseUrl": "http://localhost:3000",
       "apiUrl": "http://localhost:4000",
-      "description": "Local development — api-gateway on :4000 (GATEWAY_PORT in root .env; portal is on :3000). localhost auto-translates to host.docker.internal in Docker.",
+      "description": "Local development. api-gateway :4000 (apiUrl). UI portals: workspace :3000, tenant-admin :3200, console :3100. NOTE: deploy/nginx and lib/portalLinks.ts describe workspace on :3300 for PROD; dev runs it on :3000 because apps/tenant-workspace/package.json uses a bare `next dev`. The values here match what actually runs locally. In prod all portals are ONE origin behind nginx under /workspace, /tenant, /console. localhost auto-translates to host.docker.internal inside Docker (skipped on ECS/Cloud Run).",
       "variables": {
         "SMOKE_API_TOKEN": "",
         "smoke_widget_id": "",
         "geo_winner_address_id": ""
+      },
+      "portals": {
+        "workspace": {
+          "url": "http://localhost:3000",
+          "authRealm": "projexlight"
+        },
+        "tenantAdmin": {
+          "url": "http://localhost:3200",
+          "authRealm": "projexlight"
+        },
+        "console": {
+          "url": "http://localhost:3100",
+          "authRealm": "projexlight"
+        }
       }
     },
     "staging": {
@@ -26,6 +40,20 @@
         "SMOKE_API_TOKEN": "",
         "smoke_widget_id": "",
         "geo_winner_address_id": ""
+      },
+      "portals": {
+        "workspace": {
+          "url": "https://cloud.projexlight.com/workspace",
+          "authRealm": "projexlight"
+        },
+        "tenantAdmin": {
+          "url": "https://cloud.projexlight.com/tenant",
+          "authRealm": "projexlight"
+        },
+        "console": {
+          "url": "https://cloud.projexlight.com/console",
+          "authRealm": "projexlight"
+        }
       }
     },
     "production": {
@@ -36,6 +64,20 @@
         "SMOKE_API_TOKEN": "",
         "smoke_widget_id": "",
         "geo_winner_address_id": ""
+      },
+      "portals": {
+        "workspace": {
+          "url": "https://cloud.projexlight.com/workspace",
+          "authRealm": "projexlight"
+        },
+        "tenantAdmin": {
+          "url": "https://cloud.projexlight.com/tenant",
+          "authRealm": "projexlight"
+        },
+        "console": {
+          "url": "https://cloud.projexlight.com/console",
+          "authRealm": "projexlight"
+        }
       }
     }
   },
@@ -79,6 +121,7 @@
     "auditor_id": "auditor-ext-001",
     "customer_id": "cust-acme-001",
     "tenant_key_id": "vk-qa-tenant-current",
+    "customer_kms_key_arn": "arn:aws:kms:us-east-1:111122223333:key/1234abcd-12ab-34cd-56ef-1234567890ab",
     "new_tenant_key_id": "vk-qa-tenant-rotated",
     "sensor_id": "66666666-6666-6666-6666-666666666666",
     "ADMIN_OPS_TOKEN": "dev-admin-token-please-change",
@@ -108,9 +151,9 @@
   },
   "testCredentials": {
     "default": {
-      "email": "default_test_user@example.com",
-      "password": "DefaultTestPass123!",
-      "description": "Fallback credentials when registration fails or for login-only tests"
+      "email": "uitest_1784588359@example.com",
+      "password": "UiTestPass123!",
+      "_status": "VERIFIED: created via POST /api/auth/register (201) and login confirmed via POST /api/auth/login (200) on 2026-07-20. [MUST-59]"
     },
     "registered": null,
     "_usage": {
@@ -296,6 +339,22 @@
       "referenced_by_count": 1,
       "needs_llm_review": true,
       "scope_hint": "env"
+    }
+  },
+  "authRealms": {
+    "projexlight": {
+      "loginUrl": "/login",
+      "emailField": "email",
+      "passwordField": "password",
+      "canSelfRegister": true,
+      "registerUrl": "/register",
+      "signupUrl": "/signup",
+      "selfRegisterPortal": "workspace",
+      "roles": [
+        "user",
+        "tenantAdmin",
+        "platformAdmin"
+      ]
     }
   }
 }

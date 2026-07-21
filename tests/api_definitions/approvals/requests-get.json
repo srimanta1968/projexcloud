@@ -34,5 +34,32 @@
   "expectedResponse": {
     "success": "boolean",
     "data": "array"
-  }
+  },
+  "description": "Gateway-composed inbox of PENDING approval requests for a tenant, oldest-first. Optional ?assignee_persona_id= narrows it to requests having at least one undecided step assigned to that persona — note assignment lives on approval.step, not on the request. Edge cases: ?tenant_id= is REQUIRED (400 if absent) and is caller-asserted; only status='pending' rows are ever returned, so approved/rejected history is unreachable here; hard-capped at LIMIT 100 with no paging cursor; an assignee with nothing queued returns an empty array, not 404; a non-UUID tenant_id or assignee_persona_id fails its ::uuid cast and returns 500.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "Gateway default-deny authGate (AUTH_GATE_MODE=enforce): path is not on the public allowlist and no bearer token was sent"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "authGate ran requireAuth and the JWT failed verification or had expired"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "tenant_id required",
+      "when": "?tenant_id= query param is absent or empty"
+    },
+    {
+      "status": 500,
+      "code": "InternalError",
+      "message": "<postgres error text>",
+      "when": "tenant_id or assignee_persona_id is not a valid UUID (::uuid cast fails), or the request query errors"
+    }
+  ]
 }

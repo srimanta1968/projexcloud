@@ -2,6 +2,21 @@
   "name": "GET /api/diagnostic/health — sdk-diagnostic-telemetry",
   "endpoint": "/api/diagnostic/health",
   "method": "GET",
+  "description": "Returns the most recent health snapshot for one device, selected by the required device_uuid query param. NOTE: the path ends in /health, so the gateway auth gate treats it as public - no bearer token is required and there is no 401. Edge cases: a missing device_uuid query param -> 400; a known device that has never posted a snapshot returns 404 'no snapshots recorded' (distinct from the 400 for an absent param); only the latest snapshot is returned - there is no history or pagination on this route.",
+  "errorCases": [
+    {
+      "status": 400,
+      "code": "BadRequest",
+      "message": "device_uuid query param required",
+      "when": "the device_uuid query param is absent or empty"
+    },
+    {
+      "status": 404,
+      "code": "NotFound",
+      "message": "no snapshots recorded",
+      "when": "the device has no health snapshot rows yet"
+    }
+  ],
   "requiresAuth": false,
   "expectedStatus": 200,
   "sdk": "sdk-diagnostic-telemetry",

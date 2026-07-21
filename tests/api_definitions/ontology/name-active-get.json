@@ -23,5 +23,20 @@
   ],
   "dependsOn": [
     "POST /api/auth/register"
+  ],
+  "description": "Fetches the currently active ontology version for a given ontology name from the path. Edge cases: any error thrown by getActiveOntology is mapped to 404 with the raw message, so a name that was never registered and a name whose every version has been deprecated (leaving no active version) both return 404 and are only distinguishable by message text; a datastore failure is also swallowed into that 404 branch rather than surfacing as 500, so a 404 here does not strictly prove absence; the lookup is by name only with no version or tenant qualifier, so it always reflects the most recent activation.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "Mounted in the api-gateway, /ontology/* is not on the default-deny allowlist, so the root authGate hook rejects a request with no valid tenant JWT. The standalone semantic-service binary registers these routes without auth"
+    },
+    {
+      "status": 404,
+      "code": "NotFound",
+      "message": "<error message from getActiveOntology>",
+      "when": "getActiveOntology throws — the ontology name is unknown, or it has no currently active version because all versions were deprecated. Datastore errors are also caught by this branch"
+    }
   ]
 }

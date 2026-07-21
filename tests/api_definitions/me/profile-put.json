@@ -37,5 +37,32 @@
       "band_written": true,
       "phone_updated": true
     }
-  }
+  },
+  "description": "Updates the CURRENT caller's profile (person_id comes from the verified JWT sub, never from the body): display_name/given_name/family_name/avatar are merged into the profile.band_l2 'profile' band via a jsonb || upsert, while phone is stored as a person-level identity.alias. Returns 200 with { person_id, band_written, phone_updated }. Edge cases: the name/avatar band write needs a tenant context, resolved from the caller's OLDEST active identity.tenant_membership — a caller with no active membership still gets 200 but with band_written=false and the name fields silently dropped; only truthy fields are written, so empty strings are ignored and no field can be cleared this way; phone is replace-semantics (any existing phone alias is DELETEd first) and passing phone:\"\" clears it while still reporting phone_updated=true; the new phone alias is inserted with verified_at NULL and its hash needs pgcrypto digest(); the band upsert merges rather than replaces, so omitted keys are preserved. Requires a valid tenant JWT.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "No Authorization: Bearer header — the gateway default-deny authGate runs requireAuth on every non-allowlisted path"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "Bearer token fails verifyJwt (bad signature, malformed, or exp in the past)"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Unauthorized",
+      "when": "requireAuth passed but req.auth.sub is absent, so no person_id can be resolved (payload is { success:false, error:\"Unauthorized\" })"
+    },
+    {
+      "status": 500,
+      "code": "InternalError",
+      "message": "<Postgres error message>",
+      "when": "Any DB failure in the try block — phone alias DELETE/INSERT (e.g. pgcrypto digest() unavailable or a unique-constraint clash on value_hash), the app_identity upsert, or the profile.band_l2 upsert; returned as { success:false, error:<message> }"
+    }
+  ]
 }

@@ -2,6 +2,27 @@
   "name": "GET /admin/pools/:pool_index — api-gateway",
   "endpoint": "/admin/pools/:pool_index",
   "method": "GET",
+  "description": "Returns one routing pool plus its derived tenant_count and the 25 most recent lifecycle events, as { success: true, data: { pool, tenant_count, lifecycle_history } }. tenant_count counts rows in routing.tenant_pool_map where the pool is the admin or evidence pool, or where the pool_index appears inside app_pool_index — note that last clause is a LIKE substring match, so a short pool_index can over-count by matching longer indexes that contain it. QA edge cases: an unknown pool_index is a clean 404 \"pool not found\" checked before the count and history queries run; lifecycle_history is capped at 25 rows newest-first with no way to page further back; a pool with no lifecycle events returns an empty array, not a 404; pool_index is a text column so any string is a valid lookup and simply misses rather than erroring.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "admin token required",
+      "when": "requireAdmin() found no valid x-admin-ops-token header — missing, or matching neither env ADMIN_OPS_TOKEN nor an active admin.ops_token hash (30s cache TTL applies to revocations)"
+    },
+    {
+      "status": 404,
+      "code": "NotFound",
+      "message": "pool not found",
+      "when": "no row in routing.pool matches the pool_index path param"
+    },
+    {
+      "status": 500,
+      "code": "InternalServerError",
+      "message": "<database error message>",
+      "when": "any of the pool, tenant-count or lifecycle-history queries throws — Postgres unavailable or the routing schema missing"
+    }
+  ],
   "requiresAuth": false,
   "expectedStatus": 200,
   "sdk": "api-gateway",

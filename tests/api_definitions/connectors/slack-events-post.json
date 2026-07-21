@@ -18,6 +18,7 @@
       "event_callback"
     ]
   },
+  "description": "Slack Events API webhook receiver. This route is deliberately on the api-gateway public allowlist and carries no requireAuth — a bearer JWT is neither required nor consulted, and the trust boundary is instead the Slack signature check over the raw request body using SLACK_SIGNING_SECRET together with the x-slack-request-timestamp and x-slack-signature headers. QA edge cases: the url_verification handshake responds 200 with the challenge as plain text (Content-Type: text/plain), NOT as JSON, so a test asserting a JSON body will fail on the very first call Slack makes; a bad, absent, or replayed-beyond-the-timestamp-window signature returns 401 InvalidSignature; every other outcome — including an event type this build does not handle — returns 200, because Slack retries any non-2xx and an error status would cause duplicate deliveries, so 'unrecognised event' must be asserted on the response body rather than the status; signature verification runs over rawBody, so any middleware that re-serialises the JSON breaks it; Slack redelivers on timeout, so handlers must tolerate duplicate event ids.",
   "testCases": [
     {
       "name": "URL verification handshake (no signature required)",
@@ -30,5 +31,13 @@
   ],
   "captureResponse": {
     "connectors.slack-events.response.data.inbound_event_id": "data.inbound_event_id"
-  }
+  },
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "InvalidSignature",
+      "message": "InvalidSignature",
+      "when": "the x-slack-signature / x-slack-request-timestamp pair does not validate against SLACK_SIGNING_SECRET over the raw body, or the headers are missing"
+    }
+  ]
 }

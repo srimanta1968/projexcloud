@@ -60,5 +60,43 @@
         "success": true
       }
     }
+  ],
+  "errorCases": [
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "Missing required: request, context",
+      "when": "the body is absent, or either the request or the context object is missing"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "request.model and request.prompt are required",
+      "when": "request is present but request.model or request.prompt is missing or empty"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "context.agent_id, context.run_id, and context.trace_id are required",
+      "when": "context is present but any of agent_id, run_id or trace_id is missing or empty"
+    },
+    {
+      "status": 200,
+      "code": "StreamError",
+      "message": "event: error / data: {\"message\":\"<error>\"}",
+      "when": "the generator throws AFTER the SSE headers have been flushed (provider unavailable, no matching route, kill-switch tripped, provider mid-stream failure). The HTTP status is already committed as 200, so the failure arrives as an SSE error frame followed by stream close — it can never be a 4xx/5xx status, which is the key difference from /complete"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "no Authorization header, or it is not of the form 'Bearer <jwt>' (requireAuth preHandler)"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "the bearer JWT fails verifyJwt — bad signature, wrong JWT_SECRET, or exp already elapsed (requireAuth preHandler)"
+    }
   ]
 }

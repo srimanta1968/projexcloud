@@ -2,6 +2,21 @@
   "name": "GET /admin/invoices — api-gateway",
   "endpoint": "/admin/invoices",
   "method": "GET",
+  "description": "Cross-tenant operator listing of billing invoices with optional tenant_id, from and to filters, newest-first by generated_at and hard-capped at 200 rows. The date filters are inclusive-overlap, not containment: from matches invoices whose period_end >= from and to matches invoices whose period_start <= to, so a range returns every invoice overlapping it. QA edge cases: there is no pagination or cursor, so beyond 200 invoices the tail is invisible; omitting tenant_id returns invoices for ALL tenants — this route is deliberately not tenant-scoped and is ops-token gated only; a tenant_id that is not a valid UUID fails the ::uuid cast and returns 500 (not 400), and an unparseable from/to fails the ::date cast the same way; filters that match nothing are a 200 with an empty array, never 404.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "admin token required",
+      "when": "requireAdmin() found no valid x-admin-ops-token header — missing, or matching neither env ADMIN_OPS_TOKEN nor an active admin.ops_token hash (30s cache TTL applies to revocations)"
+    },
+    {
+      "status": 500,
+      "code": "InternalServerError",
+      "message": "<database error message>",
+      "when": "the SELECT against billing.invoice throws — tenant_id not castable to uuid, from/to not castable to date, or Postgres unavailable"
+    }
+  ],
   "requiresAuth": false,
   "expectedStatus": 200,
   "sdk": "api-gateway",

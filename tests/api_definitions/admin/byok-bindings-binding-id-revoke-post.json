@@ -2,6 +2,33 @@
   "name": "POST /admin/byok/bindings/:binding_id/revoke — api-gateway",
   "endpoint": "/admin/byok/bindings/:binding_id/revoke",
   "method": "POST",
+  "description": "Revokes a tenant CMK binding, recording the mandatory reason and operator_id for the audit trail, and returns 200 { success: true, data: <binding> } with the now-revoked binding. QA edge cases: reason and operator_id are both required with a falsy check (empty strings rejected) — revocation is never allowed to be unattributed; an unknown binding_id is a clean 404 \"binding not found\" because revokeCmk() returning null is handled explicitly, unlike the sibling rotate route which 500s in the same situation; revoking an already-revoked binding depends on revokeCmk returning the row (200) versus null (404), so assert on the returned status rather than assuming idempotency; propagation to readers is bounded by the binding's sla_revoke_propagation_seconds, so a revoked key can still decrypt for a short window after this call returns 200.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "admin token required",
+      "when": "requireAdmin() found no valid x-admin-ops-token header — missing, or matching neither env ADMIN_OPS_TOKEN nor an active admin.ops_token hash (30s cache TTL applies to revocations)"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "reason + operator_id required",
+      "when": "reason or operator_id is missing, null, or an empty string in the body"
+    },
+    {
+      "status": 404,
+      "code": "NotFound",
+      "message": "binding not found",
+      "when": "revokeCmk() returns null/undefined — no binding exists with that binding_id (or it is no longer revocable)"
+    },
+    {
+      "status": 500,
+      "code": "InternalServerError",
+      "message": "<revoke error message>",
+      "when": "revokeCmk() throws — KMS unreachable, the audit/DB write failing, or Postgres unavailable"
+    }
+  ],
   "requiresAuth": false,
   "expectedStatus": 200,
   "sdk": "api-gateway",

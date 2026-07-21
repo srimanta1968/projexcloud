@@ -21,6 +21,7 @@
       "storm_impact"
     ]
   },
+  "description": "Tunes a single feature weight for a model. Implemented as an INSERT ... ON CONFLICT (model_id, feature) DO UPDATE, so it upserts: the first call creates the weight row, later calls overwrite the value and re-stamp last_tuned_at. QA edge cases: the feature name comes from the URL path and is NOT validated against DEFAULT_FEATURE_WEIGHTS, so tuning an arbitrary feature like 'made_up_signal' succeeds and adds a row that scoreContact will include in its normalisation total but never multiply by a subscore — silently diluting every real subscore, which is the highest-value bug to test for; weight must be a finite number >= 0, so 0 is accepted (and setting every weight to 0 makes normalisation skip and produce a composite of 0) while negative, NaN, Infinity, null and non-numeric values are rejected; an unknown model_id violates the feature_weight foreign key and surfaces as 400, not 404.",
   "testCases": [
     {
       "name": "Tune one feature weight (upsert)",
@@ -48,5 +49,31 @@
   },
   "captureResponse": {
     "lead-scoring.set-weight.response.data.weight_id": "data.weight_id"
-  }
+  },
+  "errorCases": [
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "weight must be a non-negative finite number",
+      "when": "body.weight is null/undefined, not a number, NaN, Infinity, or negative"
+    },
+    {
+      "status": 400,
+      "code": "SetWeightFailed",
+      "message": "<underlying database error message> | [sdk-lead-scoring] setFeatureWeight failed",
+      "when": "the upsert throws or returns no row — most commonly the :id path param is not an existing model_id (foreign-key violation) or is not a valid UUID"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "no Authorization header, or it is not of the form 'Bearer <jwt>' (api-gateway default-deny authGate, AUTH_GATE_MODE=enforce)"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "the bearer JWT fails verifyJwt — bad signature, wrong JWT_SECRET, or exp already elapsed (api-gateway default-deny authGate, AUTH_GATE_MODE=enforce)"
+    }
+  ]
 }

@@ -32,5 +32,32 @@
   "expectedResponse": {
     "success": "boolean",
     "data": "array"
-  }
+  },
+  "description": "Gateway-composed list of a tenant's approval routes (route_id, name, status, created_at) with a derived sla_minutes = the MAX sla_minutes across the route's steps JSON, defaulting to 0 when no step declares one. Edge cases: ?tenant_id= is REQUIRED (400 if absent) and is caller-asserted from the query string rather than taken from the JWT; results are newest-first and hard-capped at LIMIT 100 with no paging cursor, so tenants with more than 100 routes are silently truncated; a tenant with no routes returns 200 with an empty data array; a tenant_id that is not a UUID fails the ::uuid cast and returns 500.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "Gateway default-deny authGate (AUTH_GATE_MODE=enforce): path is not on the public allowlist and no bearer token was sent"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "authGate ran requireAuth and the JWT failed verification or had expired"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "tenant_id required",
+      "when": "?tenant_id= query param is absent or empty"
+    },
+    {
+      "status": 500,
+      "code": "InternalError",
+      "message": "<postgres error text>",
+      "when": "tenant_id is not a valid UUID (::uuid cast fails), or the route query errors"
+    }
+  ]
 }

@@ -1,5 +1,5 @@
 {
-  "name": "GET /api/mcp/server-registrations \u2014 sdk-mcp-bridge",
+  "name": "GET /api/mcp/server-registrations — sdk-mcp-bridge",
   "endpoint": "/api/mcp/server-registrations",
   "sdk": "sdk-mcp-bridge",
   "sourceFile": "packages/sdk-mcp-bridge/src/server/handlers/mcpController.ts",
@@ -25,5 +25,32 @@
   "expectedResponse": {
     "success": true,
     "data": "array"
-  }
+  },
+  "description": "Lists the MCP server registrations for one tenant. The tenant_id query parameter is mandatory and is the only scoping mechanism - the handler does NOT derive the tenant from the JWT, so any authenticated caller can list another tenant's registrations by passing that tenant_id. Edge cases: tenant_id omitted or an empty string is a 400; an unknown tenant_id returns 200 with an empty array; disabled registrations are included in the listing; the listing is unpaginated; requires a valid JWT.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "Authorization header absent or not in Bearer form (requireAuth / gateway default-deny authGate)"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "Bearer token fails JWT verification or is expired (requireAuth / gateway default-deny authGate)"
+    },
+    {
+      "status": 400,
+      "code": "Missing query param: tenant_id",
+      "message": "Missing query param: tenant_id",
+      "when": "tenant_id query parameter is absent or an empty string"
+    },
+    {
+      "status": 500,
+      "code": "List failed",
+      "message": "List failed",
+      "when": "listMcpServers throws (database unavailable, malformed tenant_id reaching a UUID cast, or query error)"
+    }
+  ]
 }

@@ -13,6 +13,7 @@
   "sourceFile": "packages/sdk-engagement/src/server/routes.ts",
   "_generated": true,
   "testability": "auto",
+  "description": "Boolean authorisation probe used by downstream SDKs to gate non-participant access: returns { data: { allowed: true|false } } for a (encounter_id, grantee_persona_id, method) triple. It selects the single most recent non-revoked, non-expired grant for that grantee on that encounter and reports whether method appears in scope.methods, with '*' acting as a wildcard. QA edge cases: this endpoint returns 200 with allowed:false for every negative outcome — no grant, revoked grant, expired grant, wrong method, or an entirely nonexistent encounter all look identical, so never assert 403/404 for a denial; the ORDER BY issued_at DESC LIMIT 1 is the trap — when a grantee holds several concurrent grants, only the newest is consulted, so issuing a narrow grant after a broad one silently REVOKES the broader access at check time; a grant whose scope has no methods array evaluates to allowed:false; method matching is exact and case-sensitive apart from the '*' wildcard; the check is read-only and idempotent.",
   "testCases": [
     {
       "name": "Check whether a grantee may call a method",
@@ -31,5 +32,25 @@
   ],
   "captureResponse": {
     "encounters.check-grant.response.data.allowed": "data.allowed"
-  }
+  },
+  "errorCases": [
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "missing fields",
+      "when": "grantee_persona_id or method is missing or empty in the body"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "no Authorization header, or it is not of the form 'Bearer <jwt>' (requireAuth preHandler)"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "the bearer JWT fails verifyJwt — bad signature, wrong JWT_SECRET, or exp already elapsed (requireAuth preHandler)"
+    }
+  ]
 }

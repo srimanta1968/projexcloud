@@ -34,15 +34,66 @@
     "tenant-lifecycle.reinstate.response.data.state.current_state": "data.state.current_state"
   },
   "fieldEnums": {
-    "current_state": ["active", "suspended", "offboarding", "offboarded", "sandbox"]
+    "current_state": [
+      "active",
+      "suspended",
+      "offboarding",
+      "offboarded",
+      "sandbox"
+    ]
   },
   "statusTransitions": {
     "entity": "tenant_lifecycle.state",
     "field": "current_state",
-    "flow": ["active", "suspended", "active"],
+    "flow": [
+      "active",
+      "suspended",
+      "active"
+    ],
     "transitions": [
-      { "from": "active", "to": "suspended", "via": "POST /api/tenant-lifecycle/:tenant_id/suspend" },
-      { "from": "suspended", "to": "active", "via": "POST /api/tenant-lifecycle/:tenant_id/reinstate" }
+      {
+        "from": "active",
+        "to": "suspended",
+        "via": "POST /api/tenant-lifecycle/:tenant_id/suspend"
+      },
+      {
+        "from": "suspended",
+        "to": "active",
+        "via": "POST /api/tenant-lifecycle/:tenant_id/reinstate"
+      }
     ]
-  }
+  },
+  "description": "Reinstates a previously suspended tenant back to its active lifecycle state, attributing the change to the JWT subject. Takes no body. Edge cases: ownership is enforced the same way as suspend — the JWT tenant_id or parent_tenant_id must match the path tenant_id, otherwise 403; reinstating a tenant that is already active is an invalid transition (409), so the call is not idempotent; a tenant that has been offboarded past its deadline cannot be reinstated through this route and also returns 409 with the \"from → active\" message; an unknown tenant_id is caught by the ownership check and returns 403 rather than 404.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "No Authorization: Bearer <jwt> header on a requireAuth route"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "Bearer token fails verifyJwt (bad signature, malformed, or exp in the past)"
+    },
+    {
+      "status": 403,
+      "code": "Forbidden",
+      "message": "Tenant ownership check failed",
+      "when": "The JWT's tenant_id and parent_tenant_id both differ from the :tenant_id in the path"
+    },
+    {
+      "status": 409,
+      "code": "InvalidTransition",
+      "message": "Invalid tenant lifecycle transition <from> → active",
+      "when": "The tenant is not in a state from which reinstatement is allowed (e.g. already active, or offboarded)"
+    },
+    {
+      "status": 500,
+      "code": "InternalError",
+      "message": "Internal Server Error",
+      "when": "The database is unreachable or the state write throws outside the InvalidTransition path"
+    }
+  ]
 }

@@ -9,7 +9,10 @@
   "featureId": "e9e9b8ee-101b-4a6c-8100-538b861781a8",
   "epicId": "f9bd4029-5fd6-4dc1-bfce-00af515b8294",
   "priority": 36,
-  "dependsOn": ["POST /api/auth/signup-tenant", "POST /api/notifications/providers"],
+  "dependsOn": [
+    "POST /api/auth/signup-tenant",
+    "POST /api/notifications/providers"
+  ],
   "testCases": [
     {
       "name": "Verify the configured email provider with a test send",
@@ -32,5 +35,32 @@
   ],
   "captureResponse": {
     "notifications.providers.verify.response.data.result.provider_message_id": "data.result.provider_message_id"
-  }
+  },
+  "description": "Verifies an email provider binding by sending a real test message to the `to` address. CRITICAL for testing: a FAILED test send is treated as an expected, informative outcome and STILL returns 200 — with data.verified=false and data.error carrying the provider's message — so callers must inspect data.verified, not the status code. Only the missing-recipient and missing-tenant-claim cases produce non-200 responses. Edge cases: `to` is required and trimmed but is NOT format-validated, so a syntactically invalid address reaches the provider and returns verified:false; an unknown or cross-tenant :provider_id likewise surfaces as verified:false rather than 404; the call sends actual email, so it is not free to retry.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "Authorization header absent or not in 'Bearer <jwt>' form (requireAuth preHandler)"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "JWT signature invalid, malformed, or exp has elapsed"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "to (recipient email) is required",
+      "when": "body.to is absent or empty after trimming"
+    },
+    {
+      "status": 403,
+      "code": "Forbidden",
+      "message": "JWT missing tenant_id claim",
+      "when": "the verified JWT carries no tenant_id claim"
+    }
+  ]
 }

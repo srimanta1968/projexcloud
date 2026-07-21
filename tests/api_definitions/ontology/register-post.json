@@ -75,5 +75,26 @@
   ],
   "dependsOn": [
     "POST /api/auth/register"
+  ],
+  "description": "Registers a DomainOntologyBundle under a bundle_ref and, unless activate is explicitly false, makes it the active version for its ontology name — activate defaults to true, so an ordinary register call silently supersedes whatever version was previously active. Edge cases: both bundle and bundle_ref are required and a missing one is a 400; every downstream failure from registerOntology is also collapsed to 400 with the raw error message rather than a typed status, so a structurally invalid bundle, an unresolvable reference inside it, and a duplicate bundle_ref all present as 400 and must be distinguished by message text; re-registering an identical bundle_ref is therefore not a safe idempotent retry; the route performs no tenant scoping of its own.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "Mounted in the api-gateway, /ontology/* is not on the default-deny allowlist, so the root authGate hook rejects a request with no valid tenant JWT. The standalone semantic-service binary registers these routes without auth"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "bundle and bundle_ref required",
+      "when": "The body is missing bundle or bundle_ref"
+    },
+    {
+      "status": 400,
+      "code": "RegistrationError",
+      "message": "<error message from registerOntology>",
+      "when": "registerOntology throws — invalid bundle structure, duplicate bundle_ref, or an unresolvable reference inside the bundle. The raw message is returned"
+    }
   ]
 }

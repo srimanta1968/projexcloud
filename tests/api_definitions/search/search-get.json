@@ -39,5 +39,50 @@
       "took_ms": "number",
       "index_used": "string"
     }
-  }
+  },
+  "description": "Executes an ABAC-filtered free-text search over an indexed entity_kind for the caller's tenant, reading q/entity_kind/size/from from the query string and returning the hit set. tenant_id is force-injected from the verified JWT and effective_scopes are server-resolved via resolveEffectiveScopes(req.auth) — a caller-supplied effective_scopes in the request is ignored, so scope escalation is not possible. Edge cases: the JWT tenant_id must be a UUID or validation fails even though the caller never supplied it; entity_kind is mandatory and an unregistered entity_kind returns IndexNotFound rather than an empty page; DSL `size` is clamped to 0..200 and `from` floored at 0, so oversized pagination requests are silently capped instead of erroring; `script`, `script_score` and `function_score` clauses are stripped from any supplied DSL to prevent ABAC bypass; results are always confined to the JWT tenant so a cross-tenant entity is invisible rather than 403.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "No Authorization: Bearer <jwt> header on a requireAuth route"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "Bearer token fails verifyJwt (bad signature, malformed, or exp in the past)"
+    },
+    {
+      "status": 403,
+      "code": "Forbidden",
+      "message": "JWT missing tenant_id claim",
+      "when": "Token verifies but carries no tenant_id claim; authTenant() rejects before any query runs"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "tenant_id must be a UUID",
+      "when": "The tenant_id claim injected from the JWT is not a well-formed UUID"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "entity_kind is required",
+      "when": "entity_kind query param is missing or blank"
+    },
+    {
+      "status": 404,
+      "code": "IndexNotFound",
+      "message": "No search index registered for the requested entity_kind",
+      "when": "executeQuery throws IndexNotFoundError because no index definition exists for tenant_id + entity_kind"
+    },
+    {
+      "status": 500,
+      "code": "InternalError",
+      "message": "InternalError",
+      "when": "OpenSearch is unreachable or the query throws a non-IndexNotFoundError"
+    }
+  ]
 }

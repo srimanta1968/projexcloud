@@ -1,23 +1,38 @@
 {
- "name": "POST /api/diagnostic/health — sdk-diagnostic-telemetry",
- "endpoint": "/api/diagnostic/health",
- "method": "POST",
- "requiresAuth": false,
- "expectedStatus": 201,
- "sdk": "sdk-diagnostic-telemetry",
- "sourceFile": "packages/sdk-diagnostic-telemetry/src/server/index.ts",
- "_generated": true,
- "testability": "auto",
- "priority": 40,
- "dependsOn": [
+  "name": "POST /api/diagnostic/health — sdk-diagnostic-telemetry",
+  "endpoint": "/api/diagnostic/health",
+  "method": "POST",
+  "description": "Intake for a periodic device health probe: device_uuid and captured_at are required, while permissions, battery_pct, wifi_state and sensor_state are optional and default to null/undefined. NOTE: the path ends in /health, so the gateway auth gate treats it as public - no bearer token is required and there is no 401. Edge cases: missing device_uuid or captured_at -> 400; a malformed captured_at is not caught at the route and fails inside recordHealth, which is downgraded to a 400 rather than a 500; battery_pct is not range-checked, so out-of-range values are stored as given; snapshots are append-only, so repeated posts from the same device are all retained.",
+  "errorCases": [
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "device_uuid and captured_at are required",
+      "when": "the body omits device_uuid or captured_at"
+    },
+    {
+      "status": 400,
+      "code": "BadRequest",
+      "message": "<error message thrown by recordHealth>",
+      "when": "recordHealth throws — malformed captured_at or an insert failure (caught and returned as 400, not 500)"
+    }
+  ],
+"requiresAuth": false,
+  "expectedStatus": 201,
+  "sdk": "sdk-diagnostic-telemetry",
+  "sourceFile": "packages/sdk-diagnostic-telemetry/src/server/index.ts",
+  "_generated": true,
+  "testability": "auto",
+  "priority": 40,
+  "dependsOn": [
   "POST /api/auth/register",
   "POST /api/auth/signup-tenant",
   "POST /api/devices"
  ],
- "testCases": [
+  "testCases": [
   {
-   "name": "Record a health snapshot for a registered device",
-   "payload": {
+  "name": "Record a health snapshot for a registered device",
+  "payload": {
     "device_uuid": "{{cache:devices.create.response.data.device.device_uuid}}",
     "permissions": {
      "camera": true,
@@ -31,13 +46,13 @@
     "captured_at": "{{dynamic:pastdatetime}}",
     "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}"
    },
-   "expectedStatus": 201,
-   "expectedResponse": {
+  "expectedStatus": 201,
+  "expectedResponse": {
     "success": true
    }
   }
  ],
- "captureResponse": {
+  "captureResponse": {
   "diagnostic.health.response.data.snapshot_id": "data.snapshot_id",
   "diagnostic.health.response.data.device_uuid": "data.device_uuid"
  }

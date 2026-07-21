@@ -12,7 +12,14 @@
   "_generated": true,
   "testability": "auto",
   "fieldEnums": {
-    "status": ["running", "completed", "failed", "terminated_ttl_expired", "terminated_kill_switch", "terminated_quota"]
+    "status": [
+      "running",
+      "completed",
+      "failed",
+      "terminated_ttl_expired",
+      "terminated_kill_switch",
+      "terminated_quota"
+    ]
   },
   "testCases": [
     {
@@ -26,6 +33,33 @@
         "Authorization": "Bearer {{cache:auth.register.response.data.token}}"
       },
       "expectedStatus": 200
+    }
+  ],
+  "description": "Lists agent_run rows, optionally filtered by tenant_id, agent_id and status, with limit/offset paging. Requires a valid tenant JWT (requireAuth). Edge cases: filters come from the query string, not the JWT, so omitting tenant_id lists across tenants and a foreign tenant_id is not rejected - tenant scoping must be tested explicitly; limit/offset go through parseInt, so a non-numeric value becomes NaN and surfaces as a 500 \"List failed\" instead of a 400; an unknown status value or an agent_id with no runs returns 200 with an empty array rather than a 404; a non-UUID tenant_id or agent_id fails the uuid cast and yields a 500.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "Authorization header absent or not in Bearer form (requireAuth)"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "Bearer token fails JWT verification (requireAuth)"
+    },
+    {
+      "status": 500,
+      "code": "ListFailed",
+      "message": "List failed",
+      "when": "listAgentRuns throws - NaN limit/offset, a non-UUID tenant_id or agent_id failing the uuid cast, or any DB error"
+    },
+    {
+      "status": 500,
+      "code": "InternalError",
+      "message": "InternalError",
+      "when": "the handler throws outside its own try/catch and the route wrapper catch fires"
     }
   ]
 }

@@ -67,5 +67,62 @@
   },
   "captureResponse": {
     "consents.create.response.data.receipt.receipt_id": "data.receipt.receipt_id"
-  }
+  },
+  "description": "Grants a new consent receipt for the (person, purpose, processor, jurisdiction) tuple (FR-CNS-1) and returns 201 with the receipt. person_id, purpose_id, processor, app_id, jurisdiction and granted_by_actor are all mandatory non-empty strings; expires_at is optional but must parse as ISO-8601 when supplied; source_tenant_id and target_tenant_id are optional and drive the cross-border check. Edge cases: a cross-border transfer refused on jurisdictional grounds returns HTTP 451 CrossBorderViolation (FR-CNS-5), not a 403; an existing active receipt for the same tuple is a 409, so granting twice is not idempotent - revoke first; a purpose_id that is not in the registry trips a foreign-key violation that is mapped to a 400 rather than a 404; an expires_at in the past is accepted (only parseability is validated); requires a valid JWT.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "Authorization header absent or not in Bearer form (requireAuth / gateway default-deny authGate)"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "Bearer token fails JWT verification or is expired (requireAuth / gateway default-deny authGate)"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "body must be an object",
+      "when": "Request body is absent or not a JSON object"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "<field> is required",
+      "when": "Any of person_id, purpose_id, processor, app_id, jurisdiction, granted_by_actor is absent or whitespace-only"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "expires_at must be ISO-8601",
+      "when": "expires_at is supplied but Date.parse cannot parse it"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "purpose_id does not exist",
+      "when": "The receipt insert raises a foreign-key violation - purpose_id has not been registered via POST /api/consents/purposes"
+    },
+    {
+      "status": 409,
+      "code": "Conflict",
+      "message": "Active receipt already exists for this tuple",
+      "when": "A duplicate-key violation - an active receipt already covers this (person, purpose, processor, jurisdiction) tuple"
+    },
+    {
+      "status": 451,
+      "code": "CrossBorderViolation",
+      "message": "<CrossBorderError message>",
+      "when": "grantConsent throws CrossBorderError - the source_tenant_id/target_tenant_id transfer is not permitted for this jurisdiction (FR-CNS-5)"
+    },
+    {
+      "status": 500,
+      "code": "InternalError",
+      "message": "InternalError",
+      "when": "Any other grantConsent failure (database error, event-emit failure)"
+    }
+  ]
 }

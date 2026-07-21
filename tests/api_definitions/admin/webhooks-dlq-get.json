@@ -2,6 +2,21 @@
   "name": "GET /admin/webhooks/dlq — api-gateway",
   "endpoint": "/admin/webhooks/dlq",
   "method": "GET",
+  "description": "Operator cross-tenant dead-letter queue view: deliveries in status \"dlq\" whose dlq_until is NULL or still in the future, joined to their subscription and endpoint to expose delivery_id, endpoint_id, event_type, attempts, failed_at and tenant_id. Ordered by last_attempt_at descending (NULLS LAST) and capped at 100 rows. QA edge cases: entries whose dlq_until has already passed are filtered OUT of this list — a delivery can therefore vanish from the DLQ view purely by aging, and replaying it afterwards returns 409 from the replay route, so QA should read this list and replay promptly; the query is deliberately not tenant-filtered, so it spans all tenants; the 100-row cap has no pagination; an empty DLQ is a 200 with data: [], never a 404.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "admin token required",
+      "when": "requireAdmin() found no valid x-admin-ops-token header — missing, or matching neither env ADMIN_OPS_TOKEN nor an active admin.ops_token hash (30s cache TTL applies to revocations)"
+    },
+    {
+      "status": 500,
+      "code": "InternalServerError",
+      "message": "<database error message>",
+      "when": "the DLQ join across webhook.delivery/subscription/endpoint throws — Postgres unavailable or the webhook schema missing"
+    }
+  ],
   "requiresAuth": false,
   "expectedStatus": 200,
   "sdk": "api-gateway",

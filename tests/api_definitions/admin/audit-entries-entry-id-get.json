@@ -2,6 +2,27 @@
   "name": "GET /admin/audit/entries/:entry_id \u2014 api-gateway",
   "endpoint": "/admin/audit/entries/:entry_id",
   "method": "GET",
+  "description": "Fetches a single audit entry by entry_id with SELECT *, so the response includes the full row — payload plus the chain fields seq, prev_hash and entry_hash that POST /admin/audit/verify walks. Returns { success: true, data: <entry> }. QA edge cases: an unknown entry_id is a clean 404 \"entry not found\" from an explicit row-count check; an entry_id that is not castable to the column type (e.g. a non-UUID when the column is a UUID) fails in Postgres and returns 500 rather than 400 or 404, so malformed and missing ids behave differently here — unlike GET /admin/invoices/:invoice_id which regex-checks first and 404s; the hash columns come back as bytea and serialize as buffer-shaped JSON, not hex strings; the route is cross-tenant and ops-token gated, so no tenant ownership check is applied.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "admin token required",
+      "when": "requireAdmin() found no valid x-admin-ops-token header — missing, or matching neither env ADMIN_OPS_TOKEN nor an active admin.ops_token hash (30s cache TTL applies to revocations)"
+    },
+    {
+      "status": 404,
+      "code": "NotFound",
+      "message": "entry not found",
+      "when": "no row in audit.entry matches the entry_id path param"
+    },
+    {
+      "status": 500,
+      "code": "InternalServerError",
+      "message": "<database error message>",
+      "when": "the SELECT throws — entry_id not castable to the column type, or Postgres unavailable"
+    }
+  ],
   "requiresAuth": false,
   "expectedStatus": 200,
   "sdk": "api-gateway",

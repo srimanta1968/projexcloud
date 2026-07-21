@@ -2,6 +2,27 @@
   "name": "GET /admin/active-active/profiles/:tenant_id — api-gateway",
   "endpoint": "/admin/active-active/profiles/:tenant_id",
   "method": "GET",
+  "description": "Reads a tenant's active-active profile together with its replication streams, returning { success: true, data: { profile, replication_streams } }. QA edge cases: a tenant with no profile is a clean 404 \"no profile for tenant\" — the null check on the profile happens before the stream lookup, so streams are only queried for a real profile; a profile that exists with zero replication streams is a 200 with an empty replication_streams array, not a 404; neither call is wrapped in try/catch, so a tenant_id that fails the Postgres uuid cast escapes to the Fastify default 500 body ({ statusCode, error, message }) rather than a 400 or 404; the route is cross-tenant and ops-token gated, so the tenant_id path param is trusted with no ownership check against a caller JWT.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "admin token required",
+      "when": "requireAdmin() found no valid x-admin-ops-token header — missing, or matching neither env ADMIN_OPS_TOKEN nor an active admin.ops_token hash (30s cache TTL applies to revocations)"
+    },
+    {
+      "status": 404,
+      "code": "NotFound",
+      "message": "no profile for tenant",
+      "when": "getActiveActiveProfile(tenant_id) returns null/undefined — that tenant has no active-active profile"
+    },
+    {
+      "status": 500,
+      "code": "InternalServerError",
+      "message": "Internal Server Error",
+      "when": "getActiveActiveProfile() or listReplicationStreams() throws — most commonly tenant_id failing a uuid cast, or Postgres unavailable; unhandled by the route, so Fastify default error serialization applies"
+    }
+  ],
   "requiresAuth": false,
   "expectedStatus": 200,
   "sdk": "api-gateway",

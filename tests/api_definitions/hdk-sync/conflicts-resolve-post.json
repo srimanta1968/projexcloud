@@ -49,5 +49,32 @@
   "captureResponse": {
     "hdk-sync.conflicts-resolve.response.data.conflict.conflict_id": "data.conflict.conflict_id",
     "hdk-sync.conflicts-resolve.response.data.human_review_task.task_id": "data.human_review_task.task_id"
-  }
+  },
+  "description": "Resolves a two-sided conflict for an event_type by applying that type's registered policy (crdt / lww / merge / event-sourcing / human-review) to input_a and input_b, optionally linking the outcome to a batch_id and an audit_entry_id. Edge cases: the event_type MUST already be registered via PUT /api/hdk-sync/event-type-policies — an unregistered type returns 409 UnregisteredEventType, not 404; input_a and input_b must both be present objects (a falsy or missing side is a 400); the catch block maps ANY resolver throw to 409, so unrelated resolver failures also present as UnregisteredEventType; a 'human-review' policy does not resolve inline, it enqueues a human-review task; batch_id and audit_entry_id are optional linkage only.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "Authorization header absent or not in 'Bearer <jwt>' form (requireAuth preHandler)"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "JWT signature invalid, malformed, or exp has elapsed"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "missing fields",
+      "when": "event_type, input_a or input_b is absent/falsy"
+    },
+    {
+      "status": 409,
+      "code": "UnregisteredEventType",
+      "message": "event_type <type> has no registered conflict_policy",
+      "when": "resolveConflict threw — chiefly because no policy is registered for the event_type; the catch maps every resolver throw to this 409"
+    }
+  ]
 }

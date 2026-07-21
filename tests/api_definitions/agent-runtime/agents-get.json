@@ -12,7 +12,11 @@
   "_generated": true,
   "testability": "auto",
   "fieldEnums": {
-    "tier": ["sync", "orchestration", "batch"]
+    "tier": [
+      "sync",
+      "orchestration",
+      "batch"
+    ]
   },
   "testCases": [
     {
@@ -26,6 +30,33 @@
         "Authorization": "Bearer {{cache:auth.register.response.data.token}}"
       },
       "expectedStatus": 200
+    }
+  ],
+  "description": "Lists agent_definition rows, optionally filtered by tenant_id and tier, with limit/offset paging. Requires a valid tenant JWT (requireAuth). Edge cases: tenant_id is read from the query string, not the JWT, so an absent tenant_id lists across tenants and a foreign tenant_id is NOT rejected - verify tenant scoping deliberately; limit/offset go through parseInt so a non-numeric or empty value yields NaN and surfaces as a 500 \"List failed\" rather than a 400; an unknown tier value or a tenant with no definitions returns 200 with an empty array, not a 404; a malformed non-UUID tenant_id fails the Postgres uuid cast and becomes a 500.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "Authorization header absent or not in Bearer form (requireAuth)"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "Bearer token fails JWT verification (requireAuth)"
+    },
+    {
+      "status": 500,
+      "code": "ListFailed",
+      "message": "List failed",
+      "when": "listAgentDefinitions throws - NaN limit/offset from a non-numeric query value, a non-UUID tenant_id failing the uuid cast, or any DB error"
+    },
+    {
+      "status": 500,
+      "code": "InternalError",
+      "message": "InternalError",
+      "when": "the handler throws outside its own try/catch and the route wrapper catch fires"
     }
   ]
 }

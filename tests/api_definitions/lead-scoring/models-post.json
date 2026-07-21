@@ -9,9 +9,9 @@
   "_generated": true,
   "testability": "auto",
   "dependsOn": [
-    "POST /api/auth/register",
     "POST /api/auth/signup-tenant"
   ],
+  "description": "Creates a lead-scoring model for a (tenant_id, vertical) pair and, in the same transaction, seeds one lead_scoring.feature_weight row per entry in weights — defaulting to DEFAULT_FEATURE_WEIGHTS (proximity 0.30, expertise 0.25, intent 0.30, storm_impact 0.15) when weights is omitted. Status is 'active' with trained_at = now() when activate is true, otherwise 'training' with trained_at null. QA edge cases: creation is NOT idempotent and nothing enforces one model per (tenant, vertical), so repeated POSTs with activate:true leave several active models and the /models/active lookup then resolves the most recently trained one; tenant_id is cast to ::uuid in SQL, so a non-UUID tenant_id fails inside the transaction and surfaces as 400 rather than a distinct validation error; passing an empty weights object ({}) is accepted and creates a model with zero weight rows, which later makes scoring fall back to DEFAULT_FEATURE_WEIGHTS; vertical is a free-text string with no allowlist.",
   "testCases": [
     {
       "name": "Create an active lead-scoring model for (tenant, vertical)",
@@ -34,7 +34,7 @@
       },
       "expectedStatus": 201,
       "headers": {
-        "Authorization": "Bearer {{cache:auth.register.response.data.token}}"
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
       }
     }
   ],
@@ -51,5 +51,31 @@
   "captureResponse": {
     "lead-scoring.create.response.data.model_id": "data.model_id",
     "lead-scoring.create.response.data.tenant_id": "data.tenant_id"
-  }
+  },
+  "errorCases": [
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "tenant_id and vertical are required",
+      "when": "tenant_id or vertical is missing or empty in the body"
+    },
+    {
+      "status": 400,
+      "code": "CreateModelFailed",
+      "message": "<underlying database error message>",
+      "when": "createModel throws inside the transaction — e.g. tenant_id is not a valid UUID for the ::uuid cast, feature_set is not valid JSON, or a duplicate (model_id, feature) weight is supplied"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "no Authorization header, or it is not of the form 'Bearer <jwt>' (api-gateway default-deny authGate, AUTH_GATE_MODE=enforce)"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "the bearer JWT fails verifyJwt — bad signature, wrong JWT_SECRET, or exp already elapsed (api-gateway default-deny authGate, AUTH_GATE_MODE=enforce)"
+    }
+  ]
 }

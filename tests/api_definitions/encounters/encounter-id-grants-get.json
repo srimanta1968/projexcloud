@@ -12,6 +12,7 @@
   "sourceFile": "packages/sdk-engagement/src/server/routes.ts",
   "_generated": true,
   "testability": "auto",
+  "description": "Lists the currently ACTIVE grants on an encounter, ordered by issued_at. The query filters to revoked_at IS NULL AND expires_at > now(), so revoked and expired grants are excluded server-side. QA edge cases: expiry is evaluated at query time, which makes this the natural place to test TTL behaviour — issue a grant with a short ttl_ms, confirm it appears, then confirm it disappears once expires_at passes, with no state change or explicit sweep required; a revoked grant vanishes from this list immediately, so the listing cannot be used to audit historical grants; an unknown encounter_id returns 200 with an empty array rather than a 404; the listing is unpaginated and keyed only on encounter_id with no tenant predicate.",
   "testCases": [
     {
       "name": "List active grants for an encounter",
@@ -22,6 +23,20 @@
         "encounter_id": "{{cache:encounters.create.response.data.encounter.encounter_id}}"
       },
       "expectedStatus": 200
+    }
+  ],
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "no Authorization header, or it is not of the form 'Bearer <jwt>' (requireAuth preHandler)"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "the bearer JWT fails verifyJwt — bad signature, wrong JWT_SECRET, or exp already elapsed (requireAuth preHandler)"
     }
   ]
 }

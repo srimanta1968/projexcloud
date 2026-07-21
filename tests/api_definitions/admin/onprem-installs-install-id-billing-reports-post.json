@@ -2,6 +2,27 @@
   "name": "POST /admin/onprem/installs/:install_id/billing-reports — api-gateway",
   "endpoint": "/admin/onprem/installs/:install_id/billing-reports",
   "method": "POST",
+  "description": "Generates a billing report for an on-prem install over the [period_start, period_end] window and records the local artifact path where the report was written, returning 201 { success: true, data: <report> }. Air-gapped installs report billing by producing a local artifact rather than calling home, which is why the path is supplied by the operator. QA edge cases: period_start, period_end and artifact_local_path are all required with a falsy check; the dates are NOT parsed or ordered by the route, so an unparseable timestamp or a period_end before period_start is not a 400 — it either produces an empty report or fails the timestamptz cast as a 500; artifact_local_path is not existence- or writability-checked by the route, so a bad path surfaces as a 500 from the generator; an unknown install_id is an FK violation and therefore a 500, not a 404; regenerating the same period appends another report row rather than replacing.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "admin token required",
+      "when": "requireAdmin() found no valid x-admin-ops-token header — missing, or matching neither env ADMIN_OPS_TOKEN nor an active admin.ops_token hash (30s cache TTL applies to revocations)"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "period_start, period_end, artifact_local_path required",
+      "when": "any of period_start, period_end or artifact_local_path is missing, null, or an empty string"
+    },
+    {
+      "status": 500,
+      "code": "InternalServerError",
+      "message": "<report error message>",
+      "when": "generateOnpremBillingReport() throws — period_start/period_end not castable to a timestamp, artifact_local_path not writable, install_id not matching a registered install (FK violation), or Postgres unavailable"
+    }
+  ],
   "requiresAuth": false,
   "expectedStatus": 201,
   "sdk": "api-gateway",

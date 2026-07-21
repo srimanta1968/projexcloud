@@ -12,7 +12,12 @@
   "sourceFile": "packages/sdk-social/src/server/routes.ts",
   "_generated": true,
   "fieldEnums": {
-    "kind": ["dm", "comment", "mention", "review"]
+    "kind": [
+      "dm",
+      "comment",
+      "mention",
+      "review"
+    ]
   },
   "testCases": [
     {
@@ -31,9 +36,47 @@
     }
   ],
   "expectedResponse": {
-    "data": { "interaction": { "interaction_id": "string", "kind": "string" } }
+    "data": {
+      "interaction": {
+        "interaction_id": "string",
+        "kind": "string"
+      }
+    }
   },
   "captureResponse": {
     "social.interactions.create.response.data.interaction.interaction_id": "data.interaction.interaction_id"
-  }
+  },
+  "description": "Ingests an inbound social interaction (DM, comment, mention or review) against a previously authorized handle, recording the external author id and optional message body, and returns 201 with the stored interaction. Edge cases: handle_id, kind and author_external_id are mandatory and a missing one returns the generic \"missing fields\" 400; kind is enum-checked against dm, comment, mention and review with a distinct \"invalid kind\" 400; body is optional so an empty-bodied interaction (for example a bare mention) is accepted; author_persona_id is optional and left null when the external author has not yet been resolved to a known persona; a handle_id that does not exist or was never authorized violates a foreign key at insert and surfaces as a 500 rather than a 404; there is no external-id de-duplication, so replaying the same webhook payload creates duplicate interactions.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "No Authorization: Bearer <jwt> header on a requireAuth route"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "Bearer token fails verifyJwt (bad signature, malformed, or exp in the past)"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "missing fields",
+      "when": "Any of handle_id, kind or author_external_id is absent or empty"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "invalid kind",
+      "when": "kind is supplied but is not one of dm|comment|mention|review"
+    },
+    {
+      "status": 500,
+      "code": "InternalError",
+      "message": "Internal Server Error",
+      "when": "ingestInteraction throws — e.g. handle_id violates a foreign key because the handle was never authorized, or the database is unreachable"
+    }
+  ]
 }

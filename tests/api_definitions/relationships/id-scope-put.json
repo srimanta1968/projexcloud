@@ -38,17 +38,45 @@
     }
   ],
   "fieldEnums": {
-    "status": ["open", "active", "suspended", "terminated", "expired"]
+    "status": [
+      "open",
+      "active",
+      "suspended",
+      "terminated",
+      "expired"
+    ]
   },
   "statusTransitions": {
     "entity": "relationship",
     "field": "status",
-    "flow": ["open", "active", "suspended", "terminated", "expired"],
+    "flow": [
+      "open",
+      "active",
+      "suspended",
+      "terminated",
+      "expired"
+    ],
     "transitions": [
-      { "from": "active", "to": "suspended", "via": "PUT /api/relationships/:relationship_id/scope" },
-      { "from": "suspended", "to": "active", "via": "PUT /api/relationships/:relationship_id/scope" },
-      { "from": "active", "to": "terminated", "via": "PUT /api/relationships/:relationship_id/scope" },
-      { "from": "active", "to": "expired", "via": "PUT /api/relationships/:relationship_id/scope" }
+      {
+        "from": "active",
+        "to": "suspended",
+        "via": "PUT /api/relationships/:relationship_id/scope"
+      },
+      {
+        "from": "suspended",
+        "to": "active",
+        "via": "PUT /api/relationships/:relationship_id/scope"
+      },
+      {
+        "from": "active",
+        "to": "terminated",
+        "via": "PUT /api/relationships/:relationship_id/scope"
+      },
+      {
+        "from": "active",
+        "to": "expired",
+        "via": "PUT /api/relationships/:relationship_id/scope"
+      }
     ]
   },
   "expectedResponse": {
@@ -58,5 +86,50 @@
         "status": "string"
       }
     }
-  }
+  },
+  "description": "Updates a relationship edge's scope object and/or lifecycle status (FR-REB-4), returning the full updated relationship; setting status='terminated' also stamps terminated_at and invalidates the cached decisions for both personas. Body must be an object carrying at least one of scope or status — an empty body is a 400, and status is constrained to open|active|suspended|terminated|expired. Edge cases: an unknown or non-existent relationship_id yields 404 (the UPDATE returns zero rows); a scope-only update replaces the jsonb scope wholesale rather than merging; re-terminating an already-terminated edge succeeds idempotently and simply re-stamps terminated_at; a non-UUID relationship_id makes Postgres reject the cast and surfaces as 500. Requires a valid tenant JWT (route preHandler requireAuth plus the gateway default-deny gate).",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "No Authorization: Bearer header — the gateway default-deny authGate runs requireAuth on every non-allowlisted path"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "Bearer token fails verifyJwt (bad signature, malformed, or exp in the past)"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "body must be an object",
+      "when": "Request body is missing, null, or not a JSON object"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "at least one of scope or status is required",
+      "when": "Body is an object but carries neither a scope object nor a status string"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "status must be one of open, active, suspended, terminated, expired",
+      "when": "status is a string outside the allowed RelationshipStatus set"
+    },
+    {
+      "status": 404,
+      "code": "NotFound",
+      "message": "Relationship <relationship_id> not found",
+      "when": "No rebac.relationship row matches relationship_id, so the UPDATE (or the no-op SELECT) returns zero rows"
+    },
+    {
+      "status": 500,
+      "code": "InternalError",
+      "message": "InternalError",
+      "when": "Any other failure in updateRelationshipScope — non-UUID relationship_id rejected by Postgres, jsonb cast failure, or cache-invalidation/DB error"
+    }
+  ]
 }

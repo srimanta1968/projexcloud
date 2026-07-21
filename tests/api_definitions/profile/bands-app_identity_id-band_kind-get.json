@@ -12,7 +12,11 @@
   "priority": 60,
   "testability": "auto",
   "fieldEnums": {
-    "band_kind": ["profile", "preference", "notification_routing"]
+    "band_kind": [
+      "profile",
+      "preference",
+      "notification_routing"
+    ]
   },
   "dependsOn": [
     "POST /api/auth/register",
@@ -30,6 +34,39 @@
         "band_kind": "profile"
       },
       "expectedStatus": 200
+    }
+  ],
+  "description": "Reads one L2 profile band (the encrypted fields_envelope) for an app identity and band kind, returning 200 with { data: { band } }. band_kind is validated against the closed set profile | preference | notification_routing before the query runs. Edge cases: an unrecognised band_kind is a 400 (not a 404); a valid band_kind for an app_identity_id that has never had that band upserted is a 404; a non-UUID app_identity_id reaches the Postgres UUID cast unguarded and surfaces as a 500; the band is keyed only by (app_identity_id, band_kind) so the handler performs no tenant check against the JWT; requires a valid JWT.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "Authorization header absent or not in Bearer form (requireAuth / gateway default-deny authGate)"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "Bearer token fails JWT verification or is expired (requireAuth / gateway default-deny authGate)"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "invalid band_kind",
+      "when": "band_kind path segment is not one of profile, preference, notification_routing"
+    },
+    {
+      "status": 404,
+      "code": "NotFound",
+      "message": "NotFound",
+      "when": "No profile.band_l2 row exists for the (app_identity_id, band_kind) pair"
+    },
+    {
+      "status": 500,
+      "code": "Internal Server Error",
+      "message": "invalid input syntax for type uuid",
+      "when": "app_identity_id is not a valid UUID - no format guard, so Postgres 22P02 escapes as an unhandled 500"
     }
   ]
 }

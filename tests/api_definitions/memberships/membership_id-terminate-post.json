@@ -21,7 +21,11 @@
   "statusTransitions": {
     "entity": "membership",
     "field": "status",
-    "flow": ["active", "suspended", "terminated"],
+    "flow": [
+      "active",
+      "suspended",
+      "terminated"
+    ],
     "transitions": [
       {
         "from": "active",
@@ -46,5 +50,32 @@
   "captureResponse": {
     "memberships.terminate.response.data.membership.membership_id": "data.membership.membership_id",
     "memberships.terminate.response.data.membership.status": "data.membership.status"
-  }
+  },
+  "description": "Terminates the L3 membership named by the membership_id path param and returns the updated row. Requires a valid tenant JWT (requireAuth). Edge cases: no body is read, so any payload is ignored; there is no state precondition - an already-terminated membership can be terminated again and still returns 200 with the row (repeatable, though the termination stamp is rewritten), whereas an unknown membership_id returns 404 NotFound; the caller JWT tenant is never compared to the membership, so any authenticated caller can terminate any membership - verify tenant scoping deliberately; the route does not cascade to or check dependent L4 personas; a malformed non-UUID membership_id fails the uuid cast in an untried service call and surfaces as a Fastify 500 rather than a 404.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "Authorization header absent or not in Bearer form (requireAuth)"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "Bearer token fails JWT verification (requireAuth)"
+    },
+    {
+      "status": 404,
+      "code": "NotFound",
+      "message": "NotFound",
+      "when": "terminateMembership returns no row for the membership_id"
+    },
+    {
+      "status": 500,
+      "code": "InternalServerError",
+      "message": "Internal Server Error",
+      "when": "terminateMembership throws and the route has no try/catch, so the Fastify default error handler responds - chiefly a non-UUID membership_id failing the uuid cast, or any DB error"
+    }
+  ]
 }

@@ -47,15 +47,58 @@
   "statusTransitions": {
     "entity": "impersonation_grant",
     "field": "status",
-    "flow": ["pending_approval", "active", "ended"],
+    "flow": [
+      "pending_approval",
+      "active",
+      "ended"
+    ],
     "transitions": [
-      { "from": null, "to": "pending_approval", "via": "POST /api/impersonation/request" },
-      { "from": "pending_approval", "to": "active", "via": "POST /api/impersonation/:grant_id/approve" },
-      { "from": "active", "to": "ended", "via": "POST /api/impersonation/:grant_id/end" }
+      {
+        "from": null,
+        "to": "pending_approval",
+        "via": "POST /api/impersonation/request"
+      },
+      {
+        "from": "pending_approval",
+        "to": "active",
+        "via": "POST /api/impersonation/:grant_id/approve"
+      },
+      {
+        "from": "active",
+        "to": "ended",
+        "via": "POST /api/impersonation/:grant_id/end"
+      }
     ]
   },
   "captureResponse": {
     "impersonation.request.response.data.grant.grant_id": "data.grant.grant_id",
     "impersonation.request.response.data.grant.status": "data.grant.status"
-  }
+  },
+  "description": "Opens a support impersonation grant against a target tenant, recording support_user_id, target_tenant_id and the ticket_ref, and returns 201 with the grant. Requires a valid tenant JWT (requireAuth). duration_minutes is optional and clamped server-side to the 5..240 range (default 30), so 1 becomes 5 and 10000 becomes 240 rather than erroring. The new grant is always created in status \"pending_approval\" because manager_approval_id and customer_consent_ref are still null - it does not grant access yet. Edge cases: support_user_id, target_tenant_id and ticket_ref are presence-checked only (no UUID or existence check), so a non-existent or malformed target_tenant_id passes validation and fails on the INSERT as a 500; the caller JWT identity is never compared to support_user_id, so a caller can open a grant naming someone else; there is no duplicate suppression - repeating the same ticket_ref creates another grant.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "Authorization header absent or not in Bearer form (requireAuth)"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "Bearer token fails JWT verification (requireAuth)"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "support_user_id, target_tenant_id, ticket_ref are required",
+      "when": "any of support_user_id, target_tenant_id or ticket_ref is absent or empty"
+    },
+    {
+      "status": 500,
+      "code": "InternalError",
+      "message": "InternalError",
+      "when": "the INSERT into identity.impersonation_grant throws - a non-UUID support_user_id or target_tenant_id failing the uuid cast, an unsatisfied foreign key, or any DB error"
+    }
+  ]
 }

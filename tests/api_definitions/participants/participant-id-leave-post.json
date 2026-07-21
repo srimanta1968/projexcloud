@@ -32,5 +32,32 @@
   "captureResponse": {
     "participants.leave.response.data.participant.participant_id": "data.participant.participant_id",
     "participants.leave.response.data.participant.encounter_id": "data.participant.encounter_id"
-  }
+  },
+  "description": "Marks an encounter participant as having left by stamping engagement.encounter_participant.left_at = now(), returning 200 with the updated participant row (participant_id, encounter_id, persona_id, role, joined_at, left_at, required). The UPDATE is guarded by `left_at IS NULL`, so only currently-joined participants are affected. Edge cases: leaving twice returns 404 on the second call because zero rows match, as does an unknown participant_id; the handler does not check the parent encounter's state, so a participant can leave an encounter that is already closed or sealed; there is no re-join endpoint, and required=true participants are not protected from leaving; a non-UUID participant_id fails the Postgres cast as an uncaught 500. Requires a valid tenant JWT.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "No Authorization: Bearer header — the gateway default-deny authGate runs requireAuth on every non-allowlisted path"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "Bearer token fails verifyJwt (bad signature, malformed, or exp in the past)"
+    },
+    {
+      "status": 404,
+      "code": "NotFound",
+      "message": "NotFound",
+      "when": "No engagement.encounter_participant row with that participant_id and left_at IS NULL — unknown participant, or they already left"
+    },
+    {
+      "status": 500,
+      "code": "Internal Server Error",
+      "message": "Fastify default error payload from the uncaught service throw",
+      "when": "removeParticipant throws — participant_id is not a valid UUID, or the UPDATE fails"
+    }
+  ]
 }

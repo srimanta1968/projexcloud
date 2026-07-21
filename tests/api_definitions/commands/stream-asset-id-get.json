@@ -18,9 +18,13 @@
   "testCases": [
     {
       "name": "Edge agent subscribes to its asset's command stream",
-      "pathParams": { "asset_id": "{{cache:assets.create.response.data.asset_id}}" },
+      "pathParams": {
+        "asset_id": "{{cache:assets.create.response.data.asset_id}}"
+      },
       "expectedStatus": 101,
       "testability": "manual"
     }
-  ]
+  ],
+  "description": "Per-asset command delivery stream. This is a WebSocket-only route ({ websocket: true }): an edge agent for a robot subscribes here and receives dispatched commands in real time as JSON frames from the command broker. On connect the server immediately pushes a { kind: \"hello\", asset_id, emitted_at } frame, and the broker subscription is torn down by the socket close handler. The path prefix /api/commands/stream/ is deliberately exempt from the api-gateway default-deny authGate (WS auth belongs in the Sec-WebSocket-Protocol token, tracked as follow-up hardening), so no Authorization header is checked and any asset_id may be subscribed. The handler has no validation branches and never sends an HTTP error status: it does not verify the asset exists, so subscribing to an unknown asset_id simply yields a stream that never emits, and a send on an already-closed socket is swallowed. Edge cases are transport-level rather than status-code-level - a plain non-upgrade HTTP GET is rejected by the @fastify/websocket plugin before this handler runs, and an abandoned socket is cleaned up only on close.",
+  "errorCases": []
 }

@@ -3,6 +3,33 @@
   "endpoint": "/api/analytics/datasets/:spec_id/builds",
   "sdk": "sdk-analytics",
   "method": "GET",
+  "description": "Returns the reproducibility ledger for a dataset spec - every build with its time window and lineage_ref - scoped to the caller's tenant. Edge cases: an unknown spec_id or one owned by another tenant is NOT a 404 here; the query simply returns an empty array with 200. No pagination params are accepted, so specs with a long build history return the whole list.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "Authorization header absent or not in the form \"Bearer <jwt>\""
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "JWT signature invalid, malformed, or past its exp claim"
+    },
+    {
+      "status": 400,
+      "code": "BadRequest",
+      "message": "tenant context required",
+      "when": "the verified JWT carries no tenant_id claim"
+    },
+    {
+      "status": 500,
+      "code": "InternalError",
+      "message": "<error message from listDatasetBuilds>",
+      "when": "the service/DB call throws (bad asset/sensor reference, ClickHouse or Postgres failure)"
+    }
+  ],
   "requiresAuth": true,
   "expectedStatus": 200,
   "taskId": "e292d33e-d950-446d-9a78-22818cc31e4c",

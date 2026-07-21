@@ -36,5 +36,44 @@
   },
   "captureResponse": {
     "vault.decrypt.response.data.plaintext_b64": "data.plaintext_b64"
-  }
+  },
+  "description": "Reverses POST /api/vault/encrypt: unwraps the DEK via the secret reference and decrypts the bundle, returning 200 with { plaintext_b64 }. All five of ref, ciphertext_b64, wrapped_dek_b64, iv_b64 and tag_b64 are mandatory non-empty strings - every missing field is reported in the same 400 details array. Edge cases: an unregistered or malformed ref is a 400; a tampered ciphertext, wrapped DEK, IV or auth tag fails AES-GCM authentication inside the service and is not specially mapped, so it surfaces as a generic 500 InternalError rather than a 400; decrypting a bundle whose key has since been shredded also fails as a 500; the operation is read-only and safely repeatable; requires a valid JWT.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "Authorization header absent or not in Bearer form (requireAuth / gateway default-deny authGate)"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "Bearer token fails JWT verification or is expired (requireAuth / gateway default-deny authGate)"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "body must be an object",
+      "when": "Request body is absent or not a JSON object"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "<field> is required",
+      "when": "Any of ref, ciphertext_b64, wrapped_dek_b64, iv_b64, tag_b64 is absent, not a string, or an empty string"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "Secret reference not registered ... / Invalid secret reference ...",
+      "when": "envelopeDecrypt rejects ref - the secret reference is malformed or has never been registered"
+    },
+    {
+      "status": 500,
+      "code": "InternalError",
+      "message": "InternalError",
+      "when": "Any other envelopeDecrypt failure - notably GCM authentication failure from a tampered/mismatched bundle, and decryption under a shredded key"
+    }
+  ]
 }

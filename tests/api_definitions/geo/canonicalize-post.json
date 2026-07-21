@@ -30,12 +30,35 @@
         "lat": 37.7749,
         "lng": -122.4194,
         "geo_node_id": "{{cache:geo-nodes.create.response.data.geo_node.geo_node_id}}",
-        "provider_refs": { "mapbox": "poi.a1b2c3" }
+        "provider_refs": {
+          "mapbox": "poi.a1b2c3"
+        }
       },
       "expectedStatus": 200
     }
   ],
   "captureResponse": {
     "geo.canonicalize.response.data.address.address_id": "data.address.address_id"
-  }
+  },
+  "description": "Canonicalizes a raw address string into a deduplicated geo.address row and records a geo.address_alias for the raw input, returning 200 with the canonical address. raw_input, street, city and country are all mandatory; the alias hash is looked up first, so re-posting the same raw_input is idempotent and returns the existing address rather than creating a duplicate. Edge cases: repeated/duplicate raw_input (alias hit, no new row, no audit event), a different raw_input that normalizes to the same (street, city, country, postal_code) hash (sibling reuse - same address_id), empty-string street/city/country (rejected as missing), optional lat/lng/region/postal_code/geo_node_id/provider_refs omitted, a geo_node_id that does not exist (FK violation surfaces as an unhandled 500), and missing/expired JWT.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "Authorization header absent or not in Bearer form (requireAuth / gateway default-deny authGate)"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "Bearer token fails JWT verification or is expired (requireAuth / gateway default-deny authGate)"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "missing fields",
+      "when": "raw_input, street, city or country is absent or empty in the body"
+    }
+  ]
 }

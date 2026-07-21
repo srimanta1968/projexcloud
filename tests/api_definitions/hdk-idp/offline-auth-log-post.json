@@ -16,7 +16,11 @@
     "POST /api/hdk-idp/claims"
   ],
   "fieldEnums": {
-    "method": ["biometric", "pin", "passkey"]
+    "method": [
+      "biometric",
+      "pin",
+      "passkey"
+    ]
   },
   "captureResponse": {
     "offline-auth.log.response.data.log.log_id": "data.log.log_id",
@@ -36,6 +40,45 @@
         "occurred_at": "{{dynamic:pastdatetime}}"
       },
       "expectedStatus": 201
+    }
+  ],
+  "description": "Records an authentication a device performed while offline, writing it to hdk_idp.offline_auth_log on the next sync and touching last_used_at on the matching (device_uuid, person_id) device_claim. All four fields - device_uuid, person_id, method and occurred_at - are required, and method must be one of biometric, pin or passkey (also enforced by a CHECK constraint on the table). Edge cases: an unrecognised method has its own distinct 400 branch separate from the missing-fields branch; there is no FK and no uniqueness constraint, so an unknown device/person is accepted and replaying the same event inserts a duplicate log row (not idempotent); when no claim matches, the last_used_at UPDATE affects zero rows silently and the call still returns 201; person_id must be a UUID and occurred_at must be a parseable timestamp - both are handled at the database and fail there, not in a validation branch.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "Authorization header absent or not in \"Bearer <token>\" form (requireAuth preHandler)"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "Bearer token fails verifyJwt (bad signature, malformed, or exp in the past) (requireAuth preHandler)"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "missing fields",
+      "when": "device_uuid, person_id, method or occurred_at missing/empty in the body"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "invalid method",
+      "when": "method is present but not one of 'biometric', 'pin', 'passkey'"
+    },
+    {
+      "status": 400,
+      "code": "FST_ERR_CTP_EMPTY_JSON_BODY",
+      "message": "Body cannot be empty when content-type is set to application/json",
+      "when": "Content-Type: application/json declared but the request body is empty or unparseable (Fastify JSON body parser, before the handler runs)"
+    },
+    {
+      "status": 500,
+      "code": "InternalServerError",
+      "message": "Internal Server Error",
+      "when": "logOfflineAuth INSERT fails - person_id is not a valid UUID (hdk_idp.offline_auth_log.person_id is UUID NOT NULL), occurred_at is not a parseable date (Invalid Date), or the Postgres pool is unavailable"
     }
   ]
 }

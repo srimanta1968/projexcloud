@@ -34,5 +34,43 @@
         "success": true
       }
     }
+  ],
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "Authorization header absent or not in Bearer form (requireAuth)"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "Bearer token fails JWT verification (requireAuth)"
+    },
+    {
+      "status": 400,
+      "code": "MissingPathParam",
+      "message": "Missing path param: token_id",
+      "when": "token_id resolves falsy (defensive - an empty path segment normally route-misses to 404 first)"
+    },
+    {
+      "status": 400,
+      "code": "MissingRequiredField",
+      "message": "Missing required field: args",
+      "when": "body.args is undefined (absent body, or a body with no args key); args:null passes the check"
+    },
+    {
+      "status": 500,
+      "code": "ValidateFailed",
+      "message": "Validate failed",
+      "when": "validateToken throws - a non-UUID token_id failing the uuid cast, or any DB error"
+    },
+    {
+      "status": 500,
+      "code": "InternalError",
+      "message": "InternalError",
+      "when": "the handler throws outside its own try/catch and the route wrapper catch fires"
+    }
   ]
 }

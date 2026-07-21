@@ -9,7 +9,10 @@
   "featureId": "e9e9b8ee-101b-4a6c-8100-538b861781a8",
   "epicId": "f9bd4029-5fd6-4dc1-bfce-00af515b8294",
   "priority": 40,
-  "dependsOn": ["POST /api/auth/signup-tenant", "POST /api/notifications/providers"],
+  "dependsOn": [
+    "POST /api/auth/signup-tenant",
+    "POST /api/notifications/providers"
+  ],
   "testCases": [
     {
       "name": "Revoke the tenant's email provider",
@@ -30,6 +33,39 @@
           }
         }
       }
+    }
+  ],
+  "description": "Revokes an email provider binding for the caller's tenant, recording an audit reason. The body is optional — an absent reason defaults to 'tenant revoked email provider'. The binding is resolved by (binding_id, tenant_id from the JWT), so another tenant's provider_id is unreachable. Edge cases: a JWT with no tenant_id claim is 403; an unknown, cross-tenant or ALREADY-revoked :provider_id raises a service 'not found' error that fail() turns into 400 ValidationError rather than 404, so a repeat delete is a 400 and this route is not idempotent; revoking the tenant's only provider leaves outbound email with no binding and is not blocked.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "Authorization header absent or not in 'Bearer <jwt>' form (requireAuth preHandler)"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "JWT signature invalid, malformed, or exp has elapsed"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "<service error matching unsupported|too short|must be at least|not found|invalid>",
+      "when": ":provider_id is unknown, belongs to another tenant, or is already revoked — the service not-found error is mapped to 400 by fail()"
+    },
+    {
+      "status": 403,
+      "code": "Forbidden",
+      "message": "JWT missing tenant_id claim",
+      "when": "the verified JWT carries no tenant_id claim"
+    },
+    {
+      "status": 500,
+      "code": "InternalError",
+      "message": "InternalError",
+      "when": "Unexpected service/DB failure (connection loss, or a constraint the handler does not map)"
     }
   ]
 }

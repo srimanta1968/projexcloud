@@ -44,7 +44,10 @@
     }
   ],
   "fieldEnums": {
-    "resource_class": ["sensitive", "low_risk"]
+    "resource_class": [
+      "sensitive",
+      "low_risk"
+    ]
   },
   "expectedResponse": {
     "data": {
@@ -56,5 +59,38 @@
   },
   "captureResponse": {
     "policies.evaluate.response.data.decision": "data.decision"
-  }
+  },
+  "description": "Evaluates a stored policy against a subject and context per FR-POL-1 and returns the decision plus any obligations. Requires a valid tenant JWT (requireAuth). Edge cases: policy_id and subject_id are mandatory presence checks; purpose is conditionally required - it must be supplied whenever purpose_bound is true, and omitting it then is a 400 even though purpose is otherwise optional; a well-formed policy_id that does not resolve is a 404 NotFound raised from the service (matched on the message containing \"not found\"), not a 400; a policy that evaluates to deny is still a 200 with a deny decision in the body, so a deny must not be treated as an error status; a non-UUID policy_id or subject_id fails the uuid cast and surfaces as a 500 rather than a 400.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "Authorization header absent or not in Bearer form (requireAuth)"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "Bearer token fails JWT verification (requireAuth)"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "policy_id is required / subject_id is required / purpose is required when purpose_bound is true",
+      "when": "validateEvaluatePolicy fails; details[] carries every failed rule"
+    },
+    {
+      "status": 404,
+      "code": "NotFound",
+      "message": "<service message containing \"not found\">",
+      "when": "evaluatePolicy throws for an unresolvable policy or a referenced entity it cannot find"
+    },
+    {
+      "status": 500,
+      "code": "InternalError",
+      "message": "InternalError",
+      "when": "evaluatePolicy throws any other error - IQL evaluation failure, a non-UUID id failing the uuid cast, or any DB error"
+    }
+  ]
 }

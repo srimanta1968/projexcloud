@@ -2,6 +2,27 @@
   "name": "POST /api/campaigns/journeys/:journey_id/runs — sdk-campaign",
   "endpoint": "/api/campaigns/journeys/:journey_id/runs",
   "method": "POST",
+  "description": "Starts a journey run for one subject persona; the run begins at current_step 0 in state 'active'. subject_persona_id is required. Edge cases: missing subject_persona_id -> 400; an unknown journey_id fails the FK inside the insert and surfaces as an unhandled 500 rather than a 404; nothing prevents starting a second concurrent run for the same (journey, persona) pair, so the endpoint is not idempotent and callers must de-duplicate.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "Authorization header absent or not in the form \"Bearer <jwt>\""
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "JWT signature invalid, malformed, or past its exp claim"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "missing subject_persona_id",
+      "when": "body omits subject_persona_id (details: [\"missing subject_persona_id\"])"
+    }
+  ],
   "requiresAuth": true,
   "dependsOn": [
     "POST /api/auth/signup-tenant",

@@ -3,6 +3,33 @@
   "endpoint": "/api/analytics/datasets",
   "sdk": "sdk-analytics",
   "method": "GET",
+  "description": "Lists every dataset spec belonging to the caller's tenant. Tenant scoping comes from the JWT claim, so a caller can never see another tenant's specs and a token with no tenant claim is rejected 400. Edge cases: a tenant with no specs returns an empty array with 200 (not 404); the endpoint takes no filter/pagination params, so the full spec list is returned each call.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "Authorization header absent or not in the form \"Bearer <jwt>\""
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "JWT signature invalid, malformed, or past its exp claim"
+    },
+    {
+      "status": 400,
+      "code": "BadRequest",
+      "message": "tenant context required",
+      "when": "the verified JWT carries no tenant_id claim"
+    },
+    {
+      "status": 500,
+      "code": "InternalError",
+      "message": "<error message from listDatasetSpecs>",
+      "when": "the service/DB call throws (bad asset/sensor reference, ClickHouse or Postgres failure)"
+    }
+  ],
   "requiresAuth": true,
   "expectedStatus": 200,
   "taskId": "1e108f10-9db0-467e-8457-e966deb347bf",

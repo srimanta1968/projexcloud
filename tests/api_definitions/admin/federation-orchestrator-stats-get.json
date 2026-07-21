@@ -2,6 +2,15 @@
   "name": "GET /admin/federation/orchestrator-stats — api-gateway",
   "endpoint": "/admin/federation/orchestrator-stats",
   "method": "GET",
+  "description": "Read-only probe counter for the federation failover orchestrator: returns { success: true, data: <stats> } straight from the in-memory handle (probe counts, failure streaks, last-run bookkeeping) with no database access. QA edge cases: the numbers are per-replica and per-process — they reset to zero on every gateway restart and differ between replicas behind the load balancer, so tests must not assert absolute counts across calls; with FEDERATION_ORCHESTRATOR_ENABLED=false the orchestrator is constructed but idle and stats stay at their initial values rather than the route 404-ing or erroring; the handler has no try/catch and no failure branch beyond the auth guard, so 401 and 200 are the only realistic outcomes.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "admin token required",
+      "when": "x-admin-ops-token header is missing, empty, or matches neither the env ADMIN_OPS_TOKEN break-glass secret (constant-time compare) nor the SHA-256 hash of any active row in admin.ops_token; revoked/expired DB tokens keep working until the per-replica cache expires (ADMIN_OPS_TOKEN_CACHE_TTL_MS, default 30s) unless a Redis invalidation broadcast lands first"
+    }
+  ],
   "requiresAuth": false,
   "expectedStatus": 200,
   "sdk": "api-gateway",

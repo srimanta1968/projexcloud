@@ -17,8 +17,15 @@
     "resources.create.response.data.resource.resource_id": "data.resource.resource_id"
   },
   "fieldEnums": {
-    "environment": ["dev", "staging", "prod"],
-    "status": ["registered", "quarantined"]
+    "environment": [
+      "dev",
+      "staging",
+      "prod"
+    ],
+    "status": [
+      "registered",
+      "quarantined"
+    ]
   },
   "testCases": [
     {
@@ -53,5 +60,32 @@
         "approved_by": "string"
       }
     }
-  }
+  },
+  "description": "Registers or updates an owned resource in the ownership registry, driven by GitOps sync, returning 201 with the stored record. Requires a valid tenant JWT (requireAuth). Edge cases: five fields are mandatory presence checks (resource_id, resource_type, environment, owner, approved_by) and any one missing or empty produces the same single 400 message listing all five; values are not validated against any enum in the route, so an unknown resource_type or a typo in environment is accepted and stored; because this is a sync endpoint the same resource_id is expected to be re-posted - the upsert makes it effectively idempotent on resource_id with later fields overwriting earlier ones, so a repeat call is a 201 rather than a 409; the caller JWT tenant is neither recorded nor checked, so ownership rows are platform-wide; a constraint or DB failure is a 500 that echoes the underlying error message in details[].",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "Authorization header absent or not in Bearer form (requireAuth)"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "Bearer token fails JWT verification (requireAuth)"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "resource_id, resource_type, environment, owner, approved_by are required",
+      "when": "any of resource_id, resource_type, environment, owner or approved_by is absent or empty"
+    },
+    {
+      "status": 500,
+      "code": "InternalError",
+      "message": "InternalError",
+      "when": "registerResource throws - a constraint violation or any DB error; the underlying message is echoed in details[]"
+    }
+  ]
 }

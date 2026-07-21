@@ -2,6 +2,27 @@
   "name": "POST /admin/meter/pricing-catalogs \u2014 api-gateway",
   "endpoint": "/admin/meter/pricing-catalogs",
   "method": "POST",
+  "description": "Creates a new version of a pricing catalog, stamping created_by from operator_id, and returns 200 { success: true, data: <created version> }. QA edge cases: catalog_id, version and operator_id are all required and validated with a falsy check — which means version: 0 is rejected as missing even though it is a valid-looking integer, and empty strings are likewise rejected; version is not type-checked, so a string version is passed straight to the DB; re-creating an existing (catalog_id, version) pair violates the uniqueness constraint and surfaces as a 500 with the raw driver message rather than a 409 — there is no conflict branch in this handler; nothing verifies operator_id corresponds to a real operator, it is recorded as free text.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "admin token required",
+      "when": "requireAdmin() found no valid x-admin-ops-token header — missing, or matching neither env ADMIN_OPS_TOKEN nor an active admin.ops_token hash (30s cache TTL applies to revocations)"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "catalog_id, version, operator_id required",
+      "when": "catalog_id, version or operator_id is missing, null, an empty string, or (for version) the number 0 — the guard is a falsy check"
+    },
+    {
+      "status": 500,
+      "code": "InternalServerError",
+      "message": "<database error message>",
+      "when": "createCatalogVersion() throws — most commonly a unique-constraint violation because that catalog_id/version already exists, or Postgres unavailable"
+    }
+  ],
   "requiresAuth": false,
   "expectedStatus": 200,
   "sdk": "api-gateway",

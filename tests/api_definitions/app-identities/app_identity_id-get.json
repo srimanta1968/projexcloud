@@ -27,5 +27,32 @@
       },
       "expectedStatus": 200
     }
+  ],
+  "description": "Fetches one L2 app_identity row by its app_identity_id path param. Requires a valid tenant JWT (requireAuth). Edge cases: the lookup is by primary key only - the caller JWT tenant is never compared to the row, so any authenticated caller can read any app_identity and tenant scoping is not enforced here; a well-formed UUID that does not exist returns 404 NotFound, whereas a malformed non-UUID id fails the Postgres uuid cast inside an untried service call and surfaces as a Fastify 500, not a 400 or 404.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "Authorization header absent or not in Bearer form (requireAuth)"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "Bearer token fails JWT verification (requireAuth)"
+    },
+    {
+      "status": 404,
+      "code": "NotFound",
+      "message": "NotFound",
+      "when": "no app_identity row matches the app_identity_id"
+    },
+    {
+      "status": 500,
+      "code": "InternalServerError",
+      "message": "Internal Server Error",
+      "when": "getAppIdentity throws and the route has no try/catch, so the Fastify default error handler responds - chiefly a non-UUID app_identity_id failing the uuid cast, or any DB error"
+    }
   ]
 }

@@ -14,14 +14,26 @@
   "_generated": true,
   "testability": "auto",
   "fieldEnums": {
-    "status": ["draft", "published", "archived"]
+    "status": [
+      "draft",
+      "published",
+      "archived"
+    ]
   },
   "statusTransitions": {
     "entity": "content.item",
     "field": "status",
-    "flow": ["draft", "published", "archived"],
+    "flow": [
+      "draft",
+      "published",
+      "archived"
+    ],
     "transitions": [
-      { "from": "draft", "to": "published", "via": "POST /api/content/items/:item_id/versions/:version_id/publish" }
+      {
+        "from": "draft",
+        "to": "published",
+        "via": "POST /api/content/items/:item_id/versions/:version_id/publish"
+      }
     ]
   },
   "captureResponse": {
@@ -42,6 +54,39 @@
         "published_by": "{{cache:auth.signup-tenant.response.data.userId}}"
       },
       "expectedStatus": 200
+    }
+  ],
+  "description": "Publishes a specific version of an item, making it the live version and recording published_by. Edge cases: published_by is the only required body field (400 if absent) and is accepted as free text — it is not verified to be a real persona; the 404 covers the (item_id, version_id) PAIR, so a valid version_id belonging to a DIFFERENT item is a 404 rather than a cross-item publish; there is no state guard, so re-publishing the already-live version returns 200 again (idempotent in effect); publishing an older version is permitted and acts as a rollback.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "Authorization header absent or not in 'Bearer <jwt>' form (requireAuth preHandler)"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "JWT signature invalid, malformed, or exp has elapsed"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "missing published_by",
+      "when": "body.published_by is absent/empty"
+    },
+    {
+      "status": 404,
+      "code": "NotFound",
+      "message": "NotFound",
+      "when": "no version matches the (:item_id, :version_id) pair — unknown item, unknown version, or the version belongs to another item"
+    },
+    {
+      "status": 500,
+      "code": "Internal Server Error",
+      "message": "Internal Server Error",
+      "when": ":item_id or :version_id is not a valid UUID — the route has no try/catch, so the rejection surfaces as Fastify's default 500"
     }
   ]
 }

@@ -3,6 +3,21 @@
   "endpoint": "/api/flags",
   "sdk": "sdk-feature-flags",
   "method": "GET",
+  "description": "Lists every registered feature flag with its kind, default_value and kill_switch state. Edge cases: the route accepts no filter or pagination params and is not tenant-scoped - flag definitions are global, so every authenticated caller sees the full catalogue; an empty registry returns 200 with an empty array rather than a 404; rollouts are not included in this response, only the flag definitions.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "Authorization header absent or not in the form \"Bearer <jwt>\""
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "JWT signature invalid, malformed, or past its exp claim"
+    }
+  ],
   "requiresAuth": true,
   "expectedStatus": 200,
   "taskId": "cbf65711-e8e1-41ad-84e6-7aa87b76d5a6",

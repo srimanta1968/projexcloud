@@ -15,5 +15,14 @@
       "name": "Scrape Prometheus metrics",
       "expectedStatus": 200
     }
+  ],
+  "description": "Prometheus scrape endpoint for the api-gateway. Each scrape best-effort refreshes the MDM/EMPI gauges and then renders the whole metric registry as text/plain; version=0.0.4, including the http_request_duration_seconds histogram fed by the gateway's onResponse hook (labelled by method and status_class). Edge cases: the EMPI gauge refresh is wrapped in a swallow-all try/catch, so an EMPI or database outage still yields 200 with the remaining metrics and merely stale MDM gauges - it never fails the scrape; '/metrics' is on the authGate public allowlist, so it responds identically with no Authorization header or an invalid one and never returns 401; it takes no query parameters and no body, so there is no validation branch and no client-error response; the body is plain-text exposition rather than JSON and grows with label cardinality instead of paginating.",
+  "errorCases": [
+    {
+      "status": 500,
+      "code": "InternalServerError",
+      "message": "Internal Server Error",
+      "when": "metricsRegistry.render() itself throws - it is the one call in the handler left outside the swallow-all try/catch, and the gateway registers no setErrorHandler, so the failure surfaces as Fastify's default 500 payload. Not reachable through request input; only via a corrupted metric registry."
+    }
   ]
 }

@@ -4,6 +4,21 @@
   "sdk": "sdk-data-rights",
   "sourceFile": "packages/sdk-data-rights/src/server/routes.ts",
   "method": "POST",
+  "description": "Records a reconciliation run comparing expected vs actual data classes per (person, pool) and flips the traffic light that gates DSAR certificate issuance. Edge cases: the body is entirely optional - an omitted discrepancies array defaults to [], which records a clean (green) run and unblocks certificate issuance, so QA must treat an empty-body call as semantically meaningful rather than a no-op; discrepancy entries are not shape-validated at the route; the endpoint always answers 200 (not 201) and every call appends a new run, making the most recent run authoritative.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "Authorization header absent or not in the form \"Bearer <jwt>\""
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "JWT signature invalid, malformed, or past its exp claim"
+    }
+  ],
   "requiresAuth": true,
   "expectedStatus": 200,
   "taskId": "4e811425-e319-451a-9fa6-30c71717d88f",

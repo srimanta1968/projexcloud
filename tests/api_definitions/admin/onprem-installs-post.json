@@ -2,6 +2,27 @@
   "name": "POST /admin/onprem/installs — api-gateway",
   "endpoint": "/admin/onprem/installs",
   "method": "POST",
+  "description": "Registers a customer on-prem install (P8 Variant C) with its cluster name, Kubernetes distribution and installed version, returning 201 { success: true, data: <install> }. air_gap_mode (strict | diode-in | diode-bidi) and billing_mode (internal-report-only | flat-fee | per-incident) are optional and default inside registerOnpremInstall. QA edge cases: customer_id, cluster_name, k8s_distribution and installed_version are required with a falsy check (empty strings rejected); k8s_distribution, air_gap_mode and billing_mode are typed unions but are NOT runtime-validated by the route, so out-of-enum values reach the DB check constraints and return 500 rather than 400; the route is not idempotent — registering the same customer_id + cluster_name twice either creates a second install or raises a unique violation as a 500, since there is no conflict branch; installed_version is free text and not semver-validated.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "admin token required",
+      "when": "requireAdmin() found no valid x-admin-ops-token header — missing, or matching neither env ADMIN_OPS_TOKEN nor an active admin.ops_token hash (30s cache TTL applies to revocations)"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "customer_id, cluster_name, k8s_distribution, installed_version required",
+      "when": "any of customer_id, cluster_name, k8s_distribution or installed_version is missing, null, or an empty string"
+    },
+    {
+      "status": 500,
+      "code": "InternalServerError",
+      "message": "<registration error message>",
+      "when": "registerOnpremInstall() throws — k8s_distribution/air_gap_mode/billing_mode outside their allowed enums hitting a DB check constraint, a unique violation on a duplicate install, or Postgres unavailable"
+    }
+  ],
   "requiresAuth": false,
   "expectedStatus": 201,
   "sdk": "api-gateway",

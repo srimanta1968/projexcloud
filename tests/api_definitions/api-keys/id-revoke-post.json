@@ -61,5 +61,32 @@
   "captureResponse": {
     "api-keys.revoke.response.data.key.key_id": "data.key.key_id",
     "api-keys.revoke.response.data.key.status": "data.key.status"
-  }
+  },
+  "description": "Immediately revokes an API key by id so it stops authenticating, returning the updated key record. Edge cases: revokeKey only matches an ACTIVE key, so revoking a key that is already revoked returns 404 NotFound (\"No active key with id ...\") rather than a 200 no-op — the call is therefore not idempotent and a retry after a successful revoke will 404; an unknown key_id is likewise 404; a malformed (non-UUID) key_id fails the query cast and surfaces as a 500, since the route performs no id-format validation; there is no tenant ownership check against the JWT, so authorization rests on key ids being unguessable; revocation is immediate with no grace period, unlike rotate.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "No Authorization: Bearer <jwt> header on a requireAuth route"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "Bearer token fails verifyJwt (bad signature, malformed, or exp in the past)"
+    },
+    {
+      "status": 404,
+      "code": "NotFound",
+      "message": "No active key with id <key_id>",
+      "when": "No active key matches key_id — it does not exist, or it was already revoked"
+    },
+    {
+      "status": 500,
+      "code": "InternalError",
+      "message": "InternalError",
+      "when": "revokeKey throws — e.g. key_id is not a valid UUID and the query cast fails, or the database is unreachable"
+    }
+  ]
 }

@@ -23,5 +23,32 @@
         "Authorization": "Bearer {{cache:auth.register.response.data.token}}"
       }
     }
+  ],
+  "description": "Fetches a single evidence capture row by its id path param. Gated by the gateway default-deny authGate, so a valid tenant JWT is required. Edge cases: the lookup is by id alone and the caller JWT tenant is never compared to the row tenant_id, so any authenticated caller can read any capture - tenant scoping must be tested explicitly; a well-formed but unknown id returns 404 {success:false,error:\"not found\"}, while a malformed non-UUID id fails the uuid cast inside an untried service call and surfaces as a Fastify 500 instead; the handler does not filter sealed or retention-expired captures, so those still return 200.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "Authorization header absent or not in Bearer form - gateway default-deny authGate onRequest hook (AUTH_GATE_MODE=enforce)"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "Bearer token fails JWT verification in the gateway authGate"
+    },
+    {
+      "status": 404,
+      "code": "NotFound",
+      "message": "not found",
+      "when": "getCapture returns no row for the id"
+    },
+    {
+      "status": 500,
+      "code": "InternalServerError",
+      "message": "Internal Server Error",
+      "when": "getCapture throws and the route has no try/catch, so the Fastify default error handler responds - chiefly a non-UUID id failing the uuid cast, or any DB error"
+    }
   ]
 }

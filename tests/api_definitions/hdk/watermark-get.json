@@ -13,6 +13,7 @@
     "POST /api/auth/signup-tenant",
     "POST /api/hdk/watermark"
   ],
+  "description": "Lists every watermark application recorded against one media variant, filtered by the required variant_id query param. QA edge cases: a missing variant_id is a 400, but an unknown variant_id returns 200 with an empty array rather than a 404 — \"no such variant\" and \"variant with no watermarks\" are indistinguishable; the listing is unpaginated (no limit/offset), so a variant with many applications returns them all in one response; the query is keyed only by variant_id with no tenant predicate.",
   "testCases": [
     {
       "name": "List watermark applications for a variant",
@@ -23,6 +24,26 @@
       "headers": {
         "Authorization": "Bearer {{cache:auth.register.response.data.token}}"
       }
+    }
+  ],
+  "errorCases": [
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "variant_id query param required",
+      "when": "the variant_id query param is absent or an empty string"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "no Authorization header, or it is not of the form 'Bearer <jwt>' (api-gateway default-deny authGate, AUTH_GATE_MODE=enforce)"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "the bearer JWT fails verifyJwt — bad signature, wrong JWT_SECRET, or exp already elapsed (api-gateway default-deny authGate, AUTH_GATE_MODE=enforce)"
     }
   ]
 }

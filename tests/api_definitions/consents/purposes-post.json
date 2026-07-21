@@ -54,5 +54,56 @@
   },
   "captureResponse": {
     "consents.purposes.create.response.data.purpose.purpose_id": "data.purpose.purpose_id"
-  }
+  },
+  "description": "Registers a typed processing purpose in the per-app purpose registry (FR-CNS-4) and emits consent.purpose.registered.v1. Returns 201 with the purpose. purpose_id, app_id and description are mandatory non-empty strings; legal_basis must be one of consent | contract | legitimate-interest | vital | public-task | legal-obligation; default_jurisdictions is optional, defaults to an empty array, and must be an array of strings when supplied. Edge cases: re-registering an existing purpose_id is a 409 rather than an upsert, so the call is not idempotent; string fields are trimmed, so whitespace-only values count as missing; a non-array or mixed-type default_jurisdictions is a 400; requires a valid JWT.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "Authorization header absent or not in Bearer form (requireAuth / gateway default-deny authGate)"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "Bearer token fails JWT verification or is expired (requireAuth / gateway default-deny authGate)"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "body must be an object",
+      "when": "Request body is absent or not a JSON object"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "purpose_id / app_id / description is required",
+      "when": "Any of purpose_id, app_id, description is absent or whitespace-only"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "legal_basis must be one of consent, contract, legitimate-interest, vital, public-task, legal-obligation",
+      "when": "legal_basis is missing or outside the closed set"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "default_jurisdictions must be an array of strings",
+      "when": "default_jurisdictions is supplied but is not an array, or contains a non-string element"
+    },
+    {
+      "status": 409,
+      "code": "Conflict",
+      "message": "purpose_id already registered",
+      "when": "The insert raises a duplicate-key violation - this purpose_id already exists in the registry"
+    },
+    {
+      "status": 500,
+      "code": "InternalError",
+      "message": "InternalError",
+      "when": "Any other registerPurpose failure (database error, event-emit failure)"
+    }
+  ]
 }

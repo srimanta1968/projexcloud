@@ -30,5 +30,38 @@
       "email": "string",
       "phone": "string"
     }
-  }
+  },
+  "description": "Resolves a tenant's primary/billing contact from its FOUNDING member (earliest active identity.tenant_membership row): display_name from the L2 profile band, email and phone from the person's aliases. Purpose-bound, consent-gated and audited (TK-3572). Edge cases: ?purpose= defaults to 'support'; the internal purposes support/billing/operations are TPO-allowed, but ANY other purpose requires an active, unrevoked, unexpired consent.receipt for that person and FAILS CLOSED with 403 consent_absent when none exists; a tenant with no active members returns 404 even though the tenant itself exists; every access — granted or denied — writes a consent.contact_read.{granted,denied}.v1 audit event, and audit failures are swallowed so they never block the decision; a non-UUID tenant_id fails the ::uuid cast and returns 500.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "Gateway default-deny authGate (AUTH_GATE_MODE=enforce): path is not on the public allowlist and no bearer token was sent"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "authGate ran requireAuth and the JWT failed verification or had expired"
+    },
+    {
+      "status": 403,
+      "code": "consent_absent",
+      "message": "reading tenant contact for purpose '<purpose>' requires an active consent receipt",
+      "when": "?purpose= is outside {support, billing, operations} and the contact person has no active (unrevoked, unexpired) consent.receipt row"
+    },
+    {
+      "status": 404,
+      "code": "NotFound",
+      "message": "No active member found for tenant",
+      "when": "the tenant has no identity.tenant_membership row with status=active"
+    },
+    {
+      "status": 500,
+      "code": "InternalError",
+      "message": "<postgres error text>",
+      "when": ":tenant_id is not a valid UUID (::uuid cast fails), or the contact/consent query errors"
+    }
+  ]
 }

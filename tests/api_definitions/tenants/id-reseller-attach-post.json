@@ -36,5 +36,50 @@
   "captureResponse": {
     "tenants.attach-reseller.response.data.tenant_id": "data.tenant_id",
     "tenants.attach-reseller.response.data.reseller_id": "data.reseller_id"
-  }
+  },
+  "description": "Attaches an existing reseller to :tenant_id and optionally overrides the commission_rules for that pairing. Returns the updated tenant with 200 (not 201). Edge cases: reseller_id is the only required field; commission_rules must be an object or it is silently DROPPED (a string or array is discarded, not rejected); an unknown reseller_id or :tenant_id is a foreign-key violation mapped to 400 ValidationError rather than 404 — unless the service raises a 'not found' message, which maps to 404; re-attaching the SAME reseller either overwrites the attachment or trips a unique constraint mapped to 409 Conflict, so retries are not safely idempotent.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "Authorization header absent or not in 'Bearer <jwt>' form (requireAuth preHandler)"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "JWT signature invalid, malformed, or exp has elapsed"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "reseller_id is required",
+      "when": "body.reseller_id is absent or empty after trimming"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "<pg error: violates foreign key constraint ...>",
+      "when": ":tenant_id or reseller_id references a row that does not exist"
+    },
+    {
+      "status": 409,
+      "code": "Conflict",
+      "message": "<pg error: duplicate key value violates unique constraint ...>",
+      "when": "re-attaching a reseller that is already attached trips a unique constraint"
+    },
+    {
+      "status": 404,
+      "code": "NotFound",
+      "message": "<error text containing 'not found'>",
+      "when": "the service throws a not-found error while resolving the tenant or reseller"
+    },
+    {
+      "status": 500,
+      "code": "InternalError",
+      "message": "InternalError",
+      "when": "Unexpected service/DB failure (connection loss, or a constraint the handler does not map)"
+    }
+  ]
 }

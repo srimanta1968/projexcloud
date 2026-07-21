@@ -24,5 +24,26 @@
       },
       "expectedStatus": 200
     }
+  ],
+  "description": "Lists every device linked to one person from device.person_link - link_id, device_uuid, person_id, first_used_at, last_used_at and status - returned under data.links. Edge cases: an unknown person_id returns 200 with links: [] rather than 404; person_id is a UUID column, so a non-UUID path segment fails at the database and surfaces as a 500 rather than a 400; revoked links are NOT filtered out - every row is returned regardless of its status value, so callers must filter on status themselves; the result set is unpaginated and unordered, and the query filters on person_id alone with no tenant or device-status predicate, so the caller's JWT tenant does not narrow the rows.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "Authorization header absent or not in \"Bearer <token>\" form (requireAuth preHandler)"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "Bearer token fails verifyJwt (bad signature, malformed, or exp in the past) (requireAuth preHandler)"
+    },
+    {
+      "status": 500,
+      "code": "InternalServerError",
+      "message": "Internal Server Error",
+      "when": "listDevicesForPerson SELECT fails - person_id is not a valid UUID (device.person_link.person_id is UUID NOT NULL) or the Postgres pool is unavailable; the route has no try/catch so the rejection becomes Fastify default 500"
+    }
   ]
 }

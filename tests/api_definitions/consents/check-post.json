@@ -39,5 +39,38 @@
   },
   "captureResponse": {
     "consents.check.response.data.receipt_id": "data.receipt_id"
-  }
+  },
+  "description": "Returns the current consent state for a (person_id, purpose_id, processor, jurisdiction) tuple. This is the hot-path gate every downstream SDK calls before processing PII (FR-CNS-1, FR-CNS-5). Always returns 200 with the evaluated result - a tuple with no receipt, an expired receipt or a revoked receipt is reported as not-allowed in the payload rather than as a 404 or 403. All four fields are mandatory non-empty strings and are trimmed. Edge cases: whitespace-only values count as missing; an unknown person_id or purpose_id yields a negative result, not an error; the call is read-only, side-effect-free and safely repeatable; requires a valid JWT.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "Authorization header absent or not in Bearer form (requireAuth / gateway default-deny authGate)"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "Bearer token fails JWT verification or is expired (requireAuth / gateway default-deny authGate)"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "body must be an object",
+      "when": "Request body is absent or not a JSON object"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "<field> is required",
+      "when": "Any of person_id, purpose_id, processor, jurisdiction is absent or whitespace-only"
+    },
+    {
+      "status": 500,
+      "code": "InternalError",
+      "message": "InternalError",
+      "when": "checkConsent throws (database unavailable or query error)"
+    }
+  ]
 }
