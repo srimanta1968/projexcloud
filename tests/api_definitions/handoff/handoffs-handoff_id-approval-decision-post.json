@@ -1,0 +1,53 @@
+{
+  "name": "POST /api/handoffs/:handoff_id/approval/decision - Record the CS accept/reject decision",
+  "endpoint": "/api/handoffs/:handoff_id/approval/decision",
+  "sdk": "sdk-handoff",
+  "sourceFile": "packages/sdk-handoff/src/server/routes.ts",
+  "method": "POST",
+  "requiresAuth": true,
+  "expectedStatus": 200,
+  "taskId": "b0bccad4-15b3-460f-bea9-11dcd532f7f8",
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "priority": 48,
+  "testability": "auto",
+  "description": "Record the sdk-approval outcome against a handoff, mapping the approval decision onto the handoff lifecycle: 'approved' moves pending -> accepted (delivery now owns the engagement), 'rejected' moves pending -> rejected and records reject_reason. The move runs through the standard handoff transition path, so it is validated against HANDOFF_TRANSITIONS, stamps accepted_at/rejected_at, and emits the lifecycle event (handoff.accepted.v1 / handoff.rejected.v1) via sdk-audit. Edge cases: the decision is only legal from 'pending' — deciding on a draft handoff (approval never requested) or on an already-decided/terminal one returns 409; 'rejected' is terminal, so a rejected handoff cannot later be accepted; reject_reason is persisted only when decision=rejected and ignored otherwise; 400 when tenant_id or decision is missing, or decision is outside approved|rejected; 404 when the handoff does not exist for that tenant.",
+  "dependsOn": [
+    "POST /api/auth/signup-tenant",
+    "POST /api/handoffs",
+    "POST /api/handoffs/:handoff_id/transition",
+    "POST /api/handoffs/:handoff_id/approval/request"
+  ],
+  "fieldEnums": {
+    "decision": ["approved", "rejected"],
+    "status": ["draft", "pending", "accepted", "rejected", "completed", "cancelled"]
+  },
+  "statusTransitions": {
+    "draft -> pending": "POST /api/handoffs/:handoff_id/approval/request (submit for CS review)",
+    "pending -> accepted": "POST /api/handoffs/:handoff_id/approval/decision with decision=approved",
+    "pending -> rejected": "POST /api/handoffs/:handoff_id/approval/decision with decision=rejected (reject_reason recorded)",
+    "accepted -> completed": "POST /api/handoffs/:handoff_id/transition with status=completed"
+  },
+  "testCases": [
+    {
+      "name": "CS approves the handoff (pending -> accepted)",
+      "headers": { "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}" },
+      "pathParams": { "handoff_id": "{{cache:handoff.handoffs.create.response.data.handoff.handoff_id}}" },
+      "payload": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "decision": "approved",
+        "reject_reason": "not applicable when approving"
+      },
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "data": { "handoff": { "handoff_id": "string", "status": "string" } }
+      }
+    }
+  ],
+  "errorCases": [
+    { "status": 400, "code": "ValidationError", "message": "tenant_id and decision are required", "when": "tenant_id or decision missing from body" },
+    { "status": 400, "code": "ValidationError", "message": "decision must be approved or rejected", "when": "decision is any value other than approved|rejected" },
+    { "status": 401, "code": "Unauthorized", "message": "Unauthorized", "when": "Authorization bearer token missing or invalid" },
+    { "status": 404, "code": "NotFound", "message": "NotFound", "when": "handoff_id not found for the tenant" },
+    { "status": 409, "code": "InvalidTransition", "message": "invalid transition <from> -> accepted|rejected", "when": "the handoff is not in 'pending' (never submitted for approval, or already decided/terminal)" }
+  ]
+}

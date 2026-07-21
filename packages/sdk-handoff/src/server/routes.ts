@@ -9,6 +9,7 @@ import {
   InvalidHandoffTransition,
 } from '../services/handoffService';
 import { startHandoffSaga, listHandoffSagaSteps } from '../services/handoffSaga';
+import { requestHandoffApproval, recordHandoffDecision, type HandoffDecision } from '../services/handoffApproval';
 import type { CreateHandoffInput, HandoffStatus, UpdateHandoffInput } from '../models/handoff.model';
 
 const STATUSES: HandoffStatus[] = ['draft', 'pending', 'accepted', 'rejected', 'completed', 'cancelled'];
@@ -108,6 +109,49 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
       if (!req.query.tenant_id) return reply.code(400).send({ error: 'ValidationError', details: ['tenant_id query param required'] });
       const steps = await listHandoffSagaSteps(req.query.tenant_id, req.params.handoff_id);
       return reply.code(200).send({ data: { steps } });
+    },
+  );
+
+  // ---- CS accept/reject gate (delegated to sdk-approval) ----
+
+  // File the CS accept/reject approval (subject = handoff) and submit for review (draft -> pending).
+  app.post<{ Params: { handoff_id: string } }>(
+    '/api/handoffs/:handoff_id/approval/request', { preHandler: requireAuth }, async (req, reply) => {
+      const body = (req.body ?? {}) as { tenant_id?: string };
+      if (!body.tenant_id) return reply.code(400).send({ error: 'ValidationError', details: ['tenant_id is required'] });
+      try {
+        const result = await requestHandoffApproval(body.tenant_id, req.params.handoff_id);
+        if (!result) return reply.code(404).send({ error: 'NotFound' });
+        return reply.code(200).send({ data: result });
+      } catch (err) {
+        if (err instanceof InvalidHandoffTransition) {
+          return reply.code(409).send({ error: 'InvalidTransition', message: err.message });
+        }
+        throw err;
+      }
+    },
+  );
+
+  // Record the sdk-approval decision: approved -> handoff accepted, rejected -> handoff rejected.
+  app.post<{ Params: { handoff_id: string } }>(
+    '/api/handoffs/:handoff_id/approval/decision', { preHandler: requireAuth }, async (req, reply) => {
+      const body = (req.body ?? {}) as { tenant_id?: string; decision?: HandoffDecision; reject_reason?: string };
+      if (!body.tenant_id || !body.decision) {
+        return reply.code(400).send({ error: 'ValidationError', details: ['tenant_id and decision are required'] });
+      }
+      if (body.decision !== 'approved' && body.decision !== 'rejected') {
+        return reply.code(400).send({ error: 'ValidationError', details: ['decision must be approved or rejected'] });
+      }
+      try {
+        const rec = await recordHandoffDecision(body.tenant_id, req.params.handoff_id, body.decision, body.reject_reason);
+        if (!rec) return reply.code(404).send({ error: 'NotFound' });
+        return reply.code(200).send({ data: { handoff: rec } });
+      } catch (err) {
+        if (err instanceof InvalidHandoffTransition) {
+          return reply.code(409).send({ error: 'InvalidTransition', message: err.message });
+        }
+        throw err;
+      }
     },
   );
 }

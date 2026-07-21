@@ -167,6 +167,7 @@ import {
   migrationsDir as approvalMigrations,
   server as approvalServer,
   startSlaTimer,
+  submitRequest as submitApprovalRequest,
 } from '@projexlight/sdk-approval';
 import {
   migrationsDir as tenantLifecycleMigrationsDir,
@@ -330,7 +331,7 @@ import { migrationsDir as sequenceMigrations, server as sequenceServer, startSeq
 import { migrationsDir as schedulingMigrations, server as schedulingServer, startSchedulingReminderWorker } from '@projexlight/sdk-scheduling';
 import { migrationsDir as deliverabilityMigrations, server as deliverabilityServer, startReplySyncWorker, suppressionService as deliverabilitySuppression, reputationService as deliverabilityReputation, isChannelPaused } from '@projexlight/sdk-deliverability';
 import { migrationsDir as offerCatalogMigrations, server as offerCatalogServer } from '@projexlight/sdk-offer-catalog';
-import { migrationsDir as handoffMigrations, server as handoffServer, registerHandoffSaga } from '@projexlight/sdk-handoff';
+import { migrationsDir as handoffMigrations, server as handoffServer, registerHandoffSaga, setHandoffApprovalCreator } from '@projexlight/sdk-handoff';
 import { migrationsDir as incidentMigrations, server as incidentServer } from '@projexlight/sdk-incident';
 import { migrationsDir as leadScoringMigrations }         from '@projexlight/sdk-lead-scoring';
 import {
@@ -3813,6 +3814,24 @@ const start = async (): Promise<void> => {
     // definition + in-process step/compensation handlers. No new engine — the durable
     // worker above drives it. Idempotent; the definition is inserted once.
     await registerHandoffSaga().catch((err) => app.log.warn({ err }, 'registerHandoffSaga failed'));
+
+    // P15·E2 (TK-3648): route the CS accept/reject gate through sdk-approval. When a
+    // handoff approval route is configured, file a real approval.request (subject = the
+    // handoff); otherwise sdk-handoff falls back to its synthetic ref. No new gate.
+    const handoffApprovalRouteId = process.env.HANDOFF_APPROVAL_ROUTE_ID;
+    if (handoffApprovalRouteId) {
+      setHandoffApprovalCreator(async (ctx) => {
+        const { request } = await submitApprovalRequest({
+          tenant_id: ctx.tenant_id,
+          route_id: handoffApprovalRouteId,
+          subject_kind: 'handoff.handoff',
+          subject_id: ctx.handoff_id,
+          initiator_persona_id: ctx.from_persona_id,
+          reason: 'Sales→Delivery handoff CS accept/reject',
+        });
+        return { approval_id: request.request_id };
+      });
+    }
 
     app.addHook('onClose', async (): Promise<void> => {
       rotationScheduler.stop();
