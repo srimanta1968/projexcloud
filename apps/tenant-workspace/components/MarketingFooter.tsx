@@ -4,6 +4,9 @@ const COL_TITLE = 'mb-3 text-xs font-semibold uppercase tracking-wide text-foreg
 const COL_LINK = 'mb-2 block text-sm text-muted-foreground hover:text-foreground';
 
 export function MarketingFooter(): JSX.Element {
+  // Static docs are served under the portal basePath (/workspace in prod); raw
+  // <a> links to them must include it or they 404 through the gateway.
+  const base = process.env.NEXT_PUBLIC_BASE_PATH ?? '';
   return (
     <footer className="mt-20 border-t bg-muted">
       <div className="mx-auto grid max-w-6xl grid-cols-[repeat(auto-fit,minmax(180px,1fr))] gap-8 px-8 pb-8 pt-12">
@@ -16,10 +19,10 @@ export function MarketingFooter(): JSX.Element {
         </div>
         <div>
           <div className={COL_TITLE}>For Developers</div>
-          <a href="/docs/user/tenant-getting-started.html" className={COL_LINK}>Getting started</a>
-          <a href="/docs/user/tenant-admin-guide.html" className={COL_LINK}>Tenant admin guide</a>
-          <a href="/docs/api/index.html" className={COL_LINK}>API reference</a>
-          <a href="/docs/api/test-plan.html" className={COL_LINK}>API test plan</a>
+          <a href={`${base}/docs/user/tenant-getting-started.html`} className={COL_LINK}>Getting started</a>
+          <a href={`${base}/docs/user/tenant-admin-guide.html`} className={COL_LINK}>Tenant admin guide</a>
+          <a href={`${base}/docs/api/index.html`} className={COL_LINK}>API reference</a>
+          <a href={`${base}/docs/api/test-plan.html`} className={COL_LINK}>API test plan</a>
         </div>
         <div>
           <div className={COL_TITLE}>Company</div>
