@@ -4,6 +4,7 @@ import { useState, FormEvent, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Badge, Button, Card, Textarea, cn } from '@projexlight/design-system';
 import { getToken } from '../../lib/apiClient';
+import { PROJEXLIGHT_URL } from '../../lib/portalLinks';
 
 /**
  * /build — SDK composition planner (replaces the brittle blueprint matcher).
@@ -270,7 +271,21 @@ export default function BuildPage(): JSX.Element {
           )}
 
           <div className="mt-6 flex flex-wrap gap-2">
-            <Button onClick={reset}>Plan another</Button>
+            <Button
+              onClick={() => {
+                // Hand off to ProjexLight: carry the plan + THIS ProjexCloud's origin so the
+                // new project pre-fills useProjexCloudSdks + the base URL automatically. No
+                // credentials are passed — the user authenticates with their own ProjexLight
+                // account (no key custody).
+                const origin = typeof window !== 'undefined' ? window.location.origin : 'https://cloud.projexlight.com';
+                const handoff = { v: 1, description: intent, plan, projexCloudBaseUrl: origin, useProjexCloudSdks: true };
+                const enc = encodeURIComponent(btoa(unescape(encodeURIComponent(JSON.stringify(handoff)))));
+                window.open(`${PROJEXLIGHT_URL}/dashboard?handoff=${enc}`, '_blank', 'noopener');
+              }}
+            >
+              Create in ProjexLight ↗
+            </Button>
+            <Button variant="secondary" onClick={reset}>Plan another</Button>
             <Button variant="secondary" onClick={() => setPhase('idle')}>Edit prompt &amp; regenerate</Button>
             <Button
               variant="secondary"
