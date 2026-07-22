@@ -13,3 +13,5 @@
 export const TENANT_URL = process.env.NEXT_PUBLIC_TENANT_URL || 'http://localhost:3200';
 export const CONSOLE_URL = process.env.NEXT_PUBLIC_CONSOLE_URL || 'http://localhost:3100';
 export const TENANT_BILLING_URL = `${TENANT_URL}/billing`;
+// ProjexLight (the AI app builder) — where the "Create in ProjexLight" hand-off lands.
+export const PROJEXLIGHT_URL = process.env.NEXT_PUBLIC_PROJEXLIGHT_URL || 'http://localhost:3020';
