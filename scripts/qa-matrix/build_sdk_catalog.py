@@ -28,7 +28,9 @@ SRC = os.path.join(HERE, "qa-apis.json")
 # Catalog version = the QA snapshot date. Kept as a constant (not today()) so
 # reruns are reproducible and the version only moves when someone bumps it.
 VERSION = "2026.07.21"
-GATEWAY_BASE_URL = "https://cloud.projexlight.com"
+# Configurable so a self-hosted ProjexCloud can publish its OWN catalog with its own
+# domain: SDK_GATEWAY_BASE_URL=https://projexcloud.acme.com python build_sdk_catalog.py
+GATEWAY_BASE_URL = os.getenv("SDK_GATEWAY_BASE_URL", "https://cloud.projexlight.com").rstrip("/")
 # Where the human API reference is served (for per-SDK deep links).
 DOCS_BASE = GATEWAY_BASE_URL + "/workspace/docs/api/index.html"
 
