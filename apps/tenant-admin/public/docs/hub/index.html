@@ -92,6 +92,7 @@
   <p class="sub">ProjexCloud is a library of <b>75 production-grade SDKs (538 APIs)</b> — identity, CRM, scheduling, outreach, billing, agents, and more — that you compose into an app instead of building from scratch. <b>Call them directly from your own project</b>, or describe your idea in <b>ProjexLight</b>, our AI app builder, and it plans the work, discovers which SDKs fit, and generates the code that calls them. This hub is the step-by-step path from idea to a running app — either way.</p>
   <div class="cta">
     <a class="btn" href="#build">Build step-by-step ↓</a>
+    <a class="btn ghost" href="../api/sdk-catalog.json" download>Download SDK catalog ↓</a>
     <a class="btn ghost" href="../api/index.html">API Reference ↗</a>
     <a class="btn ghost" href="#agents">Agent Cookbook ↗</a>
     <a class="btn ghost" href="./why-sdks.html">Why pre-built SDKs? ↗</a>
@@ -180,7 +181,7 @@
 
   <div class="step"><div class="n">A2</div><div>
     <h3>Download the SDK catalog</h3>
-    <p>Grab the machine-readable <b><code>sdk-catalog.json</code></b> — every SDK, its group, and each endpoint (method, path, auth, payload shape, field enums, dependencies) for all 538 APIs. Browse the same content human-style in the <a href="../api/index.html">API reference</a>. Drop the catalog straight into your repo — it's the exact catalog ProjexLight bundles, just consumed directly.</p>
+    <p><a href="../api/sdk-catalog.json" download><b>Download <code>sdk-catalog.json</code> ↓</b></a> — the machine-readable catalog: every SDK, its group, and each endpoint (method, path, auth, payload shape, field enums, dependencies) for all 538 APIs. Browse the same content human-style in the <a href="../api/index.html">API reference</a>. Drop the catalog straight into your repo — it's the exact catalog ProjexLight bundles, just consumed directly.</p>
   </div></div>
 
   <div class="step"><div class="n">A3</div><div>
@@ -212,14 +213,15 @@
   </div></div>
 
   <div class="step"><div class="n">2</div><div>
-    <h3>Discover which SDKs fit — and decide with-or-without</h3>
-    <p>Describe your app and let discovery propose the building blocks. In ProjexCloud's <b>Workspace → Build</b>, <code>POST /api/build/plan</code> has an LLM compose a plan from the whole ~88-SDK catalog: <span class="pill">recommended SDKs</span> <span class="pill">custom work</span> <span class="pill">vertical pack</span> <span class="pill">complexity</span>, with foundation SDKs (identity, tenant, ReBAC) auto-injected. ProjexLight's own discovery embeds your description and finds reusable resources.</p>
-    <p><b>Here you choose:</b> opt in to ProjexCloud SDKs (reuse) or go standalone (generate everything). The choice is saved as <code>useProjexCloudSdks</code> in your export config and is reversible. Unsure? Read <a href="./why-sdks.html">Why pre-built SDKs?</a></p>
+    <h3>Opt in to ProjexCloud SDKs — one checkbox</h3>
+    <p>In the <b>CLI Export Wizard</b> (or the <b>Quick Prototype</b> wizard) tick <b>"Reuse ProjexCloud pre-built SDKs."</b> Off by default = standalone (generate everything). When on, code generation reuses ProjexCloud's <b>469 tenant-callable APIs</b> (identity, CRM, scheduling, billing, notifications&hellip;) instead of building those backends. The choice is saved as <code>useProjexCloudSdks</code>, persisted to your project, and reversible. Unsure? Read <a href="./why-sdks.html">Why pre-built SDKs?</a></p>
+    <p class="muted"><b>Prototype note:</b> a prototype generated with this on skips building identity/auth/APIs — so it promotes cleanly to a full sprint (the choice carries over automatically). Platform-admin APIs are excluded from the reuse set (they need an operator token, not your tenant token).</p>
   </div></div>
 
   <div class="step"><div class="n">3</div><div>
-    <h3>CLI export — download your scaffold</h3>
-    <p>From the portal's <b>New Session → CLI Export Wizard</b>, download the export ZIP. It's a self-contained repo scaffold: <code>.claude/instructions/bootstrap.md</code>, <code>.projexlight/context/*</code> (framework, requirements, tasks, sprint), the <code>mcp-server/</code> toolkit, and — <i>if you opted in</i> — the <b>ProjexCloud SDK catalog</b> (<code>mcp-server/data/sdk-catalog.json</code>) so the AI builder can discover all 538 APIs offline. Extract it at your repo root.</p>
+    <h3>CLI export — download your scaffold &amp; add your key</h3>
+    <p>From the wizard, download the export ZIP: a self-contained scaffold with <code>.claude/instructions/bootstrap.md</code>, <code>.projexlight/context/*</code>, the <code>mcp-server/</code> toolkit, and — <i>when you opted in</i> — the bundled <b>SDK catalog</b> (<code>mcp-server/data/sdk-catalog.json</code> + the ~3k-token <code>sdk-catalog-index.json</code> map) and a <code>.env.example</code> pre-wired with <code>PROJEXCLOUD_API_BASE_URL</code> + a blank <code>PROJEXCLOUD_TENANT_TOKEN</code>.</p>
+    <p class="muted">Copy <code>.env.example</code> → <code>.env</code> and paste your tenant token from <b>cloud.projexlight.com/workspace → Settings → API keys</b>. (That's the only step that uses ProjexCloud's own portal.)</p>
   </div></div>
 
   <div class="step"><div class="n">4</div><div>
@@ -236,15 +238,18 @@ curl http://localhost:8000/health   # Test MCP (API + BDD/UI tests)</pre>
     <h3>Generate the code — the build loop</h3>
     <p>Open your AI coding tool and prompt: <b>"Read .claude/instructions/bootstrap.md and start."</b> The agent then loops, task by task:</p>
     <pre>init_session      → your assigned tasks for the sprint
-get_instruction   → the next task's full context
-  ├─ if you opted in: consult mcp-server/data/sdk-catalog.json →
-  │     if an SDK covers this capability, REUSE it (call the gateway) — don't rebuild
-  └─ else: generate the code from scratch
-(write the API-definition JSON first, then the code)
+get_instruction   → next task's context. If you opted in AND it's a backend task, a
+                    REUSE-FIRST rule is injected:
+  ├─ scan the ~3k-token SDK map (sdk-catalog-index.json) ONCE, keep it in context
+  ├─ match your capability via reuse_when keywords → pick an SDK/endpoint
+  ├─ call the get_sdk_api tool for THAT one endpoint's spec (payload/fields) — never
+  │     the whole 94k-token catalog
+  └─ call the gateway at $PROJEXCLOUD_API_BASE_URL/api/… with the tenant token — don't rebuild
+(otherwise generate from scratch; write the API-definition JSON first)
 validate / self_check / quality_gates   → Dev-MCP reviews vs standards + auto-fixes
 complete_task     → only when validation.passed === true
 … repeat until the sprint is done</pre>
-    <p class="muted">Backend/API tasks require an API-definition JSON before code (JSON-first). The Test-MCP runs those definitions against your running app.</p>
+    <p class="muted">Progressive disclosure keeps tokens low: the SDK map is read once per session; only the endpoints you actually use are fetched in full via <code>get_sdk_api</code>.</p>
   </div></div>
 
   <div class="step"><div class="n">6</div><div>
