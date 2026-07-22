@@ -33,6 +33,14 @@ export default async function HelpPage(): Promise<JSX.Element> {
         </p>
         <div className="mt-3 flex flex-wrap gap-4 text-sm">
           <a
+            href={`${base}/docs/hub/index.html`}
+            target="_blank"
+            rel="noreferrer"
+            className="text-primary underline"
+          >
+            Developer Hub ↗
+          </a>
+          <a
             href={`${base}/docs/api/index.html`}
             target="_blank"
             rel="noreferrer"

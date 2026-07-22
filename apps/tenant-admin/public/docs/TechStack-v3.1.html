@@ -1,0 +1,709 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>ProjexCloud · Tech Stack &amp; Cost Plan · v3.1</title>
+<style>
+  :root {
+    --bg: #0b0f17; --panel: #121826; --panel-2: #1a2234; --line: #243049;
+    --text: #e6ecf5; --muted: #8a98b3; --accent: #c9a86a; --accent-2: #6aa9ff;
+    --teal: #2dd4bf; --green: #5dd39e; --red: #ff6b6b; --yellow: #f5c451; --purple: #b88dff;
+    --code-bg: #0f1422;
+  }
+  * { box-sizing: border-box; }
+  html, body { background: var(--bg); color: var(--text); font-family: ui-sans-serif, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", sans-serif; margin: 0; padding: 0; line-height: 1.55; }
+  .page { max-width: 1260px; margin: 0 auto; padding: 56px 32px 96px; }
+  header.cover { border-bottom: 1px solid var(--line); padding-bottom: 36px; margin-bottom: 48px; }
+  header.cover .eyebrow { color: var(--accent); letter-spacing: 0.18em; text-transform: uppercase; font-size: 12px; font-weight: 700; }
+  header.cover h1 { font-size: 42px; line-height: 1.15; margin: 12px 0 8px; letter-spacing: -0.02em; }
+  header.cover .sub { color: var(--muted); font-size: 17px; max-width: 900px; }
+  header.cover .meta { display: flex; gap: 24px; flex-wrap: wrap; margin-top: 24px; color: var(--muted); font-size: 13px; }
+  header.cover .meta b { color: var(--text); font-weight: 600; }
+  header.cover .changelog { margin-top: 22px; background: var(--panel-2); border-left: 3px solid var(--accent-2); border-radius: 0 10px 10px 0; padding: 14px 18px; font-size: 13.5px; color: #d6deef; }
+  header.cover .changelog b { color: var(--accent-2); }
+
+  h2 { font-size: 26px; letter-spacing: -0.01em; margin: 56px 0 18px; padding-bottom: 8px; border-bottom: 1px solid var(--line); }
+  h3 { font-size: 18px; margin: 28px 0 10px; color: var(--text); }
+  h4 { font-size: 13px; margin: 18px 0 8px; color: var(--accent); text-transform: uppercase; letter-spacing: 0.12em; }
+  p { color: #c8d1e3; }
+  small, .muted { color: var(--muted); }
+
+  .grid { display: grid; gap: 16px; }
+  .grid.cols-2 { grid-template-columns: repeat(2, minmax(0,1fr)); }
+  .grid.cols-3 { grid-template-columns: repeat(3, minmax(0,1fr)); }
+  @media (max-width: 900px) { .grid.cols-2, .grid.cols-3 { grid-template-columns: 1fr; } header.cover h1 { font-size: 30px; } }
+
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 18px 18px 16px; }
+  .card .label { color: var(--accent); font-size: 11px; text-transform: uppercase; letter-spacing: 0.14em; font-weight: 700; }
+  .card .title { font-weight: 600; margin: 6px 0 6px; font-size: 15px; }
+  .card .body { color: var(--muted); font-size: 13.5px; }
+
+  table { width: 100%; border-collapse: collapse; margin-top: 12px; font-size: 13.5px; }
+  th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { color: var(--muted); font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; }
+  td.num { text-align: right; font-family: ui-monospace, Consolas, monospace; }
+
+  pre, code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+  pre { background: var(--code-bg); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; overflow-x: auto; font-size: 12.5px; line-height: 1.5; }
+  code { background: var(--code-bg); padding: 1px 6px; border-radius: 4px; font-size: 12.5px; }
+
+  nav.toc { position: sticky; top: 0; background: rgba(11,15,23,0.92); backdrop-filter: blur(10px); border-bottom: 1px solid var(--line); padding: 10px 32px; z-index: 10; }
+  nav.toc .row { max-width: 1260px; margin: 0 auto; display: flex; flex-wrap: wrap; gap: 10px; font-size: 12px; }
+  nav.toc a { color: var(--muted); text-decoration: none; border-bottom: 1px solid transparent; }
+  nav.toc a:hover { color: var(--accent); border-color: var(--accent); }
+
+  .callout { border-left: 3px solid var(--accent); background: var(--panel-2); padding: 14px 18px; border-radius: 0 10px 10px 0; margin: 18px 0; color: #d6deef; font-size: 14px; }
+  .callout.green { border-color: var(--green); }
+  .callout.red { border-color: var(--red); }
+  .callout.purple { border-color: var(--purple); }
+
+  ul.tight li { margin: 4px 0; color: #c8d1e3; font-size: 14px; }
+
+  .pick { background: var(--panel); border: 1px solid var(--line); border-left: 4px solid var(--accent); border-radius: 0 12px 12px 0; padding: 16px 20px; margin: 12px 0 18px; }
+  .pick .top { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; flex-wrap: wrap; margin-bottom: 8px; }
+  .pick .top .name { font-weight: 700; font-size: 16px; color: var(--text); }
+  .pick .top .tag { font-size: 10px; padding: 2px 8px; border-radius: 4px; font-weight: 700; letter-spacing: 0.08em; }
+  .pick .top .tag.committed { background: rgba(93,211,158,0.18); color: var(--green); }
+  .pick .top .tag.new { background: rgba(184,141,255,0.18); color: var(--purple); }
+  .pick .row { display: grid; grid-template-columns: 130px 1fr; gap: 10px; font-size: 13px; margin-top: 6px; }
+  .pick .row .k { color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; font-size: 10.5px; padding-top: 2px; font-weight: 600; }
+  .pick .row .v { color: #c8d1e3; }
+  .pick .row .v.cost { color: var(--accent); font-family: ui-monospace, Consolas, monospace; font-size: 13px; }
+</style>
+</head>
+<body>
+
+<nav class="toc">
+  <div class="row">
+    <a href="#overview">1 · Overview</a>
+    <a href="#languages">2 · Languages</a>
+    <a href="#backend">3 · Backend Framework</a>
+    <a href="#api-style">4 · API Style</a>
+    <a href="#orm">5 · ORM</a>
+    <a href="#database">6 · Database (Postgres)</a>
+    <a href="#polyglot">7 · Polyglot Storage</a>
+    <a href="#events">8 · Event Streaming</a>
+    <a href="#workflow">9 · Workflow</a>
+    <a href="#ai">10 · AI &amp; MCP</a>
+    <a href="#frontend">11 · Frontend</a>
+    <a href="#mobile">12 · Mobile (HDK)</a>
+    <a href="#observability">13 · Observability</a>
+    <a href="#testing">14 · Testing</a>
+    <a href="#build">15 · Build &amp; Registry</a>
+    <a href="#orchestration">16 · Orchestration</a>
+    <a href="#cicd">17 · CI/CD</a>
+    <a href="#variants">18 · Per-Variant</a>
+    <a href="#cost-summary">19 · Production Cost</a>
+    <a href="#cost-scale">20 · Cost at Scale</a>
+    <a href="#dont-use">21 · What We Don't Use</a>
+  </div>
+</nav>
+
+<div class="page">
+
+<header class="cover">
+  <div class="eyebrow">ProjexCloud · Tech Stack &amp; Cost Plan · v3.1</div>
+  <h1>Recommended Stack — with Licensing &amp; Service Costs for Production Launch</h1>
+  <p class="sub">The opinionated tech stack for ProjexCloud across every layer, with per-component <b>cost estimates for initial production launch</b> (10 design-partner tenants · 1 region · 1-2 verticals live · ~100k API calls/day) and scaling notes through Y2-Y5 growth. Recommendations are dependency-derived from the v3.1 architecture and respect the Opinionated Constraints + Polyglot Persistence doctrines.</p>
+  <div class="meta">
+    <div><b>Companion docs</b> · <code>./Architecture-v3.1.html</code> · <code>./SDK-Build-Plan-v3.1.html</code> · <code>./ProjectStructure-v3.1.html</code> · <code>./AgenticIntegration-v3.1.html</code></div>
+    <div><b>Initial launch cost target</b> · ~$8k–12k/mo recurring infrastructure + services · ~$60k one-time Y1 audit fees</div>
+    <div><b>Pricing reference period</b> · 2025-2026 list prices · USD</div>
+  </div>
+  <div class="changelog">
+    <b>Cost framing.</b> Every per-component cost in this doc reflects the <b>initial production launch profile</b>: ~10 paying tenants, 1 region (us-east-1 baseline), 1-2 verticals live, ~100k API calls/day total, ~100GB OLTP data, ~500GB blob storage. Where applicable, we show the scaling curve at 100 / 1,000 / 10,000 / 100,000 tenants in §20. Costs marked <code>passthrough</code> are mostly re-billed to tenants via sdk-meter's <code>passthrough_plus_margin</code> pricing mode — they appear on our P&amp;L but net out against tenant revenue at the catalog margin.
+  </div>
+</header>
+
+<!-- ============ OVERVIEW ============ -->
+<section id="overview">
+  <h2>1 · Overview &amp; Decision Principles</h2>
+  <p>This document is the authoritative reference for "what to build with." Every choice below is dependency-derived from the v3.1 architecture, not preference-driven. Where the docs already commit a choice (e.g., PostgreSQL + Kafka + S3 in §8B), this doc reaffirms and adds the specific product/version. Where the docs leave a choice open (e.g., backend framework, ORM, frontend SPA framework), this doc commits a recommendation with rationale.</p>
+
+  <div class="grid cols-3" style="margin-top:16px">
+    <div class="card"><div class="label">Principle 1</div><div class="title">Dependency-derived, not preference</div><div class="body">Choices follow the architectural doctrines (§3A Opinionated Constraints · §3B Localize Complexity · §8B Polyglot Persistence). Where a doctrine says "Postgres pools are for OLTP + PII only," the stack reflects that — no Postgres-as-cache, no Postgres-as-queue.</div></div>
+    <div class="card"><div class="label">Principle 2</div><div class="title">Owned, not rented</div><div class="body">Prefer libraries you copy and own (shadcn/ui · Radix · Drizzle SQL) over heavy frameworks that take control. Matches the Rule of Three: ship one approach; the platform doesn't grow flexibility-creep.</div></div>
+    <div class="card"><div class="label">Principle 3</div><div class="title">Cost-honest, scale-explicit</div><div class="body">Every component named with a cost estimate at production launch. No "we'll figure out infra cost later." Polyglot persistence means many components — the bill must be modelable from day one.</div></div>
+  </div>
+</section>
+
+<!-- ============ LANGUAGES ============ -->
+<section id="languages">
+  <h2>2 · Languages</h2>
+
+  <div class="pick">
+    <div class="top">
+      <span class="name">TypeScript · Kotlin (Android) · Swift (iOS)</span>
+      <span class="tag committed">COMMITTED</span>
+    </div>
+    <div class="row"><div class="k">Pick</div><div class="v">TypeScript everywhere possible · Kotlin for HDK Android natives · Swift for HDK iOS natives</div></div>
+    <div class="row"><div class="k">Why</div><div class="v">Single language across server + client + mobile facade reduces context switching. TypeScript's structural type system matches our contracts-first discipline. Kotlin/Swift natives are the only real option for HDK (offline biometric · camera · AR · device attestation).</div></div>
+    <div class="row"><div class="k">Versions</div><div class="v">TypeScript 5.7+ · Node.js 22 LTS (or Bun for hot-path services) · Kotlin 2.1 · Swift 6</div></div>
+    <div class="row"><div class="k">When Rust</div><div class="v">Reserve for sustained sub-ms hot paths if Node ever proves insufficient (sdk-meter gate · sdk-pool-router · sdk-identity-resolver projector). Default is TypeScript; Rust is an escape valve, not a starting point.</div></div>
+    <div class="row"><div class="k">Alternatives ruled out</div><div class="v"><b>Go</b> — strong concurrency but second language to maintain. <b>Java/Kotlin server</b> — JVM tax + dual-stack. <b>Python</b> — fine for ML pipelines (we can use it for parsing/embedding workers); not for the SDK estate.</div></div>
+    <div class="row"><div class="k">Cost (initial launch)</div><div class="v cost">$0 — all open source.</div></div>
+  </div>
+</section>
+
+<!-- ============ BACKEND FRAMEWORK ============ -->
+<section id="backend">
+  <h2>3 · Backend Framework</h2>
+
+  <div class="pick">
+    <div class="top">
+      <span class="name">Fastify (default service binary framework)</span>
+      <span class="tag new">RECOMMENDATION</span>
+    </div>
+    <div class="row"><div class="k">Pick</div><div class="v"><b>Fastify 5+</b> for every service binary (identity-service · audit-service · meter-collector · billing-service · ai-gateway-service · etc.)</div></div>
+    <div class="row"><div class="k">Why</div><div class="v">TypeScript-first; Zod/JSON Schema validation integrates cleanly with our typed <code>contracts</code>; plugin ecosystem mature (helmet · cors · rate-limit · jwt · circuit-breaker); ~30% faster than Express which matters for sdk-meter's ≤2ms gate budget. Hooks system maps to <code>@meter</code> + <code>withTenant</code> + audit-emit middleware naturally.</div></div>
+    <div class="row"><div class="k">For hot paths</div><div class="v">If meter gate or pool router p99 budget proves tight (≤2ms / ≤5ms respectively), drop to <b>uWebSockets.js</b> for that one service. As a last resort, a Rust microservice. But Fastify handles ≤2ms p99 for typical workloads.</div></div>
+    <div class="row"><div class="k">Alternatives ruled out</div><div class="v"><b>NestJS</b> — opinionated framework conflicts with our SDK-as-package architecture; adds dependency injection complexity we don't need. <b>Hono</b> — newer; less battle-tested at scale. <b>Encore.ts</b> — vendor lock-in. <b>Express</b> — slower, weaker TS story.</div></div>
+    <div class="row"><div class="k">Cost</div><div class="v cost">$0 — open source. Operational cost is the Node.js runtime in containers (counted in §16 Kubernetes).</div></div>
+  </div>
+</section>
+
+<!-- ============ API STYLE ============ -->
+<section id="api-style">
+  <h2>4 · API Style</h2>
+
+  <div class="pick">
+    <div class="top">
+      <span class="name">REST + OpenAPI (public) · gRPC (internal) · SSE (streaming)</span>
+      <span class="tag new">RECOMMENDATION</span>
+    </div>
+    <div class="row"><div class="k">Pick</div><div class="v">
+      <b>REST + OpenAPI 3.1</b> for every SDK public surface — customer developers use TypeScript, Python, Go, Java, etc., and OpenAPI generates typed clients for all of them.<br/>
+      <b>gRPC</b> for internal service-to-service hot paths (meter event emission → collector; projector → resolver; lineage edges → projection worker).<br/>
+      <b>Server-Sent Events (SSE)</b> for streaming (AI gateway response streams; <code>/billing/live</code> real-time meter; live workflow logs).
+    </div></div>
+    <div class="row"><div class="k">Schema source</div><div class="v">OpenAPI specs auto-generated from Zod schemas in <code>@projexlight/contracts</code> via <code>zod-to-openapi</code>. SDK code generated from OpenAPI via <code>openapi-typescript</code> + hand-curated wrappers.</div></div>
+    <div class="row"><div class="k">Alternatives ruled out</div><div class="v"><b>GraphQL</b> — overkill given typed SDKs already give type safety; adds runtime complexity + N+1 risk. <b>tRPC</b> — too coupled to TypeScript; blocks customer apps in other languages. <b>SOAP</b> — no.</div></div>
+    <div class="row"><div class="k">Cost</div><div class="v cost">$0 — all open standards and OSS tooling.</div></div>
+  </div>
+</section>
+
+<!-- ============ ORM ============ -->
+<section id="orm">
+  <h2>5 · ORM / Query Builder</h2>
+
+  <div class="pick">
+    <div class="top">
+      <span class="name">Drizzle ORM</span>
+      <span class="tag new">RECOMMENDATION</span>
+    </div>
+    <div class="row"><div class="k">Pick</div><div class="v"><b>Drizzle ORM</b> (latest)</div></div>
+    <div class="row"><div class="k">Why</div><div class="v">Type-safe SQL builder with great migration story. Doesn't abstract SQL away — we need raw SQL for RLS, partial indexes, PostGIS queries, and the per-pool per-SDK schema model from §8A. Migration files are SQL (DBA/Finance can review them). Tight bundle, minimal runtime overhead.</div></div>
+    <div class="row"><div class="k">Migrations</div><div class="v">Drizzle Kit generates SQL migrations from schema changes. Per-SDK <code>db/migrations/</code> orchestrated by <code>tools/migration-runner</code> per pool in dependency order (matches ProjectStructure §6.3).</div></div>
+    <div class="row"><div class="k">Alternatives ruled out</div><div class="v"><b>Prisma</b> — too heavy; migration story controversial; abstracts SQL too far for our RLS/PostGIS/partition needs. <b>TypeORM</b> — legacy; weaker TS. <b>Kysely</b> — also excellent; equally valid pick (we choose Drizzle for slightly better migration ergonomics). <b>Raw <code>pg</code></b> — too low-level for productivity.</div></div>
+    <div class="row"><div class="k">Cost</div><div class="v cost">$0 — open source.</div></div>
+  </div>
+</section>
+
+<!-- ============ DATABASE ============ -->
+<section id="database">
+  <h2>6 · Database (PostgreSQL)</h2>
+
+  <div class="pick">
+    <div class="top">
+      <span class="name">PostgreSQL 17</span>
+      <span class="tag committed">COMMITTED</span>
+    </div>
+    <div class="row"><div class="k">Pick</div><div class="v"><b>PostgreSQL 17</b> per pool, per SDK schema (e.g., <code>identity.*</code>, <code>payment.*</code>, <code>engagement.*</code>), RLS per tenant — exactly as §8A Pool Placement Matrix mandates.</div></div>
+    <div class="row"><div class="k">Extensions</div><div class="v"><code>pgcrypto</code> (column-level encryption helpers) · <code>pgvector</code> (vector embeddings for RAG v1) · <code>pg_partman</code> (time-based partitioning) · <code>pgaudit</code> (Postgres-level audit trail) · <code>pg_trgm</code> (text-similarity search) · <code>postgis</code> (sdk-geo)</div></div>
+    <div class="row"><div class="k">Production hosting</div><div class="v">
+      <b>AWS Aurora Postgres Serverless v2</b> per pool — auto-scales 0.5-128 ACUs per cluster; built-in Multi-AZ; PITR included; lowest-ops choice.<br/>
+      Alternative: <b>AWS RDS Postgres Multi-AZ</b> for fixed-size pools (cheaper at steady state; more ops).<br/>
+      For BYOC/sovereign/on-prem: self-managed with <b>Patroni</b> or <b>Stolon</b> for HA.
+    </div></div>
+    <div class="row"><div class="k">Initial launch sizing</div><div class="v">3 pools (1 admin · 1 healthcare app · 1 realty app), each Aurora Serverless v2 starting at 1 ACU (~1 vCPU + 2GB), auto-scaling to 8 ACUs on demand.</div></div>
+    <div class="row"><div class="k">Cost (initial launch)</div><div class="v cost"><b>~$1500–2500/mo</b> for 3 Aurora Serverless v2 clusters (1-2 ACU baseline each + storage $0.10/GB-mo + I/O charges). RDS Multi-AZ alternative ~$2000–3000/mo. Self-managed on EC2: ~$1000/mo + ops overhead.</div></div>
+    <div class="row"><div class="k">Cost at scale</div><div class="v cost">100 pools (Year 2-3): ~$20-40k/mo · 1000 pools (Year 4): ~$200-400k/mo (much of this is billed back via meter passthrough).</div></div>
+  </div>
+</section>
+
+<!-- ============ POLYGLOT STORAGE ============ -->
+<section id="polyglot">
+  <h2>7 · Polyglot Storage (the non-Postgres tier)</h2>
+  <p>Per Architecture §8B, the workloads listed below do not go in Postgres. Each gets its purpose-built engine.</p>
+
+  <div class="pick">
+    <div class="top">
+      <span class="name">Cache + Identity Projection — Dragonfly (or Redis 7)</span>
+      <span class="tag new">RECOMMENDATION</span>
+    </div>
+    <div class="row"><div class="k">Pick</div><div class="v"><b>Dragonfly</b> (Redis-compatible) or vanilla <b>Redis 7+</b> — drop-in choice based on ops preference</div></div>
+    <div class="row"><div class="k">Why Dragonfly</div><div class="v">Better memory efficiency (~30% lower) and faster multi-core throughput than Redis. Matters because the Identity Projection store (§2B in AIM) holds 10M+ subjects at scale.</div></div>
+    <div class="row"><div class="k">Hosting options</div><div class="v">
+      <b>AWS ElastiCache</b> (Redis) Multi-AZ · <b>Upstash</b> serverless (pay-per-request) · <b>Dragonfly Cloud</b> · self-managed
+    </div></div>
+    <div class="row"><div class="k">Cost (initial launch)</div><div class="v cost"><b>~$300/mo</b> — 1 ElastiCache cluster (cache.r6g.large Multi-AZ ~$280/mo) OR Upstash starter (~$50-150/mo for light usage) OR Dragonfly Cloud ~$200/mo dev tier.</div></div>
+  </div>
+
+  <div class="pick">
+    <div class="top">
+      <span class="name">Telemetry &amp; Usage Rollups — ClickHouse</span>
+      <span class="tag committed">COMMITTED</span>
+    </div>
+    <div class="row"><div class="k">Pick</div><div class="v"><b>ClickHouse</b> shared cluster partitioned by <code>pool_index</code> (NOT per-pool ClickHouse). Required for sdk-meter rollups and sdk-analytics hot queries.</div></div>
+    <div class="row"><div class="k">Hosting options</div><div class="v"><b>ClickHouse Cloud</b> · <b>Altinity</b> · self-managed on EC2 (3-node m6id cluster)</div></div>
+    <div class="row"><div class="k">Cost (initial launch)</div><div class="v cost"><b>~$500/mo</b> — ClickHouse Cloud production tier minimal · self-managed 3-node ~$450/mo + ops.</div></div>
+  </div>
+
+  <div class="pick">
+    <div class="top">
+      <span class="name">Search — OpenSearch</span>
+      <span class="tag committed">COMMITTED</span>
+    </div>
+    <div class="row"><div class="k">Pick</div><div class="v"><b>OpenSearch 2.x</b> per-pool indexes (sdk-search owns); AWS-friendly Elasticsearch fork.</div></div>
+    <div class="row"><div class="k">Hosting</div><div class="v"><b>AWS OpenSearch Service</b> Multi-AZ recommended for production.</div></div>
+    <div class="row"><div class="k">Cost (initial launch)</div><div class="v cost"><b>~$800/mo</b> — 3-node r6g.large.search Multi-AZ cluster.</div></div>
+  </div>
+
+  <div class="pick">
+    <div class="top">
+      <span class="name">Blob Storage — AWS S3 (or GCS / Azure Blob / MinIO)</span>
+      <span class="tag committed">COMMITTED</span>
+    </div>
+    <div class="row"><div class="k">Pick</div><div class="v"><b>AWS S3</b> Standard for hot blobs; <b>S3 Intelligent-Tiering</b> for evidence/media that ages out. Per-tenant prefix; encrypted under sdk-vault keys. Multi-cloud: GCS · Azure Blob · MinIO on-prem.</div></div>
+    <div class="row"><div class="k">Cost (initial launch)</div><div class="v cost"><b>~$25/mo</b> — 500GB storage ($0.023/GB-mo = $11.50) + request costs (~$10) + data transfer (~$5).</div></div>
+    <div class="row"><div class="k">Cost at scale</div><div class="v cost">10TB (Year 3): ~$250/mo · 1PB (Year 5): ~$23k/mo. Mostly billed to tenants via per-MB SKUs.</div></div>
+  </div>
+
+  <div class="pick">
+    <div class="top">
+      <span class="name">Vector Store — pgvector (v1) → Qdrant or Pinecone (scale)</span>
+      <span class="tag committed">COMMITTED</span>
+    </div>
+    <div class="row"><div class="k">Pick (v1)</div><div class="v"><b>pgvector</b> extension in each App Pool's Postgres (free). Works to ~10M vectors per pool. CI monitors vector count per pool; at 8M, plan migration to dedicated store.</div></div>
+    <div class="row"><div class="k">Pick (scale)</div><div class="v"><b>Qdrant</b> (self-hosted, Rust, fast) for Tier-G with dedicated cluster · <b>Pinecone</b> (managed) for SaaS production at hyperscale</div></div>
+    <div class="row"><div class="k">Cost (initial launch)</div><div class="v cost"><b>$0</b> — pgvector included in Postgres.</div></div>
+    <div class="row"><div class="k">Cost at scale</div><div class="v cost">Pinecone starter ~$70/mo; production tier ~$500-2000/mo. Qdrant self-hosted ~$300-500/mo per cluster.</div></div>
+  </div>
+
+  <div class="pick">
+    <div class="top">
+      <span class="name">Lakehouse (P7) — Iceberg + Trino + Glue/Polaris Catalog</span>
+      <span class="tag committed">COMMITTED</span>
+    </div>
+    <div class="row"><div class="k">Pick</div><div class="v"><b>Apache Iceberg</b> on S3 as the table format · <b>AWS Glue Data Catalog</b> or <b>Apache Polaris</b> as catalog · <b>Trino</b> (or AWS Athena) as query engine. Ships in Phase 7.</div></div>
+    <div class="row"><div class="k">Cost (initial launch)</div><div class="v cost"><b>$0 initial</b> — Iceberg lands in Phase 7 (week 44-50). Pre-P7 budget Iceberg infra investment ~$2-5k/mo.</div></div>
+  </div>
+
+  <div class="pick">
+    <div class="top">
+      <span class="name">Key Management — AWS KMS · GCP KMS · HSM</span>
+      <span class="tag committed">COMMITTED</span>
+    </div>
+    <div class="row"><div class="k">Pick</div><div class="v">Provider chosen by deployment variant: <b>AWS KMS</b> for AWS deployments · <b>GCP KMS</b> for GCP · <b>HashiCorp Vault</b> for self-managed/on-prem · <b>HSM (CloudHSM / KeyVault Premium / Thales Luna)</b> for FIPS-140-2 L3 + sovereign. BYOK customers plug their own KMS via sdk-secrets abstraction.</div></div>
+    <div class="row"><div class="k">Cost (initial launch)</div><div class="v cost"><b>~$200–400/mo</b> AWS KMS: $1/key/mo × ~200 keys (Pool KEKs + Tenant Keys; envelope encryption minimizes key count) + $0.03/10k requests × ~3M requests/mo ≈ $9-15. Bulk: ~$220-400/mo.</div></div>
+    <div class="row"><div class="k">Cost at scale</div><div class="v cost">1000 tenants: ~$1500-3000/mo. Mostly billed back via tenant usage SKUs.</div></div>
+  </div>
+</section>
+
+<!-- ============ EVENTS ============ -->
+<section id="events">
+  <h2>8 · Event Streaming</h2>
+
+  <div class="pick">
+    <div class="top">
+      <span class="name">Redpanda (preferred) or Apache Kafka</span>
+      <span class="tag new">RECOMMENDATION</span>
+    </div>
+    <div class="row"><div class="k">Pick</div><div class="v"><b>Redpanda</b> — Kafka-compatible (no code changes for producers/consumers) but no ZooKeeper/JVM. Simpler ops at our 200+ pool scale.</div></div>
+    <div class="row"><div class="k">Why Redpanda</div><div class="v">~6-10× lower TCO than self-managed Kafka per Redpanda's benchmarks. Single-binary deployment. Strong consistency by default. Wire-compatible with Kafka tooling.</div></div>
+    <div class="row"><div class="k">Hosting options</div><div class="v"><b>Redpanda Cloud BYOC</b> (deployed in your AWS/GCP account) · <b>Redpanda Cloud Dedicated</b> · self-managed on EC2 · for vanilla Kafka: <b>AWS MSK</b> or <b>Confluent Cloud</b></div></div>
+    <div class="row"><div class="k">Cost (initial launch)</div><div class="v cost"><b>~$700/mo</b> — Redpanda Cloud BYOC starter or self-managed 3-node i4i.large cluster (~$400-700/mo). AWS MSK ~$800-1500/mo. Confluent Cloud starts ~$500/mo but ramps fast with throughput.</div></div>
+  </div>
+</section>
+
+<!-- ============ WORKFLOW ============ -->
+<section id="workflow">
+  <h2>9 · Workflow Engine</h2>
+
+  <div class="pick">
+    <div class="top">
+      <span class="name">Temporal</span>
+      <span class="tag committed">COMMITTED</span>
+    </div>
+    <div class="row"><div class="k">Pick</div><div class="v"><b>Temporal</b> — sdk-workflow wraps it; tenants never see Temporal directly. One Temporal namespace per pool family.</div></div>
+    <div class="row"><div class="k">Hosting options</div><div class="v"><b>Temporal Cloud</b> (managed; recommended for initial launch — significant ops savings) · self-hosted with Postgres or Cassandra backend</div></div>
+    <div class="row"><div class="k">Cost (initial launch)</div><div class="v cost"><b>~$1000/mo</b> Temporal Cloud production tier (starts ~$200/mo dev; production ramps with action volume). Self-hosted: ~$500/mo infra + heavy ops cost.</div></div>
+    <div class="row"><div class="k">Cost at scale</div><div class="v cost">Temporal Cloud bills per "Action" — at 10M actions/mo ~$3000-5000/mo.</div></div>
+  </div>
+</section>
+
+<!-- ============ AI ============ -->
+<section id="ai">
+  <h2>10 · AI Providers + MCP</h2>
+
+  <div class="pick">
+    <div class="top">
+      <span class="name">Multi-provider LLM SDKs + MCP SDK</span>
+      <span class="tag committed">COMMITTED</span>
+    </div>
+    <div class="row"><div class="k">Pick</div><div class="v">
+      LLM provider SDKs (consumed by sdk-ai-gateway):<br/>
+      • <code>@anthropic-ai/sdk</code> (Claude Sonnet 4.7 / Opus 4.7 / Haiku 4.5)<br/>
+      • <code>openai</code> (GPT-5 / GPT-4.x)<br/>
+      • <code>@google/generative-ai</code> (Gemini)<br/>
+      • <code>@aws-sdk/client-bedrock-runtime</code> (Bedrock — Claude via AWS, Llama, others)<br/>
+      • <code>ollama-js</code> (local models for on-prem deployment)<br/>
+      MCP support: <code>@modelcontextprotocol/sdk</code> (consumed by sdk-mcp-bridge)<br/>
+      AI streaming UX: <b>Vercel AI SDK</b> for the conversation surfaces (Tenant Workspace + Conversation)
+    </div></div>
+    <div class="row"><div class="k">Cost (initial launch)</div><div class="v cost">
+      <b>~$3000–5000/mo</b> in LLM API costs (mostly billed back to tenants via <code>passthrough_plus_margin</code> SKUs; net cost ~$500-1000/mo). Anthropic Claude Sonnet 4.7: $3 input / $15 output per 1M tokens. Initial light AI usage: ~10M tokens/day = $100-300/day passing through.<br/>
+      MCP SDK: $0 (open source).<br/>
+      Vercel AI SDK: $0 (open source; Vercel hosting only if you use it).
+    </div></div>
+    <div class="row"><div class="k">Cost at scale</div><div class="v cost">100 tenants with moderate AI use: $20-50k/mo passthrough (~$3-8k net at 15% margin). 1000 tenants: $200-500k/mo passthrough.</div></div>
+  </div>
+
+  <div class="pick">
+    <div class="top">
+      <span class="name">Langfuse (LLM observability)</span>
+      <span class="tag committed">COMMITTED</span>
+    </div>
+    <div class="row"><div class="k">Pick</div><div class="v"><b>Langfuse</b> for AI trace observability (sdk-ai-gateway emits per call)</div></div>
+    <div class="row"><div class="k">Hosting</div><div class="v"><b>Langfuse Cloud Pro</b> ($59/mo) for initial launch · <b>Langfuse Cloud Team</b> ($499/mo) at production scale · Self-hosted OSS (free + ops)</div></div>
+    <div class="row"><div class="k">Cost (initial launch)</div><div class="v cost"><b>$59/mo</b> Langfuse Cloud Pro.</div></div>
+  </div>
+</section>
+
+<!-- ============ FRONTEND ============ -->
+<section id="frontend">
+  <h2>11 · Frontend (3 Platform Portals)</h2>
+
+  <div class="pick">
+    <div class="top">
+      <span class="name">Next.js 15 App Router (the 3 portals)</span>
+      <span class="tag new">RECOMMENDATION</span>
+    </div>
+    <div class="row"><div class="k">Pick</div><div class="v"><b>Next.js 15+ (App Router)</b> for all three platform portals: ProjexCloud Admin · Tenant Admin · Tenant Workspace</div></div>
+    <div class="row"><div class="k">Why</div><div class="v">React Server Components match the data-heavy admin portal needs (cuts client JS); SSR matters for Tenant Admin (per-tenant subdomains with branding); huge ecosystem; Module Federation host for Tenant Workspace integrates well with Next.js + Webpack.</div></div>
+    <div class="row"><div class="k">Module Federation</div><div class="v"><b>@module-federation/nextjs-mf</b> for Tenant Workspace shell hosting vertical app remotes. Iframes for tenant custom apps (different React versions; security boundary).</div></div>
+    <div class="row"><div class="k">Hosting</div><div class="v">Containerized on our own Kubernetes (no Vercel lock-in). Alternative: customers self-hosting their custom apps on Vercel is supported via the npm SDKs.</div></div>
+    <div class="row"><div class="k">Cost</div><div class="v cost">$0 — open source. Hosting cost = Kubernetes nodes (see §16).</div></div>
+  </div>
+
+  <div class="pick">
+    <div class="top">
+      <span class="name">Design System — shadcn/ui + Radix UI + Tailwind CSS</span>
+      <span class="tag new">RECOMMENDATION</span>
+    </div>
+    <div class="row"><div class="k">Pick</div><div class="v"><b>shadcn/ui</b> components (copied into <code>@projexlight/design-system</code>) · <b>Radix UI primitives</b> for accessibility · <b>Tailwind CSS 4+</b> for utility-first styling</div></div>
+    <div class="row"><div class="k">Why</div><div class="v">"Owned not rented" — components are copied into our codebase, no upgrade hell. Radix gives WCAG 2.1 AA accessibility primitives (critical for enterprise + government buyers). Tailwind v4 zero-config.</div></div>
+    <div class="row"><div class="k">React Native parity</div><div class="v"><code>react-native-web</code> bridges design-system components to RN where applicable; mobile-specific primitives via React Native + HDK.</div></div>
+    <div class="row"><div class="k">Alternatives ruled out</div><div class="v"><b>Mantine</b> — full-featured but heavier · <b>Chakra</b> — velocity slowed · <b>Ant Design</b> — enterprise-y but stylistically opinionated · <b>MUI</b> — fights customization</div></div>
+    <div class="row"><div class="k">Cost</div><div class="v cost">$0 — all open source. (Tailwind CSS is MIT; shadcn/ui is MIT; Radix is MIT.)</div></div>
+  </div>
+
+  <div class="pick">
+    <div class="top">
+      <span class="name">Data fetching · State · Forms · Tables · Charts · Maps</span>
+      <span class="tag new">RECOMMENDATION</span>
+    </div>
+    <div class="row"><div class="k">Server state</div><div class="v"><b>TanStack Query</b> (React Query) — server-state caching, deduplication, optimistic updates</div></div>
+    <div class="row"><div class="k">Client state</div><div class="v"><b>Zustand</b> — lightweight, TS-friendly. (Avoid Redux Toolkit — overkill for our needs.)</div></div>
+    <div class="row"><div class="k">Forms + validation</div><div class="v"><b>React Hook Form</b> + <b>Zod</b> (already using Zod in <code>contracts</code>)</div></div>
+    <div class="row"><div class="k">Tables</div><div class="v"><b>TanStack Table</b> — headless data tables (admin portals need)</div></div>
+    <div class="row"><div class="k">Charts</div><div class="v"><b>Recharts</b> (simple usage) or <b>Visx</b> (complex viz) or <b>Apache ECharts</b> (heavyweight dashboards)</div></div>
+    <div class="row"><div class="k">Maps</div><div class="v"><b>Mapbox GL JS</b> (matches sdk-geo provider choice; reuse access token)</div></div>
+    <div class="row"><div class="k">Cost</div><div class="v cost">$0 — all open source. Mapbox: free tier covers 50k MAUs/mo; $0.50 per 1k MAUs beyond.</div></div>
+  </div>
+</section>
+
+<!-- ============ MOBILE ============ -->
+<section id="mobile">
+  <h2>12 · Mobile (HDK)</h2>
+
+  <div class="pick">
+    <div class="top">
+      <span class="name">React Native (new architecture) + Kotlin/Swift</span>
+      <span class="tag committed">COMMITTED</span>
+    </div>
+    <div class="row"><div class="k">Pick</div><div class="v"><b>React Native 0.78+</b> with <b>New Architecture (Fabric renderer + TurboModules)</b> for cross-platform UI · <b>Kotlin 2.1</b> for Android native HDK modules · <b>Swift 6</b> for iOS native HDK modules</div></div>
+    <div class="row"><div class="k">Bridge tooling</div><div class="v"><b>react-native-codegen</b> for TurboModule type-safe bridges; per-HDK TS facade auto-generated from native specs.</div></div>
+    <div class="row"><div class="k">Build &amp; distribution</div><div class="v"><b>Fastlane</b> for iOS/Android CI builds · <b>EAS Build</b> (Expo Application Services) considered if we keep some Expo modules · <b>iOS App Store Connect</b> + <b>Google Play Console</b> for distribution</div></div>
+    <div class="row"><div class="k">Cost</div><div class="v cost"><b>$99/year</b> iOS Apple Developer Program + <b>$25 one-time</b> Google Play Console = <b>~$125/year</b>. EAS Build optional: ~$99/mo Production tier (saves significant CI build infrastructure cost).</div></div>
+  </div>
+</section>
+
+<!-- ============ OBSERVABILITY ============ -->
+<section id="observability">
+  <h2>13 · Observability</h2>
+
+  <div class="pick">
+    <div class="top">
+      <span class="name">OpenTelemetry + Grafana stack (or Datadog)</span>
+      <span class="tag committed">COMMITTED</span>
+    </div>
+    <div class="row"><div class="k">Instrumentation</div><div class="v"><b>OpenTelemetry SDK</b> — committed in <code>@projexlight/telemetry</code> foundation package. Auto-instruments Fastify, Drizzle, fetch, Kafka clients.</div></div>
+    <div class="row"><div class="k">Backend (recommended)</div><div class="v"><b>Grafana Cloud</b> — Tempo (traces) + Loki (logs) + Mimir (metrics). Free tier covers initial launch; Pro at $99/mo.</div></div>
+    <div class="row"><div class="k">Backend (alternative)</div><div class="v"><b>Datadog</b> — managed; richer feature set; significantly more expensive (~$15-30/host/mo + APM + logs)</div></div>
+    <div class="row"><div class="k">AI traces</div><div class="v"><b>Langfuse</b> (covered in §10)</div></div>
+    <div class="row"><div class="k">Trace UI</div><div class="v"><b>sdk-trace</b> (P6A) — our own cross-system trace viewer aggregates from OTel + sdk-audit + sdk-meter + sdk-lineage. Doesn't replace Grafana/Datadog — those are infra-level; sdk-trace is product-level.</div></div>
+    <div class="row"><div class="k">Cost (initial launch)</div><div class="v cost"><b>$0–99/mo</b> Grafana Cloud (free tier likely enough for initial; $99/mo Pro). OR <b>~$1500/mo</b> Datadog (20-30 hosts) — only if you prefer managed and accept the bill.</div></div>
+    <div class="row"><div class="k">Cost at scale</div><div class="v cost">Grafana Cloud Pro scales to ~$500-2000/mo at production scale. Datadog scales to ~$5-15k/mo.</div></div>
+  </div>
+</section>
+
+<!-- ============ TESTING ============ -->
+<section id="testing">
+  <h2>14 · Testing</h2>
+
+  <div class="pick">
+    <div class="top">
+      <span class="name">Vitest + Playwright + k6 + Pact</span>
+      <span class="tag new">RECOMMENDATION</span>
+    </div>
+    <div class="row"><div class="k">Unit + integration</div><div class="v"><b>Vitest</b> (Vite-based; faster than Jest; native ESM + TypeScript)</div></div>
+    <div class="row"><div class="k">End-to-end</div><div class="v"><b>Playwright</b> (browser automation; multi-browser; trace replay)</div></div>
+    <div class="row"><div class="k">Load testing</div><div class="v"><b>k6</b> (Grafana-owned; JavaScript test scripts; matches PRD AC load tests for meter gate, pool router, ReBAC 10M edges)</div></div>
+    <div class="row"><div class="k">Contract tests</div><div class="v"><b>Pact</b> for cross-SDK contract tests (CI runs cross-consumer contract suite on every PR per Architecture §0)</div></div>
+    <div class="row"><div class="k">Chaos tests</div><div class="v"><b>Chaos Mesh</b> (Kubernetes-native; for the chaos drills mandated in PRDs)</div></div>
+    <div class="row"><div class="k">Cost</div><div class="v cost">$0 — all open source.</div></div>
+  </div>
+</section>
+
+<!-- ============ BUILD ============ -->
+<section id="build">
+  <h2>15 · Build, Monorepo, Releases &amp; Private Registry</h2>
+
+  <div class="pick">
+    <div class="top">
+      <span class="name">pnpm + turbo + Changesets + Verdaccio (or GitHub Packages)</span>
+      <span class="tag committed">COMMITTED</span>
+    </div>
+    <div class="row"><div class="k">Monorepo</div><div class="v"><b>pnpm</b> workspaces + <b>turbo</b> for caching builds (committed in v3.1 design)</div></div>
+    <div class="row"><div class="k">Releases</div><div class="v"><b>Changesets</b> for semver discipline; CI auto-publishes bumped packages on merge to main</div></div>
+    <div class="row"><div class="k">Private registry</div><div class="v">
+      <b>GitHub Packages</b> — easiest if you already use GitHub; ~$0.25/GB storage + $0.50/GB transfer.<br/>
+      <b>Cloudsmith</b> — feature-rich (per-tenant tokens, fine-grained access); $99/mo+.<br/>
+      <b>Verdaccio</b> self-hosted — free + ops; great control.
+    </div></div>
+    <div class="row"><div class="k">Cost (initial launch)</div><div class="v cost"><b>$0–100/mo</b> — GitHub Packages free for private repos up to 500MB; Cloudsmith Starter ~$99/mo if you want per-tenant token policy (relevant for ICP 4 tenant developers).</div></div>
+  </div>
+</section>
+
+<!-- ============ ORCHESTRATION ============ -->
+<section id="orchestration">
+  <h2>16 · Container Orchestration</h2>
+
+  <div class="pick">
+    <div class="top">
+      <span class="name">Kubernetes + Helm + ArgoCD</span>
+      <span class="tag committed">COMMITTED</span>
+    </div>
+    <div class="row"><div class="k">Pick</div><div class="v"><b>Kubernetes</b> — committed. <b>EKS</b> on AWS, <b>GKE</b> on GCP, <b>AKS</b> on Azure. Vanilla K8s for on-prem.</div></div>
+    <div class="row"><div class="k">Package &amp; deploy</div><div class="v"><b>Helm</b> charts per service (committed) · <b>ArgoCD</b> for GitOps (declarative deploys, multi-cluster)</div></div>
+    <div class="row"><div class="k">Container runtime</div><div class="v"><b>containerd</b> (K8s default) · base images: <b>distroless</b> for security and size · <b>Node.js 22 slim</b> for services</div></div>
+    <div class="row"><div class="k">Service mesh</div><div class="v">Defer initially. Add <b>Linkerd</b> (lightweight) or <b>Istio</b> (full-featured) when multi-cluster mTLS becomes a requirement (P7+).</div></div>
+    <div class="row"><div class="k">Cost (initial launch)</div><div class="v cost"><b>~$700/mo</b> — 1 EKS cluster control plane ($73/mo) + node group: 6 × c6i.xlarge ($600/mo) = ~$673/mo. Add ~$50/mo for load balancers (ALB/NLB).</div></div>
+    <div class="row"><div class="k">Cost at scale</div><div class="v cost">3 regions × 3 clusters Year 3: ~$10-20k/mo K8s + load balancing.</div></div>
+  </div>
+</section>
+
+<!-- ============ CICD ============ -->
+<section id="cicd">
+  <h2>17 · CI/CD</h2>
+
+  <div class="pick">
+    <div class="top">
+      <span class="name">GitHub Actions</span>
+      <span class="tag new">RECOMMENDATION</span>
+    </div>
+    <div class="row"><div class="k">Pick</div><div class="v"><b>GitHub Actions</b> — ubiquitous, integrates with our private registry, simple runner self-hosting</div></div>
+    <div class="row"><div class="k">Why</div><div class="v">Same vendor as code hosting; lowest friction; private repo includes 50k build-minutes/mo free; self-hosted runners possible for heavy CI work (Android builds, e2e suites)</div></div>
+    <div class="row"><div class="k">Alternatives ruled out</div><div class="v"><b>GitLab CI</b> — fine if you're on GitLab. <b>Buildkite</b> — premium ops; overkill at our stage. <b>Jenkins</b> — high ops overhead.</div></div>
+    <div class="row"><div class="k">Cost (initial launch)</div><div class="v cost"><b>$0–200/mo</b> — first 50k minutes free for private repos; beyond at $0.008/min Linux. With self-hosted runners (cheap EC2), CI minutes cost can stay under $200/mo even at active development.</div></div>
+  </div>
+</section>
+
+<!-- ============ VARIANTS ============ -->
+<section id="variants">
+  <h2>18 · Per-Deployment-Variant Variations</h2>
+
+  <table>
+    <thead><tr><th>Layer</th><th>SaaS default</th><th>BYOK</th><th>Sovereign Cloud</th><th>On-Prem / Air-Gapped</th></tr></thead>
+    <tbody>
+      <tr><td><b>KMS</b></td><td>AWS KMS</td><td>Customer's KMS (AWS / GCP / HSM)</td><td>Partner-provided KMS</td><td>HashiCorp Vault on-prem / Thales HSM</td></tr>
+      <tr><td><b>Blob</b></td><td>AWS S3</td><td>AWS S3 (CMK-wrapped)</td><td>Partner cloud S3-compatible</td><td>MinIO on-prem</td></tr>
+      <tr><td><b>Event bus</b></td><td>Redpanda Cloud BYOC</td><td>Same</td><td>Self-managed Redpanda</td><td>Self-managed Redpanda</td></tr>
+      <tr><td><b>Cache</b></td><td>ElastiCache</td><td>Same</td><td>Self-managed Redis/Dragonfly</td><td>Self-managed</td></tr>
+      <tr><td><b>OLTP</b></td><td>Aurora Serverless v2</td><td>Same</td><td>Self-managed Postgres + Patroni</td><td>Self-managed Postgres + Patroni</td></tr>
+      <tr><td><b>OLAP</b></td><td>ClickHouse Cloud</td><td>Same</td><td>Self-managed ClickHouse</td><td>Self-managed ClickHouse</td></tr>
+      <tr><td><b>LLM</b></td><td>Anthropic + OpenAI + Gemini</td><td>Same</td><td>Region-allowed providers only</td><td>Local models (Llama 3.3 / Mistral via Ollama or vLLM)</td></tr>
+      <tr><td><b>Workflow</b></td><td>Temporal Cloud</td><td>Same</td><td>Self-managed Temporal</td><td>Self-managed Temporal</td></tr>
+      <tr><td><b>Observability</b></td><td>Grafana Cloud / Datadog</td><td>Same + customer SIEM forwarder</td><td>Self-managed Grafana</td><td>Self-managed Grafana</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ============ COST SUMMARY ============ -->
+<section id="cost-summary">
+  <h2>19 · Initial Production Launch Cost Summary</h2>
+
+  <p>The consolidated monthly cost for the initial production launch profile (10 design-partner tenants · 1 region us-east-1 · 1-2 verticals live · ~100k API calls/day · ~100GB OLTP · ~500GB blob).</p>
+
+  <h3>19.1 · Recurring monthly infrastructure</h3>
+  <table>
+    <thead><tr><th>Component</th><th>Service / hosting</th><th class="num">Monthly cost (USD)</th></tr></thead>
+    <tbody>
+      <tr><td>Postgres (3 pools)</td><td>AWS Aurora Serverless v2 (or RDS Multi-AZ)</td><td class="num">$2,000</td></tr>
+      <tr><td>Cache + Identity Projection</td><td>AWS ElastiCache (or Dragonfly Cloud / Upstash)</td><td class="num">$300</td></tr>
+      <tr><td>Event streaming</td><td>Redpanda Cloud BYOC (or self-managed)</td><td class="num">$700</td></tr>
+      <tr><td>ClickHouse (telemetry + usage rollups)</td><td>ClickHouse Cloud production tier</td><td class="num">$500</td></tr>
+      <tr><td>OpenSearch (search)</td><td>AWS OpenSearch Service Multi-AZ</td><td class="num">$800</td></tr>
+      <tr><td>Blob storage</td><td>AWS S3 Standard + Intelligent-Tiering</td><td class="num">$25</td></tr>
+      <tr><td>KMS</td><td>AWS KMS</td><td class="num">$300</td></tr>
+      <tr><td>Workflow engine</td><td>Temporal Cloud production</td><td class="num">$1,000</td></tr>
+      <tr><td>Kubernetes (1 cluster + 6 nodes)</td><td>AWS EKS + c6i.xlarge nodes + load balancers</td><td class="num">$750</td></tr>
+      <tr><td>Vector store</td><td>pgvector (in Postgres) — $0</td><td class="num">$0</td></tr>
+      <tr><td>Iceberg lakehouse</td><td>Defer to P7 — $0 initial</td><td class="num">$0</td></tr>
+      <tr><td>Observability (Grafana Cloud Pro)</td><td>Grafana Cloud Pro</td><td class="num">$99</td></tr>
+      <tr><td>AI traces (Langfuse Cloud)</td><td>Langfuse Cloud Pro</td><td class="num">$59</td></tr>
+      <tr><td>Private npm registry</td><td>GitHub Packages (or Cloudsmith $99)</td><td class="num">$50</td></tr>
+      <tr><td>CI/CD</td><td>GitHub Actions (private + light self-hosted runners)</td><td class="num">$100</td></tr>
+      <tr><td>DNS + domains</td><td>Route 53 + domain renewals (~$15/mo + ~$3/mo)</td><td class="num">$20</td></tr>
+      <tr><td>iOS + Android distribution</td><td>Apple Dev ($99/yr) + Google Play ($25 once)</td><td class="num">$10</td></tr>
+      <tr><td>SSL / code signing</td><td>Let's Encrypt (free) + code-signing cert</td><td class="num">$50</td></tr>
+      <tr><td><b>Subtotal · Infrastructure + Services</b></td><td></td><td class="num"><b>~$6,763</b></td></tr>
+    </tbody>
+  </table>
+
+  <h3>19.2 · Passthrough costs (mostly billed back to tenants)</h3>
+  <table>
+    <thead><tr><th>Component</th><th>Usage estimate</th><th class="num">Monthly cost (USD)</th></tr></thead>
+    <tbody>
+      <tr><td>LLM API costs (Anthropic + OpenAI + Bedrock)</td><td>~10M tokens/day average across all tenants</td><td class="num">$3,000–5,000</td></tr>
+      <tr><td>SMS via Twilio (sdk-notification)</td><td>~50k SMS/mo</td><td class="num">$400</td></tr>
+      <tr><td>Email via SES / SendGrid</td><td>~500k emails/mo</td><td class="num">$50</td></tr>
+      <tr><td>WhatsApp BSP (Twilio)</td><td>~10k conversations/mo</td><td class="num">$300</td></tr>
+      <tr><td>Maps (Mapbox)</td><td>Within 50k MAU free tier initially</td><td class="num">$0</td></tr>
+      <tr><td>Payment fees (Stripe)</td><td>Passthrough to merchant; net $0 platform cost</td><td class="num">$0</td></tr>
+      <tr><td><b>Subtotal · Passthrough</b></td><td></td><td class="num"><b>~$3,750–5,750</b></td></tr>
+    </tbody>
+  </table>
+  <p class="muted" style="font-size:13px;margin-top:8px"><b>Net of passthrough billing:</b> approximately $500–1,500/mo (revenue recovery via <code>passthrough_plus_margin</code> SKUs at 15% margin).</p>
+
+  <h3>19.3 · Year-1 one-time costs</h3>
+  <table>
+    <thead><tr><th>Item</th><th class="num">Cost (USD)</th></tr></thead>
+    <tbody>
+      <tr><td>SOC2 Type I audit</td><td class="num">$20,000–40,000</td></tr>
+      <tr><td>HIPAA gap assessment + readiness</td><td class="num">$15,000–30,000</td></tr>
+      <tr><td>Penetration test (annual; required pre-SOC2)</td><td class="num">$15,000–30,000</td></tr>
+      <tr><td>Legal review (privacy policy · ToS · DPAs · BAAs)</td><td class="num">$10,000–20,000</td></tr>
+      <tr><td>Cyber-liability insurance (annual premium)</td><td class="num">$5,000–15,000</td></tr>
+      <tr><td><b>Subtotal · Year-1 one-time</b></td><td class="num"><b>~$65,000–135,000</b></td></tr>
+    </tbody>
+  </table>
+
+  <h3>19.4 · The headline number</h3>
+  <div class="callout green">
+    <b>Initial production launch · monthly recurring (infrastructure + services + observability + AI passthrough):</b>
+    <ul style="margin:8px 0 0 0">
+      <li><b>~$10,500–12,500 / month</b> total cost (gross including LLM passthrough)</li>
+      <li><b>~$7,500–8,500 / month</b> net cost after tenant billing recovers passthrough at 15% margin</li>
+      <li><b>~$90,000 / year</b> infrastructure run rate (excluding personnel)</li>
+      <li><b>~$65,000–135,000 one-time</b> Year-1 audit / legal / insurance</li>
+    </ul>
+    <br/>
+    Plus payroll (the dominant cost): 8 engineers Y1 average $200k loaded = ~$1.6M/year. <b>Total Year-1 burn ≈ $1.75M–1.9M</b> (matches the seed-stage assumption in BusinessPlan.md §11).
+  </div>
+</section>
+
+<!-- ============ COST AT SCALE ============ -->
+<section id="cost-scale">
+  <h2>20 · Cost at Scale (illustrative)</h2>
+
+  <p>How the infrastructure bill grows with tenant count. Most costs scale sub-linearly (per-pool fixed costs amortize as tenants increase per pool) until pool count itself grows (typically every 5k tenants per Admin Pool, every 2-30k per App Pool).</p>
+
+  <table>
+    <thead>
+      <tr>
+        <th>Component</th>
+        <th class="num">10 tenants (P1 launch)</th>
+        <th class="num">100 tenants (Y2)</th>
+        <th class="num">1,000 tenants (Y3)</th>
+        <th class="num">10,000 tenants (Y4)</th>
+        <th class="num">100,000 tenants (Y5)</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr><td>Postgres (pools)</td><td class="num">$2,000</td><td class="num">$5,000</td><td class="num">$25,000</td><td class="num">$200,000</td><td class="num">$1,500,000</td></tr>
+      <tr><td>Cache (Redis/Dragonfly)</td><td class="num">$300</td><td class="num">$1,000</td><td class="num">$5,000</td><td class="num">$30,000</td><td class="num">$200,000</td></tr>
+      <tr><td>Event streaming (Redpanda)</td><td class="num">$700</td><td class="num">$2,000</td><td class="num">$8,000</td><td class="num">$40,000</td><td class="num">$250,000</td></tr>
+      <tr><td>ClickHouse</td><td class="num">$500</td><td class="num">$2,500</td><td class="num">$12,000</td><td class="num">$60,000</td><td class="num">$400,000</td></tr>
+      <tr><td>OpenSearch</td><td class="num">$800</td><td class="num">$3,000</td><td class="num">$15,000</td><td class="num">$80,000</td><td class="num">$500,000</td></tr>
+      <tr><td>Blob (S3)</td><td class="num">$25</td><td class="num">$250</td><td class="num">$2,500</td><td class="num">$25,000</td><td class="num">$250,000</td></tr>
+      <tr><td>KMS</td><td class="num">$300</td><td class="num">$1,500</td><td class="num">$8,000</td><td class="num">$40,000</td><td class="num">$250,000</td></tr>
+      <tr><td>Temporal Cloud</td><td class="num">$1,000</td><td class="num">$3,000</td><td class="num">$15,000</td><td class="num">$80,000</td><td class="num">$500,000</td></tr>
+      <tr><td>Kubernetes</td><td class="num">$750</td><td class="num">$3,000</td><td class="num">$15,000</td><td class="num">$100,000</td><td class="num">$700,000</td></tr>
+      <tr><td>Iceberg lakehouse (from P7)</td><td class="num">$0</td><td class="num">$2,000</td><td class="num">$10,000</td><td class="num">$60,000</td><td class="num">$400,000</td></tr>
+      <tr><td>Vector store (Pinecone/Qdrant from scale)</td><td class="num">$0</td><td class="num">$500</td><td class="num">$3,000</td><td class="num">$20,000</td><td class="num">$120,000</td></tr>
+      <tr><td>Observability</td><td class="num">$99</td><td class="num">$500</td><td class="num">$2,000</td><td class="num">$10,000</td><td class="num">$50,000</td></tr>
+      <tr><td>LLM passthrough (mostly billed back)</td><td class="num">$3,000</td><td class="num">$25,000</td><td class="num">$200,000</td><td class="num">$1,500,000</td><td class="num">$10,000,000</td></tr>
+      <tr><td>SMS/email passthrough</td><td class="num">$750</td><td class="num">$5,000</td><td class="num">$40,000</td><td class="num">$300,000</td><td class="num">$2,000,000</td></tr>
+      <tr><td><b>Total monthly (gross)</b></td><td class="num"><b>$10,224</b></td><td class="num"><b>$54,250</b></td><td class="num"><b>$360,500</b></td><td class="num"><b>$2,545,000</b></td><td class="num"><b>$17,120,000</b></td></tr>
+      <tr><td><b>Net after passthrough billing</b></td><td class="num"><b>~$7,500</b></td><td class="num"><b>~$25,000</b></td><td class="num"><b>~$130,000</b></td><td class="num"><b>~$800,000</b></td><td class="num"><b>~$5,500,000</b></td></tr>
+    </tbody>
+  </table>
+
+  <div class="callout">
+    <b>Reading the table.</b> Gross cost grows with tenant count but <b>most growth is LLM + SMS passthrough</b> billed back to tenants at margin. Net infrastructure cost as a percent of ARR drops over time (10-15% at scale per BusinessPlan §8), confirming the 75-80% gross margin target. By Year 5, net infra is ~$66M/year against ~$500M+ ARR.
+  </div>
+</section>
+
+<!-- ============ DON'T USE ============ -->
+<section id="dont-use">
+  <h2>21 · What We Do <i>Not</i> Use (and Why)</h2>
+
+  <table>
+    <thead><tr><th>Anti-pick</th><th>Why not</th></tr></thead>
+    <tbody>
+      <tr><td><b>Prisma ORM</b></td><td>Too heavy; abstracts SQL too far for our RLS / PostGIS / partitioned-table needs; migration story has unresolved production issues. Drizzle is the better choice for our shape.</td></tr>
+      <tr><td><b>GraphQL platform-wide</b></td><td>Typed SDKs already deliver type safety; GraphQL adds N+1 risk + runtime complexity without proportional value. (Specific SDKs may expose GraphQL endpoints if a vertical demands; not platform default.)</td></tr>
+      <tr><td><b>NestJS</b></td><td>Opinionated framework conflicts with SDK-as-package architecture; DI complexity we don't need.</td></tr>
+      <tr><td><b>Material UI / Ant Design (as primary)</b></td><td>Opinionated styling fights design-system customization. shadcn+Radix+Tailwind is "owned not rented."</td></tr>
+      <tr><td><b>Pinning to one cloud</b></td><td>SDK abstractions (sdk-secrets · sdk-vault · sdk-media) decouple cloud choice. Required for sovereign + on-prem variants.</td></tr>
+      <tr><td><b>Jest</b></td><td>Vitest is strictly better in 2026 (faster, native ESM, better TS support).</td></tr>
+      <tr><td><b>Monorepo without Changesets</b></td><td>Semver discipline collapses without it. 57 SDKs cannot be released ad-hoc.</td></tr>
+      <tr><td><b>Auth0 / Okta as our IdP product</b></td><td>We ARE the IdP (sdk-identity). We federate WITH customer's Okta/Azure AD/Ping; we don't pay for Auth0 as our auth.</td></tr>
+      <tr><td><b>Stripe Billing</b></td><td>We ARE the billing product (sdk-billing + sdk-meter). Stripe is just the payment processor behind sdk-payment.</td></tr>
+      <tr><td><b>Putting telemetry in Postgres</b></td><td>Violates §8B Polyglot Persistence. ClickHouse is the right tool.</td></tr>
+      <tr><td><b>Cross-pool transactional SQL</b></td><td>Architecturally banned (§8A). Cross-pool reads go through warehouse / Iceberg lakehouse only.</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ============ APPENDIX ============ -->
+<section>
+  <h2>Appendix · Notes &amp; Decision Authority</h2>
+  <ul class="tight">
+    <li><b>Pricing reference period:</b> List prices observed in 2025-2026 — actual costs depend on enterprise discounts, committed-use savings, and reserved-capacity pricing (typically 20-40% off).</li>
+    <li><b>Initial production profile assumptions:</b> 10 design-partner tenants in 1 region (us-east-1), 1-2 verticals live, ~100k API calls/day total platform-wide, ~100GB OLTP, ~500GB blob storage. Larger initial footprints scale costs proportionally (use §20 table).</li>
+    <li><b>Self-managed vs managed trade-off:</b> Initial-launch numbers assume the managed option for most components (Aurora · ElastiCache · ClickHouse Cloud · Temporal Cloud · Grafana Cloud) to reduce ops burden on a small early team. Self-managed alternatives reduce cost ~40-60% but add headcount-equivalent ops time. Switch to self-managed as the SRE team grows (P5-P6).</li>
+    <li><b>Decision authority:</b> Tech-stack changes require Platform Architect sign-off + Working Group review. Doctrines (§3A · §3B · §8B) take precedence over individual tech preferences.</li>
+    <li><b>Cost monitoring:</b> Tag every resource with <code>tenant_id · pool_index · sdk_name</code> for showback (CostExplorer / GCP Billing). Per-SDK cost dashboards in ProjexCloud Admin Portal (P4).</li>
+  </ul>
+
+  <h3>Cross-references</h3>
+  <table>
+    <thead><tr><th>You're looking for</th><th>Document</th></tr></thead>
+    <tbody>
+      <tr><td>Why these tech choices (architecturally)</td><td><code>./Architecture-v3.1.html</code> §3A · §3B · §8B</td></tr>
+      <tr><td>Where each tech lands per phase</td><td><code>./SDK-Build-Plan-v3.1.html</code> §0A</td></tr>
+      <tr><td>Repo + SDK + DB structure</td><td><code>./ProjectStructure-v3.1.html</code></td></tr>
+      <tr><td>Per-phase acceptance criteria (where tech choices must verify)</td><td><code>../../prd/P*-*.md</code></td></tr>
+      <tr><td>How costs net out against revenue model</td><td><code>../../business/BusinessPlan.md</code> §8 · §11</td></tr>
+    </tbody>
+  </table>
+</section>
+
+</div>
+
+</body>
+</html>
