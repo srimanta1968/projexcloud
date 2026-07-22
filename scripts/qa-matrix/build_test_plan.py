@@ -114,7 +114,14 @@ pre{background:#0b0f14;border:1px solid var(--line);border-radius:8px;padding:10
 
 P = [f'<!doctype html><html lang="en"><head><meta charset="utf-8">'
      f'<meta name="viewport" content="width=device-width,initial-scale=1">'
-     f'<title>ProjexCloud — QA Test Plan</title><style>{CSS}</style></head><body><main>']
+     f'<title>ProjexCloud — QA Test Plan</title><style>{CSS}</style></head><body><main>'
+     '<a href="/" title="Back to ProjexCloud" '
+     'style="display:inline-flex;align-items:center;gap:9px;text-decoration:none;color:inherit;margin-bottom:14px">'
+     '<span style="width:28px;height:28px;border-radius:7px;background:linear-gradient(135deg,#1A51C7,#3f74e8);'
+     'display:grid;place-items:center;flex:none">'
+     '<svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M6 19V5h6.5a4.5 4.5 0 0 1 0 9H9.5" '
+     'stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></span>'
+     '<span style="font-weight:700;font-size:15px">ProjexCloud</span></a>']
 
 total_cases = len(apis)
 total_apis = len({(r["method"], r["endpoint"]) for r in apis})

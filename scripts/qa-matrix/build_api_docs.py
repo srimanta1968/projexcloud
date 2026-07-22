@@ -253,7 +253,14 @@ def build_page(public=False):
     P.append('<div class="layout">')
 
     # sidebar
-    P.append('<aside><h1>ProjexCloud API</h1><div class="sub">v3.1 · API reference</div>')
+    P.append('<aside><a href="/" title="Back to ProjexCloud" '
+             'style="display:flex;align-items:center;gap:9px;padding:0;margin:0 0 10px;text-decoration:none;color:var(--ink)">'
+             '<span style="width:28px;height:28px;border-radius:7px;background:linear-gradient(135deg,#1A51C7,#3f74e8);'
+             'display:grid;place-items:center;flex:none">'
+             '<svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M6 19V5h6.5a4.5 4.5 0 0 1 0 9H9.5" '
+             'stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></span>'
+             '<span style="font-weight:700;font-size:15px">ProjexCloud API</span></a>'
+             '<div class="sub">v3.1 · API reference</div>')
     P.append('<h2>SDKs / services</h2>')
     for s in sdk_names:
         P.append(f'<a href="#{sdk_anchor(s)}">{esc(s)} <span class="cnt">({len(by_sdk[s])})</span></a>')
