@@ -1,0 +1,489 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>PRD · ProjexCloud ↔ ProjexLight Integration v0.1</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<style>
+  :root {
+    --bg: #0b0f17; --panel: #121826; --panel-2: #1a2234; --line: #243049;
+    --text: #e6ecf5; --muted: #8a98b3; --accent: #c9a86a; --accent-2: #6aa9ff;
+    --teal: #2dd4bf; --green: #5dd39e; --red: #ff6b6b; --yellow: #f5c451; --purple: #b88dff;
+    --code-bg: #0f1422;
+  }
+  * { box-sizing: border-box; }
+  html, body { background: var(--bg); color: var(--text); font-family: ui-sans-serif, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", sans-serif; margin: 0; padding: 0; line-height: 1.55; }
+  .page { max-width: 1260px; margin: 0 auto; padding: 56px 32px 96px; }
+  header.cover { border-bottom: 1px solid var(--line); padding-bottom: 36px; margin-bottom: 40px; }
+  header.cover .eyebrow { color: var(--accent); letter-spacing: 0.18em; text-transform: uppercase; font-size: 12px; font-weight: 700; }
+  header.cover h1 { font-size: 40px; line-height: 1.15; margin: 12px 0 8px; letter-spacing: -0.02em; }
+  header.cover .sub { color: var(--muted); font-size: 17px; max-width: 940px; }
+  header.cover .meta { display: flex; gap: 22px; flex-wrap: wrap; margin-top: 22px; color: var(--muted); font-size: 13px; }
+  header.cover .meta b { color: var(--text); font-weight: 600; }
+  header.cover .changelog { margin-top: 22px; background: var(--panel-2); border-left: 3px solid var(--accent-2); border-radius: 0 10px 10px 0; padding: 14px 18px; font-size: 13.5px; color: #d6deef; }
+  header.cover .changelog b { color: var(--accent-2); }
+  h2 { font-size: 25px; letter-spacing: -0.01em; margin: 54px 0 16px; padding-bottom: 8px; border-bottom: 1px solid var(--line); }
+  h3 { font-size: 17px; margin: 26px 0 9px; color: var(--text); }
+  h4 { font-size: 12.5px; margin: 18px 0 8px; color: var(--accent); text-transform: uppercase; letter-spacing: 0.12em; }
+  p { color: #c8d1e3; }
+  small, .muted { color: var(--muted); }
+  .grid { display: grid; gap: 16px; }
+  .grid.cols-2 { grid-template-columns: repeat(2, minmax(0,1fr)); }
+  .grid.cols-3 { grid-template-columns: repeat(3, minmax(0,1fr)); }
+  @media (max-width: 900px) { .grid.cols-2, .grid.cols-3 { grid-template-columns: 1fr; } header.cover h1 { font-size: 29px; } }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 16px 16px 14px; }
+  .card .label { color: var(--accent); font-size: 11px; text-transform: uppercase; letter-spacing: 0.14em; font-weight: 700; }
+  .card .title { font-weight: 600; margin: 6px 0 6px; font-size: 15px; }
+  .card .body { color: var(--muted); font-size: 13.5px; }
+  .pill { display: inline-block; padding: 3px 10px; border-radius: 999px; font-size: 11px; border: 1px solid var(--line); color: var(--muted); margin-right: 6px; }
+  .pill.purple { color: var(--purple); border-color: rgba(184,141,255,0.4); }
+  .pill.green { color: var(--green); border-color: rgba(93,211,158,0.4); }
+  .pill.blue { color: var(--accent-2); border-color: rgba(106,169,255,0.4); }
+  table { width: 100%; border-collapse: collapse; margin-top: 12px; font-size: 13.5px; }
+  th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { color: var(--muted); font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; }
+  td.num { text-align: right; font-variant-numeric: tabular-nums; }
+  pre, code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+  pre { background: var(--code-bg); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; overflow-x: auto; font-size: 12.5px; line-height: 1.5; color: #c9d1d9; }
+  code { background: var(--code-bg); padding: 1px 6px; border-radius: 4px; font-size: 12.5px; }
+  .diagram-wrap { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 22px; overflow-x: auto; }
+  .caption { color: var(--muted); font-size: 12.5px; margin-top: 10px; text-align: center; }
+  .mermaid { background: transparent; }
+  nav.toc { position: sticky; top: 0; background: rgba(11,15,23,0.92); backdrop-filter: blur(10px); border-bottom: 1px solid var(--line); padding: 10px 32px; z-index: 10; }
+  nav.toc .row { max-width: 1260px; margin: 0 auto; display: flex; flex-wrap: wrap; gap: 10px 14px; font-size: 12px; }
+  nav.toc a { color: var(--muted); text-decoration: none; border-bottom: 1px solid transparent; }
+  nav.toc a:hover { color: var(--accent); border-color: var(--accent); }
+  .callout { border-left: 3px solid var(--accent); background: var(--panel-2); padding: 13px 18px; border-radius: 0 10px 10px 0; margin: 18px 0; color: #d6deef; font-size: 14px; }
+  .callout.green { border-color: var(--green); }
+  .callout.red { border-color: var(--red); }
+  .callout.purple { border-color: var(--purple); }
+  .callout.blue { border-color: var(--accent-2); }
+  ul.tight li, ol.tight li { margin: 4px 0; color: #c8d1e3; font-size: 14px; }
+  .fr { background: var(--panel); border: 1px solid var(--line); border-left: 3px solid var(--accent-2); border-radius: 0 10px 10px 0; padding: 12px 16px; margin: 12px 0; }
+  .fr .frid { color: var(--accent-2); font-weight: 700; font-size: 12px; letter-spacing: 0.06em; }
+  .status-pill { display:inline-block; font-size:11px; padding:2px 9px; border-radius:5px; background:rgba(245,196,81,0.16); color:var(--yellow); font-weight:700; letter-spacing:0.06em; }
+  .tag { font-size: 10px; padding: 2px 8px; border-radius: 4px; font-weight: 700; letter-spacing: 0.08em; }
+  .tag.p1 { background: rgba(93,211,158,0.16); color: var(--green); }
+  .tag.p2 { background: rgba(184,141,255,0.16); color: var(--purple); }
+</style>
+</head>
+<body>
+
+<nav class="toc">
+  <div class="row">
+    <a href="#tldr">1 · TL;DR</a>
+    <a href="#background">2 · Background &amp; Problem</a>
+    <a href="#goals">3 · Goals</a>
+    <a href="#users">4 · Users</a>
+    <a href="#solution">5 · Solution</a>
+    <a href="#contracts">6 · Data &amp; API Contracts</a>
+    <a href="#flows">7 · User Flows</a>
+    <a href="#security">8 · Security</a>
+    <a href="#milestones">9 · Milestones</a>
+    <a href="#metrics">10 · Metrics</a>
+    <a href="#open">11 · Open Questions</a>
+    <a href="#appendix">12 · Appendix</a>
+  </div>
+</nav>
+
+<div class="page">
+
+<header class="cover">
+  <div class="eyebrow">Product Requirements · Developer Experience · Draft v0.1</div>
+  <h1>ProjexCloud &harr; ProjexLight Integration</h1>
+  <p class="sub">Make ProjexLight's AI code generator <b>reuse ProjexCloud's 75 SDKs (538 APIs)</b> instead of rebuilding them, and let a customer start a ProjexCloud-backed project from either product. The mechanism: ProjexCloud publishes a machine-readable <b>SDK catalog</b> that ships inside every CLI export, so the codegen LLM discovers and reuses SDK APIs by construction.</p>
+  <div class="meta">
+    <div><b>Status</b> · <span class="status-pill">DRAFT v0.1 — for review</span></div>
+    <div><b>Date</b> · 2026-07-21</div>
+    <div><b>Owner</b> · Platform / Developer Experience</div>
+    <div><b>Scope</b> · Plan + contracts only; implementation follows per §9</div>
+  </div>
+  <div class="changelog">
+    <b>What this PRD commits to.</b> (1) The load-bearing piece is a <b>machine-readable SDK catalog</b> generated in ProjexCloud from the same source as the API reference (<code>qa-apis.json</code>), synced into ProjexLight's MCP toolkit (<code>ai-appgen/mcp/dist/data/</code>) so it is <b>bundled into every CLI export</b>. (2) The exported <b>build instruction gains a reuse rule</b> — consult the catalog first; reuse the SDK via the gateway; only generate custom code for gaps. (3) A <b>deep-link on-ramp</b> lets ProjexCloud's Build page create a seeded ProjexLight project without either product holding the other's credentials. (4) Recommendation: <b>Phase&nbsp;1 first</b> (catalog + reuse rule — makes reuse actually happen, ProjexCloud-side, ships value alone); Phase&nbsp;2 (the on-ramp) second.
+  </div>
+</header>
+
+<!-- 1 TLDR -->
+<section id="tldr">
+  <h2>1 · TL;DR</h2>
+  <div class="grid cols-3">
+    <div class="card"><div class="label">The problem</div><div class="title">ProjexLight can't see ProjexCloud's SDKs</div><div class="body">Its reuse engine only searches the project's own resources. So a ProjexCloud-targeted project regenerates a CRM / auth / scheduler from scratch — the opposite of reuse.</div></div>
+    <div class="card"><div class="label">The fix (Phase 1)</div><div class="title">Bundle the SDK catalog into every export</div><div class="body">Publish <code>sdk-catalog.json</code> in ProjexCloud → sync into <code>ai-appgen/mcp/dist/data/</code> → it ships with every CLI export → a reuse rule tells the LLM to consult it and call the gateway.</div></div>
+    <div class="card"><div class="label">The on-ramp (Phase 2)</div><div class="title">Create a ProjexLight project from ProjexCloud</div><div class="body">A "Create in ProjexLight" button on <code>/build</code> hands the composed plan over via a one-time deep-link token — no cross-product key custody.</div></div>
+  </div>
+  <div class="callout green" style="margin-top:16px"><b>Recommendation.</b> These solve different halves. Phase 1 (catalog + reuse rule) is what makes reuse <i>happen</i> and is cheap — do it first. Phase 2 (the on-ramp) is the premium funnel and only pays off once Phase 1 exists.</div>
+  <div class="callout purple"><b>P0 — ProjexCloud SDKs are OPTIONAL (foundational principle).</b> ProjexLight code generation must work <b>fully standalone</b> (generate everything from scratch — its default today) <i>and</i> <b>accelerated</b> (reuse ProjexCloud SDKs). The customer chooses <b>per project</b>; the choice drives whether the catalog + reuse rule ship. A customer who declines needs <b>no ProjexCloud account</b> and gets exactly today's ProjexLight behavior. Every decision point links a <b>"Why pre-built SDKs?" benefits reference</b> so the choice is informed. ProjexCloud is an opt-in accelerator, never a dependency.</div>
+</section>
+
+<!-- 2 BACKGROUND -->
+<section id="background">
+  <h2>2 · Background &amp; Problem Statement</h2>
+
+  <h3>2.1 · The two products today</h3>
+  <div class="grid cols-2">
+    <div class="card">
+      <div class="label">ProjexLight · <code>ai-appgen</code></div>
+      <div class="title">Generic AI app generator</div>
+      <div class="body">
+        React + Express (REST) + Postgres. Describe an app → plan as <b>Epic → Feature → Scenario (BDD) → Task</b> → export a scaffold → a local CLI agent generates code task-by-task.
+        <ul class="tight" style="margin-top:8px">
+          <li><code>POST /api/projects</code>; JWT + encrypted platform API key + <code>MCP_SESSION_TOKEN</code>.</li>
+          <li>Discovery = embeddings search over <b>the project's own</b> resources (<code>text-embedding-3-small</code>, "reuse before generate").</li>
+          <li>Export = Sprint Wizard → ZIP → S3; bundles Dev-MCP <code>:8766</code> + Test-MCP <code>:8000</code>.</li>
+          <li>Proven savings: <b>&minus;50% tokens · &minus;84% startup · str_replace 100%&rarr;0% · ~50% fewer sessions.</b></li>
+        </ul>
+      </div>
+    </div>
+    <div class="card">
+      <div class="label">ProjexCloud</div>
+      <div class="title">75 reusable SDKs · 538 gateway APIs</div>
+      <div class="body">
+        One Fastify gateway mounting ~90 SDKs; Postgres pools + Redis + ClickHouse; portals behind nginx at <code>cloud.projexlight.com</code>.
+        <ul class="tight" style="margin-top:8px">
+          <li>Default-deny gate: a valid <b>tenant JWT</b> gates every non-public route.</li>
+          <li>In-portal discovery: <b>Workspace &rarr; Build</b> &rarr; <code>POST /api/build/plan</code> composes <code>{recommended_sdks, custom_work, vertical_pack, complexity}</code>.</li>
+          <li>Reference already generated: <code>docs/v3.1/api_docs/index.html</code> + machine data <code>scripts/qa-matrix/qa-apis.json</code>.</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <h3>2.2 · The SDK estate (grouped, real counts)</h3>
+  <table>
+    <thead><tr><th>Group</th><th class="num">SDKs</th><th class="num">APIs</th></tr></thead>
+    <tbody>
+      <tr><td>Platform &amp; Multi-Tenancy</td><td class="num">20</td><td class="num">133</td></tr>
+      <tr><td>Outreach &amp; Communication <span class="pill purple">this sprint</span></td><td class="num">8</td><td class="num">111</td></tr>
+      <tr><td>CRM &amp; Engagement</td><td class="num">8</td><td class="num">68</td></tr>
+      <tr><td>Governance, Consent &amp; Security</td><td class="num">10</td><td class="num">56</td></tr>
+      <tr><td>Identity &amp; Access (AIM)</td><td class="num">6</td><td class="num">55</td></tr>
+      <tr><td>AI &amp; Agents</td><td class="num">7</td><td class="num">53</td></tr>
+      <tr><td>Native HDK (mobile / edge)</td><td class="num">11</td><td class="num">28</td></tr>
+      <tr><td>Connectors &amp; Integration</td><td class="num">1</td><td class="num">18</td></tr>
+      <tr><td>Billing, Metering &amp; Analytics</td><td class="num">4</td><td class="num">16</td></tr>
+      <tr><td><b>Total</b></td><td class="num"><b>75</b></td><td class="num"><b>538</b></td></tr>
+    </tbody>
+  </table>
+
+  <h3>2.3 · The gap</h3>
+  <pre>ProjexLight discovery  ─►  embeds/searches the PROJECT's own resources only
+ProjexCloud catalog    ─►  75 SDKs / 538 APIs  ── NOT visible to ProjexLight codegen
+ProjexCloud /build     ─►  composes an SDK plan  ── but does NOT create a ProjexLight project</pre>
+  <div class="callout red"><b>Consequence.</b> The codegen LLM cannot reuse ProjexCloud SDKs because it never learns they exist. Reuse — the entire economic argument — does not happen: weeks of rebuild, wasted tokens, and re-implemented (weaker) identity/consent/RLS enforcement.</div>
+</section>
+
+<!-- 3 GOALS -->
+<section id="goals">
+  <h2>3 · Goals &amp; Non-Goals</h2>
+  <div class="grid cols-2">
+    <div class="card">
+      <div class="label">Goals</div>
+      <ul class="tight" style="margin-top:6px">
+        <li><b>G0 · Optional by design</b> — codegen works fully standalone <i>and</i> accelerated; the customer chooses per project (default = standalone). ProjexCloud is never a hard dependency.</li>
+        <li><b>G1 · Reuse</b> — codegen discovers &amp; reuses ProjexCloud SDKs (calls the gateway) instead of generating backends, <i>when opted in.</i></li>
+        <li><b>G2 · On-ramp</b> — idea &rarr; seeded ProjexLight project + downloadable scaffold, starting inside ProjexCloud.</li>
+        <li><b>G3 · No secret custody</b> — neither product stores the other's credentials (deep-link hand-off).</li>
+        <li><b>G4 · Preserve the contract</b> — generated app calls the gateway with the tenant JWT; gated/metered/audited/per-pool isolation untouched.</li>
+        <li><b>G5 · Zero drift</b> — catalog auto-generated from the same source as the API reference.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <div class="label">Non-Goals</div>
+      <ul class="tight" style="margin-top:6px">
+        <li>Rebuilding ProjexLight's codegen engine or refinement wizard.</li>
+        <li>Merging the two products or their billing.</li>
+        <li>The customer-facing <i>documentation</i> (the next deliverable after this PRD).</li>
+        <li>Vertical connectors or agent-runtime changes.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- 4 USERS -->
+<section id="users">
+  <h2>4 · Users</h2>
+  <table>
+    <thead><tr><th>Persona</th><th>Need</th></tr></thead>
+    <tbody>
+      <tr><td><b>Tenant developer</b></td><td>Describe an app once; get a scaffold whose backend is ProjexCloud SDK calls, not TODO stubs.</td></tr>
+      <tr><td><b>Tenant admin</b></td><td>Link the ProjexLight account/entitlement to the ProjexCloud tenant; govern what is reused.</td></tr>
+      <tr><td><b>Codegen LLM / agent</b></td><td>A machine-readable catalog + an explicit reuse rule so it can decide "reuse SDK X" vs "write custom" per capability.</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- 5 SOLUTION -->
+<section id="solution">
+  <h2>5 · Proposed Solution</h2>
+
+  <h3>5.1 · Architecture — Phase 1 (catalog bundled into the CLI export)</h3>
+  <div class="diagram-wrap">
+    <pre class="mermaid">
+flowchart TB
+  classDef pc fill:#241f10,stroke:#c9a86a,color:#fff;
+  classDef pl fill:#1d1830,stroke:#b88dff,color:#fff;
+  classDef exp fill:#16241c,stroke:#5dd39e,color:#e6ecf5;
+  classDef llm fill:#0f1422,stroke:#6aa9ff,color:#fff;
+
+  QA["ProjexCloud<br/>scripts/qa-matrix/qa-apis.json"]:::pc
+  CAT["sdk-catalog.json<br/>(public · versioned · source of truth)"]:::pc
+  MCPDATA["ai-appgen/mcp/dist/data/<br/>sdk-catalog.json"]:::pl
+  BI["mcp/dist/templates/<br/>build_instruction.md<br/>+ REUSE RULE"]:::pl
+  EXPORT["CLI export bundles mcp/dist<br/>→ mcp-server/data/sdk-catalog.json<br/>ships in every project"]:::exp
+  LLM["Codegen LLM<br/>reads catalog (or Dev-MCP get_sdk_catalog)<br/>→ reuse SDK via gateway · generate only custom work"]:::llm
+
+  QA --> CAT
+  CAT -->|CI sync| MCPDATA
+  MCPDATA --> EXPORT
+  BI --> EXPORT
+  EXPORT --> LLM
+    </pre>
+    <div class="caption">The catalog is generated once in ProjexCloud and rides inside the MCP toolkit that every export bundles — no per-project fetch, works offline / air-gapped.</div>
+  </div>
+
+  <h3>5.2 · Phase 1 requirements — reuse foundation <span class="tag p1">PHASE 1</span></h3>
+
+  <div class="fr" style="border-left-color:var(--purple)"><div class="frid" style="color:var(--purple)">FR0 · Opt-in decision + two code-generation modes <span class="muted">(gates everything below)</span></div>
+  A <b><code>useProjexCloudSdks</code></b> choice is captured at the decision point — in <b>ProjexLight project setup</b> (a "Use ProjexCloud pre-built SDKs?" step) and/or <b>ProjexCloud's <code>/build</code></b> — and persisted in <code>.projexlight/config/export-config.json</code> (default <b>false</b> = standalone).
+  <div class="grid cols-2" style="margin-top:10px">
+    <div class="card"><div class="label" style="color:var(--green)">Mode ON · Accelerated</div><div class="body">FR1–FR4 apply — catalog bundled, reuse rule in <code>build_instruction.md</code>, plan seeds "reuse" tasks. Codegen reuses SDKs via the gateway.</div></div>
+    <div class="card"><div class="label" style="color:var(--muted)">Mode OFF · Standalone <span class="pill">default</span></div><div class="body">Exactly today's ProjexLight behavior — <b>no</b> catalog, <b>no</b> reuse rule, every task generates from scratch, <b>no ProjexCloud account required.</b> Nothing regresses.</div></div>
+  </div>
+  <div style="margin-top:8px">The decision UI links <b>FR9</b> (benefits reference) so the choice is informed. Reversible: a later export can flip the flag; existing generated code is untouched.</div></div>
+
+  <div class="fr"><div class="frid">FR1 · Machine-readable SDK catalog <span class="muted">(Mode ON)</span></div>
+  Generated by a new step in <code>scripts/qa-matrix/</code> (the pipeline that builds the API reference), from <code>qa-apis.json</code> + the group map (§2.2). Published next to the API reference and mirrored to the portals. Per SDK: <code>{ sdk, group, summary, api_count, apis:[{method, endpoint, requiresAuth, summary, payload_shape, fieldEnums, dependsOn}], reuse_when:[keywords], docs_url }</code>. Public, non-sensitive — API surface only, no data, no secrets.</div>
+
+  <div class="fr"><div class="frid">FR2 · Bundle the catalog into the CLI export <span class="muted">(primary distribution)</span></div>
+  <b>Sync into the MCP toolkit:</b> CI copies <code>sdk-catalog.json</code> into <b><code>ai-appgen/mcp/dist/data/sdk-catalog.json</code></b>. <code>mcp/dist</code> is the toolkit shipped inside <i>every</i> CLI export (the <code>setup-all.sh</code> / compose / <code>data</code> / <code>docs</code> / <code>templates</code> bundle), so <b>every exported project carries the catalog on disk</b>. <b>Serve it from the Dev-MCP (recommended):</b> a <code>projexlight_get_sdk_catalog</code> tool / <code>GET /api/sdk-catalog</code> on <code>:8766</code> reading <code>data/sdk-catalog.json</code>, so the LLM can query "which SDK/API covers X?" as a tool call. <b>Freshness:</b> sync on version bump; exports pin the version they shipped with. <i>(Enhancement:)</i> also embed entries into ProjexLight's <code>embeddings</code> table as <code>resource_type='projexcloud_sdk'</code> to rank SDKs in its reuse search.</div>
+
+  <div class="fr"><div class="frid">FR3 · Reuse rule in the exported build instruction</div>
+  <code>mcp/dist/templates/build_instruction.md</code> (which becomes the exported build guidance) gains:
+  <div class="callout blue" style="margin:10px 0 4px">"Before generating any backend, service, or data model, consult the ProjexCloud SDK catalog at <code>mcp-server/data/sdk-catalog.json</code> (or call the Dev-MCP <code>get_sdk_catalog</code> tool). If an SDK covers the capability, <b>REUSE it</b>: call the gateway at <code>&lt;gateway_base_url&gt;/api/…</code> with the tenant JWT — do not write a new backend. Only generate custom code for capabilities no SDK provides."</div>
+  Plus the API-reference URL and a short "authenticate to the gateway" note (tenant signup/login &rarr; JWT &rarr; <code>Authorization: Bearer</code>). <b>Net effect: the LLM discovers all 538 SDK APIs from the shipped catalog and decides reuse-vs-generate per capability.</b> <span class="muted">(In Mode OFF this rule is absent — the standard "generate everything" guidance applies.)</span></div>
+
+  <div class="fr" style="border-left-color:var(--accent)"><div class="frid" style="color:var(--accent)">FR9 · "Why pre-built SDKs?" benefits reference <span class="muted">(informs the FR0 choice)</span></div>
+  A customer-facing page in the ProjexCloud docs (<code>docs/v3.1/developer-hub/why-sdks.html</code>, mirrored to the portals + linked from the landing page like the API reference) that lets a customer decide <b>with vs without</b>, stating both sides honestly:
+  <div class="grid cols-2" style="margin-top:10px">
+    <div class="card"><div class="label" style="color:var(--green)">Reuse (Mode ON)</div><div class="body">Ships in minutes not weeks; <b>&minus;50% tokens / ~50% fewer sessions</b> on top of ProjexLight's baseline; 538 production-grade APIs across 9 domains; <b>identity/RLS/ABAC/consent enforced at the SDK gate</b> (not re-implemented in generated code); metered/audited/replayable; no backend to maintain; canonical-ID model (no PII duplication).</div></div>
+    <div class="card"><div class="label">Standalone (Mode OFF)</div><div class="body">Full control of every line; <b>no ProjexCloud account or runtime dependency</b>; no per-call metering; best when the app is offline-only, air-gapped without ProjexCloud, or intentionally self-contained.</div></div>
+  </div>
+  <div style="margin-top:8px">Includes a short <b>decision matrix</b> ("choose reuse when… / choose standalone when…") + a per-group summary of what each SDK family gives you. Linked from ProjexLight's opt-in step, ProjexCloud <code>/build</code>, the export's <code>build_instruction.md</code>, and the Developer Hub.</div></div>
+
+  <div class="fr"><div class="frid">FR4 · Reuse surfaced in the plan</div>
+  Extend <code>POST /api/build/plan</code>'s <code>recommended_sdks[]</code> with, per SDK, the concrete <code>apis[]</code> + <code>docs_url</code> from the catalog — so the bootstrap (and Phase 2 seeding) have exact endpoints, not just names.</div>
+
+  <h3>5.3 · Phase 2 requirements — the on-ramp <span class="tag p2">PHASE 2</span></h3>
+  <div class="diagram-wrap">
+    <pre class="mermaid">
+sequenceDiagram
+  participant U as Tenant developer
+  participant PC as ProjexCloud /build
+  participant PL as ProjexLight
+  U->>PC: describe app
+  PC->>PC: /api/build/plan (catalog-enriched)
+  U->>PC: click "Create in ProjexLight"
+  PC->>PL: deep-link + one-time signed token {plan, tenant_ref, return_url}
+  PL->>PC: verify token (server-to-server)
+  U->>PL: authenticate (own ProjexLight account)
+  PL->>PL: create project + seed Epics/Features/Tasks<br/>(each SDK → a "reuse" task w/ apis[])
+  PL->>PL: Sprint Export → S3
+  PL-->>U: download link (+ return to ProjexCloud)
+    </pre>
+    <div class="caption">Deep-link hand-off — no product stores the other's credentials.</div>
+  </div>
+  <div class="grid cols-2">
+    <div class="fr"><div class="frid">FR5 · "Create in ProjexLight" CTA</div>on the <code>/build</code> result, after a plan is composed.</div>
+    <div class="fr"><div class="frid">FR6 · Deep-link hand-off</div>ProjexCloud mints a one-time, short-TTL, signed token <code>{plan, tenant_ref, return_url, nonce}</code> &rarr; redirect to ProjexLight <code>/import?handoff=…</code>; ProjexLight verifies server-to-server; user authenticates with their <b>own</b> account. <b>No API-key custody.</b></div>
+    <div class="fr"><div class="frid">FR7 · Seed the project</div>Create project (<code>POST /api/projects</code>); one <b>Feature per capability</b>; each recommended SDK &rarr; a <b>"reuse" Task</b> ("integrate <code>&lt;sdk&gt;</code> via the gateway", carrying <code>apis[]</code> + <code>docs_url</code>); each <code>custom_work[]</code> &rarr; a normal generate Task.</div>
+    <div class="fr"><div class="frid">FR8 · Export + return</div>Trigger the Sprint Export; return the S3 download link (optionally deep-link back to ProjexCloud's <code>return_url</code>).</div>
+  </div>
+</section>
+
+<!-- 6 CONTRACTS -->
+<section id="contracts">
+  <h2>6 · Data &amp; API Contracts</h2>
+
+  <h3>6.1 · <code>sdk-catalog.json</code> (ProjexCloud &rarr; published &amp; bundled)</h3>
+<pre>{
+  "version": "2026.07.21",
+  "gateway_base_url": "https://cloud.projexlight.com",
+  "groups": [
+    { "name": "Outreach &amp; Communication", "sdk_count": 8, "api_count": 111,
+      "sdks": [
+        { "sdk": "sdk-scheduling", "api_count": 30,
+          "summary": "Calendar, booking, no-show, public booking links",
+          "reuse_when": ["scheduling","appointment","booking","calendar","availability"],
+          "docs_url": "/docs/api/index.html#sdk-sdk-scheduling",
+          "apis": [
+            { "method": "POST", "endpoint": "/api/scheduling/appointments",
+              "requiresAuth": true, "summary": "Book an appointment (double-book safe)",
+              "fieldEnums": { "status": ["confirmed","cancelled","completed","no_show"] } }
+            /* … */
+          ] }
+      ] }
+    /* … 9 groups … */
+  ]
+}</pre>
+
+  <h3>6.1a · The opt-in flag (<code>export-config.json</code>)</h3>
+<pre>// .projexlight/config/export-config.json — the FR0 switch
+{
+  "exportMode": "new_repository",
+  "useProjexCloudSdks": false,               // default = standalone; true = accelerated
+  "projexCloudCatalogVersion": "2026.07.21", // pinned when useProjexCloudSdks=true
+  "selectedPurposes": [ /* … */ ]
+}</pre>
+  <p>When <code>false</code>: the export omits <code>sdk-catalog.json</code> and the reuse rule — pure standalone ProjexLight. When <code>true</code>: both ship, pinned to <code>projexCloudCatalogVersion</code>.</p>
+
+  <h3>6.2 · Deep-link hand-off token (Phase 2)</h3>
+<pre>// ProjexCloud mints; ProjexLight verifies via a ProjexCloud endpoint
+{
+  "iss": "projexcloud", "aud": "projexlight",
+  "nonce": "&lt;single-use&gt;", "exp": "&lt;now+10m&gt;",
+  "tenant_ref": "&lt;opaque tenant handle, not PII&gt;",
+  "return_url": "https://cloud.projexlight.com/workspace/build?handoff=done",
+  "plan": { "summary": "...", "vertical_pack": "revops", "complexity": "medium",
+            "recommended_sdks": [ { "sdk": "sdk-crm", "apis": [ /* … */ ], "docs_url": "…" } ],
+            "custom_work": [ "admin dashboard UI", "vertical pricing rules" ] }
+}</pre>
+
+  <h3>6.3 · ProjexLight endpoints used (existing / to confirm)</h3>
+  <table>
+    <thead><tr><th>Endpoint / tool</th><th>Use</th><th>Status</th></tr></thead>
+    <tbody>
+      <tr><td><code>POST /api/projects</code></td><td>Create project</td><td>exists · confirm external/token auth</td></tr>
+      <tr><td><code>import_epics/features/scenarios</code> · <code>create_tasks_bulk</code></td><td>Seed the hierarchy</td><td>exist as MCP tools · confirm REST/handoff path</td></tr>
+      <tr><td>Sprint Export trigger + status &rarr; S3 URL</td><td>Produce the scaffold</td><td>exists in wizard · confirm programmatic trigger</td></tr>
+      <tr><td>Handoff verify (on ProjexCloud)</td><td>Validate the one-time token</td><td><b>new</b></td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- 7 FLOWS -->
+<section id="flows">
+  <h2>7 · User Flows</h2>
+  <div class="grid cols-2">
+    <div class="card">
+      <div class="label">Flow A — start in ProjexCloud</div>
+      <div class="title">Phase 1 + Phase 2</div>
+      <div class="body">
+        <ol class="tight" style="margin-top:6px">
+          <li>Workspace &rarr; Build &rarr; describe app &rarr; catalog-enriched plan.</li>
+          <li><b>Create in ProjexLight</b> &rarr; deep-link + one-time token.</li>
+          <li>Authenticate &rarr; project + Epics/Features/Tasks seeded, SDKs as reuse tasks.</li>
+          <li>Export &rarr; scaffold ships the catalog + reuse rule.</li>
+          <li>Local: <code>./setup-all.sh</code> (Dev-MCP :8766, Test-MCP :8000) &rarr; run the CLI agent &rarr; <b>backend tasks resolve by calling ProjexCloud gateway APIs</b>; custom tasks generate UI/domain code.</li>
+        </ol>
+      </div>
+    </div>
+    <div class="card">
+      <div class="label">Flow B — start in ProjexLight</div>
+      <div class="title">Phase 1 only</div>
+      <div class="body">
+        <ol class="tight" style="margin-top:6px">
+          <li>Create a project in ProjexLight; refinement wizard &rarr; PRD.</li>
+          <li>Export bundles the catalog (<code>mcp/dist/data/</code>) + reuse rule.</li>
+          <li>Codegen consults the catalog &rarr; reuses ProjexCloud SDKs.</li>
+          <li><i>(Enhancement)</i> discovery search ranks ProjexCloud SDKs as reuse candidates.</li>
+        </ol>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 8 SECURITY -->
+<section id="security">
+  <h2>8 · Security &amp; Trust Boundary</h2>
+  <ul class="tight">
+    <li><b>No key custody</b> — Phase 2 uses a one-time, signed, short-TTL hand-off token verified server-to-server; neither product stores the other's credentials. (Vaulting a ProjexLight key via <code>sdk-secrets</code> is the explicit <i>non-preferred</i> fallback.)</li>
+    <li><b>Catalog is public API-surface only</b> — no data, no secrets; safe to publish, bundle, and embed.</li>
+    <li><b>Runtime isolation unchanged</b> — the generated app authenticates to the gateway with the tenant JWT; every reused SDK call is gated/metered/audited and lands in the tenant's pool.</li>
+    <li><b>PII boundary honored</b> — reuse tasks reference canonical IDs (<code>person_id</code>, <code>persona_id</code>) per AIM; identity data is never duplicated into the generated app.</li>
+    <li><b>Tenant/account linking</b> (open question §11) — how a ProjexCloud tenant maps to a ProjexLight account/entitlement.</li>
+  </ul>
+</section>
+
+<!-- 9 MILESTONES -->
+<section id="milestones">
+  <h2>9 · Milestones</h2>
+  <table>
+    <thead><tr><th>#</th><th>Milestone</th><th>Depends on</th><th>Delivers</th></tr></thead>
+    <tbody>
+      <tr><td><b>M0</b></td><td>Opt-in flag (<code>useProjexCloudSdks</code>) in export-config + decision UI; standalone default unchanged</td><td>—</td><td>FR0</td></tr>
+      <tr><td><b>M0b</b></td><td>"Why pre-built SDKs?" benefits reference page (published + mirrored + linked)</td><td>—</td><td>FR9</td></tr>
+      <tr><td><b>M1</b></td><td><code>sdk-catalog.json</code> generated in the qa-matrix pipeline + published/mirrored</td><td>qa-apis.json</td><td>FR1</td></tr>
+      <tr><td><b>M2</b></td><td>Sync catalog &rarr; <code>ai-appgen/mcp/dist/data/sdk-catalog.json</code> (CI) so every export bundles it</td><td>M1</td><td>FR2</td></tr>
+      <tr><td><b>M3</b></td><td>Reuse rule added to <code>mcp/dist/templates/build_instruction.md</code> + API-reference URL</td><td>M2</td><td>FR3</td></tr>
+      <tr><td><b>M4</b></td><td>Dev-MCP <code>get_sdk_catalog</code> tool / <code>GET /api/sdk-catalog</code> (optional)</td><td>M2</td><td>FR2 (serve)</td></tr>
+      <tr><td><b>M5</b></td><td><code>/api/build/plan</code> enriched with per-SDK <code>apis[]</code> + <code>docs_url</code></td><td>M1</td><td>FR4</td></tr>
+      <tr><td><b>M6</b></td><td><i>enhancement</i> — embed catalog into ProjexLight discovery embeddings</td><td>M1 + PL team</td><td>FR2 (rank)</td></tr>
+      <tr><td><b>M7</b></td><td>Deep-link hand-off: ProjexCloud CTA + one-time token + ProjexLight consume + seed</td><td>M1–M5 + PL team</td><td>FR5–FR8</td></tr>
+      <tr><td><b>M8</b></td><td>End-to-end proof: idea &rarr; export &rarr; local codegen reuses &ge;1 SDK</td><td>M1–M5</td><td>G1 (+G2 w/ M7)</td></tr>
+    </tbody>
+  </table>
+  <p><span class="tag p1">PHASE 1</span> = M1–M5 (ProjexCloud-side + the <code>mcp/dist</code> sync; ships value alone — codegen reuses SDKs from the bundled catalog). <span class="tag p2">PHASE 2</span> = M6–M8 (needs ProjexLight-team coordination for discovery ranking + the on-ramp).</p>
+</section>
+
+<!-- 10 METRICS -->
+<section id="metrics">
+  <h2>10 · Success Metrics</h2>
+  <table>
+    <thead><tr><th>Metric</th><th>Definition</th></tr></thead>
+    <tbody>
+      <tr><td><b>SDK reuse rate</b> <span class="pill green">primary</span></td><td>% of backend/API tasks satisfied by a ProjexCloud SDK call vs newly generated code.</td></tr>
+      <tr><td>Time-to-first-running-app</td><td>Idea &rarr; deployed scaffold that calls a live SDK.</td></tr>
+      <tr><td>Token / cost savings</td><td>Extend the ai-appgen baseline (&minus;50% tokens) with SDK-reuse deltas.</td></tr>
+      <tr><td>On-ramp conversion</td><td><code>/build</code> plans that become ProjexLight projects (Phase 2).</td></tr>
+      <tr><td>Catalog freshness</td><td>0 drift incidents (auto-generated).</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- 11 OPEN -->
+<section id="open">
+  <h2>11 · Open Questions</h2>
+  <ol class="tight">
+    <li><b>External API contract</b> — does ProjexLight expose project-create + import + export to <i>external</i> callers with token auth, or only via the in-app wizard + MCP session token? (Determines M7 shape.)</li>
+    <li><b>Account linking</b> — how does a ProjexCloud tenant identify/authorize itself to ProjexLight (shared IdP? entitlement mapping?).</li>
+    <li><b>Billing split</b> — ProjexLight meters codegen ($/min); ProjexCloud meters runtime SDK calls — confirm no double-charge and where the reuse "credit" lands.</li>
+    <li><b>Discovery ingestion</b> — batch-embed the catalog into ProjexLight's <code>embeddings</code> table (preferred) vs a live federated search against a ProjexCloud catalog endpoint.</li>
+    <li><b>Versioning</b> — how catalog version bumps propagate to already-exported projects (pin vs auto-refresh).</li>
+  </ol>
+</section>
+
+<!-- 12 APPENDIX -->
+<section id="appendix">
+  <h2>12 · Appendix — Grounded References</h2>
+  <table>
+    <thead><tr><th>Area</th><th>Files / endpoints</th></tr></thead>
+    <tbody>
+      <tr><td>ProjexCloud discovery</td><td><code>apps/tenant-workspace/app/api/build/plan/route.ts</code> · <code>lib/build/planLlm.ts</code> · <code>app/build/page.tsx</code></td></tr>
+      <tr><td>Catalog source &amp; pipeline</td><td><code>scripts/qa-matrix/qa-apis.json</code> · <code>build_api_docs.py</code> · reference <code>docs/v3.1/api_docs/index.html</code></td></tr>
+      <tr><td>Gateway / auth / isolation</td><td><code>services/api-gateway/src/plugins/authGate.ts</code> · <code>../Architecture-v3.1.html</code> §8/§8A/§12/§22A</td></tr>
+      <tr><td>ProjexLight (<code>ai-appgen</code>)</td><td><code>docs/AI_APPGEN_SYSTEM_DOCUMENTATION.md</code> · <code>API_DEFINITION_JSON_FIRST_WORKFLOW_COMPLETE.md</code> · <code>ACTUAL_TOKEN_EFFICIENCY_ANALYSIS.md</code> · <code>PROJEXLIGHT_SETUP.md</code> · <code>mcp/dist/{data,templates/build_instruction.md,setup-all.sh}</code></td></tr>
+      <tr><td>ProjexLight cloud API (observed)</td><td><code>POST /api/projects</code> · <code>POST /api/embeddings/projects/{id}/search</code> · <code>POST /api/mcp/api-library/update</code> · MCP <code>projexlight_*</code></td></tr>
+    </tbody>
+  </table>
+  <div class="callout"><b>Doc-status note.</b> Architecture/TechStack describe the target v3.1/v3.2 design (parts "designed &amp; backlogged, not shipped"); the running system is the docker-compose gateway mounting ~90 SDKs. This PRD targets what exists today plus the minimal additions above.</div>
+  <p class="muted" style="margin-top:18px; font-size:12.5px">Companion: the Markdown source of this PRD lives at <code>./ProjexCloud-ProjexLight-Integration-PRD.md</code>.</p>
+</section>
+
+</div>
+
+<script>
+  mermaid.initialize({
+    startOnLoad: true,
+    theme: 'dark',
+    themeVariables: {
+      background: '#0b0f17', primaryColor: '#1a2234', primaryTextColor: '#e6ecf5',
+      primaryBorderColor: '#c9a86a', lineColor: '#8a98b3',
+      secondaryColor: '#16241c', tertiaryColor: '#241622'
+    },
+    flowchart: { curve: 'basis', useMaxWidth: true },
+    sequence: { useMaxWidth: true }
+  });
+</script>
+</body>
+</html>

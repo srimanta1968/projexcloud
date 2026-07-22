@@ -1,0 +1,297 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Agent Cookbook · ProjexCloud Developer Hub</title>
+<style>
+  :root{--bg:#0b0f17;--panel:#121826;--panel-2:#1a2234;--line:#243049;--text:#e6ecf5;--muted:#8a98b3;--accent:#c9a86a;--accent-2:#6aa9ff;--teal:#2dd4bf;--green:#5dd39e;--red:#ff6b6b;--yellow:#f5c451;--purple:#b88dff;--code-bg:#0f1422}
+  *{box-sizing:border-box}
+  html,body{background:var(--bg);color:var(--text);font-family:ui-sans-serif,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;margin:0;padding:0;line-height:1.55}
+  a{color:var(--accent-2);text-decoration:none}a:hover{text-decoration:underline}
+  .page{max-width:1120px;margin:0 auto;padding:52px 32px 96px}
+  header.cover{border-bottom:1px solid var(--line);padding-bottom:30px;margin-bottom:20px}
+  .crumb{font-size:12.5px;color:var(--muted);margin-bottom:6px}
+  header.cover .eyebrow{color:var(--accent);letter-spacing:.18em;text-transform:uppercase;font-size:12px;font-weight:700}
+  header.cover h1{font-size:38px;line-height:1.14;margin:12px 0 8px;letter-spacing:-0.02em}
+  header.cover .sub{color:var(--muted);font-size:16.5px;max-width:880px}
+  nav.toc{position:sticky;top:0;background:rgba(11,15,23,.92);backdrop-filter:blur(10px);border-bottom:1px solid var(--line);padding:9px 32px;z-index:10;margin:-52px -32px 0}
+  nav.toc .row{max-width:1120px;margin:0 auto;display:flex;flex-wrap:wrap;gap:8px 13px;font-size:12px}
+  nav.toc a{color:var(--muted)}nav.toc a:hover{color:var(--accent);text-decoration:none}
+  h2{font-size:22px;margin:16px 0 6px}
+  h3{font-size:16px;margin:20px 0 7px;color:var(--accent);text-transform:uppercase;letter-spacing:.05em;font-size:12px}
+  p{color:#c8d1e3}.muted{color:var(--muted)}
+  pre{background:var(--code-bg);border:1px solid var(--line);border-radius:10px;padding:14px 16px;overflow-x:auto;font-size:12.5px;line-height:1.5;color:#c9d1d9;margin:10px 0}
+  code{background:var(--code-bg);padding:1px 6px;border-radius:4px;font-size:12.5px;font-family:ui-monospace,Consolas,monospace}
+  .agent{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:22px 24px;margin:22px 0}
+  .agent .num{display:inline-block;width:26px;height:26px;border-radius:7px;background:#1f6feb;color:#fff;font-weight:700;text-align:center;line-height:26px;font-size:14px;margin-right:8px}
+  .agent h2{display:inline;font-size:21px}
+  .agent .line{color:var(--muted);font-size:14px;margin:10px 0 12px}
+  .uses{display:flex;flex-wrap:wrap;gap:6px;margin:10px 0}
+  .uses .sdk{font-family:ui-monospace,Consolas,monospace;font-size:11.5px;color:var(--accent);background:var(--code-bg);border:1px solid var(--line);border-radius:6px;padding:2px 8px}
+  .grd{border-left:3px solid var(--green);background:var(--panel-2);padding:10px 16px;border-radius:0 8px 8px 0;margin:10px 0 0;font-size:13px;color:#d6deef}
+  .callout{border-left:3px solid var(--accent);background:var(--panel-2);padding:13px 18px;border-radius:0 10px 10px 0;margin:18px 0;color:#d6deef;font-size:14px}
+  .callout.purple{border-color:var(--purple)}
+  .btn{display:inline-block;background:transparent;border:1px solid var(--line);color:var(--text);border-radius:9px;padding:8px 14px;font-weight:600;font-size:14px;margin:10px 8px 0 0}
+  .btn:hover{border-color:var(--accent-2);text-decoration:none}
+</style>
+</head>
+<body>
+<nav class="toc"><div class="row">
+  <a href="#model">The agent model</a>
+  <a href="#a1">1 · Sales Cadence</a>
+  <a href="#a2">2 · Booking</a>
+  <a href="#a3">3 · Voice Outreach</a>
+  <a href="#a4">4 · Lead Intelligence</a>
+  <a href="#a5">5 · Handoff</a>
+  <a href="#a6">6 · Incident Triage</a>
+  <a href="#a7">7 · Offer / Quote</a>
+</div></nav>
+<div class="page">
+
+<header class="cover">
+  <div class="crumb"><a href="./index.html">Developer Hub</a> › Agent Cookbook</div>
+  <div class="eyebrow">ProjexCloud · Build</div>
+  <h1>Agent Cookbook</h1>
+  <p class="sub">Seven agent types you can build on ProjexCloud, each with the exact SDKs, capability scopes, and runnable sample code. Every agent expresses a goal as an <b>Intent</b>, plans against the <b>CapabilityGraph</b> (your SDKs + connectors + MCP tools), and executes each step gated by a capability token, metered, audited, and traceable — so nothing runs off the rails.</p>
+</header>
+
+<section id="model">
+  <h2>The agent model in one screen</h2>
+  <p>Create an agent identity with a scoped, time-boxed capability set; give it an intent; let it plan and execute. Under the hood, each step mints a single-use capability token, passes the meter gate, and lands in the audit + trace log.</p>
+<pre>import { resolveIdentityContext } from '@projexlight/sdk-identity-resolver/client';
+import { AgentRuntime } from '@projexlight/sdk-agent-runtime/client';
+
+const ctx = await resolveIdentityContext(token);            // six-layer identity
+const agent = AgentRuntime.create({
+  agent_id: 'my-agent',
+  acting_for: ctx.primary_persona_id,
+  scope: ['crm.read', 'notification.send'],                 // least privilege
+  ttl_seconds: 300,                                         // hard deadline
+});
+
+const plan   = await agent.plan({ goal, subject, parameters });  // typed multi-step plan
+const result = await agent.execute(plan);                        // token+meter+audit+trace per step
+console.log(result.trace_id);                                    // open in sdk-trace</pre>
+  <p class="muted">Every REST endpoint below is a step the agent's plan can execute — or that you can call directly. All require <code>Authorization: Bearer &lt;tenant-jwt&gt;</code> unless noted. Full payloads/enums are in the <a href="../api_docs/index.html">API Reference</a>.</p>
+</section>
+
+<!-- 1 SALES CADENCE -->
+<div class="agent" id="a1">
+  <span class="num">1</span><h2>Sales Cadence Agent</h2>
+  <p class="line">Runs a multi-touch outreach cadence — enroll a lead, send each step in its send-window, and stop automatically on reply, opt-out, or a bounce.</p>
+  <div class="uses"><span class="sdk">sdk-sequence</span><span class="sdk">sdk-notification</span><span class="sdk">sdk-deliverability</span></div>
+  <h3>Sample</h3>
+<pre>const agent = AgentRuntime.create({
+  agent_id: 'sales-cadence-agent', acting_for: ctx.primary_persona_id,
+  scope: ['sequences.enroll','sequences.control','notification.send','deliverability.check'],
+  ttl_seconds: 300,
+});
+
+// 1 · Pre-send safety: is this address suppressed / the channel paused?
+POST /api/deliverability/check
+     { "tenant_id": TID, "channel": "email", "address": "lead@acme.com" }
+//   → { data: { suppressed: false } }   (skip if true)
+
+// 2 · Enroll the lead into a cadence (idempotent)
+POST /api/sequences/enrollments
+     { "tenant_id": TID, "sequence_id": SEQ, "subject_persona_id": LEAD,
+       "send_window": { "quiet_hours": [21,7], "weekdays": [1,2,3,4,5] } }
+
+// 3 · The executor drains due steps (send-window gated, dedup-safe)
+POST /api/sequences/tick        // a scheduler/agent tick; sends via sdk-notification
+
+// 4 · Reactive control — pause the enrollment the moment the lead replies
+POST /api/sequences/enrollments/:enrollment_id/control
+     { "action": "pause", "control_reason": "reply_received" }</pre>
+  <div class="grd"><b>Guardrails:</b> the frequency-cap + circuit-breaker guard blocks over-sending; deliverability suppression + reputation auto-pause protect your domain; every send is metered and audited. The agent's <code>scope</code> can't send outside these SDKs.</div>
+</div>
+
+<!-- 2 BOOKING -->
+<div class="agent" id="a2">
+  <span class="num">2</span><h2>Booking &amp; No-Show Agent</h2>
+  <p class="line">Offers real availability, books a slot (double-book safe), sends reminders, and rescues no-shows by re-booking — all in the host's timezone.</p>
+  <div class="uses"><span class="sdk">sdk-scheduling</span></div>
+  <h3>Sample</h3>
+<pre>const agent = AgentRuntime.create({
+  agent_id: 'booking-agent', acting_for: ctx.primary_persona_id,
+  scope: ['scheduling.read','scheduling.book','scheduling.reschedule'],
+  ttl_seconds: 180,
+});
+
+// 1 · Open slots for a date (business hours + buffers, IANA tz, existing appts excluded)
+GET  /api/scheduling/availability?tenant_id=TID&host_persona_id=HOST&date=2026-02-14
+
+// 2 · Book (transactional double-book prevention → 409 if the slot was just taken)
+POST /api/scheduling/appointments
+     { "tenant_id": TID, "host_persona_id": HOST, "meeting_type_id": MT,
+       "start_time": "2026-02-14T15:00:00Z", "end_time": "2026-02-14T15:30:00Z",
+       "subject_persona_id": LEAD }
+
+// 3 · Public, no-login booking link (anonymous prospect books + confirms by token)
+GET  /api/scheduling/public/links/:slug/availability?date=2026-02-14
+POST /api/scheduling/public/links/:slug/book         // → { public_token }
+POST /api/scheduling/public/appointments/:public_token/confirm
+
+// 4 · No-show rescue (worker scans past-grace, un-attended appts → rebook)
+POST /api/scheduling/no-show-scan   { "grace_minutes": 10 }</pre>
+  <div class="grd"><b>Guardrails:</b> public booking authorizes on a capability token, never the appointment id (no IDOR); booking windows (max-days-ahead, min-notice) are enforced server-side; reminders/no-show run as opt-in workers.</div>
+</div>
+
+<!-- 3 VOICE -->
+<div class="agent" id="a3">
+  <span class="num">3</span><h2>Voice Outreach Agent</h2>
+  <p class="line">Places a recorded call from a tracked number, detects a human vs voicemail (AMD), and logs the outcome to the CRM timeline — with recording gated on consent.</p>
+  <div class="uses"><span class="sdk">connector-twilio-voice</span><span class="sdk">sdk-consent</span><span class="sdk">sdk-crm</span></div>
+  <h3>Sample</h3>
+<pre>const agent = AgentRuntime.create({
+  agent_id: 'voice-outreach-agent', acting_for: ctx.primary_persona_id,
+  scope: ['voice.provision','voice.call','consent.check','crm.activity.log'],
+  ttl_seconds: 300,
+});
+
+// 1 · A tracking number pinned to this campaign (one active claim per tenant+number)
+POST /api/voice/tracking-numbers   { "tenant_id": TID, "install_id": INST, "purpose": "q1-outreach" }
+
+// 2 · Place the call. Recording is CONSENT-GATED: if no affirmative consent on file,
+//     recording is withheld at source (Twilio is never asked to record).
+POST /api/voice/calls
+     { "tenant_id": TID, "install_id": INST, "to_number": "+14155550123",
+       "subject_persona_id": LEAD, "record": true, "machine_detection": true,
+       "metadata": { "encounter_id": ENC } }     // encounter anchors the CRM bridge
+
+// 3 · Twilio posts progress + AMD to the PUBLIC signed webhook (no JWT; X-Twilio-Signature)
+POST /api/voice/webhooks/twilio/status   // AnsweredBy=machine_* → is_voicemail, and…
+//   …the platform bridges the finished call into the CRM timeline automatically:
+//   crm.call.logged.v1 / crm.call.missed.v1 / crm.voicemail.received.v1</pre>
+  <div class="grd"><b>Guardrails:</b> recording fails closed — no consent decision ⇒ no recording pointer stored; webhook signatures are verified; a missed/voicemail outcome is logged distinctly so follow-up reporting never double-counts.</div>
+</div>
+
+<!-- 4 LEAD INTEL -->
+<div class="agent" id="a4">
+  <span class="num">4</span><h2>Lead Intelligence Agent</h2>
+  <p class="line">Scores an inbound lead, computes the next-best-action, and writes it as the deal's enforced NEXT action so nothing stalls.</p>
+  <div class="uses"><span class="sdk">sdk-lead-scoring</span><span class="sdk">sdk-crm</span></div>
+  <h3>Sample</h3>
+<pre>const agent = AgentRuntime.create({
+  agent_id: 'lead-intel-agent', acting_for: ctx.primary_persona_id,
+  scope: ['lead-scoring.score','crm.read','crm.next-action.write'],
+  ttl_seconds: 120,
+});
+
+// 1 · Score the lead against the active model for the tenant's vertical
+POST /api/lead-scoring/score
+     { "tenant_id": TID, "vertical": "solar", "features": { "budget": 25000, "urgency": "high" } }
+//   → { data: { score: 0.82, band: "hot" } }
+
+// 2 · Next-best-action from the model
+POST /api/lead-scoring/next-best-action   { "tenant_id": TID, "vertical": "solar", "lead_id": LEAD }
+
+// 3 · Persist it as the deal's enforced NEXT action (save-gate: a deal can't go stale)
+POST /api/crm/deals/:deal_id/next-action
+     { "tenant_id": TID, "action": "book_site_survey", "due_at": "2026-02-16T00:00:00Z" }</pre>
+  <div class="grd"><b>Guardrails:</b> the save-gate refuses to leave an open deal without a NEXT action; scoring requires an <i>active</i> model for the vertical (explicit 400 otherwise, never a silent guess).</div>
+</div>
+
+<!-- 5 HANDOFF -->
+<div class="agent" id="a5">
+  <span class="num">5</span><h2>Sales → Delivery Handoff Agent</h2>
+  <p class="line">Orchestrates a won deal into delivery as a durable saga, then gates the CS accept/reject decision through approvals.</p>
+  <div class="uses"><span class="sdk">sdk-handoff</span><span class="sdk">sdk-workflow</span><span class="sdk">sdk-approval</span></div>
+  <h3>Sample</h3>
+<pre>const agent = AgentRuntime.create({
+  agent_id: 'handoff-agent', acting_for: ctx.primary_persona_id,
+  scope: ['handoff.create','handoff.saga','handoff.approval'],
+  ttl_seconds: 300,
+});
+
+// 1 · Create the handoff (draft), with prework / promises / milestones
+POST /api/handoffs
+     { "tenant_id": TID, "from_persona_id": AE, "deal_id": DEAL,
+       "promises": ["go-live in 30 days"], "risks": ["data migration scope unknown"] }
+
+// 2 · Drive kickoff/prework/milestones as an sdk-workflow saga (durable + compensating)
+POST /api/handoffs/:handoff_id/saga/start      // steps recorded; rollback on failure
+
+// 3 · File the CS accept/reject approval (subject = the handoff) and submit for review
+POST /api/handoffs/:handoff_id/approval/request   { "tenant_id": TID }   // draft → pending
+
+// 4 · Record the CS decision → reflected onto the handoff lifecycle + event
+POST /api/handoffs/:handoff_id/approval/decision
+     { "tenant_id": TID, "decision": "approved" }   // pending → accepted (or rejected)</pre>
+  <div class="grd"><b>Guardrails:</b> transitions are validated against the lifecycle state machine (invalid → 409); the accept/reject decision is delegated to sdk-approval (not a bespoke gate); the saga compensates on step failure.</div>
+</div>
+
+<!-- 6 INCIDENT -->
+<div class="agent" id="a6">
+  <span class="num">6</span><h2>Incident Triage Agent</h2>
+  <p class="line">Opens an incident, appends an append-only evidence timeline notarised into the audit chain, and watches SLA breaches.</p>
+  <div class="uses"><span class="sdk">sdk-incident</span><span class="sdk">sdk-audit</span></div>
+  <h3>Sample</h3>
+<pre>const agent = AgentRuntime.create({
+  agent_id: 'incident-triage-agent', acting_for: ctx.primary_persona_id,
+  scope: ['incident.create','incident.evidence','incident.transition'],
+  ttl_seconds: 240,
+});
+
+// 1 · Open an incident with an SLA deadline
+POST /api/incidents
+     { "tenant_id": TID, "incident_type": "data_quality", "title": "Duplicate leads ingested",
+       "severity": "high", "sla_due_at": "2026-02-14T20:00:00Z" }
+
+// 2 · Append evidence (detected / root_cause / recovery / verification).
+//     Append-only: each entry is hash-chained into sdk-audit; UPDATE/DELETE are blocked.
+POST /api/incidents/:incident_id/evidence
+     { "tenant_id": TID, "kind": "detected", "body": "Dedup monitor flagged 412 dup leads",
+       "evidence_ref": "s3://ops-logs/dedup.json" }
+//   → { evidence: { audit_entry_id, audit_seq, audit_entry_hash } }   // the immutability receipt
+
+// 3 · Move the lifecycle; scan for SLA breaches (partial-index powered)
+POST /api/incidents/:incident_id/transition   { "tenant_id": TID, "status": "investigating" }
+GET  /api/incidents/sla-breaches?tenant_id=TID</pre>
+  <div class="grd"><b>Guardrails:</b> evidence is tamper-evident (a DB trigger blocks edits/deletes; the FK is RESTRICT so an incident with evidence can't be erased); the audit receipt proves the text wasn't altered after recording.</div>
+</div>
+
+<!-- 7 OFFER -->
+<div class="agent" id="a7">
+  <span class="num">7</span><h2>Offer / Quote Agent</h2>
+  <p class="line">Publishes a versioned offer through an approval gate, then resolves the current live version so quotes never reference a stale price.</p>
+  <div class="uses"><span class="sdk">sdk-offer-catalog</span><span class="sdk">sdk-approval</span></div>
+  <h3>Sample</h3>
+<pre>const agent = AgentRuntime.create({
+  agent_id: 'offer-agent', acting_for: ctx.primary_persona_id,
+  scope: ['offer.author','offer.publish','offer.resolve'],
+  ttl_seconds: 180,
+});
+
+// 1 · Create an offer + a draft version
+POST /api/offers                       { "tenant_id": TID, "name": "Pro Plan", "slug": "pro" }
+POST /api/offers/:offer_id/versions    { "tenant_id": TID, "version": "2026.1" }
+
+// 2 · Request the publish approval (subject = the offer version) → sdk-approval
+POST /api/offers/:offer_id/versions/:version_id/publish-approval   { "tenant_id": TID }
+
+// 3 · Activate (gated: blocked while pending/rejected) → promotes to the single live version
+POST /api/offers/:offer_id/versions/:version_id/activate   { "tenant_id": TID }
+
+// 4 · Resolve the current version (live → beta → draft fallback) for a quote
+GET  /api/offers/:offer_id/current?tenant_id=TID
+//   Stale-reference guard: a quote pinned to a non-current version is flagged.</pre>
+  <div class="grd"><b>Guardrails:</b> activation is blocked until the publish approval clears (409 otherwise); exactly one live version per offer; version-stamp + stale-reference guard stop quotes from citing an outdated offer.</div>
+</div>
+
+<div class="callout purple">
+  <b>Compose them.</b> Real workflows chain these — a Lead Intelligence Agent scores a lead, a Sales Cadence Agent runs outreach, a Voice Outreach Agent calls, a Booking Agent schedules the demo, an Offer Agent sends the quote, and a Handoff Agent moves the won deal to delivery. Each step is a capability-token-gated, metered, audited call — one <code>trace_id</code> spans the whole journey.
+</div>
+
+<p style="margin-top:20px">
+  <a class="btn" href="./index.html">← Developer Hub</a>
+  <a class="btn" href="../api_docs/index.html">API Reference ↗</a>
+  <a class="btn" href="../AgenticIntegration-v3.1.html">Agentic Integration ↗</a>
+</p>
+
+<p class="muted" style="margin-top:36px;font-size:12.5px;border-top:1px solid var(--line);padding-top:16px">ProjexCloud · Developer Hub · v3.1 · Endpoints reflect the shipped SDKs; see the API Reference for full payloads, enums, and error responses.</p>
+
+</div>
+</body>
+</html>

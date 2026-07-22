@@ -1,0 +1,1012 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>AIM Identity Model v3.1 · Deep Dive — Schemas, APIs, Lifecycle</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<style>
+  :root {
+    --bg: #0b0f17;
+    --panel: #121826;
+    --panel-2: #1a2234;
+    --line: #243049;
+    --text: #e6ecf5;
+    --muted: #8a98b3;
+    --accent: #c9a86a;
+    --accent-2: #6aa9ff;
+    --teal: #2dd4bf;
+    --green: #5dd39e;
+    --red: #ff6b6b;
+    --yellow: #f5c451;
+    --purple: #b88dff;
+    --code-bg: #0f1422;
+  }
+  * { box-sizing: border-box; }
+  html, body { background: var(--bg); color: var(--text); font-family: ui-sans-serif, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", sans-serif; margin: 0; padding: 0; line-height: 1.55; }
+  .page { max-width: 1260px; margin: 0 auto; padding: 56px 32px 96px; }
+  header.cover { border-bottom: 1px solid var(--line); padding-bottom: 36px; margin-bottom: 48px; }
+  header.cover .eyebrow { color: var(--accent); letter-spacing: 0.18em; text-transform: uppercase; font-size: 12px; font-weight: 700; }
+  header.cover h1 { font-size: 40px; line-height: 1.15; margin: 12px 0 8px; letter-spacing: -0.02em; }
+  header.cover .sub { color: var(--muted); font-size: 16px; max-width: 900px; }
+  header.cover .meta { display: flex; gap: 24px; flex-wrap: wrap; margin-top: 20px; color: var(--muted); font-size: 13px; }
+  header.cover .meta b { color: var(--text); font-weight: 600; }
+
+  h2 { font-size: 24px; letter-spacing: -0.01em; margin: 48px 0 16px; padding-bottom: 8px; border-bottom: 1px solid var(--line); }
+  h3 { font-size: 17px; margin: 24px 0 10px; color: var(--text); }
+  h4 { font-size: 13px; margin: 16px 0 6px; color: var(--accent); text-transform: uppercase; letter-spacing: 0.12em; }
+  p { color: #c8d1e3; }
+  small, .muted { color: var(--muted); }
+
+  .grid { display: grid; gap: 16px; }
+  .grid.cols-2 { grid-template-columns: repeat(2, minmax(0,1fr)); }
+  .grid.cols-3 { grid-template-columns: repeat(3, minmax(0,1fr)); }
+  @media (max-width: 900px) { .grid.cols-2, .grid.cols-3 { grid-template-columns: 1fr; } header.cover h1 { font-size: 30px; } }
+
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 16px 18px; }
+  .card .label { color: var(--accent); font-size: 11px; text-transform: uppercase; letter-spacing: 0.14em; font-weight: 700; }
+  .card .title { font-weight: 600; margin: 6px 0 6px; }
+  .card .body { color: var(--muted); font-size: 13.5px; }
+
+  table { width: 100%; border-collapse: collapse; margin-top: 12px; font-size: 13.5px; }
+  th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { color: var(--muted); font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; }
+
+  pre, code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+  pre { background: var(--code-bg); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; overflow-x: auto; font-size: 12.5px; }
+  code { background: var(--code-bg); padding: 1px 6px; border-radius: 4px; font-size: 12.5px; }
+
+  .diagram-wrap { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 22px; overflow-x: auto; }
+  .caption { color: var(--muted); font-size: 12.5px; margin-top: 10px; text-align: center; }
+  .mermaid { background: transparent; }
+
+  nav.toc { position: sticky; top: 0; background: rgba(11,15,23,0.92); backdrop-filter: blur(10px); border-bottom: 1px solid var(--line); padding: 10px 32px; z-index: 10; }
+  nav.toc .row { max-width: 1260px; margin: 0 auto; display: flex; flex-wrap: wrap; gap: 12px; font-size: 12px; }
+  nav.toc a { color: var(--muted); text-decoration: none; border-bottom: 1px solid transparent; }
+  nav.toc a:hover { color: var(--accent); border-color: var(--accent); }
+
+  .callout { border-left: 3px solid var(--accent); background: var(--panel-2); padding: 14px 18px; border-radius: 0 10px 10px 0; margin: 18px 0; color: #d6deef; font-size: 14px; }
+  .callout.blue { border-color: var(--accent-2); }
+  .callout.green { border-color: var(--green); }
+  .callout.red { border-color: var(--red); }
+  .callout.purple { border-color: var(--purple); }
+  .callout.teal { border-color: var(--teal); }
+
+  ul.tight li { margin: 4px 0; color: #c8d1e3; }
+
+  .layer-card { background: var(--panel); border: 1px solid var(--line); border-left: 4px solid var(--purple); border-radius: 0 12px 12px 0; padding: 16px 20px; margin-bottom: 14px; }
+  .layer-card .lnum { display: inline-block; background: linear-gradient(135deg, var(--purple), #6e4ed1); color: #190b3a; font-weight: 800; padding: 4px 10px; border-radius: 6px; margin-right: 10px; font-size: 12px; }
+  .layer-card h3 { display: inline-block; margin: 0; }
+  .layer-card code.eid { color: var(--accent); font-size: 13px; }
+</style>
+</head>
+<body>
+
+<nav class="toc">
+  <div class="row">
+    <a href="#problem">1 · Problem</a>
+    <a href="#layers">2 · Six Layers</a>
+    <a href="#hierarchies">2A · Extended Hierarchies</a>
+    <a href="#identity-projection">2B · Identity Projection</a>
+    <a href="#schemas">3 · Schemas</a>
+    <a href="#api">4 · API Surface</a>
+    <a href="#lifecycle">5 · Lifecycle</a>
+    <a href="#compliance">6 · Compliance Mapping</a>
+    <a href="#scenarios">7 · Scenario Walkthroughs</a>
+  </div>
+</nav>
+
+<div class="page">
+
+<header class="cover">
+  <div class="eyebrow">AIM · Identity Model Deep Dive · v3.1 Complete Edition</div>
+  <h1>The Six-Layer Identity Stack — Schemas, APIs, Lifecycles</h1>
+  <p class="sub">A focused supplement to <a href="./Architecture-v3.1.html">Architecture-v3.1.html</a>. Covers the table schemas (per pool), the API surface owned by <code>sdk-identity</code> · <code>sdk-persona</code> · <code>sdk-engagement</code> · <code>sdk-rebac</code>, the lifecycle states of every layer, and the compliance mapping (HIPAA · DPDP · GDPR · PCI · SOC 2 · RBI/SEBI) of where each PII / PHI / payment field lives.</p>
+  <div class="meta">
+    <div><b>Audience</b> · backend &amp; identity engineers</div>
+    <div><b>Companion</b> · <code>Architecture-v3.1.html</code> · <code>SDK-Build-Plan-v3.1.html</code></div>
+    <div><b>Pre-reads</b> · <code>../Architecture-v2.html §5A</code> (Identity, MDM &amp; Consent)</div>
+  </div>
+</header>
+
+<!-- ============ PROBLEM ============ -->
+<section id="problem">
+  <h2>1 · The Problem We're Modeling</h2>
+  <p>A single human can be — simultaneously — a patient at three hospitals (with multiple doctors and admissions per hospital), a buyer at five eCommerce stores, an investor in two funds, a donor at one ashram, a homeowner working with a contractor, and an employee at her own clinic. We need this to work with:</p>
+  <ul class="tight">
+    <li>One master identity per human across the whole platform (no duplicate humans).</li>
+    <li>Strict isolation between tenants of the same app (Hospital A cannot see Hospital B's chart).</li>
+    <li>Strict isolation between apps (the donation history doesn't leak into the eCommerce profile).</li>
+    <li>Time- and role-bounded clinical access (an ER nurse sees vitals for her shift, then the access disappears).</li>
+    <li>Longitudinal access for primary care (the PCP keeps reading the chart between visits).</li>
+    <li>Right-to-erasure that works in one shred without traversing every pool.</li>
+    <li>Audit trails sufficient to defend a HIPAA / DPDP / GDPR access request.</li>
+  </ul>
+
+  <p>No single-layer identity model solves all of this. The six-layer stack does, by giving each requirement a dedicated entity with its own lifecycle, audit, and key tier.</p>
+</section>
+
+<!-- ============ LAYERS ============ -->
+<section id="layers">
+  <h2>2 · The Six Layers</h2>
+
+  <div class="layer-card">
+    <span class="lnum">L1</span><h3>Master Person · <code class="eid">person_id</code></h3>
+    <p>One row per human. Lives in the admin pool of the person's home region. Carries identity alias graph (emails · phones · biometric refs · gov-IDs), home-region pointer, master encryption key handle, and a compliance summary. Encrypted under the Person Key.</p>
+    <ul class="tight">
+      <li><b>Cardinality:</b> 1 per human.</li>
+      <li><b>Pool:</b> admin pool · home region only.</li>
+      <li><b>Key:</b> Person Key (shred = global erasure).</li>
+      <li><b>Owns:</b> the master shred power.</li>
+    </ul>
+  </div>
+
+  <div class="layer-card">
+    <span class="lnum">L2</span><h3>App Identity · <code class="eid">app_identity_id</code></h3>
+    <p>The person's projection into one app. One row per <code>(person_id × app_id)</code>. Carries the app-scoped display profile, app preferences, app-scoped notification routing (push tokens, WhatsApp number used in this app).</p>
+    <ul class="tight">
+      <li><b>Cardinality:</b> N per person, where N is the count of distinct apps the person has logged into.</li>
+      <li><b>Pool:</b> admin pool of any tenant the person belongs to in this app (typically the first one they joined, or their home admin pool if they're a platform-direct user).</li>
+      <li><b>Key:</b> Person Key (envelope) + App-scope salt.</li>
+      <li><b>Owns:</b> per-app preferences and channel routing.</li>
+    </ul>
+  </div>
+
+  <div class="layer-card">
+    <span class="lnum">L3</span><h3>Tenant Membership · <code class="eid">tenant_membership_id</code></h3>
+    <p>The app identity's membership in one tenant. One row per <code>(app_identity_id × tenant_id)</code>. Carries the tenant-scoped role, the membership status (active · suspended · departed), tenant-scoped attributes, and joining metadata.</p>
+    <ul class="tight">
+      <li><b>Cardinality:</b> N per app identity, where N is the count of tenants the person has joined in this app.</li>
+      <li><b>Pool:</b> tenant's admin pool.</li>
+      <li><b>Key:</b> Tenant Key.</li>
+      <li><b>Owns:</b> tenant-scoped role assignment and lifecycle.</li>
+    </ul>
+  </div>
+
+  <div class="layer-card">
+    <span class="lnum">L4</span><h3>Persona · <code class="eid">persona_id</code></h3>
+    <p>The "hat" the person wears in this tenant membership. Carries a kind (Patient · Doctor · Buyer · Donor · Investor · …), persona-scoped status, and join keys into the persona-extension tables (donor giving history, patient chart root, investor stake records).</p>
+    <ul class="tight">
+      <li><b>Cardinality:</b> typically 1 per tenant membership, occasionally 2+ (e.g., doctor-who-is-also-patient).</li>
+      <li><b>Pool:</b> identity facet in the tenant's admin pool; extension data in the tenant's app pool.</li>
+      <li><b>Key:</b> Tenant Key + persona-scope salt.</li>
+      <li><b>Owns:</b> the join from identity layers into the domain.</li>
+    </ul>
+  </div>
+
+  <div class="layer-card">
+    <span class="lnum">L5</span><h3>Encounter · <code class="eid">encounter_id</code></h3>
+    <p>A bounded interaction between one persona and one or more counterpart personas inside a tenant context. Has time bounds, a location, a list of participants with roles, encounter-scoped consent, and an encounter-level encryption key.</p>
+    <ul class="tight">
+      <li><b>Cardinality:</b> M per persona (many encounters over time).</li>
+      <li><b>Pool:</b> tenant's app pool.</li>
+      <li><b>Key:</b> Encounter Key (shred = encounter-only erasure).</li>
+      <li><b>Owns:</b> time- and scope-bounded grants; the billable / regulatory work unit.</li>
+    </ul>
+  </div>
+
+  <div class="layer-card">
+    <span class="lnum">L6</span><h3>Relationship · <code class="eid">relationship_id</code></h3>
+    <p>A long-running bond between two personas. Spans many encounters. Carries kind (primary-care · sales-rep · loyalty · advisor), grant scope, status, and an attestation cadence.</p>
+    <ul class="tight">
+      <li><b>Cardinality:</b> R per persona (typically small — &lt; 50).</li>
+      <li><b>Pool:</b> tenant's app pool (unless cross-tenant, then a special cross-tenant relationship pool with re-encryption).</li>
+      <li><b>Key:</b> Tenant Key (intra-tenant) or Cross-tenant Relationship Key.</li>
+      <li><b>Owns:</b> ReBAC longitudinal access.</li>
+    </ul>
+  </div>
+</section>
+
+<!-- ============ EXTENDED HIERARCHIES ============ -->
+<section id="hierarchies">
+  <h2>2A · Extended Hierarchies <span class="new-tag">v3.1</span></h2>
+  <p>The six-layer stack handles per-person identity. Real enterprises also need hierarchies <i>above</i> the tenant (resellers, sub-tenants, org charts), <i>orthogonal</i> to identity (geographic, fiscal-period), and <i>refinements</i> of role identity (role templates with inheritance). v3.1 makes each one a first-class typed entity so verticals stop inventing flat-string substitutes.</p>
+
+  <div class="layer-card">
+    <h3>Reseller · <code class="eid">reseller_id</code></h3>
+    <p>A partner organization that owns and bills a portfolio of customer tenants under a contract with Projexlight. White-labels the platform under their own brand and domain; sees consolidated billing across their portfolio; gets scoped admin access (read-mostly) into their customer tenants.</p>
+    <ul class="tight">
+      <li><b>Cardinality:</b> small (10s–100s of resellers per region).</li>
+      <li><b>Pool:</b> reseller's own Admin Pool (a tenant of the platform in its own right) + read-projections into each customer tenant's Admin Pool.</li>
+      <li><b>Carries:</b> commission rate; brand override (logo, palette, domain CNAME); support escalation contact; portfolio-level kill switches; invoice-aggregation preference (reseller-billed vs pass-through to end-tenant).</li>
+      <li><b>Owns:</b> the GTM channel layer above tenant; consolidated billing; white-label control.</li>
+      <li><b>Event:</b> <code>reseller.tenant.attached.v1</code>.</li>
+    </ul>
+  </div>
+
+  <div class="layer-card">
+    <h3>Sub-tenant · recursive <code class="eid">tenant.parent_tenant_id</code></h3>
+    <p>A tenant whose parent is also a tenant. Healthcare HIE (50 hospitals under one network), franchise chain (500 locations under one brand), property-management company (200 buildings under one operator), conglomerate (subsidiaries under one parent).</p>
+    <ul class="tight">
+      <li><b>Cardinality:</b> arbitrarily deep tree (parent.parent.parent...); typical depth 2–3.</li>
+      <li><b>Pool placement policy:</b> <b>hybrid</b> — sub-tenants share parent's pool by default (cheap, simple routing, audit roll-up trivial); any sub-tenant can opt out to Tier-P/G and get its own pool (premium isolation for flagship hospital, residency for a German sub-tenant of an EU parent).</li>
+      <li><b>Audit roll-up:</b> CTE traversal up the chain; parent sees aggregated audit; sub-tenant sees only its own.</li>
+      <li><b>Quota inheritance:</b> sub-tenant inherits parent's quotas unless explicitly overridden; usage events tag both <code>tenant_id</code> and <code>root_tenant_id</code> for showback.</li>
+      <li><b>Owns:</b> the multi-location / network operating model.</li>
+    </ul>
+  </div>
+
+  <div class="layer-card">
+    <h3>Business Unit (recursive) · <code class="eid">bu.parent_bu_id</code></h3>
+    <p>v3 introduced a flat <code>bu_id</code>. v3.1 makes BU a tree so enterprise org charts (Global VP → Regional VP → Country Manager → Site Director → Department Lead) cascade ABAC policy correctly. Matches Analyze.txt's mandated scope hierarchy (<code>Org → BU → Region → Property → Dept → User</code>).</p>
+    <ul class="tight">
+      <li><b>Cardinality:</b> tree within a tenant; typical depth 3–5.</li>
+      <li><b>Pool:</b> tenant's Admin Pool (pure metadata).</li>
+      <li><b>Policy inheritance:</b> ABAC rules cascade down the chain; explicit overrides supported at any node; IQL exposes <code>subject.bu.ancestors()</code> as a queryable set.</li>
+      <li><b>Owns:</b> enterprise org-chart inheritance for policies, roles, visibility, reporting.</li>
+    </ul>
+  </div>
+
+  <div class="layer-card">
+    <h3>Geographic Node · <code class="eid">geo_node_id</code></h3>
+    <p>A typed tree of geographic units, separate from <code>pool_index</code>. Pool indexes encode where data <i>lives</i>; geo nodes encode what real-world locality something <i>refers to</i>. Levels: <code>Region → Country → State/Province → City → Locality</code>.</p>
+    <ul class="tight">
+      <li><b>Cardinality:</b> platform-global static-ish tree (~100k nodes globally).</li>
+      <li><b>Pool:</b> Global Catalog (read-replicated everywhere).</li>
+      <li><b>Used by:</b> tenants (registered locality), encounters (event location), addresses (canonical resolution), policies (sub-regional data residency — "DE-only data stays in a German pool even within EU"), reporting ("all encounters in California in Q3").</li>
+      <li><b>Owns:</b> the locality reference dimension. Distinct from address — geo nodes are political/administrative; addresses are physical points within them.</li>
+    </ul>
+  </div>
+
+  <div class="layer-card">
+    <h3>Role Template · <code class="eid">role_template_id</code></h3>
+    <p>v3 stored persona roles as flat strings (<code>['patient']</code>, <code>['doctor']</code>). v3.1 promotes roles to typed templates with inheritance. <code>junior_doctor &lt; senior_doctor &lt; chief_of_medicine</code> — junior is a subset of senior is a subset of chief. ABAC policies bind to templates, not strings, so a "senior_doctor can write Rx" rule automatically grants chief.</p>
+    <ul class="tight">
+      <li><b>Cardinality:</b> per-app registry of templates (~50 per vertical) + per-tenant overrides.</li>
+      <li><b>Pool:</b> per-app platform-global templates in Global Catalog; per-tenant overrides in tenant's Admin Pool.</li>
+      <li><b>Inheritance:</b> single-parent DAG; reasoner caches the closure.</li>
+      <li><b>Owns:</b> readable, maintainable role-based policies at six-layer scale.</li>
+    </ul>
+  </div>
+
+  <div class="layer-card">
+    <h3>Fiscal Period · <code class="eid">fiscal_period_id</code></h3>
+    <p>Per-tenant fiscal calendar so billing, reporting, and contract renewals align with the tenant's actual fiscal year — not the platform's calendar year. Decomposes into Year → Quarter → Month → Week. Defaults to calendar year for tenants who haven't customized.</p>
+    <ul class="tight">
+      <li><b>Cardinality:</b> 1 active period set per tenant; historical periods retained for reporting.</li>
+      <li><b>Pool:</b> tenant's Admin Pool.</li>
+      <li><b>Used by:</b> sdk-billing (invoice cycle alignment), sdk-analytics (per-fiscal-quarter rollups), sdk-tenant-lifecycle (renewal triggers).</li>
+      <li><b>Owns:</b> the temporal hierarchy for finance and reporting.</li>
+    </ul>
+  </div>
+
+  <div class="layer-card">
+    <h3>Agent Identity · <code class="eid">agent_id</code> <span class="new-tag">Analyze.txt #5</span></h3>
+    <p>AI agents acting in the system get their own typed identity — not a special-case bypass of the human identity stack but a parallel structure. An agent has an <code>agent_id</code>, runs on behalf of an <code>agent_persona</code> (the human persona it represents), has a typed <code>agent_scope</code> (allow-list of methods it can invoke), and an <code>agent_chain</code> (provenance: human → meta-agent → executing agent).</p>
+    <ul class="tight">
+      <li><b>Cardinality:</b> N agents per tenant (typically &lt; 50).</li>
+      <li><b>Pool:</b> agent definitions in tenant's Admin Pool; memory namespaces in Vector Store partition per tenant (hard physical isolation).</li>
+      <li><b>Audited as:</b> <code>actor.kind = 'agent'</code> with the full chain recorded on every action.</li>
+      <li><b>Beyond-scope actions:</b> route through <code>sdk-approval</code> for human sign-off.</li>
+      <li><b>Owns:</b> AI-agent containment, prompt-leakage prevention, agent action attribution.</li>
+    </ul>
+  </div>
+
+  <div class="callout">
+    <b>How these compose with the six layers.</b> A persona's <i>identity</i> (who they are) is L4. Their <i>scope</i> (where they sit in the org) is the BU tree. Their <i>locality</i> (where their work happens) is the geo node. Their <i>role authority</i> (what they can do) is the role template. Their <i>tenant context</i> (whose data they see) is L3 + parent-tenant chain. The reseller relationship governs <i>who bills whom</i>. Fiscal period governs <i>when</i>. All seven dimensions stack independently — a clinician (L4 + senior_doctor template) at a sub-tenant hospital (parent-tenant chain) of a healthcare HIE in California (geo node) under Reseller X (reseller_id) during FY24-Q3 (fiscal period) acting on patient Z (encounter participation) is a fully addressable subject for ABAC, audit, billing, and reporting.
+  </div>
+</section>
+
+<!-- ============ IDENTITY PROJECTION ============ -->
+<section id="identity-projection">
+  <h2>2B · Identity Projection System <span class="new-tag">v3.1</span></h2>
+  <p>The six layers plus the extended hierarchies make identity expressive. They also make identity expensive to resolve on demand — at hyperscale, walking <i>person → app identity → tenant membership → persona → encounter → relationships → role-templates → consent → policy</i> for every authenticated call is the platform's worst hot-path. v3.1's answer is the <b>Identity Projection System</b>: precomputed flattened read models, refreshed by change events, consulted in sub-ms.</p>
+
+  <div class="callout red">
+    <b>Why this exists.</b> Architectural review (<code>../../Analyze2.txt</code> #1) called runtime identity resolution at PB scale "the platform's first bottleneck": it must become projected/cached. This section is the canonical model — the SDK that implements it (sdk-identity-resolver) lives in P2 of the build plan.
+  </div>
+
+  <h3>2B.1 · The subject_view projection</h3>
+  <p>For every active <code>(person_id, app_id, tenant_id)</code> triple, the projection store holds one materialized <code>subject_view</code> row that flattens everything authz / audit / personalization needs:</p>
+
+  <pre>CREATE TABLE subject_view (
+  -- Composite key
+  person_id            uuid not null,
+  app_id               text not null,
+  tenant_id            uuid not null,
+
+  -- Flattened identity layers (read-only snapshots of L1-L4)
+  app_identity_id      uuid not null,
+  tenant_membership_id uuid not null,
+  primary_persona_id   uuid not null,
+  all_persona_ids      uuid[] not null,             -- the person may hold multiple personas at this tenant
+
+  -- Extended hierarchies (read-only snapshots)
+  bu_id                uuid,                         -- current BU
+  bu_ancestors         uuid[],                       -- full ancestry up to org
+  parent_tenant_id     uuid,                         -- if sub-tenant
+  root_tenant_id       uuid not null,                -- top of the tenant chain
+  reseller_id          uuid,                         -- if attached to a reseller
+  geo_node_id          text,                         -- current locality
+  role_template_ids    text[] not null,              -- effective roles after inheritance
+  effective_role_closure text[] not null,            -- transitive role closure (junior < senior < chief)
+
+  -- Authorization summary
+  abac_attributes      jsonb not null,               -- snapshot of attributes the ABAC engine reads
+  rebac_edges          jsonb not null,               -- relationships keyed by kind (subset, depth-bounded)
+  active_consents      jsonb not null,               -- consent receipts by (purpose, processor)
+  effective_scopes     text[] not null,              -- IQL-evaluated effective access scopes
+
+  -- Pool routing
+  admin_pool_index     text not null,
+  app_pool_index       text not null,
+  evidence_pool_index  text,
+
+  -- Snapshot metadata
+  projection_version   bigint not null,              -- monotonic, used by audit and policy decisions
+  projected_at         timestamptz not null,
+  source_event_id      uuid not null,                -- the event that triggered this refresh
+  ttl_expires_at       timestamptz not null,         -- safety: force re-projection beyond this
+
+  primary key (person_id, app_id, tenant_id)
+);
+
+-- Indexes for the common access patterns
+CREATE INDEX subject_view_by_persona ON subject_view USING gin (all_persona_ids);
+CREATE INDEX subject_view_by_role ON subject_view USING gin (effective_role_closure);
+CREATE INDEX subject_view_by_geo ON subject_view (geo_node_id);
+CREATE INDEX subject_view_by_reseller ON subject_view (reseller_id) WHERE reseller_id IS NOT NULL;</pre>
+
+  <p><b>Storage:</b> Redis for live hot reads (sub-ms); Postgres in the person's home Admin Pool for durability and replay. The projector worker writes both atomically (Postgres → Redis pub/sub invalidate). See Architecture §8B Polyglot Persistence and §8A Pool Placement Matrix for the doctrine behind these placement choices.</p>
+
+  <h3>2B.2 · How projections stay fresh</h3>
+  <p>The projector worker subscribes to a small set of change events. When any of these fires, the affected <code>subject_view</code> rows are recomputed within 1s and pushed to Redis:</p>
+
+  <table>
+    <thead><tr><th>Triggering event</th><th>Which subject_views to refresh</th></tr></thead>
+    <tbody>
+      <tr><td><code>identity.persona.created.v1</code> · <code>identity.persona.shred.v1</code></td><td>All views for the person</td></tr>
+      <tr><td><code>identity.membership.suspended.v1</code> · <code>identity.membership.reactivated.v1</code></td><td>The (person, app, tenant) view</td></tr>
+      <tr><td><code>identity.role.assigned.v1</code> · <code>identity.role.revoked.v1</code></td><td>The (person, app, tenant) view</td></tr>
+      <tr><td><code>rebac.relationship.created.v1</code> · <code>rebac.relationship.terminated.v1</code></td><td>Both endpoint persona's views</td></tr>
+      <tr><td><code>consent.granted.v1</code> · <code>consent.revoked.v1</code></td><td>All views for the consenting person</td></tr>
+      <tr><td><code>tenant.bu.moved.v1</code></td><td>All views for personas under the BU subtree</td></tr>
+      <tr><td><code>tenant.role-template.updated.v1</code></td><td>All views whose effective_role_closure references the template</td></tr>
+      <tr><td>TTL expiry (default 1h)</td><td>The view (safety re-projection)</td></tr>
+    </tbody>
+  </table>
+
+  <h3>2B.3 · How the resolver consumes the projection</h3>
+  <p><code>resolveIdentityContext(token)</code> from sdk-identity-resolver is the only sanctioned entry point for reading identity. It executes in this order:</p>
+  <pre>// pseudocode — actual implementation in sdk-identity-resolver
+async function resolveIdentityContext(token: JWT): Promise&lt;IdentityContext&gt; {
+  const claims = verifyJwt(token);                          // (person_id, app_id, tenant_id, ...)
+  const key = `${claims.person_id}:${claims.app_id}:${claims.tenant_id}`;
+
+  // 1) Hot path — Redis projection store, p99 ≤ 0.5ms warm
+  const view = await redis.get(`subject_view:${key}`);
+  if (view) return materializeContext(claims, view);
+
+  // 2) Cold path — Postgres projection store, p99 ≤ 5ms
+  const view = await pg.query('SELECT * FROM subject_view WHERE ...', key);
+  if (view) {
+    await redis.set(`subject_view:${key}`, view, { EX: 60 });
+    return materializeContext(claims, view);
+  }
+
+  // 3) Fallback — live six-layer resolve (rare; emits an alert)
+  emitMetric('identity.projection.miss', { reason: 'cold-not-found' });
+  const view = await liveSixLayerResolve(claims);            // expensive — typically &gt; 50ms
+  await projector.materializeOutOfBand(view);                // schedule a backfill
+  return materializeContext(claims, view);
+}</pre>
+
+  <p>The fallback exists so the platform degrades to live resolution under projector failure rather than hard-failing. CI chaos-tests killing the projector verify the fallback works without errors.</p>
+
+  <h3>2B.4 · Guarantees</h3>
+  <ul class="tight">
+    <li><b>Freshness:</b> projection refreshed within 1s p99 of any triggering event; staleness budget = 1s.</li>
+    <li><b>Correctness under TTL:</b> safety re-projection at TTL expiry catches any missed event (rare; defense-in-depth).</li>
+    <li><b>Snapshot stability:</b> the resolver materializes one IdentityContext per request from one projection version; policy + audit references the same snapshot for the request's lifetime.</li>
+    <li><b>Storage budget:</b> at 10M (person, app, tenant) triples, projection store stays under ~50GB Postgres + 10GB Redis hot set.</li>
+    <li><b>No direct layer reads.</b> Lint (rule OC-4 in Architecture §3A) blocks any non-resolver SDK from importing sdk-identity / sdk-persona for attribute reads — every read MUST go through <code>resolveIdentityContext()</code>.</li>
+  </ul>
+
+  <div class="callout green">
+    <b>The trade.</b> Some staleness (up to 1s in pathological cases) in exchange for sub-ms identity resolution and predictable latency at PB scale. Hot-path latency becomes a Redis lookup, not a six-layer graph walk — the difference between a usable platform and one that hits 5ms of identity overhead on every call.
+  </div>
+</section>
+
+<!-- ============ SCHEMAS ============ -->
+<section id="schemas">
+  <h2>3 · Table Schemas (per pool)</h2>
+  <p>Conceptual Postgres DDL. Every table's primary key is non-sequential (ULID); every PII column is envelope-encrypted at the column level under the appropriate key.</p>
+
+  <h3>3.1 · Master person (admin pool · home region)</h3>
+  <pre>CREATE TABLE person (
+  person_id              text PRIMARY KEY,         -- pers_01HXYZ...
+  home_admin_pool_index  text NOT NULL,            -- admin-014
+  home_region            text NOT NULL,            -- ap-south-1
+  person_key_arn         text NOT NULL,            -- HSM key handle
+  status                 text NOT NULL,            -- ACTIVE | SUSPENDED | ERASED
+  alias_graph_version    int  NOT NULL DEFAULT 0,
+  created_at             timestamptz NOT NULL,
+  erased_at              timestamptz                -- set on cryptographic erasure
+);
+
+CREATE TABLE person_alias (
+  person_id              text REFERENCES person,
+  alias_kind             text NOT NULL,            -- email | phone | govid | biometric_ref
+  alias_value_enc        bytea NOT NULL,           -- envelope-encrypted
+  alias_fingerprint      bytea NOT NULL,           -- HMAC(value) for lookup
+  verified_at            timestamptz,
+  PRIMARY KEY (person_id, alias_kind, alias_fingerprint)
+);
+
+CREATE TABLE person_secure_data (
+  person_id              text REFERENCES person,
+  band                   text NOT NULL,            -- 'dl' | 'pan' | 'aadhaar' | 'ssn' | 'passport' | 'pci'
+  field_label            text NOT NULL,
+  field_value_enc        bytea NOT NULL,           -- per-field envelope
+  field_last4_clear      text,                     -- masked, for display
+  jurisdiction           text,                     -- 'IN' | 'US' | ...
+  consent_ref            text NOT NULL,
+  PRIMARY KEY (person_id, band, field_label)
+);</pre>
+
+  <h3>3.2 · App identity (admin pool)</h3>
+  <pre>CREATE TABLE app_identity (
+  app_identity_id        text PRIMARY KEY,         -- apid_01HXYZ...
+  person_id              text NOT NULL,            -- references person in home pool
+  app_id                 text NOT NULL,            -- 'healthcare' | 'ecommerce' | ...
+  display_name_enc       bytea,
+  locale                 text,
+  preferences_enc        jsonb,                    -- envelope-encrypted JSON
+  notification_routing_enc bytea,                  -- channel routing (push tokens, etc.)
+  created_at             timestamptz NOT NULL,
+  status                 text NOT NULL,            -- ACTIVE | SUSPENDED | DEPRECATED
+  UNIQUE (person_id, app_id)
+);
+
+CREATE INDEX ix_app_identity_person ON app_identity (person_id);</pre>
+
+  <h3>3.3 · Tenant membership (admin pool · tenant's pool)</h3>
+  <pre>CREATE TABLE tenant_membership (
+  tenant_membership_id   text PRIMARY KEY,         -- tmb_01HXYZ...
+  app_identity_id        text NOT NULL,
+  tenant_id              text NOT NULL,
+  roles                  text[] NOT NULL,          -- ['patient'] or ['doctor', 'admin']
+  status                 text NOT NULL,            -- ACTIVE | SUSPENDED | DEPARTED | INVITED
+  joined_at              timestamptz NOT NULL,
+  departed_at            timestamptz,
+  attributes_enc         jsonb,                    -- tenant-scoped, ABAC inputs
+  UNIQUE (app_identity_id, tenant_id)
+);
+
+-- Row-level security still applied within a pool
+ALTER TABLE tenant_membership ENABLE ROW LEVEL SECURITY;
+CREATE POLICY pol_membership ON tenant_membership
+  USING (tenant_id = current_setting('app.tenant_id')::text);</pre>
+
+  <h3>3.4 · Persona (admin + app pool split)</h3>
+  <pre>-- Identity facet (admin pool of the tenant)
+CREATE TABLE persona (
+  persona_id             text PRIMARY KEY,         -- pers_01HXYZ_patient
+  tenant_membership_id   text NOT NULL,
+  kind                   text NOT NULL,            -- 'patient' | 'doctor' | 'buyer' | ...
+  status                 text NOT NULL,            -- ACTIVE | SUSPENDED | ARCHIVED
+  display_label_enc      bytea,
+  extension_table_ref    text,                     -- 'healthcare_chart_root' | 'donor_giving_root' | ...
+  extension_pool_index   text,                     -- pool that holds extension rows
+  created_at             timestamptz NOT NULL
+);
+
+-- Extension data (tenant's app pool — example: healthcare chart root)
+CREATE TABLE healthcare_chart_root (
+  chart_root_id          text PRIMARY KEY,
+  persona_id             text NOT NULL,            -- back-reference; resolved at runtime
+  mrn                    text,                     -- medical record number (per-tenant)
+  blood_type             text,
+  allergies_enc          bytea,
+  primary_care_provider  text,                     -- relationship_id reference
+  encounter_count        int DEFAULT 0,
+  status                 text DEFAULT 'ACTIVE',
+  created_at             timestamptz NOT NULL
+);</pre>
+
+  <h3>3.5 · Encounter (app pool)</h3>
+  <pre>CREATE TABLE encounter (
+  encounter_id           text PRIMARY KEY,         -- enc_01HXYZ_visit_42
+  tenant_id              text NOT NULL,
+  app_id                 text NOT NULL,
+  kind                   text NOT NULL,            -- 'visit' | 'admission' | 'order' | 'appointment' | ...
+  state                  text NOT NULL,            -- OPEN | IN_PROGRESS | CLOSED | SEALED
+  scheduled_at           timestamptz,
+  opened_at              timestamptz NOT NULL,
+  closed_at              timestamptz,
+  sealed_at              timestamptz,              -- on retention-driven seal
+  address_id             text,                     -- L5 location anchor
+  encounter_key_arn      text NOT NULL,            -- payload key
+  payload_enc            bytea,                    -- encrypted payload (visit notes, order body)
+  metadata               jsonb                     -- non-PII (counts, refs)
+);
+
+CREATE TABLE encounter_participant (
+  encounter_id           text REFERENCES encounter,
+  persona_id             text NOT NULL,
+  role                   text NOT NULL,            -- 'patient' | 'doctor' | 'nurse' | 'buyer' | ...
+  joined_at              timestamptz NOT NULL,
+  left_at                timestamptz,
+  PRIMARY KEY (encounter_id, persona_id, role)
+);
+
+CREATE TABLE encounter_grant (
+  grant_id               text PRIMARY KEY,
+  encounter_id           text REFERENCES encounter,
+  grantee_persona_id     text NOT NULL,
+  scope                  text[] NOT NULL,          -- ['vitals.read', 'labs.read']
+  granted_by             text NOT NULL,            -- persona_id of issuer
+  expires_at             timestamptz NOT NULL,
+  revoked_at             timestamptz,
+  reason                 text                      -- 'shift_assignment' | 'consult_request'
+);</pre>
+
+  <h3>3.6 · Relationship (app pool, optionally cross-tenant)</h3>
+  <pre>CREATE TABLE relationship (
+  relationship_id        text PRIMARY KEY,
+  kind                   text NOT NULL,            -- 'primary_care' | 'loyalty' | 'advisor' | ...
+  persona_a_id           text NOT NULL,
+  persona_b_id           text NOT NULL,
+  scope                  text[] NOT NULL,          -- which actions persona_a may take on persona_b's data
+  status                 text NOT NULL,            -- ACTIVE | SUSPENDED | TERMINATED
+  consent_ref            text NOT NULL,
+  created_at             timestamptz NOT NULL,
+  attested_at            timestamptz,              -- last annual attestation
+  terminated_at          timestamptz,
+  cross_tenant           boolean DEFAULT false,
+  source_tenant_id       text,                     -- when cross_tenant=true
+  target_tenant_id       text                      -- when cross_tenant=true
+);
+
+CREATE INDEX ix_rel_a ON relationship (persona_a_id, status);
+CREATE INDEX ix_rel_b ON relationship (persona_b_id, status);</pre>
+</section>
+
+<!-- ============ API ============ -->
+<section id="api">
+  <h2>4 · SDK API Surface · key endpoints</h2>
+
+  <div class="callout">
+    <b><span class="new-tag">v3.1</span> The canonical entry point for reading identity is <code>resolveIdentityContext(token)</code> from <code>sdk-identity-resolver</code>.</b> Every other layer-attribute read in any non-resolver SDK is forbidden by lint (Opinionated Constraint OC-4, Architecture §3A). The resolver reads from the Identity Projection store (§2B) on the hot path with p99 ≤ 0.5ms warm; falls back to live six-layer resolve only on miss. The endpoints below are the <i>mutation</i> surfaces — reads happen through the resolver.
+  </div>
+
+  <pre>// The one read endpoint that matters
+import { resolveIdentityContext } from '@projexlight/sdk-identity-resolver';
+
+const ctx = await resolveIdentityContext(token);
+// ctx.person_id · ctx.persona_id · ctx.tenant_id · ctx.bu_ancestors ·
+// ctx.effective_role_closure · ctx.active_consents · ctx.rebac_edges ·
+// ctx.admin_pool_index · ctx.projection_version · ...
+// — snapshot is stable for the request lifetime; audit + policy reference projection_version</pre>
+
+  <h3>4.1 · sdk-identity</h3>
+  <pre>// First login per app — mints app_identity if missing
+POST /v1/identity/login
+  { credential, app_id }
+  → { jwt, person_id, app_identity_id }
+
+// JWT carries the full tuple
+GET /v1/identity/me
+  → { person_id, app_identity_id, memberships: [...], personas: [...] }
+
+// Alias graph stitch (admin only)
+POST /v1/identity/merge
+  { primary_person_id, alias_person_id }
+  → { primary_person_id, merged_alias_count }</pre>
+
+  <h3>4.2 · sdk-persona</h3>
+  <pre>// Create a tenant membership (e.g., patient joins hospital)
+POST /v1/persona/membership
+  { app_identity_id, tenant_id, roles: ['patient'] }
+  → { tenant_membership_id, persona_id }
+
+// Add a persona to an existing membership
+POST /v1/persona/{tenant_membership_id}/persona
+  { kind: 'doctor' }
+  → { persona_id }
+
+// List a person's complete stack (across apps and tenants)
+GET /v1/persona/stack?person_id=pers_001
+  → {
+      app_identities: [...],
+      memberships:    [...],
+      personas:       [...]
+    }</pre>
+
+  <h3>4.3 · sdk-engagement</h3>
+  <pre>// Open an encounter (issues encounter key)
+POST /v1/engagement/encounters
+  {
+    tenant_id, app_id, kind: 'visit',
+    participants: [
+      { persona_id: 'pers_001_patient', role: 'patient' },
+      { persona_id: 'pers_002_doctor',  role: 'attending' }
+    ],
+    address_id, scheduled_at
+  }
+  → { encounter_id, encounter_key_arn, state: 'OPEN' }
+
+// Time-bounded grant for non-participants
+POST /v1/engagement/encounters/{encounter_id}/grants
+  {
+    grantee_persona_id, scope: ['vitals.read'],
+    expires_at, reason: 'shift_assignment'
+  }
+  → { grant_id }
+
+// Close an encounter (payload retained, encounter still readable until seal)
+POST /v1/engagement/encounters/{encounter_id}/close
+  → { state: 'CLOSED', closed_at }
+
+// Seal (retention expiry — shreds the encounter key)
+POST /v1/engagement/encounters/{encounter_id}/seal
+  → { state: 'SEALED', sealed_at, key_shredded: true }</pre>
+
+  <h3>4.4 · sdk-rebac</h3>
+  <pre>// Open a relationship (e.g., PCP assignment)
+POST /v1/rebac/relationships
+  {
+    kind: 'primary_care',
+    persona_a_id: 'pers_dr_smith',
+    persona_b_id: 'pers_ravi_patient',
+    scope: ['chart.read', 'rx.write'],
+    consent_ref: 'cnst_01HXYZ'
+  }
+  → { relationship_id, status: 'ACTIVE' }
+
+// Check if a relationship allows an action (used by Policy SDK)
+POST /v1/rebac/check
+  {
+    actor_persona_id, target_persona_id, action: 'chart.read'
+  }
+  → { allow: true, via_relationship: 'rel_01HXYZ' }
+
+// Terminate a relationship (e.g., patient changes PCP)
+POST /v1/rebac/relationships/{relationship_id}/terminate
+  { reason: 'patient_request' }
+  → { status: 'TERMINATED', terminated_at }</pre>
+</section>
+
+<!-- ============ LIFECYCLE ============ -->
+<section id="lifecycle">
+  <h2>5 · Lifecycle States</h2>
+
+  <h3>5.1 · Encounter</h3>
+  <div class="diagram-wrap">
+    <pre class="mermaid">
+stateDiagram-v2
+  [*] --> OPEN: encounter created
+  OPEN --> IN_PROGRESS: first activity logged
+  IN_PROGRESS --> CLOSED: closed by participant
+  CLOSED --> SEALED: retention expires
+  CLOSED --> IN_PROGRESS: reopened (within window)
+  SEALED --> [*]
+  note right of SEALED
+    Encounter Key shredded
+    Payload mathematically irrecoverable
+    Metadata retained for analytics counts
+  end note
+    </pre>
+  </div>
+
+  <h3>5.2 · Relationship</h3>
+  <div class="diagram-wrap">
+    <pre class="mermaid">
+stateDiagram-v2
+  [*] --> ACTIVE: relationship created with consent
+  ACTIVE --> SUSPENDED: anomaly · attestation overdue
+  SUSPENDED --> ACTIVE: re-attested
+  ACTIVE --> TERMINATED: either party terminates
+  SUSPENDED --> TERMINATED: timeout
+  TERMINATED --> [*]
+    </pre>
+  </div>
+
+  <h3>5.3 · Tenant Membership</h3>
+  <div class="diagram-wrap">
+    <pre class="mermaid">
+stateDiagram-v2
+  [*] --> INVITED: invitation issued
+  INVITED --> ACTIVE: accepted
+  INVITED --> [*]: declined
+  ACTIVE --> SUSPENDED: admin action
+  SUSPENDED --> ACTIVE: reinstated
+  ACTIVE --> DEPARTED: person leaves tenant
+  SUSPENDED --> DEPARTED: timeout
+  DEPARTED --> [*]
+    </pre>
+  </div>
+
+  <h3>5.4 · Master Person</h3>
+  <div class="diagram-wrap">
+    <pre class="mermaid">
+stateDiagram-v2
+  [*] --> ACTIVE: created
+  ACTIVE --> SUSPENDED: admin · fraud
+  SUSPENDED --> ACTIVE: reinstated
+  ACTIVE --> ERASED: erasure request honored
+  SUSPENDED --> ERASED: erasure request honored
+  ERASED --> [*]
+  note right of ERASED
+    Person Key shredded
+    All downstream layers undecryptable
+    Tombstone retained for audit
+  end note
+    </pre>
+  </div>
+</section>
+
+<!-- ============ COMPLIANCE ============ -->
+<section id="compliance">
+  <h2>6 · Compliance Mapping</h2>
+  <p>Where each regulated field type lives — by layer, pool, and key.</p>
+
+  <table>
+    <thead><tr><th>Regulation</th><th>Field class</th><th>Layer</th><th>Pool</th><th>Key</th><th>Erasure mechanism</th></tr></thead>
+    <tbody>
+      <tr><td><b>HIPAA (US PHI)</b></td><td>Clinical notes, vitals, labs, dx codes</td><td>L5 Encounter payload</td><td>App pool (Healthcare)</td><td>Encounter Key</td><td>Seal encounter → key shred</td></tr>
+      <tr><td><b>HIPAA</b></td><td>MRN, allergies, blood type</td><td>L4 Persona extension</td><td>App pool</td><td>Tenant Key</td><td>Tenant offboarding</td></tr>
+      <tr><td><b>DPDP (India)</b></td><td>Name, phone, email aliases</td><td>L1 alias graph</td><td>Admin pool (home region)</td><td>Person Key</td><td>Right-to-erasure shreds Person Key</td></tr>
+      <tr><td><b>DPDP</b></td><td>Aadhaar, PAN, DL</td><td>L1 Secure Data band</td><td>Admin pool (IN region pinned)</td><td>Person Key + per-field envelope</td><td>Field-level shred</td></tr>
+      <tr><td><b>GDPR (EU)</b></td><td>Personal data + processing record</td><td>L1 + L2 + L4 + consent</td><td>EU-region admin + app pools</td><td>Person + Tenant keys</td><td>Portability export from MDM endpoint; erasure shreds Person Key</td></tr>
+      <tr><td><b>PCI DSS</b></td><td>Card tokens (no raw PAN)</td><td>L1 Secure Data band, PCI</td><td>Admin pool</td><td>Person Key + tokenizer</td><td>Token revoke via processor; field shred locally</td></tr>
+      <tr><td><b>SOC 2</b></td><td>Audit ledger</td><td>Per-pool audit chain</td><td>Every pool</td><td>Pool KEK (immutable)</td><td>Retention-policy driven (typically 7y)</td></tr>
+      <tr><td><b>RBI / SEBI</b></td><td>Investor stake, K-1s</td><td>L4 Persona extension + L5 Encounter (cap call, distribution)</td><td>App pool (OneEstate)</td><td>Tenant Key + Encounter Key</td><td>8y retention, then seal</td></tr>
+      <tr><td><b>Data residency</b></td><td>All PII at-rest</td><td>L1–L6</td><td>Region-pinned pools only</td><td>Per-region root CMK</td><td>Region-bounded by pool placement</td></tr>
+    </tbody>
+  </table>
+
+  <div class="callout green">
+    <b>The compliance benefit of layering.</b> A regulator asking "show me every place we hold this patient's data" gets answered by a single graph traversal — person_id → app_identities → memberships → personas → encounters/relationships. A regulator asking "prove you erased patient X's data" gets answered by "we shredded the Person Key on YYYY-MM-DD; here is the audit chain entry". No table scan, no shard reconciliation.
+  </div>
+
+  <div class="callout">
+    <b>The billing benefit of layering <span class="new-tag">v3.1</span>.</b> Every metered API call (see Architecture §10A) carries the full six-layer tuple — <code>org_id · app_id · tenant_id · bu_id · persona_id · encounter_id</code> — from the JWT. That lets <code>sdk-billing</code> split a tenant's bill <b>per app</b>, <b>per business unit</b>, <b>per persona-kind</b> (e.g., "your clinicians cost X, your patients cost Y"), and <b>per encounter</b> ("Hospital A's Q3 visits cost Z in platform fees"). AWS, GCP, Azure, and Stripe all bill against a flat customer/account identity and rely on user-defined tags for any further split. We get this for free because the six-layer stack is the identity, not a metadata afterthought.
+  </div>
+</section>
+
+<!-- ============ SCENARIOS ============ -->
+<section id="scenarios">
+  <h2>7 · Scenario Walkthroughs · API + Tables</h2>
+
+  <h3>7.1 · Healthcare — Ravi visits Dr. Smith at Hospital A</h3>
+  <pre>// 1. Ravi (already a person) joins Hospital A
+POST /v1/persona/membership
+  { app_identity_id: 'apid_ravi_hc', tenant_id: 'ten_hospA', roles: ['patient'] }
+→ { tenant_membership_id: 'tmb_ravi_hA', persona_id: 'pers_ravi_hA_patient' }
+
+// 2. Dr. Smith is a doctor at Hospital A
+// (persona already exists: pers_drsmith_hA_doctor)
+
+// 3. PCP relationship is established
+POST /v1/rebac/relationships
+  {
+    kind: 'primary_care',
+    persona_a_id: 'pers_drsmith_hA_doctor',
+    persona_b_id: 'pers_ravi_hA_patient',
+    scope: ['chart.read', 'rx.write'],
+    consent_ref: 'cnst_pcp_ravi'
+  }
+→ { relationship_id: 'rel_pcp_ravi_smith' }
+
+// 4. Visit is scheduled
+POST /v1/engagement/encounters
+  {
+    tenant_id: 'ten_hospA', app_id: 'healthcare', kind: 'visit',
+    participants: [
+      { persona_id: 'pers_ravi_hA_patient', role: 'patient' },
+      { persona_id: 'pers_drsmith_hA_doctor', role: 'attending' }
+    ],
+    scheduled_at: '2026-04-12T10:30Z'
+  }
+→ { encounter_id: 'enc_visit_42', state: 'OPEN' }
+
+// 5. Dr. Smith reads Ravi's chart (Pool Router → app-healthcare-007)
+GET /v1/healthcare/chart/pers_ravi_hA_patient
+  Authorization: Bearer <jwt with tuple>
+→ Policy: ABAC ✓
+→ ReBAC: rel_pcp_ravi_smith ACTIVE ✓
+→ Encounter: enc_visit_42 IN_PROGRESS ✓
+→ chart returned
+
+// 6. Visit closes
+POST /v1/engagement/encounters/enc_visit_42/close
+→ state: 'CLOSED'
+
+// 7. 6 years later, retention triggers seal
+POST /v1/engagement/encounters/enc_visit_42/seal
+→ state: 'SEALED', encounter key shredded</pre>
+
+  <h3>7.2 · eCommerce — Anita places an order at BookStore</h3>
+  <pre>// 1. Anita joins BookStore tenant (e-com app)
+POST /v1/persona/membership
+  { app_identity_id: 'apid_anita_ec', tenant_id: 'ten_bookstore', roles: ['buyer'] }
+→ { tenant_membership_id: 'tmb_anita_bs', persona_id: 'pers_anita_bs_buyer' }
+
+// 2. Order placed (one encounter)
+POST /v1/engagement/encounters
+  {
+    tenant_id: 'ten_bookstore', app_id: 'ecommerce', kind: 'order',
+    participants: [
+      { persona_id: 'pers_anita_bs_buyer', role: 'buyer' }
+    ],
+    metadata: { order_no: 'BS-2026-04-998' }
+  }
+→ { encounter_id: 'enc_order_BS998' }
+
+// 3. Payment + line items hang off encounter
+// Payment SDK uses Anita's PCI token from L1 Secure Data
+// Order body is encrypted under encounter key
+
+// 4. Later, Anita orders from ElectroMart
+POST /v1/persona/membership
+  { app_identity_id: 'apid_anita_ec', tenant_id: 'ten_electromart', roles: ['buyer'] }
+→ { tenant_membership_id: 'tmb_anita_em', persona_id: 'pers_anita_em_buyer' }
+
+// 5. ElectroMart staff cannot see BookStore orders.
+// Pool Router refuses cross-tenant query.
+// Anita aggregating her own data needs an analytics-export consent.</pre>
+
+  <h3>7.3 · Marketplace — two-sided contractor / homeowner platform <span class="new-tag">v3.1</span></h3>
+  <p>Storm-damage repair marketplace. Sam (Homeowner persona at <code>ten_marketplace</code>) posts a job; Bob's Roofing (Contractor persona at the same tenant) bids; platform holds funds in escrow; dispute resolution is an encounter the platform staff joins. Exercises: two personas at one tenant with opposing interests, escrow via sdk-payment, reputation across encounters, dispute encounter with a third-party participant.</p>
+<pre>// 1. Sam and Bob's Roofing both hold personas at the marketplace tenant
+//    Sam: pers_sam_mp_homeowner   Bob: pers_bob_mp_contractor
+// 2. Sam posts a job — a Listing encounter
+POST /v1/engagement/encounters
+  { kind: 'listing', tenant_id: 'ten_marketplace',
+    participants: [{ persona_id: 'pers_sam_mp_homeowner', role: 'requester' }] }
+→ { encounter_id: 'enc_listing_223' }
+
+// 3. Bob bids — bids are sub-encounters referencing the listing
+POST /v1/engagement/encounters
+  { kind: 'bid', parent_encounter_id: 'enc_listing_223',
+    participants: [{ persona_id: 'pers_bob_mp_contractor', role: 'bidder' }] }
+→ { encounter_id: 'enc_bid_BR_99' }
+
+// 4. Sam accepts → Job encounter opened; sdk-payment escrows funds
+POST /v1/engagement/encounters
+  { kind: 'job', parent_encounter_id: 'enc_listing_223',
+    participants: [
+      { persona_id: 'pers_sam_mp_homeowner', role: 'payer' },
+      { persona_id: 'pers_bob_mp_contractor', role: 'provider' }
+    ],
+    payment_ref: 'pay_escrow_998' }
+→ { encounter_id: 'enc_job_998' }
+
+// 5. Bob captures evidence (sdk-evidence) — each capture stamped with encounter_id
+// 6. Dispute? sdk-approval routes to platform support; a 3rd persona joins enc_job_998
+//    as 'arbitrator'; ReBAC grants temporary read on evidence chain
+// 7. Resolution closes the job encounter; escrow releases; ratings written to
+//    persona-extension on both sides; encounter key sealed at the end of the
+//    dispute window for retention</pre>
+
+  <h3>7.4 · B2B2C subscription — tenant's app charges its end users <span class="new-tag">v3.1</span></h3>
+  <p>A SaaS tenant (FitStudio) uses our platform to run their fitness app; their end users subscribe to FitStudio at $20/month. Platform bills FitStudio for SDK usage; FitStudio bills its end users. End users are personas at FitStudio's tenant, not direct platform customers.</p>
+<pre>// 1. End user signs up via FitStudio's app
+//    Identity SDK mints person + app identity + tenant membership + persona
+//    Persona kind: 'member' at tenant_id='ten_fitstudio'
+// 2. FitStudio's app calls sdk-payment for end-user's monthly $20 charge
+//    actor: { kind: 'tenant_admin', tenant_id: 'ten_fitstudio' }
+//    payee: tenant's own Stripe Connect account (not ours)
+// 3. sdk-meter records that call as 'payment.charge.subscription' SKU
+//    against ten_fitstudio (the platform-tenant)
+// 4. End of month: sdk-billing invoices FitStudio for all SDK usage
+//    FitStudio receives one invoice line: '847k API calls · $1,245'
+//    FitStudio's revenue from end-user subscriptions is theirs, not ours
+// 5. The end user appears in our system only as a persona;
+//    they never see a Projexlight invoice</pre>
+
+  <h3>7.5 · Multi-currency consolidation — global tenant with regional revenue <span class="new-tag">v3.1</span></h3>
+  <p>GlobalCorp operates in US, EU, IN with revenue in USD, EUR, INR. Their fiscal year ends March 31. They want one consolidated quarterly P&amp;L in USD. Exercises: fiscal-period entity, multi-region pool placement, geo-node + currency dimensions, warehouse aggregation with FX normalization.</p>
+<pre>// 1. GlobalCorp configures its fiscal calendar
+PUT /v1/tenant/fiscal-period
+  { tenant_id: 'ten_globalcorp', fiscal_year_start: '04-01',
+    base_currency: 'USD',
+    fx_source: 'platform_daily_close' }
+
+// 2. Each region's encounters carry geo_node_id + transaction currency
+//    US sales encounter: geo_node_id='geo_us', currency='USD'
+//    EU sales encounter: geo_node_id='geo_eu', currency='EUR'
+//    IN sales encounter: geo_node_id='geo_in', currency='INR'
+//    Each lives in its region's app pool (residency)
+
+// 3. Quarterly close (cron, T+1 day after fiscal quarter end)
+//    sdk-analytics rollup job (warehouse only — no live cross-pool join):
+//      SELECT geo_node_id, SUM(amount * fx_to_usd_at_txn_date) AS usd_revenue
+//      FROM warehouse.encounters_by_tenant
+//      WHERE tenant_id = 'ten_globalcorp'
+//        AND fiscal_period_id = 'fp_globalcorp_FY24_Q1'
+//      GROUP BY geo_node_id;
+
+// 4. Output: consolidated P&L in USD, broken down by geo_node
+//    Audit trail: which FX rates applied per transaction; reproducible
+//    Showback: per-BU and per-geo splits available via sdk-billing</pre>
+
+  <h3>7.6 · Cross-tenant referral — Hospital A refers patient to Hospital B <span class="new-tag">v3.1</span></h3>
+  <p>Ravi's PCP at Hospital A refers him to a specialist at Hospital B. Without explicit cross-tenant relationship, B has no access to A's chart. Exercises: cross-tenant Relationship (L6 with cross-tenant key), Encounter Grant scoped to specific records, consent-driven hand-off, commission-tracking if the referral is paid.</p>
+<pre>// 1. Dr. Smith at Hospital A initiates the referral
+POST /v1/rebac/cross-tenant-relationship
+  { kind: 'referral',
+    source: { persona_id: 'pers_drsmith_hA_doctor', tenant_id: 'ten_hospA' },
+    target: { tenant_id: 'ten_hospB', persona_kind: 'specialist' },
+    subject: { persona_id: 'pers_ravi_hA_patient' },
+    scope: ['chart.read.subset', 'imaging.read'],
+    consent_ref: 'cnst_ravi_refer_hB',
+    expires_at: '2026-09-01' }
+→ { relationship_id: 'rel_referral_ravi_hAhB', cross_tenant_key_id: 'ck_998' }
+
+// 2. Hospital B's intake team accepts the referral
+//    A specialist persona at B is matched: pers_drjones_hB_specialist
+PUT /v1/rebac/cross-tenant-relationship/rel_referral_ravi_hAhB
+  { accepted_by: 'pers_drjones_hB_specialist' }
+
+// 3. Dr. Jones can now read Ravi's chart subset
+//    On read: ReBAC check finds the cross-tenant relationship + active consent
+//    Decryption uses cross-tenant relationship key (re-encrypted from A's tenant key)
+//    Every read audited in BOTH ten_hospA and ten_hospB audit chains
+
+// 4. Visit at Hospital B opens a new encounter under ten_hospB
+//    pers_ravi_hB_patient created (separate persona at Hospital B)
+//    Persona-extension link tags rel_referral_ravi_hAhB for provenance
+
+// 5. If A and B have a commercial referral agreement
+//    sdk-billing applies commission rule: % of B's revenue → A's reseller-style payout
+//    Tracked via sdk-meter actor.relationship_ref</pre>
+
+  <h3>7.7 · Tenant impersonation by support <span class="new-tag">v3.1</span></h3>
+  <p>Support engineer Priya needs to debug an issue in Tenant X's account. Direct DB access is forbidden. She uses scoped, time-bounded, consent-required impersonation; every action under impersonation is loudly audited and visible to the customer.</p>
+<pre>// 1. Tenant X granted "support impersonation" consent during contract signing
+//    Stored as a tenant-level standing consent: cnst_support_impersonation
+//    Tenant admin can revoke at any time from their console
+
+// 2. Priya opens a support ticket and requests impersonation
+POST /v1/identity/impersonation/request
+  { support_engineer: 'usr_priya',
+    target_tenant_id: 'ten_X',
+    reason: 'investigating ticket SUP-998',
+    requested_scope: ['read:audit', 'read:billing', 'read:user.list'],
+    duration_minutes: 30 }
+→ { request_id: 'imp_req_223' }
+
+// 3. Approval routing via sdk-approval
+//    Manager approves → if scope includes write, also requires customer approval
+//    Customer X's primary contact gets a notification + must approve in-app
+
+// 4. Approved → sdk-identity mints an impersonation JWT
+//    Claims: actor.kind='support_impersonator',
+//            actor.real_user='usr_priya',
+//            actor.target_tenant='ten_X',
+//            expires_at=now+30min
+//    JWT cannot be silently refreshed; expires hard
+
+// 5. Every call under this JWT
+//    - tagged in audit with both actor.real_user AND impersonation flag
+//    - surfaced LOUDLY in customer's audit-read API (red banner)
+//    - sdk-meter records usage under platform overhead, not customer's bill
+
+// 6. End of session: certificate of impersonation generated
+//    Lists every action, every record touched, every reason
+//    Stored permanently in tenant's audit chain</pre>
+</section>
+
+</div>
+
+<script>
+  mermaid.initialize({
+    startOnLoad: true,
+    theme: 'dark',
+    themeVariables: {
+      background: '#0b0f17',
+      primaryColor: '#1a2234',
+      primaryTextColor: '#e6ecf5',
+      primaryBorderColor: '#c9a86a',
+      lineColor: '#8a98b3',
+      secondaryColor: '#16241c',
+      tertiaryColor: '#241622'
+    },
+    flowchart: { curve: 'basis', useMaxWidth: true },
+    sequence: { useMaxWidth: true }
+  });
+</script>
+</body>
+</html>

@@ -22,7 +22,7 @@ export function MarketingHeader(): JSX.Element {
         <Link href="/features" className="hover:text-primary">Features</Link>
         <Link href="/pricing" className="hover:text-primary">Pricing</Link>
         <Link href="/security" className="hover:text-primary">Security</Link>
-        <a href={`${base}/docs/user/tenant-getting-started.html`} className="hover:text-primary">Docs</a>
+        <a href={`${base}/docs/hub/index.html`} className="hover:text-primary">Developer Hub</a>
         <a href={`${base}/docs/api/index.html`} className="hover:text-primary">API</a>
       </nav>
 
