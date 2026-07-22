@@ -16,17 +16,16 @@ export default function RegisterPage(): JSX.Element {
   if (welcome) {
     return (
       <AuthShell className="max-w-xl">
-        <h1 className="mb-2 text-3xl font-bold tracking-tight">Welcome, {welcome.email}</h1>
-        <p className="mb-6 text-sm leading-relaxed text-muted-foreground">
-          Your user ID is <code className="rounded bg-muted px-1.5 py-0.5">{welcome.userId}</code>.
+        <h1 className="mb-2 text-3xl font-bold tracking-tight">Check your email</h1>
+        <p className="mb-4 text-sm leading-relaxed text-muted-foreground">
+          We sent a verification link to <strong className="text-foreground">{welcome.email}</strong>.
+          Click it to activate your account — then you can sign in.
         </p>
         <p className="text-sm leading-relaxed text-muted-foreground">
-          Your personal account is created but you&apos;re not attached to any workspace yet.
-          Ask your workspace admin to invite this email, or{' '}
-          <Link href="/signup" className="text-primary underline">create your own workspace</Link>.
+          The link expires in 24 hours. Don&apos;t see it? Check your spam folder.
         </p>
         <p className="mt-6 text-xs text-muted-foreground">
-          Already signed in? <Link href="/dashboard" className="text-primary underline">Go to your workspace dashboard</Link>.
+          Already verified? <Link href="/login" className="text-primary underline">Sign in</Link>.
         </p>
       </AuthShell>
     );

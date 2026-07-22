@@ -17,6 +17,7 @@ export {
   resolveEmailSend,
   setPlatformEmailProvider,
   getPlatformEmailProvider,
+  sendPlatformEmail,
 } from './services/emailProviderService';
 export type {
   EmailProviderBinding,

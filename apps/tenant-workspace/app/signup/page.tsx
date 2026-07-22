@@ -18,26 +18,24 @@ export default function SignupPage(): JSX.Element {
   if (welcome) {
     return (
       <AuthShell className="max-w-2xl">
-        <h1 className="mb-2 text-3xl font-bold tracking-tight">Welcome to {welcome.display_name}.</h1>
-        <p className="mb-6 text-sm leading-relaxed text-muted-foreground">
-          Your trial workspace is live. You&apos;re signed in as <strong>{welcome.email}</strong>{' '}
-          and have been added as its admin.
+        <h1 className="mb-2 text-3xl font-bold tracking-tight">Check your email to finish</h1>
+        <p className="mb-4 text-sm leading-relaxed text-muted-foreground">
+          Your trial workspace <strong>{welcome.display_name}</strong> is created — but first,
+          verify your email. We sent a link to <strong className="text-foreground">{welcome.email}</strong>.
+          Click it to activate your account, then sign in.
         </p>
         <div className="my-5 rounded-lg border bg-muted p-4 text-sm">
           <div><strong>Tenant ID:</strong> <code>{welcome.tenant_id}</code></div>
-          <div><strong>App ID:</strong> <code>{welcome.app_id}</code></div>
-          <div><strong>Org ID:</strong> <code>{welcome.org_id}</code></div>
           <div><strong>Region:</strong> {welcome.region}</div>
         </div>
-        <h2 className="mt-7 text-lg font-semibold">Next steps</h2>
+        <h2 className="mt-6 text-lg font-semibold">Once verified</h2>
         <ol className="list-decimal space-y-1 pl-6 text-sm leading-relaxed">
-          <li>Open the <a href={TENANT_URL} target="_blank" rel="noreferrer" className="text-primary underline">Tenant Admin console</a> to invite teammates, add webhooks, and connect Slack / Salesforce / M365.</li>
-          <li>Bookmark <a href={TENANT_BILLING_URL} target="_blank" rel="noreferrer" className="text-primary underline">Billing</a> — check it weekly during your trial.</li>
-          <li>Read the <a href="/docs/user/tenant-getting-started.html" target="_blank" rel="noreferrer" className="text-primary underline">Getting Started guide</a> — a 15-minute walkthrough of the trial.</li>
+          <li><Link href="/login" className="text-primary underline">Sign in</Link> to your new workspace.</li>
+          <li>Open the <a href={TENANT_URL} target="_blank" rel="noreferrer" className="text-primary underline">Tenant Admin console</a> to invite teammates and connect Slack / Salesforce / M365.</li>
+          <li>Read the <a href="/docs/user/tenant-getting-started.html" target="_blank" rel="noreferrer" className="text-primary underline">Getting Started guide</a>.</li>
         </ol>
         <p className="mt-7 text-xs text-muted-foreground">
-          Your token is stored locally; you&apos;ll stay signed in across reloads. If you sign out,
-          come back to <Link href="/login" className="text-primary underline">/login</Link>.
+          The verification link expires in 24 hours. Don&apos;t see it? Check your spam folder.
         </p>
       </AuthShell>
     );

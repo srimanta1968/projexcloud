@@ -101,8 +101,10 @@ export async function registerPerson(input: RegisterPersonInput): Promise<Regist
     if (!personRow) throw new Error('Failed to insert identity.person');
 
     const aliasRow = await dataService.one<AliasRecord>(
+      // verified_at = NULL → email starts UNVERIFIED; set on /api/auth/verify-email.
+      // (Existing rows created before this change keep verified_at = now(), grandfathered.)
       `INSERT INTO identity.alias (person_id, kind, value_envelope, value_hash, verified_at)
-       VALUES ($1, 'email', $2, $3, now())
+       VALUES ($1, 'email', $2, $3, NULL)
        RETURNING alias_id, person_id, kind, value_envelope, value_hash, verified_at`,
       [personRow.person_id, Buffer.from(input.email, 'utf-8'), emailHash],
     );
@@ -198,8 +200,9 @@ export async function signupTenant(input: SignupTenantInput): Promise<SignupTena
     const person_id = person.rows[0].person_id;
 
     await q(
+      // Email starts UNVERIFIED (verify via /api/auth/verify-email before login).
       `INSERT INTO identity.alias (person_id, kind, value_envelope, value_hash, verified_at)
-       VALUES ($1, 'email', $2, $3, now())`,
+       VALUES ($1, 'email', $2, $3, NULL)`,
       [person_id, Buffer.from(input.email, 'utf-8'), emailHash],
     );
 
@@ -291,6 +294,7 @@ export interface VerifiedLogin {
   person: PersonRecord;
   credential: CredentialRecord;
   email: string;
+  emailVerified: boolean;
 }
 
 /**
@@ -309,11 +313,12 @@ export async function verifyEmailPassword(email: string, password: string): Prom
     cred_status: CredentialStatus;
     last_used_at: Date | null;
     secret_envelope: Buffer;
+    email_verified_at: Date | null;
   }>(
     `SELECT p.person_id, p.home_region, p.status, p.mdm_method,
             p.created_at AS person_created_at,
             c.credential_id, c.status AS cred_status, c.last_used_at,
-            c.secret_envelope
+            c.secret_envelope, a.verified_at AS email_verified_at
        FROM identity.alias a
        JOIN identity.person p ON p.person_id = a.person_id
        JOIN identity.credential c
@@ -354,7 +359,22 @@ export async function verifyEmailPassword(email: string, password: string): Prom
       last_used_at: row.last_used_at,
     },
     email,
+    emailVerified: row.email_verified_at != null,
   };
+}
+
+/**
+ * Marks a person's email alias as verified (sets verified_at = now()). Idempotent.
+ * Returns true if a matching unverified/verified email alias was found.
+ */
+export async function markEmailVerified(person_id: string, email: string): Promise<boolean> {
+  const emailHash = hashAliasValue('email', email);
+  const res = await dataService.query(
+    `UPDATE identity.alias SET verified_at = now()
+      WHERE person_id = $1 AND kind = 'email' AND value_hash = $2`,
+    [person_id, emailHash],
+  );
+  return (res.rowCount ?? 0) > 0;
 }
 
 /**

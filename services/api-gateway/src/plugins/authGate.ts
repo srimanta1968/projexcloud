@@ -41,6 +41,7 @@ const PUBLIC_EXACT = new Set<string>([
   '/api/auth/login',
   '/api/auth/register',
   '/api/auth/signup-tenant',
+  '/api/auth/verify-email', // email-verification link (pre-login, no JWT)
   '/api/mfa/verify', // login-completion step: caller has no full JWT yet
   '/api/storm/overlay', // public storm query (documented Public query)
   '/api/connectors/slack/events', // HMAC-verified in handler

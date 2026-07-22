@@ -1,5 +1,5 @@
 import { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
-import { loginHandler, registerHandler, signupTenantHandler } from './handlers/authController';
+import { loginHandler, registerHandler, signupTenantHandler, verifyEmailHandler } from './handlers/authController';
 import {
   aliasMergeHandler,
   impersonationApproveHandler,
@@ -39,6 +39,11 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
 
   app.post('/api/auth/login', async (req: FastifyRequest, reply: FastifyReply) => {
     try { await loginHandler(req, reply); }
+    catch (err) { req.log.error(err); if (!reply.sent) reply.code(500).send({ error: 'InternalError' }); }
+  });
+
+  app.post('/api/auth/verify-email', async (req: FastifyRequest, reply: FastifyReply) => {
+    try { await verifyEmailHandler(req, reply); }
     catch (err) { req.log.error(err); if (!reply.sent) reply.code(500).send({ error: 'InternalError' }); }
   });
 

@@ -8,16 +8,18 @@ export interface RegisterRequest {
 export interface RegisterResponse {
   userId: string;
   email: string;
-  token: string;
+  token?: string;                 // absent when verification is required (hard gate)
+  verification_required?: boolean;
 }
 
 /**
- * POST /api/auth/register — creates a new user and persists the returned JWT
- * for subsequent authenticated calls.
+ * POST /api/auth/register — creates a new user. With email verification enabled
+ * the response has no token (verification_required=true); the user must verify
+ * their email before they can sign in.
  */
 export async function registerUser(input: RegisterRequest): Promise<RegisterResponse> {
   const data = await apiPost<RegisterResponse>('/api/auth/register', input);
-  setToken(data.token);
+  if (data.token) setToken(data.token);
   return data;
 }
 
@@ -36,18 +38,29 @@ export interface SignupTenantResponse {
   org_id: string;
   display_name: string;
   region: string;
-  token: string;
+  token?: string;                 // absent when verification is required (hard gate)
+  verification_required?: boolean;
 }
 
 /**
  * POST /api/auth/signup-tenant — full self-serve signup: creates the person,
- * a new org + default app, a trial tenant, and an admin membership. Returns
- * a JWT already scoped to the new tenant.
+ * a new org + default app, a trial tenant, and an admin membership. With email
+ * verification enabled the response has no token; the user must verify first.
  */
 export async function signupTenant(input: SignupTenantRequest): Promise<SignupTenantResponse> {
   const data = await apiPost<SignupTenantResponse>('/api/auth/signup-tenant', input);
-  setToken(data.token);
+  if (data.token) setToken(data.token);
   return data;
+}
+
+export interface VerifyEmailResponse {
+  verified: boolean;
+  email: string;
+}
+
+/** POST /api/auth/verify-email — confirms the email-verification token. */
+export async function verifyEmail(token: string): Promise<VerifyEmailResponse> {
+  return apiPost<VerifyEmailResponse>('/api/auth/verify-email', { token });
 }
 
 export interface LoginRequest {

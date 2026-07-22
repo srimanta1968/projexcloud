@@ -67,6 +67,25 @@ export function verifyJwt(token: string): SixLayerJwtClaims {
   return jwt.verify(token, jwtSecret()) as SixLayerJwtClaims;
 }
 
+/** Purpose-scoped token for the email-verification link (short-lived, single purpose). */
+export interface EmailVerifyToken {
+  purpose: 'email_verify';
+  person_id: string;
+  email: string;
+}
+
+export function signEmailVerifyToken(person_id: string, email: string): string {
+  return jwt.sign({ purpose: 'email_verify', person_id, email }, jwtSecret(), { expiresIn: '24h' });
+}
+
+export function verifyEmailVerifyToken(token: string): EmailVerifyToken {
+  const claims = jwt.verify(token, jwtSecret()) as EmailVerifyToken;
+  if (claims.purpose !== 'email_verify' || !claims.person_id || !claims.email) {
+    throw new Error('invalid email-verification token');
+  }
+  return claims;
+}
+
 /**
  * Builds a six-layer JWT from a verified login + optional tenant context.
  * If `tenant_id` is provided, the matching membership populates bu_id and

@@ -125,6 +125,7 @@ import {
   registerApnsPushAdapter,
   registerFcmPushAdapter,
   registerSlackOutboundAdapter,
+  sendPlatformEmail,
 } from '@projexlight/sdk-notification';
 import {
   migrationsDir as paymentMigrations,
@@ -469,6 +470,21 @@ app.get('/metrics', async (_req, reply) => {
   }
   reply.header('Content-Type', 'text/plain; version=0.0.4');
   return metricsRegistry.render();
+});
+
+// Email-verification send hook (approach B): register/signup handlers in sdk-identity
+// stash the verify email on `reply.verificationEmail` (they can't import sdk-notification —
+// dependency cycle). Here we send it, fire-and-forget, without blocking the response.
+app.addHook('onResponse', async (_req, reply) => {
+  const ve = (reply as unknown as { verificationEmail?: { email: string; token: string } }).verificationEmail;
+  if (!ve?.email || !ve.token) return;
+  const base = (process.env.PUBLIC_APP_URL || 'https://cloud.projexlight.com').replace(/\/+$/, '');
+  const link = `${base}/workspace/verify-email?token=${encodeURIComponent(ve.token)}`;
+  void sendPlatformEmail({
+    destination: ve.email,
+    subject: 'Verify your email — ProjexCloud',
+    body: `Welcome to ProjexCloud!\n\nPlease confirm your email address to activate your account:\n\n${link}\n\nThis link expires in 24 hours. If you didn't sign up, you can ignore this message.`,
+  }).catch((err) => app.log.warn({ err: (err as Error)?.message, email: ve.email }, 'verification email send failed'));
 });
 
 // Mount each SDK's server surface and shared registry routes.
