@@ -69,6 +69,7 @@
 
 <nav class="toc">
   <div class="row">
+    <a href="/" title="Back to ProjexCloud" style="display:inline-flex;align-items:center;gap:8px;font-weight:700;font-size:15px;color:#e6ecf5;margin-right:auto"><span style="width:26px;height:26px;border-radius:7px;background:linear-gradient(135deg,#1A51C7,#3f74e8);display:grid;place-items:center;flex:none"><svg width="15" height="15" viewBox="0 0 24 24" fill="none"><path d="M6 19V5h6.5a4.5 4.5 0 0 1 0 9H9.5" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></span>ProjexCloud</a>
     <a href="#start">Start here</a>
     <a href="#what">What is ProjexCloud</a>
     <a href="#catalog">SDK Catalog</a>
@@ -88,7 +89,7 @@
 <header class="cover">
   <div class="eyebrow">ProjexCloud · Developer Hub</div>
   <h1>Build your app on ProjexCloud</h1>
-  <p class="sub">ProjexCloud is a library of <b>75 production-grade SDKs (538 APIs)</b> — identity, CRM, scheduling, outreach, billing, agents, and more — that you compose into an app instead of building from scratch. Describe your idea in <b>ProjexLight</b>, our AI app builder; it plans the work, discovers which SDKs fit, and generates the code that calls them. This hub is the step-by-step path from idea to a running app.</p>
+  <p class="sub">ProjexCloud is a library of <b>75 production-grade SDKs (538 APIs)</b> — identity, CRM, scheduling, outreach, billing, agents, and more — that you compose into an app instead of building from scratch. <b>Call them directly from your own project</b>, or describe your idea in <b>ProjexLight</b>, our AI app builder, and it plans the work, discovers which SDKs fit, and generates the code that calls them. This hub is the step-by-step path from idea to a running app — either way.</p>
   <div class="cta">
     <a class="btn" href="#build">Build step-by-step ↓</a>
     <a class="btn ghost" href="../api/index.html">API Reference ↗</a>
@@ -154,7 +155,56 @@
 <!-- BUILD -->
 <section id="build">
   <h2>3 · Build your app — step by step</h2>
-  <p>From idea to a running app. Steps 1–2 happen in the browser; steps 3–7 on your laptop with your AI coding tool (Claude Code, Cursor, Aider, Windsurf, Goose).</p>
+  <p>There are <b>two tracks</b>, and the difference is whether you use <b>ProjexLight</b> (our AI app builder) to plan and scaffold the app. Both let you reuse ProjexCloud's <b>538 SDK APIs</b> — ProjexLight is optional, ProjexCloud works on its own.</p>
+
+  <div class="grid c2" style="margin:16px 0 10px">
+    <a class="card" href="#track-direct">
+      <div class="label" style="color:var(--teal)">Track A · Direct — no ProjexLight</div>
+      <div class="title">Add the SDKs to your own project</div>
+      <div class="body">Download the SDK catalog, grab an API key + base URL, and point your own AI coding tool (or hand-code) at them. ProjexCloud is a self-serve API you call from any codebase — keep your repo, your stack.</div>
+    </a>
+    <a class="card" href="#track-projexlight">
+      <div class="label" style="color:var(--accent-2)">Track B · With ProjexLight</div>
+      <div class="title">Plan, scaffold &amp; generate with the AI builder</div>
+      <div class="body">ProjexLight scopes the app as Epics→Features→Tasks, exports a scaffold, and generates the code — reusing ProjexCloud SDKs (opt-in) or generating everything standalone.</div>
+    </a>
+  </div>
+
+  <h3 id="track-direct" style="font-size:19px;color:var(--teal);margin-top:30px;border-top:1px solid var(--line);padding-top:22px">Track A · Direct — use the SDKs in your own project</h3>
+  <p class="muted">No ProjexLight, no CLI export, no wizard. You keep your own repo, stack, and AI tool — ProjexCloud is simply an API you call. Four steps.</p>
+
+  <div class="step"><div class="n">A1</div><div>
+    <h3>Get access — API key + base URL</h3>
+    <p>Sign in to ProjexCloud at <b>cloud.projexlight.com</b>, open <b>Workspace → Settings → API keys</b>, and create a key. You now have the two things every call needs: the <b>base URL</b> (<code>https://cloud.projexlight.com</code>) and a <b>tenant credential</b>. Authenticate (tenant login → JWT) and pass it as <code>Authorization: Bearer &lt;token&gt;</code> on every request. No account for ProjexLight is required.</p>
+  </div></div>
+
+  <div class="step"><div class="n">A2</div><div>
+    <h3>Download the SDK catalog</h3>
+    <p>Grab the machine-readable <b><code>sdk-catalog.json</code></b> — every SDK, its group, and each endpoint (method, path, auth, payload shape, field enums, dependencies) for all 538 APIs. Browse the same content human-style in the <a href="../api/index.html">API reference</a>. Drop the catalog straight into your repo — it's the exact catalog ProjexLight bundles, just consumed directly.</p>
+  </div></div>
+
+  <div class="step"><div class="n">A3</div><div>
+    <h3>Point your AI coding tool at the catalog</h3>
+    <p>In your own repo, attach <code>sdk-catalog.json</code> (or the API-reference URL) as context for <b>Claude Code, Cursor, Aider, Windsurf, or Goose</b>, and instruct it:</p>
+    <pre>"Use the ProjexCloud SDK catalog. Before writing any backend, service, or
+ data model, check whether an SDK already covers it — if so, call the gateway
+ at https://cloud.projexlight.com/api/… with the tenant JWT instead of building it.
+ Only generate custom code for capabilities no SDK provides."</pre>
+    <p class="muted">The model discovers all 538 APIs from the catalog and reuses them — the same reuse rule ProjexLight ships, applied inside your own tool. (Optional: serve the catalog over a local MCP so it's a tool call, not just pasted context.)</p>
+  </div></div>
+
+  <div class="step"><div class="n">A4</div><div>
+    <h3>Call the gateway — that's the whole integration</h3>
+    <p>Every SDK is a REST call to your base URL with the tenant JWT:</p>
+    <pre>curl -X POST https://cloud.projexlight.com/api/scheduling/appointments \
+  -H "Authorization: Bearer $TENANT_JWT" \
+  -H "Content-Type: application/json" \
+  -d '{ "persona_id": "…", "start": "2026-08-01T15:00:00Z", "duration_min": 30 }'</pre>
+    <p class="muted">Gated, metered, audited, and isolated to your tenant's pool automatically. Your app stores only its own domain data and <b>references canonical IDs</b> (<code>person_id</code>, <code>persona_id</code>) — see <a href="#data">Your data vs ours</a>. Nothing to deploy or maintain on the ProjexCloud side.</p>
+  </div></div>
+
+  <h3 id="track-projexlight" style="font-size:19px;color:var(--accent-2);margin-top:34px;border-top:1px solid var(--line);padding-top:22px">Track B · With ProjexLight — plan, scaffold &amp; generate</h3>
+  <p class="muted">From idea to a running app with the AI builder. Steps 1–2 happen in the browser; steps 3–7 on your laptop with your AI coding tool. Reuse ProjexCloud SDKs (opt-in) or generate everything standalone.</p>
 
   <div class="step"><div class="n">1</div><div>
     <h3>Create a project in ProjexLight</h3>

@@ -25,7 +25,15 @@
 
 **Recommendation:** Phase 1 first — it is what makes reuse actually happen and is cheap. Phase 2 is the premium UX and only pays off once Phase 1 exists.
 
-> **P0 — ProjexCloud SDKs are OPTIONAL (foundational principle).** ProjexLight code generation must work **fully standalone** (generate everything from scratch — its default today) *and* **accelerated** (reuse ProjexCloud SDKs). The customer chooses **per project**; the choice drives whether the catalog + reuse rule ship. A customer who declines needs **no ProjexCloud account** and gets exactly today's ProjexLight behavior. To make an informed choice, every decision point links a **"Why pre-built SDKs?" benefits reference**. ProjexCloud is an opt-in accelerator, never a dependency.
+> **P0 — Three independent consumption modes (foundational principle).** ProjexCloud and ProjexLight compose three ways, and each must stand on its own:
+>
+> | Mode | ProjexLight? | ProjexCloud SDKs? | How the developer works |
+> |---|---|---|---|
+> | **A · Direct** | ❌ no | ✅ yes | Download the **SDK catalog**, grab an **API key + base URL**, and call the APIs from *their own* project/tooling (hand-code, or feed the catalog to their own AI assistant). ProjexCloud is a self-serve API product. |
+> | **B · Accelerated** | ✅ yes | ✅ yes | Use the catalog + key + base URL *with* the CLI export + ProjexLight; the AI builder reuses SDKs (`useProjexCloudSdks: true`). |
+> | **C · ProjexLight-only** | ✅ yes | ❌ no | Generate everything from scratch in ProjexLight — exactly what it does today (`useProjexCloudSdks: false`, the default). |
+>
+> ProjexCloud is an **opt-in accelerator, never a dependency** (Mode C needs no ProjexCloud account); and it is **usable entirely on its own** (Mode A needs no ProjexLight). Every decision point links a **"Why pre-built SDKs?" benefits reference**. This PRD's catalog work (FR1) is the shared asset behind Modes A and B.
 
 ---
 
