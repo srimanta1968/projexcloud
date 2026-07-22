@@ -9,7 +9,7 @@ import { CurrentUserBadge } from '@projexlight/design-system';
 // It DOES show on app/dashboard routes, where it's the primary "back to home" nav.
 const OWN_HEADER = new Set([
   '/', '/features', '/pricing', '/security', '/terms', '/privacy', '/dpa',
-  '/login', '/register', '/signup', '/customers', '/investors',
+  '/login', '/register', '/signup', '/verify-email', '/customers', '/investors',
 ]);
 
 export function AppHeader(): JSX.Element | null {

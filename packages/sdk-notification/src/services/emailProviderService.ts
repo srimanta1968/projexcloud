@@ -359,6 +359,41 @@ async function sendViaConfig(p: ResolvedEmailProvider, args: SendArgs): Promise<
   throw new Error(`per-provider send not supported for kind: ${p.kind}`);
 }
 
+/**
+ * Send a PLATFORM (system) email — e.g. registration verification — using env-configured
+ * credentials, independent of any per-tenant provider. Prefers SendGrid (SENDGRID_API_KEY),
+ * falls back to SMTP (SMTP_HOST/…). Returns null when no platform sender is configured, so
+ * callers can degrade gracefully (e.g. log the link in dev).
+ */
+export async function sendPlatformEmail(args: Omit<SendArgs, 'channel'>): Promise<SendResult | null> {
+  const sendArgs: SendArgs = { channel: 'email', ...args };
+  const sgKey = process.env.SENDGRID_API_KEY;
+  if (sgKey) {
+    return sendViaConfig({
+      kind: 'sendgrid',
+      config: { from_name: process.env.SENDGRID_FROM_NAME || process.env.FROM_NAME || 'ProjexCloud' },
+      from_address: process.env.SENDGRID_FROM_EMAIL || process.env.FROM_EMAIL || null,
+      credential: sgKey,
+    }, sendArgs);
+  }
+  const host = process.env.SMTP_HOST;
+  if (host) {
+    return sendViaConfig({
+      kind: 'smtp',
+      config: {
+        host,
+        port: process.env.SMTP_PORT ? Number(process.env.SMTP_PORT) : 587,
+        secure: process.env.SMTP_SECURE === 'true',
+        user: process.env.SMTP_USER,
+        from_name: process.env.FROM_NAME || 'ProjexCloud',
+      },
+      from_address: process.env.FROM_EMAIL || process.env.SMTP_USER || null,
+      credential: process.env.SMTP_PASSWORD || '',
+    }, sendArgs);
+  }
+  return null;
+}
+
 async function loadResolved(sql: string, params: unknown[]): Promise<ResolvedEmailProvider | null> {
   const row = await dataService.one<{
     kind: EmailProviderKind;

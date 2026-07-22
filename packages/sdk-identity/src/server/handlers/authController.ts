@@ -5,10 +5,17 @@ import {
   verifyEmailPassword,
   listMemberships,
   mintAppIdentity,
+  markEmailVerified,
   PersonExistsError,
   InvalidCredentialsError,
 } from '../../services/identityService';
-import { buildSixLayerClaims, readProjectionVersion, signJwt } from '../../utils/jwt';
+import {
+  buildSixLayerClaims,
+  readProjectionVersion,
+  signJwt,
+  signEmailVerifyToken,
+  verifyEmailVerifyToken,
+} from '../../utils/jwt';
 import {
   validateLoginInput,
   validateRegisterInput,
@@ -34,18 +41,19 @@ export async function registerHandler(req: FastifyRequest, reply: FastifyReply):
       display_name: validation.value.display_name,
       phone: validation.value.phone,
     });
-    const token = signJwt(buildSixLayerClaims({
-      person_id: result.person.person_id,
+    // HARD verification: no login token yet. Stash the verify email for the gateway
+    // hook to send (approach B — sdk-identity can't import sdk-notification: cycle).
+    const verifyToken = signEmailVerifyToken(result.person.person_id, validation.value.email);
+    (reply as { verificationEmail?: unknown }).verificationEmail = {
       email: validation.value.email,
-      display_name: validation.value.display_name,
-      actor_kind: 'human',
-      mfa_methods: ['pwd'],
-    }));
+      token: verifyToken,
+      userId: result.person.person_id,
+    };
     reply.code(201).send({
       data: {
         userId: result.person.person_id,
         email: validation.value.email,
-        token,
+        verification_required: true,
       },
     });
   } catch (err) {
@@ -72,15 +80,13 @@ export async function signupTenantHandler(req: FastifyRequest, reply: FastifyRep
   }
   try {
     const result = await signupTenant(validation.value);
-    const token = signJwt(buildSixLayerClaims({
-      person_id: result.person_id,
+    // HARD verification: no login token yet — the user must verify their email first.
+    const verifyToken = signEmailVerifyToken(result.person_id, validation.value.email);
+    (reply as { verificationEmail?: unknown }).verificationEmail = {
       email: validation.value.email,
-      display_name: result.person_display_name,
-      tenant_id: result.tenant_id,
-      app_id: result.app_id,
-      actor_kind: 'human',
-      mfa_methods: ['pwd'],
-    }));
+      token: verifyToken,
+      userId: result.person_id,
+    };
     reply.code(201).send({
       data: {
         userId: result.person_id,
@@ -90,7 +96,7 @@ export async function signupTenantHandler(req: FastifyRequest, reply: FastifyRep
         org_id: result.org_id,
         display_name: result.display_name,
         region: result.region,
-        token,
+        verification_required: true,
       },
     });
   } catch (err) {
@@ -115,6 +121,14 @@ export async function loginHandler(req: FastifyRequest, reply: FastifyReply): Pr
   }
   try {
     const verified = await verifyEmailPassword(validation.value.email, validation.value.password);
+    // HARD email-verification gate: block login until the email is verified.
+    if (!verified.emailVerified) {
+      reply.code(403).send({
+        error: 'EmailNotVerified',
+        details: ['Please verify your email before signing in — check your inbox for the verification link.'],
+      });
+      return;
+    }
     let activeTenantId: string | null = null;
     let activeBuId: string | null = null;
 
@@ -174,5 +188,28 @@ export async function loginHandler(req: FastifyRequest, reply: FastifyReply): Pr
     }
     req.log.error(err);
     reply.code(500).send({ error: 'InternalError' });
+  }
+}
+
+/**
+ * POST /api/auth/verify-email — validates the signed email-verification token and
+ * marks the email alias verified, unblocking login. Body: { token }.
+ */
+export async function verifyEmailHandler(req: FastifyRequest, reply: FastifyReply): Promise<void> {
+  const body = (req.body ?? {}) as { token?: string };
+  if (!body.token || typeof body.token !== 'string') {
+    reply.code(400).send({ error: 'ValidationError', details: ['token is required'] });
+    return;
+  }
+  try {
+    const claims = verifyEmailVerifyToken(body.token);
+    const ok = await markEmailVerified(claims.person_id, claims.email);
+    if (!ok) {
+      reply.code(404).send({ error: 'NotFound', details: ['No matching email found to verify.'] });
+      return;
+    }
+    reply.code(200).send({ data: { verified: true, email: claims.email } });
+  } catch (err) {
+    reply.code(400).send({ error: 'InvalidToken', details: ['The verification link is invalid or has expired.'] });
   }
 }
