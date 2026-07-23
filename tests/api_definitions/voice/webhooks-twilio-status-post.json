@@ -1,0 +1,55 @@
+{
+  "name": "POST /api/voice/webhooks/twilio/status - Twilio call status callback (AMD -> voicemail)",
+  "endpoint": "/api/voice/webhooks/twilio/status",
+  "sdk": "connector-twilio-voice",
+  "sourceFile": "packages/connector-twilio-voice/src/server/webhookRoutes.ts",
+  "method": "POST",
+  "requiresAuth": false,
+  "expectedStatus": 200,
+  "taskId": "236427cb-527c-48d9-9146-b9de48d89bb9",
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "priority": 66,
+  "testability": "auto",
+  "description": "PUBLIC signed webhook: Twilio posts call-progress here (queued -> initiated -> ringing -> in-progress -> completed, or a terminal busy/no-answer/canceled/failed). Authentication is by X-Twilio-Signature (HMAC-SHA1 over the request URL plus every parameter appended as key+value in sorted order, base64), NOT a tenant JWT — so the gateway's default-deny authGate allowlists the /api/voice/webhooks/ prefix. Verification is fail-closed once TWILIO_AUTH_TOKEN is configured and permissive when it is not, so local and test runs work unsigned. AnsweredBy carries answering-machine detection: machine_start / machine_end_* mark the call is_voicemail, while 'unknown' and 'fax' deliberately do NOT (unknown means detection was inconclusive and treating it as voicemail would log phantom voicemails). Edge cases: callbacks are RETRIED and can arrive OUT OF ORDER, so a status is never allowed to regress out of a terminal state and is_voicemail is sticky once set; an unrecognised CallSid is acknowledged with 202 rather than 404, because retrying would never make the call known; a missing CallSid is likewise 202; 401 InvalidSignature only when a token is configured and the signature is absent/wrong/over tampered params.",
+  "dependsOn": [
+    "POST /api/auth/signup-tenant",
+    "POST /api/voice/tracking-numbers",
+    "POST /api/voice/calls"
+  ],
+  "fieldEnums": {
+    "CallStatus": ["queued", "initiated", "ringing", "in-progress", "completed", "busy", "no-answer", "canceled", "failed"],
+    "AnsweredBy": ["human", "machine_start", "machine_end_beep", "machine_end_silence", "machine_end_other", "fax", "unknown"]
+  },
+  "statusTransitions": {
+    "queued -> ringing -> in-progress": "successive status callbacks as the call progresses",
+    "in-progress -> completed": "final status callback; stamps ended_at and duration_seconds",
+    "any -> is_voicemail=true": "a callback whose AnsweredBy is machine_start/machine_end_* (AMD classification, sticky)"
+  },
+  "testCases": [
+    {
+      "name": "Voicemail reached: completed call answered by a machine",
+      "headers": { "Content-Type": "application/json" },
+      "payload": {
+        "CallSid": "{{cache:voice.calls.create.response.data.call.external_id}}",
+        "CallStatus": "completed",
+        "AnsweredBy": "machine_start",
+        "CallDuration": "42",
+        "ErrorCode": ""
+      },
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "data": {
+          "matched": "boolean",
+          "voice_call_id": "string",
+          "status": "string",
+          "is_voicemail": "boolean",
+          "voicemail_detected": "boolean"
+        }
+      }
+    }
+  ],
+  "errorCases": [
+    { "status": 202, "code": "Accepted", "message": "unknown CallSid <sid>", "when": "the CallSid is not in the mirror, or the payload has no CallSid — acknowledged so Twilio stops retrying" },
+    { "status": 401, "code": "InvalidSignature", "message": "InvalidSignature", "when": "TWILIO_AUTH_TOKEN is configured and X-Twilio-Signature is missing, wrong, or computed over different params" }
+  ]
+}

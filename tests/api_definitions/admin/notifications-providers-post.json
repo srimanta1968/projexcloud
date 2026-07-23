@@ -3,6 +3,27 @@
   "endpoint": "/admin/notifications/providers",
   "sdk": "sdk-notification",
   "method": "POST",
+  "description": "Sets the platform-default email provider that the tenant-first send resolver falls back to when a tenant has configured no BYO provider of its own. Accepts kind (smtp | sendgrid | ses) plus an optional provider config object, from_address and credential, stamps created_by as \"admin-ops\", and returns 201 { success: true, data: <provider> }. QA edge cases: kind is the ONLY validated field and it IS checked against the closed set smtp|sendgrid|ses, so an unknown kind is a proper 400 (unlike most sibling admin routes); config, from_address and credential are all optional and unvalidated — a provider can be created with no from_address and no credential and will only fail later at send time, not here; the credential is stored via the secrets envelope and is not echoed back in plaintext; this is a singleton platform setting, so posting again replaces the current default rather than creating a second provider.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "admin token required",
+      "when": "x-admin-ops-token header is missing, empty, or matches neither the env ADMIN_OPS_TOKEN break-glass secret (constant-time compare) nor the SHA-256 hash of any active row in admin.ops_token; revoked/expired DB tokens keep working until the per-replica cache expires (ADMIN_OPS_TOKEN_CACHE_TTL_MS, default 30s) unless a Redis invalidation broadcast lands first"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "kind is required (smtp|sendgrid|ses)",
+      "when": "kind is missing, empty, or not one of smtp, sendgrid, ses"
+    },
+    {
+      "status": 500,
+      "code": "InternalServerError",
+      "message": "<provider error message>",
+      "when": "setPlatformEmailProvider() throws — credential encryption/secret storage failing, a malformed config failing to store, or Postgres unavailable"
+    }
+  ],
   "requiresAuth": false,
   "taskId": "a91d4bda-83a3-4a4f-b97f-f71168c23351",
   "sprintId": "efcf9cbd-5e84-469e-946e-efcabf8c88e1",

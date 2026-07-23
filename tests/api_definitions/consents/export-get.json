@@ -32,5 +32,26 @@
     "data": {
       "receipts": "array"
     }
-  }
+  },
+  "description": "Exports consent receipts as a JSONL-friendly array under { data: { receipts } } with status 200 - the DSAR / portability surface. The person_id query parameter is optional: when supplied the export is filtered to that person, and when omitted EVERY receipt in the store is returned. Edge cases: the export is unpaginated and has no limit, so calling it without person_id on a large store returns the entire table in one response; an unknown person_id returns 200 with an empty receipts array rather than a 404; revoked and expired receipts are included (this is a full history, not a live-consent view); no tenant scoping is applied - the only filter is person_id; requires a valid JWT.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "Authorization header absent or not in Bearer form (requireAuth / gateway default-deny authGate)"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "Bearer token fails JWT verification or is expired (requireAuth / gateway default-deny authGate)"
+    },
+    {
+      "status": 500,
+      "code": "InternalError",
+      "message": "InternalError",
+      "when": "exportReceipts throws - includes a non-UUID person_id (Postgres 22P02) and database errors"
+    }
+  ]
 }

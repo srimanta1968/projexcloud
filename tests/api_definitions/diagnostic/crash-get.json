@@ -2,6 +2,27 @@
   "name": "GET /api/diagnostic/crash — sdk-diagnostic-telemetry",
   "endpoint": "/api/diagnostic/crash",
   "method": "GET",
+  "description": "Lists the crash snapshots recorded for one device, selected by the required device_uuid query param. Edge cases: a missing device_uuid query param -> 400; a device_uuid with no crashes is NOT a 404 - it returns 200 with an empty data array; the endpoint accepts no pagination or time-window params, so a chatty device returns its full crash history in one response.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "Authorization header absent or not in the form \"Bearer <jwt>\" — enforced by the gateway default-deny auth gate, not by the route itself"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "JWT signature invalid, malformed, or past its exp claim — enforced by the gateway default-deny auth gate, not by the route itself"
+    },
+    {
+      "status": 400,
+      "code": "BadRequest",
+      "message": "device_uuid query param required",
+      "when": "the device_uuid query param is absent or empty"
+    }
+  ],
   "requiresAuth": true,
   "expectedStatus": 200,
   "sdk": "sdk-diagnostic-telemetry",

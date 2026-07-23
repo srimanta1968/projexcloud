@@ -25,5 +25,32 @@
       },
       "expectedStatus": 200
     }
+  ],
+  "description": "Reads one canonical address row by address_id and returns 200 with { data: { address } }. Read-only, requires a valid JWT; the record is not tenant-scoped (geo.address is a platform-wide canonical table), so any authenticated caller can read any address_id. Edge cases: unknown but well-formed UUID returns 404, an address_id that was consumed as the loser of POST /api/geo/merge is deleted and therefore also 404s afterwards, and a non-UUID address_id reaches the Postgres UUID cast unguarded (22P02) and surfaces as a 500.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "Authorization header absent or not in Bearer form (requireAuth / gateway default-deny authGate)"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "Bearer token fails JWT verification or is expired (requireAuth / gateway default-deny authGate)"
+    },
+    {
+      "status": 404,
+      "code": "NotFound",
+      "message": "NotFound",
+      "when": "No geo.address row exists for the supplied address_id (never created, or deleted as the loser of a merge)"
+    },
+    {
+      "status": 500,
+      "code": "Internal Server Error",
+      "message": "invalid input syntax for type uuid",
+      "when": "address_id is not a valid UUID - the handler has no format guard, so the Postgres 22P02 error escapes as an unhandled 500"
+    }
   ]
 }

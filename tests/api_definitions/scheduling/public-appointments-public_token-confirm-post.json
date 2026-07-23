@@ -1,0 +1,42 @@
+{
+  "name": "POST /api/scheduling/public/appointments/:public_token/confirm - Invitee confirms (double opt-in)",
+  "endpoint": "/api/scheduling/public/appointments/:public_token/confirm",
+  "sdk": "sdk-scheduling",
+  "sourceFile": "packages/sdk-scheduling/src/server/publicRoutes.ts",
+  "method": "POST",
+  "requiresAuth": false,
+  "expectedStatus": 200,
+  "taskId": "ca26e4ff-f683-4905-aaa3-2a85ad87b90d",
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "priority": 74,
+  "testability": "auto",
+  "description": "PUBLIC: the invitee confirms a booking they made through a shared link, moving it pending -> confirmed, stamping confirmed_at, recording a booking_event and firing the confirmation notice. This is the double opt-in step: a public booking is created 'pending' because the invitee's email is unverified at booking time, so an unverified address never holds a confirmed slot on the host's calendar. AUTHORISATION IS THE TOKEN: the path parameter is the high-entropy public_token issued at booking, NOT the appointment_id — accepting a raw appointment_id here would be an IDOR (guess an id, confirm or cancel a stranger's meeting), so passing one returns 404. Edge cases: an unknown, wrong or already-used-then-cancelled token is a flat 404 that reveals nothing; confirming an already-confirmed appointment is idempotent (confirmed_at is preserved via COALESCE) rather than an error; confirming a cancelled or completed appointment fails the lifecycle guard.",
+  "dependsOn": [
+    "POST /api/auth/signup-tenant",
+    "POST /api/scheduling/meeting-types",
+    "POST /api/scheduling/scheduling-links",
+    "POST /api/scheduling/public/links/:slug/book"
+  ],
+  "fieldEnums": {
+    "status": ["pending", "confirmed", "cancelled", "completed", "no_show"]
+  },
+  "statusTransitions": {
+    "pending -> confirmed": "POST /api/scheduling/public/appointments/:public_token/confirm (stamps confirmed_at, emits the confirmed booking_event)",
+    "pending|confirmed -> cancelled": "POST /api/scheduling/public/appointments/:public_token/cancel"
+  },
+  "testCases": [
+    {
+      "name": "Invitee confirms the pending booking with their token",
+      "headers": { "Content-Type": "application/json" },
+      "pathParams": { "public_token": "{{cache:scheduling.public.book.response.data.public_token}}" },
+      "payload": {},
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "data": { "appointment": { "appointment_id": "string", "status": "string" } }
+      }
+    }
+  ],
+  "errorCases": [
+    { "status": 404, "code": "NotFound", "message": "NotFound", "when": "the token is unknown or wrong — including when a raw appointment_id is passed instead of the token" }
+  ]
+}

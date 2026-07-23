@@ -74,5 +74,38 @@
         "Authorization": "Bearer {{cache:auth.register.response.data.token}}"
       }
     }
+  ],
+  "description": "Advances an intent plan through its lifecycle (proposed → approved → executing → completed|abandoned, plus proposed → abandoned) by UPDATEing semantic.intent_plan.status, returning 200 {success:true, data:{plan_id, status}}; reaching 'completed' or 'abandoned' also emits a semantic.plan.executed.v1 audit entry. QA edge cases: the handler does NOT enforce the transition graph — the UPDATE is unconditional, so jumping proposed → completed, or moving backwards from executing → proposed, both succeed with 200. Re-posting the same status is idempotent (row updates to the same value, still 200). Only presence of `status` is validated (400 when missing, empty string, or an empty body); everything after that is wrapped in a single catch that maps EVERY error to 404, so a status outside the DB enum ('shipped'), a non-UUID :id ('abc' → invalid input syntax for type uuid), and a valid-but-unknown plan_id all return 404 {success:false, error:...} — never 400 or 500 for those cases. The distinguishing signal is the `error` string, not the status code. The UPDATE has no tenant predicate, so any authenticated caller holding a plan_id can transition it; the path is not on the gateway public allowlist, so a valid tenant JWT is required.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "No Authorization: Bearer header — authGate.ts default-deny gate rejects /plan/:id/status before the handler"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "Bearer token fails verifyJwt (bad signature, malformed, or expired)"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "status required",
+      "when": "Body missing entirely, or body.status absent / empty string"
+    },
+    {
+      "status": 404,
+      "code": "NotFound",
+      "message": "[sdk-semantic] plan '<id>' not found",
+      "when": "The UPDATE matches no row — plan_id is a valid UUID but does not exist"
+    },
+    {
+      "status": 404,
+      "code": "PlanStatusUpdateFailed",
+      "message": "<Postgres error message, e.g. invalid input syntax for type uuid / invalid input value for enum plan_status>",
+      "when": "updatePlanStatus throws for any other reason — non-UUID :id, a status value outside the DB enum, or a DB failure; the handler's catch maps every error to 404"
+    }
   ]
 }

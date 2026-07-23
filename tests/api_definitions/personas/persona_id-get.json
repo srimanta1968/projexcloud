@@ -29,5 +29,32 @@
       },
       "expectedStatus": 200
     }
+  ],
+  "description": "Fetches a single persona by id. Edge cases: an unknown persona_id returns 404 NotFound; a :persona_id that is not a valid UUID is not validated by the handler and fails in Postgres as a 500; the lookup is by id alone and is NOT filtered by the caller's tenant, so any authenticated caller holding a persona_id can read it.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "Authorization header absent or not in 'Bearer <jwt>' form (requireAuth preHandler)"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "JWT signature invalid, malformed, or exp has elapsed"
+    },
+    {
+      "status": 404,
+      "code": "NotFound",
+      "message": "NotFound",
+      "when": "no persona row exists for :persona_id"
+    },
+    {
+      "status": 500,
+      "code": "Internal Server Error",
+      "message": "Internal Server Error",
+      "when": ":persona_id is not a valid UUID — the route has no try/catch, so the rejection surfaces as Fastify's default 500"
+    }
   ]
 }

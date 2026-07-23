@@ -11,7 +11,13 @@
   "sourceFile": "packages/sdk-social/src/server/routes.ts",
   "_generated": true,
   "fieldEnums": {
-    "network": ["twitter", "linkedin", "instagram", "facebook", "tiktok"]
+    "network": [
+      "twitter",
+      "linkedin",
+      "instagram",
+      "facebook",
+      "tiktok"
+    ]
   },
   "testCases": [
     {
@@ -29,9 +35,47 @@
     }
   ],
   "expectedResponse": {
-    "data": { "handle": { "handle_id": "string", "network": "string" } }
+    "data": {
+      "handle": {
+        "handle_id": "string",
+        "network": "string"
+      }
+    }
   },
   "captureResponse": {
     "social.handles.create.response.data.handle.handle_id": "data.handle.handle_id"
-  }
+  },
+  "description": "Authorizes a social network handle for a tenant and binds it to the persona permitted to act on it, returning 201 with the handle record. Edge cases: tenant_id, network, external_handle_id and authorized_persona_id are all mandatory and a missing one returns the generic \"missing fields\" ValidationError without naming the field; network is enum-checked against twitter, linkedin, instagram, facebook and tiktok and anything else is a separate \"invalid network\" 400; the route performs no duplicate check, so re-authorizing the same tenant + network + external_handle_id either creates a second row or trips a database unique constraint that surfaces as a 500 rather than a 409; tenant_id is read from the body rather than the JWT, so the route itself does not prevent naming another tenant; an authorized_persona_id that does not exist violates a foreign key at insert and also surfaces as 500.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "No Authorization: Bearer <jwt> header on a requireAuth route"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "Bearer token fails verifyJwt (bad signature, malformed, or exp in the past)"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "missing fields",
+      "when": "Any of tenant_id, network, external_handle_id or authorized_persona_id is absent or empty"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "invalid network",
+      "when": "network is supplied but is not one of twitter|linkedin|instagram|facebook|tiktok"
+    },
+    {
+      "status": 500,
+      "code": "InternalError",
+      "message": "Internal Server Error",
+      "when": "authorizeHandle throws — e.g. tenant_id or authorized_persona_id violates a foreign key, a duplicate handle trips a unique constraint, or the database is unreachable"
+    }
+  ]
 }

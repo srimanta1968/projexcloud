@@ -13,6 +13,7 @@
     "POST /api/auth/signup-tenant",
     "POST /api/lead-scoring/models"
   ],
+  "description": "Fetches one lead-scoring model by model_id, returning model_id, tenant_id, vertical, trained_at (ISO or null), feature_set and status. QA edge cases: an unknown model_id returns 404 'not found'; the query is not tenant-scoped, so any caller with a model_id reads that tenant's model metadata; trained_at is null for models still in 'training' status, so consumers must handle the null; the response contains the model row only — feature weights require the separate /weights endpoint.",
   "testCases": [
     {
       "name": "Fetch a model by id",
@@ -34,5 +35,25 @@
       "feature_set": "object",
       "status": "string"
     }
-  }
+  },
+  "errorCases": [
+    {
+      "status": 404,
+      "code": "NotFound",
+      "message": "not found",
+      "when": "no lead_scoring.model row matches the :id path param"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "no Authorization header, or it is not of the form 'Bearer <jwt>' (api-gateway default-deny authGate, AUTH_GATE_MODE=enforce)"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "the bearer JWT fails verifyJwt — bad signature, wrong JWT_SECRET, or exp already elapsed (api-gateway default-deny authGate, AUTH_GATE_MODE=enforce)"
+    }
+  ]
 }

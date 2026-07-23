@@ -64,7 +64,7 @@ import {
 } from '@projexlight/sdk-meter';
 import { server as secretsServer } from '@projexlight/sdk-secrets';
 import { migrationsDir as tenantMigrations, server as tenantServer, createTenant as tenantCreate, listTenants as tenantList, ensureApp as appEnsure } from '@projexlight/sdk-tenant';
-import { migrationsDir as consentMigrations, server as consentServer } from '@projexlight/sdk-consent';
+import { migrationsDir as consentMigrations, server as consentServer, checkConsent } from '@projexlight/sdk-consent';
 import { migrationsDir as assetMigrations, registerAsset as assetRegister, getTwin as assetGetTwin, bootstrapAssetClickHouseSchema, ingestReadings as assetIngestReadings, startSensorRollupJob, runSensorRollup, queryReadings as assetQueryReadings } from '@projexlight/sdk-asset';
 import {
   migrationsDir as commandMigrations,
@@ -125,6 +125,10 @@ import {
   registerApnsPushAdapter,
   registerFcmPushAdapter,
   registerSlackOutboundAdapter,
+  makeSequenceStepSender,
+  setPreSendGuard,
+  setSmsConsentHandler,
+  setDeliveryReputationHook,
   sendPlatformEmail,
 } from '@projexlight/sdk-notification';
 import {
@@ -164,6 +168,7 @@ import {
   migrationsDir as approvalMigrations,
   server as approvalServer,
   startSlaTimer,
+  submitRequest as submitApprovalRequest,
 } from '@projexlight/sdk-approval';
 import {
   migrationsDir as tenantLifecycleMigrationsDir,
@@ -183,6 +188,8 @@ import {
 import {
   migrationsDir as crmMigrations,
   server as crmServer,
+  logCall as crmLogCall,
+  logVoicemail as crmLogVoicemail,
 } from '@projexlight/sdk-crm';
 import {
   migrationsDir as serviceRequestMigrations,
@@ -323,9 +330,19 @@ import { migrationsDir as assignmentMigrations, server as assignmentServer } fro
 // P14/P15 InboundCRM SDK batch — routes + migrations were built but not yet
 // wired into the gateway boot; mount them here so their schemas land in the
 // live DB and their HTTP surfaces are reachable.
-import { migrationsDir as sequenceMigrations, server as sequenceServer, startSequenceExecutor } from '@projexlight/sdk-sequence';
-import { migrationsDir as handoffMigrations, server as handoffServer } from '@projexlight/sdk-handoff';
+import { migrationsDir as sequenceMigrations, server as sequenceServer, startSequenceExecutor, setSequenceStepSender } from '@projexlight/sdk-sequence';
+import { migrationsDir as schedulingMigrations, server as schedulingServer, startSchedulingReminderWorker } from '@projexlight/sdk-scheduling';
+import { migrationsDir as deliverabilityMigrations, server as deliverabilityServer, startReplySyncWorker, suppressionService as deliverabilitySuppression, reputationService as deliverabilityReputation, isChannelPaused } from '@projexlight/sdk-deliverability';
+import { migrationsDir as offerCatalogMigrations, server as offerCatalogServer } from '@projexlight/sdk-offer-catalog';
+import { migrationsDir as handoffMigrations, server as handoffServer, registerHandoffSaga, setHandoffApprovalCreator } from '@projexlight/sdk-handoff';
 import { migrationsDir as incidentMigrations, server as incidentServer } from '@projexlight/sdk-incident';
+import {
+  migrationsDir as twilioVoiceMigrations,
+  server as twilioVoiceServer,
+  setRecordingConsentChecker,
+  setVoiceCallEventHandler,
+  isVoicemailOutcome,
+} from '@projexlight/connector-twilio-voice';
 import { migrationsDir as leadScoringMigrations }         from '@projexlight/sdk-lead-scoring';
 import {
   migrationsDir as evidenceMigrations,
@@ -557,8 +574,14 @@ app.register(eventServer.registerRoutes);
 app.register(crmServer.registerRoutes);
 app.register(assignmentServer.registerRoutes);
 app.register(sequenceServer.registerRoutes);
+app.register(schedulingServer.registerRoutes);
+app.register(schedulingServer.registerPublicRoutes);
+app.register(deliverabilityServer.registerRoutes);
+app.register(offerCatalogServer.registerRoutes);
 app.register(handoffServer.registerRoutes);
 app.register(incidentServer.registerRoutes);
+app.register(twilioVoiceServer.registerRoutes);
+app.register(twilioVoiceServer.registerWebhookRoutes);
 app.register(serviceRequestServer.registerRoutes);
 app.register(contentServer.registerRoutes);
 app.register(campaignServer.registerRoutes);
@@ -984,6 +1007,20 @@ app.register(async (instance) => {
   });
 });
 
+/**
+ * Map a Twilio call status onto the sdk-crm call_disposition vocabulary
+ * (P15·E4/E5 bridge). 'canceled' maps to 'failed': the leg never connected, and
+ * 'no_answer' would wrongly imply the far end was reached and did not pick up.
+ */
+function crmDisposition(status: string): 'answered' | 'no_answer' | 'busy' | 'failed' {
+  switch (status) {
+    case 'completed': return 'answered';
+    case 'busy': return 'busy';
+    case 'no-answer': return 'no_answer';
+    default: return 'failed';   // canceled | failed | anything unexpected
+  }
+}
+
 const start = async (): Promise<void> => {
   try {
     initPool({
@@ -1181,8 +1218,12 @@ const start = async (): Promise<void> => {
       // P14/P15 — InboundCRM SDK batch. Self-contained schemas (no cross-SDK
       // hard FKs; deal_id/subject refs are loose), so ordering is unconstrained.
       { sdk: 'sdk-sequence',            dir: sequenceMigrations },
+      { sdk: 'sdk-scheduling',          dir: schedulingMigrations },
+      { sdk: 'sdk-deliverability',      dir: deliverabilityMigrations },
+      { sdk: 'sdk-offer-catalog',       dir: offerCatalogMigrations },
       { sdk: 'sdk-handoff',             dir: handoffMigrations },
       { sdk: 'sdk-incident',            dir: incidentMigrations },
+      { sdk: 'connector-twilio-voice',  dir: twilioVoiceMigrations },
     ]);
 
     // P9.2 — incremental catalog sync (Epic A, TK-3461). OPT-IN: embedding the
@@ -3715,10 +3756,125 @@ const start = async (): Promise<void> => {
     // P14·E1 scheduler: sdk-sequence step-executor tick. OFF by default (opt-in)
     // — the app must first wire a step sender (sdk-notification bridge) via
     // setSequenceStepSender, else touches emit through the default no-op.
+    // P14·E4 (TK-3631): bridge sdk-sequence step sends to sdk-notification's unified
+    // transport (email SES/SMTP, SMS Twilio, quiet-hours-aware). The default resolver
+    // is a no-op (emit-only) until the app wires setSequenceDestinationResolver.
+    setSequenceStepSender(makeSequenceStepSender());
+
+    // Pre-send guard: skip a suppressed recipient / reputation-paused channel BEFORE the
+    // provider is called (bridges sdk-notification's transport to sdk-deliverability).
+    setPreSendGuard(async ({ tenant_id, channel, destination }) => {
+      if (channel !== 'email' && channel !== 'sms') return { blocked: false };
+      try {
+        const suppressed = await deliverabilitySuppression.isSuppressed({ tenantId: tenant_id, channel, address: destination });
+        if (suppressed) return { blocked: true, reason: 'recipient is suppressed' };
+        if (await isChannelPaused(tenant_id, channel)) return { blocked: true, reason: 'channel paused for reputation' };
+      } catch { /* fail-open: never block a send on a guard error */ }
+      return { blocked: false };
+    });
+
+    // Inbound SMS STOP/START keywords propagate to the sms suppression list (TK-3634/3634).
+    setSmsConsentHandler(async ({ tenant_id, from_number, intent }) => {
+      if (intent === 'opt_out') {
+        await deliverabilitySuppression.suppress({ tenantId: tenant_id, channel: 'sms', address: from_number, reason: 'optout', source: 'sms:STOP' });
+        return { action: 'suppressed' };
+      }
+      if (intent === 'opt_in') {
+        await deliverabilitySuppression.unsuppress({ tenantId: tenant_id, channel: 'sms', address: from_number });
+        return { action: 'resubscribed' };
+      }
+      return { action: 'none' };
+    });
+
+    // Delivery-status callbacks feed the deliverability reputation counters (TK-3636).
+    setDeliveryReputationHook(async ({ tenant_id, channel, delivered, bounced, complained }) => {
+      await deliverabilityReputation.recordSendOutcome({ tenantId: tenant_id, channel, delivered, bounced, complained });
+    });
+
+    // P15·E4 (TK-3654) — recording-consent gate. connector-twilio-voice carries no
+    // sdk-consent dependency, so the lookup is injected here. The connector fails
+    // CLOSED: anything that is not an affirmative grant (no subject persona, no
+    // receipt, a lookup error) withholds the recording, so an unconfigured
+    // purpose never silently records anyone.
+    const recordingPurposeId = process.env.VOICE_RECORDING_CONSENT_PURPOSE_ID || 'call_recording';
+    setRecordingConsentChecker(async ({ tenant_id, subject_persona_id }) => {
+      if (!subject_persona_id) return { decision: 'unknown' };
+      const result = await checkConsent({
+        person_id: subject_persona_id,
+        purpose_id: recordingPurposeId,
+        processor: process.env.VOICE_RECORDING_CONSENT_PROCESSOR || 'connector-twilio-voice',
+        jurisdiction: process.env.VOICE_RECORDING_CONSENT_JURISDICTION || 'us',
+      });
+      void tenant_id;
+      // An expired or revoked receipt reads as granted:false — an explicit denial.
+      return result.granted
+        ? { decision: 'granted', receipt_id: result.receipt_id }
+        : { decision: result.receipt_id ? 'denied' : 'unknown' };
+    });
+
+    // P15·E4 (TK-3654) — bridge telephony call events into the sdk-crm timeline.
+    // The encounter is the CRM anchor and the connector does not know it, so it
+    // travels on the call metadata (placeCall metadata.encounter_id); without it
+    // there is nothing to attach the activity to, so the event is skipped rather
+    // than logged against a fabricated encounter.
+    setVoiceCallEventHandler(async (call, kind) => {
+      if (kind === 'status' && !['completed', 'busy', 'no-answer', 'canceled', 'failed'].includes(call.status)) {
+        return; // only log once the call has actually finished
+      }
+      const payload = (call.payload ?? {}) as Record<string, unknown>;
+      const encounter_id = typeof payload.encounter_id === 'string' ? payload.encounter_id : null;
+      const actor_persona_id = call.initiated_by_persona_id ?? call.subject_persona_id;
+      if (!encounter_id || !actor_persona_id) return;
+
+      const common = {
+        encounter_id,
+        actor_persona_id,
+        call_direction: call.direction,
+        call_duration_seconds: call.duration_seconds,
+        phone_number: call.direction === 'inbound' ? call.from_number : call.to_number,
+        // Only ever propagate a recording pointer the consent gate actually stored.
+        recording_url: call.recording_url,
+        recording_consent: call.recording_consent,
+        external_call_id: call.external_id,
+      };
+
+      if (call.is_voicemail || isVoicemailOutcome(call.answered_by)) {
+        await crmLogVoicemail({
+          ...common,
+          call_disposition: 'voicemail',
+          voicemail_transcript: call.voicemail_transcript,
+          summary: `Voicemail reached on ${call.direction} call`,
+        });
+        return;
+      }
+      await crmLogCall({
+        ...common,
+        call_disposition: crmDisposition(call.status),
+        summary: `${call.direction} call ${call.status}`,
+      });
+    });
+
     const sequenceExecutor = startSequenceExecutor({
       enabled: process.env.SEQUENCE_EXECUTOR_ENABLED === 'true',
       intervalMs: parseInt(process.env.SEQUENCE_EXECUTOR_INTERVAL_MS || '30000', 10),
       batchSize: parseInt(process.env.SEQUENCE_EXECUTOR_BATCH_SIZE || '50', 10),
+    });
+
+    // P14·E2 scheduler: sdk-scheduling reminder drain + no-show scan. OFF by
+    // default (opt-in) — the app must wire a booking notifier (setBookingNotifier)
+    // for reminders to actually deliver, else they emit through the default no-op.
+    const schedulingReminderWorker = startSchedulingReminderWorker({
+      enabled: process.env.SCHEDULING_WORKER_ENABLED === 'true',
+      intervalMs: parseInt(process.env.SCHEDULING_WORKER_INTERVAL_MS || '60000', 10),
+      batchSize: parseInt(process.env.SCHEDULING_WORKER_BATCH_SIZE || '50', 10),
+      noShowGraceMinutes: parseInt(process.env.SCHEDULING_NO_SHOW_GRACE_MINUTES || '10', 10),
+    });
+
+    // P14·E3 worker: sdk-deliverability IMAP reply sync. OFF by default (opt-in) —
+    // needs a real IMAP fetcher wired via setImapFetcher, else it no-ops.
+    const deliverabilityReplyWorker = startReplySyncWorker({
+      enabled: process.env.DELIVERABILITY_REPLY_WORKER_ENABLED === 'true',
+      intervalMs: parseInt(process.env.DELIVERABILITY_REPLY_INTERVAL_MS || '120000', 10),
     });
 
     // P15·E5 scheduler: sdk-connectors sync retry/backoff worker. OFF by default
@@ -3760,6 +3916,29 @@ const start = async (): Promise<void> => {
       batchSize: parseInt(process.env.WORKFLOW_DURABLE_WORKER_BATCH_SIZE || '20', 10),
     });
 
+    // P15·E2 (TK-3647): register the sales→delivery handoff saga as an sdk-workflow
+    // definition + in-process step/compensation handlers. No new engine — the durable
+    // worker above drives it. Idempotent; the definition is inserted once.
+    await registerHandoffSaga().catch((err) => app.log.warn({ err }, 'registerHandoffSaga failed'));
+
+    // P15·E2 (TK-3648): route the CS accept/reject gate through sdk-approval. When a
+    // handoff approval route is configured, file a real approval.request (subject = the
+    // handoff); otherwise sdk-handoff falls back to its synthetic ref. No new gate.
+    const handoffApprovalRouteId = process.env.HANDOFF_APPROVAL_ROUTE_ID;
+    if (handoffApprovalRouteId) {
+      setHandoffApprovalCreator(async (ctx) => {
+        const { request } = await submitApprovalRequest({
+          tenant_id: ctx.tenant_id,
+          route_id: handoffApprovalRouteId,
+          subject_kind: 'handoff.handoff',
+          subject_id: ctx.handoff_id,
+          initiator_persona_id: ctx.from_persona_id,
+          reason: 'Sales→Delivery handoff CS accept/reject',
+        });
+        return { approval_id: request.request_id };
+      });
+    }
+
     app.addHook('onClose', async (): Promise<void> => {
       rotationScheduler.stop();
       auditVerifier.stop();
@@ -3771,6 +3950,8 @@ const start = async (): Promise<void> => {
       webhookDelivery.stop();
       connectorsRetryWorker.stop();
       sequenceExecutor.stop();
+      schedulingReminderWorker.stop();
+      deliverabilityReplyWorker.stop();
       approvalSlaTimer.stop();
       tenantLifecycleScheduler.stop();
       workflowDurableWorker.stop();
@@ -3779,7 +3960,16 @@ const start = async (): Promise<void> => {
     });
 
     await app.listen({ port: config.port, host: '0.0.0.0' });
-    console.log(`api-gateway listening on :${config.port}`);
+    // Prominent, greppable startup banner so it's obvious which port the gateway
+    // bound (it shares `pnpm run dev` output with the portals). Override the port
+    // via GATEWAY_PORT in the root .env.
+    console.log(
+      `\n${'='.repeat(60)}\n` +
+        `  🚀 api-gateway listening on http://localhost:${config.port}\n` +
+        `     health: http://localhost:${config.port}/health\n` +
+        `     (set GATEWAY_PORT in root .env to change this port)\n` +
+        `${'='.repeat(60)}\n`,
+    );
   } catch (err) {
     app.log.error(err);
     process.exit(1);

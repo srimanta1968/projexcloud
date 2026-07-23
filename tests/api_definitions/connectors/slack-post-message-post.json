@@ -15,6 +15,7 @@
   "dependsOn": [
     "POST /api/auth/register"
   ],
+  "description": "Server-side wrapper over Slack chat.postMessage. channel and text are both required and must be non-empty strings; blocks (array) and thread_ts (string) are optional passthroughs. QA edge cases: Slack-side rejections are returned as HTTP 400 SlackError carrying Slack's error code in details — so channel_not_found, not_in_channel, invalid_auth and a revoked or missing bot token ALL arrive as 400, never as 401/403/404, and tests must assert details rather than status; a non-string or empty channel/text is a local 400 ValidationError before any Slack call; only a thrown transport error becomes a 500 InternalError; the call is not idempotent — there is no dedupe key, so a retry posts a second visible message into the channel, which makes at-least-once retry logic dangerous here; blocks is passed through only when it is an array, and a malformed blocks payload surfaces as a Slack 400 rather than local validation.",
   "testCases": [
     {
       "name": "postMessage returns 400 SlackError when SLACK_BOT_TOKEN not configured",
@@ -30,5 +31,37 @@
   ],
   "captureResponse": {
     "connectors.slack-post-message.response.data.ts": "data.ts"
-  }
+  },
+  "errorCases": [
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "channel + text required",
+      "when": "body.channel or body.text is absent, empty, or not a string"
+    },
+    {
+      "status": 400,
+      "code": "SlackError",
+      "message": "<Slack error code, e.g. channel_not_found / not_in_channel / invalid_auth / invalid_blocks>",
+      "when": "Slack responds with ok:false to chat.postMessage — including auth failures and unknown channels"
+    },
+    {
+      "status": 500,
+      "code": "InternalError",
+      "message": "InternalError",
+      "when": "the chatPostMessage call throws — network failure reaching slack.com or an unparseable response"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "no Authorization header, or it is not of the form 'Bearer <jwt>' (requireAuth preHandler)"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "the bearer JWT fails verifyJwt — bad signature, wrong JWT_SECRET, or exp already elapsed (requireAuth preHandler)"
+    }
+  ]
 }

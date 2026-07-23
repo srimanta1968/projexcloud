@@ -33,5 +33,32 @@
         "iql_source": "string"
       }
     }
-  }
+  },
+  "description": "Reads one policy bundle by its policy_id path param and returns it under data.policy. Requires a valid tenant JWT (requireAuth). Edge cases: the lookup is by id alone - the caller JWT tenant is never compared to the policy, so any authenticated caller can read any policy bundle including its IQL source; a well-formed but unknown policy_id returns 404 NotFound with the id echoed in details[], while a malformed non-UUID id fails the Postgres uuid cast inside the try/catch and is reported as a 500 InternalError rather than a 404 or 400; the response returns exactly the version row the id addresses - there is no \"latest version\" resolution here.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "Authorization header absent or not in Bearer form (requireAuth)"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "Bearer token fails JWT verification (requireAuth)"
+    },
+    {
+      "status": 404,
+      "code": "NotFound",
+      "message": "No policy <policy_id>",
+      "when": "getPolicy returns no row for the policy_id"
+    },
+    {
+      "status": 500,
+      "code": "InternalError",
+      "message": "InternalError",
+      "when": "getPolicy throws - a non-UUID policy_id failing the uuid cast, or any DB error"
+    }
+  ]
 }

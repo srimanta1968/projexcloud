@@ -1,0 +1,65 @@
+{
+  "sdk": "sdk-deliverability",
+  "sourceFile": "packages/sdk-deliverability/src/server/routes.ts",
+  "taskId": "9776c8ed-6c63-4518-bfd6-f9ba50bd389c",
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "featureId": "e205e703-6dfa-4dbb-a281-be5b4512960a",
+  "epicId": "287f42d8-2045-4105-8948-5e1f25fba3ba",
+  "testability": "auto",
+  "name": "POST /api/deliverability/webhooks/:provider - Provider bounce/complaint webhook",
+  "endpoint": "/api/deliverability/webhooks/:provider",
+  "method": "POST",
+  "requiresAuth": false,
+  "expectedStatus": 200,
+  "priority": 21,
+  "description": "PUBLIC provider webhook receiver (on the gateway allowlist) — HMAC-verified when a signing secret is configured for the (tenant, provider), else accepted (dev/unconfigured). Classifies each event as hard_bounce/soft_bounce/complaint (SES/SendGrid/Mailgun/Postmark shapes + a normalized envelope) and AUTO-SUPPRESSES the recipient on hard bounce or complaint. tenant_id is carried on the per-tenant webhook URL via ?tenant_id=. Returns 401 if a configured signature fails to verify.",
+  "dependsOn": [
+    "POST /api/auth/signup-tenant"
+  ],
+  "testCases": [
+    {
+      "name": "Deliver a hard-bounce notification (no secret configured -> accepted, auto-suppress)",
+      "headers": {
+        "Content-Type": "application/json"
+      },
+      "pathParams": {
+        "provider": "{{static:postmark}}"
+      },
+      "queryParams": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}"
+      },
+      "payload": {
+        "event_type": "hard_bounce",
+        "address": "{{dynamic:email}}",
+        "message_id": "msg-{{dynamic:uuid}}"
+      },
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "data": {
+          "processed": "number",
+          "suppressed": "number"
+        }
+      }
+    }
+  ],
+  "errorCases": [
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "tenant_id query param required",
+      "when": "tenant_id missing"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "unknown provider",
+      "when": "provider not in the supported set"
+    },
+    {
+      "status": 401,
+      "code": "InvalidSignature",
+      "message": "webhook HMAC signature verification failed",
+      "when": "a signing secret is configured for (tenant, provider) and the signature does not match"
+    }
+  ]
+}

@@ -22,5 +22,32 @@
       },
       "expectedStatus": 200
     }
+  ],
+  "description": "Fetches a tenant by id. Edge cases: an unknown :tenant_id returns 404 with the id echoed in details[]; the lookup is by id alone and is not scoped to the caller, so any authenticated caller holding a tenant_id can read that tenant; a :tenant_id that is not a valid UUID reaches the query and is handled by the shared uncaught() mapper — it matches none of the foreign-key / duplicate / not-found text patterns and therefore returns 500 InternalError rather than 400.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "Authorization header absent or not in 'Bearer <jwt>' form (requireAuth preHandler)"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "JWT signature invalid, malformed, or exp has elapsed"
+    },
+    {
+      "status": 404,
+      "code": "NotFound",
+      "message": "No tenant with id <tenant_id>",
+      "when": "no tenant row matches :tenant_id"
+    },
+    {
+      "status": 500,
+      "code": "InternalError",
+      "message": "InternalError",
+      "when": "Unexpected service/DB failure (connection loss, or a constraint the handler does not map)"
+    }
   ]
 }

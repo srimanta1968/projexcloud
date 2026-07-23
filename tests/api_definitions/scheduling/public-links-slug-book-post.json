@@ -1,0 +1,60 @@
+{
+  "name": "POST /api/scheduling/public/links/:slug/book - Anonymous booking via a shared link",
+  "endpoint": "/api/scheduling/public/links/:slug/book",
+  "sdk": "sdk-scheduling",
+  "sourceFile": "packages/sdk-scheduling/src/server/publicRoutes.ts",
+  "method": "POST",
+  "requiresAuth": false,
+  "expectedStatus": 201,
+  "taskId": "ca26e4ff-f683-4905-aaa3-2a85ad87b90d",
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "priority": 71,
+  "testability": "auto",
+  "description": "PUBLIC (anonymous) booking: a prospect opens a shared scheduling link and books without any tenant login, so this route is deliberately outside requireAuth and the gateway allowlists the /api/scheduling/public/ prefix. It is written for an untrusted caller. end_time is DERIVED from the link's meeting type when omitted, so a client cannot book a 6-hour slot against a 30-minute meeting type. The link's own guardrails are enforced SERVER-side: a start_time beyond max_days_ahead or inside min_notice_minutes is rejected 400 even though the UI also shows them. The appointment is created as 'pending', NOT confirmed — the invitee's email is unverified at booking time, so double opt-in is what stops an unverified address from holding a confirmed slot on the host's calendar; confirming via the returned token moves it pending -> confirmed. The response carries a high-entropy public_token which is the ONLY key the public confirm/cancel routes accept (acting on a raw appointment_id would be an IDOR). Edge cases: an unknown, deactivated or expired slug is an indistinguishable 404 — never a 403 that would confirm the slug exists; a slot taken between rendering and submitting returns 409 via the transactional double-book check; 400 when start_time, invitee_name or invitee_email is missing.",
+  "dependsOn": [
+    "POST /api/auth/signup-tenant",
+    "POST /api/scheduling/meeting-types",
+    "POST /api/scheduling/scheduling-links"
+  ],
+  "fieldEnums": {
+    "status": ["pending", "confirmed", "cancelled", "completed", "no_show"]
+  },
+  "statusTransitions": {
+    "(none) -> pending": "POST /api/scheduling/public/links/:slug/book (anonymous booking, email unverified)",
+    "pending -> confirmed": "POST /api/scheduling/public/appointments/:public_token/confirm (double opt-in; stamps confirmed_at)",
+    "pending|confirmed -> cancelled": "POST /api/scheduling/public/appointments/:public_token/cancel"
+  },
+  "testCases": [
+    {
+      "name": "Prospect books a slot through the public link",
+      "headers": { "Content-Type": "application/json" },
+      "pathParams": { "slug": "{{cache:scheduling.scheduling-link.create.response.data.link.slug}}" },
+      "payload": {
+        "start_time": "{{dynamic:futuredatetime+48h}}",
+        "end_time": "{{dynamic:futuredatetime+49h}}",
+        "invitee_name": "{{dynamic:name}}",
+        "invitee_email": "{{dynamic:email}}",
+        "timezone": "America/New_York",
+        "notes": "Booked from the website pricing page"
+      },
+      "expectedStatus": 201,
+      "expectedResponse": {
+        "data": {
+          "appointment": { "appointment_id": "string", "status": "string", "start_time": "string", "end_time": "string" },
+          "public_token": "string"
+        }
+      }
+    }
+  ],
+  "captureResponse": {
+    "scheduling.public.book.response.data.public_token": "data.public_token",
+    "scheduling.public.book.response.data.appointment.appointment_id": "data.appointment.appointment_id"
+  },
+  "errorCases": [
+    { "status": 400, "code": "ValidationError", "message": "start_time, invitee_name and invitee_email are required", "when": "any of the three required fields is missing" },
+    { "status": 400, "code": "BookingWindowError", "message": "start_time is beyond the link's <n>-day booking window", "when": "start_time exceeds the link's max_days_ahead" },
+    { "status": 400, "code": "BookingWindowError", "message": "start_time is inside the link's <n>-minute minimum notice", "when": "start_time is sooner than the link's min_notice_minutes" },
+    { "status": 404, "code": "NotFound", "message": "NotFound", "when": "the slug is unknown, the link is deactivated, or it has expired — all indistinguishable by design" },
+    { "status": 409, "code": "DoubleBooking", "message": "that slot was just taken", "when": "the host was booked for that window between page render and submit" }
+  ]
+}

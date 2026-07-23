@@ -47,5 +47,55 @@
   },
   "captureResponse": {
     "mcp-tools-invoke.create.response.data.invocation_id": "data.invocation_id"
-  }
+  },
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "Authorization header absent or not in Bearer form (requireAuth / gateway default-deny authGate)"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "Bearer token fails JWT verification or is expired (requireAuth / gateway default-deny authGate)"
+    },
+    {
+      "status": 400,
+      "code": "tool_id must be a valid UUID",
+      "message": "tool_id must be a valid UUID",
+      "when": "The :tool_id path segment does not match the UUID regex (e.g. an unsubstituted \":tool_id\" placeholder) - guarded up front so it cannot reach the query and 500"
+    },
+    {
+      "status": 400,
+      "code": "Required: agent_run_id, capability_token_id, args, trace_id",
+      "message": "Required: agent_run_id, capability_token_id, args, trace_id",
+      "when": "Body is absent or any of agent_run_id, capability_token_id, trace_id is missing/empty, or args is undefined (args may legitimately be null, 0 or an empty object)"
+    },
+    {
+      "status": 403,
+      "code": "<invocation result payload>",
+      "message": "Invocation outcome was not \"succeeded\"",
+      "when": "invokeMcpTool returned normally with outcome !== \"succeeded\" (policy denial, capability-token rejection, upstream tool error) - the body still carries the full result object under data"
+    },
+    {
+      "status": 403,
+      "code": "<service message>",
+      "message": "tenant opted out / registration status not enabled",
+      "when": "invokeMcpTool throws with a message containing \"opted out\" or \"status=\" - the tenant has opted out of the tool or the server registration is disabled"
+    },
+    {
+      "status": 404,
+      "code": "<service \"not found\" message>",
+      "message": "tool not found",
+      "when": "invokeMcpTool throws with a message containing \"not found\" - the tool_id, agent run or capability token does not exist"
+    },
+    {
+      "status": 500,
+      "code": "Invoke failed",
+      "message": "Invoke failed",
+      "when": "Any other invocation failure (transport error, database error)"
+    }
+  ]
 }

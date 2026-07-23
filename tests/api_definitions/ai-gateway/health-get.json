@@ -7,6 +7,7 @@
   "sdk": "sdk-ai-gateway",
   "sourceFile": "packages/sdk-ai-gateway/src/server/routes.ts",
   "testability": "auto",
+  "description": "Liveness probe for sdk-ai-gateway. Returns 200 with the constant body { sdk: 'sdk-ai-gateway', status: 'ok' }. QA edge cases: this path is on the api-gateway public allowlist (isHealth matches any path ending in /health), so it is reachable with NO Authorization header and must NOT return 401 — a 401 here means the authGate allowlist regressed, which is the one regression worth asserting; the handler has no requireAuth preHandler, touches no database, provider or credential store, and takes no parameters, so it reports only that the route is mounted and cannot detect a degraded provider or an unreachable Postgres — 'ok' is not a dependency health signal; it therefore has no error responses of its own.",
   "testCases": [
     {
       "name": "Health probe returns ok",
@@ -16,5 +17,6 @@
         "status": "ok"
       }
     }
-  ]
+  ],
+  "errorCases": []
 }

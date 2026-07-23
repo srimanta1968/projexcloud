@@ -2,6 +2,21 @@
   "name": "GET /admin/approvals/routes — api-gateway",
   "endpoint": "/admin/approvals/routes",
   "method": "GET",
+  "description": "Operator cross-tenant listing of approval routes — route_id, tenant_id, name, status, created_at and a derived sla_minutes computed as the MAX sla_minutes across the route's steps JSON array — newest-first and capped at 200 rows. QA edge cases: sla_minutes is COALESCE'd to 0, so a route whose steps carry no sla_minutes reports 0 rather than null, and 0 is also what the breaches query treats as \"no SLA\" (such routes can never appear as breached); the derived value is the maximum across steps, not per-step, so per-step SLAs are not visible here; no filtering by tenant or status and no pagination past the 200-row cap; an empty result is a 200 with data: [], never 404; a malformed steps JSON in a row can fail jsonb_array_elements and turn the whole request into a 500.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "admin token required",
+      "when": "requireAdmin() found no valid x-admin-ops-token header — missing, or matching neither env ADMIN_OPS_TOKEN nor an active admin.ops_token hash (30s cache TTL applies to revocations)"
+    },
+    {
+      "status": 500,
+      "code": "InternalServerError",
+      "message": "<database error message>",
+      "when": "the SELECT against approval.route throws — jsonb_array_elements failing on a steps column that is not a JSON array, or Postgres unavailable"
+    }
+  ],
   "requiresAuth": false,
   "expectedStatus": 200,
   "sdk": "api-gateway",

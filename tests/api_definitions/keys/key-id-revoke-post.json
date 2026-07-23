@@ -49,5 +49,38 @@
   },
   "captureResponse": {
     "keys.revoke.response.success": "success"
-  }
+  },
+  "description": "Revokes the API key named by the key_id path param, requiring a non-empty reason in the body, and returns {success:true} on the first successful revocation. Gated by the gateway default-deny authGate, so a valid tenant JWT is required. Edge cases: reason is trimmed before the check, so a whitespace-only string counts as missing and is a 400 - but note the reason is never persisted by this handler, it only gates the call; revocation is NOT idempotent in its response - a second revoke of the same key returns 404 \"key not found or already revoked\", the same status and message as a key that never existed, so the two cases are indistinguishable; there is no tenant check at all - the key is matched on key_id alone, so a caller can revoke another tenant key; a non-UUID key_id fails the uuid cast inside revokeKey and surfaces as a 500 with the raw driver message.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "Authorization header absent or not in Bearer form - gateway default-deny authGate onRequest hook (AUTH_GATE_MODE=enforce)"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "Bearer token fails JWT verification in the gateway authGate"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "reason required",
+      "when": "body.reason is absent, empty, or whitespace-only after trim"
+    },
+    {
+      "status": 404,
+      "code": "NotFound",
+      "message": "key not found or already revoked",
+      "when": "revokeKey reports no row updated - the key_id does not exist, or it was already revoked by an earlier call"
+    },
+    {
+      "status": 500,
+      "code": "RevokeFailed",
+      "message": "<error message>",
+      "when": "the sdk-api-keys dynamic import or revokeKey throws - a non-UUID key_id failing the uuid cast, or any DB error; the raw message is echoed in error"
+    }
+  ]
 }

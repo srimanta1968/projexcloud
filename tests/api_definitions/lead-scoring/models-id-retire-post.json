@@ -29,6 +29,7 @@
       }
     ]
   },
+  "description": "Flips a lead-scoring model to status='retired', returning the updated model. Unlike activate, trained_at is left untouched. QA edge cases: there is no state precondition — retiring an already-retired model succeeds and is fully idempotent; retiring the only active model for a (tenant, vertical) is permitted and leaves that pair with no active model, which then makes /models/active return 404 and every /score call for that pair fail with 400 'no active model' — that downstream blast radius is the important regression to cover; an unknown model_id maps to 404.",
   "testCases": [
     {
       "name": "Retire a model (flip status to retired)",
@@ -55,5 +56,25 @@
   "captureResponse": {
     "lead-scoring.retire.response.data.model_id": "data.model_id",
     "lead-scoring.retire.response.data.status": "data.status"
-  }
+  },
+  "errorCases": [
+    {
+      "status": 404,
+      "code": "NotFound",
+      "message": "[sdk-lead-scoring] model <id> not found",
+      "when": "the UPDATE matches no lead_scoring.model row for the :id path param"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "no Authorization header, or it is not of the form 'Bearer <jwt>' (api-gateway default-deny authGate, AUTH_GATE_MODE=enforce)"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "the bearer JWT fails verifyJwt — bad signature, wrong JWT_SECRET, or exp already elapsed (api-gateway default-deny authGate, AUTH_GATE_MODE=enforce)"
+    }
+  ]
 }

@@ -2,6 +2,27 @@
   "name": "POST /admin/sovereign/regions/:region_id/bundles \u2014 api-gateway",
   "endpoint": "/admin/sovereign/regions/:region_id/bundles",
   "method": "POST",
+  "description": "Ships a signed release bundle to a sovereign region, recording the version, the artifact reference and the detached signature, and returns 201 { success: true, data: <release> }. signature_hex is decoded with Buffer.from(hex, \"hex\") before being handed to shipSovereignBundle. QA edge cases: version, bundle_artifact_ref and signature_hex are all required with a falsy check; signature_hex is NOT validated as hex — Buffer.from silently truncates at the first invalid character and an odd-length or non-hex string yields a short/empty buffer that fails signature verification downstream as a 500, not a 400, so a malformed signature looks like a server error; an unknown region_id in the path is a foreign-key violation surfacing as a 500 rather than a 404; re-shipping the same version has no conflict branch and will typically raise a unique violation as a 500.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "admin token required",
+      "when": "requireAdmin() found no valid x-admin-ops-token header — missing, or matching neither env ADMIN_OPS_TOKEN nor an active admin.ops_token hash (30s cache TTL applies to revocations)"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "version, bundle_artifact_ref, signature_hex required",
+      "when": "any of version, bundle_artifact_ref or signature_hex is missing, null, or an empty string"
+    },
+    {
+      "status": 500,
+      "code": "InternalServerError",
+      "message": "<ship error message>",
+      "when": "shipSovereignBundle() throws — signature verification failing (including a non-hex or odd-length signature_hex silently truncated by Buffer.from), region_id not matching a registered region (FK violation), a duplicate version, or Postgres unavailable"
+    }
+  ],
   "requiresAuth": false,
   "expectedStatus": 201,
   "sdk": "api-gateway",

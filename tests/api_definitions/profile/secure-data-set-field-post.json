@@ -29,5 +29,32 @@
       },
       "expectedStatus": 200
     }
+  ],
+  "description": "Sets or replaces one named encrypted field on a person's secure-data record, creating the row on first use and merging the field into the existing field_envelopes / field_states JSONB on subsequent calls. Returns 200 with the full updated record. Idempotent: re-posting the same field overwrites in place and the field state is (re-)set to active - which means a previously shredded field can be resurrected by writing it again. Edge cases: person_id, field_name and envelope are all mandatory and an empty string counts as missing; envelope is stored verbatim with no format or size validation; a person_id that does not exist trips a foreign-key violation that escapes as an unhandled 500; requires a valid JWT.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "Authorization header absent or not in Bearer form (requireAuth / gateway default-deny authGate)"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "Bearer token fails JWT verification or is expired (requireAuth / gateway default-deny authGate)"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "missing required fields",
+      "when": "person_id, field_name or envelope is absent or an empty string"
+    },
+    {
+      "status": 500,
+      "code": "Internal Server Error",
+      "message": "insert or update on table \"secure_data\" violates foreign key constraint",
+      "when": "person_id does not reference an existing person (or is not a valid UUID) - the upsert has no pre-check, so the Postgres error escapes unhandled"
+    }
   ]
 }

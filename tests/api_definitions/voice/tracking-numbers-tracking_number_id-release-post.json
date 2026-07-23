@@ -1,0 +1,45 @@
+{
+  "name": "POST /api/voice/tracking-numbers/:tracking_number_id/release - Release a tracking number",
+  "endpoint": "/api/voice/tracking-numbers/:tracking_number_id/release",
+  "sdk": "connector-twilio-voice",
+  "sourceFile": "packages/connector-twilio-voice/src/server/routes.ts",
+  "method": "POST",
+  "requiresAuth": true,
+  "expectedStatus": 200,
+  "taskId": "a89d6c67-d5dd-4933-9148-db8e91b4493a",
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "priority": 65,
+  "testability": "auto",
+  "description": "Release a tracking number back to Twilio and mark the mirror row 'released' with released_at stamped. The row is deliberately KEPT rather than deleted so historical calls placed from that number stay attributable, and releasing frees the (tenant, phone_number) active-claim slot so the number can be re-provisioned later. Edge cases: releasing an ALREADY-released number is an idempotent no-op that returns the current row (not a 409); 400 when tenant_id is missing from the body; 404 when the id is unknown or belongs to another tenant; 422 with remediation when the upstream release fails — retry reconciles the mirror if the number was already released in the Twilio console. After release the tenant may have no active number, in which case a later POST /api/voice/calls without an explicit from_number returns 400 NoCallerIdAvailable.",
+  "dependsOn": [
+    "POST /api/auth/signup-tenant",
+    "POST /api/voice/tracking-numbers",
+    "POST /api/voice/calls"
+  ],
+  "fieldEnums": {
+    "status": ["active", "released", "deleted-upstream"]
+  },
+  "statusTransitions": {
+    "active -> released": "POST /api/voice/tracking-numbers/:tracking_number_id/release (stamps released_at; row retained for attribution)"
+  },
+  "testCases": [
+    {
+      "name": "Release the provisioned tracking number",
+      "headers": { "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}" },
+      "pathParams": { "tracking_number_id": "{{cache:voice.tracking-numbers.create.response.data.tracking_number.tracking_number_id}}" },
+      "payload": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}"
+      },
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "data": { "tracking_number": { "tracking_number_id": "string", "status": "string", "released_at": "string" } }
+      }
+    }
+  ],
+  "errorCases": [
+    { "status": 400, "code": "ValidationError", "message": "tenant_id is required", "when": "tenant_id missing from body" },
+    { "status": 401, "code": "Unauthorized", "message": "Unauthorized", "when": "Authorization bearer token missing or invalid" },
+    { "status": 404, "code": "NotFound", "message": "NotFound", "when": "tracking_number_id unknown or belongs to another tenant" },
+    { "status": 422, "code": "ProviderError", "message": "number release failed: <upstream message>", "when": "the injected Twilio provider rejects the release" }
+  ]
+}

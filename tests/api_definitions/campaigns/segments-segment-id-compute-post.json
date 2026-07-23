@@ -2,6 +2,27 @@
   "name": "POST /api/campaigns/segments/:segment_id/compute — sdk-campaign",
   "endpoint": "/api/campaigns/segments/:segment_id/compute",
   "method": "POST",
+  "description": "Recomputes a segment's population_estimate and stamps last_computed_at. Only simple tenant_id equality predicates in the DSL are evaluated today; anything else yields an estimate of 0. Edge cases: an unknown segment_id returns 404; if projection.subject_view is missing (e.g. a fresh test environment) the count silently falls back to 0 rather than erroring; the call is safely repeatable/idempotent - each run overwrites the previous estimate; the emitted campaign.segment.computed.v1 audit records tenant 'unknown' when the parent campaign row cannot be read.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "Authorization header absent or not in the form \"Bearer <jwt>\""
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "JWT signature invalid, malformed, or past its exp claim"
+    },
+    {
+      "status": 404,
+      "code": "NotFound",
+      "message": "NotFound",
+      "when": "no campaign.segment row exists for the given segment_id"
+    }
+  ],
   "requiresAuth": true,
   "dependsOn": [
     "POST /api/auth/signup-tenant",

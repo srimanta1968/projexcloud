@@ -56,5 +56,38 @@
         "Authorization": "Bearer {{cache:auth.register.response.data.token}}"
       }
     }
+  ],
+  "description": "Provenance-stamped evidence intake: records a capture (device, attestation, blob id + checksum, capture time, consent ref and optional lat/lng/altitude/IMU signature) against an encounter and returns 201. Gated by the gateway default-deny authGate, so a valid tenant JWT is required. Edge cases: nine fields are required (tenant_id, encounter_id, capturer_persona_id, device_uuid, device_attestation_id, raw_blob_id, blob_checksum, consent_ref, captured_at) and the 400 names every missing one in a single message; the geo/IMU fields default to null when omitted; if the encounter was sealed between upload and intake the write is refused with 409 encounter_sealed carrying encounter_id and sealed_at - the canonical AC-11 path; every other service failure (unknown encounter foreign key, bad checksum, malformed captured_at, non-UUID identifiers, retention-class violations) is flattened into a 400 with the raw error message rather than a 404 or 500, so a missing FK looks like a validation error; tenant_id comes from the body, not the JWT, so cross-tenant capture is not blocked here.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "Authorization header absent or not in Bearer form - gateway default-deny authGate onRequest hook (AUTH_GATE_MODE=enforce)"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "Bearer token fails JWT verification in the gateway authGate"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "missing required fields: <comma-separated list>",
+      "when": "any of tenant_id, encounter_id, capturer_persona_id, device_uuid, device_attestation_id, raw_blob_id, blob_checksum, consent_ref or captured_at is absent or falsy"
+    },
+    {
+      "status": 409,
+      "code": "encounter_sealed",
+      "message": "encounter <encounter_id> is sealed (at <sealed_at>) - no new evidence captures may reference it",
+      "when": "captureEvidence raises EncounterSealedError; the response also carries encounter_id and sealed_at"
+    },
+    {
+      "status": 400,
+      "code": "CaptureFailed",
+      "message": "<service error message>",
+      "when": "captureEvidence throws anything other than EncounterSealedError - unknown encounter/persona foreign key, non-UUID identifiers, malformed captured_at, checksum or retention failures, or any DB error; all collapse to 400"
+    }
   ]
 }

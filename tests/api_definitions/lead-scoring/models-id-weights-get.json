@@ -13,6 +13,7 @@
     "POST /api/auth/signup-tenant",
     "POST /api/lead-scoring/models"
   ],
+  "description": "Lists every lead_scoring.feature_weight row for a model, ordered by feature name, with weight coerced from the database numeric to a JS number. QA edge cases: an unknown model_id does NOT 404 — it returns 200 with an empty array, so \"model does not exist\" and \"model has no weights\" are indistinguishable through this endpoint (use GET /models/:id to disambiguate); an empty array is meaningful, because the scoring engine falls back to DEFAULT_FEATURE_WEIGHTS whenever no weight rows exist; weights are returned raw (as tuned), NOT normalised — normalisation to sum 1.0 happens inside scoreContact, so these values will not necessarily add up to 1; the listing is unpaginated and not tenant-scoped.",
   "testCases": [
     {
       "name": "List feature weights for a model",
@@ -27,5 +28,19 @@
   ],
   "expectedResponse": {
     "data": "array"
-  }
+  },
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "no Authorization header, or it is not of the form 'Bearer <jwt>' (api-gateway default-deny authGate, AUTH_GATE_MODE=enforce)"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "the bearer JWT fails verifyJwt — bad signature, wrong JWT_SECRET, or exp already elapsed (api-gateway default-deny authGate, AUTH_GATE_MODE=enforce)"
+    }
+  ]
 }

@@ -29,5 +29,26 @@
       },
       "expectedStatus": 200
     }
+  ],
+  "description": "Lists the L4 personas attached to one membership. Requires a valid tenant JWT (requireAuth). Edge cases: this is a list, so an unknown but well-formed membership_id returns 200 with an empty personas array - never a 404; there is no limit/offset paging, so every persona is returned in one payload; shredded personas are not filtered by the route, so the caller must inspect the returned state; the caller JWT tenant is never compared to the membership, so personas under another tenant membership are readable - test tenant scoping explicitly; a malformed non-UUID membership_id fails the uuid cast in an untried service call and surfaces as a Fastify 500 rather than a 400.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "Authorization header absent or not in Bearer form (requireAuth)"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "Bearer token fails JWT verification (requireAuth)"
+    },
+    {
+      "status": 500,
+      "code": "InternalServerError",
+      "message": "Internal Server Error",
+      "when": "listPersonasForMembership throws and the route has no try/catch, so the Fastify default error handler responds - chiefly a non-UUID membership_id failing the uuid cast, or any DB error"
+    }
   ]
 }

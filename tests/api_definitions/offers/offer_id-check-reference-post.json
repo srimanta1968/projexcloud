@@ -1,0 +1,52 @@
+{
+  "sdk": "sdk-offer-catalog",
+  "sourceFile": "packages/sdk-offer-catalog/src/server/routes.ts",
+  "requiresAuth": true,
+  "taskId": "95bdb660-30d0-4337-98a1-897aac9f6912",
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "featureId": "7079a34d-8593-4978-944a-7162513d8c91",
+  "epicId": "9a0f06fa-f1a9-4292-8bc5-715ec836bbc8",
+  "testability": "auto",
+  "name": "POST /api/offers/:offer_id/check-reference - Stale-reference guard",
+  "endpoint": "/api/offers/:offer_id/check-reference",
+  "method": "POST",
+  "expectedStatus": 200,
+  "priority": 31,
+  "description": "The stale-reference guard: given a pinned offer_version_id, report whether it is still the current version. A reference to a superseded (retired/older) version is stale=true. Current references pass (stale=false). Callable by CRM at quote/version-stamp time. tenant_id and offer_version_id required.",
+  "dependsOn": [
+    "POST /api/auth/signup-tenant",
+    "POST /api/offers",
+    "POST /api/offers/:offer_id/versions"
+  ],
+  "testCases": [
+    {
+      "name": "Current reference is not stale",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "pathParams": {
+        "offer_id": "{{cache:offers.create.response.data.offer.offer_id}}"
+      },
+      "payload": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "offer_version_id": "{{cache:offers.version.create.response.data.version.offer_version_id}}"
+      },
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "data": {
+          "reference": {
+            "stale": "boolean"
+          }
+        }
+      }
+    }
+  ],
+  "errorCases": [
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "tenant_id and offer_version_id are required",
+      "when": "required missing"
+    }
+  ]
+}

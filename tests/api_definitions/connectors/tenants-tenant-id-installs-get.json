@@ -10,6 +10,7 @@
   "sdk": "sdk-connectors",
   "sourceFile": "packages/sdk-connectors/src/server/routes.ts",
   "testability": "auto",
+  "description": "Lists every connector install belonging to one tenant, keyed on the :tenant_id path param. QA edge cases: an unknown tenant_id returns 200 with an empty array rather than a 404, so 'no such tenant' and 'tenant with no installs' are indistinguishable; the tenant_id comes from the URL and is NOT cross-checked against the tenant claim in the caller's JWT, so an authenticated caller can enumerate another tenant's installs by changing the path segment — the cross-tenant isolation assertion belongs here; the listing is unpaginated with no limit/offset and no status filter, so uninstalled and errored installs are returned alongside active ones.",
   "testCases": [
     {
       "name": "List connector installs for a tenant",
@@ -20,6 +21,20 @@
         "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}"
       },
       "expectedStatus": 200
+    }
+  ],
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "no Authorization header, or it is not of the form 'Bearer <jwt>' (requireAuth preHandler)"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "the bearer JWT fails verifyJwt — bad signature, wrong JWT_SECRET, or exp already elapsed (requireAuth preHandler)"
     }
   ]
 }

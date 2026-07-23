@@ -44,5 +44,56 @@
   "captureResponse": {
     "break-glass.use.response.data.certificate.grant_id": "data.certificate.grant_id",
     "break-glass.use.response.data.certificate.cert_hash": "data.certificate.cert_hash"
-  }
+  },
+  "description": "Exercises an approved break-glass grant to perform one emergency action against an optional target, returning an audit certificate that records what was done, by which persona and when. Edge cases: action is mandatory at the route; every failure from the service is surfaced as 403 (not 400) because a refusal here is an authorization denial — an unknown grant_id, a grant that is still pending or already consumed (\"is <status>, not active\"), a grant whose TTL has elapsed (\"has expired\"), and an action that falls outside the grant's recorded scope all return 403 with the specific reason; the acting persona is taken from the JWT rather than the body so a caller cannot attribute the use to someone else; target_id is optional, so scope checks that depend on a target must encode that in the scope object.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "No Authorization: Bearer <jwt> header on a requireAuth route"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "Bearer token fails verifyJwt (bad signature, malformed, or exp in the past)"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "action is required",
+      "when": "The body omits action or supplies an empty value"
+    },
+    {
+      "status": 403,
+      "code": "BreakGlass",
+      "message": "grant <grant_id> not found",
+      "when": "No break-glass grant exists for the path grant_id"
+    },
+    {
+      "status": 403,
+      "code": "BreakGlass",
+      "message": "grant <grant_id> has expired",
+      "when": "The grant was approved but its TTL window has elapsed"
+    },
+    {
+      "status": 403,
+      "code": "BreakGlass",
+      "message": "grant <grant_id> is <status>, not active",
+      "when": "The grant is still pending approval, was rejected, or has already been consumed"
+    },
+    {
+      "status": 403,
+      "code": "BreakGlass",
+      "message": "action '<action>' is outside the grant scope",
+      "when": "The requested action is not permitted by the scope object recorded on the grant"
+    },
+    {
+      "status": 500,
+      "code": "InternalError",
+      "message": "InternalError",
+      "when": "useBreakGlass throws a non-BreakGlassError (certificate write failure, database unreachable)"
+    }
+  ]
 }

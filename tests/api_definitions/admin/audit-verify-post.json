@@ -2,6 +2,27 @@
   "name": "POST /admin/audit/verify — api-gateway",
   "endpoint": "/admin/audit/verify",
   "method": "POST",
+  "description": "Verifies the integrity of a tenant's audit hash chain: loads every entry for the tenant ordered by seq and walks it, requiring seq to be contiguous from 0 and each entry's prev_hash to equal the previous entry's entry_hash (the first entry must link to 32 zero bytes). tenant_id is a QUERY parameter, not a body field, and is mandatory. QA edge cases: a FAILED verification is NOT an error status — it returns 200 with { verified: false, failed_seq, reason: \"gap\" | \"wrong-prev\" }, so tests must assert on the payload, not the HTTP code; a tenant with zero entries verifies as true with entry_count 0; the walk loads the entire chain with no LIMIT, so a large tenant makes this a slow, memory-heavy call; a tenant_id that is not a valid UUID fails the ::uuid cast and returns 500 rather than 400.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "admin token required",
+      "when": "requireAdmin() found no valid x-admin-ops-token header — missing, or matching neither env ADMIN_OPS_TOKEN nor an active admin.ops_token hash (30s cache TTL applies to revocations)"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "tenant_id query param required",
+      "when": "the tenant_id query-string parameter is missing or empty — note it is read from the query string, not the request body"
+    },
+    {
+      "status": 500,
+      "code": "InternalServerError",
+      "message": "<database error message>",
+      "when": "the chain query throws — tenant_id not castable to uuid, prev_hash/entry_hash not being bytea buffers as expected, or Postgres unavailable"
+    }
+  ],
   "requiresAuth": false,
   "expectedStatus": 200,
   "sdk": "api-gateway",

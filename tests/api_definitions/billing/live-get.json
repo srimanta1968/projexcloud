@@ -34,5 +34,44 @@
       "lag_ms": "number",
       "by_sku": "object"
     }
-  }
+  },
+  "description": "Returns the caller's current live meter reading — in-flight usage counters for the tenant that have not yet been rolled into an invoice. tenant_id comes exclusively from the verified JWT, so the endpoint always reports the caller's own tenant and cannot be pointed at another tenant via the query string. Edge cases: the only validation is that the JWT tenant_id is a well-formed UUID, so all other query params are ignored rather than rejected; a tenant with no recorded usage returns 200 with zeroed/empty counters rather than 404; values are point-in-time and unsmoothed, so consecutive calls can differ as the meter collector flushes; a token missing the tenant_id claim is 403 before any read.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "No Authorization: Bearer <jwt> header on a requireAuth route"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "Bearer token fails verifyJwt (bad signature, malformed, or exp in the past)"
+    },
+    {
+      "status": 403,
+      "code": "Forbidden",
+      "message": "JWT missing tenant_id claim",
+      "when": "Token verifies but carries no tenant_id claim; billing surfaces refuse to run unscoped"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "tenant_id must be a UUID",
+      "when": "The tenant_id claim injected from the JWT is not a well-formed UUID"
+    },
+    {
+      "status": 404,
+      "code": "CatalogNotFound",
+      "message": "Rate catalog not found",
+      "when": "readLiveMeter throws CatalogNotFoundError while resolving the tenant's active rate catalog"
+    },
+    {
+      "status": 500,
+      "code": "InternalError",
+      "message": "InternalError",
+      "when": "The meter store (Redis/ClickHouse) is unreachable or the read throws"
+    }
+  ]
 }

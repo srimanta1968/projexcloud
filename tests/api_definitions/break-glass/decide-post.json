@@ -42,19 +42,74 @@
     }
   },
   "fieldEnums": {
-    "decision": ["approve", "reject"]
+    "decision": [
+      "approve",
+      "reject"
+    ]
   },
   "statusTransitions": {
     "entity": "approval.break_glass_grant",
     "field": "status",
-    "flow": ["pending", "active", "expired", "revoked"],
+    "flow": [
+      "pending",
+      "active",
+      "expired",
+      "revoked"
+    ],
     "transitions": [
-      { "from": "pending", "to": "active", "via": "POST /api/break-glass/:grant_id/decide" },
-      { "from": "pending", "to": "revoked", "via": "POST /api/break-glass/:grant_id/decide" }
+      {
+        "from": "pending",
+        "to": "active",
+        "via": "POST /api/break-glass/:grant_id/decide"
+      },
+      {
+        "from": "pending",
+        "to": "revoked",
+        "via": "POST /api/break-glass/:grant_id/decide"
+      }
     ]
   },
   "captureResponse": {
     "break-glass.decide.response.data.grant.grant_id": "data.grant.grant_id",
     "break-glass.decide.response.data.grant.status": "data.grant.status"
-  }
+  },
+  "description": "Records an approve or reject decision on one step of a pending break-glass grant and returns the updated grant, which becomes active once all required steps approve. The deciding persona is taken from the JWT (primary_persona_id, else sub). Edge cases: step_id is mandatory and decision must be exactly \"approve\" or \"reject\" — any other value, including \"approved\" or a boolean, is a 400 at the route; an unknown grant_id returns 400 BreakGlass \"grant ... not found\", not 404, because the service signals it as a domain error; deciding on a grant that is no longer pending (already approved, rejected, expired or used) returns 400 BreakGlass \"grant ... is <status>, not pending\", so a duplicate decision is rejected rather than silently accepted — the call is not idempotent; reason is optional and is recorded for audit.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "No Authorization: Bearer <jwt> header on a requireAuth route"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "Bearer token fails verifyJwt (bad signature, malformed, or exp in the past)"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "step_id and decision (approve|reject) are required",
+      "when": "step_id is missing, or decision is absent or not exactly \"approve\" or \"reject\""
+    },
+    {
+      "status": 400,
+      "code": "BreakGlass",
+      "message": "grant <grant_id> not found",
+      "when": "No break-glass grant exists for the path grant_id"
+    },
+    {
+      "status": 400,
+      "code": "BreakGlass",
+      "message": "grant <grant_id> is <status>, not pending",
+      "when": "The grant has already left pending status (approved, rejected, expired or consumed)"
+    },
+    {
+      "status": 500,
+      "code": "InternalError",
+      "message": "InternalError",
+      "when": "decideBreakGlass throws a non-BreakGlassError (step write failure, database unreachable)"
+    }
+  ]
 }

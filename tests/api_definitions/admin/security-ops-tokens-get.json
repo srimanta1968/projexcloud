@@ -2,6 +2,21 @@
   "name": "GET /admin/security/ops-tokens — api-gateway",
   "endpoint": "/admin/security/ops-tokens",
   "method": "GET",
+  "description": "Lists admin ops token metadata — id, label, expiry, creation and revocation bookkeeping — and NEVER returns secrets or hashes usable to reconstruct a token, since only SHA-256 hashes are stored. Returns { success: true, data: [...] }. QA edge cases: this is the only way to recover a token's id for revocation, because the plaintext is shown exactly once at mint time; the env ADMIN_OPS_TOKEN break-glass secret is NOT a DB row and therefore never appears in this list, so an empty list does not mean admin access is impossible; the listing has no filtering or pagination and typically includes expired and revoked tokens alongside active ones, so callers must filter on expiry/revocation themselves rather than assuming everything listed still authenticates.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "admin token required",
+      "when": "x-admin-ops-token header is missing, empty, or matches neither the env ADMIN_OPS_TOKEN break-glass secret (constant-time compare) nor the SHA-256 hash of any active row in admin.ops_token; revoked/expired DB tokens keep working until the per-replica cache expires (ADMIN_OPS_TOKEN_CACHE_TTL_MS, default 30s) unless a Redis invalidation broadcast lands first"
+    },
+    {
+      "status": 500,
+      "code": "InternalServerError",
+      "message": "<listing error message>",
+      "when": "listOpsTokens() throws — Postgres unavailable or the admin.ops_token table missing"
+    }
+  ],
   "requiresAuth": false,
   "expectedStatus": 200,
   "sdk": "api-gateway",

@@ -2,6 +2,27 @@
   "name": "POST /api/campaigns — sdk-campaign",
   "endpoint": "/api/campaigns",
   "method": "POST",
+  "description": "Creates a campaign for a tenant. tenant_id and name are both required; variant_flag_id is optional and links the campaign to a feature-flag variant for A/B allocation. Edge cases: missing or empty tenant_id/name -> 400; campaign names are not unique, so repeated POSTs create distinct campaigns (not idempotent); the new campaign starts in its default status and emits a campaign.created.v1 audit entry - audit failures are swallowed and do not fail the request.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "Authorization header absent or not in the form \"Bearer <jwt>\""
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "JWT signature invalid, malformed, or past its exp claim"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "missing fields",
+      "when": "body omits tenant_id or name (details: [\"missing fields\"])"
+    }
+  ],
   "requiresAuth": true,
   "dependsOn": [
     "POST /api/auth/signup-tenant",

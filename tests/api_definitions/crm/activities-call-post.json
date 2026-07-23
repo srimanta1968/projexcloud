@@ -1,0 +1,68 @@
+{
+  "name": "POST /api/crm/activities/call - Log a call on the timeline",
+  "endpoint": "/api/crm/activities/call",
+  "sdk": "sdk-crm",
+  "sourceFile": "packages/sdk-crm/src/server/routes.ts",
+  "method": "POST",
+  "requiresAuth": true,
+  "expectedStatus": 201,
+  "taskId": "2b1c31db-08c0-4207-a81d-79bae03c515e",
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "priority": 68,
+  "testability": "auto",
+  "description": "Log a call on the contact/lead timeline with its structured telephony fields: direction, disposition, duration, phone number, recording url + recording consent, and the provider call id. Emits crm.call.missed.v1 when the disposition means nobody picked up (no_answer/busy/failed) and crm.call.logged.v1 otherwise. Edge cases: writes are IDEMPOTENT on external_call_id (partial unique index) because telephony webhooks retry — re-logging the same provider call id UPDATES the existing timeline entry in place rather than appending a duplicate, and deliberately does NOT re-emit the domain event, so downstream consumers cannot double-count one call; validation happens before the insert so an unknown call_disposition, an unknown call_direction, or a negative call_duration_seconds returns a 400 listing every offending field instead of a raw Postgres CHECK violation surfacing as a 500; 400 when encounter_id or actor_persona_id is missing; activities with no external_call_id (manually logged calls) are unconstrained and may repeat.",
+  "dependsOn": [
+    "POST /api/auth/signup-tenant",
+    "POST /api/auth/register",
+    "POST /api/app-identities",
+    "POST /api/memberships",
+    "POST /api/personas",
+    "POST /api/vault/keys",
+    "POST /api/encounters"
+  ],
+  "fieldEnums": {
+    "call_direction": ["inbound", "outbound"],
+    "call_disposition": ["answered", "no_answer", "busy", "failed", "voicemail", "left_message"]
+  },
+  "testCases": [
+    {
+      "name": "Log an answered outbound call with recording consent",
+      "headers": { "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}" },
+      "payload": {
+        "encounter_id": "{{cache:encounters.create.response.data.encounter.encounter_id}}",
+        "actor_persona_id": "{{cache:personas.create.response.data.persona.persona_id}}",
+        "call_direction": "outbound",
+        "call_disposition": "answered",
+        "call_duration_seconds": 137,
+        "phone_number": "+14155550123",
+        "recording_url": "https://api.twilio.com/2010-04-01/Recordings/RE{{dynamic:slug}}",
+        "recording_consent": true,
+        "external_call_id": "CA{{dynamic:slug}}",
+        "summary": "Discovery call - budget and timeline confirmed",
+        "occurred_at": "{{dynamic:pastdatetime}}"
+      },
+      "expectedStatus": 201,
+      "expectedResponse": {
+        "data": {
+          "activity": {
+            "activity_id": "string",
+            "kind": "string",
+            "call_direction": "string",
+            "call_disposition": "string",
+            "call_duration_seconds": "number"
+          }
+        }
+      }
+    }
+  ],
+  "captureResponse": {
+    "crm.activities.call.response.data.activity.activity_id": "data.activity.activity_id"
+  },
+  "errorCases": [
+    { "status": 400, "code": "ValidationError", "message": "encounter_id and actor_persona_id are required", "when": "encounter_id or actor_persona_id missing from body" },
+    { "status": 400, "code": "ValidationError", "message": "call_disposition must be one of answered|no_answer|busy|failed|voicemail|left_message", "when": "call_disposition is outside the enum" },
+    { "status": 400, "code": "ValidationError", "message": "call_direction must be one of inbound|outbound", "when": "call_direction is outside the enum" },
+    { "status": 400, "code": "ValidationError", "message": "call_duration_seconds must be a non-negative number", "when": "call_duration_seconds is negative or not a number" },
+    { "status": 401, "code": "Unauthorized", "message": "Unauthorized", "when": "Authorization bearer token missing or invalid" }
+  ]
+}

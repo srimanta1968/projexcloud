@@ -36,5 +36,38 @@
       },
       "expectedStatus": 201
     }
+  ],
+  "description": "Captures the current permission-surface state of a device: the permission_set map (permission name to boolean or string, stored as JSONB) for a device_uuid within a tenant, optionally scoped to a persona_id, returning 201 with the stored snapshot including its generated snapshot_id and taken_at. device_uuid, tenant_id and permission_set are required; persona_id is optional and stored as NULL when omitted. Edge cases: there is no uniqueness constraint, so every call appends a new historical row - repeat posts are intentionally NOT idempotent and build the timeline that GET /devices/:device_uuid/latest reads; an empty permission_set object {} passes the presence check and is accepted, while a missing key is rejected; tenant_id and persona_id must be valid UUIDs and are enforced by the column types, not by handler validation; tenant_id comes from the body and is never cross-checked against the caller's JWT tenant.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "Authorization header absent or not in \"Bearer <token>\" form (requireAuth preHandler)"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "Bearer token fails verifyJwt (bad signature, malformed, or exp in the past) (requireAuth preHandler)"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "missing fields",
+      "when": "device_uuid, tenant_id or permission_set missing/empty in the body (persona_id is optional)"
+    },
+    {
+      "status": 400,
+      "code": "FST_ERR_CTP_EMPTY_JSON_BODY",
+      "message": "Body cannot be empty when content-type is set to application/json",
+      "when": "Content-Type: application/json declared but the request body is empty or unparseable (Fastify JSON body parser, before the handler runs)"
+    },
+    {
+      "status": 500,
+      "code": "InternalServerError",
+      "message": "Internal Server Error",
+      "when": "snapshotSurface INSERT fails - tenant_id or persona_id is not a valid UUID (both are UUID columns), permission_set is not JSON-serialisable, or the Postgres pool is unavailable"
+    }
   ]
 }

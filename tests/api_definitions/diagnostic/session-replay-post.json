@@ -2,6 +2,33 @@
   "name": "POST /api/diagnostic/session-replay — sdk-diagnostic-telemetry",
   "endpoint": "/api/diagnostic/session-replay",
   "method": "POST",
+  "description": "Intake for one sanitized session-replay event. device_uuid, sanitized_event_kind and occurred_at are required; payload is optional and is expected to be pre-sanitized by the client - the route performs no PII scrubbing of its own. Edge cases: any missing required field -> 400; sanitized_event_kind is not enum-validated at the route, so unknown kinds are rejected only if the service layer rejects them (which is downgraded to a 400); an oversized payload or a malformed occurred_at also surfaces as 400 rather than 500; events are append-only with no de-duplication, so replayed uploads duplicate rows.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "Authorization header absent or not in the form \"Bearer <jwt>\" — enforced by the gateway default-deny auth gate, not by the route itself"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "JWT signature invalid, malformed, or past its exp claim — enforced by the gateway default-deny auth gate, not by the route itself"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "device_uuid, sanitized_event_kind, occurred_at are required",
+      "when": "the body omits any one of the three required fields"
+    },
+    {
+      "status": 400,
+      "code": "BadRequest",
+      "message": "<error message thrown by recordSessionReplay>",
+      "when": "recordSessionReplay throws — unknown event kind, oversized payload, or an insert failure (caught and returned as 400, not 500)"
+    }
+  ],
   "requiresAuth": true,
   "expectedStatus": 201,
   "sdk": "sdk-diagnostic-telemetry",

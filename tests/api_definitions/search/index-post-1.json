@@ -45,5 +45,56 @@
   "captureResponse": {
     "search.query.response.data.index_used": "data.index_used",
     "search.query.response.data.total": "data.total"
-  }
+  },
+  "description": "POST form of the search query endpoint: accepts a full search DSL body (query/size/from/sort) instead of the flat query-string form, then runs the same ABAC-filtered execution as GET /api/search. tenant_id comes from the verified JWT and effective_scopes are resolved server-side from JWT claims — any effective_scopes in the body is discarded. Edge cases: an empty or non-object body fails validation before reaching OpenSearch; `size` is clamped into 0..200 and `from` floored at 0 so oversized page requests are capped, not rejected; `script`/`script_score`/`function_score` clauses are recursively stripped from the DSL (including inside arrays) so a crafted body cannot execute code or escape tenant filtering; querying an entity_kind with no registered index returns 404 IndexNotFound.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "No Authorization: Bearer <jwt> header on a requireAuth route"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "Bearer token fails verifyJwt (bad signature, malformed, or exp in the past)"
+    },
+    {
+      "status": 403,
+      "code": "Forbidden",
+      "message": "JWT missing tenant_id claim",
+      "when": "Token verifies but carries no tenant_id claim; authTenant() rejects before any query runs"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "body must be an object",
+      "when": "Request body is absent or not a JSON object"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "tenant_id must be a UUID",
+      "when": "The tenant_id claim injected from the JWT is not a well-formed UUID"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "entity_kind is required",
+      "when": "entity_kind is missing or blank in the body"
+    },
+    {
+      "status": 404,
+      "code": "IndexNotFound",
+      "message": "No search index registered for the requested entity_kind",
+      "when": "executeQuery throws IndexNotFoundError for tenant_id + entity_kind"
+    },
+    {
+      "status": 500,
+      "code": "InternalError",
+      "message": "InternalError",
+      "when": "OpenSearch is unreachable or query execution throws an unexpected error"
+    }
+  ]
 }

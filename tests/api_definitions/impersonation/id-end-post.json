@@ -47,15 +47,58 @@
   "statusTransitions": {
     "entity": "impersonation_grant",
     "field": "status",
-    "flow": ["pending_approval", "active", "ended"],
+    "flow": [
+      "pending_approval",
+      "active",
+      "ended"
+    ],
     "transitions": [
-      { "from": null, "to": "pending_approval", "via": "POST /api/impersonation/request" },
-      { "from": "pending_approval", "to": "active", "via": "POST /api/impersonation/:grant_id/approve" },
-      { "from": "active", "to": "ended", "via": "POST /api/impersonation/:grant_id/end" }
+      {
+        "from": null,
+        "to": "pending_approval",
+        "via": "POST /api/impersonation/request"
+      },
+      {
+        "from": "pending_approval",
+        "to": "active",
+        "via": "POST /api/impersonation/:grant_id/approve"
+      },
+      {
+        "from": "active",
+        "to": "ended",
+        "via": "POST /api/impersonation/:grant_id/end"
+      }
     ]
   },
   "captureResponse": {
     "impersonation.end.response.data.grant.grant_id": "data.grant.grant_id",
     "impersonation.end.response.data.grant.status": "data.grant.status"
-  }
+  },
+  "description": "Terminates an impersonation grant: stamps a generated certificate_audit_id and pulls expires_at back to LEAST(expires_at, now()), returning the grant with status forced to \"ended\". Requires a valid tenant JWT (requireAuth). Edge cases: no body is read, so any payload is ignored; there is no state precondition - a grant still in pending_approval, one already ended, or one already expired can all be ended and return 200; it is repeatable but not strictly idempotent, because each call mints a fresh certificate_audit_id that overwrites the previous one; an unknown grant_id is a 404; a non-UUID grant_id fails the uuid comparison and is a 500; the caller identity is never compared to the grant support_user_id, so any authenticated caller can end any grant.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "Authorization header absent or not in Bearer form (requireAuth)"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "Bearer token fails JWT verification (requireAuth)"
+    },
+    {
+      "status": 404,
+      "code": "NotFound",
+      "message": "Impersonation grant <grant_id> not found",
+      "when": "the UPDATE matches no row for the grant_id"
+    },
+    {
+      "status": 500,
+      "code": "InternalError",
+      "message": "InternalError",
+      "when": "the UPDATE throws - a non-UUID grant_id failing the uuid comparison, or any DB error"
+    }
+  ]
 }

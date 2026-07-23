@@ -2,6 +2,27 @@
   "name": "DELETE /admin/security/ops-tokens/:id — api-gateway",
   "endpoint": "/admin/security/ops-tokens/:id",
   "method": "DELETE",
+  "description": "Revokes a DB-backed admin ops token immediately, returning { success: true, data: { id, status: \"revoked\" } }. On success it wipes the local token cache, broadcasts a Redis invalidation so peer replicas drop the token too, and emits a security.admin_ops_token.revoked.v1 audit event. QA edge cases: revocation is NOT instantaneous fleet-wide — a replica that misses the Redis broadcast keeps honouring the token until its cache expires (ADMIN_OPS_TOKEN_CACHE_TTL_MS, default 30s), so a negative test immediately after revoking can still see 200s; revoking an unknown id, or one already revoked, returns 404 \"token not found or already revoked\", making the operation non-idempotent in its status code even though the end state is the same; the env ADMIN_OPS_TOKEN break-glass secret is not a DB row and CANNOT be revoked here — that is deliberate, so operators can never lock themselves out.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "admin token required",
+      "when": "x-admin-ops-token header is missing, empty, or matches neither the env ADMIN_OPS_TOKEN break-glass secret (constant-time compare) nor the SHA-256 hash of any active row in admin.ops_token; revoked/expired DB tokens keep working until the per-replica cache expires (ADMIN_OPS_TOKEN_CACHE_TTL_MS, default 30s) unless a Redis invalidation broadcast lands first"
+    },
+    {
+      "status": 404,
+      "code": "NotFound",
+      "message": "token not found or already revoked",
+      "when": "revokeOpsToken(id) returns falsy — no admin.ops_token row with that id, or it was already revoked"
+    },
+    {
+      "status": 500,
+      "code": "InternalServerError",
+      "message": "<revoke error message>",
+      "when": "revokeOpsToken() throws, or the post-revoke cache invalidation/audit-event emission fails — e.g. Postgres unavailable"
+    }
+  ],
   "requiresAuth": false,
   "expectedStatus": 200,
   "sdk": "api-gateway",

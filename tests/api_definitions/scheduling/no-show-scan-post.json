@@ -1,0 +1,47 @@
+{
+  "sdk": "sdk-scheduling",
+  "sourceFile": "packages/sdk-scheduling/src/server/routes.ts",
+  "requiresAuth": true,
+  "taskId": "f01aa1e1-dc3c-46a8-984e-3ce8f749c2b0",
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "featureId": "afd11775-0799-4702-8f94-c2e12c001ea1",
+  "epicId": "4df864ec-e460-4cc9-a58a-92baadec5269",
+  "testability": "auto",
+  "name": "POST /api/scheduling/no-show/scan - Mark no-shows",
+  "endpoint": "/api/scheduling/no-show/scan",
+  "method": "POST",
+  "expectedStatus": 200,
+  "priority": 68,
+  "description": "Mark confirmed appointments whose end_time passed by grace_minutes (default 10) and that were never completed as no_show, appending a booking_event for each. Returns {marked, appointment_ids} so a caller can offer a rescue/rebook. Also runs on the scheduling worker timer.",
+  "dependsOn": [
+    "POST /api/auth/signup-tenant"
+  ],
+  "fieldEnums": {},
+  "testCases": [
+    {
+      "name": "Run a no-show scan",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "payload": {
+        "grace_minutes": 10,
+        "batch_size": 100
+      },
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "data": {
+          "marked": "number",
+          "appointment_ids": "array"
+        }
+      }
+    }
+  ],
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "missing or invalid token",
+      "when": "no valid Bearer token"
+    }
+  ]
+}

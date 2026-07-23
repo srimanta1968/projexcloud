@@ -2,6 +2,33 @@
   "name": "POST /admin/federation/iceberg-catalogs — api-gateway",
   "endpoint": "/admin/federation/iceberg-catalogs",
   "method": "POST",
+  "description": "Registers (or updates) a federation.iceberg_catalog row so the lineage-projector worker can resolve a target table_ref, giving ops an alternative to raw SQL and preserving the auto-migrate doctrine. Upsert semantics: ON CONFLICT (catalog_id) DO UPDATE overwrites region, backend, root_url, capacity_tier and status, so re-posting an existing catalog_id is an update and still returns 201, never 409. capacity_tier defaults to \"standard\" and status to \"active\". QA edge cases: backend is validated against the closed set glue|nessie|hive and anything else is a 400; catalog_id, region, backend and root_url are all required and empty strings count as missing; root_url is not URL-validated; status is NOT validated in the handler, so an out-of-enum status reaches the DB check constraint and returns 500 rather than 400.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "admin token required",
+      "when": "x-admin-ops-token header is missing, empty, or matches neither the env ADMIN_OPS_TOKEN break-glass secret (constant-time compare) nor the SHA-256 hash of any active row in admin.ops_token; revoked/expired DB tokens keep working until the per-replica cache expires (ADMIN_OPS_TOKEN_CACHE_TTL_MS, default 30s) unless a Redis invalidation broadcast lands first"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "catalog_id, region, backend, root_url are required",
+      "when": "any of catalog_id, region, backend or root_url is missing, null, or an empty string"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "backend must be one of: glue, nessie, hive",
+      "when": "backend is present but not one of glue, nessie, hive"
+    },
+    {
+      "status": 500,
+      "code": "InternalServerError",
+      "message": "<database error message>",
+      "when": "the INSERT ... ON CONFLICT into federation.iceberg_catalog throws — e.g. status outside the allowed enum hitting a check constraint, or Postgres unavailable"
+    }
+  ],
   "requiresAuth": false,
   "expectedStatus": 201,
   "sdk": "api-gateway",

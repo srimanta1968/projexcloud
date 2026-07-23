@@ -35,11 +35,64 @@
     }
   ],
   "fieldEnums": {
-    "placement": ["share", "tier-p", "tier-g"],
-    "isolation_tier": ["S", "P", "G"]
+    "placement": [
+      "share",
+      "tier-p",
+      "tier-g"
+    ],
+    "isolation_tier": [
+      "S",
+      "P",
+      "G"
+    ]
   },
   "captureResponse": {
     "tenants.create-sub-tenant.response.data.tenant_id": "data.tenant_id",
     "tenants.create-sub-tenant.response.data.parent_tenant_id": "data.parent_tenant_id"
-  }
+  },
+  "description": "Creates a sub-tenant beneath :tenant_id. app_id, display_name and region are required; placement (share | tier-p | tier-g) decides whether the child shares the parent's pool or gets a dedicated tier. Edge cases: placement is whitelist-checked only when supplied — omitting it is legal and defers to the service default; the PARENT :tenant_id is not validated by the handler, so an unknown or non-UUID parent surfaces as a foreign-key violation mapped to 400 ValidationError, not 404; duplicate natural keys map to 409 Conflict; nesting depth and per-parent sub-tenant counts are not capped at this layer.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "Authorization header absent or not in 'Bearer <jwt>' form (requireAuth preHandler)"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "JWT signature invalid, malformed, or exp has elapsed"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "app_id is required / display_name is required / region is required / placement must be one of share, tier-p, tier-g",
+      "when": "any validateCreateSubTenant check fails; all failures are returned together in details[]"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "<pg error: violates foreign key constraint ...>",
+      "when": ":tenant_id (the parent), reseller_id or geo_node_id references a row that does not exist"
+    },
+    {
+      "status": 409,
+      "code": "Conflict",
+      "message": "<pg error: duplicate key value violates unique constraint ...>",
+      "when": "a unique constraint (e.g. brand_domain) is violated"
+    },
+    {
+      "status": 404,
+      "code": "NotFound",
+      "message": "<error text containing 'not found'>",
+      "when": "the service throws a not-found error while resolving the parent tenant or a referenced entity"
+    },
+    {
+      "status": 500,
+      "code": "InternalError",
+      "message": "InternalError",
+      "when": "Unexpected service/DB failure (connection loss, or a constraint the handler does not map)"
+    }
+  ]
 }

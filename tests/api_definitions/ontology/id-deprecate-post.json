@@ -46,5 +46,20 @@
         "Authorization": "Bearer {{cache:auth.register.response.data.token}}"
       }
     }
+  ],
+  "description": "Deprecates a specific ontology version by id with an optional reason, returning the updated ontology record. Edge cases: reason is optional and defaults to the literal \"unspecified\" when the body omits it, so a deprecation is never blocked for lack of justification; every error from deprecateOntology maps to 404 with the raw message, so an unknown id, an id already deprecated, and a datastore failure all present as 404 and must be told apart by message text; because a repeat call on an already-deprecated version raises rather than no-ops, the operation is not idempotent; deprecating the active version leaves the ontology name with no active version, after which GET /ontology/:name/active returns 404.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "Mounted in the api-gateway, /ontology/* is not on the default-deny allowlist, so the root authGate hook rejects a request with no valid tenant JWT. The standalone semantic-service binary registers these routes without auth"
+    },
+    {
+      "status": 404,
+      "code": "NotFound",
+      "message": "<error message from deprecateOntology>",
+      "when": "deprecateOntology throws — the ontology id is unknown or the version is already deprecated. Datastore errors are also caught by this branch"
+    }
   ]
 }

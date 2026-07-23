@@ -30,5 +30,26 @@
   ],
   "captureResponse": {
     "personas.set-bu.response.success": "success"
-  }
+  },
+  "description": "Assigns (or clears) the business unit on a persona. bu_id is optional: omitting it or sending null CLEARS the persona's BU rather than erroring — there is no validation branch on this route at all. Edge cases: an unknown :persona_id updates zero rows and still returns {success:true}, so this endpoint never reports 404 and callers cannot detect a typo'd persona; a non-UUID :persona_id or a bu_id matching no BU row fails in Postgres (cast / FK) and returns 500; the BU is not checked to belong to the persona's tenant.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "Gateway default-deny authGate (AUTH_GATE_MODE=enforce): path is not on the public allowlist and no bearer token was sent"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "authGate ran requireAuth and the JWT failed verification or had expired"
+    },
+    {
+      "status": 500,
+      "code": "InternalError",
+      "message": "<postgres error text>",
+      "when": ":persona_id or bu_id is not a valid UUID, or bu_id violates the business-unit foreign key"
+    }
+  ]
 }

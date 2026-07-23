@@ -2,6 +2,33 @@
   "name": "POST /api/diagnostic/crash — sdk-diagnostic-telemetry",
   "endpoint": "/api/diagnostic/crash",
   "method": "POST",
+  "description": "Intake for a mobile/desktop crash snapshot. device_uuid, app_version, os_version, stack_envelope and occurred_at are all required; person_id and tenant_id are optional and default to null for anonymous/pre-login crashes. Edge cases: any missing required field -> 400 listing all five; a stack_envelope that is oversized or fails the service-layer checks is also 400 (the service throw is caught and downgraded, so a storage failure looks like a validation failure to the client); occurred_at is not format-validated at the route, so a bad timestamp fails inside recordCrash and returns 400; there is no de-duplication key, so retried uploads create duplicate crash rows.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "Authorization header absent or not in the form \"Bearer <jwt>\" — enforced by the gateway default-deny auth gate, not by the route itself"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "JWT signature invalid, malformed, or past its exp claim — enforced by the gateway default-deny auth gate, not by the route itself"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "device_uuid, app_version, os_version, stack_envelope, occurred_at are required",
+      "when": "the body omits any one of the five required fields"
+    },
+    {
+      "status": 400,
+      "code": "BadRequest",
+      "message": "<error message thrown by recordCrash>",
+      "when": "recordCrash throws — malformed occurred_at, oversized stack_envelope, or an insert failure (caught and returned as 400, not 500)"
+    }
+  ],
   "requiresAuth": true,
   "expectedStatus": 201,
   "sdk": "sdk-diagnostic-telemetry",

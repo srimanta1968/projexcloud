@@ -25,5 +25,26 @@
       },
       "expectedStatus": 200
     }
+  ],
+  "description": "Fetches the conflict policy registered for a single event_type given as a path segment. Edge cases: the lookup is an exact, case-sensitive match on the event_type string, so a differently-cased or escaped value that does not decode to the exact registered string returns 404; an unregistered event_type also returns 404 (the route never lazily creates a policy). Global registry — no tenant scoping.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "Authorization header absent or not in 'Bearer <jwt>' form (requireAuth preHandler)"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "JWT signature invalid, malformed, or exp has elapsed"
+    },
+    {
+      "status": 404,
+      "code": "NotFound",
+      "message": "NotFound",
+      "when": "no policy row exists for the supplied :event_type"
+    }
   ]
 }

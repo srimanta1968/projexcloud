@@ -14,7 +14,12 @@
     "POST /api/auth/register"
   ],
   "fieldEnums": {
-    "platform": ["ios", "android", "web", "desktop"]
+    "platform": [
+      "ios",
+      "android",
+      "web",
+      "desktop"
+    ]
   },
   "testCases": [
     {
@@ -34,5 +39,32 @@
   ],
   "captureResponse": {
     "devices.create.response.data.device.device_uuid": "data.device.device_uuid"
-  }
+  },
+  "description": "Registers a device, returning 201 with the device record. The insert is an upsert on device_uuid: re-registering an existing device updates os_version, app_version and last_seen_at and COALESCEs device_key_ref (an omitted key ref preserves the stored one) rather than conflicting - so the call is idempotent and never returns a 409. device_uuid and platform are mandatory; platform is validated against the closed set ios | android | web | desktop. Edge cases: an unrecognised platform is a 400; os_version, app_version and device_key_ref are optional and default to null; re-registering a device that was previously revoked does NOT reset its status back to active; requires a valid JWT.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "Authorization header absent or not in Bearer form (requireAuth / gateway default-deny authGate)"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "Bearer token fails JWT verification or is expired (requireAuth / gateway default-deny authGate)"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "missing fields",
+      "when": "device_uuid or platform is absent or an empty string"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "invalid platform",
+      "when": "platform is not one of ios, android, web, desktop"
+    }
+  ]
 }

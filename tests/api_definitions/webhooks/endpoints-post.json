@@ -16,7 +16,10 @@
     "POST /api/auth/signup-tenant"
   ],
   "fieldEnums": {
-    "signing_algo": ["hmac-sha256", "hmac-sha512"]
+    "signing_algo": [
+      "hmac-sha256",
+      "hmac-sha512"
+    ]
   },
   "testCases": [
     {
@@ -46,5 +49,32 @@
   "captureResponse": {
     "webhooks.register-endpoint.response.data.endpoint.endpoint_id": "data.endpoint.endpoint_id",
     "webhooks.register-endpoint.response.data.endpoint.tenant_id": "data.endpoint.tenant_id"
-  }
+  },
+  "description": "Registers a tenant webhook endpoint: url, signing_key_ref and signing_algo (hmac-sha256 by default, or hmac-sha512). Edge cases: tenant_id must be a well-formed UUID and the url MUST start with https:// — plain http is rejected 400; signing_key_ref is a reference to a stored secret and its existence is NOT verified at registration time; signing_algo defaults when omitted but any other value is a 400; the registry additionally runs an SSRF-style url validator, and a rejection there throws WebhookUrlRejectedError which the controller's fail() mapper does NOT special-case — so a blocked or private URL comes back as 500 InternalError, not 400; mtls_client_cert_ref is optional and unvalidated.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "Authorization header absent or not in 'Bearer <jwt>' form (requireAuth preHandler)"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "JWT signature invalid, malformed, or exp has elapsed"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "tenant_id must be a UUID / url is required / url must use https:// / signing_key_ref is required / signing_algo must be hmac-sha256 or hmac-sha512",
+      "when": "any validateRegisterEndpoint check fails; all failures are returned together in details[]"
+    },
+    {
+      "status": 500,
+      "code": "InternalError",
+      "message": "InternalError",
+      "when": "registerEndpoint threw WebhookUrlRejectedError (url rejected by the external/SSRF validator) — fail() does not map it, so it degrades to 500 — or the insert failed"
+    }
+  ]
 }

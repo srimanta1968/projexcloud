@@ -2,6 +2,27 @@
   "name": "GET /api/diagnostic/crash/:id — sdk-diagnostic-telemetry",
   "endpoint": "/api/diagnostic/crash/:id",
   "method": "GET",
+  "description": "Fetches a single crash snapshot by its id. Edge cases: an unknown id returns 404 with {success:false,error:'not found'}; a malformed (non-UUID) id fails the Postgres uuid cast and surfaces as an unhandled 500 rather than a 404; the route applies no device or tenant filter, so any authenticated caller who knows an id can read that crash - worth confirming against tenant-isolation expectations.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "Authorization header absent or not in the form \"Bearer <jwt>\" — enforced by the gateway default-deny auth gate, not by the route itself"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "JWT signature invalid, malformed, or past its exp claim — enforced by the gateway default-deny auth gate, not by the route itself"
+    },
+    {
+      "status": 404,
+      "code": "NotFound",
+      "message": "not found",
+      "when": "no crash row exists for the given id"
+    }
+  ],
   "requiresAuth": true,
   "expectedStatus": 200,
   "sdk": "sdk-diagnostic-telemetry",

@@ -32,5 +32,32 @@
     "data": {
       "deliveries": "array"
     }
-  }
+  },
+  "description": "Lists a tenant's dead-lettered webhook deliveries — the handler delegates to listDlq, so this is the DLQ view rather than all delivery attempts. Edge cases: ?tenant_id= is REQUIRED and is caller-asserted from the query string, not the JWT, so omitting it is a 400; ?limit= is passed through Number() with no clamping, so a non-numeric limit becomes NaN and an enormous limit is honoured, while omitting it falls back to the service default of 100; a tenant with an empty DLQ returns 200 with an empty array, never 404; there is no cursor, so paging beyond the limit is impossible.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "Authorization header absent or not in 'Bearer <jwt>' form (requireAuth preHandler)"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "JWT signature invalid, malformed, or exp has elapsed"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "tenant_id required",
+      "when": "?tenant_id= query param is absent"
+    },
+    {
+      "status": 500,
+      "code": "InternalError",
+      "message": "InternalError",
+      "when": "Unexpected service/DB failure (connection loss, or a constraint the handler does not map)"
+    }
+  ]
 }

@@ -1,0 +1,43 @@
+{
+  "name": "GET /api/scheduling/availability - Compute bookable time slots for a host on a date",
+  "endpoint": "/api/scheduling/availability",
+  "sdk": "sdk-scheduling",
+  "sourceFile": "packages/sdk-scheduling/src/server/routes.ts",
+  "method": "GET",
+  "requiresAuth": true,
+  "expectedStatus": 200,
+  "taskId": "41c92779-7aec-4747-b111-ada104733228",
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "featureId": "c705caee-690d-465f-8ae4-c84521bacb7d",
+  "epicId": "4df864ec-e460-4cc9-a58a-92baadec5269",
+  "priority": 53,
+  "testability": "auto",
+  "description": "Compute a host's bookable time slots for a given ISO date, honoring the host's per-weekday business hours (in the rule's IANA timezone) and marking slots that overlap an existing non-cancelled appointment as unavailable. A weekday with no active rule returns zero slots (still HTTP 200). Slot length is the meeting type's duration when meeting_type_id is given, else slot_minutes, else the rule interval. Required query params: tenant_id, host_persona_id, date (YYYY-MM-DD).",
+  "dependsOn": [
+    "POST /api/auth/signup-tenant",
+    "POST /api/personas",
+    "POST /api/scheduling/meeting-types",
+    "POST /api/scheduling/availability-rules"
+  ],
+  "testCases": [
+    {
+      "name": "Get availability for a host on a date for a meeting type",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "queryParams": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "host_persona_id": "{{cache:personas.create.response.data.persona.persona_id}}",
+        "date": "{{static:2026-07-27}}",
+        "meeting_type_id": "{{cache:scheduling.meeting-type.create.response.data.meeting_type.meeting_type_id}}"
+      },
+      "expectedStatus": 200,
+      "expectedResponse": { "data": { "availability": { "date": "string", "slots": "array", "total_slots": "number" } } }
+    }
+  ],
+  "errorCases": [
+    { "status": 400, "code": "ValidationError", "message": "tenant_id, host_persona_id and date query params are required", "when": "any of tenant_id / host_persona_id / date missing" },
+    { "status": 400, "code": "ValidationError", "message": "date must be an ISO date (YYYY-MM-DD)", "when": "date not in YYYY-MM-DD format" },
+    { "status": 401, "code": "Unauthorized", "message": "missing or invalid token", "when": "no valid Bearer token" }
+  ]
+}

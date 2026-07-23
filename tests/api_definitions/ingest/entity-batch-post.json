@@ -41,5 +41,44 @@
   ],
   "dependsOn": [
     "POST /api/auth/register"
+  ],
+  "description": "Generic ETL landing endpoint: accepts a batch of records for the :entity named in the path, keyed by a caller-supplied idempotency_key, with an optional mode. Gated by the gateway default-deny authGate, so a valid tenant JWT is required; tenant_id is taken from req.auth.tenant (the JWT) and never from the body, so a batch cannot be written into another tenant. Edge cases: idempotency_key is mandatory and is what makes a replayed batch a no-op rather than a duplicate insert - re-POSTing the same key must not double-write; records must be a non-empty array, so an empty array and a missing records field both 400; the :entity segment is not checked against an allowlist in the route, so an unknown entity fails inside the service; there is no batch-size cap in the handler, so oversized batches are bounded only downstream; every service failure is caught and flattened to a 400 with the raw message, so this route never returns 404 or 500.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "Authorization header absent or not in Bearer form - gateway default-deny authGate onRequest hook (AUTH_GATE_MODE=enforce)"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "Bearer token fails JWT verification in the gateway authGate"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "entity is required",
+      "when": "the :entity path segment resolves empty"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "idempotency_key is required",
+      "when": "body.idempotency_key is absent or an empty string"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "records must be a non-empty array",
+      "when": "body.records is absent, not an array, or an empty array"
+    },
+    {
+      "status": 400,
+      "code": "IngestFailed",
+      "message": "<service error message>",
+      "when": "ingestBatch throws for any other reason - unknown entity/table, malformed record shape, or a sink/DB error; the catch flattens every failure to 400"
+    }
   ]
 }

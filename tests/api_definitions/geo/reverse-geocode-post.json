@@ -29,5 +29,26 @@
   ],
   "captureResponse": {
     "geo.reverse-geocode.response.data.address.street": "data.address.street"
-  }
+  },
+  "description": "Reverse-geocodes a lat/lng pair through the active geo provider and returns 200 with { street, city, country } or null when the provider has no match. Both lat and lng must be JSON numbers - the guard is a strict typeof check, so numeric strings such as \"12.97\" are rejected with 400. Edge cases: lat/lng sent as strings, either coordinate missing, lat/lng of 0 (valid - 0 is a number and passes the guard), out-of-range coordinates (not validated here; passed to the provider, which returns null), a provider miss returning 200 with a null address, and missing/expired JWT.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "Authorization header absent or not in Bearer form (requireAuth / gateway default-deny authGate)"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "Bearer token fails JWT verification or is expired (requireAuth / gateway default-deny authGate)"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "missing lat/lng",
+      "when": "lat or lng is absent or not a JSON number (numeric strings are rejected)"
+    }
+  ]
 }

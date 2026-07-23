@@ -2,6 +2,21 @@
   "name": "POST /admin/lineage/backfill — api-gateway",
   "endpoint": "/admin/lineage/backfill",
   "method": "POST",
+  "description": "Operator-triggered lineage backfill (P6B FR-LIN-5 / TK-3380). Resumable via a per-(pool_index, event_type) checkpoint so an interrupted run continues where it stopped rather than restarting; dry_run (default false) reports the counts it would write without writing anything. All body fields are optional — with an empty body the backfill runs across every pool and event_type from the stored checkpoint. QA edge cases: there is NO field validation, so an unknown pool_index or event_type is not a 400 — it simply matches nothing and returns a zero-count success; from/to are passed through new Date() unchecked, so an unparseable string becomes Invalid Date and surfaces as a 500 from the query layer; batch_size is unbounded, so a very large value can hold a connection long enough to exhaust the pool; a non-dry-run backfill advances the checkpoint, which makes a second identical call return far smaller counts — assert relative, not absolute.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "admin token required",
+      "when": "x-admin-ops-token header is missing, empty, or matches neither the env ADMIN_OPS_TOKEN break-glass secret (constant-time compare) nor the SHA-256 hash of any active row in admin.ops_token; revoked/expired DB tokens keep working until the per-replica cache expires (ADMIN_OPS_TOKEN_CACHE_TTL_MS, default 30s) unless a Redis invalidation broadcast lands first"
+    },
+    {
+      "status": 500,
+      "code": "InternalServerError",
+      "message": "<backfill error message>",
+      "when": "runLineageBackfill() throws — unparseable from/to yielding an Invalid Date, the checkpoint read/write failing, Postgres unavailable, or the batch query timing out"
+    }
+  ],
   "requiresAuth": false,
   "expectedStatus": 200,
   "sdk": "api-gateway",

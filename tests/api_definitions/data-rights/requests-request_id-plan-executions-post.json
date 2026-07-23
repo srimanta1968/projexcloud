@@ -4,6 +4,21 @@
   "sdk": "sdk-data-rights",
   "sourceFile": "packages/sdk-data-rights/src/server/routes.ts",
   "method": "POST",
+  "description": "Fans a DSAR request out into one pending execution row per pool the subject has residency in, choosing the action from the request kind: erasure -> shred-person-key, access/portability -> export, everything else -> rectify. Edge cases: an unknown request_id is NOT a 404 - planExecutions returns [] and the route still answers 201 with an empty executions array; likewise a subject with no residency rows yields an empty plan, which is the signal to touch residency first; the endpoint is not idempotent - calling it twice inserts a second full set of execution rows for the same request.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "Authorization header absent or not in the form \"Bearer <jwt>\""
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "JWT signature invalid, malformed, or past its exp claim"
+    }
+  ],
   "requiresAuth": true,
   "expectedStatus": 201,
   "taskId": "4e811425-e319-451a-9fa6-30c71717d88f",

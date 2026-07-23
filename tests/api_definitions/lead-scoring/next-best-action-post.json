@@ -9,11 +9,11 @@
   "_generated": true,
   "testability": "auto",
   "dependsOn": [
-    "POST /api/auth/register",
     "POST /api/auth/signup-tenant",
     "POST /api/lead-scoring/models",
     "POST /api/lead-scoring/models/:id/activate"
   ],
+  "description": "Scores a contact and recommends the next action in one round trip: it runs the same scoreContact pipeline as /score (so it also persists a lead_scoring.score row and emits the audit event) and then maps the result to an action. The default resolver applies storm_impact >= 0.5 as an override returning 'storm_response' regardless of any higher subscore; otherwise the dominant subscore maps proximity -> schedule_visit, expertise -> send_offer, intent -> reach_out, and anything else to nurture; when every subscore is <= 0 it returns 'nurture'. QA edge cases: the storm override outranking a strictly higher proximity/intent score is the key branch to cover, as is the 0.5 boundary itself (0.49 vs 0.50); this endpoint has the same side effects as /score, so calling it twice writes two score rows — it is not a read-only preview; every failure mode of /score applies identically here (missing required fields and 'no active model' both surface as 400); the resolver is swappable at runtime via setNextBestActionResolver, so in an environment where a custom resolver is installed the action mapping above no longer holds.",
   "testCases": [
     {
       "name": "Score + recommend next best action against the active model",
@@ -46,7 +46,7 @@
       },
       "expectedStatus": 200,
       "headers": {
-        "Authorization": "Bearer {{cache:auth.register.response.data.token}}"
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
       }
     }
   ],
@@ -59,5 +59,37 @@
   "captureResponse": {
     "lead-scoring.next-best-action.response.data.scoring.score.score_id": "data.scoring.score.score_id",
     "lead-scoring.next-best-action.response.data.scoring.model_id": "data.scoring.model_id"
-  }
+  },
+  "errorCases": [
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "tenant_id, vertical, contact_id, trace_id are required",
+      "when": "any of tenant_id, vertical, contact_id or trace_id is missing or empty in the body"
+    },
+    {
+      "status": 400,
+      "code": "NoActiveModel",
+      "message": "[sdk-lead-scoring] no active model for tenant <tenant_id> vertical <vertical>",
+      "when": "no lead_scoring.model row with status='active' exists for the (tenant_id, vertical) pair"
+    },
+    {
+      "status": 400,
+      "code": "NextBestActionFailed",
+      "message": "[sdk-lead-scoring] score insert failed | <underlying error message>",
+      "when": "the underlying scoreContact call fails (score insert returns no row, subscore backend throws, invalid tenant UUID) or the installed next-best-action resolver throws"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "no Authorization header, or it is not of the form 'Bearer <jwt>' (api-gateway default-deny authGate, AUTH_GATE_MODE=enforce)"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "the bearer JWT fails verifyJwt — bad signature, wrong JWT_SECRET, or exp already elapsed (api-gateway default-deny authGate, AUTH_GATE_MODE=enforce)"
+    }
+  ]
 }

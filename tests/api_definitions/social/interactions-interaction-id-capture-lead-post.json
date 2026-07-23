@@ -1,5 +1,5 @@
 {
-  "name": "POST /api/social/interactions/:interaction_id/capture-lead \u2014 sdk-social",
+  "name": "POST /api/social/interactions/:interaction_id/capture-lead — sdk-social",
   "endpoint": "/api/social/interactions/:interaction_id/capture-lead",
   "method": "POST",
   "requiresAuth": true,
@@ -37,5 +37,38 @@
   "captureResponse": {
     "social.capture-lead.response.data.interaction.interaction_id": "data.interaction.interaction_id",
     "social.capture-lead.response.data.interaction.captured_lead_contact_id": "data.interaction.captured_lead_contact_id"
-  }
+  },
+  "description": "Converts a social interaction into a captured lead by linking it to a CRM contact, returning the updated interaction. Edge cases: contact_id is required in the body and a missing value is a 400 before any lookup; an unknown interaction_id returns 404 NotFound; the link is a plain overwrite, so re-capturing an interaction that is already linked replaces the previous contact_id rather than returning a conflict — repeating the same call is effectively idempotent, but pointing it at a different contact silently re-parents the lead; a contact_id that does not exist violates a foreign key at update time and surfaces as a 500 rather than a 404; a malformed (non-UUID) interaction_id fails the query cast and also surfaces as 500.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "No Authorization: Bearer <jwt> header on a requireAuth route"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "Bearer token fails verifyJwt (bad signature, malformed, or exp in the past)"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "missing contact_id",
+      "when": "contact_id is absent or empty in the request body"
+    },
+    {
+      "status": 404,
+      "code": "NotFound",
+      "message": "NotFound",
+      "when": "captureLead finds no interaction for the supplied interaction_id"
+    },
+    {
+      "status": 500,
+      "code": "InternalError",
+      "message": "Internal Server Error",
+      "when": "captureLead throws — e.g. contact_id violates a foreign key, interaction_id is not a valid UUID, or the database is unreachable"
+    }
+  ]
 }

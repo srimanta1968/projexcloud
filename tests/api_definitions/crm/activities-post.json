@@ -2,6 +2,33 @@
   "name": "POST /api/crm/activities — sdk-crm",
   "endpoint": "/api/crm/activities",
   "method": "POST",
+  "description": "Logs a generic CRM activity on an encounter timeline. encounter_id, kind and actor_persona_id are required, and kind must be one of the ACTIVITY_KINDS enum defined in the crm model (widened with 'voicemail' by migration 003). Edge cases: missing required fields -> 400 'missing fields'; a kind outside the enum -> 400 'invalid activity kind'; summary and occurred_at are optional and occurred_at defaults server-side when omitted (a future-dated occurred_at is not rejected); there is no de-duplication key, so retrying the same log creates a second activity - unlike POST /api/crm/activities/call this endpoint is not idempotent; an unknown encounter_id fails the FK inside the insert and surfaces as an unhandled 500.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "Authorization header absent or not in the form \"Bearer <jwt>\""
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "JWT signature invalid, malformed, or past its exp claim"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "missing fields",
+      "when": "body omits encounter_id, kind, or actor_persona_id"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "invalid activity kind",
+      "when": "body.kind is not a member of ACTIVITY_KINDS"
+    }
+  ],
   "requiresAuth": true,
   "dependsOn": [
     "POST /api/auth/signup-tenant",
@@ -17,7 +44,7 @@
   "sourceFile": "packages/sdk-crm/src/server/routes.ts",
   "_generated": true,
   "fieldEnums": {
-    "kind": ["call", "email", "meeting", "note", "task"]
+    "kind": ["call", "email", "meeting", "note", "task", "voicemail"]
   },
   "captureResponse": {
     "crm.activities.response.data.activity.activity_id": "data.activity.activity_id"

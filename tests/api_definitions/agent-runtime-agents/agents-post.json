@@ -5,6 +5,38 @@
   "taskId": "d9609d02-6991-45a5-94dd-9c10e02e6448",
   "description": "Create an agent_definition. Required: name, acting_persona_id, tier, vector_namespace, created_by. Returns the row including server-generated agent_id + timestamps.",
   "requiresAuth": true,
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "No Authorization header, or it does not match /^Bearer\\s+(.+)$/. Enforced twice: the gateway default-deny authGate onRequest hook (AUTH_GATE_MODE=enforce) and the route's own requireAuth preHandler."
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "Bearer token present but verifyJwt() throws — bad signature, malformed JWT, or exp in the past."
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "Required: name, acting_persona_id, tier, vector_namespace, created_by",
+      "when": "createAgentDefinitionHandler falsy-checks the body: any of name, acting_persona_id, tier, vector_namespace or created_by missing, empty string, or the body absent entirely. Optional fields (tenant_id, description, agent_scope, default_ttl_seconds, kill_switch_flag_id, tool_manifest) are not checked here."
+    },
+    {
+      "status": 500,
+      "code": "CreateFailed",
+      "message": "Create failed",
+      "when": "The INSERT into agents.agent_definition rejects. The handler catches every DB error and flattens it to 500 — there is no 400/409 mapping in this route. Real triggers: tier outside CHECK (sync|orchestration|batch); default_ttl_seconds <= 0 or > 3600 (CHECK); acting_persona_id, tenant_id or kill_switch_flag_id not a valid UUID literal (acting_persona_id is a bare UUID column with no FK, so a non-existent persona inserts fine — only bad syntax fails); name/vector_namespace/created_by NULL. Note: a duplicate name is NOT an error — there is no unique index on agent_definition, so repeated POSTs create distinct agent_id rows (endpoint is non-idempotent)."
+    },
+    {
+      "status": 500,
+      "code": "InternalError",
+      "message": "InternalError",
+      "when": "The route-level try/catch in sdk-agent-runtime registerRoutes fires — an error escaping createAgentDefinitionHandler itself (e.g. pool acquisition failure) before a reply was sent."
+    }
+  ],
   "priority": 50,
   "dependsOn": [
     "POST /api/auth/register"

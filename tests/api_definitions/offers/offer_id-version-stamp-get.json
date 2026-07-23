@@ -1,0 +1,57 @@
+{
+  "sdk": "sdk-offer-catalog",
+  "sourceFile": "packages/sdk-offer-catalog/src/server/routes.ts",
+  "requiresAuth": true,
+  "taskId": "95bdb660-30d0-4337-98a1-897aac9f6912",
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "featureId": "7079a34d-8593-4978-944a-7162513d8c91",
+  "epicId": "9a0f06fa-f1a9-4292-8bc5-715ec836bbc8",
+  "testability": "auto",
+  "name": "GET /api/offers/:offer_id/version-stamp - Version to pin",
+  "endpoint": "/api/offers/:offer_id/version-stamp",
+  "method": "GET",
+  "expectedStatus": 200,
+  "priority": 30,
+  "description": "Return the offer version a consumer should pin (version-stamp): the current version via resolve (live, else beta, else draft). A record stores offer_version_id and later revalidates with check-reference. 404 if the offer has no version. tenant_id query param required.",
+  "dependsOn": [
+    "POST /api/auth/signup-tenant",
+    "POST /api/offers",
+    "POST /api/offers/:offer_id/versions"
+  ],
+  "testCases": [
+    {
+      "name": "Stamp the current version",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "pathParams": {
+        "offer_id": "{{cache:offers.create.response.data.offer.offer_id}}"
+      },
+      "queryParams": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}"
+      },
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "data": {
+          "stamp": {
+            "offer_version_id": "string"
+          }
+        }
+      }
+    }
+  ],
+  "errorCases": [
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "tenant_id query param required",
+      "when": "tenant_id missing"
+    },
+    {
+      "status": 404,
+      "code": "NotFound",
+      "message": "offer has no current version to stamp",
+      "when": "no version"
+    }
+  ]
+}

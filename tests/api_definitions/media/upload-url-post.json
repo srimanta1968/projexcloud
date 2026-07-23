@@ -45,5 +45,68 @@
     "media.upload-url.create.response.data.blob_id": "data.blob_id",
     "media.upload-url.create.response.data.url_id": "data.url_id",
     "media.upload-url.create.response.data.s3_key": "data.s3_key"
-  }
+  },
+  "description": "Issues a presigned S3 upload URL for a new media blob (FR-MED-1) and returns 201 with the blob id, URL and expiry. The tenant is forced from the JWT tenant_id claim and overwrites any tenant_id in the body, so cross-tenant uploads are impossible. persona_id, content_type and a positive byte_size are mandatory. Edge cases: byte_size must be a positive number and is capped at 5 GiB (5368709120) - zero, negative, non-numeric or oversized values are 400s; ttl_seconds is optional and is clamped down to the service maximum, so an oversized TTL is silently reduced rather than rejected; a JWT with no tenant_id claim is a 403, not a 401; supplying an encounter_id that has already been sealed is a 409 (FR-MED-5); a tenant with no active vault key is a 400 VaultKeyMissing and must be provisioned via sdk-vault first.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "Authorization header absent or not in Bearer form (requireAuth / gateway default-deny authGate)"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "Bearer token fails JWT verification or is expired (requireAuth / gateway default-deny authGate)"
+    },
+    {
+      "status": 403,
+      "code": "Forbidden",
+      "message": "JWT missing tenant_id claim",
+      "when": "The token verifies but carries no tenant_id claim, so no tenant context can be established"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "body must be an object",
+      "when": "Request body is absent or not a JSON object"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "persona_id / content_type is required",
+      "when": "persona_id or content_type is absent or whitespace-only"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "byte_size must be a positive number",
+      "when": "byte_size is missing, not a number, NaN/Infinity, zero or negative"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "byte_size cannot exceed 5368709120 bytes",
+      "when": "byte_size exceeds the 5 GiB single-upload ceiling"
+    },
+    {
+      "status": 400,
+      "code": "VaultKeyMissing",
+      "message": "No active vault tenant key for tenant <tenant_id>; provision via sdk-vault first",
+      "when": "The tenant has no active vault key to wrap the blob DEK"
+    },
+    {
+      "status": 409,
+      "code": "SealedEncounter",
+      "message": "Encounter <encounter_id> is sealed; new evidence blocked per FR-MED-5",
+      "when": "The supplied encounter_id has a vault.encounter_key_seal row - the encounter is sealed and no new evidence may be attached"
+    },
+    {
+      "status": 500,
+      "code": "InternalError",
+      "message": "InternalError",
+      "when": "Any other issueUploadUrl failure - notably no S3 signer registered in production, or a database error"
+    }
+  ]
 }

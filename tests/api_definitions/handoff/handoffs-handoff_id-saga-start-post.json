@@ -1,0 +1,37 @@
+{
+  "name": "POST /api/handoffs/:handoff_id/saga/start - Start the durable handoff saga",
+  "endpoint": "/api/handoffs/:handoff_id/saga/start",
+  "sdk": "sdk-handoff",
+  "sourceFile": "packages/sdk-handoff/src/server/routes.ts",
+  "method": "POST",
+  "requiresAuth": true,
+  "expectedStatus": 202,
+  "taskId": "8770bb7c-418a-4013-93f1-e0d86f2c1849",
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "priority": 47,
+  "testability": "auto",
+  "description": "Start the Sales->Delivery handoff saga for a handoff. Drives the kickoff -> prework -> promises -> risks -> milestones phases as a durable sdk-workflow saga (each phase is a typed sdk-workflow step with a registered compensator; on a step failure the prior steps' compensators run in reverse, flipping their handoff.saga_step projection to 'compensated'). No new workflow engine is introduced — registration, execution and durability come from sdk-workflow, and the definition ('handoff.saga') is registered at gateway boot. Returns 202 with the workflow run_id, run status and the ordered phase list. tenant_id is required; 404 if the handoff does not exist for the tenant.",
+  "dependsOn": [
+    "POST /api/auth/signup-tenant",
+    "POST /api/handoffs"
+  ],
+  "testCases": [
+    {
+      "name": "Start the saga for the created handoff",
+      "headers": { "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}" },
+      "pathParams": { "handoff_id": "{{cache:handoff.handoffs.create.response.data.handoff.handoff_id}}" },
+      "payload": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}"
+      },
+      "expectedStatus": 202,
+      "expectedResponse": { "data": { "saga": { "run_id": "string", "status": "string", "phases": "array" } } }
+    }
+  ],
+  "captureResponse": {
+    "handoff.saga.start.response.data.saga.run_id": "data.saga.run_id"
+  },
+  "errorCases": [
+    { "status": 400, "code": "ValidationError", "message": "tenant_id is required", "when": "tenant_id missing from body" },
+    { "status": 404, "code": "NotFound", "message": "NotFound", "when": "handoff_id not found for the tenant" }
+  ]
+}

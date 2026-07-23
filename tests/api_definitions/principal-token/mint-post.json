@@ -38,5 +38,38 @@
       "sub": "string"
     }
   },
-  "testability": "auto"
+  "testability": "auto",
+  "description": "Mints a short-TTL, audience-bound platform principal token (P10/E2) from the SERVER-RESOLVED identity context: every claim derives from the verified JWT / resolveIdentityContext, and the only caller-supplied values are audience, ttl_seconds and purpose. Returns 201 with { token, audience, sub }. When the JWT carries both app_id and tenant_id the full IdentityContext (persona ids, effective scopes, role closure, projection_version) is resolved from the DB; otherwise it falls back to the raw six-layer JWT claims with empty scope/closure arrays. Device posture is captured at the gateway from the x-device-trust and x-network-zone headers — non-string or empty header values are dropped. Edge cases: audience is mandatory and is not validated against a registry, so any string mints a token no downstream service may accept; ttl_seconds is optional and clamped by mintPrincipalToken's own bounds; the endpoint is NOT idempotent — each call mints a fresh token; minting fails if the signing key store cannot load or rotate a key.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "No Authorization: Bearer header — the gateway default-deny authGate runs requireAuth on every non-allowlisted path"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "Bearer token fails verifyJwt (bad signature, malformed, or exp in the past)"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Unauthorized",
+      "when": "requireAuth passed but req.auth.sub is absent, so there is no subject to bind the principal token to"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "audience is required",
+      "when": "Body is missing audience, or audience is an empty/falsy value"
+    },
+    {
+      "status": 500,
+      "code": "InternalError",
+      "message": "<error message from resolveIdentityContext or mintPrincipalToken>",
+      "when": "Identity-context resolution fails (person/app/tenant lookup errors or non-UUID ids from the JWT) or the token cannot be signed — signing-key load/rotation or wrap-key failure"
+    }
+  ]
 }

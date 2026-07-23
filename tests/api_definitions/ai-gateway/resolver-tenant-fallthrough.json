@@ -12,6 +12,7 @@
   "priority": 10,
   "testability": "manual",
   "skipReason": "Internal resolver function exercised indirectly by /api/ai-gateway/complete and /stream. Unit-tested in packages/sdk-ai-gateway/tests/resolver-fallthrough.spec.ts (added with this task).",
+  "description": "Internal (non-HTTP) contract for completionService.loadProviderRow, the BYOK credential resolver behind /api/ai-gateway/complete and /stream. Resolution order per FR-BYOK-2: (1) an active row in ai_gateway.tenant_provider_credential for (tenant, provider) — but if its model_allowlist is non-null and the requested model is absent from it, treat as no tenant credential and fall through (FR-BYOK-6); (2) the platform row in ai_gateway.provider. QA edge cases: the function NEVER throws — it returns null when neither row exists, and the caller (complete/stream) is what raises '[ai-gateway] provider <id> not available', which the controller maps to HTTP 503; the caching behaviour is the subtle part — results are cached per (tenant, provider) with no model in the key, so a model-allowlist fall-through deliberately bypasses and does not poison the cache, and a test that binds an allowlisted credential then immediately requests a non-allowlisted model must still see the platform credential; a disabled platform row is still returned (status is carried on the row, not filtered in the query), so 'disabled provider' is enforced downstream rather than here; a null/undefined tenant_id skips step 1 entirely and resolves platform-only.",
   "testCases": [
     {
       "name": "Tenant active binding → tenant credential",
@@ -61,5 +62,13 @@
   ],
   "expectedResponse": {
     "success": true
-  }
+  },
+  "errorCases": [
+    {
+      "status": 503,
+      "code": "ProviderNotAvailable",
+      "message": "[ai-gateway] provider <provider_id> not available",
+      "when": "loadProviderRow returns null (no active tenant binding and no platform ai_gateway.provider row) — the resolver itself does not throw; complete()/stream() raise this and completionController maps messages containing \"not available\" to HTTP 503"
+    }
+  ]
 }

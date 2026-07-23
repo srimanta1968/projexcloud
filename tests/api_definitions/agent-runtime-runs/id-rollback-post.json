@@ -35,5 +35,37 @@
         "success": true
       }
     }
+  ],
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "No Authorization: Bearer <jwt> header on a requireAuth route"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "Bearer token fails verifyJwt (bad signature, malformed, or exp in the past)"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "Missing path param: run_id",
+      "when": "The :run_id path segment resolves to an empty value"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "to_seq must be an integer >= -1",
+      "when": "The to_seq query param is present but is not parseable as an integer, or parses to a value below -1"
+    },
+    {
+      "status": 500,
+      "code": "InternalError",
+      "message": "Rollback failed",
+      "when": "rollbackRun throws — the run does not exist, a compensation handler fails, or the database is unreachable. Note this handler has no 404 branch, so an unknown run_id surfaces as 500"
+    }
   ]
 }

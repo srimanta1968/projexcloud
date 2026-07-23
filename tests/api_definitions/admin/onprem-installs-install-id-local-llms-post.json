@@ -2,6 +2,27 @@
   "name": "POST /admin/onprem/installs/:install_id/local-llms — api-gateway",
   "endpoint": "/admin/onprem/installs/:install_id/local-llms",
   "method": "POST",
+  "description": "Registers a locally hosted LLM against an on-prem install — model id, serving backend (ollama | vllm | text-generation-inference), endpoint URL and quantization (fp16 | int8 | int4 | awq) — returning 201 { success: true, data: <model> }. status is optional (ready | loading | disabled) and defaults inside registerOnpremLocalLlm. QA edge cases: model_id, backend, endpoint_url and quantization are required with a falsy check; backend, quantization and status are typed unions but are NOT runtime-validated by the route, so out-of-enum values only fail at the DB check constraint and return 500 rather than 400; endpoint_url is not URL-validated and is never probed, so registering an unreachable endpoint succeeds; an unknown install_id is an FK violation and therefore a 500, not a 404; re-registering the same model_id on the same install has no conflict branch and may raise a unique violation as a 500.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "admin token required",
+      "when": "requireAdmin() found no valid x-admin-ops-token header — missing, or matching neither env ADMIN_OPS_TOKEN nor an active admin.ops_token hash (30s cache TTL applies to revocations)"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "model_id, backend, endpoint_url, quantization required",
+      "when": "any of model_id, backend, endpoint_url or quantization is missing, null, or an empty string"
+    },
+    {
+      "status": 500,
+      "code": "InternalServerError",
+      "message": "<registration error message>",
+      "when": "registerOnpremLocalLlm() throws — backend/quantization/status outside their allowed enums hitting a DB check constraint, install_id not matching a registered install (FK violation), a duplicate model_id, or Postgres unavailable"
+    }
+  ],
   "requiresAuth": false,
   "expectedStatus": 201,
   "sdk": "api-gateway",

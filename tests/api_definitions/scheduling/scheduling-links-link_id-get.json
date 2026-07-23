@@ -1,0 +1,56 @@
+{
+  "sdk": "sdk-scheduling",
+  "sourceFile": "packages/sdk-scheduling/src/server/routes.ts",
+  "requiresAuth": true,
+  "taskId": "b1b6ed6d-9513-4dc2-8791-dbea3fbb4ecd",
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "featureId": "9219a230-d47e-41f0-8f7a-8adb6065437f",
+  "epicId": "4df864ec-e460-4cc9-a58a-92baadec5269",
+  "testability": "auto",
+  "name": "GET /api/scheduling/scheduling-links/:link_id - Fetch one booking link",
+  "endpoint": "/api/scheduling/scheduling-links/:link_id",
+  "method": "GET",
+  "expectedStatus": 200,
+  "priority": 59,
+  "description": "Fetch a single public booking link by id (tenant-scoped). 404 if not found. tenant_id query param required.",
+  "dependsOn": [
+    "POST /api/auth/signup-tenant",
+    "POST /api/scheduling/scheduling-links"
+  ],
+  "testCases": [
+    {
+      "name": "Get a booking link by id",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "pathParams": {
+        "link_id": "{{cache:scheduling.scheduling-link.create.response.data.link.link_id}}"
+      },
+      "queryParams": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}"
+      },
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "data": {
+          "link": {
+            "link_id": "string"
+          }
+        }
+      }
+    }
+  ],
+  "errorCases": [
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "tenant_id query param required",
+      "when": "tenant_id missing"
+    },
+    {
+      "status": 404,
+      "code": "NotFound",
+      "message": "link not found",
+      "when": "no link for tenant"
+    }
+  ]
+}

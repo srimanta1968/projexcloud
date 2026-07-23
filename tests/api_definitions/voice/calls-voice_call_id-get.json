@@ -1,0 +1,40 @@
+{
+  "name": "GET /api/voice/calls/:voice_call_id - Fetch one call",
+  "endpoint": "/api/voice/calls/:voice_call_id",
+  "sdk": "connector-twilio-voice",
+  "sourceFile": "packages/connector-twilio-voice/src/server/routes.ts",
+  "method": "GET",
+  "requiresAuth": true,
+  "expectedStatus": 200,
+  "taskId": "a89d6c67-d5dd-4933-9148-db8e91b4493a",
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "priority": 64,
+  "testability": "auto",
+  "description": "Fetch a single call leg by id, including its recording fields, AMD outcome (answered_by), is_voicemail classification and any voicemail transcript. Tenant-scoped: another tenant's call reads as not-found rather than leaking its existence. Edge cases: 400 when the tenant_id query param is missing; 404 for an unknown id or one belonging to a different tenant; recording_url/recording_sid stay null until the recording webhook delivers them, and answered_by stays null until the status callback carrying AMD arrives.",
+  "dependsOn": [
+    "POST /api/auth/signup-tenant",
+    "POST /api/voice/tracking-numbers",
+    "POST /api/voice/calls"
+  ],
+  "fieldEnums": {
+    "status": ["queued", "initiated", "ringing", "in-progress", "completed", "busy", "no-answer", "canceled", "failed"],
+    "answered_by": ["human", "machine_start", "machine_end_beep", "machine_end_silence", "machine_end_other", "fax", "unknown"]
+  },
+  "testCases": [
+    {
+      "name": "Fetch the placed call",
+      "headers": { "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}" },
+      "pathParams": { "voice_call_id": "{{cache:voice.calls.create.response.data.call.voice_call_id}}" },
+      "queryParams": { "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}" },
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "data": { "call": { "voice_call_id": "string", "external_id": "string", "status": "string", "is_voicemail": "boolean" } }
+      }
+    }
+  ],
+  "errorCases": [
+    { "status": 400, "code": "ValidationError", "message": "tenant_id query param required", "when": "tenant_id query param missing" },
+    { "status": 401, "code": "Unauthorized", "message": "Unauthorized", "when": "Authorization bearer token missing or invalid" },
+    { "status": 404, "code": "NotFound", "message": "NotFound", "when": "voice_call_id unknown or belongs to another tenant" }
+  ]
+}

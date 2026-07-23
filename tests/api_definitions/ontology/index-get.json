@@ -20,5 +20,20 @@
         "Authorization": "Bearer {{cache:auth.register.response.data.token}}"
       }
     }
+  ],
+  "description": "Lists every registered ontology known to the semantic service, returning the full collection in one response. Edge cases: the handler takes no query parameters — there is no filtering by name, tenant or status and no pagination or limit, so active and deprecated versions all come back together and the payload grows unbounded with the number of registered ontologies; an empty registry returns 200 with an empty data array rather than 404; the route has no validation branch and no not-found branch, so the only reachable failure is an unhandled datastore error surfacing through the Fastify error handler as 500.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "Mounted in the api-gateway, /ontology/* is not on the default-deny allowlist, so the root authGate hook rejects a request with no valid tenant JWT. The standalone semantic-service binary registers these routes without auth"
+    },
+    {
+      "status": 500,
+      "code": "InternalError",
+      "message": "Internal Server Error",
+      "when": "listOntologies throws (database unreachable); the route has no try/catch, so the failure surfaces through the default Fastify error handler"
+    }
   ]
 }

@@ -14,7 +14,11 @@
     "POST /api/auth/register"
   ],
   "fieldEnums": {
-    "kind": ["totp", "webauthn", "sms_otp"]
+    "kind": [
+      "totp",
+      "webauthn",
+      "sms_otp"
+    ]
   },
   "testCases": [
     {
@@ -40,5 +44,38 @@
   "captureResponse": {
     "mfa.challenge.response.data.challenge_id": "data.challenge_id"
   },
-  "testability": "auto"
+  "testability": "auto",
+  "description": "Issues a step-up MFA challenge for the CALLER (person_id is taken from the verified JWT sub, never from the body), returning 201 with challenge_id, kind, a kind-specific payload and expires_at. kind defaults to 'totp' and must be one of totp|webauthn|sms_otp; the payload is an instruction string for totp, a { challenge, allow_credentials } object for webauthn, and an sms delivery hint for sms_otp. Edge cases: challenges live in an in-process Map with a short TTL and are purged on each call, so they do not survive a gateway restart and are not shared across replicas; issuing repeatedly creates independent challenge_ids with no rate limit or per-person cap, and older ones stay valid until they expire; an empty body is accepted and silently defaults to totp. Requires a valid tenant JWT (route preHandler requireAuth plus the gateway default-deny gate).",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "No Authorization: Bearer header — the gateway default-deny authGate runs requireAuth on every non-allowlisted path"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "Bearer token fails verifyJwt (bad signature, malformed, or exp in the past)"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing person_id",
+      "when": "The JWT verified but carries no sub claim, so the handler cannot bind the challenge to a person"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "kind must be totp|webauthn|sms_otp",
+      "when": "body.kind is present but is not one of totp, webauthn, sms_otp"
+    },
+    {
+      "status": 500,
+      "code": "InternalError",
+      "message": "InternalError",
+      "when": "issueMfaChallenge throws unexpectedly (crypto/UUID or challenge-store failure); caught by the controller fail() helper and by the route wrapper"
+    }
+  ]
 }

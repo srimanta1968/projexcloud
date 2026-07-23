@@ -2,6 +2,27 @@
   "name": "POST /admin/onprem/installs/:install_id/bundles — api-gateway",
   "endpoint": "/admin/onprem/installs/:install_id/bundles",
   "method": "POST",
+  "description": "Records that a signed release bundle was applied to an on-prem install, capturing bundle_version, whether its signature verified, and the list of migrations applied per SDK; returns 201 { success: true, data: <application record> }. QA edge cases: bundle_version is required and signature_verified must be a real boolean — the guard is typeof !== \"boolean\", so the strings \"true\"/\"false\" and the numbers 1/0 are all rejected as 400, which is the most common false failure when posting from a shell; signature_verified: false is a legitimate accepted value (it records a failed verification) and is NOT rejected; migrations_applied is optional and its [{ sdk, filename }] entries are not shape-validated; an unknown install_id is an FK violation and therefore a 500, not a 404; re-posting the same bundle_version has no conflict branch and may raise a unique violation as a 500.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "admin token required",
+      "when": "requireAdmin() found no valid x-admin-ops-token header — missing, or matching neither env ADMIN_OPS_TOKEN nor an active admin.ops_token hash (30s cache TTL applies to revocations)"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "bundle_version + signature_verified required",
+      "when": "bundle_version is missing/empty, or signature_verified is absent or not a JSON boolean (strings \"true\"/\"false\" and numbers are rejected)"
+    },
+    {
+      "status": 500,
+      "code": "InternalServerError",
+      "message": "<apply error message>",
+      "when": "applyOnpremBundle() throws — install_id not matching a registered install (FK violation), a duplicate bundle_version, malformed migrations_applied failing to store, or Postgres unavailable"
+    }
+  ],
   "requiresAuth": false,
   "expectedStatus": 201,
   "sdk": "api-gateway",

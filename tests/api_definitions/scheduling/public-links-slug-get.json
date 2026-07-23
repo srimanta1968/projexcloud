@@ -1,0 +1,39 @@
+{
+  "name": "GET /api/scheduling/public/links/:slug - Public booking-page payload",
+  "endpoint": "/api/scheduling/public/links/:slug",
+  "sdk": "sdk-scheduling",
+  "sourceFile": "packages/sdk-scheduling/src/server/publicRoutes.ts",
+  "method": "GET",
+  "requiresAuth": false,
+  "expectedStatus": 200,
+  "taskId": "ca26e4ff-f683-4905-aaa3-2a85ad87b90d",
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "priority": 72,
+  "testability": "auto",
+  "description": "PUBLIC: resolve a shared booking slug into exactly what a booking page needs to render — title, description, the booking window (max_days_ahead / min_notice_minutes) and the meeting duration resolved from the link's meeting type. No auth: the visitor is an anonymous prospect, so the gateway allowlists /api/scheduling/public/. The projection is deliberately narrow — tenant_id, host_persona_id, link_id and meeting_type_id are NEVER returned, so a leaked slug cannot be used to enumerate a tenant's internals. Edge cases: an unknown slug, a deactivated link (is_active=false) and an expired link (expires_at in the past) ALL return an identical 404 rather than a 403, so an attacker cannot use the status code to discover which slugs exist; duration_minutes is null when the link pins no meeting type, in which case booking falls back to a 30-minute default.",
+  "dependsOn": [
+    "POST /api/auth/signup-tenant",
+    "POST /api/scheduling/meeting-types",
+    "POST /api/scheduling/scheduling-links"
+  ],
+  "testCases": [
+    {
+      "name": "Anonymous visitor loads the booking page for a live link",
+      "pathParams": { "slug": "{{cache:scheduling.scheduling-link.create.response.data.link.slug}}" },
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "data": {
+          "link": {
+            "slug": "string",
+            "title": "string",
+            "max_days_ahead": "number",
+            "min_notice_minutes": "number"
+          }
+        }
+      }
+    }
+  ],
+  "errorCases": [
+    { "status": 404, "code": "NotFound", "message": "NotFound", "when": "slug unknown, link deactivated, or link expired — all three are indistinguishable by design" }
+  ]
+}

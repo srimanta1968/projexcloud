@@ -53,6 +53,57 @@
     "notifications.send.response.data.message.message_id": "data.message.message_id"
   },
   "fieldEnums": {
-    "channel": ["email", "sms", "whatsapp", "push", "slack"]
-  }
+    "channel": [
+      "email",
+      "sms",
+      "whatsapp",
+      "push",
+      "slack"
+    ]
+  },
+  "description": "Sends a templated notification through the full pipeline: consent check -> quiet-hours check -> template render -> queue. tenant_id is OVERWRITTEN from the caller's JWT, so a tenant_id in the body is ignored and cross-tenant sends are impossible here. The status code encodes the outcome: 201 when queued but 200 when the message was SUPPRESSED (consent absent/revoked, inside a quiet-hours window, or dnd) — a 200 therefore means nothing was sent and the reason is in data.suppression_reason. Edge cases: a JWT with no tenant_id claim is 403, not 401; template_code must resolve to a template for that (tenant, channel) or the send is 404 TemplateNotFound; enforce_consent and honor_quiet_hours let the caller opt out of those gates; scheduled_at defers delivery.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "Authorization header absent or not in 'Bearer <jwt>' form (requireAuth preHandler)"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "JWT signature invalid, malformed, or exp has elapsed"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "tenant_id is required / template_code is required / person_id is required / channel must be one of email, sms, whatsapp, push, slack / destination is required",
+      "when": "any validateSendNotification check fails; all failures are returned together in details[]"
+    },
+    {
+      "status": 403,
+      "code": "Forbidden",
+      "message": "JWT missing tenant_id claim",
+      "when": "the verified JWT carries no tenant_id claim, so the handler cannot scope the send"
+    },
+    {
+      "status": 404,
+      "code": "TemplateNotFound",
+      "message": "Template <code> not found for channel <channel>",
+      "when": "template_code (+ channel/locale) resolves to no tenant template and no platform default exists"
+    },
+    {
+      "status": 409,
+      "code": "Conflict",
+      "message": "Template already exists for that (tenant, code, channel, version)",
+      "when": "a duplicate-key error escapes the send path and is mapped by the shared fail() handler"
+    },
+    {
+      "status": 500,
+      "code": "InternalError",
+      "message": "InternalError",
+      "when": "Unexpected service/DB failure (connection loss, or a constraint the handler does not map)"
+    }
+  ]
 }

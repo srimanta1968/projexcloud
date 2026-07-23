@@ -1,0 +1,63 @@
+{
+  "sdk": "sdk-notification",
+  "sourceFile": "packages/sdk-notification/src/server/routes.ts",
+  "taskId": "a53a3912-4598-4dfe-a728-21e6ab9a5d4c",
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "featureId": "73f2d42d-acc1-4317-9e31-604bc330a08a",
+  "epicId": "f7f7186e-8f69-4e44-97b8-212928e870f6",
+  "testability": "auto",
+  "name": "POST /api/notifications/webhooks/sms/inbound - Inbound SMS webhook",
+  "endpoint": "/api/notifications/webhooks/sms/inbound",
+  "method": "POST",
+  "requiresAuth": false,
+  "expectedStatus": 200,
+  "priority": 41,
+  "description": "PUBLIC inbound SMS webhook (Twilio, on the gateway allowlist). HMAC-verified when a signing secret is configured for the tenant, else accepted. Classifies the leading keyword case-insensitively: STOP/UNSUBSCRIBE/CANCEL/END/QUIT -> opt_out (suppresses the number), START/UNSTOP/YES -> opt_in (resubscribes), HELP/INFO -> returns the configured auto-reply; unknown text is a no-op. Idempotent per (provider, MessageSid). tenant_id via ?tenant_id=.",
+  "dependsOn": [
+    "POST /api/auth/signup-tenant"
+  ],
+  "fieldEnums": {},
+  "testCases": [
+    {
+      "name": "Inbound STOP opts the number out",
+      "headers": {
+        "Content-Type": "application/json"
+      },
+      "queryParams": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}"
+      },
+      "payload": {
+        "From": "+1555{{dynamic:number}}",
+        "To": "+15005550006",
+        "Body": "STOP",
+        "MessageSid": "SM{{dynamic:uuid}}"
+      },
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "data": {
+          "intent": "string"
+        }
+      }
+    }
+  ],
+  "errorCases": [
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "tenant_id query param required",
+      "when": "tenant_id missing"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "From is required",
+      "when": "From missing"
+    },
+    {
+      "status": 401,
+      "code": "InvalidSignature",
+      "message": "inbound SMS signature verification failed",
+      "when": "signing secret configured and signature mismatch"
+    }
+  ]
+}

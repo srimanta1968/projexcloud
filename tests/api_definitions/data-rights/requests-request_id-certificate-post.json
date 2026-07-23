@@ -4,6 +4,27 @@
   "sdk": "sdk-data-rights",
   "sourceFile": "packages/sdk-data-rights/src/server/routes.ts",
   "method": "POST",
+  "description": "Issues the completion certificate for a DSAR request, sealing it with an audit entry whose entry_id becomes signed_by_audit_entry_id (a caller-supplied signed_by_audit_entry_id wins so an externally-orchestrated flow can pre-seal). Guarded by the reconciliation traffic light: if the latest reconciliation run is red the request is refused 409 before anything is written. Edge cases: the whole body is optional - shred_proofs defaults to {} and an empty proof set is accepted; an unknown request_id is NOT rejected here, the certificate is still inserted with the request_id as its subject fallback; the endpoint is not idempotent - each call inserts another certificate row for the same request.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "Authorization header absent or not in the form \"Bearer <jwt>\""
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "JWT signature invalid, malformed, or past its exp claim"
+    },
+    {
+      "status": 409,
+      "code": "ReconciliationRed",
+      "message": "Reconciliation red — DSAR completion blocked",
+      "when": "isReconciliationGreen() is false, i.e. the most recent reconciliation run recorded outstanding discrepancies"
+    }
+  ],
   "requiresAuth": true,
   "expectedStatus": 201,
   "taskId": "4e811425-e319-451a-9fa6-30c71717d88f",

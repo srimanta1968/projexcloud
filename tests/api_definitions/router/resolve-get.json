@@ -11,8 +11,8 @@
   "featureId": "afd054e4-fdcd-47cc-9d22-61e3e0bbee99",
   "epicId": "56951d24-67ef-4f13-8b0d-008a1601953a",
   "testability": "auto",
+  "setupScript": "router_seed_tenant_pool.sql",
   "dependsOn": [
-    "POST /api/auth/register",
     "POST /api/auth/signup-tenant"
   ],
   "testCases": [
@@ -24,7 +24,7 @@
       },
       "expectedStatus": 200,
       "headers": {
-        "Authorization": "Bearer {{cache:auth.register.response.data.token}}"
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
       }
     }
   ],
@@ -36,5 +36,38 @@
       "primary_endpoint": "string",
       "status": "string"
     }
-  }
+  },
+  "description": "Resolves a (tenant_id, app_id) tuple to the pool that serves it (P1 §8.1 / FR-PR-1), returning 200 {data:{pool_index, pool_family, region, primary_endpoint, status}}. Cache-first: the route cache is consulted before routing.tenant_pool_map, and a hit is written through on miss; routing latency is emitted per FR-PR-5. QA edge cases: both query params are trimmed and required as one branch — omitting either, or sending whitespace-only values, gives the same 400 with details ['tenant_id and app_id are required']. Two distinct misses collapse into the same 404: no tenant_pool_map row for the tenant at all, and a row that exists but has no pool assigned for that app_id. app_id has two reserved sentinel values — '__admin__' selects the tenant's admin_pool_index and '__evidence__' the evidence_pool_index; every other value is looked up as a key inside the app_pool_index JSON map, so an app_id the tenant has not onboarded is a 404 rather than a 400. The read is idempotent and unpaginated (single tuple in, single pool record out). Because results are cached, a freshly seeded or freshly revoked mapping may not be reflected immediately — seed via the setupScript before asserting. tenant_id is taken from the query string and is NOT cross-checked against the caller's JWT, so any authenticated caller can resolve another tenant's pool; tenant-isolation tests must not expect a 403. The path is not on the gateway public allowlist, so the default-deny auth gate requires a valid tenant JWT.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "No Authorization: Bearer header — authGate.ts default-deny gate rejects /api/router/resolve before the handler"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "Bearer token fails verifyJwt (bad signature, malformed, or expired)"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "tenant_id and app_id are required",
+      "when": "Either query param is absent, empty, or whitespace-only after trim"
+    },
+    {
+      "status": 404,
+      "code": "NotFound",
+      "message": "No active pool mapping for this tenant and app",
+      "when": "resolveTenantPool returns null — no routing.tenant_pool_map row for tenant_id, or the row carries no pool index for the requested app_id (including the __admin__/__evidence__ sentinels being unset)"
+    },
+    {
+      "status": 500,
+      "code": "InternalError",
+      "message": "InternalError",
+      "when": "resolveTenantPool throws — route-cache backend error, malformed tenant_id rejected by the column type, or the routing schema / DB pool being unavailable"
+    }
+  ]
 }

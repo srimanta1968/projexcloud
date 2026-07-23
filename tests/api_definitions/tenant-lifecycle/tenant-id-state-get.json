@@ -29,6 +29,45 @@
     }
   ],
   "fieldEnums": {
-    "current_state": ["active", "suspended", "offboarding", "offboarded", "sandbox"]
-  }
+    "current_state": [
+      "active",
+      "suspended",
+      "offboarding",
+      "offboarded",
+      "sandbox"
+    ]
+  },
+  "description": "Reads the current lifecycle state record for a tenant (active / suspended / offboarding and its associated metadata such as reason, actor and deadline). Edge cases: ownership is enforced before the read — the JWT tenant_id or parent_tenant_id must equal the path tenant_id, so probing another tenant's state returns 403, not 404; a tenant the caller does own but which has no lifecycle row yet (never suspended, reinstated or offboarded) returns 404 NotFound rather than a synthesized \"active\" default, so consumers must treat 404 as \"no lifecycle event recorded\"; a malformed tenant_id fails the ownership comparison and returns 403 rather than a validation error.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "No Authorization: Bearer <jwt> header on a requireAuth route"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "Bearer token fails verifyJwt (bad signature, malformed, or exp in the past)"
+    },
+    {
+      "status": 403,
+      "code": "Forbidden",
+      "message": "Tenant ownership check failed",
+      "when": "The JWT's tenant_id and parent_tenant_id both differ from the :tenant_id in the path"
+    },
+    {
+      "status": 404,
+      "code": "NotFound",
+      "message": "NotFound",
+      "when": "getState returns no lifecycle row for the supplied tenant_id"
+    },
+    {
+      "status": 500,
+      "code": "InternalError",
+      "message": "Internal Server Error",
+      "when": "The database is unreachable or the state read throws"
+    }
+  ]
 }

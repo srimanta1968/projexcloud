@@ -31,5 +31,38 @@
   ],
   "captureResponse": {
     "personas.set-role.response.success": "success"
-  }
+  },
+  "description": "Sets a persona's primary role. IMPORTANT: persona.persona stores the primary role as a role_template_id UUID — there is no free-text role column — so the `role` body field must be a role_template_id and a human-readable label such as 'admin' is rejected 400. Edge cases: a missing/empty role is 400 'role required'; a non-UUID role is a 400 with a distinct message; a well-formed UUID matching no role_template row violates the FK and surfaces as 500; the UPDATE row count is not checked, so an unknown :persona_id still returns {success:true} — this endpoint can never report 404.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "Gateway default-deny authGate (AUTH_GATE_MODE=enforce): path is not on the public allowlist and no bearer token was sent"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "authGate ran requireAuth and the JWT failed verification or had expired"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "role required",
+      "when": "body.role is absent or empty"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "role must be a role_template_id (uuid)",
+      "when": "body.role is present but does not match the UUID pattern (e.g. a role label was sent)"
+    },
+    {
+      "status": 500,
+      "code": "InternalError",
+      "message": "<postgres error text>",
+      "when": ":persona_id is not a valid UUID, or role references a role_template_id that does not exist (FK violation)"
+    }
+  ]
 }

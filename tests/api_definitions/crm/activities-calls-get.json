@@ -1,0 +1,53 @@
+{
+  "name": "GET /api/crm/activities/calls - Read the call/voicemail timeline",
+  "endpoint": "/api/crm/activities/calls",
+  "sdk": "sdk-crm",
+  "sourceFile": "packages/sdk-crm/src/server/routes.ts",
+  "method": "GET",
+  "requiresAuth": true,
+  "expectedStatus": 200,
+  "taskId": "2b1c31db-08c0-4207-a81d-79bae03c515e",
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "priority": 70,
+  "testability": "auto",
+  "description": "Read the call and voicemail entries on one encounter's timeline, newest first, optionally narrowed to a kind (call|voicemail) or a call_disposition. Only telephony activities are returned — note/email/meeting/task entries are excluded even though they share the crm.activity table. Edge cases: 400 when the encounter_id query param is missing; an unknown encounter yields an empty array rather than 404, since this is a filtered read not a record fetch; limit defaults to 50 and offset to 0; entries logged manually (no external_call_id) appear alongside webhook-sourced ones.",
+  "dependsOn": [
+    "POST /api/auth/signup-tenant",
+    "POST /api/auth/register",
+    "POST /api/app-identities",
+    "POST /api/memberships",
+    "POST /api/personas",
+    "POST /api/vault/keys",
+    "POST /api/encounters",
+    "POST /api/crm/activities/call"
+  ],
+  "fieldEnums": {
+    "kind": ["call", "voicemail"],
+    "call_disposition": ["answered", "no_answer", "busy", "failed", "voicemail", "left_message"]
+  },
+  "testCases": [
+    {
+      "name": "Read the call timeline for the encounter",
+      "headers": { "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}" },
+      "queryParams": {
+        "encounter_id": "{{cache:encounters.create.response.data.encounter.encounter_id}}",
+        "kind": "call",
+        "call_disposition": "answered",
+        "limit": "50",
+        "offset": "0"
+      },
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "data": {
+          "activities": [
+            { "activity_id": "string", "kind": "string", "call_disposition": "string" }
+          ]
+        }
+      }
+    }
+  ],
+  "errorCases": [
+    { "status": 400, "code": "ValidationError", "message": "encounter_id query param required", "when": "encounter_id query param missing" },
+    { "status": 401, "code": "Unauthorized", "message": "Unauthorized", "when": "Authorization bearer token missing or invalid" }
+  ]
+}

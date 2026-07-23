@@ -35,18 +35,88 @@
     "tenant-lifecycle.suspend.response.data.state.current_state": "data.state.current_state"
   },
   "fieldEnums": {
-    "current_state": ["active", "suspended", "offboarding", "offboarded", "sandbox"]
+    "current_state": [
+      "active",
+      "suspended",
+      "offboarding",
+      "offboarded",
+      "sandbox"
+    ]
   },
   "statusTransitions": {
     "entity": "tenant_lifecycle.state",
     "field": "current_state",
-    "flow": ["active", "suspended", "offboarding", "offboarded"],
+    "flow": [
+      "active",
+      "suspended",
+      "offboarding",
+      "offboarded"
+    ],
     "transitions": [
-      { "from": "active", "to": "suspended", "via": "POST /api/tenant-lifecycle/:tenant_id/suspend" },
-      { "from": "suspended", "to": "active", "via": "POST /api/tenant-lifecycle/:tenant_id/reinstate" },
-      { "from": "active", "to": "offboarding", "via": "POST /api/tenant-lifecycle/:tenant_id/offboard" },
-      { "from": "suspended", "to": "offboarding", "via": "POST /api/tenant-lifecycle/:tenant_id/offboard" },
-      { "from": "offboarding", "to": "offboarded", "via": "scheduler:runOffboardDeadlineTick" }
+      {
+        "from": "active",
+        "to": "suspended",
+        "via": "POST /api/tenant-lifecycle/:tenant_id/suspend"
+      },
+      {
+        "from": "suspended",
+        "to": "active",
+        "via": "POST /api/tenant-lifecycle/:tenant_id/reinstate"
+      },
+      {
+        "from": "active",
+        "to": "offboarding",
+        "via": "POST /api/tenant-lifecycle/:tenant_id/offboard"
+      },
+      {
+        "from": "suspended",
+        "to": "offboarding",
+        "via": "POST /api/tenant-lifecycle/:tenant_id/offboard"
+      },
+      {
+        "from": "offboarding",
+        "to": "offboarded",
+        "via": "scheduler:runOffboardDeadlineTick"
+      }
     ]
-  }
+  },
+  "description": "Suspends a tenant with a mandatory human-readable reason and returns the resulting lifecycle state, recording the JWT subject as the acting actor (falling back to \"api-gateway\" when the token has no sub). Edge cases: the caller must own the tenant — the JWT tenant_id must equal the path tenant_id, or its parent_tenant_id must (the reseller-attached path per FR-TLC-7) — otherwise 403 before any state read; reason is required and an empty string is rejected; suspending a tenant that is already suspended, or one in a terminal offboarded state, is rejected by the state machine with 409 InvalidTransition, so this call is not idempotent; an unknown tenant_id fails the ownership check first and returns 403 rather than 404.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "No Authorization: Bearer <jwt> header on a requireAuth route"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "Bearer token fails verifyJwt (bad signature, malformed, or exp in the past)"
+    },
+    {
+      "status": 403,
+      "code": "Forbidden",
+      "message": "Tenant ownership check failed",
+      "when": "The JWT's tenant_id and parent_tenant_id both differ from the :tenant_id in the path"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "reason is required",
+      "when": "The body omits reason or supplies an empty value"
+    },
+    {
+      "status": 409,
+      "code": "InvalidTransition",
+      "message": "Invalid tenant lifecycle transition <from> → suspended",
+      "when": "The tenant's current lifecycle state cannot move to suspended (already suspended, or offboarded)"
+    },
+    {
+      "status": 500,
+      "code": "InternalError",
+      "message": "Internal Server Error",
+      "when": "The database is unreachable or the state write throws outside the InvalidTransition path"
+    }
+  ]
 }

@@ -2,6 +2,21 @@
   "name": "GET /admin/federation/iceberg-catalogs — api-gateway",
   "endpoint": "/admin/federation/iceberg-catalogs",
   "method": "GET",
+  "description": "Lists every registered Iceberg catalog (catalog_id, region, backend, root_url, capacity_tier, status, created_at) newest-first as { success: true, data: rows }. Cross-tenant operator view with no filtering, no pagination and no row limit — the full federation.iceberg_catalog table is returned, so response size grows unbounded with catalog count. QA edge cases: the query is NOT wrapped in try/catch, so a database failure escapes to the Fastify default error handler and returns the framework-shaped 500 body ({ statusCode, error, message }) rather than the { success: false, error } shape the sibling routes use — assert accordingly; an empty table is a 200 with data: [], not a 404.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "admin token required",
+      "when": "x-admin-ops-token header is missing, empty, or matches neither the env ADMIN_OPS_TOKEN break-glass secret (constant-time compare) nor the SHA-256 hash of any active row in admin.ops_token; revoked/expired DB tokens keep working until the per-replica cache expires (ADMIN_OPS_TOKEN_CACHE_TTL_MS, default 30s) unless a Redis invalidation broadcast lands first"
+    },
+    {
+      "status": 500,
+      "code": "InternalServerError",
+      "message": "Internal Server Error",
+      "when": "the SELECT against federation.iceberg_catalog throws (Postgres unavailable, missing schema/table) — unhandled by the route, so Fastify default error serialization applies, not the { success: false } envelope"
+    }
+  ],
   "requiresAuth": false,
   "expectedStatus": 200,
   "sdk": "api-gateway",

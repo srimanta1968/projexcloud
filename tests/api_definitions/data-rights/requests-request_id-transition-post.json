@@ -4,6 +4,39 @@
   "sdk": "sdk-data-rights",
   "sourceFile": "packages/sdk-data-rights/src/server/routes.ts",
   "method": "POST",
+  "description": "Advances a DSAR request to a new lifecycle state. body.to must be one of submitted, identity-verified, approval-pending, grace-period, executing, certificate-issued, audited, rejected; approval_ref and grace_until are optional companions (grace_until is parsed as a Date). Edge cases: a missing or non-enum target state -> 400; an unknown request_id -> 404; a transition the state machine forbids from the request's current status -> 409 InvalidTransition carrying 'Invalid transition <current> -> <to>'; an unparseable grace_until becomes an Invalid Date rather than a 400; re-sending the same transition after it has been applied is itself an invalid transition and returns 409, so the endpoint is not idempotent.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "Authorization header absent or not in the form \"Bearer <jwt>\""
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "JWT signature invalid, malformed, or past its exp claim"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "invalid target state",
+      "when": "body.to is missing or not one of the eight DSAR_STATES values"
+    },
+    {
+      "status": 404,
+      "code": "NotFound",
+      "message": "NotFound",
+      "when": "transitionRequest finds no request row for request_id"
+    },
+    {
+      "status": 409,
+      "code": "InvalidTransition",
+      "message": "Invalid transition <current status> → <to>",
+      "when": "the DSAR state machine does not permit moving from the request's current status to the requested one"
+    }
+  ],
   "requiresAuth": true,
   "expectedStatus": 200,
   "taskId": "4e811425-e319-451a-9fa6-30c71717d88f",

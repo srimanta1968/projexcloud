@@ -67,5 +67,32 @@
   },
   "captureResponse": {
     "approvals.requests.decide.response.success": "success"
-  }
+  },
+  "description": "Gateway request-level decision shortcut: stamps approval.request with status, final_decision, resolved_at and a reason of the form '[decided by <persona>] <comment>'. Distinct from the step-level decide route — it resolves the whole request in one write. Edge cases: decision, comment AND decider_persona_id are all mandatory (one 400 covers all three); the UPDATE is guarded by status='pending', so deciding an already-resolved request updates zero rows yet STILL returns {success:true} — the same holds for an unknown :request_id, so this endpoint can never report 404 or 409; decider_persona_id is only recorded in free text and is not checked against the step's assigned approver.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "Gateway default-deny authGate (AUTH_GATE_MODE=enforce): path is not on the public allowlist and no bearer token was sent"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "authGate ran requireAuth and the JWT failed verification or had expired"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "decision + comment + decider_persona_id required",
+      "when": "any of decision, comment or decider_persona_id is absent/empty"
+    },
+    {
+      "status": 500,
+      "code": "InternalError",
+      "message": "<postgres error text>",
+      "when": ":request_id is not a valid UUID, or decision is not an accepted approval.request status value"
+    }
+  ]
 }

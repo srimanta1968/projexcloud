@@ -18,6 +18,15 @@ export {
   InvalidIncidentTransition,
 } from './services/incidentService';
 
+// Append-only evidence timeline, notarised into the sdk-audit hash chain (TK-3651).
+export {
+  appendEvidence,
+  listEvidence,
+  IncidentNotFound,
+} from './services/evidenceService';
+export { EVIDENCE_KINDS } from './models/evidence.model';
+export type { EvidenceKind, EvidenceRecord, AppendEvidenceInput } from './models/evidence.model';
+
 export {
   INCIDENT_TRANSITIONS,
   isValidTransition,

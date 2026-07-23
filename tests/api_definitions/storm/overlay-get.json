@@ -41,5 +41,26 @@
   "expectedResponse": {
     "events": "array",
     "cell_count": "number"
-  }
+  },
+  "description": "P7 FR-STM-1..4 / AC-4 — public storm overlay query. Returns the storm events and their intensity-cell counts overlapping the requested bounding box, optionally narrowed to events since an ISO timestamp. QA edge cases: all four bbox corners are mandatory and are parsed with parseFloat, so missing, empty or non-numeric values ('abc', '') all become NaN and hit the same 400 'min_lat, min_lng, max_lat, max_lng are required floats'; note parseFloat is lenient, so '24abc' parses to 24 and is accepted. A second 400 guards inverted boxes (min_lat > max_lat or min_lng > max_lng); a degenerate zero-area box where min equals max is allowed. Out-of-earth-range coordinates are NOT rejected — the handler enforces ordering only, so lat 999 simply returns an empty events array. `since` is optional and passed through untouched; a bbox with no storms returns 200 with events:[] rather than 404. The query is read-only and idempotent, has no pagination or result cap, and is not tenant-scoped. '/api/storm/overlay' is on the authGate.ts PUBLIC_EXACT allowlist, so it is deliberately unauthenticated — no bearer token is needed and no 401 is ever returned (matching requiresAuth:false).",
+  "errorCases": [
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "min_lat, min_lng, max_lat, max_lng are required floats",
+      "when": "Any of the four bbox query params is absent, empty, or not parseable by parseFloat (result is not finite)"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "min must be less than max for both lat and lng",
+      "when": "All four parse as finite numbers but the box is inverted — min_lat > max_lat or min_lng > max_lng"
+    },
+    {
+      "status": 500,
+      "code": "StormQueryFailed",
+      "message": "<error message thrown by queryStormByBbox>",
+      "when": "queryStormByBbox throws — e.g. an unparseable `since` value reaching the query, the storm schema/PostGIS being unavailable, or the DB pool failing"
+    }
+  ]
 }

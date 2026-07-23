@@ -30,5 +30,38 @@
       },
       "expectedStatus": 200
     }
+  ],
+  "description": "Assigns an existing ticket to an agent persona by setting assignee_persona_id, returning the updated ticket. Edge cases: assignee_persona_id is required in the body and a missing value returns 400 before any lookup; an unknown ticket_id returns 404; assignment is a plain overwrite, so re-assigning an already-assigned ticket succeeds and silently replaces the previous assignee rather than returning a conflict, which makes the call idempotent for the same persona; the endpoint does not check ticket status, so a resolved or closed ticket can still be re-assigned; an assignee_persona_id that does not exist violates the foreign key at update time and surfaces as a 500.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "No Authorization: Bearer <jwt> header on a requireAuth route"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "Bearer token fails verifyJwt (bad signature, malformed, or exp in the past)"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "missing assignee_persona_id",
+      "when": "assignee_persona_id is absent or empty in the request body"
+    },
+    {
+      "status": 404,
+      "code": "NotFound",
+      "message": "NotFound",
+      "when": "assignTicket finds no ticket for the supplied ticket_id"
+    },
+    {
+      "status": 500,
+      "code": "InternalError",
+      "message": "Internal Server Error",
+      "when": "assignTicket throws — e.g. assignee_persona_id violates a foreign key, ticket_id is not a valid UUID, or the database is unreachable"
+    }
   ]
 }

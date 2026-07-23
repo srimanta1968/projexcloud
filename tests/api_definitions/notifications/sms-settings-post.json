@@ -1,0 +1,59 @@
+{
+  "sdk": "sdk-notification",
+  "sourceFile": "packages/sdk-notification/src/server/routes.ts",
+  "taskId": "a53a3912-4598-4dfe-a728-21e6ab9a5d4c",
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "featureId": "73f2d42d-acc1-4317-9e31-604bc330a08a",
+  "epicId": "f7f7186e-8f69-4e44-97b8-212928e870f6",
+  "testability": "auto",
+  "name": "POST /api/notifications/sms-settings - Configure inbound-SMS settings",
+  "endpoint": "/api/notifications/sms-settings",
+  "method": "POST",
+  "requiresAuth": true,
+  "expectedStatus": 201,
+  "priority": 40,
+  "description": "Configure a tenant's inbound-SMS settings: the HMAC signing secret used to verify Twilio webhooks and the HELP/opt-out/opt-in auto-reply text. Upsert per tenant. tenant_id required.",
+  "dependsOn": [
+    "POST /api/auth/signup-tenant"
+  ],
+  "testCases": [
+    {
+      "name": "Set the HELP auto-reply",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "payload": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "help_reply": "Support: reply STOP to opt out, START to opt in. Call 1-800-555-0100."
+      },
+      "expectedStatus": 201,
+      "expectedResponse": {
+        "data": {
+          "settings": {
+            "tenant_id": "string"
+          }
+        }
+      }
+    }
+  ],
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "Authorization header absent or not in 'Bearer <jwt>' form (requireAuth preHandler)"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "JWT signature invalid, malformed, or exp has elapsed"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "tenant_id is required",
+      "when": "tenant_id missing"
+    }
+  ]
+}

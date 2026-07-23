@@ -4,6 +4,27 @@
   "sdk": "sdk-identity-resolver",
   "sourceFile": "packages/sdk-identity-resolver/src/server/routes.ts",
   "method": "GET",
+  "description": "Returns EMPI quality metrics: probability calibration (expected calibration error over the score bins), the count of unresolved candidate links, and the merge reversal rate. Edge cases: the endpoint takes no parameters and is not tenant-filtered - it reports across the whole EMPI store; with no adjudicated links yet the calibration bins are empty and the ECE/rates come back as zeros rather than erroring; any failure inside getEmpiMetrics is caught and flattened to a bare 500 InternalError with no detail.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "Authorization header absent or not in the form \"Bearer <jwt>\""
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "JWT signature invalid, malformed, or past its exp claim"
+    },
+    {
+      "status": 500,
+      "code": "InternalError",
+      "message": "<error message from getEmpiMetrics>",
+      "when": "the calibration/metrics aggregation throws — caught and returned as a bare InternalError"
+    }
+  ],
   "requiresAuth": true,
   "expectedStatus": 200,
   "taskId": "041996da-4e3a-4cc8-97e2-25bd3d39f11e",

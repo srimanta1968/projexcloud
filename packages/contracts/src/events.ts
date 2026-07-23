@@ -224,6 +224,10 @@ export const EVENT_TYPE_REGISTRY: Record<string, EventTypeMetadata> = {
   'crm.deal.created.v1':                      { event_type: 'crm.deal.created.v1',                      retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
   'crm.deal.transitioned.v1':                 { event_type: 'crm.deal.transitioned.v1',                 retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
   'crm.activity.logged.v1':                   { event_type: 'crm.activity.logged.v1',                   retention_class: 'operational', conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+  /* call/voicemail activity (P15·E5) */
+  'crm.call.logged.v1':                       { event_type: 'crm.call.logged.v1',                       retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+  'crm.call.missed.v1':                       { event_type: 'crm.call.missed.v1',                       retention_class: 'operational', conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+  'crm.voicemail.received.v1':                { event_type: 'crm.voicemail.received.v1',                retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
 
   /* --- sdk-content (§5.3) --- */
   'content.item.created.v1':                  { event_type: 'content.item.created.v1',                  retention_class: 'operational', conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
@@ -410,6 +414,15 @@ export const EVENT_TYPE_REGISTRY: Record<string, EventTypeMetadata> = {
   'incident.updated.v1':                      { event_type: 'incident.updated.v1',                      retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
   'incident.transitioned.v1':                 { event_type: 'incident.transitioned.v1',                 retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
   'incident.sla.breached.v1':                 { event_type: 'incident.sla.breached.v1',                 retention_class: 'operational', conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+  'incident.evidence.recorded.v1':            { event_type: 'incident.evidence.recorded.v1',            retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+
+  /* --- connector-twilio-voice (P15·E4) — telephony channel --- */
+  'twilio-voice.number.provisioned.v1':       { event_type: 'twilio-voice.number.provisioned.v1',       retention_class: 'operational', conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+  'twilio-voice.number.released.v1':          { event_type: 'twilio-voice.number.released.v1',          retention_class: 'operational', conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+  'twilio-voice.call.placed.v1':              { event_type: 'twilio-voice.call.placed.v1',              retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+  'twilio-voice.call.status.v1':              { event_type: 'twilio-voice.call.status.v1',              retention_class: 'operational', conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+  'twilio-voice.call.voicemail.v1':           { event_type: 'twilio-voice.call.voicemail.v1',           retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+  'twilio-voice.call.recording.v1':           { event_type: 'twilio-voice.call.recording.v1',           retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
 
   /* --- sdk-lead-scoring (§5.4) --- */
   'lead-scoring.scored.v1':                   { event_type: 'lead-scoring.scored.v1',                   retention_class: 'operational', conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },

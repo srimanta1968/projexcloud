@@ -12,6 +12,7 @@
   "sourceFile": "packages/sdk-engagement/src/server/routes.ts",
   "_generated": true,
   "testability": "auto",
+  "description": "Lists every participant ever attached to an encounter, ordered by joined_at, including their role, required flag, joined_at and left_at. QA edge cases: this returns ALL participants, not just currently-present ones — rows for people who have left are included with a non-null left_at, so a caller wanting the active roster must filter client-side; an unknown encounter_id returns 200 with an empty array rather than a 404, so \"no such encounter\" and \"encounter with no participants\" are indistinguishable here; the listing is unpaginated with no limit or cursor; the query keys on encounter_id alone with no tenant predicate, so cross-tenant reads are possible for a caller who knows the id.",
   "testCases": [
     {
       "name": "List participants for an encounter",
@@ -22,6 +23,20 @@
         "encounter_id": "{{cache:encounters.create.response.data.encounter.encounter_id}}"
       },
       "expectedStatus": 200
+    }
+  ],
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "no Authorization header, or it is not of the form 'Bearer <jwt>' (requireAuth preHandler)"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "the bearer JWT fails verifyJwt — bad signature, wrong JWT_SECRET, or exp already elapsed (requireAuth preHandler)"
     }
   ]
 }

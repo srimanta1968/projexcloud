@@ -53,15 +53,79 @@
   "statusTransitions": {
     "entity": "index_definition",
     "field": "status",
-    "flow": ["building", "active", "deprecated", "deleting"],
+    "flow": [
+      "building",
+      "active",
+      "deprecated",
+      "deleting"
+    ],
     "transitions": [
-      { "from": null, "to": "active", "via": "POST /api/search/index" },
-      { "from": "active", "to": "deprecated", "via": "POST /api/search/index" }
+      {
+        "from": null,
+        "to": "active",
+        "via": "POST /api/search/index"
+      },
+      {
+        "from": "active",
+        "to": "deprecated",
+        "via": "POST /api/search/index"
+      }
     ]
   },
   "captureResponse": {
     "search.index.create.response.data.definition.index_def_id": "data.definition.index_def_id",
     "search.index.create.response.data.definition.tenant_id": "data.definition.tenant_id",
     "search.index.create.response.data.definition.opensearch_alias": "data.definition.opensearch_alias"
-  }
+  },
+  "description": "Registers a search index definition for an entity_kind in the caller's tenant and ensures the backing physical index/alias exists, returning the persisted definition. tenant_id is overwritten from the verified JWT, so a tenant_id in the body cannot target another tenant. Edge cases: entity_kind is mandatory; re-registering the same tenant_id + entity_kind is idempotent at the ensureIndex level rather than a duplicate error; omitting opensearch_alias lets the service derive one; field_mappings must be an object or it is dropped; if the search backend is unreachable the ensure step surfaces as 500, and a malformed mapping rejected by the engine also lands as 500 rather than 400.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "No Authorization: Bearer <jwt> header on a requireAuth route"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "Bearer token fails verifyJwt (bad signature, malformed, or exp in the past)"
+    },
+    {
+      "status": 403,
+      "code": "Forbidden",
+      "message": "JWT missing tenant_id claim",
+      "when": "Token verifies but carries no tenant_id claim; authTenant() rejects before any query runs"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "body must be an object",
+      "when": "Request body is absent or not a JSON object"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "tenant_id must be a UUID",
+      "when": "The tenant_id claim injected from the JWT is not a well-formed UUID"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "entity_kind is required",
+      "when": "entity_kind is missing or blank in the body"
+    },
+    {
+      "status": 404,
+      "code": "IndexNotFound",
+      "message": "Referenced index could not be resolved",
+      "when": "ensureIndex throws IndexNotFoundError while resolving the target alias"
+    },
+    {
+      "status": 500,
+      "code": "InternalError",
+      "message": "InternalError",
+      "when": "OpenSearch index creation fails or the persistence write throws"
+    }
+  ]
 }

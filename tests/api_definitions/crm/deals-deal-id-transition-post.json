@@ -2,6 +2,39 @@
   "name": "POST /api/crm/deals/:deal_id/transition — sdk-crm",
   "endpoint": "/api/crm/deals/:deal_id/transition",
   "method": "POST",
+  "description": "Moves a deal to a new stage through the stage guard, which enforces transition validity, stage entry criteria, and terminal-stage gating; the stage-changed event is emitted only when the move is permitted. Valid stages are qualifying, proposal, negotiation, closed-won and closed-lost. Edge cases: an absent or non-listed stage -> 400; an unknown deal_id -> 404 (from either the null result or a DealNotFoundError); a disallowed move - e.g. out of a terminal closed-won/closed-lost stage, a skipped stage, or unmet stage criteria - is 409 InvalidTransition with the guard's reason in details; re-transitioning a deal to the stage it is already in is evaluated by the same guard rather than short-circuiting.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "Authorization header absent or not in the form \"Bearer <jwt>\""
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "JWT signature invalid, malformed, or past its exp claim"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "invalid stage",
+      "when": "body.stage is missing or not one of qualifying|proposal|negotiation|closed-won|closed-lost"
+    },
+    {
+      "status": 404,
+      "code": "NotFound",
+      "message": "NotFound",
+      "when": "no deal exists for deal_id (guardedTransition returns null or throws DealNotFoundError)"
+    },
+    {
+      "status": 409,
+      "code": "InvalidTransition",
+      "message": "<StageTransitionError message>",
+      "when": "the stage guard rejects the move: invalid stage sequence, unmet stage criteria, or the deal is already in a terminal stage"
+    }
+  ],
   "requiresAuth": true,
   "dependsOn": [
     "POST /api/auth/signup-tenant",

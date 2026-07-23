@@ -2,6 +2,21 @@
   "name": "GET /admin/sovereign/regions — api-gateway",
   "endpoint": "/admin/sovereign/regions",
   "method": "GET",
+  "description": "Lists every registered sovereign-cloud region (P8 Variant B) as { success: true, data: [...] }, covering all regimes (fedramp-high, il5, pipl, eu-sovereign, uae-trd). Read-only operator surface with no filtering, no pagination and no limit. QA edge cases: listSovereignRegions() is NOT wrapped in try/catch, so a DB failure escapes to the Fastify default error handler and returns the framework 500 body ({ statusCode, error, message }) rather than the { success: false, error } envelope the POST sibling uses — assert the shape accordingly; an empty registry is a 200 with an empty array, never a 404; the route is ops-token gated only, so a valid tenant JWT without x-admin-ops-token is 401.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "admin token required",
+      "when": "requireAdmin() found no valid x-admin-ops-token header — missing, or matching neither env ADMIN_OPS_TOKEN nor an active admin.ops_token hash (30s cache TTL applies to revocations)"
+    },
+    {
+      "status": 500,
+      "code": "InternalServerError",
+      "message": "Internal Server Error",
+      "when": "listSovereignRegions() throws (Postgres unavailable or missing sovereign schema) — unhandled by the route, so Fastify default error serialization applies"
+    }
+  ],
   "requiresAuth": false,
   "expectedStatus": 200,
   "sdk": "api-gateway",

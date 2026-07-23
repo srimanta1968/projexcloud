@@ -9,7 +9,10 @@
   "featureId": "e9e9b8ee-101b-4a6c-8100-538b861781a8",
   "epicId": "f9bd4029-5fd6-4dc1-bfce-00af515b8294",
   "priority": 34,
-  "dependsOn": ["POST /api/auth/signup-tenant", "POST /api/notifications/providers"],
+  "dependsOn": [
+    "POST /api/auth/signup-tenant",
+    "POST /api/notifications/providers"
+  ],
   "testCases": [
     {
       "name": "Rotate the tenant's email provider credential",
@@ -30,6 +33,45 @@
           }
         }
       }
+    }
+  ],
+  "description": "Rotates an email provider binding's credential (and optionally its config). credential is MANDATORY on every call — this route cannot patch config alone — and must be at least 4 characters. The binding is resolved by (binding_id, tenant_id from the JWT), so a provider_id belonging to another tenant behaves as not-found. Edge cases: a JWT with no tenant_id claim is 403; an unknown or cross-tenant :provider_id raises a service 'not found' error that the fail() mapper pattern-matches to 400 ValidationError, NOT 404 — the surprising mapping to test; omitting config leaves the stored config untouched; the new credential is envelope-encrypted and never returned.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "Authorization header absent or not in 'Bearer <jwt>' form (requireAuth preHandler)"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "JWT signature invalid, malformed, or exp has elapsed"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "credential is required (min 4 chars)",
+      "when": "body.credential is absent or shorter than 4 characters"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "<service error matching unsupported|too short|must be at least|not found|invalid>",
+      "when": ":provider_id is unknown or belongs to another tenant (service not-found mapped to 400 by fail()), or the secret backend rejects the new credential"
+    },
+    {
+      "status": 403,
+      "code": "Forbidden",
+      "message": "JWT missing tenant_id claim",
+      "when": "the verified JWT carries no tenant_id claim"
+    },
+    {
+      "status": 500,
+      "code": "InternalError",
+      "message": "InternalError",
+      "when": "Unexpected service/DB failure (connection loss, or a constraint the handler does not map)"
     }
   ]
 }

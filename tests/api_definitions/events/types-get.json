@@ -3,6 +3,27 @@
   "endpoint": "/api/events/types",
   "sdk": "sdk-event",
   "method": "GET",
+  "description": "Lists every event type in the compile-time EVENT_TYPE_REGISTRY together with its metadata and a count, for runtime discovery and validation by producers and consumers. Edge cases: the registry is static compile-time data with no DB access, so the response is identical on every call and never empty in a correctly built image; the route takes no parameters, no pagination and no tenant scoping - the registry is global, not per-tenant; the handler declares no requireAuth of its own, so its 401 comes from the gateway default-deny auth gate (the path is not on the public allowlist).",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "Authorization header absent or not in the form \"Bearer <jwt>\" — enforced by the gateway default-deny auth gate, not by the route itself"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "JWT signature invalid, malformed, or past its exp claim — enforced by the gateway default-deny auth gate, not by the route itself"
+    },
+    {
+      "status": 500,
+      "code": "InternalError",
+      "message": "InternalError",
+      "when": "serializing the registry throws — logged and returned only if the reply has not already been sent"
+    }
+  ],
   "requiresAuth": false,
   "expectedStatus": 200,
   "taskId": "88fcbbee-4657-463e-9cfb-1f47d216b10c",

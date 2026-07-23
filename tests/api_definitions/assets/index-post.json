@@ -33,7 +33,11 @@
           {
             "kind": "head",
             "name": "head",
-            "position": { "x": 0, "y": 0, "z": 1 },
+            "position": {
+              "x": 0,
+              "y": 0,
+              "z": 1
+            },
             "sensors": [
               {
                 "kind": "camera",
@@ -70,6 +74,33 @@
         ]
       },
       "expectedStatus": 201
+    }
+  ],
+  "description": "Registers a digital-twin asset (a robot) together with its component tree and sensors, returning 201 with the created registry entry. The tenant is taken from the body when supplied and otherwise falls back to the JWT tenant_id claim, so a caller with a tenant-scoped token may omit it - but a token with no tenant_id claim and no body tenant_id is a 400. components defaults to an empty array, so an asset can be registered with no component tree. Edge cases: every downstream failure (duplicate device_uuid, malformed component tree, database error) is collapsed into a single generic 500 with the raw error message - there is no 409 path; model and display_name are unvalidated free text; requires a valid JWT.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "Authorization header absent or not in Bearer form (requireAuth / gateway default-deny authGate)"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "Bearer token fails JWT verification or is expired (requireAuth / gateway default-deny authGate)"
+    },
+    {
+      "status": 400,
+      "code": "tenant_id required",
+      "message": "tenant_id required",
+      "when": "Neither body.tenant_id nor the JWT tenant_id claim is present"
+    },
+    {
+      "status": 500,
+      "code": "<underlying error message>",
+      "message": "Asset registration failed",
+      "when": "assetRegister throws - duplicate device_uuid, malformed components payload, or database error. The raw message is echoed back"
     }
   ]
 }

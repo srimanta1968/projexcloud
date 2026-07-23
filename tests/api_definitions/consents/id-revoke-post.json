@@ -57,5 +57,50 @@
   },
   "captureResponse": {
     "consents.revoke.response.data.revocation.revocation_id": "data.revocation.revocation_id"
-  }
+  },
+  "description": "Revokes an existing consent receipt by appending a revocation row and stamping the parent receipt (FR-CNS-2). Returns 200 with the revocation record. Both revoked_by and reason are mandatory non-empty strings and are trimmed, so whitespace-only values count as missing. Edge cases: an unknown receipt_id is a 404; where the service reports an already-revoked or otherwise non-revocable receipt with a \"not found\" style error it also surfaces as a 404, so replaying a revoke does not silently succeed; a non-UUID receipt_id fails the Postgres UUID cast and, not matching the \"not found\" substring, is reported as a generic 500; requires a valid JWT.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "Authorization header absent or not in Bearer form (requireAuth / gateway default-deny authGate)"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "Bearer token fails JWT verification or is expired (requireAuth / gateway default-deny authGate)"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "body must be an object",
+      "when": "Request body is absent or not a JSON object"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "revoked_by is required",
+      "when": "revoked_by is absent or whitespace-only"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "reason is required",
+      "when": "reason is absent or whitespace-only"
+    },
+    {
+      "status": 404,
+      "code": "NotFound",
+      "message": "<service \"not found\" message>",
+      "when": "revokeConsent throws with a message containing \"not found\" - no receipt exists for the supplied receipt_id (or it is no longer revocable)"
+    },
+    {
+      "status": 500,
+      "code": "InternalError",
+      "message": "InternalError",
+      "when": "Any other revokeConsent failure, including a non-UUID receipt_id (Postgres 22P02) and database errors"
+    }
+  ]
 }

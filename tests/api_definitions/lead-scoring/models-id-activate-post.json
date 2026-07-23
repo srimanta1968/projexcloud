@@ -9,7 +9,6 @@
   "_generated": true,
   "testability": "auto",
   "dependsOn": [
-    "POST /api/auth/register",
     "POST /api/auth/signup-tenant",
     "POST /api/lead-scoring/models"
   ],
@@ -29,6 +28,7 @@
       }
     ]
   },
+  "description": "Flips a lead-scoring model to status='active' and stamps trained_at = now(), returning the updated model. QA edge cases: the UPDATE has no state precondition — activating an already-active model succeeds and simply re-stamps trained_at (idempotent in status, NOT in trained_at, which moves on every call, and trained_at is the tiebreaker used by /models/active); a retired model can be re-activated with no guard; activating does not deactivate any sibling model for the same (tenant, vertical), so this endpoint can leave multiple active models; an unknown model_id yields no updated row and the thrown error is mapped to 404.",
   "testCases": [
     {
       "name": "Activate a model (flip status to active)",
@@ -38,7 +38,7 @@
       "payload": {},
       "expectedStatus": 200,
       "headers": {
-        "Authorization": "Bearer {{cache:auth.register.response.data.token}}"
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
       }
     }
   ],
@@ -55,5 +55,25 @@
   "captureResponse": {
     "lead-scoring.activate.response.data.model_id": "data.model_id",
     "lead-scoring.activate.response.data.status": "data.status"
-  }
+  },
+  "errorCases": [
+    {
+      "status": 404,
+      "code": "NotFound",
+      "message": "[sdk-lead-scoring] model <id> not found",
+      "when": "the UPDATE matches no lead_scoring.model row for the :id path param"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "no Authorization header, or it is not of the form 'Bearer <jwt>' (api-gateway default-deny authGate, AUTH_GATE_MODE=enforce)"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "the bearer JWT fails verifyJwt — bad signature, wrong JWT_SECRET, or exp already elapsed (api-gateway default-deny authGate, AUTH_GATE_MODE=enforce)"
+    }
+  ]
 }

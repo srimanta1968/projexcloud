@@ -73,5 +73,56 @@
   "captureResponse": {
     "api-keys.create.response.data.key.key_id": "data.key.key_id",
     "api-keys.create.response.data.key.tenant_id": "data.key.tenant_id"
-  }
+  },
+  "description": "Issues a new API key for a tenant with an explicit scope list and optional rate limit and expiry, returning 201 with the key record plus the one-time plaintext secret. Edge cases: tenant_id is required and scopes must be a non-empty array of strings — an empty array, a non-array, or an array containing a non-string all fail as \"scopes must be a non-empty string array\"; rate_limit_rpm, when supplied, must be a finite positive number so 0 and negatives are rejected; expires_at must parse as ISO-8601 and an unparseable value is a 400, but a past expiry is not rejected by the validator; all validation failures are accumulated and returned together in one details array; tenant_id comes from the body rather than the JWT, and a tenant_id with no matching tenant row fails at insert and surfaces as a 500.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "No Authorization: Bearer <jwt> header on a requireAuth route"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "Bearer token fails verifyJwt (bad signature, malformed, or exp in the past)"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "body must be an object",
+      "when": "Request body is absent or not a JSON object"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "tenant_id is required",
+      "when": "tenant_id is missing or blank after trimming"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "scopes must be a non-empty string array",
+      "when": "scopes is absent, not an array, empty, or contains a non-string element"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "rate_limit_rpm must be a positive number",
+      "when": "rate_limit_rpm is supplied but is not finite or is <= 0"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "expires_at must be ISO-8601",
+      "when": "expires_at is supplied but Date.parse cannot parse it"
+    },
+    {
+      "status": 500,
+      "code": "InternalError",
+      "message": "InternalError",
+      "when": "issueKey throws — e.g. tenant_id violates a foreign key, key hashing fails, or the database is unreachable"
+    }
+  ]
 }

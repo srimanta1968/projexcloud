@@ -2,6 +2,27 @@
   "name": "GET /admin/byok/bindings/tenant/:tenant_id — api-gateway",
   "endpoint": "/admin/byok/bindings/tenant/:tenant_id",
   "method": "GET",
+  "description": "Reads the current BYOK binding for a single tenant, returning { success: true, data: <binding> } or 404 when the tenant has never been bound. QA edge cases: the \"no binding\" case is an explicit 404 with error \"no binding for tenant\", so absence is distinguishable from a bad request; the lookup is NOT wrapped in try/catch, so a tenant_id that is not a well-formed UUID fails the Postgres uuid cast and escapes to the Fastify default 500 body ({ statusCode, error, message }) instead of a 400 or the { success: false, error } envelope — this is the most common surprise when testing with a non-UUID path param; the route is ops-token gated and cross-tenant, so the tenant_id in the path is trusted with no ownership check against a caller JWT; a revoked binding is still returned as data (with its revoked state) rather than 404.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "admin token required",
+      "when": "requireAdmin() found no valid x-admin-ops-token header — missing, or matching neither env ADMIN_OPS_TOKEN nor an active admin.ops_token hash (30s cache TTL applies to revocations)"
+    },
+    {
+      "status": 404,
+      "code": "NotFound",
+      "message": "no binding for tenant",
+      "when": "getByokBindingForTenant(tenant_id) returns null/undefined — the tenant exists or not, but has no BYOK binding row"
+    },
+    {
+      "status": 500,
+      "code": "InternalServerError",
+      "message": "Internal Server Error",
+      "when": "the lookup throws — most commonly tenant_id is not a valid UUID and fails the Postgres cast, or Postgres is unavailable; unhandled by the route, so Fastify default error serialization applies"
+    }
+  ],
   "requiresAuth": false,
   "expectedStatus": 200,
   "sdk": "api-gateway",

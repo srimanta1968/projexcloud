@@ -53,5 +53,50 @@
   "captureResponse": {
     "workflows.register.response.data.definition.workflow_def_id": "data.definition.workflow_def_id",
     "workflows.register.response.data.definition.status": "data.definition.status"
-  }
+  },
+  "description": "Registers or upserts a workflow definition (name, optional version/namespace, and step_specs) and returns 201 with the stored definition. Requires a valid tenant JWT (requireAuth). Edge cases: name is mandatory and step_specs must be a non-empty array whose every entry is shaped {name: string, compensate?: string} - an empty array and a malformed entry are two distinct 400 messages; registration also fails with 400 WorkflowMissingHandlers when a step named in step_specs has no runtime handler registered in this process, which means the same payload can succeed or fail depending on which handlers the deployment loaded; a step whose compensate handler is unregistered surfaces as 400 StepHandlerNotFound; because it is an upsert, re-posting the same name/version is accepted and overwrites rather than returning 409, so it is idempotent on name+version and changing step_specs silently redefines the workflow for subsequent runs.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "Authorization header absent or not in Bearer form (requireAuth)"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "Bearer token fails JWT verification (requireAuth)"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "name is required / step_specs must be a non-empty array / each step_specs entry needs {name: string, compensate?: string}",
+      "when": "validateRegisterDefinition fails; details[] carries every failed rule"
+    },
+    {
+      "status": 400,
+      "code": "WorkflowMissingHandlers",
+      "message": "Workflow definition missing step handlers: <names>",
+      "when": "registerWorkflow raises WorkflowDefinitionMissingHandlersError - one or more steps named in step_specs have no handler registered in this process"
+    },
+    {
+      "status": 400,
+      "code": "StepHandlerNotFound",
+      "message": "No step handler registered for '<name>'",
+      "when": "registerWorkflow raises StepHandlerNotFoundError while resolving a step or compensation handler"
+    },
+    {
+      "status": 409,
+      "code": "InvalidState",
+      "message": "<error message containing \"not found\" or \"not in running\">",
+      "when": "a service error whose message matches the fail() state matcher"
+    },
+    {
+      "status": 500,
+      "code": "InternalError",
+      "message": "InternalError",
+      "when": "registerWorkflow throws any other error - a DB failure or unmapped service error"
+    }
+  ]
 }

@@ -35,16 +35,77 @@
     "tenant-lifecycle.offboard.response.data.state.current_state": "data.state.current_state"
   },
   "fieldEnums": {
-    "current_state": ["active", "suspended", "offboarding", "offboarded", "sandbox"]
+    "current_state": [
+      "active",
+      "suspended",
+      "offboarding",
+      "offboarded",
+      "sandbox"
+    ]
   },
   "statusTransitions": {
     "entity": "tenant_lifecycle.state",
     "field": "current_state",
-    "flow": ["active", "offboarding", "offboarded"],
+    "flow": [
+      "active",
+      "offboarding",
+      "offboarded"
+    ],
     "transitions": [
-      { "from": "active", "to": "offboarding", "via": "POST /api/tenant-lifecycle/:tenant_id/offboard" },
-      { "from": "suspended", "to": "offboarding", "via": "POST /api/tenant-lifecycle/:tenant_id/offboard" },
-      { "from": "offboarding", "to": "offboarded", "via": "scheduler:runOffboardDeadlineTick" }
+      {
+        "from": "active",
+        "to": "offboarding",
+        "via": "POST /api/tenant-lifecycle/:tenant_id/offboard"
+      },
+      {
+        "from": "suspended",
+        "to": "offboarding",
+        "via": "POST /api/tenant-lifecycle/:tenant_id/offboard"
+      },
+      {
+        "from": "offboarding",
+        "to": "offboarded",
+        "via": "scheduler:runOffboardDeadlineTick"
+      }
     ]
-  }
+  },
+  "description": "Starts tenant offboarding and stamps a data-retention deadline, defaulting to 30 days from now (per FR-TLC-6) when deadline_at is omitted, and returns the resulting lifecycle state. Edge cases: ownership is checked first — a JWT whose tenant_id and parent_tenant_id both differ from the path tenant_id gets 403; deadline_at must parse as a date, and any unparseable string (including a non-ISO format) yields 400 \"deadline_at must be ISO-8601\"; a deadline in the past is accepted by the route because only NaN is rejected, so back-dated deadlines are not guarded here; offboarding a tenant that is already offboarding or in a state with no legal edge to offboarded returns 409, making repeat calls non-idempotent.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "No Authorization: Bearer <jwt> header on a requireAuth route"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "Bearer token fails verifyJwt (bad signature, malformed, or exp in the past)"
+    },
+    {
+      "status": 403,
+      "code": "Forbidden",
+      "message": "Tenant ownership check failed",
+      "when": "The JWT's tenant_id and parent_tenant_id both differ from the :tenant_id in the path"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "deadline_at must be ISO-8601",
+      "when": "deadline_at is present but does not parse to a valid date (new Date(...) yields NaN)"
+    },
+    {
+      "status": 409,
+      "code": "InvalidTransition",
+      "message": "Invalid tenant lifecycle transition <from> → offboarding",
+      "when": "The tenant's current lifecycle state has no legal edge to the offboarding state"
+    },
+    {
+      "status": 500,
+      "code": "InternalError",
+      "message": "Internal Server Error",
+      "when": "The database is unreachable or the state write throws outside the InvalidTransition path"
+    }
+  ]
 }

@@ -2,6 +2,27 @@
   "name": "POST /admin/byok/bindings — api-gateway",
   "endpoint": "/admin/byok/bindings",
   "method": "POST",
+  "description": "Binds a tenant to a customer-managed KMS key (P8 Variant A · BYOK), recording provider, customer_kms_key_arn, tenant_key_id, the revoke-propagation SLA and an optional SIEM forwarder endpoint, and returns 200 { success: true, data: <binding> }. QA edge cases: tenant_id, provider, customer_kms_key_arn, tenant_key_id and operator_id are all required with a falsy check (empty strings rejected); provider is typed as aws-kms|gcp-kms|hsm-pkcs11 but NOT validated at runtime by the route, so an unknown provider reaches bindCmk and fails as a 500 rather than a 400; the ARN is not format-checked and the key is not proven reachable at bind time; binding a tenant that already has a binding is not given a 409 branch here — whatever bindCmk does (replace or unique violation) determines whether you see a 200 or a 500; sla_revoke_propagation_seconds and siem_forwarder_endpoint are optional and unbounded.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "admin token required",
+      "when": "requireAdmin() found no valid x-admin-ops-token header — missing, or matching neither env ADMIN_OPS_TOKEN nor an active admin.ops_token hash (30s cache TTL applies to revocations)"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "tenant_id, provider, customer_kms_key_arn, tenant_key_id, operator_id all required",
+      "when": "any of tenant_id, provider, customer_kms_key_arn, tenant_key_id or operator_id is missing, null, or an empty string"
+    },
+    {
+      "status": 500,
+      "code": "InternalServerError",
+      "message": "<bind error message>",
+      "when": "bindCmk() throws — unknown/unsupported provider value, tenant_id not a valid UUID or not an existing tenant, a unique violation on an already-bound tenant, or the KMS/DB call failing"
+    }
+  ],
   "requiresAuth": false,
   "expectedStatus": 200,
   "sdk": "api-gateway",
@@ -22,7 +43,7 @@
       "payload": {
         "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
         "provider": "aws-kms",
-        "customer_kms_key_arn": "arn:aws:kms:us-east-1:111122223333:key/1234abcd-12ab-34cd-56ef-1234567890ab",
+        "customer_kms_key_arn": "{{var:customer_kms_key_arn}}",
         "tenant_key_id": "{{var:tenant_key_id}}",
         "sla_revoke_propagation_seconds": 30,
         "siem_forwarder_endpoint": "https://siem.qa.example.com/ingest",

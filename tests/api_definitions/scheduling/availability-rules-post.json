@@ -1,0 +1,51 @@
+{
+  "name": "POST /api/scheduling/availability-rules - Set a host's weekday business hours",
+  "endpoint": "/api/scheduling/availability-rules",
+  "sdk": "sdk-scheduling",
+  "sourceFile": "packages/sdk-scheduling/src/server/routes.ts",
+  "method": "POST",
+  "requiresAuth": true,
+  "expectedStatus": 201,
+  "taskId": "41c92779-7aec-4747-b111-ada104733228",
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "featureId": "c705caee-690d-465f-8ae4-c84521bacb7d",
+  "epicId": "4df864ec-e460-4cc9-a58a-92baadec5269",
+  "priority": 52,
+  "testability": "auto",
+  "description": "Set (upsert) a host's bookable business hours for one weekday, in an IANA timezone. Idempotent — re-posting the same (tenant, host, weekday) overwrites the existing rule (one rule per weekday). A weekday with no active rule is treated as a closed day by slot generation. weekday is 0 (Sunday) through 6 (Saturday); start_time/end_time are wall-clock 'HH:MM' in the given timezone and end must be after start.",
+  "dependsOn": [
+    "POST /api/auth/signup-tenant",
+    "POST /api/personas"
+  ],
+  "fieldEnums": {
+    "weekday": [0, 1, 2, 3, 4, 5, 6]
+  },
+  "testCases": [
+    {
+      "name": "Set Monday 09:00-17:00 America/New_York availability",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "payload": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "host_persona_id": "{{cache:personas.create.response.data.persona.persona_id}}",
+        "weekday": 1,
+        "start_time": "09:00",
+        "end_time": "17:00",
+        "timezone": "America/New_York",
+        "slot_interval_minutes": 30,
+        "is_active": true
+      },
+      "expectedStatus": 201,
+      "expectedResponse": { "data": { "rule": { "rule_id": "string", "weekday": "number" } } }
+    }
+  ],
+  "captureResponse": {
+    "scheduling.availability-rule.create.response.data.rule.rule_id": "data.rule.rule_id"
+  },
+  "errorCases": [
+    { "status": 400, "code": "ValidationError", "message": "tenant_id, host_persona_id and weekday are required", "when": "tenant_id, host_persona_id or weekday missing from body" },
+    { "status": 400, "code": "ValidationError", "message": "weekday must be 0 (Sunday) through 6 (Saturday)", "when": "weekday outside 0-6" },
+    { "status": 401, "code": "Unauthorized", "message": "missing or invalid token", "when": "no valid Bearer token" }
+  ]
+}

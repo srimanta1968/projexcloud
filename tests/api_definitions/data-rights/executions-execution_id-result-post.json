@@ -4,6 +4,33 @@
   "sdk": "sdk-data-rights",
   "sourceFile": "packages/sdk-data-rights/src/server/routes.ts",
   "method": "POST",
+  "description": "Records the terminal outcome of a single DSAR execution: status is required and is expected to be 'succeeded' or 'failed', with an optional audit_entry_id sealing the proof and an optional error_detail on failure. Edge cases: a missing status -> 400 (note the value itself is not enum-checked at the route, so any non-empty string is accepted); an unknown execution_id -> 404; posting a result for an execution that already has one overwrites the previous outcome rather than 409-ing, so retries are idempotent for a given body.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "Authorization header absent or not in the form \"Bearer <jwt>\""
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "JWT signature invalid, malformed, or past its exp claim"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "missing status",
+      "when": "body omits status (details: [\"missing status\"])"
+    },
+    {
+      "status": 404,
+      "code": "NotFound",
+      "message": "NotFound",
+      "when": "recordExecutionResult finds no execution row for execution_id"
+    }
+  ],
   "requiresAuth": true,
   "expectedStatus": 200,
   "taskId": "4e811425-e319-451a-9fa6-30c71717d88f",

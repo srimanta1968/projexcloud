@@ -29,10 +29,53 @@
     }
   ],
   "fieldEnums": {
-    "conflict_policy": ["crdt", "lww", "merge", "event-sourcing", "human-review"],
-    "retention_class": ["transient", "operational", "regulated"]
+    "conflict_policy": [
+      "crdt",
+      "lww",
+      "merge",
+      "event-sourcing",
+      "human-review"
+    ],
+    "retention_class": [
+      "transient",
+      "operational",
+      "regulated"
+    ]
   },
   "captureResponse": {
     "hdk-sync.event-type-policies.create.response.data.policy.event_type": "data.policy.event_type"
-  }
+  },
+  "description": "Registers (upserts) the conflict-resolution policy for a sync event_type: which of crdt | lww | merge | event-sourcing | human-review applies when two device replays disagree, plus an optional free-text strategy_detail and a retention_class. Idempotent — re-PUTting the same event_type overwrites the policy and returns 200 (never 201), so it is safe to replay. Edge cases: an unknown conflict_policy or retention_class is rejected 400 by an explicit whitelist in the route; an empty-string event_type is treated as missing; strategy_detail and retention_class are optional; the registry is global (not tenant-scoped), so a policy registered by one tenant's operator governs every tenant's replays for that event_type.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "Authorization header absent or not in 'Bearer <jwt>' form (requireAuth preHandler)"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "JWT signature invalid, malformed, or exp has elapsed"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "missing fields",
+      "when": "event_type or conflict_policy is absent/empty"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "invalid conflict_policy",
+      "when": "conflict_policy is not one of crdt, lww, merge, event-sourcing, human-review"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "invalid retention_class",
+      "when": "retention_class was supplied but is not one of transient, operational, regulated"
+    }
+  ]
 }

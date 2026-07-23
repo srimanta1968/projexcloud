@@ -2,6 +2,21 @@
   "name": "GET /admin/meter/pricing-catalogs — api-gateway",
   "endpoint": "/admin/meter/pricing-catalogs",
   "method": "GET",
+  "description": "Lists every metering pricing catalog (P7 Y-11) backing the Admin UI as { success: true, data: catalogs }. Read-only operator surface with no filtering, no pagination and no limit, and gated by the requireAdmin ops-token helper rather than a tenant JWT. QA edge cases: the listPricingCatalogs() call is NOT wrapped in try/catch, so a DB failure escapes to the Fastify default error handler and produces the framework 500 body ({ statusCode, error, message }) instead of the { success: false, error } envelope used elsewhere; catalogs of every status (draft, active, retired) are returned together with no status filter, so tests that expect only active catalogs must filter client-side; an empty result is a 200 with an empty array, never 404.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "admin token required",
+      "when": "requireAdmin() found no valid x-admin-ops-token header — missing, or matching neither env ADMIN_OPS_TOKEN nor an active admin.ops_token hash (30s cache TTL applies to revocations)"
+    },
+    {
+      "status": 500,
+      "code": "InternalServerError",
+      "message": "Internal Server Error",
+      "when": "listPricingCatalogs() throws (Postgres unavailable or missing pricing tables) — unhandled by the route, so Fastify default error serialization applies"
+    }
+  ],
   "requiresAuth": false,
   "expectedStatus": 200,
   "sdk": "api-gateway",

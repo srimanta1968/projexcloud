@@ -50,5 +50,56 @@
   },
   "captureResponse": {
     "audit.export.response.data.request_id": "data.request_id"
-  }
+  },
+  "description": "Customer-facing self-audit export (FR-AUD-4): a tenant requests a signed PDF or JSONL dump of its own audit chain over an ISO-8601 date range. By default the request is only queued and returns 202 with a pending request_id; passing inline=true materializes the artifact synchronously and returns 201 with artifact_s3_key and signature_hex. QA edge cases: the handler collects ALL validation failures into one 400 (missing tenant_id, format outside {pdf,jsonl}, missing/unparseable range_start or range_end, and range_start > range_end are reported together in details[]); an empty body {} yields four validation messages at once. Dates are parsed with new Date(), so garbage strings ('not-a-date') fail as NaN while loose forms ('2026-01-01') are accepted. format defaults to 'jsonl' when omitted, and inline is only honoured when strictly boolean true (the string \"true\" queues instead of materializing). tenant_id is taken from the BODY and is not cross-checked against the caller's JWT, so tenant-scoping tests must assert on the returned request_id rather than on rejection. The endpoint is not idempotent — repeating the same range creates a new request_id every call. A zero-width range (range_start == range_end) is valid and exports an empty chain. No pagination; oversized ranges are accepted and produce a larger artifact. As a non-public gateway path it is behind the default-deny auth gate, so a missing/expired bearer token is rejected before the handler runs.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "No Authorization: Bearer header — rejected by the gateway default-deny auth gate (authGate.ts → requireAuth) before exportHandler executes"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "Bearer token fails verifyJwt (bad signature, malformed, or expired)"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "tenant_id is required",
+      "when": "body.tenant_id is absent, empty, or not a string"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "format must be pdf or jsonl",
+      "when": "body.format is supplied but is neither 'pdf' nor 'jsonl'"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "range_start (ISO 8601) required",
+      "when": "body.range_start is missing or parses to an invalid Date (NaN)"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "range_end (ISO 8601) required",
+      "when": "body.range_end is missing or parses to an invalid Date (NaN)"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "range_start must be <= range_end",
+      "when": "Both dates parse but the range is inverted"
+    },
+    {
+      "status": 500,
+      "code": "InternalError",
+      "message": "InternalError",
+      "when": "createExportRequest returns no row ('Failed to create export request') or materializeExport throws for inline=true (e.g. 'Export request <id> not found', DB/storage failure)"
+    }
+  ]
 }

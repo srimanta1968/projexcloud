@@ -2,6 +2,33 @@
   "name": "POST /api/events/tickets — sdk-event",
   "endpoint": "/api/events/tickets",
   "method": "POST",
+  "description": "Issues a ticket for a session and returns its generated qr_token. session_id and holder_persona_id are required; price is optional. Capacity is reserved atomically by a conditional UPDATE (sold_count < capacity AND status IN ('scheduled','live')) that row-locks the session, so concurrent buyers cannot oversell. Edge cases: missing required fields -> 400; a sold-out session, a cancelled/ended session, and a session_id that does not exist are indistinguishable to the client - all three return the same 409 CannotIssueTicket with 'Session sold out, cancelled, or not found'; nothing stops the same persona holding multiple tickets for one session, so the endpoint is not idempotent and each retry consumes another seat.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "Authorization header absent or not in the form \"Bearer <jwt>\""
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "JWT signature invalid, malformed, or past its exp claim"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "missing fields",
+      "when": "body omits session_id or holder_persona_id"
+    },
+    {
+      "status": 409,
+      "code": "CannotIssueTicket",
+      "message": "Session sold out, cancelled, or not found",
+      "when": "the capacity-reserving UPDATE matches no row: sold_count has reached capacity, the session status is not scheduled/live, or the session_id does not exist"
+    }
+  ],
   "requiresAuth": true,
   "dependsOn": [
     "POST /api/auth/register",

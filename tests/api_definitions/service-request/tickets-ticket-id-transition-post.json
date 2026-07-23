@@ -12,20 +12,60 @@
   "sourceFile": "packages/sdk-service-request/src/server/routes.ts",
   "_generated": true,
   "fieldEnums": {
-    "to": ["new", "in-progress", "awaiting-customer", "resolved", "closed"]
+    "to": [
+      "new",
+      "in-progress",
+      "awaiting-customer",
+      "resolved",
+      "closed"
+    ]
   },
   "statusTransitions": {
     "entity": "service_request.ticket",
     "field": "status",
-    "flow": ["new", "in-progress", "awaiting-customer", "resolved", "closed"],
+    "flow": [
+      "new",
+      "in-progress",
+      "awaiting-customer",
+      "resolved",
+      "closed"
+    ],
     "transitions": [
-      { "from": "new", "to": "in-progress", "via": "POST /api/service-request/tickets/:ticket_id/transition" },
-      { "from": "new", "to": "closed", "via": "POST /api/service-request/tickets/:ticket_id/transition" },
-      { "from": "in-progress", "to": "awaiting-customer", "via": "POST /api/service-request/tickets/:ticket_id/transition" },
-      { "from": "in-progress", "to": "resolved", "via": "POST /api/service-request/tickets/:ticket_id/transition" },
-      { "from": "awaiting-customer", "to": "in-progress", "via": "POST /api/service-request/tickets/:ticket_id/transition" },
-      { "from": "awaiting-customer", "to": "resolved", "via": "POST /api/service-request/tickets/:ticket_id/transition" },
-      { "from": "resolved", "to": "closed", "via": "POST /api/service-request/tickets/:ticket_id/transition" }
+      {
+        "from": "new",
+        "to": "in-progress",
+        "via": "POST /api/service-request/tickets/:ticket_id/transition"
+      },
+      {
+        "from": "new",
+        "to": "closed",
+        "via": "POST /api/service-request/tickets/:ticket_id/transition"
+      },
+      {
+        "from": "in-progress",
+        "to": "awaiting-customer",
+        "via": "POST /api/service-request/tickets/:ticket_id/transition"
+      },
+      {
+        "from": "in-progress",
+        "to": "resolved",
+        "via": "POST /api/service-request/tickets/:ticket_id/transition"
+      },
+      {
+        "from": "awaiting-customer",
+        "to": "in-progress",
+        "via": "POST /api/service-request/tickets/:ticket_id/transition"
+      },
+      {
+        "from": "awaiting-customer",
+        "to": "resolved",
+        "via": "POST /api/service-request/tickets/:ticket_id/transition"
+      },
+      {
+        "from": "resolved",
+        "to": "closed",
+        "via": "POST /api/service-request/tickets/:ticket_id/transition"
+      }
     ]
   },
   "captureResponse": {
@@ -45,6 +85,45 @@
         "to": "in-progress"
       },
       "expectedStatus": 200
+    }
+  ],
+  "description": "Advances a ticket to a new lifecycle status (new, in-progress, awaiting-customer, resolved, closed) and returns the updated ticket. Edge cases: `to` is validated against the allowed status list at the route, so an unknown or misspelled status is a 400 before any read; a legal status that is not reachable from the ticket's current status is rejected by transitionTicket with a 409 InvalidTransition carrying the \"current → target\" message; an unknown ticket_id returns 404; transitioning a ticket to the status it already holds is treated as an invalid transition rather than a no-op, so this call is not idempotent; the guard is state-machine based, meaning e.g. a closed ticket cannot be reopened through this route.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "No Authorization: Bearer <jwt> header on a requireAuth route"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "Bearer token fails verifyJwt (bad signature, malformed, or exp in the past)"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "invalid target status",
+      "when": "`to` is missing or is not one of new|in-progress|awaiting-customer|resolved|closed"
+    },
+    {
+      "status": 404,
+      "code": "NotFound",
+      "message": "NotFound",
+      "when": "transitionTicket finds no ticket for the supplied ticket_id"
+    },
+    {
+      "status": 409,
+      "code": "InvalidTransition",
+      "message": "Invalid ticket transition <current> → <to>",
+      "when": "The requested status is not reachable from the ticket's current status per the ticket state machine"
+    },
+    {
+      "status": 500,
+      "code": "InternalError",
+      "message": "Internal Server Error",
+      "when": "The database is unreachable or the update throws outside the InvalidTransition path"
     }
   ]
 }

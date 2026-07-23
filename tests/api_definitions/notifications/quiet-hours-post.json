@@ -51,5 +51,38 @@
   },
   "captureResponse": {
     "notifications.quiet-hours.upsert.response.data.quiet_hours.persona_id": "data.quiet_hours.persona_id"
-  }
+  },
+  "description": "Upserts a persona's quiet-hours windows and do-not-disturb flag; the sender defers (suppresses) messages that fall inside a window. Idempotent by persona — re-posting REPLACES the previous window set, so posting windows:[] clears quiet hours entirely rather than erroring. Edge cases: a JWT with no tenant_id claim is 403, not 401; every window must be {dow:0-6, start:'HH:MM', end:'HH:MM', tz} and ONE malformed element rejects the whole array; start/end are regex-checked for HH:MM SHAPE only, so '99:99' passes validation; tz is only checked for non-empty, so an invalid IANA zone is not caught here; an overnight window (start > end) is accepted; dnd is optional and independent of the windows.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "Authorization header absent or not in 'Bearer <jwt>' form (requireAuth preHandler)"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "JWT signature invalid, malformed, or exp has elapsed"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "persona_id is required / windows must be an array / each window needs {dow:0-6, start:HH:MM, end:HH:MM, tz}",
+      "when": "any validateSetQuietHours check fails; all failures are returned together in details[]"
+    },
+    {
+      "status": 403,
+      "code": "Forbidden",
+      "message": "JWT missing tenant_id claim",
+      "when": "the verified JWT carries no tenant_id claim"
+    },
+    {
+      "status": 500,
+      "code": "InternalError",
+      "message": "InternalError",
+      "when": "Unexpected service/DB failure (connection loss, or a constraint the handler does not map)"
+    }
+  ]
 }

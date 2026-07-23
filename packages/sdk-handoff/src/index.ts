@@ -17,6 +17,22 @@ export {
   InvalidHandoffTransition,
 } from './services/handoffService';
 
+// Durable saga (driven by sdk-workflow) — registered + started by the gateway.
+export {
+  registerHandoffSaga,
+  startHandoffSaga,
+  listHandoffSagaSteps,
+  SAGA_PHASES,
+} from './services/handoffSaga';
+
+// CS accept/reject gate — delegated to sdk-approval via the pluggable creator.
+export {
+  requestHandoffApproval,
+  recordHandoffDecision,
+  setHandoffApprovalCreator,
+} from './services/handoffApproval';
+export type { HandoffApprovalCreator, HandoffApprovalContext, HandoffDecision } from './services/handoffApproval';
+
 export {
   HANDOFF_TRANSITIONS,
   HANDOFF_TRANSITION_EVENT,

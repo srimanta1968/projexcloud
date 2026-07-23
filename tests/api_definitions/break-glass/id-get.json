@@ -38,5 +38,32 @@
         "certificate": "object"
       }
     }
-  }
+  },
+  "description": "Reads a break-glass grant by id, returning its current status (pending / active / expired / consumed / rejected), its scope and justification, its approval steps and the latest issued certificate. Edge cases: unlike the decide and use routes — which report a missing grant as a domain error with 400/403 — this read returns a plain 404 NotFound for an unknown grant_id; it performs no tenant ownership check against the JWT, so any authenticated caller holding a valid grant_id can read that grant; a malformed (non-UUID) grant_id fails the query cast and surfaces as 500 rather than 404; the response reflects expiry as recorded status, so a grant whose TTL has lapsed may still read as active until it is evaluated at use time.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "No Authorization: Bearer <jwt> header on a requireAuth route"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "Bearer token fails verifyJwt (bad signature, malformed, or exp in the past)"
+    },
+    {
+      "status": 404,
+      "code": "NotFound",
+      "message": "NotFound",
+      "when": "getBreakGlass returns no grant for the supplied grant_id"
+    },
+    {
+      "status": 500,
+      "code": "InternalError",
+      "message": "InternalError",
+      "when": "getBreakGlass throws — e.g. grant_id is not a valid UUID and the query cast fails, or the database is unreachable"
+    }
+  ]
 }

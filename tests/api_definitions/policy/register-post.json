@@ -59,5 +59,32 @@
     "policy.register.response.data.policy_id": "data.policy_id",
     "policy.register.response.data.ontology_id": "data.ontology_id",
     "policy.register.response.data.status": "data.status"
-  }
+  },
+  "description": "Registers a semantic-service policy against an ontology from IQL source, optionally activating it immediately via the activate flag (default false, so a newly registered policy is inert until activated). Mounted into the api-gateway from services/semantic-service, so the gateway default-deny authGate applies and a valid tenant JWT is required even though the handler has no requireAuth of its own. Edge cases: ontology_id, name and iql_source are presence-checked; tenant_id is optional and defaults to null, which registers a global cross-tenant policy - omitting it is silently accepted rather than rejected, so tenant scoping must be asserted deliberately; an unknown ontology_id, an IQL parse failure and a duplicate name all collapse into the same 400 with the raw service message, so this route never returns 404 or 409; there is no idempotency key, so re-registering the same name either duplicates or conflicts depending on the schema and either way surfaces as a 400.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "Authorization header absent or not in Bearer form - gateway default-deny authGate onRequest hook (AUTH_GATE_MODE=enforce)"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "Bearer token fails JWT verification in the gateway authGate"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "ontology_id, name, iql_source required",
+      "when": "any of ontology_id, name or iql_source is absent or empty"
+    },
+    {
+      "status": 400,
+      "code": "RegisterFailed",
+      "message": "<service error message>",
+      "when": "registerPolicy throws - unknown ontology_id, IQL parse failure, duplicate name, non-UUID identifiers, or any DB error; the catch flattens every failure to 400"
+    }
+  ]
 }

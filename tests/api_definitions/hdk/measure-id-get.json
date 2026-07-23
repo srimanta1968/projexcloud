@@ -13,6 +13,7 @@
     "POST /api/auth/signup-tenant",
     "POST /api/hdk/measure"
   ],
+  "description": "Fetches a single measurement from hdk_measure.measurement by its measurement id and returns it as { success: true, data }. QA edge cases: an id that does not exist returns 404 with error \"not found\" — the same 404 is returned for a well-formed-but-unknown UUID and for a syntactically invalid id, so a malformed-id test cannot be distinguished from a missing-record test by status alone; there is no tenant filter on the lookup, so any authenticated caller who knows an id can read that row (do not assert cross-tenant isolation here); the read is idempotent and safe to repeat.",
   "testCases": [
     {
       "name": "Fetch one measurement by id",
@@ -23,6 +24,26 @@
       "headers": {
         "Authorization": "Bearer {{cache:auth.register.response.data.token}}"
       }
+    }
+  ],
+  "errorCases": [
+    {
+      "status": 404,
+      "code": "NotFound",
+      "message": "not found",
+      "when": "no hdk_measure.measurement row matches the :id path param (unknown, deleted, or malformed id)"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "no Authorization header, or it is not of the form 'Bearer <jwt>' (api-gateway default-deny authGate, AUTH_GATE_MODE=enforce)"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "the bearer JWT fails verifyJwt — bad signature, wrong JWT_SECRET, or exp already elapsed (api-gateway default-deny authGate, AUTH_GATE_MODE=enforce)"
     }
   ]
 }

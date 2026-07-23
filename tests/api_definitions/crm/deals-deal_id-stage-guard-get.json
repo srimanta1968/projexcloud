@@ -1,0 +1,73 @@
+{
+  "name": "GET /api/crm/deals/:deal_id/stage-guard - Stage-transition guard verdict",
+  "endpoint": "/api/crm/deals/:deal_id/stage-guard",
+  "sdk": "sdk-crm",
+  "sourceFile": "packages/sdk-crm/src/server/routes.ts",
+  "method": "GET",
+  "requiresAuth": true,
+  "expectedStatus": 200,
+  "taskId": "2cfbfb2a-7898-4f8d-805b-c6e3d7875d8f",
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "featureId": "795e2c92-d1a5-4389-a914-8cd4dc22e60c",
+  "epicId": "f7f7186e-8f69-4e44-97b8-212928e870f6",
+  "priority": 57,
+  "testability": "auto",
+  "description": "Evaluate whether a deal may transition to to_stage: validates against the injectable allowed-transition map, runs the entry/exit criteria hook, and enforces terminal gating (a terminal stage closed-won/closed-lost has no permitted exits; a same-stage move is a no-op). Returns {allowed, reason, from_stage, to_stage, is_terminal_exit}. tenant_id and to_stage query params required.",
+  "dependsOn": [
+    "POST /api/auth/signup-tenant",
+    "POST /api/crm/deals"
+  ],
+  "fieldEnums": {
+    "to_stage": [
+      "qualifying",
+      "proposal",
+      "negotiation",
+      "closed-won",
+      "closed-lost"
+    ]
+  },
+  "testCases": [
+    {
+      "name": "Guard allows qualifying -> proposal",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "pathParams": {
+        "deal_id": "{{cache:crm.deals.response.data.deal.deal_id}}"
+      },
+      "queryParams": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "to_stage": "proposal"
+      },
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "data": {
+          "gate": {
+            "allowed": "boolean",
+            "from_stage": "string"
+          }
+        }
+      }
+    }
+  ],
+  "errorCases": [
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "tenant_id query param required",
+      "when": "tenant_id missing"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "to_stage query param must be a valid stage",
+      "when": "to_stage missing/invalid"
+    },
+    {
+      "status": 404,
+      "code": "NotFound",
+      "message": "deal not found",
+      "when": "no deal"
+    }
+  ]
+}

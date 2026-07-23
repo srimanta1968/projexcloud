@@ -18,11 +18,30 @@
   "statusTransitions": {
     "entity": "charge",
     "field": "status",
-    "flow": ["requires_action", "authorized", "captured", "failed", "refunded", "disputed"],
+    "flow": [
+      "requires_action",
+      "authorized",
+      "captured",
+      "failed",
+      "refunded",
+      "disputed"
+    ],
     "transitions": [
-      { "from": "requires_action", "to": "captured", "via": "POST /api/payments/charge" },
-      { "from": "requires_action", "to": "failed", "via": "POST /api/payments/charge" },
-      { "from": "captured", "to": "refunded", "via": "POST /api/payments/:charge_id/refund" }
+      {
+        "from": "requires_action",
+        "to": "captured",
+        "via": "POST /api/payments/charge"
+      },
+      {
+        "from": "requires_action",
+        "to": "failed",
+        "via": "POST /api/payments/charge"
+      },
+      {
+        "from": "captured",
+        "to": "refunded",
+        "via": "POST /api/payments/:charge_id/refund"
+      }
     ]
   },
   "testCases": [
@@ -53,5 +72,56 @@
   },
   "captureResponse": {
     "payments.charge.response.data.charge.charge_id": "data.charge.charge_id"
-  }
+  },
+  "description": "Captures a charge against a stored payment method via the provider. Requires a valid tenant JWT (requireAuth); tenant_id is forced from the JWT and any body tenant_id is ignored. The success status is conditional: 201 when the provider result is \"captured\", 200 for any other terminal status (for example pending or authorized) - do not assert 201 unconditionally. Edge cases: a JWT with no tenant_id claim is a 403, not a 500; amount must be a finite positive number, so 0, a negative, a string and NaN all 400; currency is length-checked only (exactly 3 characters) and is not validated against the real ISO-4217 list, so \"XXX\" passes; method_id is presence-checked only, so an unknown method_id becomes a 404 PaymentMethodNotFound from the service, and a method owned by another tenant is a 403 TenantOwnership rather than a 404; a method or charge in a state that cannot be charged surfaces as a 409 InvalidState.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "Authorization header absent or not in Bearer form (requireAuth)"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "Bearer token fails JWT verification (requireAuth)"
+    },
+    {
+      "status": 403,
+      "code": "Forbidden",
+      "message": "JWT missing tenant_id claim",
+      "when": "req.auth.tenant_id is absent after auth"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "tenant_id is required / method_id is required / amount must be a positive number / currency must be ISO-4217 3-letter",
+      "when": "validateCharge fails; details[] carries every failed rule"
+    },
+    {
+      "status": 404,
+      "code": "PaymentMethodNotFound",
+      "message": "Payment method <method_id> not found",
+      "when": "charge raises PaymentMethodNotFoundError for the supplied method_id"
+    },
+    {
+      "status": 403,
+      "code": "TenantOwnership",
+      "message": "caller tenant does not own the payment method",
+      "when": "charge raises TenantOwnershipError because the method belongs to a different tenant than the JWT tenant"
+    },
+    {
+      "status": 409,
+      "code": "InvalidState",
+      "message": "<state error message>",
+      "when": "the service throws a state error matched by fail() (message contains \"cannot distribute\", \"cannot be refunded\" or \" is \") - e.g. the method is detached or the charge is in a non-chargeable state"
+    },
+    {
+      "status": 500,
+      "code": "InternalError",
+      "message": "InternalError",
+      "when": "charge throws an unmapped error - provider/gateway failure or any DB error"
+    }
+  ]
 }

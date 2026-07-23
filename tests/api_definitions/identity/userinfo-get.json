@@ -33,5 +33,38 @@
       "roles": "array",
       "persona": "string"
     }
-  }
+  },
+  "description": "Returns the profile of the currently authenticated principal, merging the stored person record with the verified JWT claims, and is the endpoint the portals call to resolve a session cookie into a user. Edge cases: requires a bearer token, so a missing or expired token is 401 from requireAuth; a token that verifies but carries no sub claim is a second, distinct 401 raised inside the handler (\"Missing person_id claim\"); a token whose sub references a person row that has been deleted returns 404 NotFound even though the token is still cryptographically valid — clients must treat that as a forced re-login rather than a transient error; the response merges req.auth over the stored record, so claim values shadow stored fields of the same name; there are no parameters and the call is read-only and idempotent.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "No Authorization: Bearer <jwt> header on a requireAuth route"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "Bearer token fails verifyJwt (bad signature, malformed, or exp in the past)"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing person_id claim",
+      "when": "The token verifies but has no sub claim, so no person can be resolved"
+    },
+    {
+      "status": 404,
+      "code": "NotFound",
+      "message": "Person not found",
+      "when": "readUserinfo returns nothing for the token's sub — the person row was deleted or never existed"
+    },
+    {
+      "status": 500,
+      "code": "InternalError",
+      "message": "InternalError",
+      "when": "readUserinfo throws for any reason other than a \"not found\" message"
+    }
+  ]
 }

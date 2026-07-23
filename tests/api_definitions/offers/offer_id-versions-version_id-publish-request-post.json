@@ -1,0 +1,62 @@
+{
+  "sdk": "sdk-offer-catalog",
+  "sourceFile": "packages/sdk-offer-catalog/src/server/routes.ts",
+  "requiresAuth": true,
+  "taskId": "6335a8f8-7275-4461-add6-8b386bc5c84f",
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "featureId": "50face32-51ba-4a44-8641-d2d1ee5d96c9",
+  "epicId": "9a0f06fa-f1a9-4292-8bc5-715ec836bbc8",
+  "testability": "auto",
+  "name": "POST /api/offers/:offer_id/versions/:version_id/publish-request - File publish approval",
+  "endpoint": "/api/offers/:offer_id/versions/:version_id/publish-request",
+  "method": "POST",
+  "expectedStatus": 201,
+  "priority": 20,
+  "description": "File a publish-approval request for an offer version (delegated to sdk-approval; subject = offer_version_id). Sets approval_status='pending' and stores the approval_ref. While pending (or rejected) the version cannot be activated (409). tenant_id required.",
+  "dependsOn": [
+    "POST /api/auth/signup-tenant",
+    "POST /api/offers",
+    "POST /api/offers/:offer_id/versions"
+  ],
+  "captureResponse": {
+    "offers.publish-request.response.data.publish.approval_ref": "data.publish.approval_ref"
+  },
+  "testCases": [
+    {
+      "name": "Request publish approval",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "pathParams": {
+        "offer_id": "{{cache:offers.create.response.data.offer.offer_id}}",
+        "version_id": "{{cache:offers.version.create.response.data.version.offer_version_id}}"
+      },
+      "payload": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}"
+      },
+      "expectedStatus": 201,
+      "expectedResponse": {
+        "data": {
+          "publish": {
+            "approval_ref": "string",
+            "approval_status": "string"
+          }
+        }
+      }
+    }
+  ],
+  "errorCases": [
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "tenant_id is required",
+      "when": "tenant_id missing"
+    },
+    {
+      "status": 404,
+      "code": "NotFound",
+      "message": "offer version not found",
+      "when": "no version"
+    }
+  ]
+}

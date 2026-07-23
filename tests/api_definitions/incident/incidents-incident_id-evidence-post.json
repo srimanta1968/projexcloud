@@ -1,0 +1,59 @@
+{
+  "name": "POST /api/incidents/:incident_id/evidence - Append an evidence timeline entry",
+  "endpoint": "/api/incidents/:incident_id/evidence",
+  "sdk": "sdk-incident",
+  "sourceFile": "packages/sdk-incident/src/server/routes.ts",
+  "method": "POST",
+  "requiresAuth": true,
+  "expectedStatus": 201,
+  "taskId": "f718b26b-fd2e-4fcb-b313-012f15c010c8",
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "priority": 57,
+  "testability": "auto",
+  "description": "Append one entry to an incident's evidence timeline (detected / root_cause / recovery / verification / note). The entry is FIRST written to the sdk-audit hash-chained ledger and the receipt (audit_entry_id, audit_seq, audit_entry_hash) is stored on the row and returned, so the evidence is provably un-altered after recording. Evidence is APPEND-ONLY: a database trigger rejects every UPDATE and DELETE on the table, so there is deliberately no PATCH or DELETE counterpart to this endpoint, and the FK is ON DELETE RESTRICT so an incident that has evidence cannot be erased. Appending root_cause / recovery / verification also projects the body onto the matching incident summary column, and the first 'detected' entry stamps detected_at (COALESCE preserves an earlier detection time). Edge cases: 400 when tenant_id, kind or body is missing, or kind is outside the enum; 404 when the incident does not exist for that tenant (tenant-scoped, so another tenant's incident reads as not-found); occurred_at is optional and defaults to now(), letting back-dated evidence be recorded while created_at still records when it was filed; if the audit ledger is unavailable the entry is still recorded with null receipt columns rather than being lost.",
+  "dependsOn": [
+    "POST /api/auth/signup-tenant",
+    "POST /api/incidents"
+  ],
+  "fieldEnums": {
+    "kind": ["detected", "root_cause", "recovery", "verification", "note"]
+  },
+  "testCases": [
+    {
+      "name": "Record the detection evidence for the created incident",
+      "headers": { "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}" },
+      "pathParams": { "incident_id": "{{cache:incident.incidents.create.response.data.incident.incident_id}}" },
+      "payload": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "kind": "detected",
+        "body": "Dedup monitor flagged 412 duplicate leads in the nightly ingest window.",
+        "evidence_ref": "s3://ops-logs/dedup-scan.json",
+        "recorded_by_persona_id": "{{cache:auth.signup-tenant.response.data.userId}}",
+        "occurred_at": "{{dynamic:pastdatetime}}",
+        "metadata": { "detector": "dedup-monitor", "duplicate_count": 412 }
+      },
+      "expectedStatus": 201,
+      "expectedResponse": {
+        "data": {
+          "evidence": {
+            "evidence_id": "string",
+            "incident_id": "string",
+            "kind": "string",
+            "body": "string",
+            "audit_entry_id": "string",
+            "audit_entry_hash": "string"
+          }
+        }
+      }
+    }
+  ],
+  "captureResponse": {
+    "incident.evidence.create.response.data.evidence.evidence_id": "data.evidence.evidence_id"
+  },
+  "errorCases": [
+    { "status": 400, "code": "ValidationError", "message": "tenant_id, kind and body are required", "when": "tenant_id, kind or body missing from the request body" },
+    { "status": 400, "code": "ValidationError", "message": "kind must be one of detected|root_cause|recovery|verification|note", "when": "kind is outside the allowed enum" },
+    { "status": 401, "code": "Unauthorized", "message": "Unauthorized", "when": "Authorization bearer token missing or invalid" },
+    { "status": 404, "code": "NotFound", "message": "[sdk-incident] incident <id> not found for tenant", "when": "incident_id does not exist for the authenticated tenant" }
+  ]
+}

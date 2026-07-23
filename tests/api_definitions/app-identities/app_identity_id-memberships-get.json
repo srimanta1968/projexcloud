@@ -27,5 +27,26 @@
       },
       "expectedStatus": 200
     }
+  ],
+  "description": "Lists the L3 memberships attached to one app_identity. Requires a valid tenant JWT (requireAuth). Edge cases: this is a list, so an unknown but well-formed app_identity_id returns 200 with an empty memberships array - never a 404; there is no limit/offset paging, so an app_identity with many memberships returns them all in one payload; the caller JWT tenant is not compared to the rows, so membership rows for other tenants are visible to any authenticated caller - test tenant scoping explicitly; a malformed non-UUID app_identity_id fails the uuid cast in an untried service call and surfaces as a Fastify 500.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "Authorization header absent or not in Bearer form (requireAuth)"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "Bearer token fails JWT verification (requireAuth)"
+    },
+    {
+      "status": 500,
+      "code": "InternalServerError",
+      "message": "Internal Server Error",
+      "when": "listMembershipsForAppIdentity throws and the route has no try/catch, so the Fastify default error handler responds - chiefly a non-UUID app_identity_id failing the uuid cast, or any DB error"
+    }
   ]
 }

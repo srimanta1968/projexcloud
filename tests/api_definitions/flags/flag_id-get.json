@@ -3,6 +3,27 @@
   "endpoint": "/api/flags/:flag_id",
   "sdk": "sdk-feature-flags",
   "method": "GET",
+  "description": "Fetches a single feature-flag definition by flag_id. Edge cases: an unknown flag_id returns 404 (in contrast to the evaluate endpoint, which answers 200 with a null value for an unknown flag - a deliberate fail-open asymmetry QA should verify); flag_id is a caller-chosen string key, not a UUID, so lookups are exact and case-sensitive; the response carries the definition only, not the flag's rollout rules.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "Authorization header absent or not in the form \"Bearer <jwt>\""
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "JWT signature invalid, malformed, or past its exp claim"
+    },
+    {
+      "status": 404,
+      "code": "NotFound",
+      "message": "NotFound",
+      "when": "no feature_flags.flag row exists for the given flag_id"
+    }
+  ],
   "requiresAuth": true,
   "expectedStatus": 200,
   "taskId": "cbf65711-e8e1-41ad-84e6-7aa87b76d5a6",

@@ -1,0 +1,59 @@
+{
+  "sdk": "sdk-notification",
+  "sourceFile": "packages/sdk-notification/src/server/routes.ts",
+  "taskId": "d6184d21-cc25-4e19-81f7-d46eb6d62c83",
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "featureId": "73f2d42d-acc1-4317-9e31-604bc330a08a",
+  "epicId": "f7f7186e-8f69-4e44-97b8-212928e870f6",
+  "testability": "auto",
+  "name": "POST /api/notifications/webhooks/delivery/:provider - Delivery-status callback",
+  "endpoint": "/api/notifications/webhooks/delivery/:provider",
+  "method": "POST",
+  "requiresAuth": false,
+  "expectedStatus": 200,
+  "priority": 45,
+  "description": "PUBLIC provider delivery-status webhook (Twilio/SES/SendGrid, on the gateway allowlist). Normalizes the status (delivered/failed/bounced/undelivered/complaint), looks up the notification.message by provider_message_id and drives sent->delivered via markDelivered (emitting notification.delivered.v1 once), records an idempotent receipt (per provider+message_id+status), and feeds delivered/bounce counts to reputation. Unknown message ids are recorded gracefully (matched=false). tenant_id via ?tenant_id=. Signature-verified when a per-tenant secret is configured.",
+  "dependsOn": [
+    "POST /api/auth/signup-tenant"
+  ],
+  "testCases": [
+    {
+      "name": "Twilio delivered callback (unmatched id handled gracefully)",
+      "headers": {
+        "Content-Type": "application/json"
+      },
+      "pathParams": {
+        "provider": "{{static:twilio}}"
+      },
+      "queryParams": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}"
+      },
+      "payload": {
+        "MessageStatus": "delivered",
+        "MessageSid": "SM{{dynamic:uuid}}",
+        "To": "+15005550006"
+      },
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "data": {
+          "processed": "number",
+          "matched": "number"
+        }
+      }
+    }
+  ],
+  "errorCases": [
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "tenant_id query param required",
+      "when": "tenant_id missing"
+    },
+    {
+      "status": 401,
+      "code": "InvalidSignature",
+      "message": "delivery callback signature verification failed",
+      "when": "signing secret configured and signature mismatch"
+    }
+  ]
+}

@@ -23,5 +23,44 @@
       },
       "expectedStatus": 204
     }
+  ],
+  "description": "SCIM 2.0 deprovisioning (FR-IDN-9): soft-offboards a person in the resolved tenant by setting identity.tenant_membership.status = 'offboarded' for that (person_id, tenant_id) pair, replying 204 with no body. The person row, aliases and app identities are deliberately left intact — this is a membership status change, not a delete. Tenant scoping comes from scimBearerAuth (Bearer matched against identity.federation_config.scim_bearer_envelope), falling back to x-tenant-id in dev. Edge cases: the call is fully idempotent and returns 204 even when person_id is unknown or the membership is already offboarded, because the UPDATE simply matches zero rows; it is tenant-scoped, so a person_id belonging to another tenant is a silent no-op; a non-UUID person_id fails the Postgres cast and surfaces as 500; /scim/* is NOT on the gateway public allowlist, so the Bearer must also be a valid tenant JWT to clear the default-deny authGate.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "No Authorization: Bearer header — the gateway default-deny authGate runs requireAuth on every non-allowlisted path"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "Bearer token fails verifyJwt (bad signature, malformed, or exp in the past)"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing SCIM Bearer token",
+      "when": "scimBearerAuth finds no Authorization: Bearer <token> header (SCIM error payload with schemas urn:ietf:params:scim:api:messages:2.0:Error)"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "SCIM Bearer token not recognized",
+      "when": "No identity.federation_config row with protocol=scim, jit_enabled=TRUE and a matching (or NULL) scim_bearer_envelope hash"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "No SCIM Bearer token resolved and no x-tenant-id header set",
+      "when": "req.scimContext.tenant_id is unset and no x-tenant-id header was supplied"
+    },
+    {
+      "status": 500,
+      "code": "InternalError",
+      "message": "InternalError",
+      "when": "deprovisionScimUser throws — person_id or tenant_id is not a valid UUID, or the tenant_membership UPDATE fails"
+    }
   ]
 }

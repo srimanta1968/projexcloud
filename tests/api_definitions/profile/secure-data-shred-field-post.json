@@ -12,7 +12,11 @@
   "priority": 45,
   "testability": "auto",
   "fieldEnums": {
-    "reason": ["retention-expiry", "dsar-erasure", "operator-request"]
+    "reason": [
+      "retention-expiry",
+      "dsar-erasure",
+      "operator-request"
+    ]
   },
   "dependsOn": [
     "POST /api/auth/register",
@@ -34,6 +38,39 @@
         "audit_entry_id": "{{var:audit_entry_id}}"
       },
       "expectedStatus": 200
+    }
+  ],
+  "description": "Cryptographically shreds one named field on a person's secure-data record: the envelope bytes are removed from field_envelopes, field_states is stamped { state: \"shredded\", shredded_at }, and an append-only shred-log row is written. Returns 200 with the log entry. reason must be one of retention-expiry | dsar-erasure | operator-request. Edge cases: the UPDATE is unconditional, so shredding a person or field that does not exist still returns 200 and still writes a log row (no 404 path); repeat shreds of the same field are idempotent but each appends another log entry; audit_entry_id is optional and, when omitted, is generated from the emitted profile.field.shredded.v1 event; requires a valid JWT.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "Authorization header absent or not in Bearer form (requireAuth / gateway default-deny authGate)"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "Bearer token fails JWT verification or is expired (requireAuth / gateway default-deny authGate)"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "missing required fields",
+      "when": "person_id, field_name or reason is absent or an empty string"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "invalid reason",
+      "when": "reason is not one of retention-expiry, dsar-erasure, operator-request"
+    },
+    {
+      "status": 500,
+      "code": "Internal Server Error",
+      "message": "invalid input syntax for type uuid",
+      "when": "person_id is not a valid UUID - Postgres 22P02 on the UPDATE escapes as an unhandled 500"
     }
   ]
 }

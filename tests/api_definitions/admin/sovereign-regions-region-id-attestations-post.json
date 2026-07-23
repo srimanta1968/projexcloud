@@ -2,6 +2,27 @@
   "name": "POST /admin/sovereign/regions/:region_id/attestations — api-gateway",
   "endpoint": "/admin/sovereign/regions/:region_id/attestations",
   "method": "POST",
+  "description": "Records a compliance attestation for a sovereign region — the regime attested to, the auditor, its validity window and the artifact reference — and returns 201 { success: true, data: <attestation> }. QA edge cases: regime, auditor_id, issued_at, expires_at and artifact_ref are all required with a falsy check; issued_at/expires_at are passed through as strings with NO date parsing or ordering check in the route, so an unparseable timestamp or an expires_at earlier than issued_at is not a 400 — it either lands in the DB as-is or fails the timestamptz cast as a 500; regime is typed but not runtime-validated, so an out-of-enum regime surfaces from the DB check constraint as a 500; an unknown region_id is an FK violation and therefore a 500, not a 404; attestations accumulate — posting twice records two rows rather than replacing.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "admin token required",
+      "when": "requireAdmin() found no valid x-admin-ops-token header — missing, or matching neither env ADMIN_OPS_TOKEN nor an active admin.ops_token hash (30s cache TTL applies to revocations)"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "regime, auditor_id, issued_at, expires_at, artifact_ref required",
+      "when": "any of regime, auditor_id, issued_at, expires_at or artifact_ref is missing, null, or an empty string"
+    },
+    {
+      "status": 500,
+      "code": "InternalServerError",
+      "message": "<attestation error message>",
+      "when": "recordSovereignAttestation() throws — issued_at/expires_at not castable to timestamptz, regime outside the allowed enum, region_id not matching a registered region (FK violation), or Postgres unavailable"
+    }
+  ],
   "requiresAuth": false,
   "expectedStatus": 201,
   "sdk": "api-gateway",

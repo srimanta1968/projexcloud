@@ -43,5 +43,38 @@
   "captureResponse": {
     "audit.verify.response.data.pool_index": "data.pool_index",
     "audit.verify.response.data.head_hash_hex": "data.head_hash_hex"
-  }
+  },
+  "description": "On-demand hash-chain verification for one audit pool (P1-Foundation-Spine §7): walks audit.entry from from_seq to to_seq inclusive, recomputes each entry_hash from the canonical serialization, checks every prev_hash links to the preceding entry_hash, and returns the canonical proof object. QA edge cases: the status code is data-dependent — an intact chain returns 200 while a detected break returns 409 with the SAME body shape (data.ok=false, data.break_at_seq, data.break_reason of either 'prev_hash does not match the previous entry_hash' or 'entry_hash mismatch — payload tampered or canonicalization drift'), so tests must assert on data.ok, not only on status. An unknown pool_index or a from_seq/to_seq window containing no rows is NOT an error: it returns 200 with entries_checked=0, ok=true and head_hash_hex=null, so a missing-FK style negative test cannot be written here. pool_index is trimmed and a whitespace-only value is treated as empty (400). from_seq/to_seq are only honoured when typeof === 'number' — string \"1\" is silently ignored and the full pool is scanned; an inverted or out-of-range window simply yields zero rows. The call is read-only and fully idempotent apart from stamping audit.chain_head.last_verified_at on success. There is no pagination or row cap, so a large window scans the whole range in one request. pool_index is caller-supplied and not scoped to the JWT tenant, but the path sits behind the gateway default-deny gate so an invalid or expired token is rejected before the handler runs.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "No Authorization: Bearer header — the gateway default-deny auth gate (authGate.ts → requireAuth) blocks /api/audit/verify before verifyHandler runs"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "Bearer token present but verifyJwt rejects it (bad signature, malformed, expired)"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "pool_index is required",
+      "when": "body.pool_index missing, not a string, or blank/whitespace-only after trim (includes an empty {} body)"
+    },
+    {
+      "status": 409,
+      "code": "ChainBreak",
+      "message": "data.ok=false with break_at_seq and break_reason set",
+      "when": "verifyChain detects a broken link (prev_hash does not match the previous entry_hash) or a tampered entry (recomputed entry_hash mismatch)"
+    },
+    {
+      "status": 500,
+      "code": "InternalError",
+      "message": "InternalError",
+      "when": "verifyChain throws — e.g. the audit.entry / audit.chain_head query fails or the DB pool is unavailable"
+    }
+  ]
 }

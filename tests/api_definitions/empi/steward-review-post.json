@@ -4,6 +4,39 @@
   "sdk": "sdk-identity-resolver",
   "sourceFile": "packages/sdk-identity-resolver/src/server/routes.ts",
   "method": "POST",
+  "description": "Queues a candidate link for human steward adjudication by opening an approval step on the given route_id; the steward identity is taken from the JWT (primary_persona_id, falling back to sub), never from the body. tenant_id falls back to the JWT tenant claim when the body omits it. Edge cases: a missing route_id, or no tenant_id in either the body or the token, -> 400; a candidate link that does not exist throws 'empi: candidate link <id> not found' inside the service and surfaces as a 500 InternalError with that message in details, NOT a 404 - this is the single most misleading status on the route; re-queuing an already-queued link opens a second approval step, so the endpoint is not idempotent; a token with no persona claim yields an empty steward_persona_id rather than an error.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "Authorization header absent or not in the form \"Bearer <jwt>\""
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "JWT signature invalid, malformed, or past its exp claim"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "route_id, tenant_id are required",
+      "when": "body.route_id is missing, or tenant_id is absent from both the body and the JWT tenant claim"
+    },
+    {
+      "status": 500,
+      "code": "InternalError",
+      "message": "empi: candidate link <link_id> not found",
+      "when": "the link_id in the path matches no candidate-link row — surfaced as a 500 (with the message in details), not a 404"
+    },
+    {
+      "status": 500,
+      "code": "InternalError",
+      "message": "<error message from enqueueStewardReview>",
+      "when": "the approval-step insert or any other service call throws"
+    }
+  ],
   "requiresAuth": true,
   "taskId": "363e7b37-752c-497e-baa4-47eee238621c",
   "sprintId": "efcf9cbd-5e84-469e-946e-efcabf8c88e1",

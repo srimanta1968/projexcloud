@@ -45,13 +45,57 @@
   "statusTransitions": {
     "entity": "approval.request",
     "field": "status",
-    "flow": ["pending", "approved", "rejected", "escalated", "timed-out", "cancelled"],
+    "flow": [
+      "pending",
+      "approved",
+      "rejected",
+      "escalated",
+      "timed-out",
+      "cancelled"
+    ],
     "transitions": [
-      { "from": null, "to": "pending", "via": "POST /api/approvals/requests" }
+      {
+        "from": null,
+        "to": "pending",
+        "via": "POST /api/approvals/requests"
+      }
     ]
   },
   "captureResponse": {
     "approvals.requests.create.response.data.request.request_id": "data.request.request_id",
     "approvals.requests.create.response.data.pending_steps.0.step_id": "data.pending_steps.0.step_id"
-  }
+  },
+  "description": "Submits an approval request against an existing route, materialising the route steps into pending approval.step rows and returning the request plus its first step(s). Edge cases: tenant_id, route_id and initiator_persona_id must all be well-formed UUIDs; subject_kind and subject_id are required non-empty strings identifying what is being approved; a syntactically valid route_id matching no route row returns 404 RouteNotFound; the route's tenant is not cross-checked against the body tenant_id, so a mismatch is not rejected at this layer; there is no duplicate-request guard — submitting the same (subject_kind, subject_id) twice creates two independent requests.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "Authorization header absent or not in 'Bearer <jwt>' form (requireAuth preHandler)"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "JWT signature invalid, malformed, or exp has elapsed"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "tenant_id must be a UUID / route_id must be a UUID / subject_kind is required / subject_id is required / initiator_persona_id must be a UUID",
+      "when": "any validateSubmitRequest check fails; all failures are returned together in details[]"
+    },
+    {
+      "status": 404,
+      "code": "RouteNotFound",
+      "message": "Route <route_id> not found",
+      "when": "route_id is a valid UUID but no approval.route row matches"
+    },
+    {
+      "status": 500,
+      "code": "InternalError",
+      "message": "InternalError",
+      "when": "Unexpected service/DB failure (connection loss, or a constraint the handler does not map)"
+    }
+  ]
 }

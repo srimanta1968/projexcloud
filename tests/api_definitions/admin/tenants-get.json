@@ -2,6 +2,21 @@
   "name": "GET /admin/tenants — api-gateway",
   "endpoint": "/admin/tenants",
   "method": "GET",
+  "description": "Operator listing of platform tenants. Returns at most 200 tenants (hard-coded tenantList(200) cap) as { data: { tenants } } — there is no pagination, no cursor and no filtering, so on a platform with more than 200 tenants the tail is silently invisible. QA edge cases: this is a cross-tenant operator surface, so it is gated only by the x-admin-ops-token header and is NOT tenant-scoped by a JWT; a request with a valid tenant JWT but no ops token still gets 401. Extra query params are ignored rather than rejected. Revoking the ops token used here keeps working for up to the 30s admin-ops cache TTL on replicas that did not receive the Redis invalidation broadcast.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "admin token required",
+      "when": "x-admin-ops-token header is missing, empty, or matches neither the env ADMIN_OPS_TOKEN break-glass secret (constant-time compare) nor the SHA-256 hash of any active row in admin.ops_token; revoked/expired DB tokens keep working until the per-replica cache expires (ADMIN_OPS_TOKEN_CACHE_TTL_MS, default 30s) unless a Redis invalidation broadcast lands first"
+    },
+    {
+      "status": 500,
+      "code": "InternalServerError",
+      "message": "<database error message>",
+      "when": "tenantList() throws — e.g. Postgres unavailable, pool exhausted, or the tenant table is missing; the raw driver message is echoed back as { error }"
+    }
+  ],
   "requiresAuth": false,
   "expectedStatus": 200,
   "sdk": "api-gateway",

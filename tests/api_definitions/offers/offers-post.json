@@ -1,0 +1,58 @@
+{
+  "sdk": "sdk-offer-catalog",
+  "sourceFile": "packages/sdk-offer-catalog/src/server/routes.ts",
+  "requiresAuth": true,
+  "taskId": "1a62f247-b638-412d-a317-e9da3dbd6dc4",
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "featureId": "50face32-51ba-4a44-8641-d2d1ee5d96c9",
+  "epicId": "9a0f06fa-f1a9-4292-8bc5-715ec836bbc8",
+  "testability": "auto",
+  "name": "POST /api/offers - Create an offer",
+  "endpoint": "/api/offers",
+  "method": "POST",
+  "expectedStatus": 201,
+  "priority": 10,
+  "description": "Create a stable offer identity (name + unique slug); content lives in immutable versions. Slug is unique per tenant (duplicate -> 409). tenant_id, name and slug required.",
+  "dependsOn": [
+    "POST /api/auth/signup-tenant"
+  ],
+  "captureResponse": {
+    "offers.create.response.data.offer.offer_id": "data.offer.offer_id"
+  },
+  "testCases": [
+    {
+      "name": "Create an offer",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "payload": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "name": "{{dynamic:name}}",
+        "slug": "offer-{{dynamic:uuid}}",
+        "description": "Pro plan"
+      },
+      "expectedStatus": 201,
+      "expectedResponse": {
+        "data": {
+          "offer": {
+            "offer_id": "string"
+          }
+        }
+      }
+    }
+  ],
+  "errorCases": [
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "tenant_id, name and slug are required",
+      "when": "required missing"
+    },
+    {
+      "status": 409,
+      "code": "Conflict",
+      "message": "an offer with this slug already exists",
+      "when": "slug reused"
+    }
+  ]
+}

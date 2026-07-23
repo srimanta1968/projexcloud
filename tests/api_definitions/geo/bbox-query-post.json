@@ -31,5 +31,26 @@
   ],
   "captureResponse": {
     "geo.bbox-query.response.data.addresses": "data.addresses"
-  }
+  },
+  "description": "Returns the canonical addresses whose geometry falls inside the supplied bounding box, using PostGIS ST_Intersects when the extension is available and silently falling back to a plain lat/lng BETWEEN range scan when it is not. All four coordinates must be JSON numbers. Edge cases: the caller-supplied limit is clamped to a maximum of 1000 and defaults to 100, so an oversized or absent limit never returns more than 1000 rows; an inverted or zero-area box returns an empty array with 200, not an error; coordinates sent as strings fail the strict typeof guard; addresses with NULL lat/lng are excluded by the fallback path; requires a valid JWT.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "Authorization header absent or not in Bearer form (requireAuth / gateway default-deny authGate)"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "Bearer token fails JWT verification or is expired (requireAuth / gateway default-deny authGate)"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "missing bbox coords",
+      "when": "min_lat, min_lng, max_lat or max_lng is absent or not a JSON number"
+    }
+  ]
 }

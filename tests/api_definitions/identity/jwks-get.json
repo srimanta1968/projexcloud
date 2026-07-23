@@ -18,5 +18,14 @@
   ],
   "expectedResponse": {
     "keys": "array"
-  }
+  },
+  "description": "Publishes the JSON Web Key Set used to verify tokens issued by this gateway, served under /.well-known/ and therefore exempt from the default-deny auth gate — it is intentionally public and requires no bearer token. The response carries cache-control: public, max-age=300, so clients and proxies may serve a cached copy for up to five minutes; a key rotation is therefore not immediately visible to every verifier. Edge cases: the key set is derived from the JWT_SECRET environment variable and falls back to the literal \"change-me-in-prod\" when it is unset, so a misconfigured deployment still returns 200 with a key set built from the placeholder secret rather than failing — a QA check should assert the served key actually verifies a freshly minted token; the handler takes no parameters and has no failure branch of its own.",
+  "errorCases": [
+    {
+      "status": 500,
+      "code": "InternalError",
+      "message": "InternalError",
+      "when": "buildJwks throws while deriving the key set from JWT_SECRET; caught by the route wrapper"
+    }
+  ]
 }

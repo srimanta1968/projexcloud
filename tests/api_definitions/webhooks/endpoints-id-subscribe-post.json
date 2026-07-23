@@ -52,5 +52,44 @@
   },
   "captureResponse": {
     "webhooks.subscribe.response.data.subscription.subscription_id": "data.subscription.subscription_id"
-  }
+  },
+  "description": "Subscribes a registered endpoint to one event_type, with an optional filter_predicate. The endpoint_id is taken from the PATH and overwrites any endpoint_id present in the body. Edge cases: :endpoint_id must be a UUID and event_type must be non-empty; the event_type must already exist in the event-type registry — an unknown one returns 400 UnregisteredEventType, a distinct code from the plain ValidationError; an endpoint_id that is a valid UUID but matches no endpoint returns 404 EndpointNotFound; filter_predicate is accepted only if it is an object and is otherwise silently dropped rather than rejected; there is no duplicate-subscription guard on the route, so re-subscribing the same (endpoint, event_type) depends on the DB constraint.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "Authorization header absent or not in 'Bearer <jwt>' form (requireAuth preHandler)"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "JWT signature invalid, malformed, or exp has elapsed"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "endpoint_id must be a UUID / event_type is required",
+      "when": "validateSubscribe fails; all failures are returned together in details[]"
+    },
+    {
+      "status": 400,
+      "code": "UnregisteredEventType",
+      "message": "Event type <event_type> is not registered",
+      "when": "the event_type has no entry in the event-type registry"
+    },
+    {
+      "status": 404,
+      "code": "EndpointNotFound",
+      "message": "Endpoint <endpoint_id> not found",
+      "when": ":endpoint_id is a valid UUID but no webhook endpoint row matches"
+    },
+    {
+      "status": 500,
+      "code": "InternalError",
+      "message": "InternalError",
+      "when": "Unexpected service/DB failure (connection loss, or a constraint the handler does not map)"
+    }
+  ]
 }

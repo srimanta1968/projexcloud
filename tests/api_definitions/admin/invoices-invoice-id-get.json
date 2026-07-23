@@ -2,12 +2,36 @@
   "name": "GET /admin/invoices/:invoice_id — api-gateway",
   "endpoint": "/admin/invoices/:invoice_id",
   "method": "GET",
+  "description": "Returns one invoice with all of its line items, as { success: true, data: { invoice, line_items } }, line items ordered by sku. QA edge cases: invoice_id is checked against a strict UUID regex BEFORE any query runs and a non-UUID is answered 404 \"invoice not found\" rather than 400 — so malformed and non-existent ids are indistinguishable by design (this deliberately prevents id-format probing); a well-formed UUID with no matching row gets the same 404; an invoice that exists with zero line items is a 200 with an empty line_items array, not a 404; the invoice row is selected with SELECT *, so the payload includes every column including internal billing state; the route is cross-tenant and ops-token gated, so no tenant ownership check is applied to the requested invoice.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "admin token required",
+      "when": "requireAdmin() found no valid x-admin-ops-token header — missing, or matching neither env ADMIN_OPS_TOKEN nor an active admin.ops_token hash (30s cache TTL applies to revocations)"
+    },
+    {
+      "status": 404,
+      "code": "NotFound",
+      "message": "invoice not found",
+      "when": "invoice_id fails the UUID regex (checked before any DB access), or it is a valid UUID with no matching row in billing.invoice"
+    },
+    {
+      "status": 500,
+      "code": "InternalServerError",
+      "message": "<database error message>",
+      "when": "the invoice or line_item SELECT throws — Postgres unavailable or the billing schema missing"
+    }
+  ],
   "requiresAuth": false,
   "expectedStatus": 200,
   "sdk": "api-gateway",
   "sourceFile": "services/api-gateway/src/app.ts",
   "_generated": true,
   "testability": "auto",
+  "dependsOn": [
+    "POST /api/billing/invoices/generate"
+  ],
   "testCases": [
     {
       "name": "Fetch a single invoice with its line items",
@@ -15,7 +39,7 @@
         "x-admin-ops-token": "{{var:ADMIN_OPS_TOKEN}}"
       },
       "pathParams": {
-        "invoice_id": "{{var:invoice_id}}"
+        "invoice_id": "{{cache:billing-invoices.generate.response.data.invoice.invoice_id}}"
       },
       "expectedStatus": 200
     }

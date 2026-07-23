@@ -13,8 +13,18 @@
   ],
   "fieldEnums": {
     "expected_layers": [
-      "gateway", "identity", "consent", "pool-router", "vault", "policy",
-      "rebac", "meter", "sdk-body", "tool", "agent", "lineage"
+      "gateway",
+      "identity",
+      "consent",
+      "pool-router",
+      "vault",
+      "policy",
+      "rebac",
+      "meter",
+      "sdk-body",
+      "tool",
+      "agent",
+      "lineage"
     ]
   },
   "testCases": [
@@ -25,7 +35,12 @@
       },
       "payload": {
         "trace_id": "{{var:trace_id}}",
-        "expected_layers": ["gateway", "identity", "policy", "meter"]
+        "expected_layers": [
+          "gateway",
+          "identity",
+          "policy",
+          "meter"
+        ]
       },
       "expectedStatus": 200,
       "expectedResponse": {
@@ -36,5 +51,37 @@
   "captureResponse": {
     "trace.regression-assert.response.data.trace_id": "data.trace_id",
     "trace.regression-assert.response.data.pass": "data.pass"
-  }
+  },
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "Authorization header absent or not in Bearer form (requireAuth)"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "Bearer token fails JWT verification (requireAuth)"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "Required: trace_id, expected_layers (string[])",
+      "when": "trace_id is absent or empty, or expected_layers is absent or not an array (an empty array [] passes the check)"
+    },
+    {
+      "status": 500,
+      "code": "RegressionAssertFailed",
+      "message": "Regression assert failed",
+      "when": "regressionAssert throws - an unknown trace_id, a non-UUID trace_id failing the uuid cast, or any DB error; there is no 404 branch, so a missing trace surfaces as a 500"
+    },
+    {
+      "status": 500,
+      "code": "InternalError",
+      "message": "InternalError",
+      "when": "the handler throws outside its own try/catch and the route wrapper catch fires"
+    }
+  ]
 }

@@ -10,6 +10,7 @@
   "sdk": "sdk-connectors",
   "sourceFile": "packages/sdk-connectors/src/server/routes.ts",
   "testability": "auto",
+  "description": "Returns the list of connector kinds for which an adapter is currently registered in the sdk-connectors adapter registry, as { data: { kinds: [...] } }. QA edge cases: the list is built from the in-process registry, not from the database, so it reflects which adapter modules this gateway build actually loaded — a kind present in the catalogue but not compiled into the image will be absent, and that absence is exactly what makes POST /api/connectors/inbound/:kind return 404 UnknownConnectorKind for the same value; the response is global and identical for every tenant (no tenant scoping); it takes no parameters, has no pagination, and cannot return 404 or 409 — an empty kinds array is a valid 200 meaning no adapters registered.",
   "testCases": [
     {
       "name": "List registered connector adapter kinds",
@@ -17,6 +18,20 @@
         "Authorization": "Bearer {{cache:auth.register.response.data.token}}"
       },
       "expectedStatus": 200
+    }
+  ],
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "no Authorization header, or it is not of the form 'Bearer <jwt>' (requireAuth preHandler)"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "the bearer JWT fails verifyJwt — bad signature, wrong JWT_SECRET, or exp already elapsed (requireAuth preHandler)"
     }
   ]
 }

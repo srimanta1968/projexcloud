@@ -26,5 +26,38 @@
       },
       "expectedStatus": 200
     }
+  ],
+  "description": "Looks up a single command's status and result by id, scoped to the caller's tenant from the JWT tenant_id claim. Returns 200 with the command record including its lifecycle state (pending, dispatched, acked, rejected, ...). Edge cases: a token with no tenant_id claim is a 400; a command_id that exists but belongs to a different tenant is indistinguishable from one that does not exist - both are 404, which is the intended tenant-isolation behaviour; a non-UUID command_id fails the Postgres UUID cast inside the try block and is reported as a generic 500 rather than a 400; requires a valid JWT.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "Authorization header absent or not in Bearer form (requireAuth / gateway default-deny authGate)"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "Bearer token fails JWT verification or is expired (requireAuth / gateway default-deny authGate)"
+    },
+    {
+      "status": 400,
+      "code": "tenant context required",
+      "message": "tenant context required",
+      "when": "The JWT carries no tenant_id claim"
+    },
+    {
+      "status": 404,
+      "code": "command not found",
+      "message": "command not found",
+      "when": "No command with that id exists within the caller's tenant - also returned when the command belongs to a different tenant"
+    },
+    {
+      "status": 500,
+      "code": "<underlying error message>",
+      "message": "Command lookup failed",
+      "when": "getCommand throws - includes a non-UUID command_id (Postgres 22P02) and database errors"
+    }
   ]
 }

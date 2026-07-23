@@ -42,5 +42,44 @@
       },
       "expectedStatus": 201
     }
+  ],
+  "description": "Typed P12 time-series intake: writes a batch of sensor readings keyed by a caller-supplied idempotency_key and answers 201 with the ingest summary. Gated by the gateway default-deny authGate, so a valid tenant JWT is required; tenant_id prefers req.auth.tenant (the JWT) and only falls back to body.tenant_id when the JWT carries no tenant claim. Edge cases: idempotency_key is mandatory and is the replay guard - re-POSTing the same key must not double-write the series; readings must be a non-empty array, so both an empty array and an omitted field 400; if the time-series sink is not configured the route returns 400 \"sensor-reading sink not configured\" rather than a 503, which makes an infrastructure outage look like a client error; malformed reading shapes, bad timestamps and unknown sensor ids all surface as 400 with the raw service message; there is no batch-size cap in the handler; this route never returns 404 or 500 because every throw is flattened to 400.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "Authorization header absent or not in Bearer form - gateway default-deny authGate onRequest hook (AUTH_GATE_MODE=enforce)"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "Bearer token fails JWT verification in the gateway authGate"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "idempotency_key is required",
+      "when": "body.idempotency_key is absent or an empty string"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "readings must be a non-empty array",
+      "when": "body.readings is absent, not an array, or an empty array"
+    },
+    {
+      "status": 400,
+      "code": "SinkNotConfigured",
+      "message": "sensor-reading sink not configured",
+      "when": "the sensor time-series sink is not wired in this deployment"
+    },
+    {
+      "status": 400,
+      "code": "IngestFailed",
+      "message": "<service error message>",
+      "when": "ingestSensorReadingsBatch throws for any other reason - malformed reading shape, bad timestamp, unknown sensor, or a sink/DB error; the catch flattens every failure to 400"
+    }
   ]
 }

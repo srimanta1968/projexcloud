@@ -2,6 +2,33 @@
   "name": "PATCH /admin/pools/:pool_index/status — api-gateway",
   "endpoint": "/admin/pools/:pool_index/status",
   "method": "PATCH",
+  "description": "Transitions a routing pool to a new lifecycle status, recording from_status (read live from routing.pool), to_status, the mandatory reason and operator_id, and broadcasting a pool-flip to route caches. Returns a bare { success: true } with no data. to_status is upper-cased before use, so \"draining\" and \"DRAINING\" both work. QA edge cases: to_status, reason and operator_id are all required with a falsy check; the pool is verified to exist first, so an unknown pool_index is a clean 404; there is NO state-machine validation — any status is accepted from any status, including RETIRED → ACTIVE — but a to_status outside ACTIVE|MIGRATING|DRAINING|MAINTENANCE|RETIRED|QUARANTINE is caught only by the DB check constraint and returns 500 rather than 400; re-applying the pool's current status succeeds and still appends a lifecycle event, so the event log is not deduplicated.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "admin token required",
+      "when": "requireAdmin() found no valid x-admin-ops-token header — missing, or matching neither env ADMIN_OPS_TOKEN nor an active admin.ops_token hash (30s cache TTL applies to revocations)"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "to_status + reason + operator_id required",
+      "when": "any of to_status, reason or operator_id is missing, null, or an empty string"
+    },
+    {
+      "status": 404,
+      "code": "NotFound",
+      "message": "pool not found",
+      "when": "no row in routing.pool matches pool_index — checked after validation and before the transition is recorded"
+    },
+    {
+      "status": 500,
+      "code": "InternalServerError",
+      "message": "<database error message>",
+      "when": "recordPoolTransition() throws — to_status (upper-cased) outside the allowed pool-status enum and rejected by the DB check constraint, the lifecycle-event insert failing, the sdk-pool-router dynamic import failing, or Postgres unavailable"
+    }
+  ],
   "requiresAuth": false,
   "expectedStatus": 200,
   "sdk": "api-gateway",

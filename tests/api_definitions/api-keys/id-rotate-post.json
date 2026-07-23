@@ -58,5 +58,32 @@
   "captureResponse": {
     "api-keys.rotate.response.data.key.key_id": "data.key.key_id",
     "api-keys.rotate.response.data.key.rotated_from_key_id": "data.key.rotated_from_key_id"
-  }
+  },
+  "description": "Rotates an API key: mints a replacement secret and returns it with 201 while leaving the old key valid for a 24-hour grace window (FR-APK-4) so callers can cut over without downtime. Edge cases: only a rotatable (active, non-revoked) key matches, so rotating an already-revoked key returns 404 \"No rotatable key with id ...\"; an unknown key_id is also 404; rotation is not idempotent — each call mints a new secret and restarts the grace window, so a retried request produces a second replacement key rather than returning the first; the plaintext replacement secret appears only in this response and cannot be re-read afterwards; a malformed key_id fails the query cast and surfaces as 500.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "No Authorization: Bearer <jwt> header on a requireAuth route"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "Bearer token fails verifyJwt (bad signature, malformed, or exp in the past)"
+    },
+    {
+      "status": 404,
+      "code": "NotFound",
+      "message": "No rotatable key with id <key_id>",
+      "when": "No rotatable key matches key_id — it does not exist, or it is already revoked"
+    },
+    {
+      "status": 500,
+      "code": "InternalError",
+      "message": "InternalError",
+      "when": "rotateKey throws — e.g. key_id is not a valid UUID, the replacement insert violates a constraint, or the database is unreachable"
+    }
+  ]
 }

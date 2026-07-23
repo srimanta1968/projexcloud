@@ -35,12 +35,22 @@
     }
   ],
   "fieldEnums": {
-    "status": ["open", "in-review", "resolved", "rejected"]
+    "status": [
+      "open",
+      "in-review",
+      "resolved",
+      "rejected"
+    ]
   },
   "statusTransitions": {
     "entity": "hdk_sync.human_review_task",
     "field": "status",
-    "flow": ["open", "in-review", "resolved", "rejected"],
+    "flow": [
+      "open",
+      "in-review",
+      "resolved",
+      "rejected"
+    ],
     "transitions": [
       {
         "from": "open",
@@ -61,5 +71,32 @@
   },
   "captureResponse": {
     "hdk-sync.human-review-resolve.response.data.task.task_id": "data.task.task_id"
-  }
+  },
+  "description": "Resolves a queued human-review task by setting its status (open | in-review | resolved | rejected) and recording the reviewer's chosen resolved_value. resolved_value is optional and defaults to NULL, so a task may be rejected with no payload. Edge cases: status is checked against an explicit whitelist, so a missing OR unrecognised status is a 400; an unknown :task_id returns 404; there is no state-machine guard — re-resolving an already-resolved task is accepted as long as the row still matches, so idempotency must be enforced by the caller.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "Authorization header absent or not in 'Bearer <jwt>' form (requireAuth preHandler)"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "JWT signature invalid, malformed, or exp has elapsed"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "invalid status",
+      "when": "status is absent or is not one of open, in-review, resolved, rejected"
+    },
+    {
+      "status": 404,
+      "code": "NotFound",
+      "message": "NotFound",
+      "when": "no human-review task matches :task_id"
+    }
+  ]
 }

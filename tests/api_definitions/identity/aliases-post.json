@@ -52,5 +52,50 @@
         "merged_into": "string"
       }
     }
-  }
+  },
+  "description": "Merges an external identifier (alias) onto a person record so that logins arriving through different channels resolve to the same identity, returning 201 with the stored alias. Edge cases: person_id, kind and value are all mandatory and a missing one yields a combined 400; kind is enum-checked against email, phone, gov_id, biometric_template_ref, social_idp_subject and saml_nameid, and any other value is rejected with the allowed list echoed in the message; a person_id that does not exist surfaces as 404 NotFound because the service error message contains \"not found\"; merging an alias that is already attached to the same person is treated as an idempotent merge rather than a duplicate error, but attaching a value already bound to a different person collides at the datastore and surfaces as a 500 rather than a 409; values are stored as supplied, so casing and formatting are not normalised at this layer.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "No Authorization: Bearer <jwt> header on a requireAuth route"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "Bearer token fails verifyJwt (bad signature, malformed, or exp in the past)"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "person_id, kind, value are required",
+      "when": "Any of person_id, kind or value is absent or empty"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "kind must be one of email, phone, gov_id, biometric_template_ref, social_idp_subject, saml_nameid",
+      "when": "kind is supplied but is not in the allowed alias-kind list"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "<message containing \"At least one\">",
+      "when": "mergeAlias throws a validation error whose message contains \"At least one\" (insufficient identifying input for the merge)"
+    },
+    {
+      "status": 404,
+      "code": "NotFound",
+      "message": "<entity> not found",
+      "when": "mergeAlias throws an error whose message contains \"not found\" — typically person_id has no matching person row"
+    },
+    {
+      "status": 500,
+      "code": "InternalError",
+      "message": "InternalError",
+      "when": "mergeAlias throws for any other reason — e.g. the alias value is already bound to a different person and violates a unique constraint, or the database is unreachable"
+    }
+  ]
 }

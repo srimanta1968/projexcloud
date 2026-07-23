@@ -48,14 +48,62 @@
   "statusTransitions": {
     "entity": "approval.break_glass_grant",
     "field": "status",
-    "flow": ["pending", "active", "expired", "revoked"],
+    "flow": [
+      "pending",
+      "active",
+      "expired",
+      "revoked"
+    ],
     "transitions": [
-      { "from": null, "to": "pending", "via": "POST /api/break-glass" }
+      {
+        "from": null,
+        "to": "pending",
+        "via": "POST /api/break-glass"
+      }
     ]
   },
   "captureResponse": {
     "break-glass.request.response.data.grant.grant_id": "data.grant.grant_id",
     "break-glass.request.response.data.grant.status": "data.grant.status",
     "break-glass.request.response.data.pending_step_ids.0": "data.pending_step_ids.0"
-  }
+  },
+  "description": "Opens a scoped, approval-gated emergency access (break-glass) request against an approval route, returning 201 with the grant in pending status plus the approval steps it must clear. The requester persona is derived from the JWT (primary_persona_id, falling back to sub) and tenant_id defaults to the JWT tenant_id when the body omits it. Edge cases: route_id, a resolvable tenant_id and justification are all mandatory and produce a single combined 400; justification is re-checked inside the service and an empty one surfaces as a 400 BreakGlass error; ttl_minutes is optional and defaults in the service, bounding how long the grant stays usable once approved; scope defaults to an empty object, which grants nothing usable later since use-time action checks are scope-matched; a route_id that resolves to no approval route fails during grant creation and returns 400 BreakGlass \"failed to create break-glass grant\"; there is no idempotency key, so repeat submissions open additional pending grants.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "No Authorization: Bearer <jwt> header on a requireAuth route"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "Bearer token fails verifyJwt (bad signature, malformed, or exp in the past)"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "route_id, tenant_id, justification are required",
+      "when": "route_id or justification is missing, or no tenant_id can be resolved from the body or the JWT"
+    },
+    {
+      "status": 400,
+      "code": "BreakGlass",
+      "message": "justification is required",
+      "when": "requestBreakGlass re-validates the justification and finds it empty"
+    },
+    {
+      "status": 400,
+      "code": "BreakGlass",
+      "message": "failed to create break-glass grant",
+      "when": "Grant creation returns no row — e.g. route_id does not resolve to a usable approval route"
+    },
+    {
+      "status": 500,
+      "code": "InternalError",
+      "message": "InternalError",
+      "when": "requestBreakGlass throws a non-BreakGlassError (approval-route expansion failure, database unreachable)"
+    }
+  ]
 }

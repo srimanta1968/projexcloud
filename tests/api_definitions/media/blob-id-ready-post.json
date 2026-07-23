@@ -15,7 +15,12 @@
   "statusTransitions": {
     "entity": "media.blob",
     "field": "status",
-    "flow": ["uploading", "ready", "transcoded", "shredded"],
+    "flow": [
+      "uploading",
+      "ready",
+      "transcoded",
+      "shredded"
+    ],
     "transitions": [
       {
         "from": "uploading",
@@ -55,5 +60,68 @@
   "captureResponse": {
     "media.ready.response.data.blob.blob_id": "data.blob.blob_id",
     "media.ready.response.data.blob.status": "data.blob.status"
-  }
+  },
+  "description": "Commits an upload: the client reports the SHA-256 it computed and the blob transitions to ready. Returns 200 with the updated blob. checksum_hex must be exactly 64 hex characters (an optional 0x prefix is stripped before the check). The blob's tenant is asserted against the JWT tenant_id claim, so committing another tenant's blob is a 403. Edge cases: a malformed or truncated checksum is a 400; an unknown blob_id is a 404 BlobNotFound; a blob whose bytes have already been cryptographically shredded is a 410 Gone; a blob attached to a sealed encounter is a 409; a JWT with no tenant_id claim is a 403 rather than a 401; re-posting ready for an already-ready blob is not specially guarded and simply repeats the state write.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "Authorization header absent or not in Bearer form (requireAuth / gateway default-deny authGate)"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "Bearer token fails JWT verification or is expired (requireAuth / gateway default-deny authGate)"
+    },
+    {
+      "status": 403,
+      "code": "Forbidden",
+      "message": "JWT missing tenant_id claim",
+      "when": "The token verifies but carries no tenant_id claim"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "body must be an object",
+      "when": "Request body is absent or not a JSON object"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "checksum_hex must be a 64-char hex SHA-256",
+      "when": "checksum_hex is missing, or is not 64 hexadecimal characters after stripping an optional 0x prefix"
+    },
+    {
+      "status": 403,
+      "code": "TenantOwnership",
+      "message": "markBlobReady: caller tenant <tid> does not own this blob",
+      "when": "The blob's tenant_id differs from the JWT tenant_id claim"
+    },
+    {
+      "status": 404,
+      "code": "BlobNotFound",
+      "message": "Blob <blob_id> not found",
+      "when": "No blob row exists for the supplied blob_id"
+    },
+    {
+      "status": 409,
+      "code": "SealedEncounter",
+      "message": "Encounter <encounter_id> is sealed; new evidence blocked per FR-MED-5",
+      "when": "The blob belongs to an encounter that has since been sealed"
+    },
+    {
+      "status": 410,
+      "code": "Gone",
+      "message": "Blob <blob_id> has been cryptographically shredded",
+      "when": "The blob key material was shredded, so the object can no longer be committed or read"
+    },
+    {
+      "status": 500,
+      "code": "InternalError",
+      "message": "InternalError",
+      "when": "Any other markBlobReady failure (storage or database error)"
+    }
+  ]
 }

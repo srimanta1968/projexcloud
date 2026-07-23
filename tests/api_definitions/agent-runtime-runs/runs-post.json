@@ -16,7 +16,11 @@
     "agent-runtime-runs.create.response.data.run_id": "data.run_id"
   },
   "fieldEnums": {
-    "actor_kind": ["human", "service", "agent"]
+    "actor_kind": [
+      "human",
+      "service",
+      "agent"
+    ]
   },
   "testCases": [
     {
@@ -37,6 +41,38 @@
       "expectedResponse": {
         "success": true
       }
+    }
+  ],
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "No Authorization: Bearer <jwt> header on a requireAuth route"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "Bearer token fails verifyJwt (bad signature, malformed, or exp in the past)"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "Required: agent_id, persona_id, trace_id, actor_id, actor_kind",
+      "when": "The body is missing any one of agent_id, persona_id, trace_id, actor_id or actor_kind"
+    },
+    {
+      "status": 404,
+      "code": "NotFound",
+      "message": "<entity> not found",
+      "when": "startAgentRun throws an error whose message contains \"not found\" — e.g. the referenced agent_id has no agent_definition row"
+    },
+    {
+      "status": 500,
+      "code": "InternalError",
+      "message": "Start run failed",
+      "when": "startAgentRun throws for any other reason (constraint violation, model snapshot resolution failure, database unreachable)"
     }
   ]
 }

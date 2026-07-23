@@ -33,15 +33,66 @@
     "tenant-lifecycle.sandbox.response.data.sandbox.parent_tenant_id": "data.sandbox.parent_tenant_id"
   },
   "fieldEnums": {
-    "current_state": ["active", "suspended", "offboarding", "offboarded", "sandbox"]
+    "current_state": [
+      "active",
+      "suspended",
+      "offboarding",
+      "offboarded",
+      "sandbox"
+    ]
   },
   "statusTransitions": {
     "entity": "tenant_lifecycle.state",
     "field": "current_state",
-    "flow": ["active", "sandbox", "offboarded"],
+    "flow": [
+      "active",
+      "sandbox",
+      "offboarded"
+    ],
     "transitions": [
-      { "from": "active", "to": "sandbox", "via": "POST /api/tenant-lifecycle/sandbox" },
-      { "from": "sandbox", "to": "offboarded", "via": "scheduler:runOffboardDeadlineTick" }
+      {
+        "from": "active",
+        "to": "sandbox",
+        "via": "POST /api/tenant-lifecycle/sandbox"
+      },
+      {
+        "from": "sandbox",
+        "to": "offboarded",
+        "via": "scheduler:runOffboardDeadlineTick"
+      }
     ]
-  }
+  },
+  "description": "Creates a sandbox tenant beneath the caller's own tenant, optionally with an expiry timestamp and a data sanitization policy, returning the sandbox record with 201. The parent tenant is taken from the JWT tenant_id — it is never read from the body, so a sandbox cannot be attached to a tenant the caller does not hold a token for. Edge cases: a token with no tenant_id claim is rejected 403 before any work; expires_at is optional but when present must parse as a date, otherwise 400; an expires_at in the past is not rejected by the route; sanitization_policy is free-form here and validated downstream; there is no idempotency key or name-uniqueness check, so repeated calls create additional sandbox tenants.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "No Authorization: Bearer <jwt> header on a requireAuth route"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "Bearer token fails verifyJwt (bad signature, malformed, or exp in the past)"
+    },
+    {
+      "status": 403,
+      "code": "Forbidden",
+      "message": "Caller must have tenant_id",
+      "when": "The verified JWT carries no tenant_id claim, so no parent tenant can be derived"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "expires_at must be ISO-8601",
+      "when": "expires_at is present but does not parse to a valid date"
+    },
+    {
+      "status": 500,
+      "code": "InternalError",
+      "message": "Internal Server Error",
+      "when": "createSandboxTenant throws — e.g. the parent tenant row is missing, the sanitization policy is rejected downstream, or the database is unreachable"
+    }
+  ]
 }

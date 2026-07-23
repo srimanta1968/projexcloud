@@ -19,11 +19,30 @@
   "statusTransitions": {
     "entity": "refund",
     "field": "status",
-    "flow": ["pending", "awaiting_approval", "approved", "rejected", "succeeded", "failed"],
+    "flow": [
+      "pending",
+      "awaiting_approval",
+      "approved",
+      "rejected",
+      "succeeded",
+      "failed"
+    ],
     "transitions": [
-      { "from": "pending", "to": "succeeded", "via": "POST /api/payments/:charge_id/refund" },
-      { "from": "pending", "to": "awaiting_approval", "via": "POST /api/payments/:charge_id/refund" },
-      { "from": "awaiting_approval", "to": "approved", "via": "POST /api/payments/:charge_id/refund" }
+      {
+        "from": "pending",
+        "to": "succeeded",
+        "via": "POST /api/payments/:charge_id/refund"
+      },
+      {
+        "from": "pending",
+        "to": "awaiting_approval",
+        "via": "POST /api/payments/:charge_id/refund"
+      },
+      {
+        "from": "awaiting_approval",
+        "to": "approved",
+        "via": "POST /api/payments/:charge_id/refund"
+      }
     ]
   },
   "testCases": [
@@ -54,5 +73,62 @@
   },
   "captureResponse": {
     "payments.refund.response.data.refund.refund_id": "data.refund.refund_id"
-  }
+  },
+  "description": "Issues a refund against the charge named by the charge_id path param; high-value refunds are gated by sdk-approval. Requires a valid tenant JWT (requireAuth); the caller tenant comes from the JWT and is passed to the service, which enforces ownership. Edge cases: a JWT without a tenant_id claim is a 403 rather than a 500; amount must be a finite positive number and reason is mandatory, so a 0 or negative amount and a missing reason each 400; refunding more than the remaining refundable balance (including the cumulative effect of earlier partial refunds) is a 422 InsufficientRefundableAmount, distinct from the 400 validation path; an unknown charge_id is a 404 ChargeNotFound and a charge owned by a different tenant is a 403 TenantOwnership, not a 404; a charge in a status that cannot be refunded (never captured, already fully refunded, voided) is a 409 InvalidState; the endpoint is not idempotent - repeating the same request issues a second refund until the refundable balance is exhausted.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "Authorization header absent or not in Bearer form (requireAuth)"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "Bearer token fails JWT verification (requireAuth)"
+    },
+    {
+      "status": 403,
+      "code": "Forbidden",
+      "message": "JWT missing tenant_id claim",
+      "when": "req.auth.tenant_id is absent after auth"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "amount must be a positive number / reason is required",
+      "when": "validateRefund fails; details[] carries every failed rule"
+    },
+    {
+      "status": 404,
+      "code": "ChargeNotFound",
+      "message": "Charge <charge_id> not found",
+      "when": "refund raises ChargeNotFoundError for the path charge_id"
+    },
+    {
+      "status": 403,
+      "code": "TenantOwnership",
+      "message": "caller tenant does not own the charge",
+      "when": "refund raises TenantOwnershipError because the charge belongs to a different tenant than the JWT tenant"
+    },
+    {
+      "status": 422,
+      "code": "InsufficientRefundableAmount",
+      "message": "refund amount exceeds the remaining refundable balance",
+      "when": "refund raises InsufficientRefundableAmountError - the requested amount plus prior refunds exceeds the charge amount"
+    },
+    {
+      "status": 409,
+      "code": "InvalidState",
+      "message": "<state error message>",
+      "when": "the service throws a state error matched by fail() (message contains \"cannot be refunded\") - the charge was never captured, is voided, or is already fully refunded"
+    },
+    {
+      "status": 500,
+      "code": "InternalError",
+      "message": "InternalError",
+      "when": "refund throws an unmapped error - provider/gateway failure, approval-gate failure, or any DB error"
+    }
+  ]
 }

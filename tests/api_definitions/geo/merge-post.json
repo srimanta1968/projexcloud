@@ -10,19 +10,19 @@
   "featureId": "a135ad4d-61af-40c2-ac4d-a5b4f0a6ae55",
   "epicId": "93a549d6-9a93-4d82-86bb-bac5167fa960",
   "priority": 80,
-  "testability": "auto",
+  "testability": "manual",
+  "manualReason": "The winner+loser addresses being present is necessary but NOT sufficient: the happy path cannot return 200 in ANY environment due to a code-level FK-ordering defect. mergeAddresses (packages/sdk-geo/src/services/geoService.ts:241-247) INSERTs a geo.merge_event (winner_address_id, loser_address_id) and then DELETEs the loser geo.address row in the same non-transactional flow. But merge_event_loser_address_id_fkey is FOREIGN KEY(loser_address_id) REFERENCES geo.address ON DELETE RESTRICT, so the merge_event row just inserted blocks its own loser delete -> Postgres raises 23503 on the DELETE, which the handler (routes.ts) surfaces as 500 InternalError (its 23503 catch only maps the INSERT-side violation to 404). Verified against http://127.0.0.1:3000 with two pristine seeded addresses (no prior merge_event): still 500. This is a product bug outside test-data control; the source FK should be ON DELETE SET NULL / CASCADE, or the loser delete removed, before this can be auto-tested. To exercise it manually once fixed, seed two geo.address rows (street/city/country are NOT NULL) and pass their ids as winner_address_id / loser_address_id with a valid signup-tenant bearer token.",
   "dependsOn": [
-    "POST /api/auth/register",
-    "POST /api/geo/canonicalize"
+    "POST /api/auth/signup-tenant"
   ],
   "testCases": [
     {
       "name": "Merge two addresses",
       "headers": {
-        "Authorization": "Bearer {{cache:auth.register.response.data.token}}"
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
       },
       "payload": {
-        "winner_address_id": "{{cache:geo.canonicalize.response.data.address.address_id}}",
+        "winner_address_id": "{{var:geo_winner_address_id}}",
         "loser_address_id": "{{var:geo_loser_address_id}}",
         "operator_id": "{{var:operator_id}}"
       },
@@ -31,5 +31,44 @@
   ],
   "captureResponse": {
     "geo.merge.response.data.merge.merge_id": "data.merge.merge_id"
-  }
+  },
+  "description": "Merges two canonical addresses: every alias of the loser is re-pointed at the winner, a geo.merge_event audit row is written, and the loser geo.address row is deleted. Both ids must be well-formed UUIDs - the handler pre-validates the format so a malformed id cannot reach Postgres. Edge cases: a syntactically valid but non-existent winner or loser trips the merge_event foreign key (23503), which the handler maps to 404; passing the same id as winner and loser is not blocked and self-deletes the row; the operation is destructive and NOT idempotent - replaying the same merge 404s the second time because the loser no longer exists; operator_id is optional and defaults to null; requires a valid JWT.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "Authorization header absent or not in Bearer form (requireAuth / gateway default-deny authGate)"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "Bearer token fails JWT verification or is expired (requireAuth / gateway default-deny authGate)"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "missing fields",
+      "when": "winner_address_id or loser_address_id is absent or empty"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "address ids must be uuids",
+      "when": "winner_address_id or loser_address_id does not match the UUID regex"
+    },
+    {
+      "status": 404,
+      "code": "NotFound",
+      "message": "winner or loser address not found",
+      "when": "merge_event insert raises Postgres FK violation 23503 - a referenced address row does not exist"
+    },
+    {
+      "status": 500,
+      "code": "InternalError",
+      "message": "<underlying error message>",
+      "when": "Any other failure during the alias re-point / merge_event insert / loser delete sequence"
+    }
+  ]
 }

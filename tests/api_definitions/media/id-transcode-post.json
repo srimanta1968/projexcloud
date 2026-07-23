@@ -17,12 +17,21 @@
     "POST /api/media/upload-url"
   ],
   "fieldEnums": {
-    "pipeline": ["video-mp4-hls", "image-optimize", "pdf-thumbnail"]
+    "pipeline": [
+      "video-mp4-hls",
+      "image-optimize",
+      "pdf-thumbnail"
+    ]
   },
   "statusTransitions": {
     "entity": "media.transcode_job",
     "field": "status",
-    "flow": ["queued", "running", "succeeded", "failed"],
+    "flow": [
+      "queued",
+      "running",
+      "succeeded",
+      "failed"
+    ],
     "transitions": [
       {
         "from": null,
@@ -61,5 +70,62 @@
   "captureResponse": {
     "media.transcode.response.data.job.job_id": "data.job.job_id",
     "media.transcode.response.data.job.status": "data.job.status"
-  }
+  },
+  "description": "Enqueues a transcode job for an existing blob (FR-MED-3) and returns 201 with the job record, whose status is then polled via GET /api/media/transcode-jobs/:job_id. pipeline is the only body field and must be one of video-mp4-hls | image-optimize | pdf-thumbnail. The blob's tenant is asserted against the JWT tenant_id claim. Edge cases: a missing or unrecognised pipeline is a 400 with the valid values echoed back; an unknown blob_id is a 404; a blob owned by another tenant is a 403; a shredded blob is a 410 Gone and cannot be transcoded; there is no duplicate-job guard, so requesting the same pipeline twice enqueues a second independent job rather than returning the first; a JWT with no tenant_id claim is a 403 rather than a 401.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "Authorization header absent or not in Bearer form (requireAuth / gateway default-deny authGate)"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "Bearer token fails JWT verification or is expired (requireAuth / gateway default-deny authGate)"
+    },
+    {
+      "status": 403,
+      "code": "Forbidden",
+      "message": "JWT missing tenant_id claim",
+      "when": "The token verifies but carries no tenant_id claim"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "body must be an object",
+      "when": "Request body is absent or not a JSON object"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "pipeline must be one of video-mp4-hls, image-optimize, pdf-thumbnail",
+      "when": "pipeline is missing or outside the closed set"
+    },
+    {
+      "status": 403,
+      "code": "TenantOwnership",
+      "message": "requestTranscode: caller tenant <tid> does not own blob <blob_id>",
+      "when": "The blob's tenant_id differs from the JWT tenant_id claim"
+    },
+    {
+      "status": 404,
+      "code": "BlobNotFound",
+      "message": "Blob <blob_id> not found",
+      "when": "No blob row exists for the supplied blob_id"
+    },
+    {
+      "status": 410,
+      "code": "Gone",
+      "message": "Blob <blob_id> has been shredded; cannot transcode",
+      "when": "The blob key material was shredded, so the source object is unrecoverable"
+    },
+    {
+      "status": 500,
+      "code": "InternalError",
+      "message": "InternalError",
+      "when": "Any other requestTranscode failure (queue or database error)"
+    }
+  ]
 }

@@ -1,0 +1,70 @@
+{
+  "sdk": "sdk-deliverability",
+  "sourceFile": "packages/sdk-deliverability/src/server/routes.ts",
+  "requiresAuth": true,
+  "taskId": "299c5b7c-6abb-4fb5-9c09-174d9f607981",
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "featureId": "38948f60-76b4-47b0-9635-8f9dc024f792",
+  "epicId": "287f42d8-2045-4105-8948-5e1f25fba3ba",
+  "testability": "auto",
+  "name": "POST /api/deliverability/optout-tokens - Issue an opt-out token",
+  "endpoint": "/api/deliverability/optout-tokens",
+  "method": "POST",
+  "expectedStatus": 201,
+  "priority": 14,
+  "description": "Mint a single-purpose opt-out (unsubscribe) token for an address. The raw token is returned ONCE (only its hash is persisted) — embed it in the unsubscribe link. tenant_id, channel and address required.",
+  "dependsOn": [
+    "POST /api/auth/signup-tenant"
+  ],
+  "fieldEnums": {
+    "channel": [
+      "email",
+      "sms",
+      "all"
+    ],
+    "purpose": [
+      "unsubscribe",
+      "resubscribe",
+      "preferences"
+    ],
+    "scope": [
+      "tenant",
+      "global"
+    ]
+  },
+  "captureResponse": {
+    "deliverability.optout-token.create.response.data.token": "data.token",
+    "deliverability.optout-token.create.response.data.token_id": "data.token_id"
+  },
+  "testCases": [
+    {
+      "name": "Issue an unsubscribe token",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "payload": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "channel": "email",
+        "address": "{{dynamic:email}}",
+        "purpose": "unsubscribe",
+        "scope": "tenant",
+        "ttl_seconds": 604800
+      },
+      "expectedStatus": 201,
+      "expectedResponse": {
+        "data": {
+          "token_id": "string",
+          "token": "string"
+        }
+      }
+    }
+  ],
+  "errorCases": [
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "tenant_id, channel and address are required",
+      "when": "required field missing"
+    }
+  ]
+}

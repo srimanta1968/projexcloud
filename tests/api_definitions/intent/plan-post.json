@@ -50,5 +50,50 @@
         "Authorization": "Bearer {{cache:auth.register.response.data.token}}"
       }
     }
+  ],
+  "description": "Compiles a SemanticIntent into an executable Plan (G9 AC-8): resolves intent.subject.type to a semantic.object_type in the given ontology, selects matching semantic.capability_graph_edge rows by goal-keyword / pre-condition / post-condition fit, topologically orders them, persists an intent_plan row with status 'proposed', and emits a semantic.intent.planned.v1 audit entry. Returns 200 {success:true, data:{plan_id, intent_id, subject_id, steps[], generated_at, status}}. QA edge cases: five fields are mandatory and checked as one branch — tenant_id, ontology_id, goal, subject and trace_id; any missing one (or a missing `intent` wrapper) gives the same 400 'intent missing required fields'. Note subject.id is NOT validated, so an intent with subject:{type:'Patient'} and no id still plans and yields steps with an undefined subject argument. Everything after the presence check is caught and returned as 400, so semantic misses that a tester would expect as 404 are 400s instead: an unknown subject type in the ontology, and — the most common empty-result case — a goal whose tokens match no capability edge ('no capability_graph_edge matches goal ...'). A goal of one noise word therefore fails rather than returning an empty plan. Intent persistence is idempotent on (tenant_id, goal): re-posting the same tenant+goal reuses the existing intent_id but always mints a NEW plan_id, so the endpoint as a whole is not idempotent. agent_run_id is optional and defaults to null. There is no pagination — every matched step is inlined into steps[]. The path is not on the gateway public allowlist, so a valid tenant JWT is required; tenant_id comes from the body and is not cross-checked against the token.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "No Authorization: Bearer header — authGate.ts default-deny gate rejects /intent/plan before the handler"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "Bearer token fails verifyJwt (bad signature, malformed, or expired)"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "intent missing required fields",
+      "when": "Body missing, `intent` absent, or any of intent.tenant_id / ontology_id / goal / subject / trace_id is missing or falsy"
+    },
+    {
+      "status": 400,
+      "code": "PlanFailed",
+      "message": "[sdk-semantic] unknown subject type '<type>' in ontology <ontology_id>",
+      "when": "No semantic.object_type row matches intent.subject.type for the given ontology_id (includes a bogus or non-existent ontology_id)"
+    },
+    {
+      "status": 400,
+      "code": "PlanFailed",
+      "message": "[sdk-semantic] no capability_graph_edge matches goal '<goal>' for subject type '<type>'",
+      "when": "Candidate edges exist for the subject type but none satisfies the goal keywords / pre-conditions / post-conditions — an unplannable goal"
+    },
+    {
+      "status": 400,
+      "code": "PlanFailed",
+      "message": "[sdk-semantic] cannot persist intent — subject type '<type>' not registered",
+      "when": "ensureIntentRow cannot resolve the subject object_type_id when creating the backing semantic.intent row"
+    },
+    {
+      "status": 400,
+      "code": "PlanFailed",
+      "message": "<Postgres or audit error message from the INSERT into semantic.intent_plan / appendAuditEntry>",
+      "when": "Any other failure while materializing or auditing the plan (malformed UUID ontology_id, FK violation, DB unavailable) — the handler's catch maps every thrown error to 400"
+    }
   ]
 }

@@ -13,8 +13,16 @@
   "_generated": true,
   "testability": "auto",
   "fieldEnums": {
-    "kind": ["visit", "order", "deal", "session", "capital-call", "support"]
+    "kind": [
+      "visit",
+      "order",
+      "deal",
+      "session",
+      "capital-call",
+      "support"
+    ]
   },
+  "description": "Opens an encounter (FR-EN-1 / FR-EN-3). The handler issues a per-encounter Vault key FIRST — parented to parent_key_id, tagged with the caller's region — and only then inserts the engagement.encounter row, so a Vault failure leaves no orphaned encounter. Returns 201 with the encounter including its vault_key_ref, state 'open', and retention_policy defaulting to 'default-7y'. Emits engagement.encounter.opened.v1 to the audit ledger (regulated retention). QA edge cases: tenant_id, kind, parent_key_id and region are all required and their absence is a single generic 400 'missing fields' with no per-field detail; parent_key_id is NOT validated by the route — an unknown or non-parent key makes issueKey throw, which is unhandled in the handler and surfaces as a Fastify 500 rather than a 400/404, which is the trap for QA; parent_encounter_id, address_id and billing_ref are optional passthroughs with no existence check, so a bogus parent_encounter_id either violates the FK (500) or is accepted silently depending on schema constraints; the call is not idempotent — every POST mints a new encounter AND a new Vault key; the audit emit is try/catch-wrapped and non-fatal, so a 201 does not prove the audit entry landed.",
   "testCases": [
     {
       "name": "Open an encounter (issues per-encounter Vault key)",
@@ -36,5 +44,31 @@
   ],
   "captureResponse": {
     "encounters.create.response.data.encounter.encounter_id": "data.encounter.encounter_id"
-  }
+  },
+  "errorCases": [
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "missing fields",
+      "when": "any of tenant_id, kind, parent_key_id or region is missing or empty in the body"
+    },
+    {
+      "status": 500,
+      "code": "InternalServerError",
+      "message": "<Vault or database error message>",
+      "when": "issueKey fails (unknown/invalid parent_key_id, Vault unavailable) or the INSERT into engagement.encounter violates a constraint — neither is caught by the handler, so Fastify returns its default 500"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "no Authorization header, or it is not of the form 'Bearer <jwt>' (requireAuth preHandler)"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "the bearer JWT fails verifyJwt — bad signature, wrong JWT_SECRET, or exp already elapsed (requireAuth preHandler)"
+    }
+  ]
 }

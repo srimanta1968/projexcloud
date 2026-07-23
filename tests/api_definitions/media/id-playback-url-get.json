@@ -37,5 +37,62 @@
       "playback_url": "string",
       "expires_at": "string"
     }
-  }
+  },
+  "description": "Issues a presigned, time-limited playback/download URL for a ready blob (FR-MED-4) and returns 200 with the URL and expiry. Both a tenant_id claim and a sub claim are required on the JWT - a missing tenant_id is a 403 while a missing sub is a 401 - and the blob's tenant is asserted against the caller's. Edge cases: the optional ttl_seconds query parameter must parse as a positive finite number (0, negative and non-numeric values are 400s) and any oversized value is silently clamped down to the service maximum rather than rejected; an unknown blob_id is a 404; a blob owned by another tenant is a 403; a blob whose key material has been shredded is a 410 Gone; the access is attributed to the caller's persona, so this route is not side-effect free.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "Authorization header absent or not in Bearer form (requireAuth / gateway default-deny authGate)"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "Bearer token fails JWT verification or is expired (requireAuth / gateway default-deny authGate)"
+    },
+    {
+      "status": 403,
+      "code": "Forbidden",
+      "message": "JWT missing tenant_id claim",
+      "when": "The token verifies but carries no tenant_id claim"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing person_id in JWT",
+      "when": "The token carries a tenant_id but no sub claim to attribute the playback access to"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "ttl_seconds must be a positive number",
+      "when": "ttl_seconds is supplied but is non-numeric, NaN/Infinity, zero or negative"
+    },
+    {
+      "status": 403,
+      "code": "TenantOwnership",
+      "message": "issuePlaybackUrl: caller tenant <tid> does not own this blob",
+      "when": "The blob's tenant_id differs from the JWT tenant_id claim"
+    },
+    {
+      "status": 404,
+      "code": "BlobNotFound",
+      "message": "Blob <blob_id> not found",
+      "when": "No blob row exists for the supplied blob_id"
+    },
+    {
+      "status": 410,
+      "code": "Gone",
+      "message": "Blob <blob_id> has been cryptographically shredded",
+      "when": "The blob key material was shredded, so it can no longer be played back"
+    },
+    {
+      "status": 500,
+      "code": "InternalError",
+      "message": "InternalError",
+      "when": "Any other issuePlaybackUrl failure - notably no S3 signer registered in production, or a database error"
+    }
+  ]
 }

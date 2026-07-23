@@ -11,6 +11,7 @@
   "sourceFile": "packages/hdk-video-editor/src/server/routes.ts",
   "_generated": true,
   "testability": "auto",
+  "description": "Returns the hdk-video-editor capability manifest — available tools (trim/merge/caption/mute/speed/overlay), output formats (mp4/hevc/webm), max resolution (4K), and the iOS/Android native module names. The handler is a pure static-metadata read: it takes no body, params or query, touches no database, and always returns HTTP 200 with the same JSON for every caller. QA edge cases: the route is behind requireAuth, so a missing/malformed Authorization header or an expired JWT returns 401 before the handler runs; there is no tenant scoping, so two different tenants receive byte-identical payloads (do not assert per-tenant differences); unknown query params and request bodies are ignored rather than rejected; there is no pagination, no idempotency concern (GET is naturally idempotent), and no 404/409 path because nothing is looked up.",
   "testCases": [
     {
       "name": "List native video-editor capabilities",
@@ -18,6 +19,20 @@
         "Authorization": "Bearer {{cache:auth.register.response.data.token}}"
       },
       "expectedStatus": 200
+    }
+  ],
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "no Authorization header, or it is not of the form 'Bearer <jwt>' (requireAuth preHandler)"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "the bearer JWT fails verifyJwt — bad signature, wrong JWT_SECRET, or exp already elapsed (requireAuth preHandler)"
     }
   ]
 }

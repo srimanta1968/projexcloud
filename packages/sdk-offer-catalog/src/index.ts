@@ -6,3 +6,5 @@
  * later P15·E1 tasks.
  */
 export { migrationsDir } from './db';
+export * as server from './server';
+export * from './services/offerCatalogService';

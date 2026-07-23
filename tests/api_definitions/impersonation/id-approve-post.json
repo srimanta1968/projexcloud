@@ -75,5 +75,38 @@
   "captureResponse": {
     "impersonation.approve.response.data.grant.grant_id": "data.grant.grant_id",
     "impersonation.approve.response.data.grant.status": "data.grant.status"
-  }
+  },
+  "description": "Records the dual-control approval on an impersonation grant by setting manager_approval_id and/or customer_consent_ref, returning the grant with its recomputed status. Requires a valid tenant JWT (requireAuth). Status is derived, not stored: it stays \"pending_approval\" until BOTH manager_approval_id and customer_consent_ref are non-null, so approving with only one of the two returns 200 with status still pending_approval - send both, or call twice, to reach \"active\". Edge cases: sending neither field is a 400; an unknown grant_id is a 404; both fields are cast to ::uuid so a non-UUID value is a 500 rather than a 400; there is no state guard, so an already-approved, already-ended or expired grant can be re-approved and simply has its columns overwritten (an expired grant recomputes to \"ended\", not \"active\"); the caller identity is never checked against the grant support_user_id, so self-approval is not prevented here.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "Authorization header absent or not in Bearer form (requireAuth)"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "Bearer token fails JWT verification (requireAuth)"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "At least one of manager_approval_id or customer_consent_ref must be provided",
+      "when": "the body contains neither manager_approval_id nor customer_consent_ref (empty body, or both empty)"
+    },
+    {
+      "status": 404,
+      "code": "NotFound",
+      "message": "Impersonation grant <grant_id> not found",
+      "when": "the UPDATE matches no row for the grant_id"
+    },
+    {
+      "status": 500,
+      "code": "InternalError",
+      "message": "InternalError",
+      "when": "the UPDATE throws - a non-UUID grant_id, manager_approval_id or customer_consent_ref failing the ::uuid cast, or any DB error"
+    }
+  ]
 }

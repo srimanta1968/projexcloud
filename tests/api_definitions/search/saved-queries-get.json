@@ -33,5 +33,44 @@
     "data": {
       "queries": "array"
     }
-  }
+  },
+  "description": "Lists the saved queries belonging to one persona within the caller's tenant, scoped by the JWT tenant_id plus the required persona_id query param. Edge cases: persona_id is mandatory and a missing or blank value is a 400 — it is not treated as \"list all\"; a persona that exists but owns nothing returns 200 with an empty queries array rather than 404; a persona_id from another tenant yields an empty list because the tenant filter comes from the JWT, so this endpoint cannot be used to enumerate other tenants' saved queries; there is no pagination, so the full set for the persona is returned in one response.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "No Authorization: Bearer <jwt> header on a requireAuth route"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "Bearer token fails verifyJwt (bad signature, malformed, or exp in the past)"
+    },
+    {
+      "status": 403,
+      "code": "Forbidden",
+      "message": "JWT missing tenant_id claim",
+      "when": "Token verifies but carries no tenant_id claim; authTenant() rejects before any query runs"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "persona_id required",
+      "when": "persona_id query param is missing or empty"
+    },
+    {
+      "status": 404,
+      "code": "IndexNotFound",
+      "message": "Referenced index could not be resolved",
+      "when": "listSavedQueries throws IndexNotFoundError"
+    },
+    {
+      "status": 500,
+      "code": "InternalError",
+      "message": "InternalError",
+      "when": "The datastore read fails or throws a non-IndexNotFoundError"
+    }
+  ]
 }

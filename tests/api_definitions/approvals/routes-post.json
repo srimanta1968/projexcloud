@@ -61,5 +61,32 @@
   },
   "captureResponse": {
     "approvals.routes.create.response.data.route.route_id": "data.route.route_id"
-  }
+  },
+  "description": "Creates an approval route: a named, ordered chain of steps for a tenant, where each step is single (one approver_persona_id), m-of-n (m + approvers[]) or role (role_template_id). Optional kind_pattern binds the route to a subject kind and delegation_rules configure stand-ins. Edge cases: tenant_id must be a well-formed UUID (presence alone is not enough); steps must be a NON-EMPTY array and every element must carry a name plus a recognised kind with that kind's required field — one bad element rejects the whole payload; all validation failures are collected and returned together in details[]; an m-of-n step's m is not range-checked against approvers.length; delegation_rules is accepted only if it is an object and is otherwise silently dropped.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "Authorization header absent or not in 'Bearer <jwt>' form (requireAuth preHandler)"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "JWT signature invalid, malformed, or exp has elapsed"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "tenant_id must be a UUID / name is required / steps must be a non-empty array / each step needs {name, kind: single|m-of-n|role, ...}",
+      "when": "any validateCreateRoute check fails; all failures are returned together in details[]"
+    },
+    {
+      "status": 500,
+      "code": "InternalError",
+      "message": "InternalError",
+      "when": "Unexpected service/DB failure (connection loss, or a constraint the handler does not map)"
+    }
+  ]
 }

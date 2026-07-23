@@ -47,19 +47,79 @@
     }
   },
   "fieldEnums": {
-    "decision": ["approve", "reject"]
+    "decision": [
+      "approve",
+      "reject"
+    ]
   },
   "statusTransitions": {
     "entity": "approval.request",
     "field": "status",
-    "flow": ["pending", "approved", "rejected"],
+    "flow": [
+      "pending",
+      "approved",
+      "rejected"
+    ],
     "transitions": [
-      { "from": "pending", "to": "approved", "via": "POST /api/approvals/steps/:step_id/decide" },
-      { "from": "pending", "to": "rejected", "via": "POST /api/approvals/steps/:step_id/decide" }
+      {
+        "from": "pending",
+        "to": "approved",
+        "via": "POST /api/approvals/steps/:step_id/decide"
+      },
+      {
+        "from": "pending",
+        "to": "rejected",
+        "via": "POST /api/approvals/steps/:step_id/decide"
+      }
     ]
   },
   "captureResponse": {
     "approvals.steps.decide.response.data.step.step_id": "data.step.step_id",
     "approvals.steps.decide.response.data.request.status": "data.request.status"
-  }
+  },
+  "description": "Records an approve/reject decision on one approval step and advances the request. Edge cases: :step_id must be a UUID and decision must be exactly 'approve' or 'reject' (anything else, including 'approved'/'rejected', is a 400); acting_persona_id must be a UUID and must MATCH the step's assigned approver — a different persona gets 403 NotYourStep, the key authorisation case here; a step that already carries a decision returns 409 StepAlreadyDecided, so this endpoint is explicitly NOT idempotent on retry; an unknown step_id returns 404 StepNotFound; reason is optional even on reject.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "Authorization header absent or not in 'Bearer <jwt>' form (requireAuth preHandler)"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "JWT signature invalid, malformed, or exp has elapsed"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "step_id path param must be a UUID / decision must be 'approve' or 'reject' / acting_persona_id must be a UUID",
+      "when": "any validateDecide check fails; all failures are returned together in details[]"
+    },
+    {
+      "status": 403,
+      "code": "NotYourStep",
+      "message": "Step is assigned to <approver_persona_id>, not <acting_persona_id>",
+      "when": "acting_persona_id is not the persona the step is assigned to"
+    },
+    {
+      "status": 404,
+      "code": "StepNotFound",
+      "message": "Step <step_id> not found",
+      "when": "step_id is a valid UUID but no approval.step row matches"
+    },
+    {
+      "status": 409,
+      "code": "StepAlreadyDecided",
+      "message": "Step <step_id> already decided",
+      "when": "the step already has a non-null decision (replay / double-submit)"
+    },
+    {
+      "status": 500,
+      "code": "InternalError",
+      "message": "InternalError",
+      "when": "Unexpected service/DB failure (connection loss, or a constraint the handler does not map)"
+    }
+  ]
 }

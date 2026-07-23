@@ -9,6 +9,37 @@ export {
 } from './services/notificationService';
 export { getQuietHours, setQuietHours, isInQuietHours } from './services/quietHours';
 export {
+  unifiedDispatch,
+  makeSequenceStepSender,
+  setSequenceDestinationResolver,
+  setPreSendGuard,
+} from './services/dispatchService';
+export {
+  classifyKeyword,
+  processInboundSms,
+  setSmsConsentHandler,
+  upsertSmsSettings,
+  listInboundSms,
+  propagateSmsConsent,
+  getSmsConsent,
+  listSmsConsent,
+  normalizeE164,
+} from './services/smsInboundService';
+export type { KeywordIntent, SmsConsentEvent } from './services/smsInboundService';
+export {
+  classifyDeliveryStatus,
+  processDeliveryCallback,
+  setDeliveryReputationHook,
+  listDeliveryReceipts,
+} from './services/deliveryCallbackService';
+export type {
+  UnifiedDispatchInput,
+  UnifiedDispatchResult,
+  SequenceStepLike,
+  SequenceDestinationResolver,
+  ResolvedDestination,
+} from './services/dispatchService';
+export {
   bindEmailProvider,
   rotateEmailProvider,
   revokeEmailProvider,

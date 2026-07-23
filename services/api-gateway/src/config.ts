@@ -11,7 +11,12 @@ dotenv.config({ path: path.resolve(__dirname, '../../../.env') });
  */
 export const config = {
   nodeEnv: process.env.NODE_ENV || 'development',
-  port: parseInt(process.env.PORT || '3000', 10),
+  // GATEWAY_PORT is a gateway-specific override so `pnpm run dev` (turbo runs the
+  // gateway AND the Next.js portals together) can pin the gateway off the portals'
+  // ports without a bare PORT bleeding into `next dev` (which also reads PORT).
+  // Falls back to PORT, then 3000. Set GATEWAY_PORT in the root .env for a stable
+  // local port across restarts.
+  port: parseInt(process.env.GATEWAY_PORT || process.env.PORT || '3000', 10),
   appName: process.env.APP_NAME || 'projex-api-gateway',
 
   db: {

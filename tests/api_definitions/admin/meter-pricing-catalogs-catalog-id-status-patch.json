@@ -2,6 +2,27 @@
   "name": "PATCH /admin/meter/pricing-catalogs/:catalog_id/status — api-gateway",
   "endpoint": "/admin/meter/pricing-catalogs/:catalog_id/status",
   "method": "PATCH",
+  "description": "Transitions a pricing catalog between draft, active and retired, returning a bare { success: true } with no data payload. QA edge cases: this handler does NOT verify the catalog exists first — setCatalogStatus() against an unknown catalog_id updates zero rows and still answers 200 { success: true }, so QA cannot use this route to probe existence and must confirm the change with GET /admin/meter/pricing-catalogs/:catalog_id; status and operator_id are required by a falsy check but status is not validated against the draft|active|retired enum in the route, so an out-of-enum value reaches the DB check constraint and returns 500 rather than 400; there is no state-machine guard, so retired → active is accepted; the transition is idempotent — setting the status a catalog already has succeeds.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "admin token required",
+      "when": "requireAdmin() found no valid x-admin-ops-token header — missing, or matching neither env ADMIN_OPS_TOKEN nor an active admin.ops_token hash (30s cache TTL applies to revocations)"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "status + operator_id required",
+      "when": "status or operator_id is missing, null, or an empty string in the body"
+    },
+    {
+      "status": 500,
+      "code": "InternalServerError",
+      "message": "<database error message>",
+      "when": "setCatalogStatus() throws — status outside draft|active|retired hitting the DB check constraint, or Postgres unavailable"
+    }
+  ],
   "requiresAuth": false,
   "expectedStatus": 200,
   "sdk": "api-gateway",

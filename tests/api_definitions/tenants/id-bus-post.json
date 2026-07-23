@@ -33,5 +33,50 @@
   "captureResponse": {
     "tenants.create-bu.response.data.bu.bu_id": "data.bu.bu_id",
     "tenants.create-bu.response.data.bu.tenant_id": "data.bu.tenant_id"
-  }
+  },
+  "description": "Creates a business unit under :tenant_id. name and kind are required; parent_bu_id is optional and nests the BU inside another BU. Edge cases: kind is free text here — only presence is checked, so an unsupported kind is rejected by the DB (surfacing as 500) rather than by a 400; an unknown :tenant_id or a parent_bu_id that does not exist is a foreign-key violation mapped to 400 ValidationError, NOT 404; a duplicate BU name within the tenant maps to 409 Conflict where a unique constraint exists; the handler does not guard against a parent_bu_id belonging to a different tenant, nor against creating a cycle in the BU tree.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "Authorization header absent or not in 'Bearer <jwt>' form (requireAuth preHandler)"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "JWT signature invalid, malformed, or exp has elapsed"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "name is required / kind is required",
+      "when": "validateCreateBu fails; all failures are returned together in details[]"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "<pg error: violates foreign key constraint ...>",
+      "when": ":tenant_id or parent_bu_id references a row that does not exist"
+    },
+    {
+      "status": 409,
+      "code": "Conflict",
+      "message": "<pg error: duplicate key value violates unique constraint ...>",
+      "when": "a BU unique constraint (e.g. name within the tenant) is violated"
+    },
+    {
+      "status": 404,
+      "code": "NotFound",
+      "message": "<error text containing 'not found'>",
+      "when": "the service throws a not-found error while resolving the tenant or parent BU"
+    },
+    {
+      "status": 500,
+      "code": "InternalError",
+      "message": "InternalError",
+      "when": "Unexpected service/DB failure (connection loss, or a constraint the handler does not map)"
+    }
+  ]
 }

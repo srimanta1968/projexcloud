@@ -1,0 +1,61 @@
+{
+  "sdk": "sdk-scheduling",
+  "sourceFile": "packages/sdk-scheduling/src/server/routes.ts",
+  "requiresAuth": true,
+  "taskId": "f01aa1e1-dc3c-46a8-984e-3ce8f749c2b0",
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "featureId": "afd11775-0799-4702-8f94-c2e12c001ea1",
+  "epicId": "4df864ec-e460-4cc9-a58a-92baadec5269",
+  "testability": "auto",
+  "name": "POST /api/scheduling/appointments/:appointment_id/reminders - Schedule reminders",
+  "endpoint": "/api/scheduling/appointments/:appointment_id/reminders",
+  "method": "POST",
+  "expectedStatus": 201,
+  "priority": 65,
+  "description": "Schedule the pre-meeting reminder fan-out for an appointment (default 24h/2h/15m before, override via offsets_minutes). One reminder row per offset at start_time - offset; offsets already in the past are skipped; idempotent per (appointment, offset). tenant_id required.",
+  "dependsOn": [
+    "POST /api/auth/signup-tenant",
+    "POST /api/personas",
+    "POST /api/scheduling/meeting-types",
+    "POST /api/scheduling/appointments"
+  ],
+  "testCases": [
+    {
+      "name": "Schedule 24h/2h/15m reminders",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "pathParams": {
+        "appointment_id": "{{cache:scheduling.appointment.create.response.data.appointment.appointment_id}}"
+      },
+      "payload": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "offsets_minutes": [
+          1440,
+          120,
+          15
+        ]
+      },
+      "expectedStatus": 201,
+      "expectedResponse": {
+        "data": {
+          "reminders": "array"
+        }
+      }
+    }
+  ],
+  "errorCases": [
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "tenant_id is required",
+      "when": "tenant_id missing"
+    },
+    {
+      "status": 404,
+      "code": "NotFound",
+      "message": "appointment not found",
+      "when": "no appointment for tenant"
+    }
+  ]
+}

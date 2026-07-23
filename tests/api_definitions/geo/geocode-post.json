@@ -28,5 +28,26 @@
   ],
   "captureResponse": {
     "geo.geocode.response.data.address.address_id": "data.address.address_id"
-  }
+  },
+  "description": "Forward-geocodes a free-text address via the active geo provider and then canonicalizes the enriched result, returning 200 with the canonical address (or { address: null } when the provider yields nothing). Only raw_input is required. Edge cases: raw_input missing or empty string is rejected with 400; a provider miss returns 200 with a null address rather than a 404; on a provider hit the degraded canonicalize path stores raw_input as the street with city and country literals of \"?\", so repeated geocodes of the same raw_input hit the alias cache and are idempotent; requires a valid JWT.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "Authorization header absent or not in Bearer form (requireAuth / gateway default-deny authGate)"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "Bearer token fails JWT verification or is expired (requireAuth / gateway default-deny authGate)"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "missing raw_input",
+      "when": "raw_input is absent or an empty string"
+    }
+  ]
 }

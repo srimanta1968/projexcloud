@@ -21,5 +21,20 @@
       },
       "expectedStatus": 200
     }
+  ],
+  "description": "Lists every registered event-type conflict policy. Takes no query parameters — there is no paging, filtering or tenant scoping, so the full registry is returned on each call and an empty registry yields data.policies = [] with 200, not 404. Read-only and safe to poll; clients use it to learn which event types may be replayed before starting a batch.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "Authorization header absent or not in 'Bearer <jwt>' form (requireAuth preHandler)"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "JWT signature invalid, malformed, or exp has elapsed"
+    }
   ]
 }

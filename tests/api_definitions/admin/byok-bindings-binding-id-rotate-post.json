@@ -2,6 +2,33 @@
   "name": "POST /admin/byok/bindings/:binding_id/rotate — api-gateway",
   "endpoint": "/admin/byok/bindings/:binding_id/rotate",
   "method": "POST",
+  "description": "Rotates a tenant CMK: re-wraps material from previous_tenant_key_id to new_tenant_key_id for the binding named in the path, attributing the action to operator_id, and returns 200 { success: true, data: <rotation> }. QA edge cases: all three body fields are required with a falsy check; the distinctive failure is UndecryptableError — raised when data cannot be re-wrapped under the new key (wrong previous key, revoked/deleted customer key, KMS denying access) — which the handler maps to the error's own status_code or 409 when it has none, so QA must expect a 409-class conflict there rather than a 500; every other throw (unknown binding_id, KMS outage, DB failure) collapses into a 500 with the raw message and there is no 404 branch, so rotating a non-existent binding_id is a 500; a repeated rotation with the same previous/new pair is not idempotent and will typically fail undecryptable on the second run because the previous key no longer wraps anything.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "admin token required",
+      "when": "requireAdmin() found no valid x-admin-ops-token header — missing, or matching neither env ADMIN_OPS_TOKEN nor an active admin.ops_token hash (30s cache TTL applies to revocations)"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "previous_tenant_key_id, new_tenant_key_id, operator_id required",
+      "when": "any of previous_tenant_key_id, new_tenant_key_id or operator_id is missing, null, or an empty string"
+    },
+    {
+      "status": 409,
+      "code": "UndecryptableError",
+      "message": "<undecryptable error message>",
+      "when": "rotateCmk() throws UndecryptableError — material cannot be re-wrapped under the new key (previous_tenant_key_id does not match, the customer key was revoked/deleted, or KMS denied the decrypt); the handler replies with the error's status_code when present, otherwise 409"
+    },
+    {
+      "status": 500,
+      "code": "InternalServerError",
+      "message": "<rotation error message>",
+      "when": "rotateCmk() throws anything other than UndecryptableError — unknown binding_id (there is no 404 branch), KMS unreachable, or the DB write failing"
+    }
+  ],
   "requiresAuth": false,
   "expectedStatus": 200,
   "sdk": "api-gateway",

@@ -2,6 +2,33 @@
   "name": "POST /admin/webhooks/dlq/:delivery_id/replay — api-gateway",
   "endpoint": "/admin/webhooks/dlq/:delivery_id/replay",
   "method": "POST",
+  "description": "Re-enqueues a dead-lettered webhook delivery for another attempt, returning { success: true, data: <replay result> }. Takes no request body — the delivery_id path param is the whole input. QA edge cases: two distinct typed failures are mapped explicitly — DeliveryNotInDlqError becomes 404 (the delivery does not exist, or exists but is not in dlq status, so a successfully delivered id also 404s) and DlqWindowExpiredError becomes 409 (the delivery is in the DLQ but its dlq_until retention window has passed, making it permanently unreplayable). That 409 is the key edge case: an entry can be visible in GET /admin/webhooks/dlq at one moment and 409 shortly after, since the list filters on the same dlq_until. Replay is not idempotent — a successful replay moves the delivery out of dlq, so an immediate second call returns 404.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "admin token required",
+      "when": "requireAdmin() found no valid x-admin-ops-token header — missing, or matching neither env ADMIN_OPS_TOKEN nor an active admin.ops_token hash (30s cache TTL applies to revocations)"
+    },
+    {
+      "status": 404,
+      "code": "DeliveryNotInDlq",
+      "message": "<DeliveryNotInDlqError message>",
+      "when": "replayDelivery() throws DeliveryNotInDlqError — no delivery with that delivery_id, or it exists but is not in status \"dlq\" (already delivered, still retrying, or already replayed)"
+    },
+    {
+      "status": 409,
+      "code": "DlqWindowExpired",
+      "message": "<DlqWindowExpiredError message>",
+      "when": "replayDelivery() throws DlqWindowExpiredError — the delivery is in the DLQ but its dlq_until retention window has already elapsed, so it can no longer be replayed"
+    },
+    {
+      "status": 500,
+      "code": "InternalServerError",
+      "message": "<replay error message>",
+      "when": "replayDelivery() throws anything else, or the dynamic import of @projexlight/sdk-webhook fails — e.g. Postgres unavailable or the re-enqueue write failing"
+    }
+  ],
   "requiresAuth": false,
   "expectedStatus": 200,
   "sdk": "api-gateway",

@@ -16,7 +16,11 @@
     "POST /api/auth/signup-tenant"
   ],
   "fieldEnums": {
-    "provider": ["google", "apple", "microsoft"]
+    "provider": [
+      "google",
+      "apple",
+      "microsoft"
+    ]
   },
   "testCases": [
     {
@@ -36,9 +40,45 @@
     }
   ],
   "expectedResponse": {
-    "data": { "person_id": "string", "jit_provisioned": true }
+    "data": {
+      "person_id": "string",
+      "jit_provisioned": true
+    }
   },
   "captureResponse": {
     "social.social-callback.response.data.person_id": "data.person_id"
-  }
+  },
+  "description": "Consumes a verified social IdP assertion (google, apple or microsoft) and federates it into a ProjexCloud identity for the named tenant, returning the resolved person and session material. This path matches the gateway OAuth-callback allowlist regex, so it is deliberately public and takes no bearer token — trust rests entirely on the caller having already verified the provider claims. Edge cases: provider is enum-checked from the path and anything outside google|apple|microsoft is a 400; tenant_id and verified_claims.sub are both mandatory; email, email_verified and name are optional, so an assertion with an unverified or absent email still federates and may create an identity that cannot be matched to an existing person by email; a tenant_id that does not resolve surfaces as 404 via the \"not found\" message branch; repeat callbacks with the same provider subject resolve to the same person rather than creating duplicates.",
+  "errorCases": [
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "provider must be google|apple|microsoft",
+      "when": "The :provider path segment is not one of the three supported providers"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "tenant_id and verified_claims.sub are required",
+      "when": "The body omits tenant_id, or verified_claims is missing or has no sub"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "<message containing \"must include\" or \"required\">",
+      "when": "consumeSocialIdToken throws a validation error about missing or malformed claims"
+    },
+    {
+      "status": 404,
+      "code": "NotFound",
+      "message": "<entity> not found",
+      "when": "consumeSocialIdToken throws an error whose message contains \"not found\" — e.g. tenant_id does not resolve, or the provider is not configured for that tenant"
+    },
+    {
+      "status": 500,
+      "code": "InternalError",
+      "message": "InternalError",
+      "when": "consumeSocialIdToken throws for any other reason (identity linking failure, database unreachable)"
+    }
+  ]
 }

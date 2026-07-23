@@ -55,10 +55,19 @@ const INSECURE_DEFAULT_MARKERS = ['do-not-use-in-prod', 'change-me'];
 
 export type DestinationMasterKeyResolver = () => Buffer | Promise<Buffer>;
 
+// Fixed dev key used only outside production when no master key is configured,
+// mirroring emailProviderService.wrapKey / providerAdapters SYNTHETIC_ALLOWED /
+// blobService synthetic-signer fallbacks. Production still hard-refuses.
+const DEV_DESTINATION_MASTER_KEY = Buffer.alloc(32, 7);
+
 const envMasterKey = (): Buffer => {
   const raw = process.env.NOTIFICATION_MASTER_KEY || process.env.NOTIFICATION_DESTINATION_KEY || '';
   if (!raw) {
-    throw new Error('NOTIFICATION_MASTER_KEY env not set — refuse to wrap destinations with no key material');
+    if (process.env.NODE_ENV === 'production') {
+      throw new Error('NOTIFICATION_MASTER_KEY env not set — refuse to wrap destinations with no key material');
+    }
+    console.warn('[sdk-notification] NOTIFICATION_MASTER_KEY not set — using insecure dev destination key (non-production only); set NOTIFICATION_MASTER_KEY for real deployments');
+    return DEV_DESTINATION_MASTER_KEY;
   }
   for (const marker of INSECURE_DEFAULT_MARKERS) {
     if (raw.includes(marker)) {

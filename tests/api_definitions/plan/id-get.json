@@ -25,5 +25,32 @@
         "Authorization": "Bearer {{cache:auth.register.response.data.token}}"
       }
     }
+  ],
+  "description": "Reads a single intent plan by plan_id from semantic.intent_plan, returning 200 {success:true, data:{plan_id, intent_id, subject_id, steps[], generated_by_agent_run_id, generated_at, status}}. QA edge cases: :id must be a well-formed UUID — getPlan runs a bare `WHERE plan_id = $1` with no try/catch, so a non-UUID path segment ('abc', '123') raises a Postgres 'invalid input syntax for type uuid' error that escapes as Fastify's default 500, NOT a 404; only a syntactically valid but unknown UUID returns the clean 404 {success:false, error:'plan <id> not found'}. The read is idempotent, unpaginated (the full steps array is inlined however long the plan is) and returns the CURRENT status, so fetching after POST /plan/:id/status is the way to confirm a lifecycle transition. There is no tenant filter in the query — any authenticated caller who knows a plan_id can read it — so tenant-isolation tests must not expect a 403/404 for another tenant's plan. /plan/:id is not on the gateway public allowlist, so the default-deny auth gate requires a valid tenant JWT before the handler runs.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "No Authorization: Bearer header — authGate.ts default-deny gate rejects /plan/:id before the handler"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "Bearer token fails verifyJwt (bad signature, malformed, or expired)"
+    },
+    {
+      "status": 404,
+      "code": "NotFound",
+      "message": "plan <id> not found",
+      "when": "getPlan returns null — the plan_id is a valid UUID but no semantic.intent_plan row matches"
+    },
+    {
+      "status": 500,
+      "code": "Internal Server Error",
+      "message": "Internal Server Error",
+      "when": "getPlan throws — most commonly a non-UUID :id producing 'invalid input syntax for type uuid', or the semantic schema / DB pool being unavailable; the route has no catch so Fastify's default error handler responds"
+    }
   ]
 }

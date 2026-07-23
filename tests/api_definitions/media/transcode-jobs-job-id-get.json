@@ -14,8 +14,17 @@
   "_generated": true,
   "testability": "auto",
   "fieldEnums": {
-    "pipeline": ["video-mp4-hls", "image-optimize", "pdf-thumbnail"],
-    "status": ["queued", "running", "succeeded", "failed"]
+    "pipeline": [
+      "video-mp4-hls",
+      "image-optimize",
+      "pdf-thumbnail"
+    ],
+    "status": [
+      "queued",
+      "running",
+      "succeeded",
+      "failed"
+    ]
   },
   "testCases": [
     {
@@ -41,5 +50,32 @@
         "error_message": null
       }
     }
-  }
+  },
+  "description": "Polls the status of a transcode job by job_id and returns 200 with the job record (pipeline, state, output refs, timings). The route is behind requireAuth, but unlike the other media handlers this one does NOT call the tenant guard - it neither requires a tenant_id claim nor checks that the job belongs to the caller's tenant, so any authenticated caller can poll any job_id. Edge cases: an unknown job_id is a 404; a job that is still queued or running returns 200 with its in-progress state rather than an error, so callers must poll; a failed job likewise returns 200 with a failed state; a non-UUID job_id fails the Postgres UUID cast and, matching none of the mapped error classes, surfaces as a generic 500 InternalError.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "Authorization header absent or not in Bearer form (requireAuth / gateway default-deny authGate)"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "Bearer token fails JWT verification or is expired (requireAuth / gateway default-deny authGate)"
+    },
+    {
+      "status": 404,
+      "code": "NotFound",
+      "message": "No transcode job <job_id>",
+      "when": "No transcode job row exists for the supplied job_id"
+    },
+    {
+      "status": 500,
+      "code": "InternalError",
+      "message": "InternalError",
+      "when": "getTranscodeJob throws - includes a non-UUID job_id (Postgres 22P02) and database errors"
+    }
+  ]
 }

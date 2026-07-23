@@ -5,6 +5,44 @@
   "taskId": "d9609d02-6991-45a5-94dd-9c10e02e6448",
   "description": "Fetch an agent_definition by id.",
   "requiresAuth": true,
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "No Authorization header or a non-Bearer scheme. Applied by the gateway default-deny authGate and again by the route's requireAuth preHandler."
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "verifyJwt() rejects the bearer token — tampered signature, wrong secret, or expired exp claim."
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "Missing path param: id",
+      "when": "req.params.id is falsy. Practically unreachable through the router (an empty :id segment matches the sibling GET /api/agent-runtime/agents collection route instead); reachable when the handler is called directly."
+    },
+    {
+      "status": 404,
+      "code": "NotFound",
+      "message": "agent_definition not found",
+      "when": "The id is a syntactically valid UUID but no row exists in agents.agent_definition. Note this lookup is by agent_id ONLY — it is not tenant-scoped, so a caller with any valid tenant JWT can read another tenant's agent definition; the 404 is purely existence-based."
+    },
+    {
+      "status": 500,
+      "code": "LookupFailed",
+      "message": "Lookup failed",
+      "when": "The SELECT throws. Dominant real case: :id is not a valid UUID (e.g. 'abc' or a truncated id) — Postgres raises 'invalid input syntax for type uuid', which surfaces as 500 rather than 400/404."
+    },
+    {
+      "status": 500,
+      "code": "InternalError",
+      "message": "InternalError",
+      "when": "Route-level try/catch in registerRoutes — an error thrown outside the handler's own catch, with no reply already sent."
+    }
+  ],
   "priority": 60,
   "dependsOn": [
     "POST /api/auth/register",

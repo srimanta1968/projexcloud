@@ -14,7 +14,12 @@
   ],
   "testability": "auto",
   "fieldEnums": {
-    "bucket": ["second", "minute", "hour", "day"]
+    "bucket": [
+      "second",
+      "minute",
+      "hour",
+      "day"
+    ]
   },
   "testCases": [
     {
@@ -29,6 +34,27 @@
         "bucket": "minute"
       },
       "expectedStatus": 200
+    }
+  ],
+  "description": "Queries the sensor time-series for one asset, either raw or aggregated, filtered by the optional sensor_id, from and to query parameters. The optional bucket parameter selects a rollup grain and is validated against the closed set second | minute | hour | day - an unrecognised bucket is silently ignored and the query falls back to raw readings rather than erroring. Edge cases: an unknown asset_id or an empty time window returns 200 with an empty result set, not a 404; from/to are passed through to the storage layer, so an unparseable timestamp surfaces as a generic 500; an inverted range (from after to) yields an empty set; no tenant check is performed against the JWT; requires a valid JWT.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "Authorization header absent or not in Bearer form (requireAuth / gateway default-deny authGate)"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "Bearer token fails JWT verification or is expired (requireAuth / gateway default-deny authGate)"
+    },
+    {
+      "status": 500,
+      "code": "<underlying error message>",
+      "message": "Reading query failed",
+      "when": "assetQueryReadings throws - malformed from/to timestamps, a non-UUID asset_id, or a ClickHouse/Postgres error"
     }
   ]
 }

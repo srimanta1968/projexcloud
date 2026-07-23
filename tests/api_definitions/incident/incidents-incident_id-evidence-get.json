@@ -1,0 +1,54 @@
+{
+  "name": "GET /api/incidents/:incident_id/evidence - Read the incident evidence timeline",
+  "endpoint": "/api/incidents/:incident_id/evidence",
+  "sdk": "sdk-incident",
+  "sourceFile": "packages/sdk-incident/src/server/routes.ts",
+  "method": "GET",
+  "requiresAuth": true,
+  "expectedStatus": 200,
+  "taskId": "f718b26b-fd2e-4fcb-b313-012f15c010c8",
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "priority": 58,
+  "testability": "auto",
+  "description": "Read an incident's evidence timeline in chronological order (oldest first, ordered by occurred_at then created_at), optionally filtered to a single kind via the kind query param. Each entry carries its sdk-audit receipt (audit_entry_id, audit_seq, audit_entry_hash) so a reader can verify the entry against the immutable hash chain. Tenant-scoped via the required tenant_id query param. Edge cases: 400 when tenant_id is absent; an unknown or other-tenant incident_id is NOT a 404 here — it simply yields an empty evidence array, since the timeline is a filtered read rather than a record fetch; limit defaults to 200 and offset to 0 for paging a long timeline; entries whose audit emit was unavailable carry null receipt columns.",
+  "dependsOn": [
+    "POST /api/auth/signup-tenant",
+    "POST /api/incidents",
+    "POST /api/incidents/:incident_id/evidence"
+  ],
+  "fieldEnums": {
+    "kind": ["detected", "root_cause", "recovery", "verification", "note"]
+  },
+  "testCases": [
+    {
+      "name": "Read the timeline for the incident that has evidence",
+      "headers": { "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}" },
+      "pathParams": { "incident_id": "{{cache:incident.incidents.create.response.data.incident.incident_id}}" },
+      "queryParams": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "kind": "detected",
+        "limit": "50",
+        "offset": "0"
+      },
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "data": {
+          "evidence": [
+            {
+              "evidence_id": "string",
+              "incident_id": "string",
+              "kind": "string",
+              "body": "string",
+              "audit_entry_id": "string",
+              "audit_entry_hash": "string"
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "errorCases": [
+    { "status": 400, "code": "ValidationError", "message": "tenant_id query param required", "when": "tenant_id query param missing" },
+    { "status": 401, "code": "Unauthorized", "message": "Unauthorized", "when": "Authorization bearer token missing or invalid" }
+  ]
+}

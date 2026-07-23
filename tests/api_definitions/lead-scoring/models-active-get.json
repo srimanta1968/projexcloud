@@ -9,11 +9,11 @@
   "_generated": true,
   "testability": "auto",
   "dependsOn": [
-    "POST /api/auth/register",
     "POST /api/auth/signup-tenant",
     "POST /api/lead-scoring/models",
     "POST /api/lead-scoring/models/:id/activate"
   ],
+  "description": "Resolves the currently active model for a (tenant_id, vertical) pair, ordered by trained_at DESC NULLS LAST and limited to one row. Both query params are required. QA edge cases: a tenant/vertical pair with no active model returns 404 'no active model' — distinct from the 400 you get when the params are simply absent; because model creation does not enforce a single active model per pair, several rows can be active at once and this endpoint deterministically returns only the most recently trained one; tenant_id is cast to ::uuid, so a non-UUID value raises a database error rather than a clean 400; vertical matching is exact and case-sensitive.",
   "testCases": [
     {
       "name": "Look up the active model for (tenant, vertical)",
@@ -23,7 +23,7 @@
       },
       "expectedStatus": 200,
       "headers": {
-        "Authorization": "Bearer {{cache:auth.register.response.data.token}}"
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
       }
     }
   ],
@@ -36,5 +36,31 @@
       "feature_set": "object",
       "status": "string"
     }
-  }
+  },
+  "errorCases": [
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "tenant_id and vertical query params required",
+      "when": "either the tenant_id or the vertical query param is absent or empty"
+    },
+    {
+      "status": 404,
+      "code": "NotFound",
+      "message": "no active model",
+      "when": "no lead_scoring.model row exists with status='active' for the given (tenant_id, vertical)"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "no Authorization header, or it is not of the form 'Bearer <jwt>' (api-gateway default-deny authGate, AUTH_GATE_MODE=enforce)"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "the bearer JWT fails verifyJwt — bad signature, wrong JWT_SECRET, or exp already elapsed (api-gateway default-deny authGate, AUTH_GATE_MODE=enforce)"
+    }
+  ]
 }

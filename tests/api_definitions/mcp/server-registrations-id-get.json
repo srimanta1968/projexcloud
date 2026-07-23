@@ -33,5 +33,32 @@
       "endpoint_url": "string",
       "status": "string"
     }
-  }
+  },
+  "description": "Reads one MCP server registration by its registration id and returns 200 with the row. Read-only; the handler does not compare the row's tenant_id against the JWT, so any authenticated caller can read any registration id. Edge cases: an unknown but well-formed UUID returns 404; a non-UUID id fails the Postgres UUID cast (22P02) inside the try block and is reported as a generic 500 \"Lookup failed\" rather than a 400; a registration that has been disabled is still returned (with its disabled state) rather than 404ing; requires a valid JWT.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "Authorization header absent or not in Bearer form (requireAuth / gateway default-deny authGate)"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "Bearer token fails JWT verification or is expired (requireAuth / gateway default-deny authGate)"
+    },
+    {
+      "status": 404,
+      "code": "server_registration not found",
+      "message": "server_registration not found",
+      "when": "No mcp server_registration row exists for the supplied id"
+    },
+    {
+      "status": 500,
+      "code": "Lookup failed",
+      "message": "Lookup failed",
+      "when": "getMcpServer throws - includes a non-UUID id (Postgres 22P02) and database errors"
+    }
+  ]
 }

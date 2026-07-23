@@ -29,10 +29,36 @@
           "title": "{{dynamic:name}}",
           "body": "Draft body copy for the first version."
         },
-        "media_refs": ["media://hero-image"],
-        "taxonomy_tags": ["news", "featured"]
+        "media_refs": [
+          "media://hero-image"
+        ],
+        "taxonomy_tags": [
+          "news",
+          "featured"
+        ]
       },
       "expectedStatus": 201
+    }
+  ],
+  "description": "Appends a new draft version to an item. Every body field is optional — payload defaults to {}, media_refs and taxonomy_tags default to undefined — so an EMPTY body legitimately creates an empty version and there is no 400 branch on this route at all. Edge cases: an unknown or non-UUID :item_id is not checked by the handler and fails on the item_id foreign key / uuid cast as a 500 rather than 404; versions are append-only and each call creates a NEW version even with identical content (not idempotent); the created version is a draft and is not live until the publish route runs; media_refs and taxonomy_tags are stored as given and are not validated to exist.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "Authorization header absent or not in 'Bearer <jwt>' form (requireAuth preHandler)"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "JWT signature invalid, malformed, or exp has elapsed"
+    },
+    {
+      "status": 500,
+      "code": "Internal Server Error",
+      "message": "Internal Server Error",
+      "when": ":item_id is not a valid UUID or references no content item (foreign-key violation) — the route has no try/catch, so the rejection surfaces as Fastify's default 500"
     }
   ]
 }

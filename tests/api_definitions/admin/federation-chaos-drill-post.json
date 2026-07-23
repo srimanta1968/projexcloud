@@ -2,6 +2,27 @@
   "name": "POST /admin/federation/chaos-drill — api-gateway",
   "endpoint": "/admin/federation/chaos-drill",
   "method": "POST",
+  "description": "Runs an operator-triggered federation chaos drill (P7 FR-FED-3 / AC-6): performs a failover from from_region to to_region for the given federation and records a failover_event with trigger=\"chaos-drill\" so monthly RPO/RTO drills produce auditable, production-condition numbers. Returns 200 { success: true, data: <failover event> }. QA edge cases: all three of federation_id, from_region and to_region are required and empty strings count as missing; there is no check that from_region differs from to_region, nor that either region is a member of the federation — an unknown federation_id or region surfaces from the orchestrator as a 500 with the raw message rather than a 404; each call writes a new failover_event, so it is NOT idempotent and repeated drills accumulate rows; this route depends on the gateway-internal orchestrator started at boot (FEDERATION_ORCHESTRATOR_ENABLED), unlike POST /admin/chaos-drill which has no orchestrator in the gateway mount.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "admin token required",
+      "when": "x-admin-ops-token header is missing, empty, or matches neither the env ADMIN_OPS_TOKEN break-glass secret (constant-time compare) nor the SHA-256 hash of any active row in admin.ops_token; revoked/expired DB tokens keep working until the per-replica cache expires (ADMIN_OPS_TOKEN_CACHE_TTL_MS, default 30s) unless a Redis invalidation broadcast lands first"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "federation_id, from_region, to_region are required",
+      "when": "any of federation_id, from_region or to_region is missing, null, or an empty string"
+    },
+    {
+      "status": 500,
+      "code": "InternalServerError",
+      "message": "<drill error message>",
+      "when": "federationOrchestrator.runChaosDrill() throws — unknown federation_id or region, the target pool being unreachable, or the failover_event insert failing"
+    }
+  ],
   "requiresAuth": false,
   "expectedStatus": 200,
   "sdk": "api-gateway",

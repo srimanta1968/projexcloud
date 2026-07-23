@@ -9,11 +9,11 @@
   "_generated": true,
   "testability": "auto",
   "dependsOn": [
-    "POST /api/auth/register",
     "POST /api/auth/signup-tenant",
     "POST /api/lead-scoring/models",
     "POST /api/lead-scoring/models/:id/activate"
   ],
+  "description": "Scores one contact: resolves the active model for (tenant_id, vertical), loads and normalises its feature weights, runs the four subscore backends (proximity, expertise, intent, storm_impact) in parallel, computes the weighted composite scaled to 0-100, persists a lead_scoring.score row with the component breakdown, and emits a lead-scoring.scored.v1 audit entry. QA edge cases: the single most common failure is a 400 carrying 'no active model for tenant ... vertical ...' — every one of tenant_id, vertical, contact_id and trace_id is required, so a missing-field 400 and a no-model 400 share a status and must be distinguished by message; the audit append is wrapped in try/catch and only warns, so an audit outage still returns 200 (do not assert that scoring fails when audit is down); each of proximity/expertise/intent/storm_impact is optional and defaults to {}, which yields a 0 subscore rather than an error, so a body with only the four required ids scores 0 successfully; the call is not idempotent — the same trace_id can be posted repeatedly and produces a new score row each time; if the model has no weight rows the engine silently falls back to DEFAULT_FEATURE_WEIGHTS.",
   "testCases": [
     {
       "name": "Score a contact against the active model (happy path)",
@@ -45,7 +45,7 @@
       },
       "expectedStatus": 200,
       "headers": {
-        "Authorization": "Bearer {{cache:auth.register.response.data.token}}"
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
       }
     }
   ],
@@ -60,5 +60,37 @@
   "captureResponse": {
     "lead-scoring.score.response.data.score_id": "data.score.score_id",
     "lead-scoring.score.response.data.model_id": "data.model_id"
-  }
+  },
+  "errorCases": [
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "tenant_id, vertical, contact_id, trace_id are required",
+      "when": "any of tenant_id, vertical, contact_id or trace_id is missing or empty in the body"
+    },
+    {
+      "status": 400,
+      "code": "NoActiveModel",
+      "message": "[sdk-lead-scoring] no active model for tenant <tenant_id> vertical <vertical>",
+      "when": "no lead_scoring.model row with status='active' exists for the (tenant_id, vertical) pair"
+    },
+    {
+      "status": 400,
+      "code": "ScoreFailed",
+      "message": "[sdk-lead-scoring] score insert failed | <underlying database error message>",
+      "when": "the INSERT into lead_scoring.score returns no row, a subscore backend throws, or tenant_id is not a valid UUID for the ::uuid cast during model resolution"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "no Authorization header, or it is not of the form 'Bearer <jwt>' (api-gateway default-deny authGate, AUTH_GATE_MODE=enforce)"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "the bearer JWT fails verifyJwt — bad signature, wrong JWT_SECRET, or exp already elapsed (api-gateway default-deny authGate, AUTH_GATE_MODE=enforce)"
+    }
+  ]
 }

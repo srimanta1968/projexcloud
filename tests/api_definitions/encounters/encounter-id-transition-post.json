@@ -14,21 +14,56 @@
   "_generated": true,
   "testability": "auto",
   "fieldEnums": {
-    "to": ["open", "in-progress", "closed", "sealed"]
+    "to": [
+      "open",
+      "in-progress",
+      "closed",
+      "sealed"
+    ]
   },
   "statusTransitions": {
     "entity": "encounter",
     "field": "state",
-    "flow": ["open", "in-progress", "closed", "sealed"],
+    "flow": [
+      "open",
+      "in-progress",
+      "closed",
+      "sealed"
+    ],
     "transitions": [
-      { "from": "open", "to": "in-progress", "via": "POST /api/encounters/:encounter_id/transition" },
-      { "from": "open", "to": "closed", "via": "POST /api/encounters/:encounter_id/transition" },
-      { "from": "open", "to": "sealed", "via": "POST /api/encounters/:encounter_id/transition" },
-      { "from": "in-progress", "to": "closed", "via": "POST /api/encounters/:encounter_id/transition" },
-      { "from": "in-progress", "to": "sealed", "via": "POST /api/encounters/:encounter_id/transition" },
-      { "from": "closed", "to": "sealed", "via": "POST /api/encounters/:encounter_id/transition" }
+      {
+        "from": "open",
+        "to": "in-progress",
+        "via": "POST /api/encounters/:encounter_id/transition"
+      },
+      {
+        "from": "open",
+        "to": "closed",
+        "via": "POST /api/encounters/:encounter_id/transition"
+      },
+      {
+        "from": "open",
+        "to": "sealed",
+        "via": "POST /api/encounters/:encounter_id/transition"
+      },
+      {
+        "from": "in-progress",
+        "to": "closed",
+        "via": "POST /api/encounters/:encounter_id/transition"
+      },
+      {
+        "from": "in-progress",
+        "to": "sealed",
+        "via": "POST /api/encounters/:encounter_id/transition"
+      },
+      {
+        "from": "closed",
+        "to": "sealed",
+        "via": "POST /api/encounters/:encounter_id/transition"
+      }
     ]
   },
+  "description": "Drives the encounter state machine. Legal transitions are open -> in-progress|closed|sealed, in-progress -> closed|sealed, closed -> sealed, and sealed -> nothing (terminal). Closing or sealing first checks that no participant marked required has already left. Sealing additionally stamps sealed_at (plus closed_at if not already set) and cryptographically shreds the per-encounter Vault key. QA edge cases: the 400/409 split is the thing to get right — a `to` value outside the four known states is a 400 ValidationError, while a syntactically valid but illegal move (e.g. sealed -> open, or closed -> in-progress) is a 409 InvalidTransition; a nonexistent encounter_id is ALSO a 409, not a 404, because transitionEncounter throws 'Encounter <id> not found' inside the try block; blocking a close because a required participant left surfaces as the same 409 with a different details message, so assert on details; sealing is destructive and irreversible — re-sealing an already-sealed encounter is a 409 since sealed has no legal successors; the shredKey call is try/catch-wrapped and only logs, so a 200 seal response does not prove the key was actually shredded.",
   "testCases": [
     {
       "name": "Transition the encounter open -> in-progress",
@@ -47,5 +82,43 @@
   ],
   "captureResponse": {
     "encounters.transition.response.data.encounter.encounter_id": "data.encounter.encounter_id"
-  }
+  },
+  "errorCases": [
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "invalid target state",
+      "when": "body.to is missing or is not one of 'open', 'in-progress', 'closed', 'sealed'"
+    },
+    {
+      "status": 409,
+      "code": "InvalidTransition",
+      "message": "Encounter <encounter_id> not found",
+      "when": "the :encounter_id path param matches no engagement.encounter row — reported as 409, not 404"
+    },
+    {
+      "status": 409,
+      "code": "InvalidTransition",
+      "message": "Invalid encounter transition <from> -> <to>",
+      "when": "the requested move is not permitted by VALID_TRANSITIONS (e.g. any transition out of sealed, or closed -> in-progress)"
+    },
+    {
+      "status": 409,
+      "code": "InvalidTransition",
+      "message": "Cannot close encounter — required participants have left: <roles>",
+      "when": "transitioning to closed or sealed while one or more participants with required = TRUE have a non-null left_at"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "no Authorization header, or it is not of the form 'Bearer <jwt>' (requireAuth preHandler)"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "the bearer JWT fails verifyJwt — bad signature, wrong JWT_SECRET, or exp already elapsed (requireAuth preHandler)"
+    }
+  ]
 }

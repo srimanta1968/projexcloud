@@ -28,6 +28,7 @@
     "measure.create.response.data.measurement_id": "data.measurement_id",
     "measure.create.response.data.capture_id": "data.capture_id"
   },
+  "description": "Records one HDK device measurement (area / distance / volume) against a capture and persists it to hdk_measure.measurement. The route validates capture_id, kind, value, unit and device_uuid at the edge, then measurementService re-validates and inserts, returning 201 with the stored row. QA edge cases: EVERY validation failure — route-level missing field, unknown kind, non-finite or negative value, a captured_at that is not valid ISO 8601, or a database insert failure — collapses to HTTP 400, so assert on the error string, not just the status; value === 0 is accepted (only negative is rejected) while value omitted entirely is rejected, so a 0-value test must not be treated as a missing-field test; tenant_id is optional and defaults to null, meaning this endpoint does NOT enforce tenant scoping on write; the call is not idempotent — POSTing the same body twice creates two rows with different ids; the route has no requireAuth preHandler of its own but is still covered by the gateway default-deny authGate, so an anonymous call returns 401 before reaching the handler.",
   "testCases": [
     {
       "name": "Record an AR measurement",
@@ -45,6 +46,56 @@
       "headers": {
         "Authorization": "Bearer {{cache:auth.register.response.data.token}}"
       }
+    }
+  ],
+  "errorCases": [
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "capture_id, kind, value, unit, device_uuid are required",
+      "when": "any of capture_id, kind, value, unit or device_uuid is missing from the body (route-level guard; value == null triggers this but value === 0 does not)"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "[hdk-measure] invalid kind '<kind>'",
+      "when": "kind is present but not one of 'area', 'distance', 'volume'"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "[hdk-measure] value must be a finite number",
+      "when": "value is NaN, Infinity, or a non-numeric type"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "[hdk-measure] value must be non-negative",
+      "when": "value is a finite number below zero"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "[hdk-measure] captured_at is not a valid ISO 8601 timestamp",
+      "when": "captured_at is supplied but does not parse as an ISO 8601 date"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "[hdk-measure] insert failed",
+      "when": "the INSERT into hdk_measure.measurement returns no row (e.g. capture_id violates a foreign key) — the thrown error is caught and reported as 400"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "no Authorization header, or it is not of the form 'Bearer <jwt>' (api-gateway default-deny authGate, AUTH_GATE_MODE=enforce)"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "the bearer JWT fails verifyJwt — bad signature, wrong JWT_SECRET, or exp already elapsed (api-gateway default-deny authGate, AUTH_GATE_MODE=enforce)"
     }
   ]
 }

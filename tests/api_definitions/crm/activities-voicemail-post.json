@@ -1,0 +1,68 @@
+{
+  "name": "POST /api/crm/activities/voicemail - Log a voicemail on the timeline",
+  "endpoint": "/api/crm/activities/voicemail",
+  "sdk": "sdk-crm",
+  "sourceFile": "packages/sdk-crm/src/server/routes.ts",
+  "method": "POST",
+  "requiresAuth": true,
+  "expectedStatus": 201,
+  "taskId": "2b1c31db-08c0-4207-a81d-79bae03c515e",
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "priority": 69,
+  "testability": "auto",
+  "description": "Log a voicemail on the contact/lead timeline, optionally with its transcript, as activity kind 'voicemail' (added by migration 003). call_disposition defaults to 'voicemail' (the call reached the contact's voicemail) and may be 'left_message' when the rep recorded one — any OTHER disposition is rejected, since a voicemail activity cannot be 'answered' or 'busy'. Emits crm.voicemail.received.v1, which is deliberately distinct from crm.call.missed.v1 so reaching voicemail is not double-counted as a plain missed call in follow-up reporting. Edge cases: idempotent on external_call_id exactly like the call endpoint (retry updates in place and does not re-emit the event); 400 when encounter_id or actor_persona_id is missing, when the disposition is outside voicemail|left_message, when call_direction is not inbound|outbound, or when call_duration_seconds is negative.",
+  "dependsOn": [
+    "POST /api/auth/signup-tenant",
+    "POST /api/auth/register",
+    "POST /api/app-identities",
+    "POST /api/memberships",
+    "POST /api/personas",
+    "POST /api/vault/keys",
+    "POST /api/encounters"
+  ],
+  "fieldEnums": {
+    "call_direction": ["inbound", "outbound"],
+    "call_disposition": ["voicemail", "left_message"]
+  },
+  "testCases": [
+    {
+      "name": "Log an outbound voicemail with transcript",
+      "headers": { "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}" },
+      "payload": {
+        "encounter_id": "{{cache:encounters.create.response.data.encounter.encounter_id}}",
+        "actor_persona_id": "{{cache:personas.create.response.data.persona.persona_id}}",
+        "call_direction": "outbound",
+        "call_disposition": "left_message",
+        "call_duration_seconds": 18,
+        "phone_number": "+14155550123",
+        "recording_url": "https://api.twilio.com/2010-04-01/Recordings/RE{{dynamic:slug}}",
+        "recording_consent": true,
+        "voicemail_transcript": "Hi, following up on your demo request - call me back when you get a chance.",
+        "external_call_id": "CA{{dynamic:slug}}",
+        "summary": "Left voicemail after no answer",
+        "occurred_at": "{{dynamic:pastdatetime}}"
+      },
+      "expectedStatus": 201,
+      "expectedResponse": {
+        "data": {
+          "activity": {
+            "activity_id": "string",
+            "kind": "string",
+            "call_disposition": "string",
+            "voicemail_transcript": "string"
+          }
+        }
+      }
+    }
+  ],
+  "captureResponse": {
+    "crm.activities.voicemail.response.data.activity.activity_id": "data.activity.activity_id"
+  },
+  "errorCases": [
+    { "status": 400, "code": "ValidationError", "message": "encounter_id and actor_persona_id are required", "when": "encounter_id or actor_persona_id missing from body" },
+    { "status": 400, "code": "ValidationError", "message": "voicemail call_disposition must be voicemail or left_message", "when": "call_disposition is any other value, including otherwise-valid call dispositions like answered" },
+    { "status": 400, "code": "ValidationError", "message": "call_direction must be one of inbound|outbound", "when": "call_direction is outside the enum" },
+    { "status": 400, "code": "ValidationError", "message": "call_duration_seconds must be a non-negative number", "when": "call_duration_seconds is negative or not a number" },
+    { "status": 401, "code": "Unauthorized", "message": "Unauthorized", "when": "Authorization bearer token missing or invalid" }
+  ]
+}

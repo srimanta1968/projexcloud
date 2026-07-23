@@ -15,15 +15,30 @@
     "POST /api/devices"
   ],
   "fieldEnums": {
-    "reason": ["revoked", "stolen"]
+    "reason": [
+      "revoked",
+      "stolen"
+    ]
   },
   "statusTransitions": {
     "entity": "device",
     "field": "status",
-    "flow": ["active", "revoked", "stolen"],
+    "flow": [
+      "active",
+      "revoked",
+      "stolen"
+    ],
     "transitions": [
-      { "from": "active", "to": "revoked", "via": "POST /api/devices/:device_uuid/revoke" },
-      { "from": "active", "to": "stolen", "via": "POST /api/devices/:device_uuid/revoke" }
+      {
+        "from": "active",
+        "to": "revoked",
+        "via": "POST /api/devices/:device_uuid/revoke"
+      },
+      {
+        "from": "active",
+        "to": "stolen",
+        "via": "POST /api/devices/:device_uuid/revoke"
+      }
     ]
   },
   "testCases": [
@@ -43,5 +58,32 @@
   ],
   "captureResponse": {
     "devices.revoke.response.data.device.device_uuid": "data.device.device_uuid"
-  }
+  },
+  "description": "Revokes a device by setting its status to the supplied reason and bumping last_seen_at, returning 200 with the updated device record. The body is optional: reason may be revoked or stolen and defaults to revoked when omitted. Edge cases: an unregistered device_uuid updates no rows and is reported as a 404; revoking an already-revoked device succeeds again and re-emits the device.revoked.v1 audit event, so the call is idempotent in effect but not silent; a reason outside revoked | stolen is NOT validated here and is written straight to the status column, where an invalid enum value surfaces as an unhandled 500; a non-UUID device_uuid fails the Postgres UUID cast and also escapes as a 500; requires a valid JWT.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "Authorization header absent or not in Bearer form (requireAuth / gateway default-deny authGate)"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "Bearer token fails JWT verification or is expired (requireAuth / gateway default-deny authGate)"
+    },
+    {
+      "status": 404,
+      "code": "NotFound",
+      "message": "NotFound",
+      "when": "The UPDATE matched no row - no device.device row exists for the supplied device_uuid"
+    },
+    {
+      "status": 500,
+      "code": "Internal Server Error",
+      "message": "invalid input value for enum / invalid input syntax for type uuid",
+      "when": "reason is outside the revoked|stolen enum, or device_uuid is not a valid UUID - neither is guarded, so the Postgres error escapes unhandled"
+    }
+  ]
 }

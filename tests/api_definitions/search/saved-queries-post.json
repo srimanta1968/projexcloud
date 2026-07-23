@@ -52,5 +52,68 @@
   "captureResponse": {
     "search.saved-queries.create.response.data.saved_query.query_id": "data.saved_query.query_id",
     "search.saved-queries.create.response.data.saved_query.persona_id": "data.saved_query.persona_id"
-  }
+  },
+  "description": "Persists a named saved query (a reusable search DSL) for a persona inside the caller's tenant and returns the stored record. tenant_id is taken from the verified JWT, never the body. Edge cases: both tenant_id and persona_id must be UUIDs and name must be non-blank — all three are reported together in one 400 details array; the dsl key must be an object (a JSON string or array fails); the stored DSL is sanitized exactly like a live query, so script/script_score/function_score clauses are stripped and size is clamped to 0..200 before persistence, meaning a saved query can never be replayed with an escalated clause; names are not uniqueness-checked, so repeated submissions create duplicate saved queries rather than returning a conflict.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "No Authorization: Bearer <jwt> header on a requireAuth route"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "Bearer token fails verifyJwt (bad signature, malformed, or exp in the past)"
+    },
+    {
+      "status": 403,
+      "code": "Forbidden",
+      "message": "JWT missing tenant_id claim",
+      "when": "Token verifies but carries no tenant_id claim; authTenant() rejects before any query runs"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "body must be an object",
+      "when": "Request body is absent or not a JSON object"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "tenant_id must be a UUID",
+      "when": "The tenant_id claim injected from the JWT is not a well-formed UUID"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "persona_id must be a UUID",
+      "when": "persona_id is missing or not a well-formed UUID"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "name is required",
+      "when": "name is missing or blank after trimming"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "dsl object is required",
+      "when": "dsl is missing or is not a JSON object"
+    },
+    {
+      "status": 404,
+      "code": "IndexNotFound",
+      "message": "Referenced index could not be resolved",
+      "when": "createSavedQuery throws IndexNotFoundError"
+    },
+    {
+      "status": 500,
+      "code": "InternalError",
+      "message": "InternalError",
+      "when": "The saved-query insert fails (e.g. persona_id violates a foreign key) or the datastore is unreachable"
+    }
+  ]
 }

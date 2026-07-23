@@ -4,6 +4,39 @@
   "sdk": "sdk-identity-resolver",
   "sourceFile": "packages/sdk-identity-resolver/src/server/routes.ts",
   "method": "POST",
+  "description": "Records a steward's approve/reject decision on a candidate link's open approval step and labels the match outcome for calibration. step_id is required and decision must be exactly 'approve' or 'reject' (any other value, including a missing one, is a 400); reason is optional. The deciding persona comes from the JWT, not the body. Edge cases: an unknown link_id throws 'empi: candidate link <id> not found' and surfaces as 500 InternalError rather than 404; a step_id that is already decided, or that does not belong to the link, likewise fails inside the service as a 500; approving feeds a positive calibration label and reject a negative one, so double-adjudicating the same step is not a safe retry.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "Authorization header absent or not in the form \"Bearer <jwt>\""
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "JWT signature invalid, malformed, or past its exp claim"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "step_id and decision (approve|reject) are required",
+      "when": "body.step_id is missing or body.decision is anything other than \"approve\" or \"reject\""
+    },
+    {
+      "status": 500,
+      "code": "InternalError",
+      "message": "empi: candidate link <link_id> not found",
+      "when": "the link_id in the path matches no candidate-link row — surfaced as a 500, not a 404"
+    },
+    {
+      "status": 500,
+      "code": "InternalError",
+      "message": "<error message from adjudicateCandidate>",
+      "when": "the approval step is already decided, does not belong to the link, or the decision write fails"
+    }
+  ],
   "requiresAuth": true,
   "taskId": "67aa387a-d7cf-4107-a28f-fa096804b910",
   "sprintId": "efcf9cbd-5e84-469e-946e-efcabf8c88e1",

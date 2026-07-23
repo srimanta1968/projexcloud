@@ -14,8 +14,18 @@
   "sourceFile": "packages/sdk-service-request/src/server/routes.ts",
   "_generated": true,
   "fieldEnums": {
-    "priority": ["low", "normal", "high", "urgent"],
-    "severity": ["trivial", "minor", "major", "critical"]
+    "priority": [
+      "low",
+      "normal",
+      "high",
+      "urgent"
+    ],
+    "severity": [
+      "trivial",
+      "minor",
+      "major",
+      "critical"
+    ]
   },
   "captureResponse": {
     "service-request.tickets.response.data.ticket.ticket_id": "data.ticket.ticket_id"
@@ -38,6 +48,33 @@
         }
       },
       "expectedStatus": 201
+    }
+  ],
+  "description": "Creates a service-request ticket against an encounter for a requesting persona, optionally placing it on a queue with a priority/severity and external reference map, and returns the created ticket with 201. Edge cases: tenant_id, encounter_id and requester_persona_id are all mandatory and a missing one yields a single generic ValidationError (\"missing fields\") without naming the offender; queue_id, priority, severity and external_refs are optional and defaulted by the service; priority/severity are not enum-validated at the route, so an out-of-range value reaches the insert and surfaces as a 500 rather than a 400; a queue_id or encounter_id that does not exist fails the foreign key at insert time and also surfaces as a 500; there is no idempotency key, so re-POSTing the same body creates a second distinct ticket.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "No Authorization: Bearer <jwt> header on a requireAuth route"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "Bearer token fails verifyJwt (bad signature, malformed, or exp in the past)"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "missing fields",
+      "when": "Any of tenant_id, encounter_id or requester_persona_id is absent or empty"
+    },
+    {
+      "status": 500,
+      "code": "InternalError",
+      "message": "Internal Server Error",
+      "when": "createTicket throws — e.g. queue_id/encounter_id/requester_persona_id violates a foreign key, an invalid priority/severity breaks the enum constraint, or the database is unreachable"
     }
   ]
 }

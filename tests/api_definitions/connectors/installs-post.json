@@ -47,6 +47,7 @@
       }
     ]
   },
+  "description": "Registers a connector install for a tenant and returns 201 with the install record. tenant_id, connector_kind and installed_by are required; display_name, credential_ref and vendor_account_id are optional. QA edge cases: connector_kind is NOT validated against the registered adapter list at install time, so an install can be created for a kind that has no adapter — the failure only appears later when /sync or /tools/call returns 409 'no adapter registered for <kind>', and that deferred failure is the key thing to cover; nothing enforces uniqueness on (tenant_id, connector_kind, vendor_account_id), so the call is not idempotent and repeated POSTs create duplicate installs for the same vendor account; credential_ref is stored as an opaque reference with no existence check against sdk-secrets, so a dangling ref installs cleanly and only fails at sync time; all three missing-field cases collapse into one generic 400 'missing fields' with no indication of which field was absent.",
   "testCases": [
     {
       "name": "Install slack connector",
@@ -68,5 +69,25 @@
     "connectors.create.response.data.install.install_id": "data.install.install_id",
     "connectors.create.response.data.install.tenant_id": "data.install.tenant_id",
     "connectors.create.response.data.install.status": "data.install.status"
-  }
+  },
+  "errorCases": [
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "missing fields",
+      "when": "any of tenant_id, connector_kind or installed_by is missing or empty in the body"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "no Authorization header, or it is not of the form 'Bearer <jwt>' (requireAuth preHandler)"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "the bearer JWT fails verifyJwt — bad signature, wrong JWT_SECRET, or exp already elapsed (requireAuth preHandler)"
+    }
+  ]
 }

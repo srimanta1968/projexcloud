@@ -1,0 +1,56 @@
+{
+  "sdk": "sdk-scheduling",
+  "sourceFile": "packages/sdk-scheduling/src/server/routes.ts",
+  "requiresAuth": true,
+  "taskId": "6645f35d-6f20-4f27-8253-dd87b85fe4c2",
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "featureId": "efe48c51-3e78-4392-9621-85b916186487",
+  "epicId": "4df864ec-e460-4cc9-a58a-92baadec5269",
+  "testability": "auto",
+  "name": "GET /api/scheduling/calendar-connections/:connection_id - Fetch one connection",
+  "endpoint": "/api/scheduling/calendar-connections/:connection_id",
+  "method": "GET",
+  "expectedStatus": 200,
+  "priority": 72,
+  "description": "Fetch a single calendar connection by id (tenant-scoped). 404 if not found. tenant_id query param required.",
+  "dependsOn": [
+    "POST /api/auth/signup-tenant",
+    "POST /api/scheduling/calendar-connections"
+  ],
+  "testCases": [
+    {
+      "name": "Get a connection by id",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "pathParams": {
+        "connection_id": "{{cache:scheduling.calendar-connection.create.response.data.connection.connection_id}}"
+      },
+      "queryParams": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}"
+      },
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "data": {
+          "connection": {
+            "connection_id": "string"
+          }
+        }
+      }
+    }
+  ],
+  "errorCases": [
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "tenant_id query param required",
+      "when": "tenant_id missing"
+    },
+    {
+      "status": 404,
+      "code": "NotFound",
+      "message": "connection not found",
+      "when": "no connection for tenant"
+    }
+  ]
+}
