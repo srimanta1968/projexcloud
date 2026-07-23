@@ -1,5 +1,12 @@
 import { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
-import { loginHandler, registerHandler, signupTenantHandler, verifyEmailHandler } from './handlers/authController';
+import {
+  loginHandler,
+  registerHandler,
+  signupTenantHandler,
+  verifyEmailHandler,
+  sendVerificationEmailHandler,
+  verificationStatusHandler,
+} from './handlers/authController';
 import {
   aliasMergeHandler,
   impersonationApproveHandler,
@@ -44,6 +51,18 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
 
   app.post('/api/auth/verify-email', async (req: FastifyRequest, reply: FastifyReply) => {
     try { await verifyEmailHandler(req, reply); }
+    catch (err) { req.log.error(err); if (!reply.sent) reply.code(500).send({ error: 'InternalError' }); }
+  });
+
+  // SEPARATE, additive email-verification endpoints. They never gate register/
+  // signup/login — the UI checks status and requests a send; the link click verifies.
+  app.get('/api/auth/verification-status', async (req: FastifyRequest, reply: FastifyReply) => {
+    try { await verificationStatusHandler(req, reply); }
+    catch (err) { req.log.error(err); if (!reply.sent) reply.code(500).send({ error: 'InternalError' }); }
+  });
+
+  app.post('/api/auth/send-verification-email', async (req: FastifyRequest, reply: FastifyReply) => {
+    try { await sendVerificationEmailHandler(req, reply); }
     catch (err) { req.log.error(err); if (!reply.sent) reply.code(500).send({ error: 'InternalError' }); }
   });
 

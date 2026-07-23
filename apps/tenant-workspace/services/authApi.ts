@@ -1,4 +1,4 @@
-import { apiPost, setToken } from '../lib/apiClient';
+import { apiGet, apiPost, setToken } from '../lib/apiClient';
 
 export interface RegisterRequest {
   email: string;
@@ -8,18 +8,19 @@ export interface RegisterRequest {
 export interface RegisterResponse {
   userId: string;
   email: string;
-  token?: string;                 // absent when verification is required (hard gate)
-  verification_required?: boolean;
+  token?: string;
 }
 
 /**
- * POST /api/auth/register — creates a new user. With email verification enabled
- * the response has no token (verification_required=true); the user must verify
- * their email before they can sign in.
+ * POST /api/auth/register — creates a new user. The API returns a session token
+ * (unchanged contract), but the verification-first UX deliberately does NOT
+ * auto-login: it triggers a verification email and routes the user to the
+ * "check your email" screen. They verify, then sign in via /login (which checks
+ * verification status first).
  */
 export async function registerUser(input: RegisterRequest): Promise<RegisterResponse> {
   const data = await apiPost<RegisterResponse>('/api/auth/register', input);
-  if (data.token) setToken(data.token);
+  await sendVerificationEmail(data.userId, data.email).catch(() => undefined);
   return data;
 }
 
@@ -38,18 +39,18 @@ export interface SignupTenantResponse {
   org_id: string;
   display_name: string;
   region: string;
-  token?: string;                 // absent when verification is required (hard gate)
-  verification_required?: boolean;
+  token?: string;
 }
 
 /**
  * POST /api/auth/signup-tenant — full self-serve signup: creates the person,
- * a new org + default app, a trial tenant, and an admin membership. With email
- * verification enabled the response has no token; the user must verify first.
+ * a new org + default app, a trial tenant, and an admin membership. Returns a
+ * tenant-scoped token (unchanged contract), but like registerUser the
+ * verification-first UX triggers a verification email and does not auto-login.
  */
 export async function signupTenant(input: SignupTenantRequest): Promise<SignupTenantResponse> {
   const data = await apiPost<SignupTenantResponse>('/api/auth/signup-tenant', input);
-  if (data.token) setToken(data.token);
+  await sendVerificationEmail(data.userId, data.email).catch(() => undefined);
   return data;
 }
 
@@ -58,9 +59,30 @@ export interface VerifyEmailResponse {
   email: string;
 }
 
-/** POST /api/auth/verify-email — confirms the email-verification token. */
+/** POST /api/auth/verify-email — confirms the email-verification token (link click). */
 export async function verifyEmail(token: string): Promise<VerifyEmailResponse> {
   return apiPost<VerifyEmailResponse>('/api/auth/verify-email', { token });
+}
+
+/**
+ * POST /api/auth/send-verification-email — separate, additive endpoint. Requests
+ * a verification email for the given user. Used after signup and by "Resend".
+ */
+export async function sendVerificationEmail(userId: string | undefined, email: string): Promise<void> {
+  await apiPost<{ sent: boolean; email: string }>('/api/auth/send-verification-email', { userId, email });
+}
+
+export interface VerificationStatus {
+  exists: boolean;
+  verified: boolean;
+}
+
+/**
+ * GET /api/auth/verification-status — separate, additive read. The login page
+ * calls this BEFORE /api/auth/login to enforce verification client-side.
+ */
+export async function getVerificationStatus(email: string): Promise<VerificationStatus> {
+  return apiGet<VerificationStatus>(`/api/auth/verification-status?email=${encodeURIComponent(email)}`);
 }
 
 export interface LoginRequest {

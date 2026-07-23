@@ -378,6 +378,38 @@ export async function markEmailVerified(person_id: string, email: string): Promi
 }
 
 /**
+ * Reads the verification status of an email alias. Used by the UI (via
+ * GET /api/auth/verification-status) to decide whether to proceed to login.
+ * Returns exists=false for unknown emails (verified is then false).
+ */
+export async function getEmailVerificationStatus(
+  email: string,
+): Promise<{ exists: boolean; verified: boolean }> {
+  const emailHash = hashAliasValue('email', email);
+  const res = await dataService.query<{ verified_at: Date | null }>(
+    `SELECT verified_at FROM identity.alias WHERE kind = 'email' AND value_hash = $1 LIMIT 1`,
+    [emailHash],
+  );
+  const row = res.rows[0];
+  if (!row) return { exists: false, verified: false };
+  return { exists: true, verified: row.verified_at != null };
+}
+
+/**
+ * Resolves a person_id from an email alias. Returns null for unknown emails.
+ * Used by /api/auth/send-verification-email so a "resend" flow works with only
+ * the email (e.g. from the login page, where userId is not known).
+ */
+export async function getPersonIdByEmail(email: string): Promise<string | null> {
+  const emailHash = hashAliasValue('email', email);
+  const res = await dataService.query<{ person_id: string }>(
+    `SELECT person_id FROM identity.alias WHERE kind = 'email' AND value_hash = $1 LIMIT 1`,
+    [emailHash],
+  );
+  return res.rows[0]?.person_id ?? null;
+}
+
+/**
  * Mints (or returns existing) AppIdentity row for the (person, app) tuple.
  * First per-app login creates the row; subsequent logins find and reuse it.
  */
