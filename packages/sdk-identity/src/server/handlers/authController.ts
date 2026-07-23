@@ -6,6 +6,8 @@ import {
   listMemberships,
   mintAppIdentity,
   markEmailVerified,
+  getEmailVerificationStatus,
+  getPersonIdByEmail,
   PersonExistsError,
   InvalidCredentialsError,
 } from '../../services/identityService';
@@ -41,19 +43,18 @@ export async function registerHandler(req: FastifyRequest, reply: FastifyReply):
       display_name: validation.value.display_name,
       phone: validation.value.phone,
     });
-    // HARD verification: no login token yet. Stash the verify email for the gateway
-    // hook to send (approach B — sdk-identity can't import sdk-notification: cycle).
-    const verifyToken = signEmailVerifyToken(result.person.person_id, validation.value.email);
-    (reply as { verificationEmail?: unknown }).verificationEmail = {
+    const token = signJwt(buildSixLayerClaims({
+      person_id: result.person.person_id,
       email: validation.value.email,
-      token: verifyToken,
-      userId: result.person.person_id,
-    };
+      display_name: validation.value.display_name,
+      actor_kind: 'human',
+      mfa_methods: ['pwd'],
+    }));
     reply.code(201).send({
       data: {
         userId: result.person.person_id,
         email: validation.value.email,
-        verification_required: true,
+        token,
       },
     });
   } catch (err) {
@@ -80,13 +81,15 @@ export async function signupTenantHandler(req: FastifyRequest, reply: FastifyRep
   }
   try {
     const result = await signupTenant(validation.value);
-    // HARD verification: no login token yet — the user must verify their email first.
-    const verifyToken = signEmailVerifyToken(result.person_id, validation.value.email);
-    (reply as { verificationEmail?: unknown }).verificationEmail = {
+    const token = signJwt(buildSixLayerClaims({
+      person_id: result.person_id,
       email: validation.value.email,
-      token: verifyToken,
-      userId: result.person_id,
-    };
+      display_name: result.person_display_name,
+      tenant_id: result.tenant_id,
+      app_id: result.app_id,
+      actor_kind: 'human',
+      mfa_methods: ['pwd'],
+    }));
     reply.code(201).send({
       data: {
         userId: result.person_id,
@@ -96,7 +99,7 @@ export async function signupTenantHandler(req: FastifyRequest, reply: FastifyRep
         org_id: result.org_id,
         display_name: result.display_name,
         region: result.region,
-        verification_required: true,
+        token,
       },
     });
   } catch (err) {
@@ -121,14 +124,6 @@ export async function loginHandler(req: FastifyRequest, reply: FastifyReply): Pr
   }
   try {
     const verified = await verifyEmailPassword(validation.value.email, validation.value.password);
-    // HARD email-verification gate: block login until the email is verified.
-    if (!verified.emailVerified) {
-      reply.code(403).send({
-        error: 'EmailNotVerified',
-        details: ['Please verify your email before signing in — check your inbox for the verification link.'],
-      });
-      return;
-    }
     let activeTenantId: string | null = null;
     let activeBuId: string | null = null;
 
@@ -189,6 +184,51 @@ export async function loginHandler(req: FastifyRequest, reply: FastifyReply): Pr
     req.log.error(err);
     reply.code(500).send({ error: 'InternalError' });
   }
+}
+
+/**
+ * GET /api/auth/verification-status?email=... — SEPARATE, additive read. Lets the
+ * UI check whether an email is verified BEFORE calling the (unchanged) login API,
+ * so verification can be enforced entirely client-side. Never gates login itself.
+ */
+export async function verificationStatusHandler(req: FastifyRequest, reply: FastifyReply): Promise<void> {
+  const q = (req.query ?? {}) as { email?: string };
+  const email = typeof q.email === 'string' ? q.email.trim() : '';
+  if (!email) {
+    reply.code(400).send({ error: 'ValidationError', details: ['email query param is required'] });
+    return;
+  }
+  const status = await getEmailVerificationStatus(email);
+  reply.code(200).send({ data: status });
+}
+
+/**
+ * POST /api/auth/send-verification-email — SEPARATE, additive endpoint. Mints a
+ * signed email-verification token and stashes it on the reply so the gateway's
+ * onResponse hook sends the email (approach B — sdk-identity can't import
+ * sdk-notification: cycle). This does NOT gate or alter register/signup/login;
+ * it is driven by the UI after signup (or a "resend" button). Body: { userId, email }.
+ */
+export async function sendVerificationEmailHandler(req: FastifyRequest, reply: FastifyReply): Promise<void> {
+  const body = (req.body ?? {}) as { userId?: string; email?: string };
+  const email = typeof body.email === 'string' ? body.email.trim() : '';
+  if (!email) {
+    reply.code(400).send({ error: 'ValidationError', details: ['email is required'] });
+    return;
+  }
+  // userId is optional — resolve it from the email when omitted (resend flow).
+  const personId = (typeof body.userId === 'string' && body.userId) || (await getPersonIdByEmail(email));
+  if (!personId) {
+    reply.code(404).send({ error: 'NotFound', details: ['No account found for that email.'] });
+    return;
+  }
+  const verifyToken = signEmailVerifyToken(personId, email);
+  (reply as { verificationEmail?: unknown }).verificationEmail = {
+    email,
+    token: verifyToken,
+    userId: personId,
+  };
+  reply.code(202).send({ data: { sent: true, email } });
 }
 
 /**
