@@ -1,0 +1,47 @@
+{
+  "endpoint": "/api/config/resolve",
+  "method": "GET",
+  "expectedStatus": 200,
+  "description": "Resolves the MOST-specific active value for a key in the caller's context, walking app_user -> app -> tenant -> platform (first active wins). tenant comes from the JWT; app_id/app_user_id may be overridden via query. Returns {data:{key, resolved:{scope,scope_id,value,secret_ref}|null}} — resolved is null when no scope in the chain has an active value. Edge cases: key query param is required (400); tenant JWT required (401).",
+  "dependsOn": [
+    "POST /api/auth/signup-tenant",
+    "POST /api/config"
+  ],
+  "testCases": [
+    {
+      "name": "Resolve a key set at tenant scope",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "queryParams": {
+        "key": "qa.config.smoke"
+      },
+      "expectedStatus": 200
+    }
+  ],
+  "expectedResponse": {
+    "data": {
+      "key": "string",
+      "resolved": "object"
+    }
+  },
+  "errorCases": [
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "key is required",
+      "when": "the key query param is missing"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "no/invalid tenant JWT"
+    }
+  ],
+  "sdk": "sdk-config",
+  "sourceFile": "packages/sdk-config/src/server/index.ts",
+  "taskId": "e03d5fa3-db58-4a95-8d38-f7f2425aa947",
+  "requiresAuth": true,
+  "testability": "auto"
+}

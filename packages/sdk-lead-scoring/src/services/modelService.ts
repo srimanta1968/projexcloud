@@ -50,10 +50,16 @@ export interface CreateModelInput {
   weights?: Record<string, number>;
   /** When true, create the model in 'active' status immediately. */
   activate?: boolean;
+  /** Optional caller-supplied primary key for idempotent provisioning. When
+   *  omitted a random UUID is generated (the normal path). When supplied,
+   *  re-posting the same model_id upserts (resets vertical/feature_set/status
+   *  and re-tunes weights) rather than colliding on the PK — used by test/ops
+   *  fixtures that need a stable, resettable model id. */
+  model_id?: string;
 }
 
 export async function createModel(input: CreateModelInput): Promise<LeadScoringModelRef> {
-  const modelId = randomUUID();
+  const modelId = input.model_id ?? randomUUID();
   const status: LeadScoringModelStatus = input.activate ? 'active' : 'training';
   const featureSet = input.feature_set ?? {};
 
@@ -62,6 +68,10 @@ export async function createModel(input: CreateModelInput): Promise<LeadScoringM
       `INSERT INTO lead_scoring.model
          (model_id, tenant_id, vertical, feature_set, status, trained_at)
        VALUES ($1, $2::uuid, $3, $4::jsonb, $5, CASE WHEN $5 = 'active' THEN now() ELSE NULL END)
+       ON CONFLICT (model_id) DO UPDATE
+         SET tenant_id = EXCLUDED.tenant_id, vertical = EXCLUDED.vertical,
+             feature_set = EXCLUDED.feature_set, status = EXCLUDED.status,
+             trained_at = EXCLUDED.trained_at
        RETURNING model_id, tenant_id::text, vertical, trained_at, feature_set, status`,
       [modelId, input.tenant_id, input.vertical, JSON.stringify(featureSet), status],
     );
@@ -70,7 +80,9 @@ export async function createModel(input: CreateModelInput): Promise<LeadScoringM
       await q(
         `INSERT INTO lead_scoring.feature_weight
            (weight_id, model_id, feature, weight, last_tuned_at)
-         VALUES ($1, $2, $3, $4, now())`,
+         VALUES ($1, $2, $3, $4, now())
+         ON CONFLICT (model_id, feature) DO UPDATE
+           SET weight = EXCLUDED.weight, last_tuned_at = now()`,
         [randomUUID(), modelId, feature, weight],
       );
     }

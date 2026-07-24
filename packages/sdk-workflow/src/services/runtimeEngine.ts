@@ -89,13 +89,44 @@ async function createStepRow(
   spec: StepSpec,
   input: Record<string, unknown>,
 ): Promise<StepRecord> {
+  // Idempotent by (run_id, idx): a durable resume (worker re-tick after a
+  // pause/wake, or a crash-retry mid-step) can re-enter the SAME idx that a
+  // prior tick already inserted. A plain INSERT violates step_run_idx_unique
+  // and crash-loops the durable worker.
+  //
+  // CRITICAL (production, many concurrent tenants/runs): NEVER resurrect a step
+  // that already SUCCEEDED — re-running its handler would repeat side effects
+  // (double charge / duplicate notification). The WHERE guard makes DO UPDATE
+  // reset ONLY a leftover pending/running/failed row back to 'pending'
+  // (at-least-once retry — the documented contract for idempotent handlers). If
+  // the conflicting row is already 'succeeded', DO UPDATE is skipped, RETURNING
+  // yields nothing, and we return the existing succeeded row so the caller SKIPS
+  // execution. Each run_id is unique per invocation, so different tenants/apps
+  // never share a (run_id, idx) — this is purely same-run resume safety.
   const rows = await dataService.rows<StepRecord>(
     `INSERT INTO workflow.step (run_id, idx, name, input, status)
      VALUES ($1, $2, $3, $4::jsonb, 'pending')
+     ON CONFLICT (run_id, idx) DO UPDATE
+       SET name          = EXCLUDED.name,
+           input         = EXCLUDED.input,
+           status        = 'pending',
+           output        = NULL,
+           started_at    = NULL,
+           completed_at  = NULL,
+           error_message = NULL
+     WHERE workflow.step.status <> 'succeeded'
      RETURNING ${STEP_SELECT_COLUMNS}`,
     [run_id, idx, spec.name, JSON.stringify(input)],
   );
-  return rows[0];
+  if (rows.length > 0) return rows[0];
+  // Conflict row is already 'succeeded' — return it untouched; the caller
+  // detects status==='succeeded' and folds its output forward without re-running.
+  const existing = await dataService.one<StepRecord>(
+    `SELECT ${STEP_SELECT_COLUMNS} FROM workflow.step WHERE run_id = $1 AND idx = $2`,
+    [run_id, idx],
+  );
+  if (!existing) throw new Error(`step (${run_id}, ${idx}) upsert conflicted but row not found`);
+  return existing;
 }
 
 async function markStepRunning(step_id: string): Promise<void> {
@@ -334,6 +365,21 @@ export async function resumeRun(run_id: string): Promise<RunRecord> {
     // on the NEXT idx — handled by current_idx already being idx+1), nothing
     // to do here. Otherwise create a fresh step row.
     const step = await createStepRow(run_id, idx, spec, stepInput);
+
+    // Idempotent resume guard: if this idx already succeeded (a duplicate durable
+    // tick or a stale current_idx re-entered a completed step), DO NOT re-run the
+    // handler — fold the recorded output forward and advance. Prevents repeated
+    // side effects under concurrent production load.
+    if (step.status === 'succeeded') {
+      const priorOut = (step.output as Record<string, unknown> | null) ?? {};
+      prior_outputs[spec.name] = priorOut;
+      finalOutput = { ...finalOutput, [spec.name]: priorOut };
+      await dataService.query(
+        `UPDATE workflow.run SET current_idx = $2 WHERE run_id = $1 AND status = 'running'`,
+        [run_id, idx + 1],
+      );
+      continue;
+    }
 
     const ctx: StepContext = {
       run_id,

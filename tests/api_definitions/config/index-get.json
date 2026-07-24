@@ -1,0 +1,53 @@
+{
+  "endpoint": "/api/config",
+  "method": "GET",
+  "expectedStatus": 200,
+  "description": "Lists active config rows for a scope. scope query param is required; scope_id defaults to the caller's tenant for tenant scope. Tenant JWT required. Edge cases: scope must be platform|tenant|app|app_user (400).",
+  "dependsOn": [
+    "POST /api/auth/signup-tenant",
+    "POST /api/config"
+  ],
+  "fieldEnums": {
+    "scope": [
+      "platform",
+      "tenant",
+      "app",
+      "app_user"
+    ]
+  },
+  "testCases": [
+    {
+      "name": "List tenant-scoped config",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "queryParams": {
+        "scope": "tenant",
+        "scope_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}"
+      },
+      "expectedStatus": 200
+    }
+  ],
+  "expectedResponse": {
+    "data": "array"
+  },
+  "errorCases": [
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "scope must be platform|tenant|app|app_user",
+      "when": "scope missing or invalid"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "no/invalid tenant JWT"
+    }
+  ],
+  "sdk": "sdk-config",
+  "sourceFile": "packages/sdk-config/src/server/index.ts",
+  "taskId": "e03d5fa3-db58-4a95-8d38-f7f2425aa947",
+  "requiresAuth": true,
+  "testability": "auto"
+}

@@ -1,0 +1,79 @@
+{
+  "endpoint": "/api/config",
+  "method": "POST",
+  "expectedStatus": 201,
+  "description": "Upserts a config value in the multi-scope config plane (EP-341) on the (scope, scope_id, key) unique key. A non-secret value goes inline in `value`; a secret keeps only its sdk-secrets envelope pointer in `secret_ref` (value XOR secret_ref). Tenant JWT required; a tenant may only write its OWN tenant/app/app_user rows (403 otherwise) and platform scope requires a platform operator. Edge cases: scope must be platform|tenant|app|app_user and key is required (400); providing both value and secret_ref is 400.",
+  "dependsOn": [
+    "POST /api/auth/signup-tenant"
+  ],
+  "captureResponse": {
+    "config.create.response.data.config_id": "data.config_id",
+    "config.create.response.data.key": "data.key"
+  },
+  "fieldEnums": {
+    "scope": [
+      "platform",
+      "tenant",
+      "app",
+      "app_user"
+    ]
+  },
+  "testCases": [
+    {
+      "name": "Set a tenant-scoped config value",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "payload": {
+        "scope": "tenant",
+        "scope_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "key": "qa.config.smoke",
+        "value": {
+          "provider": "anthropic",
+          "model": "claude-opus-4-8"
+        }
+      },
+      "expectedStatus": 201
+    }
+  ],
+  "expectedResponse": {
+    "data": {
+      "config_id": "string",
+      "scope": "string",
+      "scope_id": "string",
+      "key": "string",
+      "status": "string"
+    }
+  },
+  "errorCases": [
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "scope (platform|tenant|app|app_user) and key are required",
+      "when": "scope missing/invalid or key missing"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "provide value OR secret_ref, not both",
+      "when": "both value and secret_ref supplied"
+    },
+    {
+      "status": 403,
+      "code": "Forbidden",
+      "message": "cannot write another tenant's config",
+      "when": "tenant scope_id != caller tenant, or platform scope without operator role"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "no/invalid tenant JWT (default-deny authGate)"
+    }
+  ],
+  "sdk": "sdk-config",
+  "sourceFile": "packages/sdk-config/src/server/index.ts",
+  "taskId": "e03d5fa3-db58-4a95-8d38-f7f2425aa947",
+  "requiresAuth": true,
+  "testability": "auto"
+}

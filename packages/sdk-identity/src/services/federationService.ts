@@ -18,6 +18,65 @@ import { mergeAlias } from './extendedIdentityService';
  *   Apple, Microsoft and maps the verified provider email to identity.alias.
  */
 
+export type FederationProtocol = 'saml' | 'scim' | 'oidc-social';
+
+export interface ProvisionFederationConfigInput {
+  tenant_id: string;
+  protocol: FederationProtocol;
+  /** Plaintext SCIM bearer — hashed (sha256) into scim_bearer_envelope; the
+   *  plaintext is never stored. Only meaningful for protocol='scim'. */
+  scim_bearer_token?: string;
+  idp_metadata_url?: string;
+  group_role_map?: Record<string, string>;
+  jit_enabled?: boolean;
+}
+
+export interface FederationConfigRef {
+  federation_id: string;
+  tenant_id: string;
+  protocol: string;
+  jit_enabled: boolean;
+}
+
+/**
+ * Create/update an identity.federation_config row (P2 §5.2). The create producer
+ * for the federation surface so tenant/admin onboarding provisions SAML/SCIM/social
+ * federation via the API instead of a direct DB seed. Idempotent on
+ * (tenant_id, protocol). For SCIM, the plaintext bearer is hashed into
+ * scim_bearer_envelope exactly as scimAuthMiddleware verifies it
+ * (crypto.createHash('sha256').update(token).digest()); the plaintext is never
+ * persisted or returned.
+ */
+export async function provisionFederationConfig(
+  input: ProvisionFederationConfigInput,
+): Promise<FederationConfigRef> {
+  const envelope = input.scim_bearer_token
+    ? crypto.createHash('sha256').update(input.scim_bearer_token).digest()
+    : null;
+  const row = await dataService.one<FederationConfigRef>(
+    `INSERT INTO identity.federation_config
+       (tenant_id, protocol, idp_metadata_url, scim_bearer_envelope, group_role_map, jit_enabled)
+     VALUES ($1::uuid, $2, $3, $4, COALESCE($5::jsonb,'{}'::jsonb), COALESCE($6, TRUE))
+     ON CONFLICT (tenant_id, protocol) DO UPDATE
+       SET idp_metadata_url = EXCLUDED.idp_metadata_url,
+           scim_bearer_envelope = COALESCE(EXCLUDED.scim_bearer_envelope,
+                                           identity.federation_config.scim_bearer_envelope),
+           group_role_map = EXCLUDED.group_role_map,
+           jit_enabled = EXCLUDED.jit_enabled
+     RETURNING federation_id::text, tenant_id::text, protocol, jit_enabled`,
+    [
+      input.tenant_id,
+      input.protocol,
+      input.idp_metadata_url ?? null,
+      envelope,
+      input.group_role_map ? JSON.stringify(input.group_role_map) : null,
+      input.jit_enabled ?? null,
+    ],
+  );
+  if (!row) throw new Error('Failed to provision federation config');
+  return row;
+}
+
 export interface SamlAssertionInput {
   tenant_id: string;
   name_id: string;

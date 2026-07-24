@@ -34,6 +34,7 @@ export const registerRoutes: FastifyPluginCallback = (app: FastifyInstance, _opt
       feature_set?: Record<string, unknown>;
       weights?: Record<string, number>;
       activate?: boolean;
+      model_id?: string;
     };
   }>('/api/lead-scoring/models', async (req, reply) => {
     const b = req.body ?? {};
@@ -47,6 +48,7 @@ export const registerRoutes: FastifyPluginCallback = (app: FastifyInstance, _opt
         feature_set: b.feature_set,
         weights: b.weights,
         activate: b.activate,
+        model_id: b.model_id,
       });
       return reply.code(201).send({ success: true, data });
     } catch (err) {

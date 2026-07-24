@@ -10,8 +10,8 @@
   "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
   "priority": 60,
   "testability": "semi-auto",
-  "setupScript": "assignment_seed_workload_pool.sql",
-  "description": "Auto-assign a task to the best-fit persona. The skill, availability-window and per-day capacity gates always run first; then the chosen strategy selects the winner. strategy='default' (or omitted) keeps the primary->backup + distance + capacity scoring; strategy='round_robin' cycles fairly through eligible candidates via a per-(tenant,pool,strategy) rotation cursor advanced atomically (concurrency-safe, no over-assignment); strategy='fair_share' biases toward the least-loaded candidate, rotating among ties. Returns the proposed assignment (status='proposed') plus the matched territory, distance and a reason string. The three candidate personas are seeded into assignment.workload by the setupScript (workload has no HTTP CRUD and no FK/tenant column). 409 when no eligible persona (empty pool / all at capacity).",
+  "setupScript": "assignment_seed_workload_pool.py",
+  "description": "Auto-assign a task to the best-fit persona. The skill, availability-window and per-day capacity gates always run first; then the chosen strategy selects the winner. strategy='default' (or omitted) keeps the primary->backup + distance + capacity scoring; strategy='round_robin' cycles fairly through eligible candidates via a per-(tenant,pool,strategy) rotation cursor advanced atomically (concurrency-safe, no over-assignment); strategy='fair_share' biases toward the least-loaded candidate, rotating among ties. Returns the proposed assignment (status='proposed') plus the matched territory, distance and a reason string. The three candidate personas are provisioned into assignment.workload by the setupScript assignment_seed_workload_pool.py, which calls the real producer PUT /api/assignment/workload/:persona_id (TK-3805) three times (API-based MUST-51 setup, no direct DB seed). 409 when no eligible persona (empty pool / all at capacity).",
   "dependsOn": [
     "POST /api/auth/signup-tenant"
   ],

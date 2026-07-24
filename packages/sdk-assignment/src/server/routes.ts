@@ -1,9 +1,11 @@
 import { FastifyInstance } from 'fastify';
 import { requireAuth } from '@projexlight/sdk-identity';
 import { assignByTask, type AssignByTaskInput, type AssignStrategy } from '../services/assignmentEngine';
+import { setWorkload } from '../services/workloadService';
 import type { GeoPoint } from '../services/geofence';
 
 const STRATEGIES: AssignStrategy[] = ['default', 'round_robin', 'fair_share'];
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /**
  * HTTP surface for sdk-assignment (EP-335). Exposes the auto-assignment engine
@@ -53,6 +55,38 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
       // No eligible persona (empty pool / all at capacity) is a 409 — the task
       // stays queued for a later dispatcher pass, not a client input error.
       return reply.code(409).send({ error: 'NoEligiblePersona', message: (err as Error).message });
+    }
+  });
+
+  // FR-ASN-3 workload upsert — the HTTP surface for the existing setWorkload
+  // service. Lets dispatchers (and tests) provision a persona's capacity/skills/
+  // availability via the API instead of a direct DB seed. Idempotent on
+  // persona_id; open_tasks is dispatcher-owned and deliberately not settable.
+  app.put<{
+    Params: { persona_id: string };
+    Body: Partial<{
+      capacity_per_day: number;
+      skills: string[];
+      available_from: string;
+      available_to: string;
+    }>;
+  }>('/api/assignment/workload/:persona_id', { preHandler: requireAuth }, async (req, reply) => {
+    const { persona_id } = req.params;
+    if (!persona_id || !UUID_RE.test(persona_id)) {
+      return reply.code(400).send({ error: 'ValidationError', details: ['persona_id must be a UUID'] });
+    }
+    const body = req.body ?? {};
+    try {
+      const result = await setWorkload({
+        persona_id,
+        capacity_per_day: body.capacity_per_day,
+        skills: body.skills,
+        available_from: body.available_from ? new Date(body.available_from) : null,
+        available_to: body.available_to ? new Date(body.available_to) : null,
+      });
+      return reply.code(200).send({ data: result });
+    } catch (err) {
+      return reply.code(500).send({ error: 'InternalError', message: (err as Error).message });
     }
   });
 }

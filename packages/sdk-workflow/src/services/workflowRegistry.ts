@@ -123,6 +123,10 @@ export async function getActiveDefinition(
 export function validateStepHandlers(specs: StepSpec[]): { ok: boolean; missing: string[] } {
   const missing: string[] = [];
   for (const spec of specs) {
+    // `sleep:<ms>` is an engine-intrinsic pause step handled by the runtime
+    // (runtimeEngine.parseSleepMs / pauseRun), not a registered TS handler.
+    // The validator must mirror that or it rejects a valid definition.
+    if (spec.name.startsWith('sleep:')) continue;
     if (!stepHandlers.has(spec.name)) missing.push(spec.name);
   }
   return { ok: missing.length === 0, missing };

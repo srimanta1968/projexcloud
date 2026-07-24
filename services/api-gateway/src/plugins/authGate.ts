@@ -25,6 +25,12 @@
  *   - WEBSOCKET: /api/dispatch/ws/* and /api/commands/stream/* — WS auth belongs
  *     in the Sec-WebSocket-Protocol token, not an onRequest preHandler. Tracked
  *     as follow-up hardening; left as-is so real-time flows don't break.
+ *   - SCIM: /scim/* self-guards with a SCIM 2.0 bearer (scimBearerAuth verifies it
+ *     against identity.federation_config). The Authorization header carries a SCIM
+ *     token, NOT a tenant JWT, so the JWT gate would 401 it before its own auth ran.
+ *   - ROBOT COMMAND-ACK: /api/commands/:id/ack self-guards with the per-robot
+ *     credential (ackCommandWithCredential verifies the pk_live_* key). Only the
+ *     /ack leaf is bypassed — sibling command routes stay tenant-JWT gated.
  *
  * Kill-switch: AUTH_GATE_MODE = enforce (default) | report | off.
  *   report → log what WOULD be blocked but allow it (safe observation).
@@ -74,6 +80,13 @@ function isHealth(pathname: string): boolean {
 /** OAuth provider callback: /api/identity/social/:provider/callback. */
 const OAUTH_CALLBACK = /^\/api\/identity\/social\/[^/]+\/callback$/;
 
+/** SCIM 2.0 — self-guarded by scimBearerAuth (Authorization is a SCIM bearer, not a tenant JWT). */
+const SCIM_PREFIX = '/scim/';
+
+/** Robot/edge command-ack — self-guarded by ackCommandWithCredential (per-robot key, not a JWT).
+ *  Scoped to the /ack leaf only; other /api/commands/* routes stay tenant-JWT gated. */
+const COMMAND_ACK = /^\/api\/commands\/[^/]+\/ack$/;
+
 function isPublic(pathname: string): boolean {
   if (PUBLIC_EXACT.has(pathname)) return true;
   if (isHealth(pathname)) return true;
@@ -85,6 +98,8 @@ function isPublic(pathname: string): boolean {
 function isSelfGuarded(pathname: string): boolean {
   for (const p of ADMIN_PREFIX) if (pathname.startsWith(p)) return true;
   for (const p of WS_PREFIX) if (pathname.startsWith(p)) return true;
+  if (pathname.startsWith(SCIM_PREFIX)) return true; // scimBearerAuth governs
+  if (COMMAND_ACK.test(pathname)) return true; // robot-key credential governs
   return false;
 }
 

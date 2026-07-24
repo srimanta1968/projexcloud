@@ -1,0 +1,65 @@
+{
+  "endpoint": "/api/config/value",
+  "method": "GET",
+  "expectedStatus": 200,
+  "description": "Returns one exact config row by (scope, scope_id, key). Tenant JWT required. Edge cases: scope + key required (400); unknown row is 404.",
+  "dependsOn": [
+    "POST /api/auth/signup-tenant",
+    "POST /api/config"
+  ],
+  "fieldEnums": {
+    "scope": [
+      "platform",
+      "tenant",
+      "app",
+      "app_user"
+    ]
+  },
+  "testCases": [
+    {
+      "name": "Get one tenant config row",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "queryParams": {
+        "scope": "tenant",
+        "scope_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "key": "qa.config.smoke"
+      },
+      "expectedStatus": 200
+    }
+  ],
+  "expectedResponse": {
+    "data": {
+      "config_id": "string",
+      "scope": "string",
+      "key": "string",
+      "status": "string"
+    }
+  },
+  "errorCases": [
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "scope and key are required",
+      "when": "scope missing/invalid or key missing"
+    },
+    {
+      "status": 404,
+      "code": "NotFound",
+      "message": "config value not found",
+      "when": "no row for that scope/scope_id/key"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "no/invalid tenant JWT"
+    }
+  ],
+  "sdk": "sdk-config",
+  "sourceFile": "packages/sdk-config/src/server/index.ts",
+  "taskId": "e03d5fa3-db58-4a95-8d38-f7f2425aa947",
+  "requiresAuth": true,
+  "testability": "auto"
+}
