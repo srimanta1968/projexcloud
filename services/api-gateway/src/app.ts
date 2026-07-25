@@ -344,7 +344,7 @@ import {
   isVoicemailOutcome,
 } from '@projexlight/connector-twilio-voice';
 import { migrationsDir as leadScoringMigrations }         from '@projexlight/sdk-lead-scoring';
-import { migrationsDir as configMigrations, server as configServer } from '@projexlight/sdk-config';
+import { migrationsDir as configMigrations, server as configServer, importEnvDefaults } from '@projexlight/sdk-config';
 import {
   migrationsDir as evidenceMigrations,
   startRetentionShredder as startEvidenceRetentionShredder,
@@ -1230,6 +1230,17 @@ const start = async (): Promise<void> => {
       // store (config.config_value); references no other schema, ordering free.
       { sdk: 'sdk-config',              dir: configMigrations },
     ]);
+
+    // EP-341 — lift env-only provider defaults into the config plane at platform
+    // scope so resolveConfig returns a platform default when no tenant/app override
+    // exists (and the 503 gate can tell "unconfigured" from "configured"). Non-secret
+    // markers only; best-effort, never blocks boot.
+    try {
+      const imported = await importEnvDefaults();
+      if (imported.length) console.log(`[api-gateway] config plane: imported ${imported.length} env platform default(s): ${imported.join(', ')}`);
+    } catch (err) {
+      console.warn('[api-gateway] config env-default import skipped:', (err as Error).message);
+    }
 
     // P9.2 — incremental catalog sync (Epic A, TK-3461). OPT-IN: embedding the
     // full catalog loads the bge-small ONNX model and is a one-time/CI job, not

@@ -14,6 +14,7 @@ export {
   invalidateConfig,
   clearConfigCache,
 } from './services/resolveConfig';
+export { importEnvDefaults } from './services/envDefaults';
 
 /**
  * The precedence tiers of the config plane. resolveConfig walks these from most

@@ -1,8 +1,39 @@
 import { createCipheriv, createDecipheriv, randomBytes } from 'crypto';
 import { dataService } from '@projexlight/db-runtime';
 import { appendAuditEntry } from '@projexlight/sdk-audit';
+import { setConfig, revokeConfig } from '@projexlight/sdk-config';
 import { buildSmtpTransport, sendViaSmtp, type SmtpConfig } from './smtpEmailAdapter';
 import type { SendArgs, SendResult } from './providerAdapters';
+
+/**
+ * Mirror an email-provider binding into the unified config plane (EP-341) so
+ * sdk-config is the single registry of which notification provider a tenant has
+ * configured. NON-SECRET marker only (kind + last_4 + binding_id) — the secret
+ * envelope stays in notification.tenant_provider_credential and the live send
+ * path is UNCHANGED. Drives resolveConfig('notification.email.credential', ctx)
+ * for the 503 PROVIDER_NOT_CONFIGURED behaviour. Best-effort (never blocks).
+ */
+async function mirrorEmailProviderToConfig(
+  binding: { binding_id: string; tenant_id: string; kind: string; status: string; last_4: string },
+  actor_id: string,
+): Promise<void> {
+  const key = 'notification.email.credential';
+  try {
+    if (binding.status === 'revoked') {
+      await revokeConfig('tenant', binding.tenant_id, key, actor_id);
+    } else {
+      await setConfig({
+        scope: 'tenant',
+        scope_id: binding.tenant_id,
+        key,
+        value: { configured: true, kind: binding.kind, last_4: binding.last_4, binding_id: binding.binding_id },
+        set_by: actor_id,
+      });
+    }
+  } catch {
+    // Mirror is best-effort — the authoritative store is the credential table.
+  }
+}
 
 /**
  * Configurable email (notification) provider — bind / rotate / revoke / list.
@@ -205,6 +236,7 @@ export async function bindEmailProvider(input: BindEmailProviderInput): Promise<
     return rowToBinding(row);
   });
 
+  await mirrorEmailProviderToConfig(inserted, input.actor_id);
   await emitAudit('notification.email_provider.bound.v1', inserted, input.actor_id, {
     kind: inserted.kind,
     last_4: inserted.last_4,
@@ -237,6 +269,7 @@ export async function rotateEmailProvider(input: RotateEmailProviderInput): Prom
   if (!row) throw new Error(`active email provider not found: ${input.binding_id}`);
   const binding = rowToBinding(row);
 
+  await mirrorEmailProviderToConfig(binding, input.actor_id);
   await emitAudit('notification.email_provider.rotated.v1', binding, input.actor_id, {
     last_4: binding.last_4,
   });
@@ -258,6 +291,7 @@ export async function revokeEmailProvider(input: RevokeEmailProviderInput): Prom
   if (!row) throw new Error(`active email provider not found: ${input.binding_id}`);
   const binding = rowToBinding(row);
 
+  await mirrorEmailProviderToConfig(binding, input.actor_id);
   await emitAudit('notification.email_provider.revoked.v1', binding, input.actor_id, {
     reason: input.reason.trim(),
   });
