@@ -55,6 +55,17 @@ export type {
   EmailProviderKind,
   BindEmailProviderInput,
 } from './services/emailProviderService';
+export {
+  emailValidationMode,
+  assessEmailDeliverability,
+  gatePlatformEmail,
+  maskEmail,
+} from './services/emailDeliverability';
+export type {
+  EmailValidationMode,
+  DeliverabilityAssessment,
+  DeliverabilityReason,
+} from './services/emailDeliverability';
 export { resolveTemplate, renderTemplate } from './services/templateEngine';
 export { registerAdapter, getProvidersForChannel } from './services/providerAdapters';
 export type { ProviderAdapter, SendArgs, SendResult } from './services/providerAdapters';
