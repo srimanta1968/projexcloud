@@ -1,0 +1,101 @@
+{
+  "name": "@projexlight/sdk-resource-registry",
+  "version": "1.0.0",
+  "schema_version": "1.0",
+  "summary": "P10/E5 infrastructure resource ownership registry (Architecture v3.2 §11A.8 + OC-12). Enforces a no-owner-no-resource rule: every infra resource (terraform module, cloud account, network zone, etc.) MUST carry an accountable owner and an approver, so a platform.resource_registry row cannot exist without both owner and approved_by. Surfaces a thin read API (\"who owns what\") to the admin app, a register/upsert endpoint used by GitOps sync, and a reconciler that quarantines registered-but-expired resources and raises ownership alerts for live-but-unregistered orphans, emitting resource_registry.quarantined.v1 audit events.",
+  "tags": [
+    "resource-registry",
+    "ownership",
+    "gitops",
+    "governance",
+    "infrastructure"
+  ],
+  "provides": {
+    "endpoints": [
+      {
+        "method": "GET",
+        "path": "/api/resources",
+        "description": "List/filter ownership records for the admin \"who owns what\" surface, by owner, status, environment, resource_type or team; paginated (default 100, max 500).",
+        "kind": "query",
+        "auth_scopes": ["resources:read"]
+      },
+      {
+        "method": "GET",
+        "path": "/api/resources/:resource_id",
+        "description": "Fetch the single ownership record for a resource_id; 404 when no registry row exists.",
+        "kind": "query",
+        "auth_scopes": ["resources:read"]
+      },
+      {
+        "method": "POST",
+        "path": "/api/resources",
+        "description": "Register or upsert an owned resource for GitOps sync; requires resource_id, resource_type, environment, owner and approved_by, and clears any prior quarantine (status back to 'registered').",
+        "kind": "mutation",
+        "auth_scopes": ["resources:write"]
+      }
+    ],
+    "events": [
+      {
+        "name": "resource_registry.quarantined.v1",
+        "retention_class": "regulated",
+        "conflict_policy": "event-sourcing",
+        "description": "Emitted by the reconciler when a resource is quarantined — reason 'expired' (registered but past expires_at) or 'orphan' (live resource with no registry row)."
+      }
+    ],
+    "models": [
+      {
+        "schema": "platform",
+        "table": "resource_registry",
+        "description": "One row per infra resource keyed by resource_id (PK), carrying NOT NULL owner + approved_by (no-owner-no-resource), terraform/cloud/network provenance, optional expires_at, and a registered|quarantined status with quarantine_reason."
+      }
+    ],
+    "hooks": [],
+    "ui_components": []
+  },
+  "consumes": {
+    "events": [],
+    "infra": ["postgres"],
+    "config_keys": ["POOL_INDEX"]
+  },
+  "scenarios": [
+    {
+      "id": "register-owned-resource",
+      "title": "Register an owned resource from GitOps sync",
+      "when_to_use": "When a GitOps/terraform reconciler applies infra and must record the accountable owner and approver so the resource is not treated as an orphan on the next reconcile pass.",
+      "example_code": "import { registerResource } from '@projexlight/sdk-resource-registry';\n\nconst row = await registerResource({\n  resource_id: 'aws:s3:projex-evidence-prod',\n  resource_type: 's3_bucket',\n  environment: 'prod',\n  owner: 'platform-team',\n  approved_by: 'jana.srimanta@gmail.com',\n  terraform_module: 'modules/evidence-bucket',\n  expires_at: '2027-01-01T00:00:00Z',\n});\nconsole.log(row.status); // 'registered'",
+      "expected_outcome": "Upserts the platform.resource_registry row (ON CONFLICT (resource_id) DO UPDATE), sets status back to 'registered' and clears quarantine_reason, returning the persisted record. Omitting owner or approved_by throws (no-owner-no-resource)."
+    },
+    {
+      "id": "lookup-resource-owner",
+      "title": "Look up who owns a resource by id",
+      "when_to_use": "When the admin app or an incident responder needs the accountable owner/approver and provenance for a specific resource_id.",
+      "example_code": "import { getOwnership } from '@projexlight/sdk-resource-registry';\n\nconst record = await getOwnership('aws:s3:projex-evidence-prod');\nif (!record) throw new Error('unregistered resource');\nconsole.log(record.owner, record.approved_by, record.status);",
+      "expected_outcome": "Returns the ResourceRegistryRecord for the resource_id, or null when no row exists (the GET /api/resources/:resource_id route maps that null to a 404)."
+    },
+    {
+      "id": "list-quarantined-resources",
+      "title": "List quarantined resources for orphan review",
+      "when_to_use": "When reviewing the reconciler's output — e.g. surfacing all quarantined resources in an environment so an operator can re-register or tear them down.",
+      "example_code": "import { listResources } from '@projexlight/sdk-resource-registry';\n\nconst flagged = await listResources({\n  status: 'quarantined',\n  environment: 'prod',\n  limit: 50,\n});\nfor (const r of flagged) {\n  console.log(r.resource_id, r.quarantine_reason);\n}",
+      "expected_outcome": "Returns up to 50 registry rows in prod with status 'quarantined', ordered by updated_at DESC, each carrying quarantine_reason ('expired' or 'orphan') for triage."
+    },
+    {
+      "id": "reconcile-orphans-and-expiry",
+      "title": "Reconcile live state against the registry",
+      "when_to_use": "When running the scheduled GitOps reconciler against observed cloud/terraform state to quarantine expired resources and flag orphans that lack a registry row.",
+      "example_code": "import { reconcile } from '@projexlight/sdk-resource-registry';\n\nconst result = await reconcile({\n  live_resource_ids: ['aws:s3:projex-evidence-prod', 'aws:rds:untracked-db'],\n});\nconsole.log(result.quarantined_expired); // ids past expires_at\nconsole.log(result.orphans);             // live ids with no registry row",
+      "expected_outcome": "Idempotently quarantines any registered-but-expired rows and identifies live resource_ids missing from the registry as orphans; each transition emits a resource_registry.quarantined.v1 audit event."
+    }
+  ],
+  "compliance_posture": {
+    "regimes": ["SOC2"],
+    "notes": "Supports SOC2 change-management and accountability controls: the NOT NULL owner + approved_by columns enforce that no infra resource exists without a named owner and approver, and every quarantine transition emits an append-only resource_registry.quarantined.v1 audit event via sdk-audit. Rows carry data_classification and network_zone hints for downstream data-handling review but hold infra metadata only (no end-user PII)."
+  },
+  "pool_placement": "admin",
+  "pricing_skus": [],
+  "links": {
+    "readme": "packages/sdk-resource-registry/README.md",
+    "source": "packages/sdk-resource-registry/src/",
+    "prd_section": "P10/E5 Resource Ownership Registry (Architecture v3.2 §11A.8 + OC-12)"
+  }
+}

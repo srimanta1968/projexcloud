@@ -1,0 +1,142 @@
+{
+  "name": "@projexlight/sdk-handoff",
+  "version": "0.1.0",
+  "schema_version": "1.0",
+  "summary": "Sales→Delivery handoff SDK (P15·E2). Manages one handoff record per closed-won deal being transitioned to onboarding/CS, carrying CS owner/backup personas, prework, promises, risks, integrations and milestones. Drives a validated status lifecycle (draft -> pending -> accepted/rejected -> completed, cancellable from any non-terminal state); every transition stamps its timestamp and emits a lifecycle event through sdk-audit. A durable kickoff→prework→promises→risks→milestones saga is driven by sdk-workflow (with per-phase compensation projected into handoff.saga_step), and the CS accept/reject gate is delegated to sdk-approval by loose id. All data is tenant-scoped and persona-keyed.",
+  "tags": [
+    "handoff",
+    "sales-to-delivery",
+    "lifecycle",
+    "saga",
+    "approval",
+    "multi-tenant"
+  ],
+  "provides": {
+    "endpoints": [
+      {
+        "method": "POST",
+        "path": "/api/handoffs",
+        "description": "Create a handoff in status 'draft' for a closed-won deal; requires tenant_id and from_persona_id and emits handoff.created.v1.",
+        "kind": "mutation",
+        "auth_scopes": ["handoff:write"]
+      },
+      {
+        "method": "GET",
+        "path": "/api/handoffs",
+        "description": "List tenant-scoped handoffs (tenant_id query param required), optionally filtered by status and deal_id with limit/offset paging.",
+        "kind": "query",
+        "auth_scopes": ["handoff:read"]
+      },
+      {
+        "method": "GET",
+        "path": "/api/handoffs/:handoff_id",
+        "description": "Fetch a single tenant-scoped handoff record by id; 404 when it does not exist.",
+        "kind": "query",
+        "auth_scopes": ["handoff:read"]
+      },
+      {
+        "method": "PATCH",
+        "path": "/api/handoffs/:handoff_id",
+        "description": "Update editable fields (owner/backup, prework, promises, risks, integrations, milestones, kickoff_ref) while still draft/pending; 409 NotEditable once past pending.",
+        "kind": "mutation",
+        "auth_scopes": ["handoff:write"]
+      },
+      {
+        "method": "POST",
+        "path": "/api/handoffs/:handoff_id/transition",
+        "description": "Move a handoff to a new status, validated against HANDOFF_TRANSITIONS; stamps the lifecycle timestamp, records reject_reason, emits the lifecycle event, and 409s on an invalid transition.",
+        "kind": "mutation",
+        "auth_scopes": ["handoff:write"]
+      },
+      {
+        "method": "POST",
+        "path": "/api/handoffs/:handoff_id/saga/start",
+        "description": "Start the durable kickoff→prework→promises→risks→milestones sdk-workflow saga for a handoff; returns 202 with the workflow run id and phase list.",
+        "kind": "mutation",
+        "auth_scopes": ["handoff:write"]
+      },
+      {
+        "method": "GET",
+        "path": "/api/handoffs/:handoff_id/saga",
+        "description": "Inspect the per-phase saga projection (each step done|compensated) recorded in handoff.saga_step for a handoff.",
+        "kind": "query",
+        "auth_scopes": ["handoff:read"]
+      },
+      {
+        "method": "POST",
+        "path": "/api/handoffs/:handoff_id/approval/request",
+        "description": "File the CS accept/reject approval (subject = handoff) via sdk-approval and submit the handoff for review (draft -> pending).",
+        "kind": "mutation",
+        "auth_scopes": ["handoff:write"]
+      },
+      {
+        "method": "POST",
+        "path": "/api/handoffs/:handoff_id/approval/decision",
+        "description": "Record the sdk-approval decision: approved transitions the handoff to accepted, rejected transitions it to rejected with a reject_reason.",
+        "kind": "mutation",
+        "auth_scopes": ["handoff:write"]
+      }
+    ],
+    "events": [],
+    "models": [
+      {
+        "schema": "handoff",
+        "table": "handoff",
+        "description": "One handoff row per closed-won deal being transitioned to onboarding/CS: tenant/persona-keyed, holds owner/backup, prework/promises/risks/integrations/milestones jsonb, status lifecycle timestamps, and loose workflow_run_id/approval_id references."
+      },
+      {
+        "schema": "handoff",
+        "table": "saga_step",
+        "description": "Per-handoff saga phase projection (kickoff/prework/promises/risks/milestones), UNIQUE(handoff_id, phase); status is done or compensated as driven by the sdk-workflow saga."
+      }
+    ],
+    "hooks": [],
+    "ui_components": []
+  },
+  "consumes": {
+    "events": [],
+    "infra": ["postgres"],
+    "config_keys": ["HANDOFF_AUDIT_POOL"]
+  },
+  "scenarios": [
+    {
+      "id": "create-handoff-draft",
+      "title": "Open a handoff for a closed-won deal",
+      "when_to_use": "When a deal closes and sales must hand it to delivery/CS: create the draft handoff capturing the CS owner and the promises/risks/milestones to carry into onboarding.",
+      "example_code": "import { createHandoff } from '@projexlight/sdk-handoff';\n\nconst handoff = await createHandoff({\n  tenant_id: req.auth.tenant_id,\n  from_persona_id: req.auth.sub,\n  deal_id: dealId,\n  cs_owner_persona_id: csOwnerId,\n  promises: [{ text: 'Go-live within 30 days' }],\n  risks: [{ text: 'Legacy data migration' }],\n});\nconsole.log(handoff.status); // 'draft'",
+      "expected_outcome": "Returns a HandoffRecord in status 'draft' with a generated handoff_id and stamped created_at; a handoff.created.v1 event is emitted through sdk-audit."
+    },
+    {
+      "id": "drive-status-transition",
+      "title": "Submit then complete a handoff via the lifecycle",
+      "when_to_use": "When advancing a handoff through its lifecycle and you want each move validated against the allowed transition graph rather than free-setting status.",
+      "example_code": "import { transitionHandoff, InvalidHandoffTransition } from '@projexlight/sdk-handoff';\n\ntry {\n  await transitionHandoff(tenantId, handoffId, 'pending');   // draft -> pending\n  await transitionHandoff(tenantId, handoffId, 'accepted');  // pending -> accepted\n  const done = await transitionHandoff(tenantId, handoffId, 'completed');\n  console.log(done?.completed_at);\n} catch (err) {\n  if (err instanceof InvalidHandoffTransition) console.error(err.message);\n}",
+      "expected_outcome": "Each valid transition updates status, stamps the matching timestamp (submitted_at/accepted_at/completed_at) and emits the lifecycle event; an illegal jump (e.g. draft -> completed) throws InvalidHandoffTransition, which the route surfaces as 409."
+    },
+    {
+      "id": "start-handoff-saga",
+      "title": "Run the durable onboarding saga",
+      "when_to_use": "After a handoff is accepted, to durably orchestrate the kickoff→prework→promises→risks→milestones phases with automatic compensation if a phase fails.",
+      "example_code": "import { startHandoffSaga, listHandoffSagaSteps } from '@projexlight/sdk-handoff';\n\nconst run = await startHandoffSaga(tenantId, handoffId);\nconsole.log(run.run_id, run.status, run.phases);\n\nconst steps = await listHandoffSagaSteps(tenantId, handoffId);\n// each: { phase, status: 'done' | 'compensated', run_id, created_at }",
+      "expected_outcome": "Returns a StartSagaResult with the sdk-workflow run_id and the phase list; handoff.saga_step gains one 'done' row per completed phase, and any failure flips prior phases to 'compensated' as the engine runs compensators in reverse."
+    },
+    {
+      "id": "request-cs-approval",
+      "title": "Route a handoff through the CS accept/reject gate",
+      "when_to_use": "When the CS team must formally accept or reject the handoff before delivery starts, delegating the gate to sdk-approval instead of transitioning status directly.",
+      "example_code": "import { requestHandoffApproval, recordHandoffDecision } from '@projexlight/sdk-handoff';\n\nawait requestHandoffApproval(tenantId, handoffId); // draft -> pending, files the approval\n\n// once CS decides:\nconst rec = await recordHandoffDecision(tenantId, handoffId, 'approved');\nconsole.log(rec?.status); // 'accepted'",
+      "expected_outcome": "requestHandoffApproval submits the handoff (pending) and files the sdk-approval subject; recordHandoffDecision maps 'approved' -> accepted and 'rejected' -> rejected (with reject_reason), returning the updated HandoffRecord or 404 when the handoff is missing."
+    }
+  ],
+  "compliance_posture": {
+    "regimes": ["SOC2", "GDPR"],
+    "notes": "Every lifecycle transition emits an immutable event through sdk-audit (actor/subject/payload), giving a tamper-evident trail of who moved a handoff and when. Records are tenant-scoped and persona-keyed (from_persona_id, cs_owner_persona_id) rather than raw user ids, and reference deals/approvals/workflow runs by loose id with no hard FK. prework/promises/risks/milestones jsonb may hold tenant business data, so treat handoff exports under GDPR data-subject scope; rows are retained (status-terminal), not hard-deleted."
+  },
+  "pool_placement": "app",
+  "pricing_skus": [],
+  "links": {
+    "readme": "packages/sdk-handoff/README.md",
+    "source": "packages/sdk-handoff/src/",
+    "prd_section": "P15·E2 Sales→Delivery Handoff (TK-3647)"
+  }
+}

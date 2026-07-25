@@ -1,0 +1,138 @@
+{
+  "name": "@projexlight/connector-twilio-voice",
+  "version": "0.1.0",
+  "schema_version": "1.0",
+  "summary": "Telephony channel connector (P15·E4) for Twilio Voice: provisions tenant tracking numbers, places outbound calls with status-callback + recording + answering-machine detection, and mirrors call/recording state via public Twilio webhooks. Upstream I/O goes through a pluggable provider (setTwilioVoiceProvider), so the package carries no twilio dependency and works unconfigured — a built-in stub returns synthetic SIDs to keep the happy path green without live credentials. Recording is gated at the source on an sdk-consent decision (fail-closed), so no audio is ever captured without an explicit grant, and provision/place/release actions emit sdk-audit events.",
+  "tags": [
+    "connector",
+    "telephony",
+    "twilio",
+    "voice",
+    "call-recording",
+    "multi-tenant"
+  ],
+  "provides": {
+    "endpoints": [
+      {
+        "method": "POST",
+        "path": "/api/voice/tracking-numbers",
+        "description": "Provision a Twilio tracking number for the tenant (via the pluggable provider) and write the mirror row; 409 if the tenant already holds that number active, 422 on provider failure.",
+        "kind": "mutation",
+        "auth_scopes": ["voice:write"]
+      },
+      {
+        "method": "GET",
+        "path": "/api/voice/tracking-numbers",
+        "description": "List the tenant's tracking numbers, newest first, optionally filtered by status with limit/offset paging.",
+        "kind": "query",
+        "auth_scopes": ["voice:read"]
+      },
+      {
+        "method": "POST",
+        "path": "/api/voice/tracking-numbers/:tracking_number_id/release",
+        "description": "Release a tracking number back to Twilio and mark the row 'released' (kept, not deleted, so past calls stay attributable); 404 if unknown.",
+        "kind": "mutation",
+        "auth_scopes": ["voice:write"]
+      },
+      {
+        "method": "POST",
+        "path": "/api/voice/calls",
+        "description": "Place an outbound call with status-callback, consent-gated recording and answering-machine detection requested; resolves caller id from from_number/tracking number, 400 when none is available.",
+        "kind": "mutation",
+        "auth_scopes": ["voice:write"]
+      },
+      {
+        "method": "GET",
+        "path": "/api/voice/calls",
+        "description": "List the tenant's calls, newest first, optionally filtered by status, direction and is_voicemail with limit/offset paging.",
+        "kind": "query",
+        "auth_scopes": ["voice:read"]
+      },
+      {
+        "method": "GET",
+        "path": "/api/voice/calls/:voice_call_id",
+        "description": "Fetch one tenant-scoped call mirror row by id; 404 when it does not exist.",
+        "kind": "query",
+        "auth_scopes": ["voice:read"]
+      },
+      {
+        "method": "POST",
+        "path": "/api/voice/webhooks/twilio/status",
+        "description": "PUBLIC Twilio call-progress callback (X-Twilio-Signature auth, no JWT): advances the call status and classifies voicemail via AnsweredBy; acknowledges an unknown Call SID with 202 so Twilio stops retrying.",
+        "kind": "webhook"
+      },
+      {
+        "method": "POST",
+        "path": "/api/voice/webhooks/twilio/recording",
+        "description": "PUBLIC Twilio recording-status callback (X-Twilio-Signature auth, no JWT): stores the recording SID/duration and, only on a consent grant, the audio pointer; 202 for an unresolvable Call SID.",
+        "kind": "webhook"
+      }
+    ],
+    "events": [
+      { "name": "twilio-voice.number.provisioned.v1", "retention_class": "operational", "conflict_policy": "lww" },
+      { "name": "twilio-voice.number.released.v1", "retention_class": "operational", "conflict_policy": "lww" },
+      { "name": "twilio-voice.call.placed.v1", "retention_class": "operational", "conflict_policy": "lww" }
+    ],
+    "models": [
+      {
+        "schema": "connector_twilio_voice",
+        "table": "tracking_number",
+        "description": "Tenant-pinned Twilio number mirror; UNIQUE(install_id, external_id) and a partial unique index permitting one active claim per (tenant, phone_number). Rows are retained as 'released' rather than deleted."
+      },
+      {
+        "schema": "connector_twilio_voice",
+        "table": "voice_call",
+        "description": "Outbound/inbound call mirror written in 'queued' and completed by the status/recording webhooks; carries recording_consent, recording_withheld_reason, answered_by and is_voicemail."
+      }
+    ],
+    "hooks": [],
+    "ui_components": []
+  },
+  "consumes": {
+    "events": [],
+    "infra": ["postgres"],
+    "config_keys": [
+      "TWILIO_ACCOUNT_SID",
+      "TWILIO_AUTH_TOKEN",
+      "TWILIO_VOICE_CALLBACK_BASE_URL",
+      "TWILIO_VOICE_INBOUND_URL",
+      "TWILIO_VOICE_AUDIT_POOL"
+    ]
+  },
+  "scenarios": [
+    {
+      "id": "provision-tracking-number",
+      "title": "Provision a tenant tracking number",
+      "when_to_use": "When a tenant install needs a Twilio number pinned to it so inbound calls can be attributed to a campaign, source or persona, and outbound calls have a caller id.",
+      "example_code": "import { provisionTrackingNumber } from '@projexlight/connector-twilio-voice';\n\nconst number = await provisionTrackingNumber({\n  install_id: install.install_id,\n  tenant_id: tenant.tenant_id,\n  phone_number: '',        // let the provider mint one\n  area_code: '415',\n  friendly_name: 'West Coast Sales',\n  purpose: 'sales-outbound',\n  assigned_persona_id: null,\n});\nconsole.log(number.phone_number, number.status); // e.g. '+1415...' 'active'",
+      "expected_outcome": "The provider claims/mints the number, a connector_twilio_voice.tracking_number row is upserted (idempotent on install_id+external_id), a twilio-voice.number.provisioned.v1 audit event is emitted, and the active TrackingNumberRecord is returned. HTTP callers POST the same fields to /api/voice/tracking-numbers and get 201; a duplicate active number yields 409."
+    },
+    {
+      "id": "place-outbound-call-consent-gated-recording",
+      "title": "Place an outbound call with consent-gated recording",
+      "when_to_use": "When placing an outbound call that should be recorded and have answering-machine detection, while never capturing audio unless recording consent has been granted for the destination.",
+      "example_code": "import { placeCall } from '@projexlight/connector-twilio-voice';\n\nconst call = await placeCall({\n  install_id: install.install_id,\n  tenant_id: tenant.tenant_id,\n  to_number: '+14155550123',\n  from_number: null,           // fall back to the tenant's active tracking number\n  record: true,                // honoured only if consent resolves to 'granted'\n  machine_detection: true,\n});\nconsole.log(call.status, call.recording_withheld_reason);",
+      "expected_outcome": "Caller id is resolved (explicit from_number, else the referenced/most-recent active tracking number, else NoCallerIdAvailable). Recording is requested from Twilio only when mayRecord(consent) is true, otherwise recording_withheld_reason records why. The voice_call row is written in 'queued', twilio-voice.call.placed.v1 is emitted, and the record is returned. Via HTTP this is POST /api/voice/calls -> 201."
+    },
+    {
+      "id": "twilio-status-webhook-voicemail-classification",
+      "title": "Complete a call from the Twilio status webhook and classify voicemail",
+      "when_to_use": "When Twilio posts call-progress callbacks and you need to verify the signature, advance the mirror row, and detect whether the call was answered by a human or a machine (voicemail).",
+      "example_code": "import { verifyTwilioSignature, applyStatusCallback, normalizeAnsweredBy } from '@projexlight/connector-twilio-voice';\n\nconst params = { CallSid: 'CA123', CallStatus: 'completed', AnsweredBy: 'machine_start' };\nconst check = verifyTwilioSignature('https://cloud.projexlight.com/api/voice/webhooks/twilio/status', params, req.headers['x-twilio-signature']);\nif (check.enforced && !check.verified) throw new Error('InvalidSignature');\nconst result = await applyStatusCallback(params);\nconsole.log(result.matched, result.call?.is_voicemail, normalizeAnsweredBy('machine_start'));",
+      "expected_outcome": "On a verified signature the matching voice_call is advanced to its normalized status and AnsweredBy is mapped so a machine answer sets is_voicemail. An unmatched Call SID returns { matched: false } which the route acknowledges with 202 (not 404) so Twilio stops retrying; a mismatched signature under enforcement yields 401."
+    }
+  ],
+  "compliance_posture": {
+    "regimes": ["SOC2", "GDPR"],
+    "notes": "Telephony connector handling PII: phone numbers, call metadata and (optionally) call-recording audio pointers. Call recording is gated at the source on an sdk-consent decision and fails closed — no audio is captured without an explicit grant, and recording_withheld_reason preserves why it was suppressed — addressing two-party-consent / call-recording law and TCPA-style dialing considerations. Webhooks authenticate by X-Twilio-Signature (fail-closed once TWILIO_AUTH_TOKEN is set), not tenant JWT. Numbers are released (not deleted) so historical calls stay attributable, and provision/place/release actions emit sdk-audit events; call rows may carry tenant business data in scope for GDPR data-subject requests."
+  },
+  "pool_placement": "app",
+  "pricing_skus": [
+    { "sku": "connector.twilio-voice.number.provision", "description": "Provision a Twilio tracking number for a tenant install.", "mode": "metered", "unit_description": "per tracking number provisioned" },
+    { "sku": "connector.twilio-voice.call.place", "description": "Place an outbound call through the Twilio voice connector.", "mode": "metered", "unit_description": "per outbound call placed" }
+  ],
+  "links": {
+    "readme": "packages/connector-twilio-voice/README.md",
+    "source": "packages/connector-twilio-voice/src/"
+  }
+}
