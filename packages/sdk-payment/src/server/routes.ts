@@ -2,6 +2,7 @@ import { FastifyInstance, FastifyRequest } from 'fastify';
 import type Stripe from 'stripe';
 import { requireAuth } from '@projexlight/sdk-identity';
 import { checkProviderConfigured } from '@projexlight/sdk-config';
+import { resolvePaymentProviderByScope } from '../services/paymentProviderResolver';
 import {
   attachMethodHandler,
   chargeHandler,
@@ -36,6 +37,20 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
     try { await chargeHandler(req, reply); }
     catch (err) { req.log.error(err); if (!reply.sent) reply.code(500).send({ error: 'InternalError' }); }
   });
+
+  // Two-level payment-provider resolution (EP-341): which provider is configured
+  // for this caller at a given level — 'collect' (tenant collects from end-users,
+  // resolves tenant->platform) or 'billing' (how the tenant pays ProjexLight,
+  // platform-scope only). Returns {configured, provider, scope, value}.
+  app.get<{ Querystring: { level?: string } }>(
+    '/api/payments/provider',
+    { preHandler: requireAuth },
+    async (req, reply) => {
+      const level = req.query.level === 'billing' ? 'billing' : 'collect';
+      const data = await resolvePaymentProviderByScope(ctxFrom(req), level);
+      return reply.send({ data });
+    },
+  );
 
   app.post<{ Params: { charge_id: string } }>(
     '/api/payments/:charge_id/refund',

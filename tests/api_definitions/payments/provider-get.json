@@ -1,0 +1,46 @@
+{
+  "endpoint": "/api/payments/provider",
+  "method": "GET",
+  "sdk": "sdk-payment",
+  "sourceFile": "packages/sdk-payment/src/server/routes.ts",
+  "taskId": "202285fe-3651-4a67-9cf4-9e03081b22bc",
+  "requiresAuth": true,
+  "description": "Two-level payment-provider resolution (EP-341) via the config plane. level='collect' (default) resolves payment.provider along the caller's tenant->platform chain (how a tenant collects from its end-users); level='billing' resolves platform-scope only (how the tenant pays ProjexLight, no tenant override). Returns 200 { data: { level, configured, provider, scope, value } } — configured=false with nulls when no provider is set at any scope in range. Tenant JWT required.",
+  "expectedStatus": 200,
+  "dependsOn": [
+    "POST /api/auth/signup-tenant"
+  ],
+  "fieldEnums": {
+    "level": ["collect", "billing"]
+  },
+  "testCases": [
+    {
+      "name": "Resolve the tenant's payment collection provider",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "queryParams": {
+        "level": "collect"
+      },
+      "expectedStatus": 200
+    }
+  ],
+  "expectedResponse": {
+    "data": {
+      "level": "string",
+      "configured": "boolean",
+      "provider": "string",
+      "scope": "string",
+      "value": "object"
+    }
+  },
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "no Authorization header or an invalid/expired tenant JWT (api-gateway default-deny authGate)"
+    }
+  ],
+  "testability": "auto"
+}
