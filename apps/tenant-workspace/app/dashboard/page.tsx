@@ -3,10 +3,11 @@
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Button, Card } from '@projexlight/design-system';
+import { Button, Card, SetupChecklist, type SetupStep } from '@projexlight/design-system';
 import { getToken } from '../../lib/apiClient';
 import { TENANT_URL, CONSOLE_URL } from '../../lib/portalLinks';
 import { logoutUser } from '../../services/authApi';
+import { listConfig } from '../../services/configApi';
 
 interface DecodedClaims {
   sub?: string;
@@ -33,9 +34,17 @@ function decode(token: string): DecodedClaims | null {
 
 const TILES = [
   { href: '/build', label: 'Build with AI', desc: 'Compose a vertical app from blueprints via chat' },
+  { href: '/dashboard/config', label: 'Configuration', desc: 'App settings & your personal keys' },
   { href: '/admin/audit', label: 'Audit ledger', desc: 'Append + verify the tamper-evident chain' },
   { href: '/admin/keys', label: 'Key hierarchy', desc: 'Vault key tiers + status' },
 ];
+
+/** The onboarding steps shown on the dashboard, keyed to config rows. */
+const SETUP_KEYS = {
+  appLlm: 'llm.provider',
+  personalKey: 'llm.personal_key',
+  locale: 'prefs.locale',
+} as const;
 
 const EXTERNAL = [
   { href: TENANT_URL, label: 'Tenant Admin', desc: 'Members, billing, connectors, BYOK' },
@@ -59,6 +68,11 @@ export default function DashboardPage(): JSX.Element {
   const router = useRouter();
   const [claims, setClaims] = useState<DecodedClaims | null>(null);
   const [token, setLocalToken] = useState<string | null>(null);
+  const [setup, setSetup] = useState<{ appLlm: boolean; personalKey: boolean; locale: boolean }>({
+    appLlm: false,
+    personalKey: false,
+    locale: false,
+  });
 
   useEffect(() => {
     const t = getToken();
@@ -68,7 +82,41 @@ export default function DashboardPage(): JSX.Element {
     }
     setLocalToken(t);
     setClaims(decode(t));
+    void (async () => {
+      try {
+        const [appRows, userRows] = await Promise.all([listConfig('app'), listConfig('app_user')]);
+        const has = (rows: { key: string }[], key: string): boolean => rows.some((r) => r.key === key);
+        setSetup({
+          appLlm: has(appRows, SETUP_KEYS.appLlm),
+          personalKey: has(userRows, SETUP_KEYS.personalKey),
+          locale: has(userRows, SETUP_KEYS.locale),
+        });
+      } catch {
+        // Degrade gracefully: leave all steps not-done.
+      }
+    })();
   }, [router]);
+
+  const setupSteps: SetupStep[] = [
+    {
+      label: 'App LLM provider',
+      description: 'Pick the default model provider for this app.',
+      done: setup.appLlm,
+      href: '/dashboard/config',
+    },
+    {
+      label: 'Your personal LLM key',
+      description: 'Add your own API key to use instead of the app default.',
+      done: setup.personalKey,
+      href: '/dashboard/config',
+    },
+    {
+      label: 'Preferred locale',
+      description: 'Set your language/region for dates and content.',
+      done: setup.locale,
+      href: '/dashboard/config',
+    },
+  ];
 
   const handleLogout = (): void => {
     logoutUser();
@@ -102,6 +150,13 @@ export default function DashboardPage(): JSX.Element {
           </div>
         )}
       </Card>
+
+      <SetupChecklist
+        title="Get set up"
+        subtitle="Personalize this app and add your own keys."
+        steps={setupSteps}
+        className="mb-7"
+      />
 
       <h2 className="mb-3 text-lg font-semibold">In-workspace tools</h2>
       <div className="mb-7 grid grid-cols-[repeat(auto-fit,minmax(240px,1fr))] gap-3">

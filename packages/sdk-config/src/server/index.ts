@@ -29,6 +29,28 @@ function claims(req: FastifyRequest): AuthClaims {
   return ((req as unknown as { auth?: AuthClaims }).auth) ?? {};
 }
 
+/**
+ * The scope_id to use when the caller omits one, derived from the JWT so WRITE,
+ * READ and resolveConfig all agree: platform is global (''), tenant is the
+ * caller's tenant, app is the caller's app_id, app_user is the caller's sub.
+ * (resolveConfig's ctxFrom reads app_id/sub the same way, so an app/app_user row
+ * written with these defaults resolves back correctly.)
+ */
+function defaultScopeId(scope: ConfigScope, a: AuthClaims): string {
+  switch (scope) {
+    case 'platform':
+      return '';
+    case 'tenant':
+      return a.tenant_id ?? '';
+    case 'app':
+      return a.app_id ?? '';
+    case 'app_user':
+      return a.sub ?? '';
+    default:
+      return '';
+  }
+}
+
 /** Build the resolution context from the caller's JWT, allowing explicit
  *  app_id / app_user_id query overrides (tenant is always the caller's). */
 function ctxFrom(req: FastifyRequest, q: { app_id?: string; app_user_id?: string }): ConfigContext {
@@ -50,10 +72,23 @@ function ctxFrom(req: FastifyRequest, q: { app_id?: string; app_user_id?: string
  *                tenant-admin role acting within their tenant.
  *   - app_user : the end-user themselves (scope_id === their own sub), or a
  *                tenant admin managing a user in their tenant. */
+/** True when the request carries the break-glass admin ops-token (env match).
+ *  Lets the platform console — which authenticates operators via an email
+ *  allowlist and may not yet mint a platform_operator role into the JWT —
+ *  manage platform-scope config by ALSO forwarding x-admin-ops-token. */
+function hasAdminOpsToken(req: FastifyRequest): boolean {
+  const envToken = process.env.ADMIN_OPS_TOKEN;
+  if (!envToken) return false;
+  const presented = req.headers['x-admin-ops-token'];
+  const value = Array.isArray(presented) ? presented[0] : presented;
+  return typeof value === 'string' && value.length > 0 && value === envToken;
+}
+
 function assertWritable(req: FastifyRequest, scope: ConfigScope, scope_id: string): string | null {
   const a = claims(req);
   if (scope === 'platform') {
-    return a.roles?.includes('platform_operator') ? null : 'platform config requires a platform operator';
+    if (a.roles?.includes('platform_operator') || hasAdminOpsToken(req)) return null;
+    return 'platform config requires a platform operator (role or x-admin-ops-token)';
   }
   if (!a.tenant_id) return 'a tenant context is required';
   if (scope === 'tenant') {
@@ -102,7 +137,7 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
       if (!scope || !SCOPES.includes(scope)) {
         return reply.code(400).send({ error: 'ValidationError', details: ['scope must be platform|tenant|app|app_user'] });
       }
-      const scope_id = req.query.scope_id ?? (scope === 'tenant' ? claims(req).tenant_id ?? '' : '');
+      const scope_id = req.query.scope_id ?? defaultScopeId(scope, claims(req));
       return { data: await listConfig(scope, scope_id) };
     },
   );
@@ -134,7 +169,7 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
       return reply.code(400).send({ error: 'ValidationError', details: ['provide value OR secret_ref, not both'] });
     }
     const scope = b.scope as ConfigScope;
-    const scope_id = b.scope_id ?? (scope === 'platform' ? '' : claims(req).tenant_id ?? '');
+    const scope_id = b.scope_id ?? defaultScopeId(scope, claims(req));
     const authErr = assertWritable(req, scope, scope_id);
     if (authErr) return reply.code(403).send({ error: 'Forbidden', details: [authErr] });
     const data = await setConfig({
@@ -158,7 +193,7 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
         return reply.code(400).send({ error: 'ValidationError', details: ['scope and key are required'] });
       }
       const scope = b.scope as ConfigScope;
-      const scope_id = b.scope_id ?? (scope === 'platform' ? '' : claims(req).tenant_id ?? '');
+      const scope_id = b.scope_id ?? defaultScopeId(scope, claims(req));
       const authErr = assertWritable(req, scope, scope_id);
       if (authErr) return reply.code(403).send({ error: 'Forbidden', details: [authErr] });
       const data = await revokeConfig(scope, scope_id, b.key, claims(req).sub ?? null);
@@ -177,7 +212,7 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
         return reply.code(400).send({ error: 'ValidationError', details: ['scope, key and secret_ref are required'] });
       }
       const scope = b.scope as ConfigScope;
-      const scope_id = b.scope_id ?? (scope === 'platform' ? '' : claims(req).tenant_id ?? '');
+      const scope_id = b.scope_id ?? defaultScopeId(scope, claims(req));
       const authErr = assertWritable(req, scope, scope_id);
       if (authErr) return reply.code(403).send({ error: 'Forbidden', details: [authErr] });
       const data = await rotateConfigSecret(scope, scope_id, b.key, b.secret_ref, claims(req).sub ?? null);

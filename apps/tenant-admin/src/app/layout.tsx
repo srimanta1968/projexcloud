@@ -28,6 +28,7 @@ const NAV = [
   { href: '/ai/providers', label: 'AI Providers' },
   { href: '/byok', label: 'BYOK' },
   { href: '/notifications/providers', label: 'Email' },
+  { href: '/config', label: 'Settings' },
   { href: '/help', label: 'Help' },
 ];
 

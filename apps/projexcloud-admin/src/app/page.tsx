@@ -1,7 +1,9 @@
 import Link from 'next/link';
-import { PageHeader } from '@projexlight/design-system';
+import { PageHeader, SetupChecklist, type SetupStep } from '@projexlight/design-system';
+import { fetchPlatformConfig, PLATFORM_SETUP_KEYS } from './config/platformConfig';
 
 const SECTIONS = [
+  { href: '/config', label: 'Configuration', desc: 'Platform-scope config plane (LLM, payment, email, S3, search)' },
   { href: '/tenants', label: 'Tenants', desc: 'Provision, suspend, offboard' },
   { href: '/pools', label: 'Pools', desc: 'Pool routing + status flips' },
   { href: '/pricing-catalogs', label: 'Pricing catalogs', desc: 'Catalog versioning + soft caps' },
@@ -14,9 +16,23 @@ const SECTIONS = [
   { href: '/active-active', label: 'Active-Active', desc: 'Tier-G+ profiles + chaos drills' },
 ];
 
-export default function HomePage(): JSX.Element {
+export default async function HomePage(): Promise<JSX.Element> {
+  // Fail-soft: fetchPlatformConfig already swallows errors and returns [], so an
+  // unreachable gateway renders the checklist with every step not-done.
+  const rows = await fetchPlatformConfig();
+  const configured = new Set(rows.map((r) => r.key));
+  const steps: SetupStep[] = PLATFORM_SETUP_KEYS.map((s) => {
+    const done = configured.has(s.key);
+    return {
+      label: s.label,
+      description: s.description,
+      done,
+      ...(done ? {} : { href: '/config', cta: 'Set up →' }),
+    };
+  });
+
   return (
-    <div>
+    <div className="flex flex-col gap-6">
       <PageHeader
         title="Platform Console"
         description={
@@ -25,6 +41,11 @@ export default function HomePage(): JSX.Element {
             <code>{process.env.NEXT_PUBLIC_GATEWAY_URL}</code> with operator-scoped JWTs.
           </>
         }
+      />
+      <SetupChecklist
+        title="Platform setup"
+        subtitle="Configure the defaults every tenant inherits."
+        steps={steps}
       />
       <div className="grid grid-cols-[repeat(auto-fit,minmax(260px,1fr))] gap-3">
         {SECTIONS.map((s) => (
