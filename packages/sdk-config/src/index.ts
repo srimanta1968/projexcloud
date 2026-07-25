@@ -15,6 +15,11 @@ export {
   clearConfigCache,
 } from './services/resolveConfig';
 export { importEnvDefaults } from './services/envDefaults';
+export {
+  checkProviderConfigured,
+  providerNotConfiguredBody,
+  type ProviderNotConfigured,
+} from './services/providerGuard';
 
 /**
  * The precedence tiers of the config plane. resolveConfig walks these from most

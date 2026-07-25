@@ -4,7 +4,7 @@
   "sdk": "sdk-payment",
   "method": "POST",
   "requiresAuth": true,
-  "expectedStatus": 201,
+  "expectedStatus": 503,
   "taskId": "2d3f74a8-f5f9-4765-a598-3c2adc5bf755",
   "sprintId": "8ef1d09e-dd8e-4daf-8d03-54dcd9f812f8",
   "featureId": "33deeb13-adc2-4198-b1e1-1315ca492994",
@@ -47,7 +47,7 @@
         "exp_year": 2030,
         "secure_data_field_ref": "{{var:secure_data_field_ref}}"
       },
-      "expectedStatus": 201
+      "expectedStatus": 503
     }
   ],
   "expectedResponse": {
@@ -93,6 +93,13 @@
       "code": "InternalError",
       "message": "InternalError",
       "when": "attachPaymentMethod throws an unmapped error - provider API failure, an unsatisfied persona foreign key, or any DB error"
+    },
+    {
+      "status": 503,
+      "code": "PROVIDER_NOT_CONFIGURED",
+      "message": "No provider is configured for 'payment.provider' ...",
+      "when": "no payment provider set at tenant/app/platform"
     }
-  ]
+  ],
+  "_provider_gate_note": "EP-341: returns 503 PROVIDER_NOT_CONFIGURED when no provider is configured for the required key at any scope (app_user->app->tenant->platform). In dev/test no such provider is configured, so 503 is the deterministic contract; configure a provider (POST /api/config or the Settings page) to reach the 2xx path. The body names provider_key + scopes_checked so users/devs know exactly what to set."
 }

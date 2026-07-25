@@ -13,6 +13,7 @@
   "testability": "auto",
   "dependsOn": [
     "POST /api/auth/signup-tenant",
+    "POST /api/notifications/providers",
     "POST /api/notifications/templates"
   ],
   "testCases": [
@@ -104,6 +105,13 @@
       "code": "InternalError",
       "message": "InternalError",
       "when": "Unexpected service/DB failure (connection loss, or a constraint the handler does not map)"
+    },
+    {
+      "status": 503,
+      "code": "PROVIDER_NOT_CONFIGURED",
+      "message": "No provider is configured for 'notification.<channel>.credential' ...",
+      "when": "no notification provider set for the channel at tenant/app/platform"
     }
-  ]
+  ],
+  "_provider_gate_note": "EP-341: /api/notifications/send now returns 503 PROVIDER_NOT_CONFIGURED when no provider is configured for the channel. This test binds an email provider first (POST /api/notifications/providers) so a provider IS configured for the tenant, exercising the mirror->resolveConfig->proceed path (201). The 503 path is covered by the payments endpoints."
 }

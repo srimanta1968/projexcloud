@@ -1,6 +1,7 @@
 import { FastifyInstance, FastifyRequest } from 'fastify';
 import type Stripe from 'stripe';
 import { requireAuth } from '@projexlight/sdk-identity';
+import { checkProviderConfigured } from '@projexlight/sdk-config';
 import {
   attachMethodHandler,
   chargeHandler,
@@ -12,16 +13,26 @@ import {
   verifyStripeWebhook,
 } from './handlers/stripeWebhookHandler';
 
+/** Build the config-resolution context from the caller's JWT (set by requireAuth). */
+function ctxFrom(req: FastifyRequest): { tenant_id?: string | null; app_id?: string | null; app_user_id?: string | null } {
+  const a = (req as unknown as { auth?: { sub?: string; tenant_id?: string | null; app_id?: string | null } }).auth ?? {};
+  return { tenant_id: a.tenant_id ?? null, app_id: a.app_id ?? null, app_user_id: a.sub ?? null };
+}
+
 /**
  * Registers /api/payments/* routes per P4-Operational-Billing §6.
  */
 export async function registerRoutes(app: FastifyInstance): Promise<void> {
   app.post('/api/payments/methods', { preHandler: requireAuth }, async (req, reply) => {
+    const notConfigured = await checkProviderConfigured('payment.provider', ctxFrom(req));
+    if (notConfigured) return reply.code(503).send(notConfigured);
     try { await attachMethodHandler(req, reply); }
     catch (err) { req.log.error(err); if (!reply.sent) reply.code(500).send({ error: 'InternalError' }); }
   });
 
   app.post('/api/payments/charge', { preHandler: requireAuth }, async (req, reply) => {
+    const notConfigured = await checkProviderConfigured('payment.provider', ctxFrom(req));
+    if (notConfigured) return reply.code(503).send(notConfigured);
     try { await chargeHandler(req, reply); }
     catch (err) { req.log.error(err); if (!reply.sent) reply.code(500).send({ error: 'InternalError' }); }
   });
