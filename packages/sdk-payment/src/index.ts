@@ -2,6 +2,11 @@ export * as server from './server';
 export * as types from './models/payment.model';
 export { migrationsDir } from './db';
 export {
+  resolvePaymentProviderByScope,
+  type PaymentLevel,
+  type ResolvedPaymentProvider,
+} from './services/paymentProviderResolver';
+export {
   attachPaymentMethod,
   charge,
   refund,

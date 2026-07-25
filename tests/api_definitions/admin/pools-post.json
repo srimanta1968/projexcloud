@@ -1,0 +1,55 @@
+{
+  "endpoint": "/admin/pools",
+  "method": "POST",
+  "sdk": "api-gateway",
+  "sourceFile": "services/api-gateway/src/app.ts",
+  "taskId": "d7134587-3284-44f2-b350-7acca8d2d4a7",
+  "requiresAuth": true,
+  "description": "Registers a routing.pool row (Pool Registry, P1 §8.1) — the create producer for the previously read-only /admin/pools surface, so tests and operators provision pools through the API instead of a SQL fixture. Admin-ops-token gated (x-admin-ops-token, non-JWT). Idempotent on pool_index (ON CONFLICT DO UPDATE). Edge cases: pool_index/pool_family/region/primary_endpoint are required; pool_family must be admin|app|evidence|warehouse|vector; app_id is required only when pool_family='app' (ignored otherwise, per the routing.pool CHECK constraints); status must be a valid pool status; isolation_class is shared|dedicated.",
+  "expectedStatus": 201,
+  "dependsOn": [],
+  "captureResponse": {
+    "admin.pools.create.response.data.pool_index": "data.pool_index"
+  },
+  "fieldEnums": {
+    "pool_family": ["admin", "app", "evidence", "warehouse", "vector"],
+    "status": ["ACTIVE", "MIGRATING", "DRAINING", "MAINTENANCE", "RETIRED", "QUARANTINE"],
+    "isolation_class": ["shared", "dedicated"]
+  },
+  "testCases": [
+    {
+      "name": "Create an ACTIVE admin-family pool",
+      "headers": {
+        "x-admin-ops-token": "{{var:ADMIN_OPS_TOKEN}}"
+      },
+      "payload": {
+        "pool_index": "qa-pool-{{dynamic:slug}}",
+        "pool_family": "admin",
+        "region": "us-east-1",
+        "primary_endpoint": "https://qa-pool.internal",
+        "status": "ACTIVE",
+        "capacity_tenants": 100,
+        "capacity_bytes": 1000000000,
+        "isolation_class": "shared"
+      },
+      "expectedStatus": 201
+    }
+  ],
+  "expectedResponse": {
+    "data": {
+      "pool_index": "string",
+      "pool_family": "string",
+      "region": "string",
+      "status": "string",
+      "primary_endpoint": "string",
+      "isolation_class": "string"
+    }
+  },
+  "errorCases": [
+    { "status": 400, "code": "ValidationError", "message": "pool_index, pool_family, region, primary_endpoint are required", "when": "any of the four required fields is missing" },
+    { "status": 400, "code": "ValidationError", "message": "invalid pool_family", "when": "pool_family is not in admin|app|evidence|warehouse|vector" },
+    { "status": 400, "code": "ValidationError", "message": "app_id is required when pool_family='app'", "when": "pool_family='app' but no app_id" },
+    { "status": 401, "code": "Unauthorized", "message": "admin token required", "when": "missing or invalid x-admin-ops-token (requireAdmin)" }
+  ],
+  "testability": "auto"
+}

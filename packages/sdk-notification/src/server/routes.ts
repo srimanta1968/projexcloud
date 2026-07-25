@@ -1,5 +1,6 @@
-import { FastifyInstance } from 'fastify';
+import { FastifyInstance, FastifyRequest } from 'fastify';
 import { requireAuth } from '@projexlight/sdk-identity';
+import { checkProviderConfigured } from '@projexlight/sdk-config';
 import {
   createTemplateHandler,
   sendHandler,
@@ -29,11 +30,24 @@ import {
 
 const DISPATCH_CHANNELS: NotificationChannel[] = ['email', 'sms', 'whatsapp', 'push', 'slack'];
 
+/** Config-resolution context from the caller's JWT (set by requireAuth). */
+function ctxFrom(req: FastifyRequest): { tenant_id?: string | null; app_id?: string | null; app_user_id?: string | null } {
+  const a = (req as unknown as { auth?: { sub?: string; tenant_id?: string | null; app_id?: string | null } }).auth ?? {};
+  return { tenant_id: a.tenant_id ?? null, app_id: a.app_id ?? null, app_user_id: a.sub ?? null };
+}
+
 /**
  * Registers /api/notifications/* routes per P4-Operational-Billing §5.
  */
 export async function registerRoutes(app: FastifyInstance): Promise<void> {
   app.post('/api/notifications/send', { preHandler: requireAuth }, async (req, reply) => {
+    // Provider gate (EP-341): the send channel needs a configured provider; when
+    // none is set at tenant/app/platform, return a clear 503 PROVIDER_NOT_CONFIGURED
+    // instead of a downstream 500 / silent stub.
+    const channel = (req.body as { channel?: string } | undefined)?.channel ?? 'email';
+    const providerKey = channel === 'email' ? 'notification.email.credential' : `notification.${channel}.credential`;
+    const notConfigured = await checkProviderConfigured(providerKey, ctxFrom(req));
+    if (notConfigured) return reply.code(503).send(notConfigured);
     try { await sendHandler(req, reply); }
     catch (err) { req.log.error(err); if (!reply.sent) reply.code(500).send({ error: 'InternalError' }); }
   });

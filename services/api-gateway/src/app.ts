@@ -89,7 +89,7 @@ import {
   migrationsDir as resourceRegistryMigrations,
   server as resourceRegistryServer,
 } from '@projexlight/sdk-resource-registry';
-import { requireAuth } from '@projexlight/sdk-identity';
+import { requireAuth, provisionFederationConfig } from '@projexlight/sdk-identity';
 import { adminOpsMigrationsDir } from './admin/migrations';
 import {
   verifyAdminOpsToken,
@@ -344,6 +344,7 @@ import {
   isVoicemailOutcome,
 } from '@projexlight/connector-twilio-voice';
 import { migrationsDir as leadScoringMigrations }         from '@projexlight/sdk-lead-scoring';
+import { migrationsDir as configMigrations, server as configServer, importEnvDefaults } from '@projexlight/sdk-config';
 import {
   migrationsDir as evidenceMigrations,
   startRetentionShredder as startEvidenceRetentionShredder,
@@ -617,6 +618,7 @@ app.register(diagnosticTelemetryServer.registerRoutes);
 
 // P7 §5.4 / AC-3 — lead scoring + next-best-action surface.
 app.register(leadScoringServer.registerRoutes);
+app.register(configServer.registerRoutes);
 
 // P9.2 / Epic B — ETL batch front door: POST /api/ingest/:entity/batch.
 // Plain sync registrar (not a Fastify plugin), so call it with the root app.
@@ -1224,7 +1226,21 @@ const start = async (): Promise<void> => {
       { sdk: 'sdk-handoff',             dir: handoffMigrations },
       { sdk: 'sdk-incident',            dir: incidentMigrations },
       { sdk: 'connector-twilio-voice',  dir: twilioVoiceMigrations },
+      // EP-341 — Unified Multi-Scope Configuration & Secrets Plane. Foundation
+      // store (config.config_value); references no other schema, ordering free.
+      { sdk: 'sdk-config',              dir: configMigrations },
     ]);
+
+    // EP-341 — lift env-only provider defaults into the config plane at platform
+    // scope so resolveConfig returns a platform default when no tenant/app override
+    // exists (and the 503 gate can tell "unconfigured" from "configured"). Non-secret
+    // markers only; best-effort, never blocks boot.
+    try {
+      const imported = await importEnvDefaults();
+      if (imported.length) console.log(`[api-gateway] config plane: imported ${imported.length} env platform default(s): ${imported.join(', ')}`);
+    } catch (err) {
+      console.warn('[api-gateway] config env-default import skipped:', (err as Error).message);
+    }
 
     // P9.2 — incremental catalog sync (Epic A, TK-3461). OPT-IN: embedding the
     // full catalog loads the bge-small ONNX model and is a one-time/CI job, not
@@ -2331,6 +2347,175 @@ const start = async (): Promise<void> => {
           operator_id: b.operator_id,
         });
         return { success: true };
+      } catch (e) {
+        return reply.code(500).send({ success: false, error: (e as Error).message });
+      }
+    });
+
+    // --- POST /admin/pools + POST /admin/tenants/:tenant_id/pool-map (TK-3803) ---
+    // Producer endpoints so tests (and operators) provision routing.pool and
+    // routing.tenant_pool_map via the API instead of the router_seed_tenant_pool.sql
+    // fixture. Admin-ops-token gated like the sibling /admin/pools routes.
+    app.post<{
+      Body: {
+        pool_index?: string;
+        pool_family?: string;
+        region?: string;
+        primary_endpoint?: string;
+        app_id?: string;
+        status?: string;
+        capacity_tenants?: number;
+        capacity_bytes?: number;
+        isolation_class?: string;
+      };
+    }>('/admin/pools', async (req, reply) => {
+      const authErr = await requireAdmin(req as unknown as { headers: Record<string, unknown> });
+      if (authErr) return reply.code(401).send({ success: false, error: authErr });
+      const b = req.body ?? {};
+      if (!b.pool_index || !b.pool_family || !b.region || !b.primary_endpoint) {
+        return reply
+          .code(400)
+          .send({ success: false, error: 'pool_index, pool_family, region, primary_endpoint are required' });
+      }
+      const FAMILIES = ['admin', 'app', 'evidence', 'warehouse', 'vector'];
+      if (!FAMILIES.includes(b.pool_family)) {
+        return reply.code(400).send({ success: false, error: 'invalid pool_family' });
+      }
+      if (b.pool_family === 'app' && !b.app_id) {
+        return reply.code(400).send({ success: false, error: "app_id is required when pool_family='app'" });
+      }
+      const POOL_STATUS = ['ACTIVE', 'MIGRATING', 'DRAINING', 'MAINTENANCE', 'RETIRED', 'QUARANTINE'];
+      if (b.status && !POOL_STATUS.includes(b.status)) {
+        return reply.code(400).send({ success: false, error: 'invalid status' });
+      }
+      if (b.isolation_class && !['shared', 'dedicated'].includes(b.isolation_class)) {
+        return reply.code(400).send({ success: false, error: 'invalid isolation_class' });
+      }
+      try {
+        const { rows } = await dataService.query(
+          `INSERT INTO routing.pool
+             (pool_index, pool_family, app_id, region, status,
+              capacity_tenants, capacity_bytes, primary_endpoint, isolation_class)
+           VALUES ($1,$2,$3,$4,COALESCE($5,'ACTIVE'),COALESCE($6,0),COALESCE($7,0),$8,COALESCE($9,'shared'))
+           ON CONFLICT (pool_index) DO UPDATE
+             SET pool_family = EXCLUDED.pool_family, app_id = EXCLUDED.app_id,
+                 region = EXCLUDED.region, status = EXCLUDED.status,
+                 primary_endpoint = EXCLUDED.primary_endpoint, isolation_class = EXCLUDED.isolation_class
+           RETURNING pool_index, pool_family, app_id, region, status, primary_endpoint, isolation_class`,
+          [
+            b.pool_index,
+            b.pool_family,
+            b.pool_family === 'app' ? b.app_id : null,
+            b.region,
+            b.status ?? null,
+            b.capacity_tenants ?? null,
+            b.capacity_bytes ?? null,
+            b.primary_endpoint,
+            b.isolation_class ?? null,
+          ],
+        );
+        return reply.code(201).send({ success: true, data: rows[0] });
+      } catch (e) {
+        return reply.code(500).send({ success: false, error: (e as Error).message });
+      }
+    });
+
+    app.post<{
+      Params: { tenant_id: string };
+      Body: {
+        admin_pool_index?: string;
+        evidence_pool_index?: string;
+        app_pool_index?: Record<string, string>;
+        region?: string;
+        status?: string;
+      };
+    }>('/admin/tenants/:tenant_id/pool-map', async (req, reply) => {
+      const authErr = await requireAdmin(req as unknown as { headers: Record<string, unknown> });
+      if (authErr) return reply.code(401).send({ success: false, error: authErr });
+      const { tenant_id } = req.params;
+      const b = req.body ?? {};
+      const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      if (!UUID_RE.test(tenant_id)) {
+        return reply.code(400).send({ success: false, error: 'tenant_id must be a UUID' });
+      }
+      if (!b.admin_pool_index || !b.region) {
+        return reply.code(400).send({ success: false, error: 'admin_pool_index and region are required' });
+      }
+      if (b.status && !['ACTIVE', 'MIGRATING', 'QUARANTINED'].includes(b.status)) {
+        return reply.code(400).send({ success: false, error: 'invalid status' });
+      }
+      try {
+        const { rows } = await dataService.query(
+          `INSERT INTO routing.tenant_pool_map
+             (tenant_id, admin_pool_index, evidence_pool_index, app_pool_index, region, status)
+           VALUES ($1::uuid,$2,$3,COALESCE($4::jsonb,'{}'::jsonb),$5,COALESCE($6,'ACTIVE'))
+           ON CONFLICT (tenant_id) DO UPDATE
+             SET admin_pool_index = EXCLUDED.admin_pool_index,
+                 evidence_pool_index = EXCLUDED.evidence_pool_index,
+                 app_pool_index = EXCLUDED.app_pool_index,
+                 region = EXCLUDED.region, status = EXCLUDED.status
+           RETURNING tenant_id::text AS tenant_id, admin_pool_index, evidence_pool_index,
+                     app_pool_index, region, status`,
+          [
+            tenant_id,
+            b.admin_pool_index,
+            b.evidence_pool_index ?? null,
+            b.app_pool_index ? JSON.stringify(b.app_pool_index) : null,
+            b.region,
+            b.status ?? null,
+          ],
+        );
+        return reply.code(201).send({ success: true, data: rows[0] });
+      } catch (e) {
+        // A bad admin_pool_index/evidence_pool_index FK -> 400 (client error), not 500.
+        const msg = (e as Error).message;
+        if (/foreign key|violates|not present/i.test(msg)) {
+          return reply.code(400).send({ success: false, error: msg });
+        }
+        return reply.code(500).send({ success: false, error: msg });
+      }
+    });
+
+    // --- POST /admin/identity/federation-configs (TK-3804) ---
+    // Create producer for identity.federation_config (SAML/SCIM/social) so tenant
+    // onboarding provisions federation via the API instead of a SQL seed. For
+    // protocol='scim' the plaintext bearer is hashed into scim_bearer_envelope
+    // (never stored). Admin-ops-token gated.
+    app.post<{
+      Body: {
+        tenant_id?: string;
+        protocol?: string;
+        scim_bearer_token?: string;
+        idp_metadata_url?: string;
+        group_role_map?: Record<string, string>;
+        jit_enabled?: boolean;
+      };
+    }>('/admin/identity/federation-configs', async (req, reply) => {
+      const authErr = await requireAdmin(req as unknown as { headers: Record<string, unknown> });
+      if (authErr) return reply.code(401).send({ success: false, error: authErr });
+      const b = req.body ?? {};
+      const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      if (!b.tenant_id || !UUID_RE.test(b.tenant_id)) {
+        return reply.code(400).send({ success: false, error: 'tenant_id (UUID) is required' });
+      }
+      if (!b.protocol || !['saml', 'scim', 'oidc-social'].includes(b.protocol)) {
+        return reply.code(400).send({ success: false, error: 'protocol must be saml|scim|oidc-social' });
+      }
+      if (b.protocol === 'scim' && !b.scim_bearer_token) {
+        return reply
+          .code(400)
+          .send({ success: false, error: "scim_bearer_token is required when protocol='scim'" });
+      }
+      try {
+        const data = await provisionFederationConfig({
+          tenant_id: b.tenant_id,
+          protocol: b.protocol as 'saml' | 'scim' | 'oidc-social',
+          scim_bearer_token: b.scim_bearer_token,
+          idp_metadata_url: b.idp_metadata_url,
+          group_role_map: b.group_role_map,
+          jit_enabled: b.jit_enabled,
+        });
+        return reply.code(201).send({ success: true, data });
       } catch (e) {
         return reply.code(500).send({ success: false, error: (e as Error).message });
       }

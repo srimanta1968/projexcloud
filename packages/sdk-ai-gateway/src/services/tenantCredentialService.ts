@@ -1,8 +1,43 @@
 import { dataService } from '@projexlight/db-runtime';
 import { appendAuditEntry } from '@projexlight/sdk-audit';
 import { envelopeEncrypt, storeSecret, retrieveSecret } from '@projexlight/sdk-secrets';
+import { setConfig, revokeConfig } from '@projexlight/sdk-config';
 import type { ProviderId } from '@projexlight/contracts';
 import { invalidateProviderCache } from './completionService';
+
+/**
+ * Mirror a BYOK credential binding into the unified config plane (EP-341) so
+ * sdk-config is the single registry of which providers a tenant has configured.
+ * This is a NON-SECRET marker (provider + last_4 + binding_id) — the raw key and
+ * its sdk-secrets envelope stay in ai_gateway.tenant_provider_credential; the live
+ * credential-resolution path (loadProviderRow) is UNCHANGED. It exists so
+ * resolveConfig('ai-gateway.<provider>.credential', ctx) can answer "is a provider
+ * configured for this scope?", driving the 503 PROVIDER_NOT_CONFIGURED behaviour.
+ * Best-effort: a mirror failure never blocks a bind/rotate/revoke.
+ */
+async function mirrorCredentialToConfig(binding: TenantCredentialBinding): Promise<void> {
+  const key = `ai-gateway.${binding.provider_id}.credential`;
+  try {
+    if (binding.status === 'revoked') {
+      await revokeConfig('tenant', binding.tenant_id, key, binding.revoked_by ?? binding.bound_by);
+    } else {
+      await setConfig({
+        scope: 'tenant',
+        scope_id: binding.tenant_id,
+        key,
+        value: {
+          configured: true,
+          provider: binding.provider_id,
+          last_4: binding.last_4,
+          binding_id: binding.binding_id,
+        },
+        set_by: binding.bound_by,
+      });
+    }
+  } catch {
+    // Mirror is best-effort — the authoritative store is the credential table.
+  }
+}
 
 /**
  * Tenant-BYOK for AI Provider Keys — bind / rotate / revoke / list.
@@ -187,6 +222,7 @@ export async function bindTenantCredential(input: BindInput): Promise<TenantCred
   });
 
   invalidateProviderCache(input.tenant_id, input.provider_id);
+  await mirrorCredentialToConfig(inserted);
 
   try {
     await appendAuditEntry({
@@ -256,6 +292,7 @@ export async function rotateTenantCredential(input: RotateInput): Promise<Tenant
   const binding = rowToBinding(row);
 
   invalidateProviderCache(binding.tenant_id, binding.provider_id);
+  await mirrorCredentialToConfig(binding);
 
   try {
     await appendAuditEntry({
@@ -325,6 +362,7 @@ export async function revokeTenantCredential(input: RevokeInput): Promise<Tenant
   const binding = rowToBinding(row);
 
   invalidateProviderCache(binding.tenant_id, binding.provider_id);
+  await mirrorCredentialToConfig(binding);
 
   try {
     await appendAuditEntry({

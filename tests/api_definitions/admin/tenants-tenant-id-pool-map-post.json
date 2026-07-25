@@ -1,0 +1,53 @@
+{
+  "endpoint": "/admin/tenants/:tenant_id/pool-map",
+  "method": "POST",
+  "sdk": "api-gateway",
+  "sourceFile": "services/api-gateway/src/app.ts",
+  "taskId": "d7134587-3284-44f2-b350-7acca8d2d4a7",
+  "requiresAuth": true,
+  "description": "Creates/updates a routing.tenant_pool_map row assigning a tenant to pools (P1 §8.1) — producer for the tenant->pool mapping so GET /api/router/resolve resolves without a SQL fixture. Admin-ops-token gated. Idempotent on tenant_id (ON CONFLICT DO UPDATE). admin_pool_index (and evidence_pool_index, if set) must reference an existing routing.pool (a bad FK returns 400, not 500). app_pool_index is a jsonb map of app_id->pool_index. Edge cases: :tenant_id must be a UUID; admin_pool_index + region are required; status ACTIVE|MIGRATING|QUARANTINED.",
+  "expectedStatus": 201,
+  "dependsOn": [
+    "POST /api/auth/signup-tenant",
+    "POST /admin/pools"
+  ],
+  "captureResponse": {
+    "admin.tenant-pool-map.create.response.data.tenant_id": "data.tenant_id"
+  },
+  "fieldEnums": {
+    "status": ["ACTIVE", "MIGRATING", "QUARANTINED"]
+  },
+  "testCases": [
+    {
+      "name": "Map a tenant to an admin pool",
+      "pathParams": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}"
+      },
+      "headers": {
+        "x-admin-ops-token": "{{var:ADMIN_OPS_TOKEN}}"
+      },
+      "payload": {
+        "admin_pool_index": "{{cache:admin.pools.create.response.data.pool_index}}",
+        "app_pool_index": {},
+        "region": "us-east-1",
+        "status": "ACTIVE"
+      },
+      "expectedStatus": 201
+    }
+  ],
+  "expectedResponse": {
+    "data": {
+      "tenant_id": "string",
+      "admin_pool_index": "string",
+      "region": "string",
+      "status": "string"
+    }
+  },
+  "errorCases": [
+    { "status": 400, "code": "ValidationError", "message": "tenant_id must be a UUID", "when": "the :tenant_id path param is not a valid UUID" },
+    { "status": 400, "code": "ValidationError", "message": "admin_pool_index and region are required", "when": "either required body field is missing" },
+    { "status": 400, "code": "ForeignKeyViolation", "message": "violates foreign key constraint", "when": "admin_pool_index (or evidence_pool_index) does not reference an existing routing.pool" },
+    { "status": 401, "code": "Unauthorized", "message": "admin token required", "when": "missing or invalid x-admin-ops-token (requireAdmin)" }
+  ],
+  "testability": "auto"
+}

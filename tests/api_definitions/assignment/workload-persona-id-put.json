@@ -1,0 +1,62 @@
+{
+  "endpoint": "/api/assignment/workload/:persona_id",
+  "method": "PUT",
+  "sdk": "sdk-assignment",
+  "sourceFile": "packages/sdk-assignment/src/server/routes.ts",
+  "taskId": "7a5837c9-db20-4386-8001-2caf18a34e79",
+  "requiresAuth": true,
+  "description": "Upserts a persona's workload profile (capacity/day, skills, availability window) through the existing setWorkload service (FR-ASN-3) — the HTTP producer surface so tests and dispatchers provision assignment candidates via the API instead of a SQL seed. Idempotent on persona_id (ON CONFLICT DO UPDATE; capacity/skills COALESCE to prior value when omitted). open_tasks is dispatcher-owned and is NOT settable here. Edge cases: persona_id must be a UUID (non-UUID -> 400 ValidationError before the ::uuid cast); a valid tenant JWT is required (api-gateway default-deny authGate). NOTE: assignment.workload has no tenant column, so this is effectively a global/ops surface.",
+  "expectedStatus": 200,
+  "dependsOn": [
+    "POST /api/auth/signup-tenant"
+  ],
+  "captureResponse": {
+    "assignment.workload.upsert.response.data.persona_id": "data.persona_id"
+  },
+  "testCases": [
+    {
+      "name": "Upsert a persona workload profile",
+      "pathParams": {
+        "persona_id": "{{dynamic:uuid}}"
+      },
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "payload": {
+        "capacity_per_day": 8,
+        "skills": [
+          "plumbing",
+          "hvac"
+        ],
+        "available_from": "2026-01-01T00:00:00Z",
+        "available_to": "{{dynamic:futuredatetime+30d}}"
+      },
+      "expectedStatus": 200
+    }
+  ],
+  "expectedResponse": {
+    "data": {
+      "persona_id": "string",
+      "open_tasks": "number",
+      "capacity_per_day": "number",
+      "skills": "array",
+      "available_from": "string",
+      "available_to": "string"
+    }
+  },
+  "errorCases": [
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "persona_id must be a UUID",
+      "when": "the :persona_id path param is not a valid UUID (guards the ::uuid cast in setWorkload)"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "no Authorization header or an invalid/expired tenant JWT (api-gateway default-deny authGate, AUTH_GATE_MODE=enforce)"
+    }
+  ],
+  "testability": "auto"
+}

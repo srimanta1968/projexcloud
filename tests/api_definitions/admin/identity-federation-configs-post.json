@@ -1,0 +1,50 @@
+{
+  "endpoint": "/admin/identity/federation-configs",
+  "method": "POST",
+  "sdk": "sdk-identity",
+  "sourceFile": "services/api-gateway/src/app.ts",
+  "taskId": "efe87260-57b9-482f-9da2-d5de3f2d5ce9",
+  "requiresAuth": true,
+  "description": "Creates/updates an identity.federation_config row (SAML/SCIM/social federation, P2 §5.2) — the create producer so tenant onboarding provisions federation via the API instead of the 10_seed_scim_federation_config.sql fixture. Admin-ops-token gated. Idempotent on (tenant_id, protocol). For protocol='scim' the PLAINTEXT scim_bearer_token is hashed (sha256) into scim_bearer_envelope exactly as scimAuthMiddleware verifies it — the plaintext is never stored or returned. scimBearerAuth matches the presented SCIM bearer against this envelope globally (not per-tenant), so provisioning one scim config with the test bearer is what lets the SCIM endpoints authenticate. Edge cases: tenant_id must be a UUID; protocol must be saml|scim|oidc-social; scim_bearer_token is required when protocol='scim'.",
+  "expectedStatus": 201,
+  "dependsOn": [
+    "POST /api/auth/signup-tenant"
+  ],
+  "captureResponse": {
+    "admin.federation-config.create.response.data.federation_id": "data.federation_id",
+    "admin.federation-config.create.response.data.tenant_id": "data.tenant_id"
+  },
+  "fieldEnums": {
+    "protocol": ["saml", "scim", "oidc-social"]
+  },
+  "testCases": [
+    {
+      "name": "Provision a SCIM federation config with the test bearer",
+      "headers": {
+        "x-admin-ops-token": "{{var:ADMIN_OPS_TOKEN}}"
+      },
+      "payload": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "protocol": "scim",
+        "scim_bearer_token": "{{var:scim_bearer_token}}",
+        "jit_enabled": true
+      },
+      "expectedStatus": 201
+    }
+  ],
+  "expectedResponse": {
+    "data": {
+      "federation_id": "string",
+      "tenant_id": "string",
+      "protocol": "string",
+      "jit_enabled": "boolean"
+    }
+  },
+  "errorCases": [
+    { "status": 400, "code": "ValidationError", "message": "tenant_id (UUID) is required", "when": "tenant_id missing or not a UUID" },
+    { "status": 400, "code": "ValidationError", "message": "protocol must be saml|scim|oidc-social", "when": "protocol missing or not in the enum" },
+    { "status": 400, "code": "ValidationError", "message": "scim_bearer_token is required when protocol='scim'", "when": "protocol='scim' without a scim_bearer_token" },
+    { "status": 401, "code": "Unauthorized", "message": "admin token required", "when": "missing or invalid x-admin-ops-token (requireAdmin)" }
+  ],
+  "testability": "auto"
+}

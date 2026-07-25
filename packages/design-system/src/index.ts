@@ -2,6 +2,8 @@ export * from './components/Alert';
 export * from './components/Badge';
 export * from './components/Button';
 export * from './components/Card';
+export * from './components/ConfigForm';
+export * from './components/SetupChecklist';
 export * from './components/AdminLoginForm';
 export * from './components/AdminLogout';
 export * from './components/Container';

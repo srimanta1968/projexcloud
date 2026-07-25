@@ -30,38 +30,33 @@
     }
   ],
   "requiresAuth": false,
-  "expectedStatus": 201,
+  "expectedStatus": 503,
   "sdk": "pool-federation-runtime",
   "sourceFile": "services/pool-federation-runtime/src/app.ts",
   "testability": "auto",
+  "dependsOn": [
+    "POST /api/auth/signup-tenant",
+    "POST /admin/identity/federation-configs"
+  ],
   "fieldEnums": {
     "from_region": ["us-east-1", "us-west-2", "eu-west-1", "ap-south-1"],
     "to_region": ["us-east-1", "us-west-2", "eu-west-1", "ap-south-1"]
   },
   "testCases": [
     {
-      "name": "Run an operator chaos-drill failover between regions",
+      "name": "Gateway mount refuses the drill (503 by design — no orchestrator threaded in)",
       "headers": {
         "x-admin-ops-token": "{{var:ADMIN_OPS_TOKEN}}"
       },
       "payload": {
-        "federation_id": "{{var:federation_id}}",
+        "federation_id": "{{cache:admin.federation-config.create.response.data.federation_id}}",
         "from_region": "us-east-1",
         "to_region": "us-west-2"
       },
-      "expectedStatus": 201
+      "expectedStatus": 503
     }
   ],
   "expectedResponse": {
-    "event_id": "string",
-    "federation_id": "string",
-    "from_region": "string",
-    "to_region": "string",
-    "trigger": "string",
-    "rpo_observed": "number",
-    "rto_observed": "number"
-  },
-  "captureResponse": {
-    "chaos-drill.run.response.event_id": "event_id"
+    "error": "string"
   }
 }

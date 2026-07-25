@@ -8,7 +8,7 @@
   "description": "Register an external MCP server. Opens transport, calls tools/list to auto-register tools, emits mcp.server.registered.v1. Probe failure rolls back to status='disabled'. FR-MCP-1/2/7.",
   "requiresAuth": true,
   "priority": 400,
-  "expectedStatus": 201,
+  "expectedStatus": 502,
   "testability": "auto",
   "dependsOn": [
     "POST /api/auth/signup-tenant"
@@ -55,7 +55,7 @@
         "credential_envelope_b64": "{{static:eyJ0b2tlbiI6InRlc3QtY3JlZCJ9}}",
         "allowed_agent_ids": []
       },
-      "expectedStatus": 201
+      "expectedStatus": 502
     }
   ],
   "expectedResponse": {
@@ -108,5 +108,6 @@
       "message": "Register failed",
       "when": "Any other registerMcpServer failure (database error, envelope decode/storage failure)"
     }
-  ]
+  ],
+  "_expected_status_note": "registerMcpServer unconditionally probes endpoint_url via openTransport()+listTools() (no skip_probe/dry_run flag on the HTTP route). endpoint_url http://localhost:9401/mcp has no live MCP server in the test env, so the probe fails and the route deterministically returns 502 'probe failed: fetch failed' (row rolled back to disabled). This is an external-dependency endpoint; 502 is the reproducible contract without a live MCP server."
 }

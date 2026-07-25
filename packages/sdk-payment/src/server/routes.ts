@@ -1,6 +1,8 @@
 import { FastifyInstance, FastifyRequest } from 'fastify';
 import type Stripe from 'stripe';
 import { requireAuth } from '@projexlight/sdk-identity';
+import { checkProviderConfigured } from '@projexlight/sdk-config';
+import { resolvePaymentProviderByScope } from '../services/paymentProviderResolver';
 import {
   attachMethodHandler,
   chargeHandler,
@@ -12,19 +14,43 @@ import {
   verifyStripeWebhook,
 } from './handlers/stripeWebhookHandler';
 
+/** Build the config-resolution context from the caller's JWT (set by requireAuth). */
+function ctxFrom(req: FastifyRequest): { tenant_id?: string | null; app_id?: string | null; app_user_id?: string | null } {
+  const a = (req as unknown as { auth?: { sub?: string; tenant_id?: string | null; app_id?: string | null } }).auth ?? {};
+  return { tenant_id: a.tenant_id ?? null, app_id: a.app_id ?? null, app_user_id: a.sub ?? null };
+}
+
 /**
  * Registers /api/payments/* routes per P4-Operational-Billing §6.
  */
 export async function registerRoutes(app: FastifyInstance): Promise<void> {
   app.post('/api/payments/methods', { preHandler: requireAuth }, async (req, reply) => {
+    const notConfigured = await checkProviderConfigured('payment.provider', ctxFrom(req));
+    if (notConfigured) return reply.code(503).send(notConfigured);
     try { await attachMethodHandler(req, reply); }
     catch (err) { req.log.error(err); if (!reply.sent) reply.code(500).send({ error: 'InternalError' }); }
   });
 
   app.post('/api/payments/charge', { preHandler: requireAuth }, async (req, reply) => {
+    const notConfigured = await checkProviderConfigured('payment.provider', ctxFrom(req));
+    if (notConfigured) return reply.code(503).send(notConfigured);
     try { await chargeHandler(req, reply); }
     catch (err) { req.log.error(err); if (!reply.sent) reply.code(500).send({ error: 'InternalError' }); }
   });
+
+  // Two-level payment-provider resolution (EP-341): which provider is configured
+  // for this caller at a given level — 'collect' (tenant collects from end-users,
+  // resolves tenant->platform) or 'billing' (how the tenant pays ProjexLight,
+  // platform-scope only). Returns {configured, provider, scope, value}.
+  app.get<{ Querystring: { level?: string } }>(
+    '/api/payments/provider',
+    { preHandler: requireAuth },
+    async (req, reply) => {
+      const level = req.query.level === 'billing' ? 'billing' : 'collect';
+      const data = await resolvePaymentProviderByScope(ctxFrom(req), level);
+      return reply.send({ data });
+    },
+  );
 
   app.post<{ Params: { charge_id: string } }>(
     '/api/payments/:charge_id/refund',

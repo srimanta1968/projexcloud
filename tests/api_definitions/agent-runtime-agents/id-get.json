@@ -3,7 +3,7 @@
   "sdk": "sdk-agent-runtime",
   "method": "GET",
   "taskId": "d9609d02-6991-45a5-94dd-9c10e02e6448",
-  "description": "Fetch an agent_definition by id.",
+  "description": "Fetch a single agent_definition by its agent_id from agents.agent_definition. Returns 200 { success: true, data: <agent_definition row> } when the row exists. Protected: a valid tenant JWT is required (gateway default-deny authGate + the route's own requireAuth preHandler), so an anonymous or expired call is 401. QA edge cases: (1) the lookup is by agent_id ONLY and is NOT tenant-scoped — any valid tenant JWT can read another tenant's agent definition, so the 404 is purely existence-based, not an authorization boundary; (2) a syntactically valid but unknown UUID is a clean 404 ('agent_definition not found'); (3) a NON-UUID :id (e.g. 'abc' or a truncated id) is NOT caught as a 400 — it reaches the SELECT and Postgres raises 'invalid input syntax for type uuid', surfacing as 500 (LookupFailed), so malformed ids fail 500 rather than 404/400; (4) an empty :id segment does not reach this handler — it routes to the sibling GET /api/agent-runtime/agents collection endpoint instead.",
   "requiresAuth": true,
   "errorCases": [
     {
