@@ -241,10 +241,11 @@ export function setPiiClassifier(fn: PiiClassifier | null): void {
 /* ------------------------------------------------------- survivorship order */
 
 /**
- * Ordering hint only. A claim from the subject themselves outranks one bought from
- * a broker, all else equal — but this SDK deliberately does NOT decide the display
- * value. sdk-projection applies the tenant's survivorship rules; this ranking just
- * puts the most defensible claim first for a human reading the list.
+ * Ordering hint only. A claim made by the subject themselves outranks one bought
+ * from a third-party data supplier, all else equal — but this SDK deliberately
+ * does NOT decide the display value. sdk-projection applies the tenant's
+ * survivorship rules; this ranking just puts the most defensible claim first for a
+ * human reading the list.
  */
 const ORIGIN_TRUST_RANK: Record<OriginClass, number> = {
   USER_PROVIDED: 70,
