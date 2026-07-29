@@ -11,3 +11,6 @@
  * anywhere in this package.
  */
 export { migrationsDir } from './db';
+export * from './models/import.model';
+export * from './services/previewService';
+export * from './services/mappingAssistantService';
