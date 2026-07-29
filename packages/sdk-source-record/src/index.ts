@@ -13,3 +13,4 @@
 export { migrationsDir } from './db';
 export * from './models/sourceRecord.model';
 export * from './services/sourceRecordService';
+export * from './services/assertionService';
