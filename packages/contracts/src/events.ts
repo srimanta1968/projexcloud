@@ -510,6 +510,20 @@ export const EVENT_TYPE_REGISTRY: Record<string, EventTypeMetadata> = {
   'mdm.merge.performed.v1':                   { event_type: 'mdm.merge.performed.v1',                   retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
   'mdm.merge.reversed.v1':                    { event_type: 'mdm.merge.reversed.v1',                    retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
   'mdm.calibration.drift.v1':                 { event_type: 'mdm.calibration.drift.v1',                 retention_class: 'operational', conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+
+  /* ============================================================
+   * P16 — sdk-source-record (EP-374). The provenance kernel: every capture,
+   * every trust-ladder transition and every rights attestation is regulated
+   * retention, because these ARE the chain of custody an auditor replays.
+   * ============================================================ */
+  'source-record.captured.v1':                { event_type: 'source-record.captured.v1',                retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+  'source-record.normalized.v1':              { event_type: 'source-record.normalized.v1',              retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+  'source-record.promoted.v1':                { event_type: 'source-record.promoted.v1',                retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+  'source-record.quarantined.v1':             { event_type: 'source-record.quarantined.v1',             retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+  'source-record.assertion.written.v1':       { event_type: 'source-record.assertion.written.v1',       retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+  'source-record.assertion.superseded.v1':    { event_type: 'source-record.assertion.superseded.v1',    retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+  'source-record.attestation.signed.v1':      { event_type: 'source-record.attestation.signed.v1',      retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+  'source-record.crosswalk.linked.v1':        { event_type: 'source-record.crosswalk.linked.v1',        retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
 };
 
 /* ============================================================
