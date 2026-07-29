@@ -336,6 +336,11 @@ import { migrationsDir as deliverabilityMigrations, server as deliverabilityServ
 import { migrationsDir as offerCatalogMigrations, server as offerCatalogServer } from '@projexlight/sdk-offer-catalog';
 import { migrationsDir as handoffMigrations, server as handoffServer, registerHandoffSaga, setHandoffApprovalCreator } from '@projexlight/sdk-handoff';
 import { migrationsDir as incidentMigrations, server as incidentServer } from '@projexlight/sdk-incident';
+// P16 · EP-374 — the provenance kernel. Every ingesting SDK lands its rows here.
+import {
+  migrationsDir as sourceRecordMigrations,
+  server as sourceRecordServer,
+} from '@projexlight/sdk-source-record';
 import {
   migrationsDir as twilioVoiceMigrations,
   server as twilioVoiceServer,
@@ -581,6 +586,7 @@ app.register(deliverabilityServer.registerRoutes);
 app.register(offerCatalogServer.registerRoutes);
 app.register(handoffServer.registerRoutes);
 app.register(incidentServer.registerRoutes);
+app.register(sourceRecordServer.registerRoutes);
 app.register(twilioVoiceServer.registerRoutes);
 app.register(twilioVoiceServer.registerWebhookRoutes);
 app.register(serviceRequestServer.registerRoutes);
@@ -1225,6 +1231,8 @@ const start = async (): Promise<void> => {
       { sdk: 'sdk-offer-catalog',       dir: offerCatalogMigrations },
       { sdk: 'sdk-handoff',             dir: handoffMigrations },
       { sdk: 'sdk-incident',            dir: incidentMigrations },
+      // Self-contained (no cross-schema FKs) — ordering free.
+      { sdk: 'sdk-source-record',       dir: sourceRecordMigrations },
       { sdk: 'connector-twilio-voice',  dir: twilioVoiceMigrations },
       // EP-341 — Unified Multi-Scope Configuration & Secrets Plane. Foundation
       // store (config.config_value); references no other schema, ordering free.

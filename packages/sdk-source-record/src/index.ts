@@ -11,6 +11,7 @@
  * anywhere in this package.
  */
 export { migrationsDir } from './db';
+export * as server from './server';
 export * from './models/sourceRecord.model';
 export * from './services/sourceRecordService';
 export * from './services/assertionService';

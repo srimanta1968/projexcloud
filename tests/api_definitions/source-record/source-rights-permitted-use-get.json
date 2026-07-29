@@ -1,0 +1,58 @@
+{
+  "name": "GET /api/source-rights/permitted-use - Ask whether a purpose is covered",
+  "endpoint": "/api/source-rights/permitted-use",
+  "sdk": "sdk-source-record",
+  "sourceFile": "packages/sdk-source-record/src/server/routes.ts",
+  "method": "GET",
+  "requiresAuth": true,
+  "expectedStatus": 200,
+  "taskId": "3837bea9-c427-4ec0-a9c7-c2bd94c51c38",
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "featureId": "32707c6f-ae2c-4e31-bf2f-2c39c0f5cc2e",
+  "epicId": "fa43f2ff-2e6e-4f27-894a-4992cc2dace9",
+  "priority": 48,
+  "testability": "auto",
+  "description": "The refusal mechanism, over HTTP: a consumer asks whether the source rights cover a purpose BEFORE acting, which is what keeps licensed data out of an incompatible use. FAILS CLOSED at every step — no attestation (NO_ATTESTATION), a purpose outside the attested set (PURPOSE_NOT_ATTESTED), or a lapsed collection period (COLLECTION_PERIOD_LAPSED) all return permitted:false with the reason named and the uses that ARE granted, so the caller sees its next best option. Absence of evidence is never read as permission. Scope the question by subject_ref (checks every attestation covering captures linked to that subject; ANY grant suffices, since each covers its own source), or by capture_id / source_fingerprint for one source. `at` defaults to now. ALWAYS 200 — \"not permitted\" is a successful answer to the question, not a failed request. Required: tenant_id, purpose.",
+  "dependsOn": [
+    "POST /api/auth/signup-tenant",
+    "POST /api/source-records",
+    "POST /api/source-rights/attestations"
+  ],
+  "testCases": [
+    {
+      "name": "Check an attested purpose against the signed rights",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "queryParams": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "purpose": "outreach",
+        "subject_ref": "{{cache:source-record.capture.response.data.source_record.subject_ref}}",
+        "capture_id": "{{cache:source-record.capture.response.data.source_record.capture_id}}",
+        "source_fingerprint": "{{cache:source-record.capture.response.data.source_record.fingerprint}}",
+        "at": "{{dynamic:datetime}}"
+      },
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "data": {
+          "permitted": "boolean",
+          "permitted_uses": "array"
+        }
+      }
+    }
+  ],
+  "errorCases": [
+    {
+      "status": 400,
+      "code": "VALIDATION_ERROR",
+      "message": "tenant_id and purpose query params are required",
+      "when": "either query param is absent"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "missing or invalid token",
+      "when": "no valid tenant Bearer token on the request"
+    }
+  ]
+}
