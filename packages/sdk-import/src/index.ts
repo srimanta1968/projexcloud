@@ -1,0 +1,13 @@
+/**
+ * @projexlight/sdk-import — governed import runs (P16 · EP-375).
+ *
+ * The governance layer above sdk-ingest's write primitive: schema preview,
+ * AI-assisted mapping that proposes but never auto-applies, a deterministic
+ * transform plan, a dry run that writes nothing, a downloadable exception file,
+ * an atomic idempotent commit and a bounded rollback window backed by per-entity
+ * lineage.
+ *
+ * Vertical-neutral by contract: no vertical, stage, role or business rule appears
+ * anywhere in this package.
+ */
+export { migrationsDir } from './db';
