@@ -1,0 +1,170 @@
+{
+  "name": "POST /api/imports/runs/:run_id/dry-run - Simulate the commit, writing nothing",
+  "endpoint": "/api/imports/runs/:run_id/dry-run",
+  "sdk": "sdk-import",
+  "sourceFile": "packages/sdk-import/src/server/routes.ts",
+  "method": "POST",
+  "requiresAuth": true,
+  "expectedStatus": 200,
+  "taskId": "f6e9a813-82ee-4f15-97cf-e4a9a3f8f772",
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "priority": 53,
+  "testability": "auto",
+  "description": "Show what the commit WOULD do — new, exact-link, review-case, related-entity and invalid counts, plus the governance verdicts — without writing anything. The guarantee is enforced, then proven, then rolled back: the simulation runs in a READ ONLY transaction (a write raises 25006 at the source), then checks pg_current_xact_id_if_assigned() as belt and braces, then rolls back unconditionally. It reuses the commit's own transform code path, so the counts describe what will actually happen rather than a parallel estimate that drifts. Governance verdicts report an unsigned attestation, an unconfirmed mapping, the columns that will be tokenized, and the review backlog. Recording that the dry run happened is a separate, deliberate write outside the proven region. Requires the transform plan (409 TRANSFORM_PLAN_REQUIRED otherwise). Required: tenant_id, rows[].",
+  "dependsOn": [
+    "POST /api/auth/signup-tenant",
+    "POST /api/imports/runs",
+    "POST /api/imports/runs/:run_id/preview",
+    "PUT /api/imports/runs/:run_id/mapping",
+    "POST /api/imports/runs/:run_id/transform-plan"
+  ],
+  "statusTransitions": {
+    "entity": "import.import_run",
+    "field": "status",
+    "flow": [
+      "draft",
+      "previewing",
+      "mapping",
+      "dry_run",
+      "committing",
+      "complete",
+      "quarantined",
+      "rolled_back"
+    ],
+    "transitions": [
+      {
+        "from": "draft",
+        "to": "previewing",
+        "via": "POST /api/imports/runs/:run_id/preview"
+      },
+      {
+        "from": "previewing",
+        "to": "mapping",
+        "via": "PUT /api/imports/runs/:run_id/mapping"
+      },
+      {
+        "from": "mapping",
+        "to": "dry_run",
+        "via": "POST /api/imports/runs/:run_id/dry-run"
+      },
+      {
+        "from": "dry_run",
+        "to": "committing",
+        "via": "POST /api/imports/runs/:run_id/commit (internal)"
+      },
+      {
+        "from": "committing",
+        "to": "complete",
+        "via": "POST /api/imports/runs/:run_id/commit"
+      },
+      {
+        "from": "complete",
+        "to": "rolled_back",
+        "via": "POST /api/imports/runs/:run_id/rollback (inside the deadline only)"
+      },
+      {
+        "from": "draft",
+        "to": "quarantined",
+        "via": "a governance failure parks the run for a human"
+      },
+      {
+        "from": "quarantined",
+        "to": "mapping",
+        "via": "a human resolves the parked run and re-maps"
+      }
+    ]
+  },
+  "fieldEnums": {
+    "status": [
+      "draft",
+      "previewing",
+      "mapping",
+      "dry_run",
+      "committing",
+      "complete",
+      "quarantined",
+      "rolled_back"
+    ]
+  },
+  "testCases": [
+    {
+      "name": "Dry-run the mapped rows",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "pathParams": {
+        "run_id": "{{cache:imports.run.create.response.data.run.run_id}}"
+      },
+      "payload": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "rows": [
+          {
+            "full_name": "Ada Lovelace",
+            "email": "{{dynamic:email}}",
+            "street_address": "1 Analytical Way",
+            "city": "London",
+            "country": "GB",
+            "external_id": "CRM-{{dynamic:uuid}}",
+            "contact_ok": "yes",
+            "consent_date": "2026-01-05T10:00:00Z"
+          },
+          {
+            "full_name": "Alan Turing",
+            "email": "{{dynamic:email}}",
+            "street_address": "2 Bombe Road",
+            "city": "Manchester",
+            "country": "GB",
+            "external_id": "CRM-{{dynamic:uuid}}",
+            "contact_ok": "",
+            "consent_date": ""
+          }
+        ]
+      },
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "data": {
+          "dry_run": {
+            "new_count": "number",
+            "writes_observed": "number",
+            "governance": "array"
+          }
+        }
+      }
+    }
+  ],
+  "captureResponse": {
+    "imports.dry-run.response.data.dry_run.new_count": "data.dry_run.new_count"
+  },
+  "errorCases": [
+    {
+      "status": 400,
+      "code": "VALIDATION_ERROR",
+      "message": "tenant_id and rows[] are required",
+      "when": "either field is missing from the body"
+    },
+    {
+      "status": 404,
+      "code": "IMPORT_RUN_NOT_FOUND",
+      "message": "import run <id> not found for tenant",
+      "when": "the run does not exist, or belongs to another tenant"
+    },
+    {
+      "status": 409,
+      "code": "TRANSFORM_PLAN_REQUIRED",
+      "message": "build the transform plan before running a dry run",
+      "when": "the run has no stored transform plan yet"
+    },
+    {
+      "status": 500,
+      "code": "DRY_RUN_WROTE",
+      "message": "the dry run acquired transaction id <xid> — it wrote to the database",
+      "when": "the simulation somehow wrote; surfaced loudly rather than passing silently"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "missing or invalid token",
+      "when": "no valid tenant Bearer token on the request"
+    }
+  ]
+}

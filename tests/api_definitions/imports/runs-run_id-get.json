@@ -1,0 +1,80 @@
+{
+  "name": "GET /api/imports/runs/:run_id - Read a run with its lineage",
+  "endpoint": "/api/imports/runs/:run_id",
+  "sdk": "sdk-import",
+  "sourceFile": "packages/sdk-import/src/server/routes.ts",
+  "method": "GET",
+  "requiresAuth": true,
+  "expectedStatus": 200,
+  "taskId": "f6e9a813-82ee-4f15-97cf-e4a9a3f8f772",
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "priority": 58,
+  "testability": "auto",
+  "description": "Read one run together with its lineage: every entity the run created, the action that created it, and whether it has been reversed. The lineage is returned inline because it is what makes a rollback possible at all — a created entity with no lineage row is indistinguishable from one a human made. Required: tenant_id query param.",
+  "dependsOn": [
+    "POST /api/auth/signup-tenant",
+    "POST /api/imports/runs"
+  ],
+  "fieldEnums": {
+    "status": [
+      "draft",
+      "previewing",
+      "mapping",
+      "dry_run",
+      "committing",
+      "complete",
+      "quarantined",
+      "rolled_back"
+    ],
+    "action": [
+      "created",
+      "linked",
+      "updated",
+      "asserted",
+      "reversed"
+    ]
+  },
+  "testCases": [
+    {
+      "name": "Read the run created by the producer",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "pathParams": {
+        "run_id": "{{cache:imports.run.create.response.data.run.run_id}}"
+      },
+      "queryParams": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}"
+      },
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "data": {
+          "run": {
+            "run_id": "string"
+          },
+          "lineage": "array"
+        }
+      }
+    }
+  ],
+  "errorCases": [
+    {
+      "status": 400,
+      "code": "VALIDATION_ERROR",
+      "message": "tenant_id query param required",
+      "when": "the tenant_id query param is absent"
+    },
+    {
+      "status": 404,
+      "code": "IMPORT_RUN_NOT_FOUND",
+      "message": "import run <id> not found for tenant",
+      "when": "the run does not exist, or belongs to another tenant"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "missing or invalid token",
+      "when": "no valid tenant Bearer token on the request"
+    }
+  ]
+}

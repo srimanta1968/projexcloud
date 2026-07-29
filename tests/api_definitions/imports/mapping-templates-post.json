@@ -1,0 +1,105 @@
+{
+  "name": "POST /api/imports/mapping-templates - Create a reusable mapping template",
+  "endpoint": "/api/imports/mapping-templates",
+  "sdk": "sdk-import",
+  "sourceFile": "packages/sdk-import/src/server/routes.ts",
+  "method": "POST",
+  "requiresAuth": true,
+  "expectedStatus": 201,
+  "taskId": "f6e9a813-82ee-4f15-97cf-e4a9a3f8f772",
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "priority": 49,
+  "testability": "auto",
+  "description": "Create a reusable, versioned column mapping. Version 1 is created here; later revisions are NEW ROWS via POST /:template_id/version, never edits — a template referenced by a committed run is frozen by database trigger, because rewriting the mapping that produced already-landed rows would make that run's lineage a lie. crosswalk_strategy decides what happens when an incoming external id already maps to a known entity. kind is certified (platform-curated) or custom (the tenant's own). UNIQUE(tenant_id, slug, version). Required: tenant_id, slug, name.",
+  "dependsOn": [
+    "POST /api/auth/signup-tenant"
+  ],
+  "fieldEnums": {
+    "kind": [
+      "certified",
+      "custom"
+    ],
+    "crosswalk_strategy": [
+      "preserve_existing",
+      "add_alias",
+      "reject_conflict"
+    ],
+    "target": [
+      "person.given_name",
+      "person.family_name",
+      "person.full_name",
+      "person.date_of_birth",
+      "contact.email",
+      "contact.phone",
+      "contact.handle",
+      "org.name",
+      "org.domain",
+      "org.size",
+      "place.address_line1",
+      "place.address_line2",
+      "place.locality",
+      "place.region",
+      "place.postal_code",
+      "place.country",
+      "external.id",
+      "attribute.custom",
+      "unmapped"
+    ]
+  },
+  "testCases": [
+    {
+      "name": "Create a custom mapping template",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "payload": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "slug": "contacts-{{dynamic:slug}}",
+        "name": "Contact extract mapping",
+        "description": "Maps a partner contact extract onto canonical targets",
+        "kind": "custom",
+        "field_map": {},
+        "transforms": [],
+        "value_crosswalks": {},
+        "crosswalk_strategy": "preserve_existing",
+        "created_by": "qa-runner",
+        "metadata": {
+          "origin": "qa"
+        }
+      },
+      "expectedStatus": 201,
+      "expectedResponse": {
+        "data": {
+          "template": {
+            "template_id": "string",
+            "version": "number"
+          }
+        }
+      }
+    }
+  ],
+  "captureResponse": {
+    "imports.template.create.response.data.template.template_id": "data.template.template_id",
+    "imports.template.create.response.data.template.slug": "data.template.slug"
+  },
+  "errorCases": [
+    {
+      "status": 400,
+      "code": "VALIDATION_ERROR",
+      "message": "tenant_id, slug and name are required",
+      "when": "any required field is missing from the body"
+    },
+    {
+      "status": 409,
+      "code": "DUPLICATE_TEMPLATE_VERSION",
+      "message": "a template with this slug and version already exists for the tenant",
+      "when": "UNIQUE(tenant_id, slug, version) is violated"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "missing or invalid token",
+      "when": "no valid tenant Bearer token on the request"
+    }
+  ]
+}

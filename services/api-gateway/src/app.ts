@@ -341,6 +341,11 @@ import {
   migrationsDir as sourceRecordMigrations,
   server as sourceRecordServer,
 } from '@projexlight/sdk-source-record';
+// P16 · EP-375 — governed import runs above sdk-ingest's write primitive.
+import {
+  migrationsDir as importMigrations,
+  server as importServer,
+} from '@projexlight/sdk-import';
 import {
   migrationsDir as twilioVoiceMigrations,
   server as twilioVoiceServer,
@@ -587,6 +592,7 @@ app.register(offerCatalogServer.registerRoutes);
 app.register(handoffServer.registerRoutes);
 app.register(incidentServer.registerRoutes);
 app.register(sourceRecordServer.registerRoutes);
+app.register(importServer.registerRoutes);
 app.register(twilioVoiceServer.registerRoutes);
 app.register(twilioVoiceServer.registerWebhookRoutes);
 app.register(serviceRequestServer.registerRoutes);
@@ -1233,6 +1239,8 @@ const start = async (): Promise<void> => {
       { sdk: 'sdk-incident',            dir: incidentMigrations },
       // Self-contained (no cross-schema FKs) — ordering free.
       { sdk: 'sdk-source-record',       dir: sourceRecordMigrations },
+      // Self-contained: entity refs are loose (kind, id) pairs, so ordering is free.
+      { sdk: 'sdk-import',              dir: importMigrations },
       { sdk: 'connector-twilio-voice',  dir: twilioVoiceMigrations },
       // EP-341 — Unified Multi-Scope Configuration & Secrets Plane. Foundation
       // store (config.config_value); references no other schema, ordering free.
