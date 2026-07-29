@@ -524,6 +524,12 @@ export const EVENT_TYPE_REGISTRY: Record<string, EventTypeMetadata> = {
   'source-record.assertion.superseded.v1':    { event_type: 'source-record.assertion.superseded.v1',    retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
   'source-record.attestation.signed.v1':      { event_type: 'source-record.attestation.signed.v1',      retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
   'source-record.crosswalk.linked.v1':        { event_type: 'source-record.crosswalk.linked.v1',        retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+
+  /* --- P16 · sdk-import (EP-375) — governed import runs. Regulated: a commit
+   * and its rollback are the provenance of everything the run created. --- */
+  'import.run.committed.v1':                  { event_type: 'import.run.committed.v1',                  retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+  'import.run.rolled-back.v1':                { event_type: 'import.run.rolled-back.v1',                retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+  'import.run.quarantined.v1':                { event_type: 'import.run.quarantined.v1',                retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
 };
 
 /* ============================================================

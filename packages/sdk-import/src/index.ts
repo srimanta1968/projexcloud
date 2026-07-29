@@ -16,3 +16,4 @@ export * from './services/previewService';
 export * from './services/mappingAssistantService';
 export * from './services/transformService';
 export * from './services/dryRunService';
+export * from './services/commitService';
