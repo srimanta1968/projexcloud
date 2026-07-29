@@ -1,7 +1,7 @@
 /**
  * Vertical-neutrality contract test (P16 · EP-374 · PCF-01-5).
  *
- * sdk-source-record is a PLATFORM SDK: it must be equally usable by a CRM, a
+ * sdk-import is a PLATFORM SDK: it must be equally usable by a CRM, a
  * healthcare MDM, an insurer, a logistics operator or anything else that ingests
  * third-party data. The moment a vertical's vocabulary leaks into the package —
  * even in a comment — the next team reads it as "this is for sales" and either
@@ -99,37 +99,6 @@ interface Hit {
   text: string;
 }
 
-/**
- * Exact literals that are allowed through, each with the reason.
- *
- * An exemption list is a hole in a gate, so it is kept short, exact-match only,
- * and every entry has to justify itself here in writing.
- *
- * TENANT_FIRST_PARTY_CRM is a label in the origin_class ENUM specified by EP-374
- * and already applied to the live database. It classifies WHERE data came from —
- * "a system the tenant themselves operate and populate" — rather than naming a
- * vertical this SDK serves; a healthcare MDM lands its own records under the same
- * label. Renaming it would fork the provenance taxonomy from the platform
- * contract that consumers are coding against, which is a worse outcome than one
- * documented product-category word in an enum. If the taxonomy is ever revised,
- * TENANT_FIRST_PARTY_SYSTEM would be the neutral spelling.
- */
-const EXEMPT_LITERALS: Array<{ literal: string; reason: string }> = [
-  {
-    literal: 'TENANT_FIRST_PARTY_CRM',
-    reason: 'origin_class ENUM label specified by EP-374 and applied to the live schema',
-  },
-];
-
-/** Blank out exempted literals so the surrounding line is still scanned. */
-function withoutExemptions(text: string): string {
-  let out = text;
-  for (const { literal } of EXEMPT_LITERALS) {
-    out = out.split(literal).join('');
-  }
-  return out;
-}
-
 function scan(terms: string[]): Hit[] {
   const hits: Hit[] = [];
   const patterns = terms.map((t) => ({
@@ -138,10 +107,9 @@ function scan(terms: string[]): Hit[] {
   }));
   for (const file of collectFiles(SCAN_DIRS[0])) {
     const lines = fs.readFileSync(path.join(PKG_ROOT, file), 'utf-8').split(/\r?\n/);
-    lines.forEach((raw, i) => {
-      const text = withoutExemptions(raw);
+    lines.forEach((text, i) => {
       for (const { term, re } of patterns) {
-        if (re.test(text)) hits.push({ file, line: i + 1, term, text: raw.trim().slice(0, 120) });
+        if (re.test(text)) hits.push({ file, line: i + 1, term, text: text.trim().slice(0, 120) });
       }
     });
   }
@@ -152,7 +120,7 @@ function format(hits: Hit[]): string {
   return hits.map((h) => `  ${h.file}:${h.line} [${h.term}] ${h.text}`).join('\n');
 }
 
-describe('sdk-source-record vertical-neutrality contract', () => {
+describe('sdk-import vertical-neutrality contract', () => {
   it('scans a non-empty set of source files', () => {
     // Guards the guard: a broken path would make every assertion below vacuous.
     const files = collectFiles(SCAN_DIRS[0]);
@@ -185,17 +153,6 @@ describe('sdk-source-record vertical-neutrality contract', () => {
       });
     }
     expect(hits.length, `business rule hard-coded into a platform SDK:\n${format(hits)}`).toBe(0);
-  });
-
-  it('exempts only literals that still exist in the source', () => {
-    // An exemption that no longer matches anything is dead weight hiding a future
-    // leak, so the list has to stay honest as the code changes.
-    const corpus = collectFiles(SCAN_DIRS[0])
-      .map((f) => fs.readFileSync(path.join(PKG_ROOT, f), 'utf-8'))
-      .join('\n');
-    for (const { literal, reason } of EXEMPT_LITERALS) {
-      expect(corpus.includes(literal), `stale exemption '${literal}' (${reason})`).toBe(true);
-    }
   });
 
   it('declares no dependency on a vertical package', () => {

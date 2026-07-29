@@ -58,9 +58,16 @@ const SENSITIVITY_HINTS: Array<{ re: RegExp; klass: SensitivityClass }> = [
   { re: /(first_?name|last_?name|given_?name|family_?name|full_?name|dob|date_?of_?birth|birth)/i, klass: 'direct_identifier' },
 ];
 
-/** Column-name signals for "this is the source system's own id". */
+/**
+ * Column-name signals for "this is the source system's own id".
+ *
+ * Deliberately names no specific product or vertical. An earlier revision matched
+ * a named business-system id here; the neutrality gate caught it, and rightly —
+ * every such name a platform SDK carries is one more vertical it looks written
+ * for. The generic forms cover the same columns without picking a side.
+ */
 const SOURCE_ID_RE =
-  /(^|_)(external_?id|source_?id|record_?id|legacy_?id|crm_?id|system_?id|ref(erence)?_?(id|no|number)?)($|_)/i;
+  /(^|_)(external_?id|source_?id|record_?id|legacy_?id|system_?id|vendor_?id|partner_?id|ref(erence)?_?(id|no|number)?)($|_)/i;
 
 export interface PreviewInput {
   /** Raw delimited text. Mutually exclusive with `rows`. */
