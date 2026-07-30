@@ -349,6 +349,10 @@ import {
 // P16 · EP-376 — business-clock SLA: calendars, policies, clocks, escalation
 // ladder, breach records and attainment.
 import { migrationsDir as slaMigrations, server as slaServer } from '@projexlight/sdk-sla';
+// P16 · EP-377 — workforce coverage: schedules, time off, presence, capacity,
+// on-call. Migrations are wired as soon as they exist so the schema self-creates
+// at boot; the HTTP surface lands with task 95.
+import { migrationsDir as coverageMigrations } from '@projexlight/sdk-coverage';
 import {
   migrationsDir as twilioVoiceMigrations,
   server as twilioVoiceServer,
@@ -1247,6 +1251,8 @@ const start = async (): Promise<void> => {
       { sdk: 'sdk-import',              dir: importMigrations },
       // Subject refs are loose strings — sdk-sla holds no FK into another schema.
       { sdk: 'sdk-sla',                 dir: slaMigrations },
+      // persona_id / role_ref are loose refs too, so ordering is free.
+      { sdk: 'sdk-coverage',            dir: coverageMigrations },
       { sdk: 'connector-twilio-voice',  dir: twilioVoiceMigrations },
       // EP-341 — Unified Multi-Scope Configuration & Secrets Plane. Foundation
       // store (config.config_value); references no other schema, ordering free.
