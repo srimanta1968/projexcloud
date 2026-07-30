@@ -393,6 +393,41 @@ suite('escalation ladder and idempotent tick (integration)', () => {
     expect(after.rungs_fired).toBe(0);
   });
 
+  it('KEEPS escalating a breached clock — the post-deadline rungs are the point', async () => {
+    // A breach scan marking the clock 'breached' must not quietly end the ladder
+    // half way up. The rungs that fire after the deadline are the ones that get
+    // somebody to actually do something about it.
+    const p = await isolatedPolicy('breached-ladder');
+    await createRung({
+      tenant_id: TENANT, policy_id: p.policy_id, rung_index: 0, minutes_after_due: 30,
+      action: 'notify', severity: 'critical', audience: { kind: 'refs', refs: ['persona:esc'] },
+    });
+    const { clock } = await startClock({
+      tenant_id: TENANT, policy_id: p.policy_id, subject_ref: `s:${stamp}-breached-ladder`,
+      source_timestamp: new Date(Date.now() - 6 * 60 * 60_000).toISOString(),
+    });
+    await dataService.query(
+      `UPDATE sla.sla_clock SET state = 'breached', breached_at = now() WHERE clock_id = $1`,
+      [clock.clock_id],
+    );
+
+    const result = await runTick({ tenant_id: TENANT });
+    expect(result.rungs_fired).toBe(1);
+    expect(fired.map((f) => f.audience[0])).toContain('persona:esc');
+    const firing = (await listFirings(TENANT, clock.clock_id))[0];
+    expect(firing.state).toBe('fired');
+
+    // A paused clock, by contrast, still does not escalate.
+    await dataService.query(
+      `UPDATE sla.sla_clock SET state = 'paused', paused_at = now(), breached_at = NULL
+        WHERE clock_id = $1`,
+      [clock.clock_id],
+    );
+    fired = [];
+    const parked = await runTick({ tenant_id: TENANT });
+    expect(parked.rungs_fired).toBe(0);
+  });
+
   it('reports at-risk clocks with ladder progress and the next rung', async () => {
     const p = await isolatedPolicy('at-risk');
     await createRung({

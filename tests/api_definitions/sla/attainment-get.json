@@ -1,0 +1,99 @@
+{
+  "name": "GET /api/sla/attainment - Attainment, percentiles, and every miss explained",
+  "endpoint": "/api/sla/attainment",
+  "sdk": "sdk-sla",
+  "sourceFile": "packages/sdk-sla/src/server/routes.ts",
+  "method": "GET",
+  "requiresAuth": true,
+  "expectedStatus": 200,
+  "taskId": "1dbcb185-1bb8-4af9-93ae-8438ba8fd513",
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "featureId": "af5400b6-00aa-4d5c-82f6-d9819457333f",
+  "epicId": "39365400-aca0-4a86-9791-5771d19998f4",
+  "priority": 34,
+  "testability": "auto",
+  "description": "How often the promise was kept over a window, how long it actually took, and for every miss why and what was done. Percentage attainment plus median and P95 over BUSINESS minutes on each policy's own calendar — the same measure and arithmetic that produced due_at, so a percentile and a deadline can never describe different clocks. Broken down by source, owner, day, hour, reason and policy (pick with ?dimensions=, and an unrecognised dimension is refused rather than dropped, because silently returning fewer breakdowns than were asked for reads as \"no data\"). Each bucket carries its own misses with cause and recovery, so a row can be read without going back to the source. Only CLOSED clocks count: an open clock has no outcome and scoring it either way would be a guess. A breached clock whose cause nobody recorded appears with reason_code null, grouped as cause_not_recorded and counted in misses_without_cause — named rather than dropped, because a report that quietly omits the misses nobody explained flatters itself. If the clock ceiling is reached the response says so via truncated and clocks_considered instead of capping silently. Returns 200. Required: tenant_id, from, to.",
+  "dependsOn": [
+    "POST /api/auth/signup-tenant",
+    "POST /api/sla/clocks/:clock_id/satisfy"
+  ],
+  "fieldEnums": {
+    "dimensions": [
+      "source",
+      "owner",
+      "day",
+      "hour",
+      "reason",
+      "policy"
+    ],
+    "reason_code": [
+      "awaiting_capacity",
+      "no_capacity",
+      "missed_handoff",
+      "upstream_outage",
+      "provider_down",
+      "process_gap",
+      "cause_not_recorded"
+    ],
+    "state": [
+      "running",
+      "paused",
+      "satisfied",
+      "breached",
+      "cancelled"
+    ]
+  },
+  "testCases": [
+    {
+      "name": "Attainment for the last thirty days across every dimension",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "queryParams": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "from": "{{dynamic:pastdatetime-30d}}",
+        "to": "{{dynamic:futuredatetime+1d}}",
+        "dimensions": "source,owner,day,hour,reason,policy",
+        "max_clocks": "1000"
+      },
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "data": {
+          "attainment": {
+            "total": "number",
+            "attained": "number",
+            "breached": "number",
+            "attainment_pct": "number",
+            "median_business_minutes": "number",
+            "p95_business_minutes": "number",
+            "misses_without_cause": "number",
+            "breakdowns": "object",
+            "misses": "array",
+            "truncated": "boolean",
+            "clocks_considered": "number"
+          }
+        }
+      }
+    }
+  ],
+  "errorCases": [
+    {
+      "status": 400,
+      "code": "VALIDATION_ERROR",
+      "message": "tenant_id, from and to query params are required",
+      "when": "a required field is missing from the request"
+    },
+    {
+      "status": 400,
+      "code": "VALIDATION_ERROR",
+      "message": "unknown dimension(s) region — allowed: source, owner, day, hour, reason, policy",
+      "when": "a dimension outside the allowed set is requested"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "missing or invalid token",
+      "when": "no valid tenant Bearer token on the request"
+    }
+  ]
+}

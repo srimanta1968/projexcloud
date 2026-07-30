@@ -1,0 +1,136 @@
+{
+  "name": "POST /api/sla/clocks/merge - Fold a merged-away subject into the survivor",
+  "endpoint": "/api/sla/clocks/merge",
+  "sdk": "sdk-sla",
+  "sourceFile": "packages/sdk-sla/src/server/routes.ts",
+  "method": "POST",
+  "requiresAuth": true,
+  "expectedStatus": 200,
+  "taskId": "1dbcb185-1bb8-4af9-93ae-8438ba8fd513",
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "featureId": "af5400b6-00aa-4d5c-82f6-d9819457333f",
+  "epicId": "39365400-aca0-4a86-9791-5771d19998f4",
+  "priority": 30,
+  "testability": "manual",
+  "description": "When two subjects turn out to be one, fold the absorbed clock into the survivor. The survivor keeps ITS OWN timing — the promise the platform made first is the one it owes — and records merged_from_ref so it still names what it absorbed; the absorbed clock is cancelled with a pointer to the survivor so the trail stays intact. Neither clock's source_timestamp, started_at or due_at moves, and a database trigger enforces that: a merge is one of the moments a system is most tempted to \"refresh\" a clock, which would erase a wait somebody has already had. Returns 200 with both clocks. MANUAL: needs TWO independently created clocks and the create->capture chain yields one clock_id, so an automated case would have to merge a clock into itself. Covered by packages/sdk-sla/tests/clock.integration.test.ts. Required: tenant_id, surviving_clock_id, merged_clock_id.",
+  "dependsOn": [
+    "POST /api/auth/signup-tenant",
+    "POST /api/sla/clocks"
+  ],
+  "fieldEnums": {
+    "state": [
+      "running",
+      "paused",
+      "satisfied",
+      "breached",
+      "cancelled"
+    ]
+  },
+  "statusTransitions": {
+    "entity": "sla.sla_clock",
+    "field": "state",
+    "note": "at_risk is a DERIVED view over running/paused clocks approaching due_at (GET /api/sla/at-risk), not a stored state — the column can only hold the five values in fieldEnums.state.",
+    "flow": [
+      "running",
+      "paused",
+      "satisfied",
+      "breached",
+      "cancelled"
+    ],
+    "transitions": [
+      {
+        "from": "running",
+        "to": "paused",
+        "via": "POST /api/sla/clocks/:clock_id/pause"
+      },
+      {
+        "from": "paused",
+        "to": "running",
+        "via": "POST /api/sla/clocks/:clock_id/resume"
+      },
+      {
+        "from": "running",
+        "to": "satisfied",
+        "via": "POST /api/sla/clocks/:clock_id/satisfy"
+      },
+      {
+        "from": "paused",
+        "to": "satisfied",
+        "via": "POST /api/sla/clocks/:clock_id/satisfy"
+      },
+      {
+        "from": "running",
+        "to": "breached",
+        "via": "POST /api/sla/breach-scan"
+      },
+      {
+        "from": "breached",
+        "to": "satisfied",
+        "via": "POST /api/sla/clocks/:clock_id/satisfy",
+        "note": "a missed promise can still be kept, late — satisfied_at then sits after due_at so attainment still counts it as a miss"
+      },
+      {
+        "from": "running",
+        "to": "cancelled",
+        "via": "POST /api/sla/clocks/:clock_id/cancel"
+      },
+      {
+        "from": "paused",
+        "to": "cancelled",
+        "via": "POST /api/sla/clocks/:clock_id/cancel"
+      },
+      {
+        "from": "breached",
+        "to": "cancelled",
+        "via": "POST /api/sla/clocks/:clock_id/cancel"
+      }
+    ]
+  },
+  "testCases": [
+    {
+      "name": "Merge the duplicate request into the original",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "payload": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "surviving_clock_id": "{{cache:sla.clock.create.response.data.clock.clock_id}}",
+        "merged_clock_id": "{{cache:sla.clock.duplicate.response.data.clock.clock_id}}",
+        "actor_id": "qa-runner"
+      },
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "data": {
+          "surviving": {
+            "clock_id": "string",
+            "merged_from_ref": "string"
+          },
+          "merged": {
+            "clock_id": "string",
+            "state": "string"
+          }
+        }
+      }
+    }
+  ],
+  "errorCases": [
+    {
+      "status": 400,
+      "code": "VALIDATION_ERROR",
+      "message": "tenant_id, surviving_clock_id and merged_clock_id are required",
+      "when": "a required field is missing from the request"
+    },
+    {
+      "status": 404,
+      "code": "SLA_CLOCK_NOT_FOUND",
+      "message": "clock <id> not found for tenant",
+      "when": "either clock does not exist for this tenant"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "missing or invalid token",
+      "when": "no valid tenant Bearer token on the request"
+    }
+  ]
+}

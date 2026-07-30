@@ -329,6 +329,52 @@ suite('breach recording and attainment (integration)', () => {
     expect(bySource.find((b) => b.key === 'web_form')!.misses).toHaveLength(2);
   });
 
+  it('lets a BREACHED clock still be satisfied — late, and still counted as a miss', async () => {
+    // The common case, not an edge one: the deadline passes and somebody answers
+    // anyway. Refusing this would leave the clock breached forever with no
+    // satisfied_at, so nothing could record when the late response happened and a
+    // report could not tell a miss that was answered from one that was abandoned.
+    const p = await createPolicy({
+      tenant_id: TENANT, slug: `late-answer-${stamp}`, name: 'Late answer',
+      subject_kind: 'request', duration_minutes: 60, calendar_id: calendarId,
+      satisfaction_contract: {},
+    });
+    const { clock } = await startClock({
+      tenant_id: TENANT, policy_id: p.policy_id, subject_ref: `s:${stamp}-late`,
+      source_timestamp: new Date(Date.now() - 5 * 3600_000).toISOString(),
+      owner_ref: 'persona:late', metadata: { source_ref: 'phone' },
+    });
+    await runBreachScan({ tenant_id: TENANT });
+    expect((await dataService.one<{ state: string }>(
+      `SELECT state FROM sla.sla_clock WHERE clock_id = $1`, [clock.clock_id]))!.state)
+      .toBe('breached');
+
+    const { breach } = await recordBreach({
+      tenant_id: TENANT, clock_id: clock.clock_id, reason_code: 'no_capacity',
+    });
+
+    const satisfied = await satisfyClock({
+      tenant_id: TENANT, clock_id: clock.clock_id, satisfied_by: 'persona:late',
+    });
+    expect(satisfied.state).toBe('satisfied');
+    expect(satisfied.satisfied_at).toBeTruthy();
+    // Late, so still a miss: satisfied_at is after due_at.
+    expect(Date.parse(satisfied.satisfied_at as unknown as string))
+      .toBeGreaterThan(Date.parse(satisfied.due_at as unknown as string));
+
+    const report = await getAttainment({
+      tenant_id: TENANT, policy_id: p.policy_id,
+      from: new Date(Date.now() - 86400_000).toISOString(),
+      to: new Date(Date.now() + 60_000).toISOString(),
+    });
+    // Nothing is laundered by allowing the late close: the clock still counts as
+    // breached and its cause is still attached.
+    expect(report.attained).toBe(0);
+    expect(report.breached).toBe(1);
+    expect(report.misses[0].reason_code).toBe('no_capacity');
+    expect(breach.reason_code).toBe('no_capacity');
+  });
+
   it('says so when the clock ceiling truncates the sample', async () => {
     const report = await getAttainment({
       tenant_id: TENANT, from: new Date(0).toISOString(),

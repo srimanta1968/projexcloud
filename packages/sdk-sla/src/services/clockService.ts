@@ -475,16 +475,29 @@ export interface SatisfyInput {
   actor_id?: string;
 }
 
+/** States from which a promise can still be fulfilled. */
+const SATISFIABLE_STATES: ClockState[] = ['running', 'paused', 'breached'];
+
 /**
  * Close the promise — but only on evidence the policy actually asked for.
  *
  * Every unmet requirement is collected before throwing, so the caller learns
  * everything that is missing in one round trip rather than discovering it one
  * rejection at a time.
+ *
+ * A BREACHED CLOCK CAN STILL BE SATISFIED, and that is the common case rather than
+ * an edge one: the deadline passes and somebody answers anyway, an hour or a day
+ * late. Refusing that would leave the clock breached forever with no satisfied_at,
+ * so nothing could record WHEN the late response happened and a report could not
+ * tell a miss that was eventually answered from one that was abandoned — which is
+ * the difference between a slow team and a broken process. Nothing is laundered by
+ * allowing it: satisfied_at is after due_at so attainment still counts the clock as
+ * a miss, the breach record and its cause are immutable rows of their own, and the
+ * event carries within_target: false.
  */
 export async function satisfyClock(input: SatisfyInput): Promise<SlaClock> {
   const clock = await getClock(input.tenant_id, input.clock_id);
-  if (clock.state !== 'running' && clock.state !== 'paused') {
+  if (!SATISFIABLE_STATES.includes(clock.state)) {
     throw new InvalidClockTransition(clock.clock_id, clock.state, 'satisfied');
   }
   const policy = await getPolicy(input.tenant_id, clock.policy_id);
@@ -524,7 +537,7 @@ export async function satisfyClock(input: SatisfyInput): Promise<SlaClock> {
                 'reason', COALESCE(pause_reason, ''))
               ELSE paused_intervals END,
             paused_at = NULL, pause_reason = NULL
-      WHERE tenant_id = $1 AND clock_id = $2 AND state IN ('running','paused')
+      WHERE tenant_id = $1 AND clock_id = $2 AND state IN ('running','paused','breached')
       RETURNING ${CLOCK_COLS}`,
     [input.tenant_id, input.clock_id, input.evidence_ref ?? null, input.satisfied_by ?? null],
   );

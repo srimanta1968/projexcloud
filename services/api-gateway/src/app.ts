@@ -346,9 +346,9 @@ import {
   migrationsDir as importMigrations,
   server as importServer,
 } from '@projexlight/sdk-import';
-// P16 · EP-376 — business-clock SLA. Migrations are wired ahead of the HTTP
-// surface so the schema exists from the next boot; routes land with task 90.
-import { migrationsDir as slaMigrations } from '@projexlight/sdk-sla';
+// P16 · EP-376 — business-clock SLA: calendars, policies, clocks, escalation
+// ladder, breach records and attainment.
+import { migrationsDir as slaMigrations, server as slaServer } from '@projexlight/sdk-sla';
 import {
   migrationsDir as twilioVoiceMigrations,
   server as twilioVoiceServer,
@@ -596,6 +596,7 @@ app.register(handoffServer.registerRoutes);
 app.register(incidentServer.registerRoutes);
 app.register(sourceRecordServer.registerRoutes);
 app.register(importServer.registerRoutes);
+app.register(slaServer.registerRoutes);
 app.register(twilioVoiceServer.registerRoutes);
 app.register(twilioVoiceServer.registerWebhookRoutes);
 app.register(serviceRequestServer.registerRoutes);

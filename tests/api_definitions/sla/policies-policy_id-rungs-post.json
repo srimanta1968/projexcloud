@@ -1,0 +1,100 @@
+{
+  "name": "POST /api/sla/policies/:policy_id/rungs - Add an escalation rung",
+  "endpoint": "/api/sla/policies/:policy_id/rungs",
+  "sdk": "sdk-sla",
+  "sourceFile": "packages/sdk-sla/src/server/routes.ts",
+  "method": "POST",
+  "requiresAuth": true,
+  "expectedStatus": 201,
+  "taskId": "1dbcb185-1bb8-4af9-93ae-8438ba8fd513",
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "featureId": "af5400b6-00aa-4d5c-82f6-d9819457333f",
+  "epicId": "39365400-aca0-4a86-9791-5771d19998f4",
+  "priority": 86,
+  "testability": "auto",
+  "description": "Add a rung to the policy ladder. The ladder is DATA: when it fires, who hears about it, how loudly, what action runs and what the recipient should do. The stored anchor is business minutes from the clock's start — the same arithmetic that produced due_at, so a rung and a deadline can never disagree about the calendar — but minutes_before_due and minutes_after_due are accepted and normalised once at insert, so the row that fires is the row an operator can read. Give exactly ONE of the three offsets; giving two or none returns 422 INVALID_RUNG_OFFSET, as does a minutes_before_due longer than the promise itself. The audience is resolved AT FIRE TIME, not now, because the person on call at 02:00 is not the person who was on call when the policy was written. Returns 201.",
+  "dependsOn": [
+    "POST /api/auth/signup-tenant",
+    "POST /api/sla/policies"
+  ],
+  "fieldEnums": {
+    "severity": [
+      "info",
+      "warning",
+      "urgent",
+      "critical"
+    ],
+    "audience_kind": [
+      "owner",
+      "refs",
+      "on_call"
+    ]
+  },
+  "testCases": [
+    {
+      "name": "Warn the owner thirty business minutes before the deadline",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "pathParams": {
+        "policy_id": "{{cache:sla.policy.create.response.data.policy.policy_id}}"
+      },
+      "payload": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "rung_index": 0,
+        "label": "pre-breach warning",
+        "minutes_before_due": 30,
+        "action": "notify",
+        "severity": "warning",
+        "audience": {
+          "kind": "owner"
+        },
+        "action_config": {
+          "channel": "email"
+        },
+        "remediation_hint": "answer the request or hand it to the backup",
+        "metadata": {
+          "owner": "qa-runner"
+        }
+      },
+      "expectedStatus": 201,
+      "expectedResponse": {
+        "data": {
+          "rung": {
+            "rung_id": "string",
+            "offset_minutes": "number"
+          }
+        }
+      }
+    }
+  ],
+  "captureResponse": {
+    "sla.rung.create.response.data.rung.rung_id": "data.rung.rung_id"
+  },
+  "errorCases": [
+    {
+      "status": 400,
+      "code": "VALIDATION_ERROR",
+      "message": "tenant_id, rung_index and action are required",
+      "when": "a required field is missing from the request"
+    },
+    {
+      "status": 422,
+      "code": "INVALID_RUNG_OFFSET",
+      "message": "give exactly one of offset_minutes, minutes_before_due or minutes_after_due",
+      "when": "no offset or more than one offset is supplied, or minutes_before_due exceeds the policy duration"
+    },
+    {
+      "status": 404,
+      "code": "SLA_POLICY_NOT_FOUND",
+      "message": "policy <id> not found for tenant",
+      "when": "the policy does not exist for this tenant"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "missing or invalid token",
+      "when": "no valid tenant Bearer token on the request"
+    }
+  ]
+}

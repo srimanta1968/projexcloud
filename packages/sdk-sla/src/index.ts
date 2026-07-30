@@ -15,3 +15,4 @@ export * from './services/calendarService';
 export * from './services/clockService';
 export * from './services/ladderService';
 export * from './services/breachService';
+export * as server from './server';

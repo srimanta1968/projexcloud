@@ -440,9 +440,13 @@ export async function runTick(input: {
   const limit = Math.min(Math.max(input.limit ?? 200, 1), 1000);
   const result = emptyResult();
 
+  // 'breached' is in scope on purpose. The rungs that fire AFTER the deadline are
+  // the ones that matter most, and a breach scan marking the clock breached must
+  // not quietly end the escalation half way up the ladder. 'paused' stays out: a
+  // parked promise does not escalate. Satisfied and cancelled clocks are done.
   const clocks = await dataService.rows<SlaClock>(
     `SELECT ${CLOCK_COLS_LOCAL} FROM sla.sla_clock
-      WHERE tenant_id = $1 AND state = 'running'
+      WHERE tenant_id = $1 AND state IN ('running','breached')
       ORDER BY due_at ASC
       LIMIT ${limit}`,
     [input.tenant_id],
@@ -548,8 +552,9 @@ async function retryFailedFirings(args: {
     if (!clock || !rung) continue;
     // A clock that has since been satisfied or cancelled must not be escalated on
     // a retry — the retry exists to recover a delivery, not to resurrect a
-    // situation that has already been resolved.
-    if (clock.state !== 'running' && clock.state !== 'paused') continue;
+    // situation that has already been resolved. Breached still counts as live:
+    // the promise is missed and nobody has answered it yet.
+    if (clock.state === 'satisfied' || clock.state === 'cancelled') continue;
 
     const policy = await getPolicy(args.tenant_id, clock.policy_id);
     const calendar = await getCalendar(args.tenant_id, policy.calendar_id);
