@@ -12,3 +12,4 @@
  */
 export { migrationsDir } from './db';
 export * from './services/calendarService';
+export * from './services/clockService';

@@ -530,6 +530,19 @@ export const EVENT_TYPE_REGISTRY: Record<string, EventTypeMetadata> = {
   'import.run.committed.v1':                  { event_type: 'import.run.committed.v1',                  retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
   'import.run.rolled-back.v1':                { event_type: 'import.run.rolled-back.v1',                retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
   'import.run.quarantined.v1':                { event_type: 'import.run.quarantined.v1',                retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+
+  /* --- P16 · sdk-sla (EP-376) — business-clock SLA. Clock lifecycle is
+   * operational; a breach is regulated, because a missed promise is what an
+   * auditor and a customer both come back to. --- */
+  'sla.clock.started.v1':                     { event_type: 'sla.clock.started.v1',                     retention_class: 'operational', conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+  'sla.clock.paused.v1':                      { event_type: 'sla.clock.paused.v1',                      retention_class: 'operational', conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+  'sla.clock.resumed.v1':                     { event_type: 'sla.clock.resumed.v1',                     retention_class: 'operational', conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+  'sla.clock.satisfied.v1':                   { event_type: 'sla.clock.satisfied.v1',                   retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+  'sla.clock.cancelled.v1':                   { event_type: 'sla.clock.cancelled.v1',                   retention_class: 'operational', conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+  'sla.clock.reassigned.v1':                  { event_type: 'sla.clock.reassigned.v1',                  retention_class: 'operational', conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+  'sla.clock.merged.v1':                      { event_type: 'sla.clock.merged.v1',                      retention_class: 'operational', conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+  'sla.rung.fired.v1':                        { event_type: 'sla.rung.fired.v1',                        retention_class: 'operational', conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+  'sla.breach.recorded.v1':                   { event_type: 'sla.breach.recorded.v1',                   retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
 };
 
 /* ============================================================
