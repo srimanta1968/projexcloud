@@ -346,6 +346,9 @@ import {
   migrationsDir as importMigrations,
   server as importServer,
 } from '@projexlight/sdk-import';
+// P16 · EP-376 — business-clock SLA. Migrations are wired ahead of the HTTP
+// surface so the schema exists from the next boot; routes land with task 90.
+import { migrationsDir as slaMigrations } from '@projexlight/sdk-sla';
 import {
   migrationsDir as twilioVoiceMigrations,
   server as twilioVoiceServer,
@@ -1241,6 +1244,8 @@ const start = async (): Promise<void> => {
       { sdk: 'sdk-source-record',       dir: sourceRecordMigrations },
       // Self-contained: entity refs are loose (kind, id) pairs, so ordering is free.
       { sdk: 'sdk-import',              dir: importMigrations },
+      // Subject refs are loose strings — sdk-sla holds no FK into another schema.
+      { sdk: 'sdk-sla',                 dir: slaMigrations },
       { sdk: 'connector-twilio-voice',  dir: twilioVoiceMigrations },
       // EP-341 — Unified Multi-Scope Configuration & Secrets Plane. Foundation
       // store (config.config_value); references no other schema, ordering free.
