@@ -15,3 +15,5 @@
  * Vertical-neutral by contract.
  */
 export { migrationsDir } from './db';
+export * from './services/timezone';
+export * from './services/eligibilityService';
