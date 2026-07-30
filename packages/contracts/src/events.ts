@@ -542,6 +542,9 @@ export const EVENT_TYPE_REGISTRY: Record<string, EventTypeMetadata> = {
   'sla.clock.reassigned.v1':                  { event_type: 'sla.clock.reassigned.v1',                  retention_class: 'operational', conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
   'sla.clock.merged.v1':                      { event_type: 'sla.clock.merged.v1',                      retention_class: 'operational', conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
   'sla.rung.fired.v1':                        { event_type: 'sla.rung.fired.v1',                        retention_class: 'operational', conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+  // The deadline passing and somebody explaining WHY are two separate facts, so
+  // they are two separate events. This one carries cause_recorded: false.
+  'sla.clock.breached.v1':                    { event_type: 'sla.clock.breached.v1',                    retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
   'sla.breach.recorded.v1':                   { event_type: 'sla.breach.recorded.v1',                   retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
 };
 
