@@ -46,6 +46,7 @@ import {
   scopeSatisfied,
   consume as consumeRateLimit,
   rateLimitHeaders,
+  meterKeyUsage,
   API_KEY_PATTERN,
   type ApiKeyRecord,
 } from '@projexlight/sdk-api-keys';
@@ -290,6 +291,26 @@ export function registerAuthGate(app: FastifyInstance): void {
         });
       }
     }
+  });
+
+  /**
+   * Per-application usage, recorded when the response is on its way out.
+   *
+   * onResponse rather than onRequest so a throttled call is not billed: a 429
+   * consumed no capacity beyond the counter check, and charging for it would
+   * mean a rate limit costs the tenant money to hit. It also means the status
+   * code is known, so an operator can tell a working integration from one that
+   * is failing repeatedly.
+   */
+  app.addHook('onResponse', async (req: FastifyRequest, reply: FastifyReply) => {
+    const key = req.apiKeyAuth;
+    if (!key || reply.statusCode === 429) return;
+    meterKeyUsage(
+      key,
+      req.method,
+      req.routeOptions?.url ?? pathnameOf(req.url),
+      reply.statusCode,
+    );
   });
 
   app.log.info(`[auth-gate] default-deny gate active (mode=${mode})`);

@@ -61,6 +61,7 @@ import {
   setCatalogStatus,
   startSloAlarms,
   getRobotUsage,
+  report as meterReport,
 } from '@projexlight/sdk-meter';
 import { server as secretsServer } from '@projexlight/sdk-secrets';
 import { migrationsDir as tenantMigrations, server as tenantServer, createTenant as tenantCreate, listTenants as tenantList, ensureApp as appEnsure } from '@projexlight/sdk-tenant';
@@ -111,6 +112,7 @@ import {
   server as apiKeysServer,
   startKeyCacheInvalidation,
   stopKeyCache,
+  setUsageReporter as setKeyUsageReporter,
 } from '@projexlight/sdk-api-keys';
 import { migrationsDir as projectionMigrations } from '@projexlight/sdk-projection';
 import {
@@ -3973,6 +3975,33 @@ const start = async (): Promise<void> => {
     // is the subscriber: a revoke on any replica evicts the cached credential
     // here within a second, instead of at the cache TTL.
     await startKeyCacheInvalidation();
+
+    // Per-application usage attribution. sdk-api-keys stays free of a hard
+    // dependency on the metering stack -- it sits on the auth path of every
+    // machine call, and coupling that path to metering's failure modes would be
+    // the wrong trade. The reporter is injected here instead.
+    setKeyUsageReporter((event) => {
+      void meterReport({
+        sku: 'api.request',
+        units: 1,
+        dimensions: {
+          org_id: null,
+          // app_id carries the tenant APPLICATION, which is what makes a usage
+          // figure answer "which of my integrations did this".
+          app_id: event.application_id,
+          tenant_id: event.tenant_id,
+          bu_id: null,
+          persona_id: null,
+          encounter_id: null,
+          pool_index: 'admin',
+          region: process.env.REGION || 'us-east-1',
+          actor_kind: 'service',
+          actor_id: event.key_id,
+        },
+      }).catch(() => {
+        /* metering must never affect the request it describes */
+      });
+    });
     app.addHook('onClose', async () => {
       // Flushes debounced last_used_at so a shutdown does not lose the signal an
       // operator uses to decide whether a key is safe to revoke.

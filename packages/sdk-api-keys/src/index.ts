@@ -15,6 +15,8 @@ export {
 } from './services/keyCache';
 export { consume, rateLimitHeaders } from './services/rateLimitService';
 export type { RateLimitDecision } from './services/rateLimitService';
+export { meterKeyUsage, setUsageReporter } from './services/usageMeter';
+export type { KeyUsageEvent, UsageReporter } from './services/usageMeter';
 
 export { scopeForRequest, scopeSatisfied, singularise } from './middleware/scope';
 export type { ScopeRequest } from './middleware/scope';
