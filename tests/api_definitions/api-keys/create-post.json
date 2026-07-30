@@ -1,128 +1,84 @@
 {
-  "name": "POST /api/api-keys - Issue new API key",
-  "endpoint": "/api/api-keys",
   "sdk": "sdk-api-keys",
-  "method": "POST",
+  "sourceFile": "packages/sdk-api-keys/src/server/routes.ts",
   "requiresAuth": true,
-  "expectedStatus": 201,
-  "taskId": "28eb95e9-75eb-4ea9-bba6-dad10acf0ad8",
-  "sprintId": "8ef1d09e-dd8e-4daf-8d03-54dcd9f812f8",
-  "featureId": "7a33ef6c-2dad-4c40-a8a2-f414c13e6c48",
-  "epicId": "00996d23-f667-4a82-9285-7728ba357e7b",
-  "priority": 30,
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "epicId": "783fc94b-6992-49a5-a492-74ee0450a92f",
   "testability": "auto",
+  "name": "POST /api/api-keys - Issue an API key",
+  "endpoint": "/api/api-keys",
+  "method": "POST",
+  "expectedStatus": 201,
+  "taskId": "bcf23c76-2e69-48c2-af3f-84acc9e636d2",
+  "featureId": "888ec9d8-5cbb-4d77-9082-fd78b08334ad",
+  "priority": 27,
+  "description": "Issues a key without naming the application in the path; application_id may still travel in the body. The tenant comes from the caller claims - it used to be read from the payload with no ownership check at all, which let any signed-in user mint and manage credentials against any tenant on the platform. A payload tenant_id that disagrees with the credential is now a 403 rather than being silently ignored, because ignoring it hides a misconfigured caller until it writes somewhere it should not. Plaintext is returned exactly once.",
   "dependsOn": [
-    "POST /api/auth/signup-tenant"
+    "POST /api/auth/signup-tenant",
+    "POST /api/applications"
   ],
-  "testCases": [
-    {
-      "name": "Issue a key with crm + engagement scopes",
-      "headers": {
-        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
-      },
-      "payload": {
-        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
-        "scopes": [
-          "crm.contact.read",
-          "engagement.encounter.create"
-        ],
-        "rate_limit_rpm": 600,
-        "expires_at": "{{dynamic:futuredatetime}}"
-      },
-      "expectedStatus": 201
-    }
-  ],
-  "statusTransitions": {
-    "entity": "api-key",
-    "field": "status",
-    "flow": [
+  "fieldEnums": {
+    "scopes": [
+      "sla.clock.read",
+      "sla.clock.write",
+      "crm.contact.read"
+    ],
+    "status": [
       "active",
       "rotating",
       "revoked",
       "expired"
-    ],
-    "transitions": [
-      {
-        "from": "none",
-        "to": "active",
-        "via": "POST /api/api-keys"
-      },
-      {
-        "from": "active",
-        "to": "rotating",
-        "via": "POST /api/api-keys/:key_id/rotate"
-      },
-      {
-        "from": "active",
-        "to": "revoked",
-        "via": "POST /api/api-keys/:key_id/revoke"
-      }
     ]
   },
-  "expectedResponse": {
-    "data": {
-      "key": {
-        "key_id": "string",
-        "prefix": "string",
-        "scopes": "array",
-        "status": "string"
+  "testCases": [
+    {
+      "name": "Issue a key naming the application in the body",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
       },
-      "plaintext": "string"
+      "payload": {
+        "application_id": "{{cache:applications.create.response.data.application.application_id}}",
+        "name": "body-named key",
+        "scopes": [
+          "sla.clock.read"
+        ],
+        "rate_limit_rpm": 600
+      },
+      "expectedStatus": 201,
+      "expectedResponse": {
+        "data": {
+          "key": {
+            "key_id": "string",
+            "prefix": "string"
+          },
+          "plaintext": "string"
+        }
+      }
     }
-  },
-  "captureResponse": {
-    "api-keys.create.response.data.key.key_id": "data.key.key_id",
-    "api-keys.create.response.data.key.tenant_id": "data.key.tenant_id"
-  },
-  "description": "Issues a new API key for a tenant with an explicit scope list and optional rate limit and expiry, returning 201 with the key record plus the one-time plaintext secret. Edge cases: tenant_id is required and scopes must be a non-empty array of strings — an empty array, a non-array, or an array containing a non-string all fail as \"scopes must be a non-empty string array\"; rate_limit_rpm, when supplied, must be a finite positive number so 0 and negatives are rejected; expires_at must parse as ISO-8601 and an unparseable value is a 400, but a past expiry is not rejected by the validator; all validation failures are accumulated and returned together in one details array; tenant_id comes from the body rather than the JWT, and a tenant_id with no matching tenant row fails at insert and surfaces as a 500.",
+  ],
   "errorCases": [
     {
-      "status": 401,
-      "code": "Unauthorized",
-      "message": "Missing bearer token",
-      "when": "No Authorization: Bearer <jwt> header on a requireAuth route"
+      "name": "A payload naming a different tenant is refused",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "payload": {
+        "tenant_id": "00000000-0000-0000-0000-0000000000ff",
+        "scopes": [
+          "sla.clock.read"
+        ]
+      },
+      "expectedStatus": 403
     },
     {
-      "status": 401,
-      "code": "Unauthorized",
-      "message": "Invalid or expired token",
-      "when": "Bearer token fails verifyJwt (bad signature, malformed, or exp in the past)"
-    },
-    {
-      "status": 400,
-      "code": "ValidationError",
-      "message": "body must be an object",
-      "when": "Request body is absent or not a JSON object"
-    },
-    {
-      "status": 400,
-      "code": "ValidationError",
-      "message": "tenant_id is required",
-      "when": "tenant_id is missing or blank after trimming"
-    },
-    {
-      "status": 400,
-      "code": "ValidationError",
-      "message": "scopes must be a non-empty string array",
-      "when": "scopes is absent, not an array, empty, or contains a non-string element"
-    },
-    {
-      "status": 400,
-      "code": "ValidationError",
-      "message": "rate_limit_rpm must be a positive number",
-      "when": "rate_limit_rpm is supplied but is not finite or is <= 0"
-    },
-    {
-      "status": 400,
-      "code": "ValidationError",
-      "message": "expires_at must be ISO-8601",
-      "when": "expires_at is supplied but Date.parse cannot parse it"
-    },
-    {
-      "status": 500,
-      "code": "InternalError",
-      "message": "InternalError",
-      "when": "issueKey throws — e.g. tenant_id violates a foreign key, key hashing fails, or the database is unreachable"
+      "name": "Scopes are required",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "payload": {
+        "name": "x"
+      },
+      "expectedStatus": 400
     }
   ]
 }

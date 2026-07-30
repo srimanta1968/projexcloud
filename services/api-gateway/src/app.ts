@@ -106,7 +106,12 @@ import {
   runDetections,
 } from '@projexlight/telemetry';
 import { migrationsDir as rebacMigrations, server as rebacServer } from '@projexlight/sdk-rebac';
-import { migrationsDir as apiKeysMigrations, server as apiKeysServer } from '@projexlight/sdk-api-keys';
+import {
+  migrationsDir as apiKeysMigrations,
+  server as apiKeysServer,
+  startKeyCacheInvalidation,
+  stopKeyCache,
+} from '@projexlight/sdk-api-keys';
 import { migrationsDir as projectionMigrations } from '@projexlight/sdk-projection';
 import {
   migrationsDir as mediaMigrations,
@@ -469,6 +474,37 @@ app.register(cors, {
 app.register(obligationEnforcementPlugin);
 // P7 FR-DSP-2 — WebSocket plugin for dispatch live updates.
 app.register(websocket);
+
+/**
+ * An empty body with `Content-Type: application/json` means `{}`, not an error.
+ *
+ * Fastify's default JSON parser rejects it with 400 "Body cannot be empty".
+ * That is defensible for a route expecting a payload and actively wrong for the
+ * ones that take none: rotating a key, revoking a credential, disabling an
+ * application. Every one of those is a POST whose entire meaning is in the URL,
+ * and every ordinary HTTP client — fetch with a JSON content-type header, curl
+ * -X POST, a Next.js server action — sends exactly this shape. The portal's
+ * rotate button and a documented `curl -X POST .../rotate` both 400'd on it.
+ *
+ * Registered before the routes so it applies to the whole surface.
+ */
+app.addContentTypeParser(
+  'application/json',
+  { parseAs: 'string' },
+  (_req, body: string, done) => {
+    if (!body || body.trim() === '') {
+      done(null, {});
+      return;
+    }
+    try {
+      done(null, JSON.parse(body));
+    } catch (err) {
+      // Malformed JSON is still a client error — only EMPTY is reinterpreted.
+      (err as Error & { statusCode?: number }).statusCode = 400;
+      done(err as Error, undefined);
+    }
+  },
+);
 
 // Default-deny auth gate. Registered on the root instance BEFORE any route or
 // SDK router so its onRequest hook is inherited everywhere. Flips the gateway
@@ -3400,50 +3436,15 @@ const start = async (): Promise<void> => {
       }
     });
 
-    // API keys (/api/keys)
-    app.get<{ Querystring: { tenant_id?: string } }>('/api/keys', async (req, reply) => {
-      const tenant_id = req.query.tenant_id;
-      if (!tenant_id) return reply.code(400).send({ success: false, error: 'tenant_id required' });
-      try {
-        // Delegate to sdk-api-keys so we honour the canonical schema
-        // (prefix / key_hash BYTEA / scopes[] / synthetic_persona_id).
-        const { listKeys } = await import('@projexlight/sdk-api-keys');
-        return { success: true, data: await listKeys(tenant_id) };
-      } catch (e) {
-        return reply.code(500).send({ success: false, error: (e as Error).message });
-      }
-    });
-
-    app.post<{
-      Body: { tenant_id?: string; name?: string; scope?: string; scopes?: string[] };
-    }>('/api/keys', async (req, reply) => {
-      const b = req.body ?? {};
-      const scopes = b.scopes ?? (b.scope ? [b.scope] : []);
-      if (!b.tenant_id || scopes.length === 0) {
-        return reply.code(400).send({ success: false, error: 'tenant_id + scope(s) required' });
-      }
-      try {
-        const { issueKey } = await import('@projexlight/sdk-api-keys');
-        const { key, plaintext } = await issueKey({ tenant_id: b.tenant_id, scopes });
-        // Plaintext returned exactly once — caller must capture.
-        return { success: true, data: { key_id: key.key_id, plaintext } };
-      } catch (e) {
-        return reply.code(500).send({ success: false, error: (e as Error).message });
-      }
-    });
-
-    app.post<{ Params: { key_id: string }; Body: { reason?: string } }>('/api/keys/:key_id/revoke', async (req, reply) => {
-      const reason = req.body?.reason?.trim();
-      if (!reason) return reply.code(400).send({ success: false, error: 'reason required' });
-      try {
-        const { revokeKey } = await import('@projexlight/sdk-api-keys');
-        const revoked = await revokeKey(req.params.key_id);
-        if (!revoked) return reply.code(404).send({ success: false, error: 'key not found or already revoked' });
-        return { success: true };
-      } catch (e) {
-        return reply.code(500).send({ success: false, error: (e as Error).message });
-      }
-    });
+    // API keys: /api/keys/* used to be implemented HERE, inline, with a payload
+    // shape that disagreed with sdk-api-keys, no rotate, and — because these
+    // routes carried no preHandler and read tenant_id straight from the request
+    // — no authorization at all beyond "is signed in somewhere". Two half-guarded
+    // doors into one table is how one of them gets missed in the next audit.
+    //
+    // The implementation now lives in sdk-api-keys (registered above as
+    // apiKeysServer), which mounts /api/api-keys/* plus a deprecated /api/keys/*
+    // alias that delegates to the same tenant-scoped handlers.
 
     // Webhooks (tenant-scoped)
     app.get<{ Querystring: { tenant_id?: string } }>('/api/webhooks/endpoints', async (req, reply) => {
@@ -3964,6 +3965,18 @@ const start = async (): Promise<void> => {
       enabled: process.env.WEBHOOK_DELIVERY_WORKER_ENABLED !== 'false',
       intervalMs: parseInt(process.env.WEBHOOK_DELIVERY_INTERVAL_MS || '5000', 10),
       batchSize: parseInt(process.env.WEBHOOK_DELIVERY_BATCH_SIZE || '50', 10),
+    });
+
+    // API-key verification cache invalidation. sdk-api-keys has published every
+    // revoke to `api-key:revoked` since it shipped, and nothing subscribed — so
+    // the multi-replica broadcast promised by FR-APK-5 did nothing at all. This
+    // is the subscriber: a revoke on any replica evicts the cached credential
+    // here within a second, instead of at the cache TTL.
+    await startKeyCacheInvalidation();
+    app.addHook('onClose', async () => {
+      // Flushes debounced last_used_at so a shutdown does not lose the signal an
+      // operator uses to decide whether a key is safe to revoke.
+      await stopKeyCache();
     });
 
     // P14·E1 scheduler: sdk-sequence step-executor tick. OFF by default (opt-in)

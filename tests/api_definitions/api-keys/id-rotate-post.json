@@ -1,89 +1,64 @@
 {
-  "name": "POST /api/api-keys/:key_id/rotate - Rotate API key with grace window",
-  "endpoint": "/api/api-keys/:key_id/rotate",
   "sdk": "sdk-api-keys",
-  "method": "POST",
+  "sourceFile": "packages/sdk-api-keys/src/server/routes.ts",
   "requiresAuth": true,
-  "expectedStatus": 201,
-  "taskId": "5d5d1458-1136-41d2-a813-629578ff999a",
-  "sprintId": "8ef1d09e-dd8e-4daf-8d03-54dcd9f812f8",
-  "featureId": "7a33ef6c-2dad-4c40-a8a2-f414c13e6c48",
-  "epicId": "00996d23-f667-4a82-9285-7728ba357e7b",
-  "priority": 50,
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "epicId": "783fc94b-6992-49a5-a492-74ee0450a92f",
   "testability": "auto",
+  "name": "POST /api/api-keys/{key_id}/rotate - Rotate with a grace window",
+  "endpoint": "/api/api-keys/{key_id}/rotate",
+  "method": "POST",
+  "expectedStatus": 201,
+  "taskId": "bcf23c76-2e69-48c2-af3f-84acc9e636d2",
+  "featureId": "888ec9d8-5cbb-4d77-9082-fd78b08334ad",
+  "priority": 29,
+  "description": "Issues a replacement carrying the same application, scopes, limit and expiry, and moves the previous key to rotating so it keeps working for a 24 hour grace window - that overlap is what lets a caller deploy the new credential before the old one stops. Returns the new plaintext exactly once. Constrained to the tenant of the caller: rotating used to take only a key_id, so any signed-in user could rotate the key of any other customer and read the new plaintext straight out of this response. A key_id belonging to another tenant now answers 404.",
   "dependsOn": [
     "POST /api/auth/signup-tenant",
-    "POST /api/api-keys"
+    "POST /api/applications",
+    "POST /api/applications/{application_id}/keys"
   ],
-  "testCases": [
-    {
-      "name": "Rotate the freshly-issued key",
-      "headers": {
-        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
-      },
-      "pathParams": {
-        "key_id": "{{cache:api-keys.create.response.data.key.key_id}}"
-      },
-      "payload": {},
-      "expectedStatus": 201
-    }
-  ],
-  "statusTransitions": {
-    "entity": "api-key",
-    "field": "status",
-    "flow": [
+  "fieldEnums": {
+    "status": [
       "active",
       "rotating",
       "revoked",
       "expired"
-    ],
-    "transitions": [
-      {
-        "from": "active",
-        "to": "rotating",
-        "via": "POST /api/api-keys/:key_id/rotate"
-      }
     ]
   },
-  "expectedResponse": {
-    "data": {
-      "key": {
-        "key_id": "string",
-        "status": "string",
-        "rotated_from_key_id": "string"
+  "testCases": [
+    {
+      "name": "Rotate the issued key",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
       },
-      "plaintext": "string"
+      "pathParams": {
+        "key_id": "{{cache:applications.id-keys.response.data.key.key_id}}"
+      },
+      "payload": {},
+      "expectedStatus": 201,
+      "expectedResponse": {
+        "data": {
+          "key": {
+            "key_id": "string",
+            "rotated_from_key_id": "string"
+          },
+          "plaintext": "string"
+        }
+      }
     }
-  },
-  "captureResponse": {
-    "api-keys.rotate.response.data.key.key_id": "data.key.key_id",
-    "api-keys.rotate.response.data.key.rotated_from_key_id": "data.key.rotated_from_key_id"
-  },
-  "description": "Rotates an API key: mints a replacement secret and returns it with 201 while leaving the old key valid for a 24-hour grace window (FR-APK-4) so callers can cut over without downtime. Edge cases: only a rotatable (active, non-revoked) key matches, so rotating an already-revoked key returns 404 \"No rotatable key with id ...\"; an unknown key_id is also 404; rotation is not idempotent — each call mints a new secret and restarts the grace window, so a retried request produces a second replacement key rather than returning the first; the plaintext replacement secret appears only in this response and cannot be re-read afterwards; a malformed key_id fails the query cast and surfaces as 500.",
+  ],
   "errorCases": [
     {
-      "status": 401,
-      "code": "Unauthorized",
-      "message": "Missing bearer token",
-      "when": "No Authorization: Bearer <jwt> header on a requireAuth route"
-    },
-    {
-      "status": 401,
-      "code": "Unauthorized",
-      "message": "Invalid or expired token",
-      "when": "Bearer token fails verifyJwt (bad signature, malformed, or exp in the past)"
-    },
-    {
-      "status": 404,
-      "code": "NotFound",
-      "message": "No rotatable key with id <key_id>",
-      "when": "No rotatable key matches key_id — it does not exist, or it is already revoked"
-    },
-    {
-      "status": 500,
-      "code": "InternalError",
-      "message": "InternalError",
-      "when": "rotateKey throws — e.g. key_id is not a valid UUID, the replacement insert violates a constraint, or the database is unreachable"
+      "name": "A key in another tenant answers 404 and mints nothing",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "pathParams": {
+        "key_id": "00000000-0000-0000-0000-0000000000ff"
+      },
+      "payload": {},
+      "expectedStatus": 404
     }
   ]
 }

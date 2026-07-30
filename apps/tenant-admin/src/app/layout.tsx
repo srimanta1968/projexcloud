@@ -19,7 +19,9 @@ const NAV = [
   { href: '/', label: 'Home' },
   { href: '/billing', label: 'Billing' },
   { href: '/members', label: 'Members' },
-  { href: '/api-keys', label: 'API keys' },
+  // Keys belong to an application, so the nav entry points at the applications
+  // list rather than a flat key list. /api-keys still redirects here.
+  { href: '/applications', label: 'API keys' },
   { href: '/webhooks', label: 'Webhooks' },
   { href: '/approvals', label: 'Approvals' },
   { href: '/connectors', label: 'Connectors' },

@@ -85,6 +85,13 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
    *   500 — handler error (Stripe retries over its 3-day window)
    */
   await app.register(async (scoped) => {
+    // The gateway now registers an explicit root JSON parser (so a bodyless
+    // POST means {} instead of 400). An explicit parent parser cannot simply be
+    // shadowed the way Fastify's built-in default can — adding the same type in
+    // a child scope raises FST_ERR_CTP_ALREADY_PRESENT and takes the whole
+    // gateway down at boot. Removing it inside THIS scope first restores the
+    // intent: raw bytes here, ordinary JSON everywhere else.
+    scoped.removeContentTypeParser('application/json');
     scoped.addContentTypeParser(
       'application/json',
       { parseAs: 'buffer' },

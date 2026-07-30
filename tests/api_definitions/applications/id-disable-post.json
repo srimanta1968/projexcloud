@@ -1,0 +1,60 @@
+{
+  "sdk": "sdk-api-keys",
+  "sourceFile": "packages/sdk-api-keys/src/server/routes.ts",
+  "requiresAuth": true,
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "epicId": "783fc94b-6992-49a5-a492-74ee0450a92f",
+  "testability": "auto",
+  "name": "POST /api/applications/{application_id}/disable - Disable and revoke its keys",
+  "endpoint": "/api/applications/{application_id}/disable",
+  "method": "POST",
+  "expectedStatus": 200,
+  "taskId": "bcf23c76-2e69-48c2-af3f-84acc9e636d2",
+  "featureId": "888ec9d8-5cbb-4d77-9082-fd78b08334ad",
+  "priority": 26,
+  "description": "Switches an application off and revokes every key it owns in the SAME transaction, so there is no window - and on a failure no permanent state - where an application an operator believes is off still has live credentials calling the platform. The response names the revoked key ids so the operator sees what just stopped rather than discovering it when an integration starts failing. This is the switch to reach for when a credential has leaked. Answers 200; a second call answers 404 because the application is no longer active.",
+  "dependsOn": [
+    "POST /api/auth/signup-tenant",
+    "POST /api/applications"
+  ],
+  "fieldEnums": {
+    "status": [
+      "active",
+      "disabled"
+    ]
+  },
+  "testCases": [
+    {
+      "name": "Disable the application and revoke what it owns",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "pathParams": {
+        "application_id": "{{cache:applications.create.response.data.application.application_id}}"
+      },
+      "payload": {},
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "data": {
+          "application": {
+            "status": "string"
+          },
+          "revoked_key_ids": "array"
+        }
+      }
+    }
+  ],
+  "errorCases": [
+    {
+      "name": "Unknown application",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "pathParams": {
+        "application_id": "00000000-0000-0000-0000-0000000000ff"
+      },
+      "payload": {},
+      "expectedStatus": 404
+    }
+  ]
+}
