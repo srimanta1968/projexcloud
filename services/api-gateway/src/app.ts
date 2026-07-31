@@ -355,11 +355,18 @@ import {
 } from '@projexlight/sdk-import';
 // P16 · EP-376 — business-clock SLA: calendars, policies, clocks, escalation
 // ladder, breach records and attainment.
-import { migrationsDir as slaMigrations, server as slaServer } from '@projexlight/sdk-sla';
+import {
+  migrationsDir as slaMigrations,
+  server as slaServer,
+  setOnCallResolver as setSlaOnCallResolver,
+} from '@projexlight/sdk-sla';
 // P16 · EP-377 — workforce coverage: schedules, time off, presence, capacity,
 // on-call. Migrations are wired as soon as they exist so the schema self-creates
 // at boot; the HTTP surface lands with task 95.
-import { migrationsDir as coverageMigrations } from '@projexlight/sdk-coverage';
+import {
+  migrationsDir as coverageMigrations,
+  makeSlaOnCallResolver,
+} from '@projexlight/sdk-coverage';
 import {
   migrationsDir as twilioVoiceMigrations,
   server as twilioVoiceServer,
@@ -3968,6 +3975,16 @@ const start = async (): Promise<void> => {
       intervalMs: parseInt(process.env.WEBHOOK_DELIVERY_INTERVAL_MS || '5000', 10),
       batchSize: parseInt(process.env.WEBHOOK_DELIVERY_BATCH_SIZE || '50', 10),
     });
+
+    // sdk-sla escalation -> sdk-coverage on-call roster.
+    // sdk-sla ships NO default resolver on purpose: firing a 'critical' rung at
+    // an empty audience because nobody wired the roster is worse than failing
+    // the firing, because the failure is visible in the ledger and recovers
+    // itself once a resolver exists. This is that resolver. It returns persona
+    // ids in tier order, and returns EMPTY rather than substituting a fallback
+    // when nobody is on call -- the gap is the thing the roster exists to
+    // surface, so hiding it behind a stand-in audience would defeat both SDKs.
+    setSlaOnCallResolver(makeSlaOnCallResolver());
 
     // API-key verification cache invalidation. sdk-api-keys has published every
     // revoke to `api-key:revoked` since it shipped, and nothing subscribed — so
