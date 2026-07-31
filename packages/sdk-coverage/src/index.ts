@@ -19,3 +19,6 @@ export * from './services/timezone';
 export * from './services/eligibilityService';
 export * from './services/capacityService';
 export * from './services/onCallService';
+export * from './services/presenceService';
+export * from './services/gapService';
+export * as server from './server';

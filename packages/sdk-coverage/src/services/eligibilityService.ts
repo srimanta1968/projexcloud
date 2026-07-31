@@ -3,6 +3,7 @@ import {
   isWithinWindowsAt,
   localParts,
   UnknownTimezone,
+  assertNamedTimezone,
   type LocalParts,
   type WorkingWindow,
 } from './timezone';
@@ -555,8 +556,9 @@ export interface UpsertScheduleInput {
  * index guarantees only one is ever active.
  */
 export async function upsertSchedule(input: UpsertScheduleInput): Promise<WorkSchedule> {
-  // Fail before writing rather than at the first eligibility sweep.
-  localParts(Date.now(), input.iana_timezone);
+  // Fail before writing rather than at the first eligibility sweep -- and refuse
+  // a fixed offset too, which Intl accepts but the database CHECK does not.
+  assertNamedTimezone(input.iana_timezone);
   return dataService.tx(async (q) => {
     await q(
       `UPDATE coverage.work_schedule SET is_active = false
@@ -593,6 +595,8 @@ export async function getSchedule(
 
 export async function listSchedules(filter: {
   tenant_id: string;
+  /** Narrow to one persona. The list endpoint documents this, so it lives here. */
+  persona_id?: string;
   limit?: number;
   offset?: number;
 }): Promise<WorkSchedule[]> {
@@ -601,8 +605,9 @@ export async function listSchedules(filter: {
   return dataService.rows<WorkSchedule>(
     `SELECT ${SCHEDULE_COLS} FROM coverage.work_schedule
       WHERE tenant_id = $1 AND is_active
+        AND ($2::uuid IS NULL OR persona_id = $2)
       ORDER BY persona_id
       LIMIT ${limit} OFFSET ${offset}`,
-    [filter.tenant_id],
+    [filter.tenant_id, filter.persona_id ?? null],
   );
 }

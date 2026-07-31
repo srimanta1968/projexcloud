@@ -41,6 +41,45 @@ export class UnknownTimezone extends Error {
   }
 }
 
+/**
+ * A fixed UTC offset presented where a zone belongs.
+ *
+ * Separate from UnknownTimezone because it is a different mistake with a
+ * different fix: '+05:30' is not unresolvable, it is unable to express DST, so a
+ * schedule written against it is silently an hour wrong for part of the year in
+ * any zone that observes it. `Intl` accepts offset identifiers, so nothing in
+ * JavaScript catches this - the database CHECK does, which meant it surfaced as
+ * a 500 from inside the INSERT instead of a refusal before the write.
+ */
+export class FixedOffsetTimezone extends Error {
+  readonly status = 422;
+  readonly code = 'FIXED_OFFSET_TIMEZONE';
+  constructor(public timezone: string) {
+    super(
+      `[sdk-coverage] '${timezone}' is a fixed UTC offset, not a named zone. ` +
+        'An offset cannot express daylight saving, so a schedule written against it is ' +
+        'wrong for part of the year. Use a named IANA zone such as America/Chicago.',
+    );
+    this.name = 'FixedOffsetTimezone';
+  }
+}
+
+/**
+ * Mirrors coverage.is_named_timezone() in migration 001, so the service refuses
+ * what the database would refuse -- and refuses it BEFORE the write, where the
+ * caller can still act on the message.
+ */
+const OFFSET_FORM = /^[+-][0-9]/;
+const PREFIXED_OFFSET_FORM = /^(UTC|GMT)[+-][0-9]/;
+
+export function assertNamedTimezone(timezone: string): void {
+  if (OFFSET_FORM.test(timezone) || PREFIXED_OFFSET_FORM.test(timezone)) {
+    throw new FixedOffsetTimezone(timezone);
+  }
+  // Resolvability is the other half, and Intl is the authority on it.
+  localParts(Date.now(), timezone);
+}
+
 const formatters = new Map<string, Intl.DateTimeFormat>();
 
 /** Cached per zone: building a DateTimeFormat is the expensive part of this file,

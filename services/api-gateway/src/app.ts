@@ -365,6 +365,7 @@ import {
 // at boot; the HTTP surface lands with task 95.
 import {
   migrationsDir as coverageMigrations,
+  server as coverageServer,
   makeSlaOnCallResolver,
 } from '@projexlight/sdk-coverage';
 import {
@@ -646,6 +647,7 @@ app.register(incidentServer.registerRoutes);
 app.register(sourceRecordServer.registerRoutes);
 app.register(importServer.registerRoutes);
 app.register(slaServer.registerRoutes);
+app.register(coverageServer.registerRoutes);
 app.register(twilioVoiceServer.registerRoutes);
 app.register(twilioVoiceServer.registerWebhookRoutes);
 app.register(serviceRequestServer.registerRoutes);
