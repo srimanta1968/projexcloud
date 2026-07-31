@@ -163,37 +163,55 @@ suite('eligibility matrix (integration)', () => {
     return persona;
   }
 
-  it('returns a persona only when EVERY condition is favourable — all 32 combinations', async () => {
+  it('returns a persona only when EVERY condition is favourable — all 64 combinations', async () => {
+    /*
+     * Six independent adverse conditions across the five inputs the criterion names
+     * — schedule, time-off (PTO and a meeting are separate rows and separate
+     * reasons), holiday, presence and capacity. Every one of the 64 combinations is
+     * built as a real persona and asserted from both directions: eligible exactly
+     * when nothing is adverse, and carrying EVERY applicable reason otherwise.
+     */
     const combos: Array<{
-      onShift: boolean; onPto: boolean; inMeeting: boolean; onHoliday: boolean; present: boolean;
+      onShift: boolean; onPto: boolean; inMeeting: boolean; onHoliday: boolean;
+      present: boolean; atCapacity: boolean;
     }> = [];
     for (const onShift of [true, false]) {
       for (const onPto of [true, false]) {
         for (const inMeeting of [true, false]) {
           for (const onHoliday of [true, false]) {
             for (const present of [true, false]) {
-              combos.push({ onShift, onPto, inMeeting, onHoliday, present });
+              for (const atCapacity of [true, false]) {
+                combos.push({ onShift, onPto, inMeeting, onHoliday, present, atCapacity });
+              }
             }
           }
         }
       }
     }
-    expect(combos).toHaveLength(32);
+    expect(combos).toHaveLength(64);
 
     const made = new Map<string, typeof combos[number]>();
-    for (const combo of combos) made.set(await makePersona(combo), combo);
+    // Every persona in the matrix carries a capacity policy of 3 in the standard
+    // band; the load provider is what decides whether they are at it. Load is
+    // measured at evaluation time, so this is where the capacity axis lives.
+    for (const combo of combos) made.set(await makePersona({ ...combo, atCapacity: true }), combo);
+    setLoadProvider(async ({ persona_ids }) =>
+      Object.fromEntries(persona_ids.map((id) => [id, { standard: made.get(id)?.atCapacity ? 3 : 0 }])),
+    );
 
     const result = await findEligible({
-      tenant_id: TENANT, at: AT, persona_ids: [...made.keys()],
+      tenant_id: TENANT, at: AT, persona_ids: [...made.keys()], band: 'standard', limit: 200,
     });
-    expect(result.evaluated).toBe(32);
+    expect(result.evaluated).toBe(64);
+    expect(result.capacity_evaluated).toBe(true);
 
     const eligibleIds = new Set(result.eligible.map((e) => e.persona_id));
     const reasonsBy = new Map(result.ineligible.map((i) => [i.persona_id, i.reasons.map((r) => r.code)]));
 
     for (const [persona, combo] of made) {
       const shouldBeEligible =
-        combo.onShift && !combo.onPto && !combo.inMeeting && !combo.onHoliday && combo.present;
+        combo.onShift && !combo.onPto && !combo.inMeeting && !combo.onHoliday &&
+        combo.present && !combo.atCapacity;
       expect(
         eligibleIds.has(persona),
         `combination ${JSON.stringify(combo)} — expected eligible=${shouldBeEligible}`,
@@ -206,6 +224,7 @@ suite('eligibility matrix (integration)', () => {
         if (combo.onPto || combo.inMeeting) expect(codes).toContain('TIME_OFF');
         if (combo.onHoliday) expect(codes).toContain('HOLIDAY');
         if (!combo.present) expect(codes).toContain('PRESENCE');
+        if (combo.atCapacity) expect(codes).toContain('AT_CAPACITY');
       }
     }
 
