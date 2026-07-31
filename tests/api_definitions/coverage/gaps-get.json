@@ -1,0 +1,74 @@
+{
+  "sdk": "sdk-coverage",
+  "sourceFile": "packages/sdk-coverage/src/services/gapService.ts",
+  "requiresAuth": true,
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "epicId": "75f3f5a3-faa8-4b82-badf-4feda46c00e7",
+  "featureId": "5f6dc00d-cb8f-4a54-9a19-9b1e0f0b2f5a",
+  "taskId": "422472b0-117e-4cb0-9f90-0c6962439155",
+  "testability": "auto",
+  "name": "GET /api/coverage/gaps - Uncovered windows, before they open",
+  "endpoint": "/api/coverage/gaps",
+  "method": "GET",
+  "expectedStatus": 200,
+  "priority": 16,
+  "description": "Windows in which nobody is on call for a rotation and tier. The whole value is in the tense: a gap found while an incident is escalating is not a warning, it is an outage, so this is written to be run AHEAD of the window and each gap reports how long until it opens. Defaults to tier 1, because a hole there means the first page goes nowhere, whereas a tier-2 hole with tier 1 staffed is thin cover rather than none. Abutting shifts produce NO gap - a zero-length gap at every handover would bury the real ones.",
+  "dependsOn": [
+    "POST /api/auth/signup-tenant",
+    "POST /api/coverage/on-call"
+  ],
+  "fieldEnums": {
+    "tier": [
+      "1",
+      "2",
+      "3"
+    ]
+  },
+  "testCases": [
+    {
+      "name": "Look ahead over the next week for tier 1",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "queryParams": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "rotation_ref": "primary",
+        "from": "{{dynamic:futuredatetime+1h}}",
+        "to": "{{dynamic:futuredatetime+7d}}",
+        "tier": "1"
+      },
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "data": {
+          "gaps": "array",
+          "rotation_ref": "string"
+        }
+      }
+    }
+  ],
+  "errorCases": [
+    {
+      "name": "A window that ends before it starts is refused",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "queryParams": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "rotation_ref": "primary",
+        "from": "{{dynamic:futuredatetime+7d}}",
+        "to": "{{dynamic:futuredatetime+1h}}"
+      },
+      "expectedStatus": 422
+    },
+    {
+      "name": "rotation_ref is required",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "queryParams": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}"
+      },
+      "expectedStatus": 400
+    }
+  ]
+}

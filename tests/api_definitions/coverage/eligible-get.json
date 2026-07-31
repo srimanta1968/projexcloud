@@ -1,0 +1,72 @@
+{
+  "sdk": "sdk-coverage",
+  "sourceFile": "packages/sdk-coverage/src/services/eligibilityService.ts",
+  "requiresAuth": true,
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "epicId": "75f3f5a3-faa8-4b82-badf-4feda46c00e7",
+  "featureId": "5f6dc00d-cb8f-4a54-9a19-9b1e0f0b2f5a",
+  "taskId": "422472b0-117e-4cb0-9f90-0c6962439155",
+  "testability": "auto",
+  "name": "GET /api/coverage/eligible - Who can act right now",
+  "endpoint": "/api/coverage/eligible",
+  "method": "GET",
+  "expectedStatus": 200,
+  "priority": 15,
+  "description": "THE core endpoint. Availability is a subtraction - schedule MINUS time-off MINUS holiday, intersected with live presence and capacity headroom - and every term stays a separate queryable fact so the answer can always say WHY somebody was skipped. Returns eligible personas sorted by most headroom first, so a router can take the head of the list, each with current load and remaining headroom. Ineligible personas are returned WITH their reasons by default, because the reasons are the point: a router that cannot explain a skip is a router nobody trusts. Reasons are COLLECTED, not short-circuited, so a persona who is both on PTO and at capacity reports both. tenant_id is taken from the credential; passing one that names a DIFFERENT tenant is a 403 rather than being silently preferred either way, so a misconfigured caller fails loudly instead of reading somebody else's roster.",
+  "dependsOn": [
+    "POST /api/auth/signup-tenant",
+    "POST /api/coverage/schedules",
+    "PUT /api/coverage/presence"
+  ],
+  "fieldEnums": {
+    "include_ineligible": [
+      "true",
+      "false"
+    ],
+    "ignore_presence": [
+      "true",
+      "false"
+    ]
+  },
+  "testCases": [
+    {
+      "name": "Ask who can act now, with reasons for those who cannot",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "queryParams": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "include_ineligible": "true",
+        "limit": "50"
+      },
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "data": {
+          "eligible": "array",
+          "ineligible": "array",
+          "evaluated": "number",
+          "capacity_evaluated": "boolean"
+        }
+      }
+    }
+  ],
+  "errorCases": [
+    {
+      "name": "Unauthenticated is refused by the default-deny gate",
+      "queryParams": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}"
+      },
+      "expectedStatus": 401
+    },
+    {
+      "name": "A tenant_id naming a different tenant than the credential is refused",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "queryParams": {
+        "tenant_id": "00000000-0000-0000-0000-0000000000ff"
+      },
+      "expectedStatus": 403
+    }
+  ]
+}

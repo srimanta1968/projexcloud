@@ -1,0 +1,99 @@
+{
+  "sdk": "sdk-coverage",
+  "sourceFile": "packages/sdk-coverage/src/server/routes.ts",
+  "requiresAuth": true,
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "epicId": "75f3f5a3-faa8-4b82-badf-4feda46c00e7",
+  "featureId": "5f6dc00d-cb8f-4a54-9a19-9b1e0f0b2f5a",
+  "taskId": "422472b0-117e-4cb0-9f90-0c6962439155",
+  "testability": "auto",
+  "name": "POST /api/coverage/on-call - Add a roster entry",
+  "endpoint": "/api/coverage/on-call",
+  "method": "POST",
+  "expectedStatus": 201,
+  "priority": 17,
+  "description": "Puts a persona on call for an interval at a tier. Entries overlap on purpose - tier 1 and tier 2 are both on call at once, which is what a tier means - so there is no exclusion constraint and no \"current on-call\" column; the answer is computed at the instant it is asked about. Re-posting the same rotation, tier, persona and start extends the interval rather than duplicating it, so a roster import is safe to re-run.",
+  "dependsOn": [
+    "POST /api/auth/signup-tenant",
+    "POST /api/personas"
+  ],
+  "fieldEnums": {
+    "tier": [
+      "1",
+      "2",
+      "3"
+    ]
+  },
+  "testCases": [
+    {
+      "name": "Tier 1 for the coming week",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "payload": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "rotation_ref": "primary",
+        "persona_id": "{{cache:personas.create.response.data.persona.persona_id}}",
+        "tier": 1,
+        "starts_at": "{{dynamic:futuredatetime+1h}}",
+        "ends_at": "{{dynamic:futuredatetime+7d}}"
+      },
+      "expectedStatus": 201,
+      "expectedResponse": {
+        "data": {
+          "entry": {
+            "roster_id": "string",
+            "tier": "number"
+          }
+        }
+      }
+    },
+    {
+      "name": "A manager on duty at tier 2",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "payload": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "rotation_ref": "primary",
+        "persona_id": "{{cache:personas.create.response.data.persona.persona_id}}",
+        "tier": 2,
+        "starts_at": "{{dynamic:futuredatetime+1h}}",
+        "ends_at": "{{dynamic:futuredatetime+7d}}",
+        "is_manager_on_duty": true
+      },
+      "expectedStatus": 201
+    }
+  ],
+  "errorCases": [
+    {
+      "name": "An interval that ends before it starts is refused",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "payload": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "rotation_ref": "primary",
+        "persona_id": "{{cache:personas.create.response.data.persona.persona_id}}",
+        "starts_at": "{{dynamic:futuredatetime+7d}}",
+        "ends_at": "{{dynamic:futuredatetime+1h}}"
+      },
+      "expectedStatus": 422
+    },
+    {
+      "name": "Tier zero is refused - tiers start at one",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "payload": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "rotation_ref": "primary",
+        "persona_id": "{{cache:personas.create.response.data.persona.persona_id}}",
+        "tier": 0,
+        "starts_at": "{{dynamic:futuredatetime+1h}}",
+        "ends_at": "{{dynamic:futuredatetime+7d}}"
+      },
+      "expectedStatus": 422
+    }
+  ]
+}

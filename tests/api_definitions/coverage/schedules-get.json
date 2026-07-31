@@ -1,0 +1,57 @@
+{
+  "sdk": "sdk-coverage",
+  "sourceFile": "packages/sdk-coverage/src/server/routes.ts",
+  "requiresAuth": true,
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "epicId": "75f3f5a3-faa8-4b82-badf-4feda46c00e7",
+  "featureId": "5f6dc00d-cb8f-4a54-9a19-9b1e0f0b2f5a",
+  "taskId": "422472b0-117e-4cb0-9f90-0c6962439155",
+  "testability": "auto",
+  "name": "GET /api/coverage/schedules - List working schedules",
+  "endpoint": "/api/coverage/schedules",
+  "method": "GET",
+  "expectedStatus": 200,
+  "priority": 11,
+  "description": "Working schedules for the tenant, optionally narrowed to one persona. Returns the windows as written, in the persona own timezone, rather than projected into UTC - a schedule shown in a zone its owner does not work in is unreadable to the person who has to correct it.",
+  "dependsOn": [
+    "POST /api/auth/signup-tenant",
+    "POST /api/coverage/schedules"
+  ],
+  "fieldEnums": {
+    "weekday": [
+      "0",
+      "1",
+      "2",
+      "3",
+      "4",
+      "5",
+      "6"
+    ]
+  },
+  "testCases": [
+    {
+      "name": "List every schedule in the tenant",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "queryParams": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}"
+      },
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "data": {
+          "schedules": "array"
+        }
+      }
+    }
+  ],
+  "errorCases": [
+    {
+      "name": "Unauthenticated",
+      "queryParams": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}"
+      },
+      "expectedStatus": 401
+    }
+  ]
+}

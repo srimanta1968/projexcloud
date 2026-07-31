@@ -1,0 +1,77 @@
+{
+  "sdk": "sdk-coverage",
+  "sourceFile": "packages/sdk-coverage/src/server/routes.ts",
+  "requiresAuth": true,
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "epicId": "75f3f5a3-faa8-4b82-badf-4feda46c00e7",
+  "featureId": "5f6dc00d-cb8f-4a54-9a19-9b1e0f0b2f5a",
+  "taskId": "422472b0-117e-4cb0-9f90-0c6962439155",
+  "testability": "auto",
+  "name": "POST /api/coverage/holiday-calendars - Maintain a regional holiday list",
+  "endpoint": "/api/coverage/holiday-calendars",
+  "method": "POST",
+  "expectedStatus": 201,
+  "priority": 13,
+  "description": "A holiday list scoped to a tenant AND a region, because a company operating in two countries does not share one. region is free-form so a tenant can key by country, state or site - naming the granularity here would be a business rule. maintained_by records WHO keeps it current: a holiday list nobody owns goes stale silently, and the first anyone notices is a working day that should not have been. Re-posting the same region replaces its dates.",
+  "dependsOn": [
+    "POST /api/auth/signup-tenant"
+  ],
+  "fieldEnums": {},
+  "testCases": [
+    {
+      "name": "A regional list with named owner",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "payload": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "region": "US-TX",
+        "name": "Texas public holidays",
+        "dates": [
+          "2026-12-25",
+          "2027-01-01"
+        ],
+        "maintained_by": "people-ops"
+      },
+      "expectedStatus": 201,
+      "expectedResponse": {
+        "data": {
+          "calendar": {
+            "holiday_calendar_id": "string",
+            "region": "string"
+          }
+        }
+      }
+    }
+  ],
+  "errorCases": [
+    {
+      "name": "A blank region is refused",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "payload": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "region": "   ",
+        "dates": [
+          "2026-12-25"
+        ]
+      },
+      "expectedStatus": 422
+    },
+    {
+      "name": "A malformed date is refused rather than silently dropped",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "payload": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "region": "US-CA",
+        "dates": [
+          "25/12/2026"
+        ]
+      },
+      "expectedStatus": 422
+    }
+  ]
+}
