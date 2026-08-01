@@ -1,0 +1,49 @@
+{
+  "sdk": "sdk-assignment",
+  "sourceFile": "packages/sdk-assignment/src/server/routes.ts",
+  "requiresAuth": true,
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "epicId": "af159e51-90a4-46cf-8d57-444515cfbe56",
+  "taskId": "efd127bc-a016-41e2-8831-bca0388ebba1",
+  "priority": 15,
+  "testability": "auto",
+  "name": "GET /api/assignment/routes - Every published rule version",
+  "endpoint": "/api/assignment/routes",
+  "method": "GET",
+  "expectedStatus": 200,
+  "description": "Lists every published version of a named rule set, newest first, with exactly one marked active. This is the audit view: which rules are in force, what they replaced, and what a rollback would return to. QA edge cases: versions are never deleted, so the list only grows - a decision from months ago still points at a version that is here; a tenant that has published nothing gets an empty array rather than a 404, because \"no rules yet\" is a normal state and routing simply treats every subject as routable.",
+  "dependsOn": [
+    "POST /api/auth/signup-tenant",
+    "POST /api/assignment/routes"
+  ],
+  "testCases": [
+    {
+      "name": "List rule versions",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "queryParams": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}"
+      },
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "data": {
+          "versions": "array"
+        }
+      }
+    }
+  ],
+  "errorCases": [
+    {
+      "name": "Unauthenticated is refused by the default-deny gate",
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "missing or invalid tenant token",
+      "when": "no valid tenant Bearer token or scoped API key on the request",
+      "expectedStatus": 401,
+      "queryParams": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}"
+      }
+    }
+  ]
+}

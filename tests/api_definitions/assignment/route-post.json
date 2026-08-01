@@ -1,0 +1,123 @@
+{
+  "sdk": "sdk-assignment",
+  "sourceFile": "packages/sdk-assignment/src/server/routes.ts",
+  "requiresAuth": true,
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "epicId": "af159e51-90a4-46cf-8d57-444515cfbe56",
+  "taskId": "efd127bc-a016-41e2-8831-bca0388ebba1",
+  "priority": 15,
+  "testability": "auto",
+  "name": "POST /api/assignment/route - Route one subject and explain it",
+  "endpoint": "/api/assignment/route",
+  "method": "POST",
+  "expectedStatus": 200,
+  "description": "Runs the six-step pipeline - eligibility, priority, specialty, availability, assignment, fallback - and returns the chosen persona WITH a per-step trace in plain language. The trace is the product: an operator asking \"why did this go there\" months later needs the explanation that was written down at the time, because re-running the pipeline today answers a different question once the rules and everybody's availability have moved on. QA edge cases: an outcome of REVIEW is a SUCCESSFUL answer (200), not an error - \"this needs a human\" is a decision; a subject that cannot ANSWER an eligibility predicate (it lacks the field the rule reads) goes to REVIEW rather than being force-assigned, and is deliberately distinct from UNROUTABLE, which means the rule was answered and the answer was no; if no coverage resolver is wired the availability step also returns REVIEW rather than assuming everybody is free; dry_run=true returns the same trace without recording the decision.",
+  "dependsOn": [
+    "POST /api/auth/signup-tenant",
+    "POST /api/assignment/routes"
+  ],
+  "captureResponse": {
+    "assignment.route.decision_id": "data.decision_id"
+  },
+  "fieldEnums": {
+    "dry_run": [
+      "true",
+      "false"
+    ]
+  },
+  "statusTransitions": {
+    "routing_decision": [
+      "none -> ASSIGNED via POST /api/assignment/route (a candidate was available)",
+      "none -> FALLBACK via POST /api/assignment/route (nobody available, a catcher is configured)",
+      "none -> REVIEW via POST /api/assignment/route (ambiguous input, or availability unknown)",
+      "none -> UNROUTABLE via POST /api/assignment/route (an eligibility rule answered no)"
+    ]
+  },
+  "testCases": [
+    {
+      "name": "Route a subject through the pipeline",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "payload": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "subject_ref": "subject-{{dynamic:slug}}",
+        "subject": {
+          "region": "TX",
+          "severity": 9,
+          "required_specialty": "roofing"
+        },
+        "candidate_persona_ids": [
+          "{{cache:personas.create.response.data.persona.persona_id}}"
+        ],
+        "persona_specialties": {},
+        "rule_set_name": "default",
+        "dry_run": false
+      },
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "data": {
+          "outcome": "string",
+          "trace": "array",
+          "rule_set_version": "number"
+        }
+      }
+    }
+  ],
+  "errorCases": [
+    {
+      "name": "A subject with no ref is refused",
+      "status": 400,
+      "code": "VALIDATION_ERROR",
+      "message": "subject_ref is required",
+      "when": "subject_ref is missing, or candidate_persona_ids is empty",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "payload": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "candidate_persona_ids": [
+          "{{cache:personas.create.response.data.persona.persona_id}}"
+        ]
+      },
+      "expectedStatus": 400,
+      "expectedError": {
+        "code": "VALIDATION_ERROR"
+      }
+    },
+    {
+      "name": "An empty candidate list is refused",
+      "status": 400,
+      "code": "VALIDATION_ERROR",
+      "message": "candidate_persona_ids must be a non-empty array",
+      "when": "no candidates are supplied",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "payload": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "subject_ref": "x",
+        "candidate_persona_ids": []
+      },
+      "expectedStatus": 400,
+      "expectedError": {
+        "code": "VALIDATION_ERROR"
+      }
+    },
+    {
+      "name": "Unauthenticated is refused by the default-deny gate",
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "missing or invalid tenant token",
+      "when": "no valid tenant Bearer token or scoped API key on the request",
+      "expectedStatus": 401,
+      "payload": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "subject_ref": "x",
+        "candidate_persona_ids": [
+          "{{cache:personas.create.response.data.persona.persona_id}}"
+        ]
+      }
+    }
+  ]
+}

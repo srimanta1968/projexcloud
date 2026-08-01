@@ -14,7 +14,8 @@
   "expectedStatus": 201,
   "description": "The MANUAL lane. Holds the quoted credits for a capability that the caller will execute and settle itself, and returns the balance as it stands after the hold. It is deliberately distinct from POST /api/capability-requests + /execute, which is the BROKERED lane where the broker picks the provider, walks the fallback chain and settles for you; here the caller performs the lookup. Both lanes hold credits the same way and settle under the same rules - what differs is who does the looking. QA edge cases: the same governance applies, so a REQUEST_ONLY role gets a PENDING_APPROVAL reservation it cannot settle until it is approved; a hold that cannot be covered is 402 and writes nothing; the returned balance already reflects the hold, so available has gone down while balance has not moved.",
   "dependsOn": [
-    "POST /api/auth/signup-tenant"
+    "POST /api/auth/signup-tenant",
+    "POST /api/personas"
   ],
   "setupScript": "data_credits_account.sql",
   "captureResponse": {
@@ -32,7 +33,7 @@
         "capability_key": "{{var:data_credits_capability_key}}",
         "subject_fingerprint": "fp-{{dynamic:slug}}",
         "role_ref": "{{static:analyst}}",
-        "requested_by_persona_id": "{{var:data_credits_persona_id}}",
+        "requested_by_persona_id": "{{cache:personas.create.response.data.persona.persona_id}}",
         "metadata": {
           "lane": "manual"
         }

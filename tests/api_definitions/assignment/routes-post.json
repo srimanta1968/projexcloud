@@ -1,0 +1,154 @@
+{
+  "sdk": "sdk-assignment",
+  "sourceFile": "packages/sdk-assignment/src/server/routes.ts",
+  "requiresAuth": true,
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "epicId": "af159e51-90a4-46cf-8d57-444515cfbe56",
+  "taskId": "efd127bc-a016-41e2-8831-bca0388ebba1",
+  "priority": 15,
+  "testability": "auto",
+  "name": "POST /api/assignment/routes - Publish or activate a routing rule version",
+  "endpoint": "/api/assignment/routes",
+  "method": "POST",
+  "expectedStatus": 201,
+  "description": "Routing rules are DATA, not code: publishing a version is this call, and switching which one is in force is the same call with activate_version. A routing rule changes when the business changes, which is weekly; a deploy is not weekly, so rules that live in code get hard-coded into one vertical and the platform stops being one. A published version is FROZEN - it can never be edited, only superseded - because every decision names the version that produced it, and an editable version would explain last month's decision with this month's rules, which is worse than no explanation because it is a confident wrong one. QA edge cases: sending activate_version switches the active version and returns 200 (nothing was created); sending rules publishes a NEW version and returns 201, with the version number allocated server-side (never supplied by the caller); exactly one version per named set is active at a time, so activating one deactivates the previous automatically; activating a version that does not exist is 404; rolling back is simply activating an earlier version number.",
+  "dependsOn": [
+    "POST /api/auth/signup-tenant"
+  ],
+  "captureResponse": {
+    "assignment.routes.publish.version": "data.version",
+    "assignment.routes.publish.rule_set_id": "data.rule_set_id"
+  },
+  "fieldEnums": {
+    "activate": [
+      "true",
+      "false"
+    ]
+  },
+  "testCases": [
+    {
+      "name": "Publish a rule set and make it active",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "payload": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "name": "default-{{dynamic:slug}}",
+        "rules": {
+          "eligibility": [
+            {
+              "field": "region",
+              "op": "present",
+              "because": "a subject with no region cannot be routed"
+            }
+          ],
+          "priority_bands": [
+            {
+              "band": "urgent",
+              "when": [
+                {
+                  "field": "severity",
+                  "op": "gte",
+                  "value": 8
+                }
+              ]
+            },
+            {
+              "band": "standard",
+              "when": []
+            }
+          ],
+          "specialty": {
+            "field": "required_specialty"
+          },
+          "assignment": {
+            "pick": "most_headroom"
+          },
+          "fallback": {
+            "to_review": true
+          }
+        },
+        "activate": true,
+        "published_by": "{{static:qa}}"
+      },
+      "expectedStatus": 201,
+      "expectedResponse": {
+        "data": {
+          "rule_set_id": "string",
+          "version": "number",
+          "is_active": "boolean"
+        }
+      }
+    }
+  ],
+  "errorCases": [
+    {
+      "name": "Neither rules nor activate_version is refused",
+      "status": 400,
+      "code": "VALIDATION_ERROR",
+      "message": "rules (object) or activate_version (number) is required",
+      "when": "the payload carries neither a rule body nor a version to activate",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "payload": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}"
+      },
+      "expectedStatus": 400,
+      "expectedError": {
+        "code": "VALIDATION_ERROR"
+      }
+    },
+    {
+      "status": 404,
+      "code": "ROUTING_RULE_SET_NOT_FOUND",
+      "message": "no active routing rule set 'x' for this tenant",
+      "when": "activate_version names a version that was never published"
+    },
+    {
+      "name": "Unauthenticated is refused by the default-deny gate",
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "missing or invalid tenant token",
+      "when": "no valid tenant Bearer token or scoped API key on the request",
+      "expectedStatus": 401,
+      "payload": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "rules": {
+          "eligibility": [
+            {
+              "field": "region",
+              "op": "present",
+              "because": "a subject with no region cannot be routed"
+            }
+          ],
+          "priority_bands": [
+            {
+              "band": "urgent",
+              "when": [
+                {
+                  "field": "severity",
+                  "op": "gte",
+                  "value": 8
+                }
+              ]
+            },
+            {
+              "band": "standard",
+              "when": []
+            }
+          ],
+          "specialty": {
+            "field": "required_specialty"
+          },
+          "assignment": {
+            "pick": "most_headroom"
+          },
+          "fallback": {
+            "to_review": true
+          }
+        }
+      }
+    }
+  ]
+}

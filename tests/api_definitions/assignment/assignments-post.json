@@ -1,0 +1,87 @@
+{
+  "sdk": "sdk-assignment",
+  "sourceFile": "packages/sdk-assignment/src/server/routes.ts",
+  "requiresAuth": true,
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "epicId": "af159e51-90a4-46cf-8d57-444515cfbe56",
+  "taskId": "efd127bc-a016-41e2-8831-bca0388ebba1",
+  "priority": 15,
+  "testability": "auto",
+  "name": "POST /api/assignments - Offer a subject to a primary, backup and manager",
+  "endpoint": "/api/assignments",
+  "method": "POST",
+  "expectedStatus": 201,
+  "description": "Opens the assignment: a primary, an optional backup, an optional manager, an acceptance window, and the SOURCE TIMESTAMP - when the WORLD produced the subject. That timestamp is required and never defaulted to now, because every SLA measures from it and quietly substituting \"now\" would restate a six-hour-old subject as fresh. It is then frozen for the life of the assignment: a decline, a reassignment, a fallback and a manager takeover all move OWNERSHIP, never the clock. QA edge cases: acceptance and response SLA clocks are started through sdk-sla FROM the source timestamp, and a clock that cannot be started leaves a null ref rather than losing the assignment; a backup equal to the primary is refused by the database; acceptance_window_minutes defaults to 5 and may be 0, which means the backup is notified at the same time. NOTE ON THE PERSONA FIELDS: primary comes from the sdk-persona producer, while the backup and the manager resolve from seeded ids. A backup or manager equal to the primary is refused (a backup that is the primary is not a backup), and the dependency graph is ONE node per METHOD+ENDPOINT so it cannot express a second and third persona from the same producer [MUST-51]; these columns are loose references with no foreign key into sdk-persona, so a seeded id is truthful rather than a fabricated FK.",
+  "dependsOn": [
+    "POST /api/auth/signup-tenant",
+    "POST /api/personas"
+  ],
+  "captureResponse": {
+    "assignment.assignments.create.record_id": "data.record_id"
+  },
+  "testCases": [
+    {
+      "name": "Offer a subject with a backup and a manager",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "payload": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "subject_ref": "subject-{{dynamic:slug}}",
+        "source_timestamp": "{{dynamic:pastdatetime}}",
+        "primary_persona_id": "{{cache:personas.create.response.data.persona.persona_id}}",
+        "backup_persona_id": "{{var:coverage_backup_persona_id}}",
+        "manager_persona_id": "{{var:assignment_manager_persona_id}}",
+        "acceptance_window_minutes": 5,
+        "routing_decision_id": "{{cache:assignment.route.decision_id}}",
+        "actor": "{{static:qa}}",
+        "metadata": {
+          "source": "api-test"
+        }
+      },
+      "expectedStatus": 201,
+      "expectedResponse": {
+        "data": {
+          "record_id": "string",
+          "state": "string",
+          "source_timestamp": "string"
+        }
+      }
+    }
+  ],
+  "errorCases": [
+    {
+      "name": "A missing source_timestamp is refused rather than defaulted",
+      "status": 400,
+      "code": "VALIDATION_ERROR",
+      "message": "source_timestamp (ISO-8601) is required",
+      "when": "the payload omits source_timestamp or it is not parseable",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "payload": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "subject_ref": "x",
+        "primary_persona_id": "{{cache:personas.create.response.data.persona.persona_id}}"
+      },
+      "expectedStatus": 400,
+      "expectedError": {
+        "code": "VALIDATION_ERROR"
+      }
+    },
+    {
+      "name": "Unauthenticated is refused by the default-deny gate",
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "missing or invalid tenant token",
+      "when": "no valid tenant Bearer token or scoped API key on the request",
+      "expectedStatus": 401,
+      "payload": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "subject_ref": "x",
+        "primary_persona_id": "{{cache:personas.create.response.data.persona.persona_id}}",
+        "source_timestamp": "{{dynamic:pastdatetime}}"
+      }
+    }
+  ]
+}

@@ -1,4 +1,4 @@
-import { FastifyInstance } from 'fastify';
+import { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { requireAuthOrApiKeyForDomain } from '@projexlight/sdk-api-keys';
 
 /**
@@ -19,6 +19,18 @@ const requireAuth = requireAuthOrApiKeyForDomain('assignment');
 import { assignByTask, type AssignByTaskInput, type AssignStrategy } from '../services/assignmentEngine';
 import { setWorkload } from '../services/workloadService';
 import type { GeoPoint } from '../services/geofence';
+// P16 · EP-379 — the enhancement surface. assign-by-task above is UNTOUCHED: everything
+// below is additive, and a regression test proves the old contract byte for byte. A
+// vertical already calling it must not have to change anything.
+import {
+  activateRuleSet, getDecision, listDecisions, listRuleSetVersions, publishRuleSet,
+  route as routeSubject, RuleSetNotFound,
+} from '../services/routingService';
+import {
+  accept, AssignmentNotFound, decline, getAssignment, getHistory, InvalidTransition,
+  NoBackupDesignated, offer, reassign, ReasonRequired, sweepExpiredOffers,
+} from '../services/lifecycleService';
+import { readRotationState, simulate } from '../services/simulationService';
 
 const STRATEGIES: AssignStrategy[] = ['default', 'round_robin', 'fair_share'];
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -105,4 +117,289 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
       return reply.code(500).send({ error: 'InternalError', message: (err as Error).message });
     }
   });
+
+  /* ================================================ P16 · EP-379 additions */
+
+  const fail = (reply: FastifyReply, status: number, code: string, message: string): void => {
+    reply.code(status).send({
+      error: status === 404 ? 'NotFound' : status === 409 ? 'Conflict' : 'RequestRefused',
+      code,
+      details: [message],
+    });
+  };
+
+  const tenantOf = (req: FastifyRequest, reply: FastifyReply): string | null => {
+    const body = (req.body ?? {}) as Record<string, unknown>;
+    const query = (req.query ?? {}) as Record<string, unknown>;
+    const claimed = req.auth?.tenant_id;
+    const named =
+      (typeof body.tenant_id === 'string' && body.tenant_id.trim()) ||
+      (typeof query.tenant_id === 'string' && query.tenant_id.trim()) || '';
+    if (claimed && named && named !== claimed) {
+      fail(reply, 403, 'TENANT_MISMATCH', 'tenant_id does not match the authenticated tenant');
+      return null;
+    }
+    const tenant_id = claimed || named;
+    if (!tenant_id) { fail(reply, 400, 'VALIDATION_ERROR', 'tenant_id is required'); return null; }
+    return tenant_id;
+  };
+
+  const wrap =
+    (handler: (req: FastifyRequest, reply: FastifyReply) => Promise<void>) =>
+    async (req: FastifyRequest, reply: FastifyReply): Promise<void> => {
+      try {
+        await handler(req, reply);
+      } catch (err) {
+        if (err instanceof AssignmentNotFound || err instanceof RuleSetNotFound) {
+          fail(reply, 404, (err as unknown as { code: string }).code, (err as Error).message); return;
+        }
+        if (err instanceof ReasonRequired) { fail(reply, 400, err.code, err.message); return; }
+        if (err instanceof InvalidTransition || err instanceof NoBackupDesignated) {
+          fail(reply, 409, (err as unknown as { code: string }).code, (err as Error).message); return;
+        }
+        req.log.error(err);
+        if (!reply.sent) {
+          reply.code(500).send({ error: 'InternalError', code: 'INTERNAL_ERROR', details: [] });
+        }
+      }
+    };
+
+  /** Publish a rule-set version, or activate an existing one. Routing is DATA. */
+  app.post('/api/assignment/routes', { preHandler: requireAuth }, wrap(async (req, reply) => {
+    const tenant_id = tenantOf(req, reply);
+    if (!tenant_id) return;
+    const b = (req.body ?? {}) as Record<string, unknown>;
+    if (typeof b.activate_version === 'number') {
+      reply.code(200).send({
+        data: await activateRuleSet({
+          tenant_id, version: b.activate_version,
+          name: typeof b.name === 'string' ? b.name : undefined,
+        }),
+      });
+      return;
+    }
+    if (!b.rules || typeof b.rules !== 'object') {
+      fail(reply, 400, 'VALIDATION_ERROR', 'rules (object) or activate_version (number) is required');
+      return;
+    }
+    reply.code(201).send({
+      data: await publishRuleSet({
+        tenant_id,
+        rules: b.rules as Parameters<typeof publishRuleSet>[0]['rules'],
+        name: typeof b.name === 'string' ? b.name : undefined,
+        published_by: typeof b.published_by === 'string' ? b.published_by : undefined,
+        activate: b.activate === true,
+      }),
+    });
+  }));
+
+  app.get('/api/assignment/routes', { preHandler: requireAuth }, wrap(async (req, reply) => {
+    const tenant_id = tenantOf(req, reply);
+    if (!tenant_id) return;
+    const q = (req.query ?? {}) as Record<string, unknown>;
+    reply.code(200).send({
+      data: {
+        versions: await listRuleSetVersions(
+          tenant_id, typeof q.name === 'string' ? q.name : undefined),
+      },
+    });
+  }));
+
+  /** Route ONE subject and return the decision trace. */
+  app.post('/api/assignment/route', { preHandler: requireAuth }, wrap(async (req, reply) => {
+    const tenant_id = tenantOf(req, reply);
+    if (!tenant_id) return;
+    const b = (req.body ?? {}) as Record<string, unknown>;
+    if (typeof b.subject_ref !== 'string' || !b.subject_ref.trim()) {
+      fail(reply, 400, 'VALIDATION_ERROR', 'subject_ref is required'); return;
+    }
+    if (!Array.isArray(b.candidate_persona_ids) || b.candidate_persona_ids.length === 0) {
+      fail(reply, 400, 'VALIDATION_ERROR', 'candidate_persona_ids must be a non-empty array');
+      return;
+    }
+    const decision = await routeSubject({
+      tenant_id,
+      subject_ref: b.subject_ref.trim(),
+      subject: (b.subject ?? {}) as Record<string, unknown>,
+      candidate_persona_ids: b.candidate_persona_ids as string[],
+      persona_specialties: b.persona_specialties as Record<string, string[]> | undefined,
+      rule_set_name: typeof b.rule_set_name === 'string' ? b.rule_set_name : undefined,
+      dry_run: b.dry_run === true,
+    });
+    // 200, not 201: routing ANSWERS a question. A REVIEW outcome is a successful answer
+    // too — "this needs a human" is the decision, not a failure to decide.
+    reply.code(200).send({ data: decision });
+  }));
+
+  app.get('/api/assignment/decisions', { preHandler: requireAuth }, wrap(async (req, reply) => {
+    const tenant_id = tenantOf(req, reply);
+    if (!tenant_id) return;
+    const q = (req.query ?? {}) as Record<string, unknown>;
+    if (typeof q.decision_id === 'string' && q.decision_id) {
+      const one = await getDecision(tenant_id, q.decision_id);
+      if (!one) {
+        fail(reply, 404, 'ROUTING_DECISION_NOT_FOUND', `no decision ${q.decision_id}`); return;
+      }
+      reply.code(200).send({ data: one });
+      return;
+    }
+    reply.code(200).send({
+      data: {
+        decisions: await listDecisions({
+          tenant_id,
+          subject_ref: typeof q.subject_ref === 'string' ? q.subject_ref : undefined,
+          outcome: q.outcome as never,
+          limit: Number(q.limit ?? 50) || 50,
+        }),
+      },
+    });
+  }));
+
+  /** Offer a subject to a primary, with a backup and a manager. */
+  app.post('/api/assignments', { preHandler: requireAuth }, wrap(async (req, reply) => {
+    const tenant_id = tenantOf(req, reply);
+    if (!tenant_id) return;
+    const b = (req.body ?? {}) as Record<string, unknown>;
+    if (typeof b.subject_ref !== 'string' || typeof b.primary_persona_id !== 'string') {
+      fail(reply, 400, 'VALIDATION_ERROR', 'subject_ref and primary_persona_id are required');
+      return;
+    }
+    if (typeof b.source_timestamp !== 'string' || Number.isNaN(Date.parse(b.source_timestamp))) {
+      // Required, never defaulted to now: when the WORLD produced the subject is the
+      // instant every SLA measures from, and quietly substituting "now" would restate a
+      // six-hour-old subject as fresh.
+      fail(reply, 400, 'VALIDATION_ERROR', 'source_timestamp (ISO-8601) is required'); return;
+    }
+    reply.code(201).send({
+      data: await offer({
+        tenant_id,
+        subject_ref: b.subject_ref,
+        source_timestamp: new Date(b.source_timestamp),
+        primary_persona_id: b.primary_persona_id,
+        backup_persona_id: typeof b.backup_persona_id === 'string' ? b.backup_persona_id : undefined,
+        manager_persona_id:
+          typeof b.manager_persona_id === 'string' ? b.manager_persona_id : undefined,
+        acceptance_window_minutes:
+          typeof b.acceptance_window_minutes === 'number' ? b.acceptance_window_minutes : undefined,
+        routing_decision_id:
+          typeof b.routing_decision_id === 'string' ? b.routing_decision_id : undefined,
+        actor: typeof b.actor === 'string' ? b.actor : undefined,
+        metadata: (b.metadata ?? undefined) as Record<string, unknown> | undefined,
+      }),
+    });
+  }));
+
+  app.get('/api/assignments/:record_id', { preHandler: requireAuth }, wrap(async (req, reply) => {
+    const tenant_id = tenantOf(req, reply);
+    if (!tenant_id) return;
+    const { record_id } = req.params as { record_id: string };
+    const record = await getAssignment(tenant_id, record_id);
+    if (!record) { fail(reply, 404, 'ASSIGNMENT_NOT_FOUND', `no assignment ${record_id}`); return; }
+    reply.code(200).send({ data: { ...record, history: await getHistory(tenant_id, record_id) } });
+  }));
+
+  app.post('/api/assignments/:record_id/accept', { preHandler: requireAuth },
+    wrap(async (req, reply) => {
+      const tenant_id = tenantOf(req, reply);
+      if (!tenant_id) return;
+      const { record_id } = req.params as { record_id: string };
+      const b = (req.body ?? {}) as Record<string, unknown>;
+      reply.code(200).send({
+        data: await accept({
+          tenant_id, record_id,
+          persona_id: typeof b.persona_id === 'string' ? b.persona_id : undefined,
+          actor: typeof b.actor === 'string' ? b.actor : undefined,
+        }),
+      });
+    }));
+
+  app.post('/api/assignments/:record_id/decline', { preHandler: requireAuth },
+    wrap(async (req, reply) => {
+      const tenant_id = tenantOf(req, reply);
+      if (!tenant_id) return;
+      const { record_id } = req.params as { record_id: string };
+      const b = (req.body ?? {}) as Record<string, unknown>;
+      // The reason is REQUIRED by the schema, not merely encouraged: "it bounced three
+      // times" tells an operator nothing about why.
+      reply.code(200).send({
+        data: await decline({
+          tenant_id, record_id,
+          reason: typeof b.reason === 'string' ? b.reason : '',
+          actor: typeof b.actor === 'string' ? b.actor : undefined,
+        }),
+      });
+    }));
+
+  app.post('/api/assignments/:record_id/reassign', { preHandler: requireAuth },
+    wrap(async (req, reply) => {
+      const tenant_id = tenantOf(req, reply);
+      if (!tenant_id) return;
+      const { record_id } = req.params as { record_id: string };
+      const b = (req.body ?? {}) as Record<string, unknown>;
+      if (typeof b.to_persona_id !== 'string' || !b.to_persona_id) {
+        fail(reply, 400, 'VALIDATION_ERROR', 'to_persona_id is required'); return;
+      }
+      reply.code(200).send({
+        data: await reassign({
+          tenant_id, record_id, to_persona_id: b.to_persona_id,
+          reason: typeof b.reason === 'string' ? b.reason : '',
+          actor: typeof b.actor === 'string' ? b.actor : undefined,
+        }),
+      });
+    }));
+
+  /** Hand over every offer whose acceptance window has run out. */
+  app.post('/api/assignments/sweep', { preHandler: requireAuth }, wrap(async (req, reply) => {
+    const tenant_id = tenantOf(req, reply);
+    if (!tenant_id) return;
+    const b = (req.body ?? {}) as Record<string, unknown>;
+    reply.code(200).send({
+      data: await sweepExpiredOffers({
+        tenant_id, limit: typeof b.limit === 'number' ? b.limit : undefined,
+      }),
+    });
+  }));
+
+  app.get('/api/assignment/rotation', { preHandler: requireAuth }, wrap(async (req, reply) => {
+    const tenant_id = tenantOf(req, reply);
+    if (!tenant_id) return;
+    const q = (req.query ?? {}) as Record<string, unknown>;
+    // READ ONLY. Advancing the cursor from a read endpoint would skew the real rotation
+    // for everybody who merely looked at it.
+    reply.code(200).send({
+      data: {
+        cursors: await readRotationState({
+          tenant_id,
+          pool_key: typeof q.pool_key === 'string' ? q.pool_key : undefined,
+          strategy: typeof q.strategy === 'string' ? q.strategy : undefined,
+        }),
+      },
+    });
+  }));
+
+  /** Replay history against a candidate version. Side-effect free, and it proves it. */
+  app.post('/api/assignment/simulate', { preHandler: requireAuth }, wrap(async (req, reply) => {
+    const tenant_id = tenantOf(req, reply);
+    if (!tenant_id) return;
+    const b = (req.body ?? {}) as Record<string, unknown>;
+    if (typeof b.candidate_version !== 'number') {
+      fail(reply, 400, 'VALIDATION_ERROR', 'candidate_version (number) is required'); return;
+    }
+    if (!Array.isArray(b.candidate_persona_ids) || b.candidate_persona_ids.length === 0) {
+      fail(reply, 400, 'VALIDATION_ERROR', 'candidate_persona_ids must be a non-empty array');
+      return;
+    }
+    const report = await simulate({
+      tenant_id,
+      candidate_version: b.candidate_version,
+      rule_set_name: typeof b.rule_set_name === 'string' ? b.rule_set_name : undefined,
+      candidate_persona_ids: b.candidate_persona_ids as string[],
+      persona_specialties: b.persona_specialties as Record<string, string[]> | undefined,
+      limit: typeof b.limit === 'number' ? b.limit : undefined,
+      skew_tolerance: typeof b.skew_tolerance === 'number' ? b.skew_tolerance : undefined,
+    });
+    // 200 on a POST because nothing was created — and the report carries the proof
+    // (side_effects all zero), so a caller can verify the claim rather than trust it.
+    reply.code(200).send({ data: report });
+  }));
 }

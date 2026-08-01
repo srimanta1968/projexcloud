@@ -1,0 +1,85 @@
+{
+  "sdk": "sdk-assignment",
+  "sourceFile": "packages/sdk-assignment/src/server/routes.ts",
+  "requiresAuth": true,
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "epicId": "af159e51-90a4-46cf-8d57-444515cfbe56",
+  "taskId": "efd127bc-a016-41e2-8831-bca0388ebba1",
+  "priority": 15,
+  "testability": "auto",
+  "name": "POST /api/assignments/:record_id/decline - Hand it back, with a reason",
+  "endpoint": "/api/assignments/:record_id/decline",
+  "method": "POST",
+  "expectedStatus": 200,
+  "description": "The reason is REQUIRED by the schema, not merely encouraged, and the work goes to the backup IMMEDIATELY rather than on the next sweep - waiting would spend the acceptance window twice, once on somebody who has already said no. The backup becomes the primary and a fresh acceptance window starts for them; the RESPONSE clock is not restarted, because the subject has been waiting since its source timestamp either way. QA edge cases: a blank or whitespace-only reason is 400; a decline with NO backup designated is 409 rather than leaving the subject unowned and invisible; the history records who declined, who it went to, and the reason.",
+  "dependsOn": [
+    "POST /api/auth/signup-tenant",
+    "POST /api/assignments"
+  ],
+  "testCases": [
+    {
+      "name": "Decline with a reason",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "pathParams": {
+        "record_id": "{{cache:assignment.assignments.create.record_id}}"
+      },
+      "payload": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "reason": "outside my service area",
+        "actor": "{{static:qa}}"
+      },
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "data": {
+          "record_id": "string",
+          "primary_persona_id": "string"
+        }
+      }
+    }
+  ],
+  "errorCases": [
+    {
+      "name": "A decline with no reason is refused",
+      "status": 400,
+      "code": "REASON_REQUIRED",
+      "message": "a decline must carry a reason",
+      "when": "reason is missing, empty or whitespace",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "pathParams": {
+        "record_id": "{{cache:assignment.assignments.create.record_id}}"
+      },
+      "payload": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}"
+      },
+      "expectedStatus": 400,
+      "expectedError": {
+        "code": "REASON_REQUIRED"
+      }
+    },
+    {
+      "status": 409,
+      "code": "NO_BACKUP_DESIGNATED",
+      "message": "assignment <id> has no backup to fall to",
+      "when": "the assignment was offered without a backup"
+    },
+    {
+      "name": "Unauthenticated is refused by the default-deny gate",
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "missing or invalid tenant token",
+      "when": "no valid tenant Bearer token or scoped API key on the request",
+      "expectedStatus": 401,
+      "pathParams": {
+        "record_id": "{{cache:assignment.assignments.create.record_id}}"
+      },
+      "payload": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "reason": "x"
+      }
+    }
+  ]
+}
