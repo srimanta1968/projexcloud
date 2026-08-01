@@ -1,0 +1,49 @@
+{
+  "sdk": "sdk-data-credits",
+  "sourceFile": "packages/sdk-data-credits/src/server/routes.ts",
+  "requiresAuth": true,
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "epicId": "fefd6ec9-2fd1-4d19-8fa0-fbfb090590bb",
+  "featureId": "51042c0e-c450-4b84-9a22-9c09ec7b9f44",
+  "taskId": "5604f877-e1ba-40bb-b324-44f43ebcb1ac",
+  "testability": "auto",
+  "priority": 15,
+  "name": "GET /api/capabilities - The outcome catalog a tenant may see",
+  "endpoint": "/api/capabilities",
+  "method": "GET",
+  "expectedStatus": 200,
+  "description": "The catalog in the tenant's own language: an outcome-named key (\"validate.phone\"), a label, a description and a price in credits. What it deliberately does NOT contain is any trace of who serves the outcome - no provider name, no credentials reference, no routing detail and no true vendor cost - because a tenant that learns which vendor answered starts building on that vendor, and the day it is replaced their integration breaks along with the abstraction. The response is built by naming the fields a tenant may see rather than by removing fields from a row, so a column added to the catalog later cannot appear here by default. A tenant with a negotiated price sees THEIR price: a tenant-scoped catalog row overrides the platform default for the same key, and exactly one row per key is returned. QA edge cases: a tenant with no negotiated prices sees the platform catalog; inactive capabilities are omitted entirely rather than returned with a flag; the list is never empty in a seeded environment because the catalog is reference data, so an empty array means the seed did not run.",
+  "dependsOn": [
+    "POST /api/auth/signup-tenant"
+  ],
+  "testCases": [
+    {
+      "name": "List the outcomes this tenant can buy",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "queryParams": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}"
+      },
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "data": {
+          "capabilities": "array"
+        }
+      }
+    }
+  ],
+  "errorCases": [
+    {
+      "name": "Unauthenticated is refused by the default-deny gate",
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "missing or invalid tenant token",
+      "when": "no valid tenant Bearer token on the request",
+      "expectedStatus": 401,
+      "queryParams": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}"
+      }
+    }
+  ]
+}

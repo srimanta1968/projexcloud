@@ -1,0 +1,107 @@
+{
+  "sdk": "sdk-data-credits",
+  "sourceFile": "packages/sdk-data-credits/src/server/routes.ts",
+  "requiresAuth": true,
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "epicId": "fefd6ec9-2fd1-4d19-8fa0-fbfb090590bb",
+  "featureId": "51042c0e-c450-4b84-9a22-9c09ec7b9f44",
+  "taskId": "5604f877-e1ba-40bb-b324-44f43ebcb1ac",
+  "testability": "auto",
+  "priority": 15,
+  "name": "PUT /api/credits/budgets - Who may spend, how much, and who has to ask",
+  "endpoint": "/api/credits/budgets",
+  "method": "PUT",
+  "expectedStatus": 200,
+  "description": "Sets one role's budget policy, replacing whatever that role had. REQUEST_ONLY means every request waits for an approval decision; DAILY_CAP allows spending up to a limit over a ROLLING 24 hours (rolling, not calendar - a calendar day resets at a moment somebody has to pick a timezone for, and a tenant in the wrong one gets two days of spend inside one working day); FULL spends freely. bulk_approval_threshold outranks all three: a single request at or above it needs approval regardless of role, because one enormous request is a different decision from the thousand small ones the role was trusted with. Spend against the cap is derived from the append-only ledger rather than from a counter, so it can always be re-derived and never quietly drifts; holds do not count, only charges - otherwise an in-flight request would eat into a cap that a no-match is about to hand back. QA edge cases: DAILY_CAP with no daily_cap is 422 - a policy that reads as a limit and enforces nothing is worse than no policy at all, because the dashboard says \"capped\" and the spend says otherwise; a negative cap or threshold is 422; the same role sent twice is one policy, not two (the upsert is keyed on tenant + role); a role with NO policy at all is not refused and not waved through - its requests come back PENDING_APPROVAL, because absent policy could mean \"not configured yet\" or \"no restriction\" and the two are indistinguishable from here.",
+  "dependsOn": [
+    "POST /api/auth/signup-tenant"
+  ],
+  "fieldEnums": {
+    "mode": [
+      "REQUEST_ONLY",
+      "DAILY_CAP",
+      "FULL"
+    ],
+    "is_active": [
+      "true",
+      "false"
+    ]
+  },
+  "testCases": [
+    {
+      "name": "Cap a role at a rolling daily limit with a bulk gate",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "payload": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "role_ref": "analyst-{{dynamic:slug}}",
+        "mode": "DAILY_CAP",
+        "daily_cap": 250,
+        "bulk_approval_threshold": 50,
+        "is_active": true
+      },
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "data": {
+          "policy_id": "string",
+          "mode": "string",
+          "daily_cap": "number"
+        }
+      }
+    }
+  ],
+  "errorCases": [
+    {
+      "name": "A DAILY_CAP policy with no cap is refused",
+      "status": 422,
+      "code": "VALIDATION_ERROR",
+      "message": "a DAILY_CAP policy must carry a daily_cap",
+      "when": "mode is DAILY_CAP and daily_cap is absent",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "payload": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "role_ref": "analyst-{{dynamic:slug}}",
+        "mode": "DAILY_CAP"
+      },
+      "expectedStatus": 422,
+      "expectedError": {
+        "code": "VALIDATION_ERROR"
+      }
+    },
+    {
+      "name": "A mode outside the three is refused",
+      "status": 400,
+      "code": "VALIDATION_ERROR",
+      "message": "mode must be one of REQUEST_ONLY, DAILY_CAP, FULL",
+      "when": "the payload names a mode that does not exist, or omits role_ref",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "payload": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "role_ref": "analyst-{{dynamic:slug}}",
+        "mode": "SOMETIMES"
+      },
+      "expectedStatus": 400,
+      "expectedError": {
+        "code": "VALIDATION_ERROR"
+      }
+    },
+    {
+      "name": "Unauthenticated is refused by the default-deny gate",
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "missing or invalid tenant token",
+      "when": "no valid tenant Bearer token on the request",
+      "expectedStatus": 401,
+      "payload": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "role_ref": "analyst",
+        "mode": "FULL"
+      }
+    }
+  ]
+}

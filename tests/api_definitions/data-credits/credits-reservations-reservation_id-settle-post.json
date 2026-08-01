@@ -1,0 +1,124 @@
+{
+  "sdk": "sdk-data-credits",
+  "sourceFile": "packages/sdk-data-credits/src/server/routes.ts",
+  "requiresAuth": true,
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "epicId": "fefd6ec9-2fd1-4d19-8fa0-fbfb090590bb",
+  "featureId": "51042c0e-c450-4b84-9a22-9c09ec7b9f44",
+  "taskId": "5604f877-e1ba-40bb-b324-44f43ebcb1ac",
+  "testability": "auto",
+  "priority": 15,
+  "name": "POST /api/credits/reservations/:reservation_id/settle - Close a hold",
+  "endpoint": "/api/credits/reservations/:reservation_id/settle",
+  "method": "POST",
+  "expectedStatus": 200,
+  "description": "Closes a hold with one of the four settlement outcomes. MATCHED charges exactly the quoted credits; NO_MATCH, TECHNICAL_FAILURE and CACHE_HIT settle to ZERO and hand the hold straight back, because a tenant pays for answers and not for attempts. The rule is enforced by the database as well as by this handler - these are promises about somebody's money, and a promise kept only by the current version of one function is not kept. Settling is IDEMPOTENT on an identical retry: the same outcome and the same credits return the same result, charge once, and keep the FIRST settlement time, which is what an at-least-once caller needs. QA edge cases: a retry asserting a DIFFERENT outcome is 409 SETTLEMENT_CONFLICT rather than being merged, because merging means the last retry to arrive decides what the tenant paid; an outcome outside the four values is 400 with the valid set named; a reservation belonging to another tenant is 404; the ledger gains a CHARGE entry for a match and a RELEASE entry naming WHY nothing was charged for the other three, so an export can tell them apart.",
+  "dependsOn": [
+    "POST /api/auth/signup-tenant",
+    "POST /api/credits/reservations"
+  ],
+  "fieldEnums": {
+    "outcome": [
+      "MATCHED",
+      "NO_MATCH",
+      "TECHNICAL_FAILURE",
+      "CACHE_HIT"
+    ]
+  },
+  "statusTransitions": {
+    "reservation": [
+      "held -> settled MATCHED via POST /api/credits/reservations/:reservation_id/settle (charges the quote)",
+      "held -> settled NO_MATCH|TECHNICAL_FAILURE|CACHE_HIT via POST /api/credits/reservations/:reservation_id/settle (charges zero, releases the hold)",
+      "held -> cancelled via POST /api/capability-requests/:request_id/approve with approved=false (releases the hold, never executed)"
+    ]
+  },
+  "testCases": [
+    {
+      "name": "Settle a hold as a no-match, charging nothing",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "pathParams": {
+        "reservation_id": "{{cache:credits-reservations.create.reservation_id}}"
+      },
+      "payload": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "outcome": "NO_MATCH",
+        "result": null
+      },
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "data": {
+          "outcome": "string",
+          "credits_charged": "number",
+          "credits_reserved": "number"
+        }
+      }
+    }
+  ],
+  "errorCases": [
+    {
+      "name": "An outcome outside the four settlement cases is refused",
+      "status": 400,
+      "code": "VALIDATION_ERROR",
+      "message": "outcome must be one of MATCHED, NO_MATCH, TECHNICAL_FAILURE, CACHE_HIT",
+      "when": "the payload names an outcome that is not a settlement case",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "pathParams": {
+        "reservation_id": "{{cache:credits-reservations.create.reservation_id}}"
+      },
+      "payload": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "outcome": "MAYBE"
+      },
+      "expectedStatus": 400,
+      "expectedError": {
+        "code": "VALIDATION_ERROR"
+      }
+    },
+    {
+      "name": "An unknown reservation is refused",
+      "status": 404,
+      "code": "RESERVATION_NOT_FOUND",
+      "message": "no reservation <id>",
+      "when": "the id names nothing belonging to this tenant",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "pathParams": {
+        "reservation_id": "{{var:absent_uuid}}"
+      },
+      "payload": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "outcome": "NO_MATCH"
+      },
+      "expectedStatus": 404,
+      "expectedError": {
+        "code": "RESERVATION_NOT_FOUND"
+      }
+    },
+    {
+      "status": 409,
+      "code": "SETTLEMENT_CONFLICT",
+      "message": "request <id> already settled as X for N credits",
+      "when": "a retry asserts a different outcome or a different charge"
+    },
+    {
+      "name": "Unauthenticated is refused by the default-deny gate",
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "missing or invalid tenant token",
+      "when": "no valid tenant Bearer token on the request",
+      "expectedStatus": 401,
+      "pathParams": {
+        "reservation_id": "{{cache:credits-reservations.create.reservation_id}}"
+      },
+      "payload": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "outcome": "NO_MATCH"
+      }
+    }
+  ]
+}

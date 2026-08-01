@@ -19,3 +19,4 @@ export * from './services/brokerService';
 export * from './services/reservationService';
 export * from './services/budgetService';
 export * as cache from './services/cacheService';
+export * as server from './server';

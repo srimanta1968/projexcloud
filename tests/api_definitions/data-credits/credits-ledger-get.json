@@ -1,0 +1,62 @@
+{
+  "sdk": "sdk-data-credits",
+  "sourceFile": "packages/sdk-data-credits/src/server/routes.ts",
+  "requiresAuth": true,
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "epicId": "fefd6ec9-2fd1-4d19-8fa0-fbfb090590bb",
+  "featureId": "51042c0e-c450-4b84-9a22-9c09ec7b9f44",
+  "taskId": "5604f877-e1ba-40bb-b324-44f43ebcb1ac",
+  "testability": "auto",
+  "priority": 15,
+  "name": "GET /api/credits/ledger - The exportable credit ledger",
+  "endpoint": "/api/credits/ledger",
+  "method": "GET",
+  "expectedStatus": 200,
+  "description": "Every credit movement in order, with the balance and reserved deltas kept SEPARATE and the account as it stood after each entry. Separate deltas are what let the export show \"quoted 5, charged 0, released 5\" instead of a single net number that hides the quote - which is exactly the question a disputed invoice asks. Entry types: GRANT (credits added), RESERVATION (a hold, moving reserved only), CHARGE (a match, moving both), RELEASE (a hold handed back, naming why nothing was charged), REFUND and ADJUSTMENT. The table is append-only in the database: corrections are new ADJUSTMENT entries, never edits, so an export can be trusted to be what happened. QA edge cases: entries survive the request they describe being purged, because a financial record must outlive the operational row (request_id stays as a fact, not as a live join); filtering by request_id gives the whole story of one request; entry_no is a total order, so two entries in the same millisecond still export in the order they happened; the true vendor cost appears nowhere in this export.",
+  "dependsOn": [
+    "POST /api/auth/signup-tenant",
+    "POST /api/capability-requests"
+  ],
+  "fieldEnums": {
+    "entry_type": [
+      "GRANT",
+      "RESERVATION",
+      "CHARGE",
+      "REFUND",
+      "RELEASE",
+      "ADJUSTMENT"
+    ]
+  },
+  "testCases": [
+    {
+      "name": "Export the ledger for one request",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "queryParams": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "request_id": "{{cache:capability-requests.create.request_id}}",
+        "limit": "100"
+      },
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "data": {
+          "entries": "array"
+        }
+      }
+    }
+  ],
+  "errorCases": [
+    {
+      "name": "Unauthenticated is refused by the default-deny gate",
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "missing or invalid tenant token",
+      "when": "no valid tenant Bearer token on the request",
+      "expectedStatus": 401,
+      "queryParams": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}"
+      }
+    }
+  ]
+}

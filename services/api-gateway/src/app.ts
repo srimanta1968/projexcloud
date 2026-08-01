@@ -368,10 +368,13 @@ import {
   server as coverageServer,
   makeSlaOnCallResolver,
 } from '@projexlight/sdk-coverage';
-// P16 · EP-378 — vendor-abstracted capability broker & credit ledger. Wired at the
-// schema stage so the tables self-create at boot; the broker services and the HTTP
-// surface land with the following tasks.
-import { migrationsDir as dataCreditsMigrations } from '@projexlight/sdk-data-credits';
+// P16 · EP-378 — vendor-abstracted capability broker & credit ledger. Tenants buy
+// OUTCOMES; the provider chain, its credentials and the true vendor cost never cross
+// the tenant boundary.
+import {
+  migrationsDir as dataCreditsMigrations,
+  server as dataCreditsServer,
+} from '@projexlight/sdk-data-credits';
 import {
   migrationsDir as twilioVoiceMigrations,
   server as twilioVoiceServer,
@@ -652,6 +655,7 @@ app.register(sourceRecordServer.registerRoutes);
 app.register(importServer.registerRoutes);
 app.register(slaServer.registerRoutes);
 app.register(coverageServer.registerRoutes);
+app.register(dataCreditsServer.registerRoutes);
 app.register(twilioVoiceServer.registerRoutes);
 app.register(twilioVoiceServer.registerWebhookRoutes);
 app.register(serviceRequestServer.registerRoutes);

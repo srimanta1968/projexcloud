@@ -1,0 +1,92 @@
+{
+  "sdk": "sdk-data-credits",
+  "sourceFile": "packages/sdk-data-credits/src/server/routes.ts",
+  "requiresAuth": true,
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "epicId": "fefd6ec9-2fd1-4d19-8fa0-fbfb090590bb",
+  "featureId": "51042c0e-c450-4b84-9a22-9c09ec7b9f44",
+  "taskId": "5604f877-e1ba-40bb-b324-44f43ebcb1ac",
+  "testability": "auto",
+  "priority": 15,
+  "name": "GET /api/capabilities/estimate - What this outcome costs and whether it is affordable",
+  "endpoint": "/api/capabilities/estimate",
+  "method": "GET",
+  "expectedStatus": 200,
+  "description": "Quotes one capability for this tenant before anything is held: the credit price, the credits currently available (balance minus the part already reserved for in-flight requests) and an explicit affordable flag. The flag is stated rather than left to the caller to compute, because a caller that gets the comparison wrong finds out at the reserve, halfway through a flow. QA edge cases: an unknown or inactive capability_key is 404 CAPABILITY_NOT_FOUND, not an empty quote; a tenant with no credit account at all quotes available=0 and affordable=false rather than erroring, because \"you have no account\" and \"you have no credits\" lead to the same next step for the caller; a tenant-specific negotiated price is preferred over the platform price; available NEVER includes credits already held by an unsettled request.",
+  "dependsOn": [
+    "POST /api/auth/signup-tenant"
+  ],
+  "testCases": [
+    {
+      "name": "Quote a capability for this tenant",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "queryParams": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "capability_key": "{{var:data_credits_capability_key}}"
+      },
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "data": {
+          "capability": {
+            "key": "string",
+            "credit_price": "number"
+          },
+          "credits": "number",
+          "available": "number",
+          "affordable": "boolean"
+        }
+      }
+    }
+  ],
+  "errorCases": [
+    {
+      "name": "A missing capability_key is refused",
+      "status": 400,
+      "code": "VALIDATION_ERROR",
+      "message": "capability_key is required",
+      "when": "the query omits capability_key",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "queryParams": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}"
+      },
+      "expectedStatus": 400,
+      "expectedError": {
+        "code": "VALIDATION_ERROR"
+      }
+    },
+    {
+      "name": "An outcome this tenant cannot buy is 404, not an empty quote",
+      "status": 404,
+      "code": "CAPABILITY_NOT_FOUND",
+      "message": "no capability 'x' is available to this tenant",
+      "when": "the capability_key names nothing active in the platform or tenant catalog",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "queryParams": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "capability_key": "{{static:validate.nothing-at-all}}"
+      },
+      "expectedStatus": 404,
+      "expectedError": {
+        "code": "CAPABILITY_NOT_FOUND"
+      }
+    },
+    {
+      "name": "Unauthenticated is refused by the default-deny gate",
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "missing or invalid tenant token",
+      "when": "no valid tenant Bearer token on the request",
+      "expectedStatus": 401,
+      "queryParams": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "capability_key": "{{var:data_credits_capability_key}}"
+      }
+    }
+  ]
+}
