@@ -1,5 +1,21 @@
 import { FastifyInstance } from 'fastify';
-import { requireAuth } from '@projexlight/sdk-identity';
+import { requireAuthOrApiKeyForDomain } from '@projexlight/sdk-api-keys';
+
+/**
+ * Every route in this SDK accepts EITHER a six-layer JWT or a tenant-scoped
+ * `pk_live_`/`pk_test_` API key. Machine callers (vertical apps calling the
+ * platform server-to-server) previously had no way to authenticate here, and the
+ * only workaround was to put a human's password in a service's environment.
+ *
+ * Key holders must carry the scope derived from the route: `assignment.<resource>.read`
+ * for GET, `assignment.<resource>.write` otherwise, where <resource> is the path
+ * segment after `assignment` (so POST /api/assignment/... maps predictably). JWT
+ * callers are unaffected — scopes apply only to keys.
+ *
+ * Named `requireAuth` so the route definitions below read unchanged; it is the
+ * combined guard, not sdk-identity's JWT-only one.
+ */
+const requireAuth = requireAuthOrApiKeyForDomain('assignment');
 import { assignByTask, type AssignByTaskInput, type AssignStrategy } from '../services/assignmentEngine';
 import { setWorkload } from '../services/workloadService';
 import type { GeoPoint } from '../services/geofence';
