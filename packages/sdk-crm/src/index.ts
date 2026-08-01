@@ -43,3 +43,5 @@ export type {
   SetSubjectNextActionInput,
   SaveGateResult as SubjectSaveGateResult,
 } from './services/subjectNextActionService';
+
+export * from './services/overdueService';
