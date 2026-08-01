@@ -64,3 +64,6 @@ export * from './services/routingService';
 
 // P16 · EP-379 — ownership over time, with the source timestamp frozen.
 export * from './services/lifecycleService';
+
+// P16 · EP-379 — replaying history against a candidate, with nothing happening.
+export * from './services/simulationService';

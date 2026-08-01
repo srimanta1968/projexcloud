@@ -174,6 +174,16 @@ export async function getActiveRuleSet(
   );
 }
 
+export async function getRuleSetVersion(
+  tenant_id: string, version: number, name = 'default',
+): Promise<RuleSet | null> {
+  return dataService.one<RuleSet>(
+    `SELECT ${RULE_SET_COLS} FROM assignment.routing_rule_set
+      WHERE tenant_id = $1 AND name = $2 AND version = $3`,
+    [tenant_id, name, version],
+  );
+}
+
 export async function listRuleSetVersions(
   tenant_id: string, name = 'default',
 ): Promise<RuleSet[]> {
@@ -284,6 +294,26 @@ function evaluatePredicate(rule: EligibilityRule, subject: Record<string, unknow
   }
 }
 
+/**
+ * The subject fields this rule set reads, and their values — nothing else.
+ */
+function readFields(
+  rules: RuleSetBody, subject: Record<string, unknown>,
+): Record<string, unknown> {
+  const fields = new Set<string>();
+  for (const rule of rules.eligibility ?? []) fields.add(rule.field);
+  for (const band of rules.priority_bands ?? []) {
+    for (const when of band.when ?? []) fields.add(when.field);
+  }
+  if (rules.specialty?.field) fields.add(rules.specialty.field);
+
+  const out: Record<string, unknown> = {};
+  for (const field of fields) {
+    if (Object.prototype.hasOwnProperty.call(subject, field)) out[field] = subject[field];
+  }
+  return out;
+}
+
 /* -------------------------------------------------------- the pipeline */
 
 export interface RouteInput {
@@ -296,6 +326,13 @@ export interface RouteInput {
   persona_specialties?: Record<string, string[]>;
   at?: Date;
   rule_set_name?: string;
+  /**
+   * Evaluate against a SPECIFIC published version rather than the active one. The
+   * simulation lane needs this: comparing a candidate against history means running
+   * rules that are deliberately NOT in force, and activating them to try them out is
+   * the experiment changing production.
+   */
+  rule_set_version?: number;
   /** Skip persisting the decision — used by the simulation lane. */
   dry_run?: boolean;
 }
@@ -304,7 +341,9 @@ export async function route(input: RouteInput): Promise<RoutingResult> {
   const startedAt = Date.now();
   const at = input.at ?? new Date();
   const trace: TraceStep[] = [];
-  const ruleSet = await getActiveRuleSet(input.tenant_id, input.rule_set_name ?? 'default');
+  const ruleSet = input.rule_set_version === undefined
+    ? await getActiveRuleSet(input.tenant_id, input.rule_set_name ?? 'default')
+    : await getRuleSetVersion(input.tenant_id, input.rule_set_version, input.rule_set_name ?? 'default');
   const rules: RuleSetBody = ruleSet?.rules ?? {};
 
   const finish = async (
@@ -370,6 +409,15 @@ export async function route(input: RouteInput): Promise<RoutingResult> {
       ? `Passed all ${eligibility.length} eligibility rule(s).`
       : 'No eligibility rules are configured, so every subject is routable.',
     candidates: input.candidate_persona_ids,
+    /*
+     * The subject fields the rules actually READ, recorded with the decision. This is
+     * what lets a simulation replay history honestly: the subject itself may have
+     * changed since, and re-fetching it would answer a question nobody asked. Only the
+     * fields that mattered are kept — the trace is an explanation, not a copy of the
+     * subject, and copying the whole thing would quietly duplicate whatever PII it
+     * carries into a table nobody thinks of as sensitive.
+     */
+    detail: { subject_fields: readFields(rules, input.subject) },
   });
 
   /* 2. PRIORITY BAND */
