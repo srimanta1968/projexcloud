@@ -368,6 +368,10 @@ import {
   server as coverageServer,
   makeSlaOnCallResolver,
 } from '@projexlight/sdk-coverage';
+// P16 · EP-378 — vendor-abstracted capability broker & credit ledger. Wired at the
+// schema stage so the tables self-create at boot; the broker services and the HTTP
+// surface land with the following tasks.
+import { migrationsDir as dataCreditsMigrations } from '@projexlight/sdk-data-credits';
 import {
   migrationsDir as twilioVoiceMigrations,
   server as twilioVoiceServer,
@@ -1300,6 +1304,9 @@ const start = async (): Promise<void> => {
       { sdk: 'sdk-sla',                 dir: slaMigrations },
       // persona_id / role_ref are loose refs too, so ordering is free.
       { sdk: 'sdk-coverage',            dir: coverageMigrations },
+      // Self-contained: the ledger's request/reservation refs are deliberately loose
+      // (a financial record outlives the row it describes), so ordering is free.
+      { sdk: 'sdk-data-credits',        dir: dataCreditsMigrations },
       { sdk: 'connector-twilio-voice',  dir: twilioVoiceMigrations },
       // EP-341 — Unified Multi-Scope Configuration & Secrets Plane. Foundation
       // store (config.config_value); references no other schema, ordering free.
