@@ -689,26 +689,86 @@ suite('data_credits schema', () => {
 
   /* -------------------------------------------- criterion 4: additive migration */
 
-  it('is additive — every CREATE in the migration is IF NOT EXISTS or guarded', async () => {
+  it('is additive — EVERY migration re-runs safely at boot', async () => {
+    // Scans the whole directory, not one named file: the migration that breaks this
+    // is the one somebody adds later, and a test pinned to 001 would never see it.
     const fs = await import('fs');
     const path = await import('path');
-    const sql = fs.readFileSync(
-      path.resolve(__dirname, '..', 'src', 'db', 'migrations', '001_init_data_credits.sql'),
-      'utf8',
+    const dir = path.resolve(__dirname, '..', 'src', 'db', 'migrations');
+    const files = fs.readdirSync(dir).filter((f) => f.endsWith('.sql')).sort();
+    expect(files.length).toBeGreaterThan(1);
+
+    for (const file of files) {
+      const sql = fs.readFileSync(path.join(dir, file), 'utf8');
+      const creates = [...sql.matchAll(/^CREATE\s+(?:UNIQUE\s+)?(SCHEMA|TABLE|INDEX)\s+(?!IF NOT EXISTS)/gim)];
+      expect(
+        creates.map((m) => m[0].trim()).join('\n'),
+        `${file}: every CREATE SCHEMA/TABLE/INDEX must be IF NOT EXISTS so a re-run at boot is safe`,
+      ).toBe('');
+
+      // ALTER must be additive and repeatable too — a bare ADD COLUMN fails on the
+      // second boot, and a boot that fails on a migration blocks every other SDK's.
+      const alters = [...sql.matchAll(/ALTER TABLE[\s\S]{0,120}?ADD COLUMN\s+(?!IF NOT EXISTS)/gi)];
+      expect(alters.map((m) => m[0].replace(/\s+/g, ' ').trim()).join('\n'),
+        `${file}: ADD COLUMN must be IF NOT EXISTS`).toBe('');
+
+      // Types and named constraints are guarded by DO blocks instead (Postgres has
+      // no IF NOT EXISTS for either), and triggers by DROP TRIGGER IF EXISTS.
+      const needGuard = [...sql.matchAll(/CREATE TYPE|ADD CONSTRAINT/g)].length;
+      const guarded = [...sql.matchAll(/EXCEPTION WHEN duplicate_object THEN NULL/g)].length;
+      expect(guarded, `${file}: each CREATE TYPE / ADD CONSTRAINT needs a duplicate_object guard`)
+        .toBe(needGuard);
+
+      const triggers = [...sql.matchAll(/^CREATE TRIGGER/gim)].length;
+      const dropped = [...sql.matchAll(/^DROP TRIGGER IF EXISTS/gim)].length;
+      expect(dropped, `${file}: each CREATE TRIGGER needs a DROP TRIGGER IF EXISTS`).toBe(triggers);
+    }
+  });
+
+  it('lets a reservation end EITHER settled OR cancelled, never both', async () => {
+    // Migration 002. A rejected request never executed, so nothing settles — but the
+    // hold still has to come back, and recording it as NO_MATCH would tell a report
+    // that the world had no answer when nobody asked the question.
+    const { reservation } = await freshReservation(3);
+    await refuses(
+      `UPDATE data_credits.reservation SET cancelled_at = now() WHERE reservation_id = $1`,
+      [reservation],
+      /reservation_cancellation_has_a_reason/,
     );
-    const creates = [...sql.matchAll(/^CREATE\s+(?:UNIQUE\s+)?(SCHEMA|TABLE|INDEX)\s+(?!IF NOT EXISTS)/gim)];
-    expect(
-      creates.map((m) => m[0].trim()).join('\n'),
-      'every CREATE SCHEMA/TABLE/INDEX must be IF NOT EXISTS so a re-run at boot is safe',
-    ).toBe('');
-    // Types are guarded by DO blocks instead (Postgres has no CREATE TYPE IF NOT
-    // EXISTS), and triggers by DROP TRIGGER IF EXISTS immediately before.
-    const types = [...sql.matchAll(/CREATE TYPE/g)].length;
-    const guarded = [...sql.matchAll(/EXCEPTION WHEN duplicate_object THEN NULL/g)].length;
-    expect(guarded).toBe(types);
-    const triggers = [...sql.matchAll(/^CREATE TRIGGER/gim)].length;
-    const dropped = [...sql.matchAll(/^DROP TRIGGER IF EXISTS/gim)].length;
-    expect(dropped).toBe(triggers);
+    await dataService.query(
+      `UPDATE data_credits.reservation SET cancelled_at = now(), cancel_reason = 'refused'
+        WHERE reservation_id = $1`,
+      [reservation],
+    );
+    // Settling afterwards would charge for a request that was refused …
+    await refuses(
+      `UPDATE data_credits.reservation
+          SET outcome = 'MATCHED', settled_credits = 3, settled_at = now()
+        WHERE reservation_id = $1`,
+      [reservation],
+      /cancelled .* and cannot be settled afterwards/,
+    );
+    // … and cancelling twice would credit the tenant for money they never spent.
+    await refuses(
+      `UPDATE data_credits.reservation SET cancelled_at = now() + interval '1 hour'
+        WHERE reservation_id = $1`,
+      [reservation],
+      /already cancelled/,
+    );
+
+    const settled = await freshReservation(2);
+    await dataService.query(
+      `UPDATE data_credits.reservation
+          SET outcome = 'MATCHED', settled_credits = 2, settled_at = now()
+        WHERE reservation_id = $1`,
+      [settled.reservation],
+    );
+    await refuses(
+      `UPDATE data_credits.reservation SET cancelled_at = now(), cancel_reason = 'too late'
+        WHERE reservation_id = $1`,
+      [settled.reservation],
+      /already settled .* cannot be cancelled/,
+    );
   });
 
   /** A reservation on its own request, so settlement tests never fight each other. */

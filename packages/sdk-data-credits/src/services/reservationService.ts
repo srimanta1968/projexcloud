@@ -7,6 +7,7 @@ import {
   type CapabilityView,
   type SettlementOutcome,
 } from './brokerService';
+import { DailyCapExceeded, evaluate as evaluateBudget, requestApproval } from './budgetService';
 
 /**
  * estimate -> reserve -> execute -> settle.
@@ -121,6 +122,8 @@ export interface Reservation {
   capability: CapabilityView;
   estimated_credits: number;
   status: string;
+  /** Why it is waiting, when it is. Null when it may execute immediately. */
+  approval_reason: string | null;
 }
 
 /**
@@ -134,7 +137,26 @@ export async function reserve(input: ReserveInput): Promise<Reservation> {
   const capability = await resolveCapability(input.tenant_id, input.capability_key);
   const price = Number(capability.credit_price);
 
-  return dataService.tx(async (q) => {
+  /*
+   * The budget is consulted BEFORE the hold, and a refusal never reaches the
+   * database. Holding first and checking after would leave a rejected request
+   * sitting against the tenant's available balance for as long as it took somebody
+   * to notice.
+   *
+   * `requires_approval` on the input is an OVERRIDE for a caller that has already
+   * decided (an API layer that ran its own gate); absent, the policy decides.
+   */
+  const verdict = await evaluateBudget({
+    tenant_id: input.tenant_id,
+    role_ref: input.role_ref ?? null,
+    credits: price,
+  });
+  if (!verdict.allowed) {
+    throw new DailyCapExceeded(verdict.spent_last_24h, verdict.daily_cap ?? 0, price);
+  }
+  const needsApproval = input.requires_approval ?? verdict.requires_approval;
+
+  const held = await dataService.tx(async (q) => {
     // FOR UPDATE inside the transaction: two concurrent reserves that both read the
     // same balance would each think there was room for the last credit.
     const account = await q<{ account_id: string; balance: string; reserved: string }>(
@@ -160,7 +182,7 @@ export async function reserve(input: ReserveInput): Promise<Reservation> {
         input.requested_by_persona_id ?? null,
         input.role_ref ?? null,
         input.subject_fingerprint,
-        input.requires_approval ? 'PENDING_APPROVAL' : 'APPROVED',
+        needsApproval ? 'PENDING_APPROVAL' : 'APPROVED',
         JSON.stringify(input.metadata ?? {}),
       ],
     );
@@ -195,7 +217,154 @@ export async function reserve(input: ReserveInput): Promise<Reservation> {
       capability: toCapabilityView(capability),
       estimated_credits: price,
       status: request.rows[0].status,
+      approval_reason: needsApproval ? verdict.reason : null,
     };
+  });
+
+  if (held.status === 'PENDING_APPROVAL') {
+    // Raised AFTER the hold is committed, and outside the transaction: sdk-approval
+    // is a network call, and holding a database transaction open across one is how a
+    // slow approval service turns into a connection-pool outage. If no requester is
+    // wired the request stays pending and says so — see budgetService.
+    await requestApproval({
+      tenant_id: input.tenant_id,
+      request_id: held.request_id,
+      role_ref: input.role_ref ?? null,
+      credits: price,
+      capability_key: capability.key,
+      reason: held.approval_reason ?? 'approval required',
+    });
+  }
+
+  return held;
+}
+
+/* -------------------------------------------------- approval decisions */
+
+export class NotAwaitingApproval extends Error {
+  readonly code = 'NOT_AWAITING_APPROVAL';
+  constructor(request_id: string, status: string) {
+    super(`request ${request_id} is ${status}, not waiting for an approval decision`);
+    this.name = 'NotAwaitingApproval';
+  }
+}
+
+/**
+ * Let an approved request through.
+ *
+ * Idempotent: approving an already-APPROVED request is a no-op rather than an error,
+ * because an approval webhook that retries is ordinary and failing the retry would
+ * leave a decision that was made looking like one that was not.
+ */
+export async function approveRequest(input: {
+  tenant_id: string;
+  request_id: string;
+  approval_ref?: string;
+  decided_by?: string;
+}): Promise<{ request_id: string; status: string; approved_at: string | null }> {
+  const row = await loadRequest(input.tenant_id, input.request_id);
+  if (row.status === 'APPROVED') {
+    const existing = await dataService.one<{ approved_at: Date | null }>(
+      `SELECT approved_at FROM data_credits.capability_request WHERE request_id = $1`,
+      [input.request_id],
+    );
+    return {
+      request_id: input.request_id,
+      status: 'APPROVED',
+      approved_at: existing?.approved_at ? new Date(existing.approved_at).toISOString() : null,
+    };
+  }
+  if (row.status !== 'PENDING_APPROVAL') throw new NotAwaitingApproval(input.request_id, row.status);
+
+  const updated = await dataService.one<{ status: string; approved_at: Date }>(
+    `UPDATE data_credits.capability_request
+        SET status = 'APPROVED', approved_at = now(),
+            approval_ref = COALESCE($2, approval_ref),
+            metadata = metadata || jsonb_build_object('approved_by', $3::text)
+      WHERE request_id = $1
+      RETURNING status, approved_at`,
+    [input.request_id, input.approval_ref ?? null, input.decided_by ?? null],
+  );
+  return {
+    request_id: input.request_id,
+    status: updated!.status,
+    approved_at: new Date(updated!.approved_at).toISOString(),
+  };
+}
+
+/**
+ * Refuse a request and give the held credits back.
+ *
+ * The hold is CANCELLED, not settled. The four settlement outcomes are all statements
+ * about a lookup that happened; a refused request never looked at anything, and
+ * filing it as NO_MATCH would tell a report that the world had no answer when nobody
+ * asked the question. Migration 002 exists for exactly this distinction.
+ */
+export async function rejectRequest(input: {
+  tenant_id: string;
+  request_id: string;
+  reason: string;
+  decided_by?: string;
+}): Promise<{ request_id: string; status: string; credits_released: number }> {
+  const reason = (input.reason ?? '').trim();
+  if (!reason) {
+    // The constraint refuses it too. "It was cancelled" with no reason is
+    // unanswerable three weeks later when somebody asks why their request never ran.
+    throw new SettlementConflict('a rejection must carry a reason');
+  }
+
+  return dataService.tx(async (q) => {
+    const req = await q<{ status: string }>(
+      `SELECT status FROM data_credits.capability_request
+        WHERE tenant_id = $1 AND request_id = $2 FOR UPDATE`,
+      [input.tenant_id, input.request_id],
+    );
+    if (req.rows.length === 0) throw new UnknownRequest(input.request_id);
+    if (req.rows[0].status === 'REJECTED') {
+      // Already refused and already released — say so without moving anything twice.
+      return { request_id: input.request_id, status: 'REJECTED', credits_released: 0 };
+    }
+    if (req.rows[0].status !== 'PENDING_APPROVAL') {
+      throw new NotAwaitingApproval(input.request_id, req.rows[0].status);
+    }
+
+    const res = await q<{ reservation_id: string; estimated_credits: string }>(
+      `UPDATE data_credits.reservation
+          SET cancelled_at = now(), cancel_reason = $2
+        WHERE request_id = $1 AND settled_at IS NULL AND cancelled_at IS NULL
+        RETURNING reservation_id, estimated_credits::text`,
+      [input.request_id, reason],
+    );
+    const released = res.rows.length > 0 ? Number(res.rows[0].estimated_credits) : 0;
+
+    if (released > 0) {
+      const account = await q<{ balance: string; reserved: string }>(
+        `UPDATE data_credits.credit_account SET reserved = reserved - $2
+          WHERE tenant_id = $1 RETURNING balance::text, reserved::text`,
+        [input.tenant_id, released],
+      );
+      await writeLedger(q, {
+        tenant_id: input.tenant_id,
+        entry_type: 'RELEASE',
+        request_id: input.request_id,
+        reservation_id: res.rows[0].reservation_id,
+        balance_delta: 0,
+        reserved_delta: -released,
+        balance_after: Number(account.rows[0].balance),
+        reserved_after: Number(account.rows[0].reserved),
+        reason: `request rejected — ${reason}`,
+      });
+    }
+
+    await q(
+      `UPDATE data_credits.capability_request
+          SET status = 'REJECTED',
+              metadata = metadata || jsonb_build_object('rejected_by', $2::text, 'reject_reason', $3::text)
+        WHERE request_id = $1`,
+      [input.request_id, input.decided_by ?? null, reason],
+    );
+
+    return { request_id: input.request_id, status: 'REJECTED', credits_released: released };
   });
 }
 
@@ -216,6 +385,24 @@ export function setCacheProbe(fn: CacheProbe | null): void {
 
 export function hasCacheProbe(): boolean {
   return cacheProbe !== null;
+}
+
+/** Records an answer we just paid for. Wired by cacheService alongside the probe. */
+export type CacheWriter = (input: {
+  tenant_id: string;
+  capability_id: string;
+  subject_fingerprint: string;
+  result: unknown;
+}) => Promise<void>;
+
+let cacheWriter: CacheWriter | null = null;
+
+export function setCacheWriter(fn: CacheWriter | null): void {
+  cacheWriter = fn;
+}
+
+export function hasCacheWriter(): boolean {
+  return cacheWriter !== null;
 }
 
 /** Usage emission into sdk-meter / sdk-billing showback. Optional, never silent. */
@@ -305,6 +492,24 @@ export async function execute(input: {
     // provider_attempt; nothing downstream is even offered them.
     outcome = execution.outcome;
     result = execution.result;
+
+    if (outcome === 'MATCHED' && cacheWriter) {
+      // Only a MATCH is worth keeping. Caching a no-match would make an absence
+      // permanent for the length of the TTL — the record that appears tomorrow
+      // would keep coming back as "not found", and the tenant would be paying
+      // nothing for an answer that is now wrong.
+      try {
+        await cacheWriter({
+          tenant_id: input.tenant_id,
+          capability_id: row.capability_id,
+          subject_fingerprint: row.subject_fingerprint,
+          result,
+        });
+      } catch {
+        // A cache that cannot be written is a slower broker, not a failed request:
+        // the tenant has their answer and is about to be charged for it either way.
+      }
+    }
   }
 
   const settlement = await settle({
