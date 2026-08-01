@@ -45,3 +45,5 @@ export type {
 } from './services/subjectNextActionService';
 
 export * from './services/overdueService';
+
+export * from './services/closeReasonService';
