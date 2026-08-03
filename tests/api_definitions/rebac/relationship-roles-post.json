@@ -12,14 +12,16 @@
   "epicId": "bd0b5996-171f-46f2-8ead-0b72593f97df",
   "priority": 70,
   "testability": "auto",
-  "dependsOn": ["POST /api/auth/signup-tenant"],
+  "dependsOn": ["POST /api/auth/signup-tenant", "POST /api/personas"],
   "coversCriterion": [
     "f50d45c1-6b9d-45ae-9f57-1806fae6d53e#AC1",
     "f50d45c1-6b9d-45ae-9f57-1806fae6d53e#AC3"
   ],
-  "description": "Grants one contextual role between two personas. A collection-root create, so 201. Proves AC1 and AC3. A subject-object pair is no longer ONE relationship: someone can be a patient's daughter AND registered carer AND billing contact simultaneously, each with its own role_label, its own trust_state and its own valid_from/valid_to — collapsing them into a single edge would force a choice between losing the distinction and overwriting a role that is still true. TRUST AND VALIDITY ARE SEPARATE AXES on purpose: 'is this in force now' and 'how sure are we it is real' have different remedies (an expired carer role needs renewing, an unevidenced one needs a document), and a single status field answers 'inactive' to both. AC3: CONFIRMED and DOCUMENTED require at least one evidence_ref, enforced BOTH in the service (readable error) and by a CHECK constraint (so a backfill or direct insert cannot slip past); CANDIDATE requires none, which is also why it is the column default — any other default would have invalidated every pre-existing row the moment the column was added. QA edge cases: the evidence CHECK uses cardinality() rather than array_length(), because array_length('{}',1) returns NULL and a NULL CHECK PASSES — written the obvious way the constraint silently permits the exact row it exists to forbid; whitespace-only evidence refs are stripped and then count as absent; a persona cannot hold a role to itself; a duplicate LIVE role for the same (pair, kind, role_label) is a 409, but the same pair may hold unlimited DIFFERENT labels and unlimited CLOSED historical rows; the live-role uniqueness is scoped to labelled rows only, so pre-existing unlabelled edges — which the original schema legitimately permits in duplicate — keep working unchanged.",
+  "description": "Grants one contextual role between two personas. A collection-root create, so 201. Proves AC1 and AC3. A subject-object pair is no longer ONE relationship: someone can be a patient's daughter AND registered carer AND billing contact simultaneously, each with its own role_label, its own trust_state and its own valid_from/valid_to — collapsing them into a single edge would force a choice between losing the distinction and overwriting a role that is still true. TRUST AND VALIDITY ARE SEPARATE AXES on purpose: 'is this in force now' and 'how sure are we it is real' have different remedies (an expired carer role needs renewing, an unevidenced one needs a document), and a single status field answers 'inactive' to both. AC3: CONFIRMED and DOCUMENTED require at least one evidence_ref, enforced BOTH in the service (readable error) and by a CHECK constraint (so a backfill or direct insert cannot slip past); CANDIDATE requires none, which is also why it is the column default — any other default would have invalidated every pre-existing row the moment the column was added. WHY persona_b IS A {{var:}} AND NOT A PRODUCER REFERENCE (this is deliberate, not the MUST-46 antipattern): the role needs TWO personas, but POST /api/personas is a single node in the dependency graph and only its first test data set executes, so the graph cannot mint a second one. rebac.relationship stores persona_a/persona_b as BARE UUIDs with NO foreign key - sdk-rebac decouples the graph from identity on purpose - so the counterparty only has to be a well-formed uuid distinct from persona_a, which CHECK (persona_a <> persona_b) is the only rule about it. It must also be STABLE ACROSS THIS FILE rather than {{dynamic:uuid}}, because the 409 ROLE_ALREADY_LIVE case below only describes a real conflict if it reuses the SAME pair and label as the first case. Re-runs are safe even though the counterparty is fixed: persona_a is a freshly created persona every run, so the (persona_a, persona_b, kind, role_label) pair that rel_live_role_idx enforces is new each time. QA edge cases: the evidence CHECK uses cardinality() rather than array_length(), because array_length('{}',1) returns NULL and a NULL CHECK PASSES — written the obvious way the constraint silently permits the exact row it exists to forbid; whitespace-only evidence refs are stripped and then count as absent; a persona cannot hold a role to itself; a duplicate LIVE role for the same (pair, kind, role_label) is a 409, but the same pair may hold unlimited DIFFERENT labels and unlimited CLOSED historical rows; the live-role uniqueness is scoped to labelled rows only, so pre-existing unlabelled edges — which the original schema legitimately permits in duplicate — keep working unchanged.",
   "captureResponse": {
-    "rebac.roles.response.data.role.relationship_id": "data.role.relationship_id"
+    "rebac.roles.response.data.role.relationship_id": "data.role.relationship_id",
+    "rebac.roles.response.data.role.persona_a": "data.role.persona_a",
+    "rebac.roles.response.data.role.persona_b": "data.role.persona_b"
   },
   "testCases": [
     {
@@ -28,7 +30,7 @@
       "payload": {
         "kind": "care-team",
         "persona_a": "{{cache:personas.create.response.data.persona.persona_id}}",
-        "persona_b": "{{cache:personas.create-second.response.data.persona.persona_id}}",
+        "persona_b": "{{var:rebac_counterparty_persona_id}}",
         "role_label": "registered_carer",
         "trust_state": "DOCUMENTED",
         "evidence_refs": ["doc:poa-77"],
@@ -42,7 +44,7 @@
       "payload": {
         "kind": "care-team",
         "persona_a": "{{cache:personas.create.response.data.persona.persona_id}}",
-        "persona_b": "{{cache:personas.create-second.response.data.persona.persona_id}}",
+        "persona_b": "{{var:rebac_counterparty_persona_id}}",
         "role_label": "billing_contact",
         "trust_state": "CANDIDATE"
       },
@@ -60,7 +62,7 @@
       "payload": {
         "kind": "care-team",
         "persona_a": "{{cache:personas.create.response.data.persona.persona_id}}",
-        "persona_b": "{{cache:personas.create-second.response.data.persona.persona_id}}",
+        "persona_b": "{{var:rebac_counterparty_persona_id}}",
         "role_label": "unevidenced",
         "trust_state": "CONFIRMED"
       },
@@ -77,7 +79,7 @@
       "payload": {
         "kind": "care-team",
         "persona_a": "{{cache:personas.create.response.data.persona.persona_id}}",
-        "persona_b": "{{cache:personas.create-second.response.data.persona.persona_id}}",
+        "persona_b": "{{var:rebac_counterparty_persona_id}}",
         "trust_state": "PROBABLY"
       },
       "expectedStatus": 400,
@@ -107,7 +109,7 @@
       "payload": {
         "kind": "care-team",
         "persona_a": "{{cache:personas.create.response.data.persona.persona_id}}",
-        "persona_b": "{{cache:personas.create-second.response.data.persona.persona_id}}",
+        "persona_b": "{{var:rebac_counterparty_persona_id}}",
         "role_label": "registered_carer",
         "trust_state": "DOCUMENTED",
         "evidence_refs": ["doc:duplicate"]
@@ -124,7 +126,7 @@
       "payload": {
         "kind": "care-team",
         "persona_a": "{{cache:personas.create.response.data.persona.persona_id}}",
-        "persona_b": "{{cache:personas.create-second.response.data.persona.persona_id}}"
+        "persona_b": "{{var:rebac_counterparty_persona_id}}"
       },
       "expectedStatus": 401
     }
