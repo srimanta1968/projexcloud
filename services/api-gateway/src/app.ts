@@ -374,6 +374,8 @@ import {
 import {
   migrationsDir as dataCreditsMigrations,
   server as dataCreditsServer,
+  grantCredits,
+  GrantRefused,
 } from '@projexlight/sdk-data-credits';
 import {
   migrationsDir as twilioVoiceMigrations,
@@ -2571,6 +2573,54 @@ const start = async (): Promise<void> => {
         // A bad admin_pool_index/evidence_pool_index FK -> 400 (client error), not 500.
         const msg = (e as Error).message;
         if (/foreign key|violates|not present/i.test(msg)) {
+          return reply.code(400).send({ success: false, error: msg });
+        }
+        return reply.code(500).send({ success: false, error: msg });
+      }
+    });
+
+    // --- POST /admin/tenants/:tenant_id/credits/grant (TK-4135) ---
+    // Operator grant for data_credits.credit_account. Credits are PAID capacity and
+    // sdk-data-credits deliberately exposes no tenant-facing top-up (only balance,
+    // reservations, settle, ledger, budgets) — so funding an account was a producer-less
+    // SQL seed (tests/setup_scripts/data_credits_account.sql) attached via setupScript,
+    // a mechanism the Test MCP never actually executes. This is the same move as the
+    // federation-configs producer below: give the operator path a real endpoint so
+    // onboarding AND the test chain provision through the API instead of a seed.
+    //
+    // Admin-ops-token gated, NOT requireAuth. A tenant reaching this could top itself up
+    // without limit and would mint GRANT ledger entries indistinguishable from ones an
+    // operator authorised — which is the only record of what was actually sold.
+    app.post<{
+      Params: { tenant_id: string };
+      Body: { credits?: number; top_up_to?: number; reason?: string };
+    }>('/admin/tenants/:tenant_id/credits/grant', async (req, reply) => {
+      const authErr = await requireAdmin(req as unknown as { headers: Record<string, unknown> });
+      if (authErr) return reply.code(401).send({ success: false, error: authErr });
+      const { tenant_id } = req.params;
+      const b = req.body ?? {};
+      const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      if (!UUID_RE.test(tenant_id)) {
+        return reply.code(400).send({ success: false, error: 'tenant_id must be a UUID' });
+      }
+      try {
+        // top_up_to is the re-runnable form (raise TO a figure, adding only the
+        // shortfall) and is what the api_definition uses, so a suite re-run does not
+        // walk the balance upward and invalidate its own assertions.
+        const data = await grantCredits({
+          tenant_id,
+          credits: b.credits,
+          top_up_to: b.top_up_to,
+          reason: b.reason ?? 'operator grant via admin-ops-token',
+        });
+        return reply.code(200).send({ success: true, data });
+      } catch (e) {
+        if (e instanceof GrantRefused) {
+          return reply.code(400).send({ success: false, error: e.message });
+        }
+        const msg = (e as Error).message;
+        req.log.error(e);
+        if (/foreign key|violates|not present|invalid input/i.test(msg)) {
           return reply.code(400).send({ success: false, error: msg });
         }
         return reply.code(500).send({ success: false, error: msg });

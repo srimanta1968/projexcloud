@@ -1,0 +1,123 @@
+{
+  "name": "POST /admin/tenants/:tenant_id/credits/grant — sdk-data-credits",
+  "endpoint": "/admin/tenants/:tenant_id/credits/grant",
+  "method": "POST",
+  "description": "Operator grant that funds a tenant's data_credits.credit_account and writes the matching GRANT row to the append-only credit_ledger, in one transaction with the account row held FOR UPDATE. Admin-ops-token gated: sdk-data-credits deliberately exposes NO tenant-facing top-up (only balance, reservations, settle, ledger, budgets), because a tenant able to fund itself is a revenue hole and would mint GRANT entries indistinguishable from ones an operator authorised. Exactly one of credits (additive) or top_up_to (raise the balance TO this figure, adding only the shortfall) must be supplied; naming both, or neither, is a 400. This definition uses top_up_to so it is re-runnable: once the account is at or above the figure the grant moves nothing and writes no ledger entry, so a suite re-run does not walk the balance upward and invalidate assertions that spend from it. Replaces tests/setup_scripts/data_credits_account.sql, a producer-less SQL seed attached via a setupScript mechanism the Test MCP never executes.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "admin token required",
+      "when": "requireAdmin() found no valid x-admin-ops-token header — missing, or matching neither env ADMIN_OPS_TOKEN nor an active admin.ops_token hash"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "tenant_id must be a UUID",
+      "when": "the :tenant_id path segment is not a UUID"
+    },
+    {
+      "status": 400,
+      "code": "VALIDATION_ERROR",
+      "message": "exactly one of credits or top_up_to is required",
+      "when": "the body names both credits and top_up_to, or neither — GrantRefused from grantCredits()"
+    },
+    {
+      "status": 400,
+      "code": "VALIDATION_ERROR",
+      "message": "credits must be a positive number",
+      "when": "the named figure is zero, negative or not finite — a grant that moves nothing is refused rather than written, since credit_ledger_moves_something would reject the entry anyway"
+    }
+  ],
+  "requiresAuth": false,
+  "expectedStatus": 200,
+  "sdk": "sdk-data-credits",
+  "sourceFile": "services/api-gateway/src/app.ts",
+  "testability": "auto",
+  "dependsOn": [
+    "POST /api/auth/signup-tenant"
+  ],
+  "testCases": [
+    {
+      "name": "Fund the run's tenant to a known floor",
+      "headers": {
+        "x-admin-ops-token": "{{var:ADMIN_OPS_TOKEN}}"
+      },
+      "pathParams": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}"
+      },
+      "payload": {
+        "top_up_to": 100,
+        "reason": "api-test fixture grant"
+      },
+      "expectedStatus": 200
+    },
+    {
+      "name": "Reject a grant naming neither figure",
+      "headers": {
+        "x-admin-ops-token": "{{var:ADMIN_OPS_TOKEN}}"
+      },
+      "pathParams": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}"
+      },
+      "payload": {
+        "reason": "no figure named"
+      },
+      "test_type": "negative",
+      "expectedStatus": 400
+    },
+    {
+      "name": "Reject a grant naming both figures",
+      "headers": {
+        "x-admin-ops-token": "{{var:ADMIN_OPS_TOKEN}}"
+      },
+      "pathParams": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}"
+      },
+      "payload": {
+        "credits": 10,
+        "top_up_to": 100
+      },
+      "test_type": "negative",
+      "expectedStatus": 400
+    },
+    {
+      "name": "Reject a non-UUID tenant",
+      "headers": {
+        "x-admin-ops-token": "{{var:ADMIN_OPS_TOKEN}}"
+      },
+      "pathParams": {
+        "tenant_id": "not-a-uuid"
+      },
+      "payload": {
+        "top_up_to": 100
+      },
+      "test_type": "negative",
+      "expectedStatus": 400
+    },
+    {
+      "name": "Reject an unauthenticated grant",
+      "headers": {},
+      "pathParams": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}"
+      },
+      "payload": {
+        "top_up_to": 100
+      },
+      "test_type": "negative",
+      "expectedStatus": 401
+    }
+  ],
+  "expectedResponse": {
+    "success": "boolean",
+    "data": {
+      "balance": "number",
+      "reserved": "number",
+      "available": "number"
+    }
+  },
+  "captureResponse": {
+    "data-credits.grant.response.data.balance": "data.balance",
+    "data-credits.grant.response.data.available": "data.available"
+  }
+}

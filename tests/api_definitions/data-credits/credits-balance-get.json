@@ -6,7 +6,7 @@
   "epicId": "fefd6ec9-2fd1-4d19-8fa0-fbfb090590bb",
   "featureId": "51042c0e-c450-4b84-9a22-9c09ec7b9f44",
   "taskId": "5604f877-e1ba-40bb-b324-44f43ebcb1ac",
-  "testability": "semi-auto",
+  "testability": "auto",
   "priority": 15,
   "name": "GET /api/credits/balance - Balance, held and available",
   "endpoint": "/api/credits/balance",
@@ -14,9 +14,9 @@
   "expectedStatus": 200,
   "description": "Three numbers: the balance, the part of it reserved for in-flight requests, and what is actually available (balance minus reserved). Available is a subtraction and is deliberately NOT stored anywhere - a third column would be a second source of truth for a number that is already implied, and the day the two disagree nobody can say which is right. QA edge cases: a tenant with no credit account is 404 CREDIT_ACCOUNT_NOT_FOUND rather than a zero balance, because \"no account\" and \"no credits\" are different situations with different fixes; reserved never exceeds balance (the database refuses it), so available is never negative; a hold released by a zero settlement restores available immediately, without touching balance.",
   "dependsOn": [
-    "POST /api/auth/signup-tenant"
+    "POST /api/auth/signup-tenant",
+    "POST /admin/tenants/:tenant_id/credits/grant"
   ],
-  "setupScript": "data_credits_account.sql",
   "testCases": [
     {
       "name": "Read the credit balance",

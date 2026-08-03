@@ -793,6 +793,15 @@ type Q = <R extends Record<string, unknown>>(
   sql: string, params?: unknown[],
 ) => Promise<{ rows: R[] }>;
 
+/** A grant that names no usable figure, reported rather than silently written. */
+export class GrantRefused extends Error {
+  code = 'VALIDATION_ERROR';
+  constructor(message: string) {
+    super(message);
+    this.name = 'GrantRefused';
+  }
+}
+
 async function capabilityById(capability_id: string, q?: Q): Promise<CapabilityRow> {
   const sql = `SELECT capability_id, tenant_id, key, outcome_label, description,
                       credit_price::text AS credit_price, category, is_active
@@ -832,33 +841,91 @@ async function writeLedger(
   );
 }
 
-/** Add credits to a tenant's account. The GRANT side of the ledger. */
+/**
+ * Add credits to a tenant's account. The GRANT side of the ledger.
+ *
+ * Two modes, exactly one of which must be named:
+ *
+ *   credits    ADDITIVE — add this many. What a real operator grant does.
+ *   top_up_to  FLOOR    — raise the balance TO this figure, adding only the shortfall.
+ *
+ * The floor mode exists for callers that run repeatedly, principally the API test chain.
+ * An additive grant re-run every suite walks the balance upward without limit, so a test
+ * asserting "spending 5 of 100 leaves 95" passes on run one and fails on run two — the
+ * classic fixture that only works once. A floor is re-runnable by construction: once the
+ * account is at or above the figure nothing moves, and writeLedger already declines a
+ * zero-delta entry, so a no-op top-up adds no noise to the export either.
+ *
+ * There is deliberately no tenant-facing route onto this. Credits are paid capacity: a
+ * tenant able to top itself up is a revenue hole, and the GRANT rows it would write are
+ * indistinguishable in the export from ones an operator authorised — which is the only
+ * record of what was actually sold. The HTTP surface is admin-ops-token gated.
+ */
 export async function grantCredits(input: {
   tenant_id: string;
-  credits: number;
+  credits?: number;
+  top_up_to?: number;
   reason?: string;
 }): Promise<BalanceView> {
+  const hasAdditive = typeof input.credits === 'number';
+  const hasFloor = typeof input.top_up_to === 'number';
+  if (hasAdditive === hasFloor) {
+    throw new GrantRefused('exactly one of credits or top_up_to is required');
+  }
+  const figure = (hasAdditive ? input.credits : input.top_up_to) as number;
+  if (!Number.isFinite(figure) || figure <= 0) {
+    throw new GrantRefused(`${hasAdditive ? 'credits' : 'top_up_to'} must be a positive number`);
+  }
+
   return dataService.tx(async (q) => {
-    const account = await q<{ account_id: string; balance: string; reserved: string }>(
-      `INSERT INTO data_credits.credit_account (tenant_id, balance)
-       VALUES ($1, $2)
-       ON CONFLICT (tenant_id) DO UPDATE SET balance = data_credits.credit_account.balance + $2
-       RETURNING account_id, balance::text, reserved::text`,
-      [input.tenant_id, input.credits],
+    // Create-if-absent then lock, rather than the previous single upsert: the floor mode
+    // has to READ the balance before it knows what to add, and reading it outside the
+    // lock lets a concurrent reservation move it between the read and the write — which
+    // would stamp a balance_after into an append-only ledger that never existed.
+    await q(
+      `INSERT INTO data_credits.credit_account (tenant_id, balance, reserved)
+       VALUES ($1, 0, 0) ON CONFLICT (tenant_id) DO NOTHING`,
+      [input.tenant_id],
     );
+    const account = await q<{ account_id: string; balance: string; reserved: string }>(
+      `SELECT account_id, balance::text, reserved::text FROM data_credits.credit_account
+        WHERE tenant_id = $1 AND is_active FOR UPDATE`,
+      [input.tenant_id],
+    );
+    if (account.rows.length === 0) throw new NoCreditAccount();
+
     const balance = Number(account.rows[0].balance);
     const reserved = Number(account.rows[0].reserved);
+    const delta = hasAdditive ? figure : Math.max(0, figure - balance);
+
+    if (delta === 0) {
+      // Already at or above the floor. Nothing moved, so nothing is recorded.
+      return { balance, reserved, available: balance - reserved };
+    }
+
+    const after = await q<{ balance: string; reserved: string }>(
+      `UPDATE data_credits.credit_account SET balance = balance + $2, updated_at = now()
+        WHERE account_id = $1 RETURNING balance::text, reserved::text`,
+      [account.rows[0].account_id, delta],
+    );
+    const balance_after = Number(after.rows[0].balance);
+    const reserved_after = Number(after.rows[0].reserved);
+
     await writeLedger(q, {
       tenant_id: input.tenant_id,
       entry_type: 'GRANT',
       request_id: null,
       reservation_id: null,
-      balance_delta: input.credits,
+      balance_delta: delta,
       reserved_delta: 0,
-      balance_after: balance,
-      reserved_after: reserved,
+      balance_after,
+      reserved_after,
       reason: input.reason ?? 'credit grant',
     });
-    return { balance, reserved, available: balance - reserved };
+    return {
+      balance: balance_after,
+      reserved: reserved_after,
+      available: balance_after - reserved_after,
+    };
   });
 }

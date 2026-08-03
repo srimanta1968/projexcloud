@@ -32,6 +32,7 @@ import {
   estimate,
   execute,
   getBalance,
+  GrantRefused,
   grantCredits,
   InsufficientCredits,
   listLedger,
@@ -474,5 +475,68 @@ suite('capability broker and reservation lifecycle', () => {
     }
     expect(failure).not.toBeNull();
     assertOpaque({ message: failure }, 'settlement conflict error');
+  });
+
+  /* ------------------------------------------------- operator grant (TK-4135) */
+
+  it('top_up_to raises the balance to a floor and is a no-op once funded', async () => {
+    const tenant = randomUUID();
+
+    const first = await grantCredits({ tenant_id: tenant, top_up_to: 100 });
+    expect(first.balance).toBe(100);
+
+    // The point of the floor mode. An additive grant re-run by a test suite walks the
+    // balance upward, so an assertion like "spending 5 of 100 leaves 95" passes on the
+    // first run and fails on the second. Re-running a floor must change nothing.
+    const second = await grantCredits({ tenant_id: tenant, top_up_to: 100 });
+    expect(second.balance).toBe(100);
+
+    // And it tops up only the shortfall rather than adding the whole figure again.
+    const third = await grantCredits({ tenant_id: tenant, top_up_to: 130 });
+    expect(third.balance).toBe(130);
+  });
+
+  it('a no-op floor grant writes no ledger entry', async () => {
+    const tenant = randomUUID();
+    await grantCredits({ tenant_id: tenant, top_up_to: 50 });
+    const afterFirst = (await listLedger({ tenant_id: tenant })).length;
+    // Assert the first grant actually landed, so the comparison below cannot pass by
+    // both sides being zero.
+    expect(afterFirst).toBe(1);
+
+    await grantCredits({ tenant_id: tenant, top_up_to: 50 });
+    // A grant that moved nothing is not an event. An append-only ledger padded with
+    // zero-delta rows on every suite run is harder to read and no more truthful --
+    // and credit_ledger_moves_something would refuse the row anyway.
+    expect((await listLedger({ tenant_id: tenant })).length).toBe(afterFirst);
+  });
+
+  it('additive and floor modes are mutually exclusive and must be positive', async () => {
+    const tenant = randomUUID();
+    await expect(grantCredits({ tenant_id: tenant })).rejects.toBeInstanceOf(GrantRefused);
+    await expect(
+      grantCredits({ tenant_id: tenant, credits: 10, top_up_to: 100 }),
+    ).rejects.toBeInstanceOf(GrantRefused);
+    await expect(
+      grantCredits({ tenant_id: tenant, credits: 0 }),
+    ).rejects.toBeInstanceOf(GrantRefused);
+    await expect(
+      grantCredits({ tenant_id: tenant, top_up_to: -5 }),
+    ).rejects.toBeInstanceOf(GrantRefused);
+  });
+
+  it('a grant records the delta, not the figure, in the ledger', async () => {
+    const tenant = randomUUID();
+    await grantCredits({ tenant_id: tenant, top_up_to: 40 });
+    await grantCredits({ tenant_id: tenant, top_up_to: 60 });
+
+    const grants = (await listLedger({ tenant_id: tenant })).filter(
+      (e) => e.entry_type === 'GRANT',
+    );
+    expect(grants.length).toBe(2);
+    // The second grant moved 20, not 60. A ledger that recorded the target figure
+    // would not reconcile against the balance it claims to explain.
+    const deltas = grants.map((e) => Number(e.balance_delta)).sort((a, b) => a - b);
+    expect(deltas).toEqual([20, 40]);
   });
 });

@@ -112,10 +112,21 @@ services:
       #   npm run dev -- --host  (or --host 0.0.0.0)
       #
       # Set in .env file or as environment variables before running tests.
-      - UI_BASE_URL=${UI_BASE_URL:-http://host.docker.internal:3000}
-      - API_BASE_URL=${API_BASE_URL:-http://host.docker.internal:5000}
+      #
+      # NO DEFAULTS ON PURPOSE. The runner resolves a URL in this priority order
+      # (projex_test_mcp/src/server.py:_get_url_with_priority):
+      #   1. URL on the request      2. these env vars      3. tests/config/test-config.json
+      # A non-empty default here is priority 2, so it PERMANENTLY SHADOWS the
+      # activeEnvironment in test-config.json — switching development <-> staging
+      # there silently has no effect. The scaffold defaults were also wrong for
+      # this repo (api-gateway is :4000, not the Express :5000 placeholder; nothing
+      # listens on :5000 at all). Leave these EMPTY so priority falls through to
+      # test-config.json, which is the single source of truth for environments.
+      # Set them in .env only to override test-config.json for a one-off run.
+      - UI_BASE_URL=${UI_BASE_URL:-}
+      - API_BASE_URL=${API_BASE_URL:-}
       # Alias for UI_BASE_URL (backward compatibility)
-      - BASE_URL=${BASE_URL:-${UI_BASE_URL:-http://host.docker.internal:3000}}
+      - BASE_URL=${BASE_URL:-${UI_BASE_URL:-}}
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]

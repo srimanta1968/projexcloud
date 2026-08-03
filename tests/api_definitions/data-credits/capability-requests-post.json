@@ -6,7 +6,7 @@
   "epicId": "fefd6ec9-2fd1-4d19-8fa0-fbfb090590bb",
   "featureId": "51042c0e-c450-4b84-9a22-9c09ec7b9f44",
   "taskId": "5604f877-e1ba-40bb-b324-44f43ebcb1ac",
-  "testability": "semi-auto",
+  "testability": "auto",
   "priority": 15,
   "name": "POST /api/capability-requests - Ask for an outcome and hold the credits",
   "endpoint": "/api/capability-requests",
@@ -15,9 +15,9 @@
   "description": "Creates the request and HOLDS the quoted credits in one transaction. The hold exists because both alternatives are worse: charging up front turns every no-match into a refund somebody has to promise to make later, and charging afterwards lets a thousand concurrent requests run against a balance of five. The subject is a FINGERPRINT, never the raw phone number or email - the broker does not need the raw value to bill, cache or audit, and a table of everything every tenant ever looked up is a breach waiting for an excuse. The role_ref decides the governance: a REQUEST_ONLY role (or any request at or above the bulk-approval threshold, whatever the role) comes back with status PENDING_APPROVAL and cannot execute until it is approved; a FULL role comes back APPROVED. QA edge cases: a refused hold writes NOTHING - no orphan request is left behind, because the whole reserve is one transaction; two concurrent reserves cannot both spend the last credit (the account row is read FOR UPDATE); the same subject may be requested repeatedly and each request gets its own hold; a daily-capped role that has exhausted its window is 403 DAILY_CAP_EXCEEDED, which is NOT the same as 402 INSUFFICIENT_CREDITS - the tenant HAS the credits, this requester may not spend them.",
   "dependsOn": [
     "POST /api/auth/signup-tenant",
-    "POST /api/personas"
+    "POST /api/personas",
+    "POST /admin/tenants/:tenant_id/credits/grant"
   ],
-  "setupScript": "data_credits_account.sql",
   "captureResponse": {
     "capability-requests.create.request_id": "data.request_id",
     "capability-requests.create.reservation_id": "data.reservation_id"
