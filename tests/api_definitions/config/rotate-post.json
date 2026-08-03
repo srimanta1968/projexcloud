@@ -2,10 +2,11 @@
   "endpoint": "/api/config/rotate",
   "method": "POST",
   "expectedStatus": 200,
-  "description": "Rotates a secret value's sdk-secrets envelope pointer in place (secret_ref swapped, value cleared, re-activated). Operates on its OWN key, qa.config.rotate.smoke, which POST /api/config creates in this same run with an initial secret_ref (declared in dependsOn), so it needs no SQL seed. Tenant JWT required + scope-ownership guard. Edge cases: scope + key + secret_ref required (400); unknown row 404.",
+  "description": "Rotates a secret value's sdk-secrets envelope pointer in place (secret_ref swapped, value cleared, re-activated). Operates on the row POST /api/config creates in this same run, consumed via {{cache:config.create.response.data.key}} rather than a seeded key, so no SQL seed is required. It is ordered LAST - after revoke - because rotateConfigSecret re-activates whatever it touches: running it on a revoked row is the interesting case and it leaves the row active with a secret_ref, which the next run's upsert resets back to a plain value. Tenant JWT required + scope-ownership guard. Edge cases: scope + key + secret_ref required (400); unknown row 404.",
   "dependsOn": [
     "POST /api/auth/signup-tenant",
-    "POST /api/config"
+    "POST /api/config",
+    "POST /api/config/revoke"
   ],
   "testability": "auto",
   "fieldEnums": {
@@ -25,7 +26,7 @@
       "payload": {
         "scope": "tenant",
         "scope_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
-        "key": "qa.config.rotate.smoke",
+        "key": "{{cache:config.create.response.data.key}}",
         "secret_ref": "vault:rotated-{{dynamic:slug}}"
       },
       "expectedStatus": 200

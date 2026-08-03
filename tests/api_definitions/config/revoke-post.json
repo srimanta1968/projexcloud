@@ -2,10 +2,13 @@
   "endpoint": "/api/config/revoke",
   "method": "POST",
   "expectedStatus": 200,
-  "description": "Soft-deletes a config value (status='revoked') so resolution stops without losing the audit row. Operates on its OWN key, qa.config.revoke.smoke, which POST /api/config creates in this same run (declared in dependsOn), so it never revokes the read tests' value and needs no SQL seed. Tenant JWT required + scope-ownership guard. Edge cases: scope + key required (400); unknown row 404; cross-tenant/platform without operator 403.",
+  "description": "Soft-deletes a config value (status='revoked') so resolution stops without losing the audit row. Operates on the row POST /api/config creates in this same run, consumed via {{cache:config.create.response.data.key}} rather than a seeded key, so no SQL seed is required. It is ordered AFTER the three read endpoints in dependsOn because revoking is what stops resolution - running it first would make the readers miss. The next run's upsert resets the row to active, so this stays re-runnable. Tenant JWT required + scope-ownership guard. Edge cases: scope + key required (400); unknown row 404; cross-tenant/platform without operator 403.",
   "dependsOn": [
     "POST /api/auth/signup-tenant",
-    "POST /api/config"
+    "POST /api/config",
+    "GET /api/config",
+    "GET /api/config/value",
+    "GET /api/config/resolve"
   ],
   "testability": "auto",
   "fieldEnums": {
@@ -25,7 +28,7 @@
       "payload": {
         "scope": "tenant",
         "scope_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
-        "key": "qa.config.revoke.smoke"
+        "key": "{{cache:config.create.response.data.key}}"
       },
       "expectedStatus": 200
     }
