@@ -1,0 +1,102 @@
+{
+  "name": "Cross-SDK composition integration suite (P16 EP-387)",
+  "endpoint": "internal://platform/tests.crossSdkComposition",
+  "sdk": "platform",
+  "sourceFile": "tests/platform/crossSdkComposition.integration.test.ts",
+  "method": "INTERNAL_FUNCTION",
+  "requiresAuth": false,
+  "expectedStatus": 200,
+  "taskId": "6a6a9f54-6223-4040-b475-aafedba7cc45",
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "featureId": "33655ac4-1866-4d03-b21d-e03a26f75b93",
+  "epicId": "42f1aac8-aba4-44cf-90a9-aadc0ac57bd3",
+  "priority": 104,
+  "testability": "manual",
+  "skipReason": "A test suite, not a runtime surface. It executes directly against a real Postgres via `npx vitest run --config tests/platform/vitest.config.ts` — 16 composition cases, currently green alongside the other four platform suites (171 assertions total).",
+  "coversCriterion": [
+    "6a6a9f54-6223-4040-b475-aafedba7cc45#AC1",
+    "6a6a9f54-6223-4040-b475-aafedba7cc45#AC2",
+    "6a6a9f54-6223-4040-b475-aafedba7cc45#AC3",
+    "6a6a9f54-6223-4040-b475-aafedba7cc45#AC4"
+  ],
+  "description": "Proves the P16 SDKs compose. Each SDK already has its own unit and integration tests; this suite exists because those cannot catch the failure that matters most in a platform — two packages individually correct and wrong together (a foreign key that never resolves, an event nobody consumes, a rollback orphaning another SDK's rows). Five flows, all against a real database. Flow 1: a contact extracted by sdk-parsing becomes assertions sdk-projection ranks, with the evidence span surviving the hand-off; a human correction then beats the enriched value, BOTH records survive the link, and the explained projection names the loser with a concrete reason rather than the word 'superseded'. Flow 2: an omnichannel thread hangs off the same subject_ref while an internal note stays undispatchable even in the composed read. Flow 3: every mutating call is proven idempotent by REPLAY — a second projection replay yields the same content hash and one snapshot row, a replayed provider delivery returns 'duplicate' with the same event_id, and a repeated message write with the same provider key returns the original message_id. Flow 4: the audit chain is verified unbroken — each entry's prev_hash equals its predecessor's entry_hash, sequence numbers are contiguous, and an unregistered event type is proven to throw at the contract layer. Flow 5: composition has not created coupling — each SDK owns its own schema, subject_ref crosses SDK boundaries as an OPAQUE STRING with zero foreign keys from conversation into projection (an FK there would make either package undeployable without the other), and each SDK still answers its own reads after the composed writes. QA edge cases discovered while writing it: the audit chain is PER pool_index, not global — chain_head is keyed on pool_index and every pool's seq restarts at 1, so querying across pools interleaves independent chains and makes them look broken; entry_hash and prev_hash are BYTEA and arrive as Buffers, so toBe compares object identity rather than content and must be compared as hex; and an unaliased `SELECT seq::text` names the output column 'seq', after which ORDER BY binds to the TEXT column and sorts lexically, putting 9990 before 999 — all three were real defects in the first draft of this suite, each of which would have produced a confident but meaningless pass or a spurious failure.",
+  "testCases": [
+    {
+      "name": "Flow 1 — extraction feeds projection, survivor and reason are named",
+      "payload": {
+        "scenario": "capture_normalize_promote_link_explain",
+        "expected_evidence_preserved": true,
+        "expected_survivor": "human_verified over enrichment",
+        "expected_both_records_retained": true,
+        "expected_reason_matches": "lost on (verification_state|origin_class|confidence)"
+      },
+      "expectedStatus": 200,
+      "expectedResponse": { "success": true }
+    },
+    {
+      "name": "Flow 2 — a thread composes with the same subject without owning it",
+      "payload": {
+        "scenario": "thread_on_projection_subject",
+        "expected_message_order": ["vault:q", "vault:a"],
+        "expected_internal_note_never_dispatchable": true
+      },
+      "expectedStatus": 200,
+      "expectedResponse": { "success": true }
+    },
+    {
+      "name": "Flow 3 — every mutating call is idempotent under replay",
+      "payload": {
+        "scenario": "idempotency_by_replay",
+        "cases": [
+          { "call": "replaySubject", "expected": "same content_hash, one snapshot row" },
+          { "call": "ingestLeadForm", "expected": "second returns duplicate with the same event_id" },
+          { "call": "recordMessage", "expected": "same message_id for a repeated provider key" }
+        ]
+      },
+      "expectedStatus": 200,
+      "expectedResponse": { "success": true }
+    },
+    {
+      "name": "Flow 4 — the audit chain verifies unbroken across the composed flow",
+      "payload": {
+        "scenario": "audit_chain_integrity",
+        "expected_prev_hash_links_predecessor": true,
+        "expected_contiguous_sequence": true,
+        "expected_unregistered_event_throws": true,
+        "note": "scoped to a single pool_index, since the chain is per-pool"
+      },
+      "expectedStatus": 200,
+      "expectedResponse": { "success": true }
+    },
+    {
+      "name": "Flow 5 — composition creates no coupling",
+      "payload": {
+        "scenario": "no_coupling",
+        "expected_owned_schemas": ["conversation", "projection", "parsing", "connectors"],
+        "expected_cross_sdk_foreign_keys": 0,
+        "expected_each_sdk_still_answers": true
+      },
+      "expectedStatus": 200,
+      "expectedResponse": { "success": true }
+    }
+  ],
+  "expectedResponse": { "success": true },
+  "errorCases": [
+    {
+      "name": "The suite skips rather than failing when no database is reachable",
+      "status": null,
+      "code": "DB_UNAVAILABLE_SKIP",
+      "message": "beforeAll sets dbUp=false and every case returns early",
+      "when": "a machine has no dev stack running; a red suite there would be misleading rather than informative, so the cases skip and the run stays green",
+      "payload": { "scenario": "no_database" }
+    },
+    {
+      "name": "A cross-SDK foreign key would fail Flow 5",
+      "status": null,
+      "code": "CROSS_SDK_FOREIGN_KEY",
+      "message": "expected 0 foreign keys from conversation into projection",
+      "when": "someone adds an FK between two SDK schemas; it makes either package undeployable without the other and turns two SDKs into one, which is the coupling this whole epic exists to prevent",
+      "payload": { "scenario": "coupling_introduced" }
+    }
+  ]
+}

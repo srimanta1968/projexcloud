@@ -1,0 +1,48 @@
+{
+  "_comment": [
+    "Example document vocabulary shipped as DATA, not source (P16 EP-387 neutrality gate).",
+    "",
+    "These classifier keywords and extraction patterns are vertical-specific by nature — an",
+    "invoice, a prescription and a lab result belong to different industries. Baking them",
+    "into the SDK's TypeScript made sdk-parsing implicitly a healthcare/finance package, so",
+    "the next vertical would fork it rather than configure it.",
+    "",
+    "As data they are a replaceable default: a tenant overrides them through sdk-taxonomy",
+    "(the production path), and a vertical can ship its own file. The SDK source now holds",
+    "only the MECHANISM — keyword scoring and regex extraction — which is genuinely neutral.",
+    "",
+    "Nothing here is authoritative. taxonomy.extraction_schema wins whenever it resolves."
+  ],
+  "classifier_rules": [
+    { "kind": "invoice", "keywords": ["invoice", "amount due", "bill to"] },
+    { "kind": "prescription", "keywords": ["rx", "prescription", "dosage", "sig:"] },
+    { "kind": "contract", "keywords": ["agreement", "effective date", "party of the first part"] },
+    { "kind": "lab-result", "keywords": ["hemoglobin", "glucose", "lab result", "reference range"] }
+  ],
+  "extraction_patterns": {
+    "invoice_number": "invoice\\s*(?:no\\.?|#)\\s*[:#]?\\s*([A-Z0-9-]+)",
+    "amount": "(?:amount due|total)\\s*[:$]?\\s*\\$?\\s*([0-9,]+\\.\\d{2})",
+    "due_date": "due\\s+(?:date|on)\\s*[:]?\\s*([A-Za-z]{3,9}\\s+\\d{1,2},?\\s+\\d{4}|\\d{4}-\\d{2}-\\d{2})",
+    "patient_name": "patient(?:\\s+name)?\\s*[:]\\s*([A-Z][a-z]+(?:\\s+[A-Z][a-z]+)+)",
+    "medication": "(?:rx|prescription|medication)\\s*[:]\\s*([A-Z][a-zA-Z0-9 -]+)",
+    "dosage": "(?:dosage|sig)\\s*[:]\\s*([0-9.]+\\s*(?:mg|ml|mcg|g)(?:\\s+\\w+){0,3})"
+  },
+  "builtin_schemas": {
+    "invoice": [
+      { "name": "invoice_number", "type": "string", "required": true },
+      { "name": "amount", "type": "currency", "required": true },
+      { "name": "due_date", "type": "date", "required": false }
+    ],
+    "prescription": [
+      { "name": "patient_name", "type": "string", "required": true },
+      { "name": "medication", "type": "string", "required": true },
+      { "name": "dosage", "type": "string", "required": true }
+    ],
+    "contract": [
+      { "name": "invoice_number", "type": "string", "required": false }
+    ],
+    "lab-result": [
+      { "name": "patient_name", "type": "string", "required": true }
+    ]
+  }
+}

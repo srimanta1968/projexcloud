@@ -66,3 +66,20 @@ export type {
 } from './services/featureBackends';
 
 export * as server from './server';
+
+// B2B firmographic + intent feature families (P16 EP-385). A registry addition: the
+// shipped geo/field-service features and every existing endpoint are unchanged.
+export {
+  listB2BFeatures,
+  getB2BFeature,
+  registerB2BFeature,
+  evaluateB2BFeatures,
+  DEFAULT_B2B_WEIGHTS,
+} from './services/b2bFeatures';
+export type {
+  B2BFeatureDef,
+  B2BFeatureFamily,
+  B2BSignals,
+  FeatureAttribution,
+  FeatureOutcome,
+} from './services/b2bFeatures';

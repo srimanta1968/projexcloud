@@ -1,0 +1,107 @@
+{
+  "sdk": "sdk-crm",
+  "sourceFile": "packages/sdk-crm/src/server/routes.ts",
+  "requiresAuth": true,
+  "taskId": "94a7a454-5ea6-43c5-a54f-495493441b5a",
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "featureId": "c611a832-fd3a-4930-8adf-22e1b3c70d36",
+  "epicId": "5622482a-4923-4f93-9dea-805cc54f3efd",
+  "testability": "auto",
+  "name": "GET /api/crm/next-actions/overdue - The overdue queue with its escalation ladder",
+  "endpoint": "/api/crm/next-actions/overdue",
+  "method": "GET",
+  "expectedStatus": 200,
+  "priority": 63,
+  "description": "Lists open next actions whose due_at has passed, oldest first, each carrying minutes_overdue, push_count, original_due_at and the escalation_level it has reached. Returns the ladder actually applied in `offsets` so a caller renders the tenant's own levels rather than guessing. Edge cases: tenant_id query param is required (400 without it); escalation_level is the HIGHEST offset passed, not the first, so an action a week late is not reported at 'nudge' and buried under actions an hour late; escalation_level is null when the action is overdue but has not yet passed the first configured offset; with no overdue_policy row for the tenant, offsets is [] and every escalation_level is null - the queue still lists everything overdue, it just has no levels to name; subject_kind selects the kind-specific policy and falls back to the tenant-wide one; limit is clamped to 1..1000 (default 100), so an absurd limit degrades instead of erroring; an empty entries[] is a normal answer, not a 404.",
+  "dependsOn": [
+    "POST /api/auth/signup-tenant",
+    "POST /api/personas",
+    "POST /api/crm/subjects/:subject_ref/next-action"
+  ],
+  "testCases": [
+    {
+      "name": "Read the overdue queue for the tenant",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "queryParams": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "owner_persona_id": "{{cache:personas.create.response.data.persona.persona_id}}",
+        "limit": "50"
+      },
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "data": {
+          "queue": {
+            "entries": "array",
+            "offsets": "array",
+            "as_of": "string"
+          }
+        }
+      }
+    },
+    {
+      "name": "400 - tenant_id query param is required",
+      "testType": "negative",
+      "coversErrorCase": "400|ValidationError",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "expectedStatus": 400,
+      "expectedError": {
+        "code": "ValidationError",
+        "messageContains": "tenant_id query param required"
+      }
+    },
+    {
+      "name": "401 - missing bearer token",
+      "testType": "negative",
+      "coversErrorCase": "401|Unauthorized|missing",
+      "headers": {},
+      "queryParams": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}"
+      },
+      "expectedStatus": 401,
+      "expectedError": {
+        "code": "Unauthorized",
+        "messageContains": "Missing bearer token"
+      }
+    },
+    {
+      "name": "401 - invalid or expired token",
+      "testType": "negative",
+      "coversErrorCase": "401|Unauthorized|invalid",
+      "headers": {
+        "Authorization": "Bearer {{static:invalid-token}}"
+      },
+      "queryParams": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}"
+      },
+      "expectedStatus": 401,
+      "expectedError": {
+        "code": "Unauthorized",
+        "messageContains": "Invalid or expired token"
+      }
+    }
+  ],
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "Authorization header absent or not in the form \"Bearer <jwt>\""
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "JWT signature invalid, malformed, or past its exp claim"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "tenant_id query param required",
+      "when": "tenant_id query param omitted"
+    }
+  ]
+}

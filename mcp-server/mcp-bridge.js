@@ -143,6 +143,41 @@ const TOOLS = [
     }
   },
   {
+    name: 'projexlight_get_sdk_api',
+    description: 'ProjexCloud SDK reuse: fetch the full spec (method, path, requiresAuth, payload_shape, fieldEnums, dependsOn) for ONE endpoint from the bundled SDK catalog. Call this only when about to integrate a specific endpoint you found in mcp-server/data/sdk-catalog-index.json — avoids loading the whole catalog.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        method: {
+          type: 'string',
+          description: 'HTTP method of the endpoint, e.g. "POST"'
+        },
+        endpoint: {
+          type: 'string',
+          description: 'Endpoint path, e.g. "/api/scheduling/appointments"'
+        }
+      },
+      required: ['method', 'endpoint']
+    }
+  },
+  {
+    name: 'projexlight_get_next_task',
+    description: 'Get AND claim your next task automatically — no taskId needed. Enforces depth-first feature sequencing: finishes your currently assigned/owned feature end-to-end (in the correct task-type order) BEFORE moving to the next feature; when your feature is done it picks the oldest unassigned feature and locks it to you. Returns the full implementation instruction. Call this after projexlight_complete_task to get the correct next task instead of picking tasks yourself.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        sprintId: {
+          type: 'string',
+          description: 'Optional: scope next-task selection to a single sprint UUID.'
+        },
+        projectPath: {
+          type: 'string',
+          description: 'Unix-style path to project root for multi-project setups. Auto-detected if not provided.'
+        }
+      }
+    }
+  },
+  {
     name: 'projexlight_validate',
     description: 'Validate generated code against quality rules',
     inputSchema: {
@@ -246,6 +281,67 @@ const TOOLS = [
     }
   },
   {
+    name: 'projexlight_review_task_delta',
+    description: 'ACCEPTANCE-CRITERIA REVIEW OF THIS TASK\'S DIFF (third-party review). Scope is the DELTA — the files this task changed — never the corpus. TWO MODES. (1) taskId only -> returns the review packet: changed files, the api_definitions you touched with their testCase/negative/errorCase/dataset counts and coversCriterion declarations, plus the criteria to review against. Review as a THIRD PARTY who did not write the diff: look for the gap, do not confirm your own work. For each criterion name the executable artifact that would FAIL if it regressed (an api_definition testCase for an endpoint, a Gherkin step for a screen). "The code looks right" is NOT evidence. (2) findings[] -> records anything not "covered" to .projexlight/context/criteria_gaps.json, which surfaces on the NEXT task AND BLOCKS projexlight_complete_task until closed. An EMPTY findings list clears the sticky. Run BEFORE complete_task.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        taskId: { type: 'string', description: 'UUID of the task being reviewed (required)' },
+        projectPath: { type: 'string', description: 'Project root path' },
+        criteria: {
+          type: 'array',
+          description: 'Criteria to review against — normally from projexlight_get_task_instruction -> criteriaContext.taskCriteria',
+          items: {
+            type: 'object',
+            properties: {
+              id: { type: 'string', description: 'Criterion id, e.g. "<feature_uuid>#AC2"' },
+              text: { type: 'string', description: 'Criterion text' }
+            }
+          }
+        },
+        findings: {
+          type: 'array',
+          description: 'RECORD MODE. Omit for packet mode. Pass [] to CLEAR the sticky after a clean review.',
+          items: {
+            type: 'object',
+            properties: {
+              criterionId: { type: 'string', description: 'Copy EXACTLY from the packet — it is the join key' },
+              criterion: { type: 'string', description: 'Criterion text' },
+              verdict: { type: 'string', enum: ['covered', 'partial', 'missing'], description: 'Anything other than "covered" is recorded as a gap and blocks completion' },
+              gap: { type: 'string', description: 'What is missing. Required when verdict is not "covered"' },
+              evidence: {
+                type: 'object',
+                description: 'Name the executable proof',
+                properties: {
+                  apiDefinitions: { type: 'array', items: { type: 'string' } },
+                  scenarios: { type: 'array', items: { type: 'string' } },
+                  files: { type: 'array', items: { type: 'string' } }
+                }
+              }
+            },
+            required: ['criterionId', 'verdict']
+          }
+        },
+        baseRef: { type: 'string', description: 'Git ref to diff against (default: HEAD)' }
+      },
+      required: ['taskId']
+    }
+  },
+  {
+    name: 'projexlight_sync_feature_file',
+    description: 'SYNC A .feature FILE BACK INTO PROJEXLIGHT (reuse first, create last). Closes the round trip: ProjexLight pushes scenarios DOWN into .feature files, but scenarios YOU author never reached ProjexLight, so feature validation, the shared UI backlog and coverage never knew about them. RESOLUTION ORDER: (1) @scenario_id: tag that exists under this feature -> UPDATE its bdd_steps; (2) else match by normalized title WITHIN the feature -> REUSE that id; (3) else match by title ELSEWHERE in the project -> REUSE and report the move; (4) else CREATE. Create is the LAST resort — it never duplicates an existing scenario. New/reused ids are WRITTEN BACK into the file as @scenario_id: tags, which makes re-running idempotent: COMMIT THE FILE afterwards or the next sync will duplicate. If the existing scenarios cannot be read it REFUSES (502) rather than creating blind. Scenarios present in ProjexLight but in no file are REPORTED, never deleted. ALWAYS run with dryRun:true first.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        featureFile: { type: 'string', description: 'Path to the .feature file (absolute, or relative to the project root)' },
+        projectPath: { type: 'string', description: 'Project root path' },
+        featureId: { type: 'string', description: 'Optional override; normally read from the file\'s @feature_id: tag' },
+        dryRun: { type: 'boolean', description: 'Report what WOULD happen without writing anything (no DB changes, no tag write-back)' }
+      },
+      required: ['featureFile']
+    }
+  },
+  {
     name: 'projexlight_review_ui_features',
     description: 'UI/BDD FEATURE REVIEW AGENT (incremental). Verifies every UI screen/page in the code has a Gherkin .feature file under tests/features/ (run via the Playwright/BDD Test MCP). Flags uncovered screens and re-checks when UI code or the feature corpus changes; covered+unchanged screens are skipped (content-hash cached). Run after generating/modifying UI code, then create/update the .feature files for flagged screens.',
     inputSchema: {
@@ -268,6 +364,20 @@ const TOOLS = [
         title: { type: 'string', description: 'Doc title (optional)' }
       },
       required: ['projectPath']
+    }
+  },
+  {
+    name: 'projexlight_pre_commit_regression_check',
+    description: 'MUST-32 PRE-COMMIT GATE. Call before EVERY git commit. Detects dangling references introduced by the staged changes (renamed/removed exports, routes, columns and api_definitions that other code still points at) and returns a danglingReferences[] where each entry carries an llmAutoAction: AUTO_RESTORE (put the removed thing back), AUTO_MIGRATE (update the callers) or ASK_HUMAN. Auto-apply every llmAutoAction and only pause when humanDecisionRequired is true. NEVER auto-ACKNOWLEDGE — that silently drops a real regression.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        projectPath: {
+          type: 'string',
+          description: 'Unix-style path to project root for multi-project setups. Auto-detected if not provided.'
+        }
+      },
+      required: []
     }
   },
   {
@@ -516,14 +626,51 @@ const TOOLS = [
           type: 'object',
           description: 'Contents of epics.json',
           properties: {
-            epics: { type: 'array', items: { type: 'object' } }
+            epics: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                    temp_id: { type: 'string' },
+                    title: { type: 'string' },
+                    description: { type: 'string' },
+                  // Validated on every item by the server; a missing value rejects
+                  // the ENTIRE import — see server.py _validate_acceptance_criteria.
+                  acceptance_criteria: {
+                    type: 'array',
+                    items: { type: 'string' },
+                    description: 'REQUIRED. Testable acceptance criteria, one observable outcome per entry, each at least 10 characters. The server REJECTS the whole import when this is missing or when an entry is too short to verify.'
+                  }
+                },
+                required: ['temp_id', 'title', 'description', 'acceptance_criteria']
+              }
+            }
           }
         },
         features: {
           type: 'object',
           description: 'Contents of features.json',
           properties: {
-            features: { type: 'array', items: { type: 'object' } }
+            features: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                    temp_id: { type: 'string' },
+                    epic_temp_id: { type: 'string' },
+                    title: { type: 'string' },
+                    description: { type: 'string' },
+                  // Validated on every item by the server; a missing value rejects
+                  // the ENTIRE import — see server.py _validate_acceptance_criteria.
+                  acceptance_criteria: {
+                    type: 'array',
+                    items: { type: 'string' },
+                    description: 'REQUIRED. Testable acceptance criteria, one observable outcome per entry, each at least 10 characters. The server REJECTS the whole import when this is missing or when an entry is too short to verify.'
+                  }
+                },
+                required: ['temp_id', 'title', 'description', 'acceptance_criteria']
+              }
+            }
           }
         },
         scenarios: {
@@ -553,8 +700,16 @@ const TOOLS = [
               title: { type: 'string' },
               description: { type: 'string' },
               source_module: { type: 'string' }
+,
+              // The server validates this on EVERY item and rejects the whole import
+              // when it is absent — see server.py _validate_acceptance_criteria.
+              acceptance_criteria: {
+                type: 'array',
+                items: { type: 'string' },
+                description: 'REQUIRED. Testable acceptance criteria, one observable outcome per entry, each at least 10 characters. The server REJECTS the whole import when this is missing or when an entry is too short to verify.'
+              }
             },
-            required: ['temp_id', 'title', 'description']
+            required: ['temp_id', 'title', 'description', 'acceptance_criteria']
           }
         }
       },
@@ -578,8 +733,16 @@ const TOOLS = [
               title: { type: 'string' },
               description: { type: 'string' },
               source_feature_file: { type: 'string' }
+,
+              // The server validates this on EVERY item and rejects the whole import
+              // when it is absent — see server.py _validate_acceptance_criteria.
+              acceptance_criteria: {
+                type: 'array',
+                items: { type: 'string' },
+                description: 'REQUIRED. Testable acceptance criteria, one observable outcome per entry, each at least 10 characters. The server REJECTS the whole import when this is missing or when an entry is too short to verify.'
+              }
             },
-            required: ['temp_id', 'epic_temp_id', 'title', 'description']
+            required: ['temp_id', 'epic_temp_id', 'title', 'description', 'acceptance_criteria']
           }
         },
         epic_id_mapping: {
@@ -1244,13 +1407,18 @@ const TOOLS = [
 const TOOL_ENDPOINTS = {
   'projexlight_init_session': { method: 'POST', path: '/api/instruction/init' },
   'projexlight_get_instruction': { method: 'POST', path: '/api/instruction/get' },
+  'projexlight_get_sdk_api': { method: 'POST', path: '/api/sdk/api' },
+  'projexlight_get_next_task': { method: 'POST', path: '/api/instruction/next' },
   'projexlight_validate': { method: 'POST', path: '/api/instruction/validate' },
   'projexlight_complete_task': { method: 'POST', path: '/api/instruction/complete' },
   'projexlight_get_rules': { method: 'GET', path: '/api/instruction/rules' },
   'projexlight_get_api_definition_rules': { method: 'GET', path: '/api/rules/api-definition' },
   'projexlight_review_api_definitions': { method: 'POST', path: '/api/instruction/review-api-definitions' },
   'projexlight_review_ui_features': { method: 'POST', path: '/api/instruction/review-ui-features' },
+  'projexlight_review_task_delta': { method: 'POST', path: '/api/instruction/review-task-delta' },
+  'projexlight_sync_feature_file': { method: 'POST', path: '/api/features/sync-feature-file' },
   'projexlight_generate_api_docs': { method: 'POST', path: '/api/instruction/generate-api-docs' },
+  'projexlight_pre_commit_regression_check': { method: 'POST', path: '/api/pre-commit-regression-check' },
   'projexlight_decision_tree': { method: 'POST', path: '/api/instruction/decision-tree' },
   'projexlight_quality_gates': { method: 'POST', path: '/api/instruction/quality-gates' },
   'projexlight_get_template': { method: 'POST', path: '/api/instruction/template' },
@@ -1317,6 +1485,16 @@ const ENDPOINT_TIMEOUTS = {
   '/api/test/status': 10000,     // Status check: 10 seconds
   '/api/test/cancel': 10000,     // Cancel: 10 seconds
   '/api/test/clear': 10000,      // Clear result: 10 seconds
+  // The review / docs endpoints run an LLM pass over every changed definition, so they
+  // scale with the size of the scope rather than with network latency: a single subdir
+  // (10 definitions) measures ~42s, and a full-repo review runs into minutes. Under the
+  // 30s default they ALWAYS timed out, which reads to the agent as "the MCP server is
+  // down" and pushes the whole workflow onto curl. 10 minutes matches the sync-test ceiling.
+  '/api/instruction/review-api-definitions': 600000,
+  '/api/instruction/review-ui-features': 600000,
+  '/api/instruction/review-task-delta': 600000,
+  '/api/instruction/generate-api-docs': 600000,
+  '/api/pre-commit-regression-check': 600000,
   'default': 30000               // Default: 30 seconds
 };
 
@@ -1388,7 +1566,14 @@ function makeHttpRequest(method, path, body = null) {
           if (res.statusCode >= 200 && res.statusCode < 300) {
             resolve(json);
           } else {
-            reject(new Error(json.error || json.message || `HTTP ${res.statusCode}`));
+            // FastAPI raises HTTPException as {"detail": ...}, so omitting `detail` here
+            // collapsed a precise validation message ("acceptance criteria missing on
+            // 3 feature(s): ...") into a bare "HTTP 400" and hid the cause entirely.
+            // detail may also be a list (Pydantic), hence the join.
+            const detail = Array.isArray(json.detail)
+              ? json.detail.map((d) => (typeof d === 'string' ? d : JSON.stringify(d))).join('; ')
+              : json.detail;
+            reject(new Error(detail || json.error || json.message || `HTTP ${res.statusCode}`));
           }
         } catch (e) {
           if (res.statusCode >= 200 && res.statusCode < 300) {

@@ -16,8 +16,7 @@ import {
   readProjectionVersion,
   signJwt,
   signEmailVerifyToken,
-  verifyEmailVerifyToken,
-} from '../../utils/jwt';
+  verifyEmailVerifyToken, verifyJwt } from '../../utils/jwt';
 import {
   validateLoginInput,
   validateRegisterInput,
@@ -80,7 +79,18 @@ export async function signupTenantHandler(req: FastifyRequest, reply: FastifyRep
     return;
   }
   try {
-    const result = await signupTenant(validation.value);
+    // signup-tenant is PUBLIC, so most callers arrive with no token and this stays undefined —
+    // the duplicate-email refusal is unchanged for them. An existing app user who is becoming a
+    // provider sends their session token, and the service reuses that person rather than
+    // creating a second identity for the same human. Read from the verified token only: taking
+    // a person_id from the body would let anyone attach a tenant to someone else's identity.
+    let authenticated_person_id: string | undefined;
+    const bearer = /^Bearer\s+(.+)$/i.exec((req.headers.authorization ?? '').trim());
+    if (bearer) {
+      try { authenticated_person_id = verifyJwt(bearer[1]).sub; } catch { /* unverified = anonymous */ }
+    }
+
+    const result = await signupTenant({ ...validation.value, authenticated_person_id });
     const token = signJwt(buildSixLayerClaims({
       person_id: result.person_id,
       email: validation.value.email,

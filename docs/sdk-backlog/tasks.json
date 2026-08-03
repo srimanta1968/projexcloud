@@ -1,0 +1,721 @@
+{
+  "_readme": "Tasks for projexlight_create_tasks_bulk. Each entry carries feature_temp_id and epic_temp_id which MUST be substituted for the real UUIDs returned by projexlight_import_full before submitting. sprint_id is fixed. See README.md in this folder for the exact procedure.",
+  "_sprint_id": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "_substitution": "Replace feature_temp_id -> feature_id and epic_temp_id -> epic_id using the id_mapping returned by the import step, then submit in batches of 12-14 to stay under the MCP response size limit.",
+  "tasks": [
+    {
+      "feature_temp_id": "PCF-01-1",
+      "epic_temp_id": "PC-01",
+      "task_type": "database",
+      "priority": "critical",
+      "title": "[sdk-source-record][DB] Schema, enums and immutability triggers",
+      "description": "REPO: packages/sdk-source-record/src/db/migrations. Ordered idempotent Postgres migrations for source_record, source_assertion, source_rights_attestation and id_crosswalk. Create the four ENUM types (origin_class 8 values, trust_state 5 values, assertion_status 4 values, evidence_kind). Indexes on (tenant_id, trust_state), (subject_ref, attribute), (tenant_id, origin_class); UNIQUE(tenant_id, external_system, external_id) on crosswalks. A BEFORE UPDATE trigger rejects any change to raw_evidence or origin_class after insert. Exported as runMigrations() invoked at Fastify boot only — never on module import, never inside data-access code.",
+      "acceptance_criteria": [
+        "Migrations are additive, IF NOT EXISTS and safe to re-run on every boot",
+        "raw_evidence and origin_class are immutable after insert, enforced by trigger",
+        "All four enums exist as Postgres ENUM types",
+        "Crosswalk uniqueness is enforced per tenant and external system"
+      ]
+    },
+    {
+      "feature_temp_id": "PCF-01-2",
+      "epic_temp_id": "PC-01",
+      "task_type": "service_layer",
+      "priority": "critical",
+      "title": "[sdk-source-record][SERVICE] Trust-ladder capture, normalize and promote",
+      "description": "REPO: packages/sdk-source-record/src/services/sourceRecordService.ts. Create with fingerprint dedupe; normalize P0->P1 delegating to sdk-parsing POST /api/parsing/contact/extract; promote P1->P2->P3->P4 with per-transition evidence requirements. Promotion to P4_DIRECT REQUIRES a first-party evidence reference and returns a typed 422 naming the missing evidence otherwise. Absent or unrecognised origin_class routes the record to UNKNOWN_QUARANTINED rather than defaulting. Every transition appends exactly one sdk-audit entry (POST /api/audit/append) carrying actor, purpose, decision reference and causation id.",
+      "acceptance_criteria": [
+        "P4 promotion without first-party evidence is rejected with a typed error",
+        "Unknown origin class quarantines rather than defaulting",
+        "Each transition appends exactly one audit entry",
+        "Fingerprint dedupe prevents a duplicate source record on retry"
+      ]
+    },
+    {
+      "feature_temp_id": "PCF-01-3",
+      "epic_temp_id": "PC-01",
+      "task_type": "service_layer",
+      "priority": "critical",
+      "title": "[sdk-source-record][SERVICE] Bitemporal assertion write and supersede",
+      "description": "REPO: packages/sdk-source-record/src/services/assertionService.ts. Write assertions with origin class, confidence, effective_from/effective_to and retrieved_at. Supersede sets status SUPERSEDED and superseded_by on the prior row — never UPDATE of the value and never DELETE. Query by subject_ref and attribute returns ALL coexisting assertions so conflicting source values are visible rather than collapsed. PII values are envelope-encrypted through sdk-vault POST /api/vault/encrypt before persistence.",
+      "acceptance_criteria": [
+        "Superseding retains the prior row with its original value and dates",
+        "Query returns all coexisting assertions, not just the survivor",
+        "PII assertion values are encrypted at rest via sdk-vault",
+        "No code path issues UPDATE or DELETE against an assertion value"
+      ]
+    },
+    {
+      "feature_temp_id": "PCF-01-4",
+      "epic_temp_id": "PC-01",
+      "task_type": "service_layer",
+      "priority": "high",
+      "title": "[sdk-source-record][SERVICE] Source-rights attestation and permitted-use check",
+      "description": "REPO: packages/sdk-source-record/src/services/attestationService.ts. Sign an attestation with the caller's platform principal over the source fingerprint, mapping version and permitted-use set, recording jurisdiction, licence reference, collection period and an evidence blob reference stored via sdk-evidence POST /api/evidence/capture. REJECT when the evidence blob is absent and origin_class is LICENSED_THIRD_PARTY or PARTNER_PROVIDED. Expose checkPermittedUse(subject_ref, purpose) so a downstream consumer can refuse a purpose the source rights do not cover.",
+      "acceptance_criteria": [
+        "Third-party and partner origins require an evidence blob to attest",
+        "Signature covers fingerprint, mapping version and permitted uses",
+        "checkPermittedUse refuses a purpose outside the attested set",
+        "Attestation is immutable once signed"
+      ]
+    },
+    {
+      "feature_temp_id": "PCF-01-5",
+      "epic_temp_id": "PC-01",
+      "task_type": "api_endpoint",
+      "priority": "critical",
+      "title": "[sdk-source-record][API] Fastify routes and API definitions",
+      "description": "REPO: packages/sdk-source-record/src/server. Routes: POST /api/source-records (201), GET /api/source-records, GET /api/source-records/:id, POST /api/source-records/:id/normalize (200), POST /api/source-records/:id/promote (200), GET /api/source-assertions, POST /api/source-assertions/:id/supersede (200), POST /api/source-rights/attestations (201), GET /api/source-rights/attestations/:id, POST /api/source-records/:id/crosswalks (201). All requiresAuth true with the tenant JWT. Author tests/api_definitions/source-record/*.json FIRST per MUST-01/02/41 with complete payload supersets, root-level fieldEnums, statusTransitions for the P0->P4 ladder, captureResponse for every created id and complete ordered dependsOn chains. Run projexlight_review_api_definitions until findingsCount is 0 and missingDefinitions is empty.",
+      "acceptance_criteria": [
+        "API definitions authored before handler code",
+        "fieldEnums present for every enum-backed field",
+        "statusTransitions documents the full trust ladder",
+        "review_api_definitions returns zero findings and zero missing definitions"
+      ]
+    },
+    {
+      "feature_temp_id": "PCF-01-5",
+      "epic_temp_id": "PC-01",
+      "task_type": "testing",
+      "priority": "high",
+      "title": "[sdk-source-record][TEST] Provenance integration and neutrality tests",
+      "description": "REPO: packages/sdk-source-record/tests. Integration: capture a P0, normalize, promote through P1/P2/P3, verify both source records survive a link and the audit chain verifies via POST /api/audit/verify; assert a P4 promotion without evidence is refused; assert an unknown origin class quarantines. Neutrality: a grep-based contract test asserting no vertical name, stage name, role name or business rule appears anywhere in packages/sdk-source-record.",
+      "acceptance_criteria": [
+        "Full capture-to-P4 flow passes end to end",
+        "Audit chain verifies unbroken after the flow",
+        "Neutrality grep test passes",
+        "Every mutating call proven idempotent by replay"
+      ]
+    },
+    {
+      "feature_temp_id": "PCF-02-1",
+      "epic_temp_id": "PC-02",
+      "task_type": "database",
+      "priority": "critical",
+      "title": "[sdk-import][DB] Run, template, exception and lineage schema",
+      "description": "REPO: packages/sdk-import/src/db/migrations. import_run with UNIQUE(tenant_id, file_fingerprint, source_kind) for commit idempotency and rollback_deadline defaulting to committed_at + 24h; mapping_template versioned and immutable once referenced by a committed run; import_exception (row_number, raw_row, reason_code, detail); import_lineage (run_id, entity_kind, entity_id, action, correlation_id). ENUM import_run_status (draft, previewing, mapping, dry_run, committing, complete, quarantined, rolled_back).",
+      "acceptance_criteria": [
+        "Unique constraint prevents a duplicate run for the same file and source",
+        "Mapping template versions are immutable once used by a committed run",
+        "Lineage correlates every created entity to its run",
+        "Rollback deadline defaults correctly on commit"
+      ]
+    },
+    {
+      "feature_temp_id": "PCF-02-2",
+      "epic_temp_id": "PC-02",
+      "task_type": "service_layer",
+      "priority": "critical",
+      "title": "[sdk-import][SERVICE] Schema preview and mapping assistant",
+      "description": "REPO: packages/sdk-import/src/services. previewService: delimiter, encoding, header-row and data-type detection with confidence scores; sensitive-data flagging for phone, email and residential address; source-ID detection so external ids become crosswalks and are never replaced. mappingAssistantService: propose a canonical target per source column WITH confidence and a human-readable reason, never auto-applying — the importer confirms every field. A structured address proposes a place entity plus a relationship assertion, never a column on the person record. Composes sdk-ai-gateway POST /api/ai-gateway/complete with redaction and budget.",
+      "acceptance_criteria": [
+        "Every suggestion carries a confidence and a reason string",
+        "No suggestion is auto-applied without explicit confirmation",
+        "Address maps to a place plus relationship, never a person column",
+        "Sensitive columns are flagged for tokenization at trusted ingress"
+      ]
+    },
+    {
+      "feature_temp_id": "PCF-02-3",
+      "epic_temp_id": "PC-02",
+      "task_type": "service_layer",
+      "priority": "critical",
+      "title": "[sdk-import][SERVICE] Transform plan and zero-write dry run",
+      "description": "REPO: packages/sdk-import/src/services. transformService produces a reviewable deterministic plan: E.164 normalization preserving the raw value as evidence, name splitting leaving uncertain suffixes for review, region and country standardization, labeled handle-type parsing, address-candidate resolution, and source-lifecycle-to-pipeline mapping DEFAULT OFF. dryRunService returns new / exact-link / review-case / related-entity / invalid counts plus governance verdicts with ZERO writes — proven by a transaction-log assertion in test rather than by convention. Composes sdk-geo POST /api/geo/canonicalize and sdk-identity-resolver POST /api/resolver/resolve for match-band estimation.",
+      "acceptance_criteria": [
+        "Dry run performs zero database writes verified by transaction-log assertion",
+        "Dry run dispatches zero outbound notifications",
+        "Lifecycle-to-pipeline mapping defaults to off",
+        "Transform plan is reviewable before identity resolution runs"
+      ]
+    },
+    {
+      "feature_temp_id": "PCF-02-4",
+      "epic_temp_id": "PC-02",
+      "task_type": "service_layer",
+      "priority": "critical",
+      "title": "[sdk-import][SERVICE] Atomic commit, exception file and rollback",
+      "description": "REPO: packages/sdk-import/src/services. commitService: acquire the run lock, verify the attestation is signed, write every row through sdk-ingest POST /api/ingest/:entity/batch keyed on run_id + row fingerprint, land each row via sdk-source-record, apply the chosen identity strategy per match band, create related entities and relationship assertions via sdk-rebac, apply consent and suppression imports through sdk-consent and sdk-deliverability WITHOUT ever fabricating a receipt from a blank or generic field, write lineage per entity and emit correlated events. rollbackService reverses every lineage row, permitted only inside the deadline and only when no downstream governed action has touched an affected entity — otherwise a typed 409 naming the blocker.",
+      "acceptance_criteria": [
+        "Interrupted commit retried yields an identical entity set with no duplicates",
+        "Rollback after a downstream governed action returns 409 naming the blocker",
+        "Blank or generic fields never produce a consent receipt",
+        "Every created entity has exactly one lineage row"
+      ]
+    },
+    {
+      "feature_temp_id": "PCF-02-5",
+      "epic_temp_id": "PC-02",
+      "task_type": "api_endpoint",
+      "priority": "critical",
+      "title": "[sdk-import][API] Fastify routes and API definitions",
+      "description": "REPO: packages/sdk-import/src/server. Routes: POST /api/imports/runs, GET /api/imports/runs, GET /api/imports/runs/:id, POST /api/imports/runs/:id/preview, POST /api/imports/runs/:id/mapping-suggestions, PUT /api/imports/runs/:id/mapping, POST /api/imports/runs/:id/transform-plan, POST /api/imports/runs/:id/dry-run, GET /api/imports/runs/:id/exceptions, POST /api/imports/runs/:id/commit, POST /api/imports/runs/:id/rollback, GET and POST /api/imports/mapping-templates, POST /api/imports/mapping-templates/:id/version. API definitions authored first with dependsOn chains (create run -> preview -> map -> dry-run -> commit), fieldEnums for source_kind and run status, statusTransitions for the run lifecycle, and a {{dynamic:}} file fingerprint per MUST-47 so the suite is re-runnable.",
+      "acceptance_criteria": [
+        "Definitions authored before handlers with complete ordered dependsOn",
+        "File fingerprint uses a dynamic value so re-runs never collide",
+        "statusTransitions covers draft through rolled_back",
+        "review_api_definitions returns zero findings"
+      ]
+    },
+    {
+      "feature_temp_id": "PCF-02-5",
+      "epic_temp_id": "PC-02",
+      "task_type": "testing",
+      "priority": "high",
+      "title": "[sdk-import][TEST] Import lifecycle and idempotency tests",
+      "description": "REPO: packages/sdk-import/tests. Full lifecycle: preview -> map -> attest -> transform -> dry-run (assert zero writes) -> commit -> verify lineage -> rollback -> verify reversal. Kill the process mid-commit and retry, asserting an identical entity set. Attempt a rollback after a downstream governed action and assert 409. Assert a blank contact-okay column produces no consent receipt. Neutrality grep test over packages/sdk-import.",
+      "acceptance_criteria": [
+        "Mid-commit crash and retry produce identical results",
+        "Rollback blocked correctly after a downstream action",
+        "Zero-write dry run proven by assertion",
+        "Neutrality grep test passes"
+      ]
+    },
+    {
+      "feature_temp_id": "PCF-03-1",
+      "epic_temp_id": "PC-03",
+      "task_type": "database",
+      "priority": "critical",
+      "title": "[sdk-sla][DB+SERVICE] Business calendar and business-minute arithmetic",
+      "description": "REPO: packages/sdk-sla. Migration for business_calendar (named IANA timezone — NEVER a fixed UTC offset — working_windows JSONB, late_coverage_extension_minutes, weekend_rule, holiday_dates DATE[]). calendarService implements business-minute arithmetic across working windows, holidays, weekends and the late-coverage extension: the function that makes a signal arriving one minute before close due thirty minutes later inside the extension rather than deferring. Property-based tests cover DST transitions in both directions, holiday boundaries, year boundaries and windows spanning midnight.",
+      "acceptance_criteria": [
+        "Timezone stored as a named IANA zone",
+        "Business-minute arithmetic correct across both DST transitions",
+        "Late-coverage extension applied correctly at the window edge",
+        "Property-based tests cover holiday and year boundaries"
+      ]
+    },
+    {
+      "feature_temp_id": "PCF-03-2",
+      "epic_temp_id": "PC-03",
+      "task_type": "service_layer",
+      "priority": "critical",
+      "title": "[sdk-sla][SERVICE] Policy and clock lifecycle",
+      "description": "REPO: packages/sdk-sla/src/services. Migrations for sla_policy (subject_kind, qualifying_predicate, duration, calendar ref, pause_conditions) and sla_clock (subject_ref, source_timestamp — the ORIGINAL signal time — started_at, due_at, state, satisfied_at, satisfied_by_evidence_ref, paused_intervals). clockService starts preserving the source timestamp across merge, reassignment and backup takeover; pauses and resumes accumulating paused intervals; satisfies ONLY with evidence meeting the policy satisfaction contract, rejecting weaker evidence with a typed error naming what is missing.",
+      "acceptance_criteria": [
+        "Clock start time survives merge, reassignment and backup takeover",
+        "Satisfy rejects evidence not meeting the policy contract",
+        "Paused intervals are excluded from elapsed business minutes",
+        "State transitions are recorded with timestamps"
+      ]
+    },
+    {
+      "feature_temp_id": "PCF-03-3",
+      "epic_temp_id": "PC-03",
+      "task_type": "service_layer",
+      "priority": "critical",
+      "title": "[sdk-sla][SERVICE] Escalation ladder and idempotent tick evaluator",
+      "description": "REPO: packages/sdk-sla/src/services. ladder_rung (offset_minutes, audience JSONB, severity, action, remediation_hint) as DATA so a vertical configures its own offsets without a platform change. The tick evaluator is IDEMPOTENT keyed on clock_id + rung so a duplicated or concurrent tick fires each rung exactly once. Rung actions compose sdk-notification for the audience, sdk-assignment for auto-reassign, sdk-coverage GET /api/coverage/on-call/current for the escalation audience, and sdk-incident when a breach is flagged systemic.",
+      "acceptance_criteria": [
+        "Concurrent duplicate ticks fire each rung exactly once",
+        "Ladder configuration is data, requiring no code change per vertical",
+        "Each rung resolves its audience through sdk-coverage at fire time",
+        "Rung failures are retried without re-firing already-fired rungs"
+      ]
+    },
+    {
+      "feature_temp_id": "PCF-03-4",
+      "epic_temp_id": "PC-03",
+      "task_type": "service_layer",
+      "priority": "high",
+      "title": "[sdk-sla][SERVICE] Breach recording and attainment reporting",
+      "description": "REPO: packages/sdk-sla/src/services. breach_record with a MANDATORY reason code, the recovery action taken, the recovering persona and a systemic flag that opens an sdk-incident. Attainment reporting exposes percentage attainment, median and P95 elapsed, and a breakdown by source, owner, day and hour with cause and recovery for every miss — so the target is governable rather than merely displayed.",
+      "acceptance_criteria": [
+        "Breach cannot be recorded without a reason code",
+        "Systemic breaches open exactly one incident, not one per rung",
+        "Attainment returns cause and recovery for every miss",
+        "Median and P95 computed over business minutes"
+      ]
+    },
+    {
+      "feature_temp_id": "PCF-03-5",
+      "epic_temp_id": "PC-03",
+      "task_type": "api_endpoint",
+      "priority": "critical",
+      "title": "[sdk-sla][API] Fastify routes and API definitions",
+      "description": "REPO: packages/sdk-sla/src/server. Routes: POST /api/sla/calendars (201), POST /api/sla/policies (201), POST /api/sla/clocks (201), GET /api/sla/clocks/:id, POST /api/sla/clocks/:id/satisfy (200), POST /api/sla/clocks/:id/pause (200), POST /api/sla/clocks/:id/breach (200), POST /api/sla/tick (200), GET /api/sla/at-risk, GET /api/sla/attainment. API definitions authored first with fieldEnums for clock state, severity and reason code, and statusTransitions for running -> at_risk -> breached -> satisfied.",
+      "acceptance_criteria": [
+        "Definitions authored before handlers",
+        "statusTransitions documents the clock state machine",
+        "Satisfy returns 422 with a named missing-evidence reason on weak evidence",
+        "Endpoints registered for catalog generation"
+      ]
+    },
+    {
+      "feature_temp_id": "PCF-03-5",
+      "epic_temp_id": "PC-03",
+      "task_type": "testing",
+      "priority": "critical",
+      "title": "[sdk-sla][TEST] Calendar edge cases and ladder idempotency",
+      "description": "REPO: packages/sdk-sla/tests. Cover: a signal one minute before close resolving inside the late-coverage extension; a signal on a configured holiday deferring to the next business morning; both DST transitions; a clock surviving merge and backup takeover unchanged; concurrent duplicate ticks firing each rung once; a breach requiring a reason code. Neutrality grep test over packages/sdk-sla.",
+      "acceptance_criteria": [
+        "All calendar edge cases pass",
+        "Concurrent tick test proves exactly-once rung firing",
+        "Clock immutability across transfer proven",
+        "Neutrality grep test passes"
+      ]
+    },
+    {
+      "feature_temp_id": "PCF-04-1",
+      "epic_temp_id": "PC-04",
+      "task_type": "database",
+      "priority": "critical",
+      "title": "[sdk-coverage][DB] Schedule, time-off, holiday and presence schema",
+      "description": "REPO: packages/sdk-coverage/src/db/migrations. work_schedule (persona_id, weekly_windows JSONB, iana_timezone), time_off (persona_id, kind PTO|MEETING|OUTAGE|HOLIDAY, starts_at, ends_at, reason), holiday_calendar (tenant_id, region, dates DATE[], maintained_by), presence (persona_id, status AVAILABLE|MEETING|OFFLINE|PTO|ON_CALL, source MANUAL|CALENDAR|SYSTEM, updated_at), capacity_policy (persona or role, max_concurrent by band, daily_cap), on_call_roster (role, persona, window, tier), backup_designation (primary, backup, scope, acceptance_window_minutes).",
+      "acceptance_criteria": [
+        "Holiday calendar is tenant and region scoped",
+        "Presence records its source so calendar sync and manual toggle are distinguishable",
+        "Capacity policy supports per-band concurrency limits",
+        "Migrations idempotent and additive"
+      ]
+    },
+    {
+      "feature_temp_id": "PCF-04-2",
+      "epic_temp_id": "PC-04",
+      "task_type": "service_layer",
+      "priority": "critical",
+      "title": "[sdk-coverage][SERVICE] Eligibility engine — who can act right now",
+      "description": "REPO: packages/sdk-coverage/src/services/eligibilityService.ts. THE core primitive: compute schedule MINUS time-off MINUS holiday, intersect with live presence and capacity headroom, and return only personas genuinely able to act at this instant with current load and remaining headroom. Table-driven tests prove a persona on PTO, inside a meeting block, outside their schedule, or at capacity is NEVER returned, across every combination. Consumed by sdk-assignment step 4 and sdk-sla late-coverage resolution.",
+      "acceptance_criteria": [
+        "Never returns an unavailable or at-capacity persona across all combinations",
+        "Returns current load and remaining headroom per persona",
+        "Evaluates in the persona's own timezone",
+        "Sub-50ms for a 500-persona tenant"
+      ]
+    },
+    {
+      "feature_temp_id": "PCF-04-3",
+      "epic_temp_id": "PC-04",
+      "task_type": "service_layer",
+      "priority": "high",
+      "title": "[sdk-coverage][SERVICE] Capacity, current load and on-call roster",
+      "description": "REPO: packages/sdk-coverage/src/services. capacityService computes current_load per persona per priority band and evaluates headroom against capacity_policy, supporting a freeze of new assignment to an over-loaded persona at a configurable threshold. onCallService resolves the correct escalation audience and manager-on-duty at any instant from the roster tiers.",
+      "acceptance_criteria": [
+        "Current load computed live rather than from a stale counter",
+        "Freeze threshold configurable per band",
+        "On-call resolution returns the correct tier for any instant",
+        "Roster gaps are detectable"
+      ]
+    },
+    {
+      "feature_temp_id": "PCF-04-4",
+      "epic_temp_id": "PC-04",
+      "task_type": "api_endpoint",
+      "priority": "critical",
+      "title": "[sdk-coverage][API] Gap detection and Fastify routes",
+      "description": "REPO: packages/sdk-coverage/src/server. gapService detects uncovered windows BEFORE they begin and alerts through sdk-notification so a hole is prevented rather than discovered. Routes: POST /api/coverage/schedules, GET /api/coverage/schedules, POST /api/coverage/time-off, POST /api/coverage/holiday-calendars, PUT /api/coverage/presence, GET /api/coverage/eligible, GET /api/coverage/gaps, POST /api/coverage/on-call, GET /api/coverage/on-call/current, POST /api/coverage/capacity-policies, POST /api/coverage/backup-designations. API definitions resolve persona foreign keys via {{cache:}} from the sdk-persona producer per MUST-36/44 — never {{var:}} and never a literal.",
+      "acceptance_criteria": [
+        "Gaps detected before the window opens",
+        "Persona FKs resolve from their producer via cache references",
+        "fieldEnums documented for presence status, time-off kind and tier",
+        "Definitions authored before handlers"
+      ]
+    },
+    {
+      "feature_temp_id": "PCF-04-4",
+      "epic_temp_id": "PC-04",
+      "task_type": "testing",
+      "priority": "high",
+      "title": "[sdk-coverage][TEST] Eligibility matrix and gap detection tests",
+      "description": "REPO: packages/sdk-coverage/tests. Table-driven eligibility matrix over every combination of schedule, time-off, holiday, presence and capacity. Gap detection asserted to fire ahead of the window. Backup designation acceptance-window expiry asserted. Neutrality grep test over packages/sdk-coverage.",
+      "acceptance_criteria": [
+        "Full eligibility combination matrix passes",
+        "Gap alert fires before the window opens",
+        "Acceptance-window expiry triggers fallback",
+        "Neutrality grep test passes"
+      ]
+    },
+    {
+      "feature_temp_id": "PCF-05-1",
+      "epic_temp_id": "PC-05",
+      "task_type": "database",
+      "priority": "high",
+      "title": "[sdk-data-credits][DB] Catalog, provider binding and ledger schema",
+      "description": "REPO: packages/sdk-data-credits/src/db/migrations. capability (key, outcome_label, description, credit_price, category), provider_binding (capability_id, provider_key, secret_ref into sdk-secrets, priority, health_state — TENANT-INVISIBLE), credit_account (tenant_id, balance, reserved), reservation (request_id, estimated_credits, reserved_at, settled_credits, settled_at, outcome MATCHED|NO_MATCH|TECHNICAL_FAILURE|CACHE_HIT), capability_request, result_cache (capability, subject_fingerprint, result, fetched_at, ttl_seconds, reuse_count), budget_policy (role, mode REQUEST_ONLY|DAILY_CAP|FULL, daily_cap, bulk_approval_threshold), credit_ledger (append-only).",
+      "acceptance_criteria": [
+        "provider_binding is unreachable from any tenant-scoped query path",
+        "credit_ledger is append-only with no update or delete path",
+        "Reservation outcome enum covers all four settlement cases",
+        "Migrations idempotent and additive"
+      ]
+    },
+    {
+      "feature_temp_id": "PCF-05-2",
+      "epic_temp_id": "PC-05",
+      "task_type": "service_layer",
+      "priority": "high",
+      "title": "[sdk-data-credits][SERVICE] Broker, fallback chain and reservation lifecycle",
+      "description": "REPO: packages/sdk-data-credits/src/services. brokerService resolves a requested OUTCOME to a provider chain by priority and live health, falling back on failure entirely invisibly to the tenant, with credentials fetched through sdk-secrets GET /api/secrets/:ref. reservationService implements estimate -> reserve -> execute -> settle where MATCHED charges the quote and NO_MATCH, TECHNICAL_FAILURE and CACHE_HIT settle to ZERO and release reserved credits. Settle is idempotent on retry. Usage is emitted to sdk-meter and attributed via sdk-billing showback.",
+      "acceptance_criteria": [
+        "No-match, technical failure and cache hit all settle to zero",
+        "Settle is idempotent on retry",
+        "Provider fallback is invisible in every tenant-scoped response",
+        "Reserved credits are released on zero settlement"
+      ]
+    },
+    {
+      "feature_temp_id": "PCF-05-3",
+      "epic_temp_id": "PC-05",
+      "task_type": "service_layer",
+      "priority": "high",
+      "title": "[sdk-data-credits][SERVICE] Result cache and role-based budget policy",
+      "description": "REPO: packages/sdk-data-credits/src/services. cacheService keyed on capability plus subject fingerprint with a TTL: a hit inside TTL serves the cached result, increments reuse_count and charges nothing without invoking a provider. budgetService enforces per-role modes — REQUEST_ONLY requires an sdk-approval POST /api/approvals/requests decision before execute; DAILY_CAP enforces a rolling daily limit; FULL permits direct execution — plus a bulk-approval threshold above which any request needs approval regardless of role.",
+      "acceptance_criteria": [
+        "Cache hit inside TTL charges nothing and invokes no provider",
+        "REQUEST_ONLY roles are blocked until approval is granted",
+        "Daily cap enforced on a rolling window",
+        "Bulk threshold applies regardless of role"
+      ]
+    },
+    {
+      "feature_temp_id": "PCF-05-4",
+      "epic_temp_id": "PC-05",
+      "task_type": "api_endpoint",
+      "priority": "high",
+      "title": "[sdk-data-credits][API] Fastify routes and vendor-opacity contract test",
+      "description": "REPO: packages/sdk-data-credits/src/server. Routes: GET /api/capabilities, POST /api/capability-requests, GET /api/capability-requests, GET /api/capability-requests/:id, POST /api/capability-requests/:id/approve, POST /api/capability-requests/:id/execute, GET /api/credits/balance, POST /api/credits/reservations, POST /api/credits/reservations/:id/settle, GET /api/credits/ledger, PUT /api/credits/budgets. Plus a CONTRACT TEST asserting no provider name, credential, routing detail or true vendor cost appears in any tenant-scoped response body across every endpoint and every error path.",
+      "acceptance_criteria": [
+        "Vendor-opacity contract test passes on success and error paths",
+        "Execute blocked until approval when the role requires it",
+        "Ledger export includes reservation, charge and refund per request",
+        "Definitions authored before handlers"
+      ]
+    },
+    {
+      "feature_temp_id": "PCF-06-1",
+      "epic_temp_id": "PC-06",
+      "task_type": "service_layer",
+      "priority": "critical",
+      "title": "[sdk-assignment][SERVICE] Six-step decision pipeline with trace",
+      "description": "REPO: packages/sdk-assignment/src/services. Configurable pipeline evaluating in order: eligibility predicates (invalid or ambiguous -> review outcome, never force-assign), priority band resolution, specialty match, availability delegated to sdk-coverage GET /api/coverage/eligible, assignment, and fallback. Returns a DECISION TRACE explaining each step in plain language so an operator can answer why a subject routed where it did. Rule configuration is versioned data requiring no deploy to change.",
+      "acceptance_criteria": [
+        "Every route call returns a per-step decision trace",
+        "Ambiguous eligibility routes to review rather than force-assigning",
+        "Rule config is versioned data, changeable without a deploy",
+        "Existing assign-by-task contract unchanged"
+      ]
+    },
+    {
+      "feature_temp_id": "PCF-06-2",
+      "epic_temp_id": "PC-06",
+      "task_type": "service_layer",
+      "priority": "critical",
+      "title": "[sdk-assignment][SERVICE] Assignment lifecycle preserving source timestamp",
+      "description": "REPO: packages/sdk-assignment/src/services. Assign primary + backup + manager with acceptance and response clocks started through sdk-sla POST /api/sla/clocks, preserving the ORIGINAL owner and source timestamp. Accept; decline with a mandatory reason routing immediately to backup; reassign with a mandatory reason. The INVARIANT that reassignment and fallback never mutate the source timestamp is enforced at the service layer and proven by test.",
+      "acceptance_criteria": [
+        "Source timestamp is immutable across every transfer",
+        "Decline requires a reason and routes immediately to backup",
+        "Acceptance-window expiry triggers automatic fallback",
+        "Assignment history records every prior owner and reason"
+      ]
+    },
+    {
+      "feature_temp_id": "PCF-06-3",
+      "epic_temp_id": "PC-06",
+      "task_type": "service_layer",
+      "priority": "medium",
+      "title": "[sdk-assignment][SERVICE] Zero-side-effect routing simulation",
+      "description": "REPO: packages/sdk-assignment/src/services. simulationService replays historical subjects through a candidate configuration producing a comparison report with ZERO assignments, notifications or SLA clocks created - enforced by injecting a no-op sink and asserted in test. SCOPE NOTE: fair-share rotation and the persisted cursor are delivered by EP-335 (P14 E5); consume that service rather than reimplementing it. Add only the skew-audit read model needed to evaluate a simulation result.",
+      "acceptance_criteria": [
+        "Simulation creates zero assignments, notifications and clocks",
+        "Consumes the EP-335 rotation service rather than reimplementing it",
+        "Simulation report compares actual versus candidate per persona",
+        "Skew audit surfaces both over-allocation and starvation"
+      ]
+    },
+    {
+      "feature_temp_id": "PCF-06-4",
+      "epic_temp_id": "PC-06",
+      "task_type": "api_endpoint",
+      "priority": "high",
+      "title": "[sdk-assignment][API] Enhancement routes and backward-compatibility regression",
+      "description": "REPO: packages/sdk-assignment/src/server. New routes alongside the unchanged assign-by-task: POST /api/assignment/routes, POST /api/assignment/route, POST /api/assignments/:id/accept, POST /api/assignments/:id/decline, POST /api/assignments/:id/reassign, GET /api/assignment/rotation, POST /api/assignment/simulate. API definitions authored first. A REGRESSION TEST proves the pre-existing POST /api/assignment/assign-by-task request and response contract is byte-compatible.",
+      "acceptance_criteria": [
+        "assign-by-task contract proven byte-compatible by regression test",
+        "New definitions authored before handlers",
+        "Decline requires a reason in the schema",
+        "Simulate documented as side-effect free"
+      ]
+    },
+    {
+      "feature_temp_id": "PCF-07-1",
+      "epic_temp_id": "PC-07",
+      "task_type": "service_layer",
+      "priority": "critical",
+      "title": "[sdk-crm][SERVICE] Subject-generic NEXT-action and structured save-gate",
+      "description": "REPO: packages/sdk-crm/src/services. Generalise next_action and save-gate from deals to any subject_ref (lead, contact, deal, ticket). A next_action requires action_type, owner_persona_id, exact due datetime, purpose and intended_outcome. The save-gate returns a STRUCTURED refusal listing each missing element individually so a client renders it inline against the offending field, never a generic error string. Enforced server-side so bypassing the client check still fails.",
+      "acceptance_criteria": [
+        "Save-gate applies to leads, contacts and tickets, not only deals",
+        "Refusal names each missing field individually",
+        "Server-side enforcement proven by calling the endpoint directly",
+        "Existing deal-scoped behaviour unchanged"
+      ]
+    },
+    {
+      "feature_temp_id": "PCF-07-2",
+      "epic_temp_id": "PC-07",
+      "task_type": "service_layer",
+      "priority": "high",
+      "title": "[sdk-crm][SERVICE] Overdue queue and date-push governance",
+      "description": "REPO: packages/sdk-crm/src/services. An overdue next-action queue with configurable escalation offsets. A date_push_log records every due-date move with its reason, and rescheduling REQUIRES a reason — a due date cannot be moved repeatedly without a new commitment or a manager reason. The push count is exposed on the subject so repeated-push patterns surface rather than hiding in history.",
+      "acceptance_criteria": [
+        "Reschedule requires a reason",
+        "Push count is queryable per subject",
+        "Overdue queue supports configurable escalation offsets",
+        "Push log is append-only"
+      ]
+    },
+    {
+      "feature_temp_id": "PCF-07-3",
+      "epic_temp_id": "PC-07",
+      "task_type": "service_layer",
+      "priority": "medium",
+      "title": "[sdk-crm][SERVICE] Close-reason taxonomy and stage aging",
+      "description": "REPO: packages/sdk-crm/src/services. A configurable close_reason taxonomy capturing code, the subject's own wording, the offer or contract version discussed, the competing option when known, a learning note and an allowed reactivation rule. Plus stage_aging computed over BUSINESS days (via sdk-sla calendars) with no meaningful activity, exposed through a pipeline aging endpoint.",
+      "acceptance_criteria": [
+        "Close reasons are tenant-configurable, not hard-coded",
+        "Stage aging computed over business days not calendar days",
+        "Reactivation rule is captured and queryable",
+        "Aging endpoint supports filtering by stage and owner"
+      ]
+    },
+    {
+      "feature_temp_id": "PCF-07-4",
+      "epic_temp_id": "PC-07",
+      "task_type": "api_endpoint",
+      "priority": "high",
+      "title": "[sdk-crm][API] Enhancement routes and regression suite",
+      "description": "REPO: packages/sdk-crm/src/server. New routes: POST and GET /api/crm/subjects/:subject_ref/next-action, GET /api/crm/subjects/:subject_ref/save-gate, GET /api/crm/next-actions/overdue, POST /api/crm/next-actions/:id/reschedule, POST /api/crm/close-reasons, GET /api/crm/pipeline/aging. API definitions authored first. A regression suite proves every existing sdk-crm endpoint (contacts, deals, activities, funnel-stages, pipeline board and stale, next-action, save-gate, stage-guard) is unchanged.",
+      "acceptance_criteria": [
+        "All existing sdk-crm endpoints pass their unchanged definitions",
+        "New definitions authored before handlers",
+        "Reschedule schema requires a reason",
+        "review_api_definitions returns zero findings"
+      ]
+    },
+    {
+      "feature_temp_id": "PCF-08-1",
+      "epic_temp_id": "PC-08",
+      "task_type": "database",
+      "priority": "high",
+      "title": "[sdk-conversation][DB+SERVICE] Omnichannel thread and message model",
+      "description": "REPO: packages/sdk-conversation. Extend the existing session and message model to thread (subject_ref, channel_set, purpose, related_object_ref, sender_identity_ref, current_eligibility_snapshot) and message (thread_id, channel EMAIL|SMS|VOICE|VOICEMAIL|SOCIAL_DM|WEB_CHAT|IN_PERSON|INTERNAL_NOTE, direction, external_message_id, delivery_state, read_state, body_ref, actor, occurred_at). Ordering is by occurred_at not arrival time so out-of-order provider delivery still renders correctly. INTERNAL_NOTE is structurally distinct so it can never be dispatched to a customer.",
+      "acceptance_criteria": [
+        "Out-of-order provider events render chronologically correct",
+        "Internal notes cannot be dispatched through any send path",
+        "Existing session and message APIs remain compatible",
+        "Thread carries purpose and eligibility snapshot"
+      ]
+    },
+    {
+      "feature_temp_id": "PCF-08-2",
+      "epic_temp_id": "PC-08",
+      "task_type": "service_layer",
+      "priority": "high",
+      "title": "[sdk-conversation][SERVICE] Reply detection and outbound linkage",
+      "description": "REPO: packages/sdk-conversation/src/services. Bind an inbound reply to its originating outbound message across channels using provider message ids, email thread headers and channel heuristics. Emit a domain event on linkage so consumers can pause automation and create an owner task without polling.",
+      "acceptance_criteria": [
+        "Inbound replies link to their originating outbound message",
+        "A domain event is emitted on linkage",
+        "Linkage works across email, SMS and social DM",
+        "Unmatched inbound messages are retained and flagged rather than dropped"
+      ]
+    },
+    {
+      "feature_temp_id": "PCF-08-3",
+      "epic_temp_id": "PC-08",
+      "task_type": "api_endpoint",
+      "priority": "high",
+      "title": "[sdk-conversation][API] Compose guardrails and routes",
+      "description": "REPO: packages/sdk-conversation/src/server. composeGuardrailService returns allow|review|deny per channel with an ORDERED human-readable reason list, delegating decision inputs to a caller-supplied resolver so the SDK stays vertical-neutral and carries no consent or policy logic of its own. Routes: POST /api/conversations/threads, POST /api/conversations/messages, GET /api/conversations/inbox, GET /api/conversations/threads/:id, POST /api/conversations/compose-guardrail.",
+      "acceptance_criteria": [
+        "Guardrail returns an ordered reason list, never a bare boolean",
+        "Decision inputs come from a caller-supplied resolver",
+        "No consent or policy logic embedded in the SDK",
+        "Inbox supports filtering by unread, awaiting reply and channel"
+      ]
+    },
+    {
+      "feature_temp_id": "PCF-09-1",
+      "epic_temp_id": "PC-09",
+      "task_type": "service_layer",
+      "priority": "high",
+      "title": "[sdk-parsing][SERVICE] Contact extraction schemas and backends",
+      "description": "REPO: packages/sdk-parsing/src/services. Register extraction schemas and backends in the existing parseOrchestrator and schemaResolver for smart-paste blocks, email signatures (multi-handle plus organization candidate), business-card OCR, vCard single and multi, mobile selected contacts, browser-selection text and voice-note transcripts. Every backend returns PROPOSALS with per-field confidence and an evidence span into the raw input. The local deterministic parser always runs first; the LLM adjunct via sdk-ai-gateway is invoked only when required fields remain unresolved AND the caller opted in. Schemas resolve tenant-first with platform fallback via sdk-taxonomy GET /api/taxonomy/extraction-schemas. Routes: POST /api/parsing/contact/extract, POST /api/parsing/contact/extract-batch, GET /api/parsing/contact/schemas.",
+      "acceptance_criteria": [
+        "Local parser runs before any LLM call and the LLM is opt-in",
+        "Every proposed field carries confidence and an evidence span",
+        "Extraction never fabricates a field absent from the input",
+        "Schemas resolve tenant-first with platform fallback"
+      ]
+    },
+    {
+      "feature_temp_id": "PCF-09-2",
+      "epic_temp_id": "PC-09",
+      "task_type": "service_layer",
+      "priority": "high",
+      "title": "[sdk-projection][SERVICE] Survivorship rules and explained projection",
+      "description": "REPO: packages/sdk-projection/src/services. survivorshipRuleService: per-attribute ordered rules weighting origin_class, confidence, recency and verification state, tenant-configurable with a platform default. explainedProjectionService returns the SURVIVING value per attribute PLUS every losing assertion with a CONCRETE reason it lost — never a bare status word. Routes: PUT and GET /api/projection/survivorship-rules, GET /api/projection/subject/:subject_ref/explained.",
+      "acceptance_criteria": [
+        "Every losing assertion carries a concrete reason string",
+        "Rules are tenant-configurable with a platform default",
+        "Losing assertions remain fully queryable",
+        "Explained view is stable for identical inputs"
+      ]
+    },
+    {
+      "feature_temp_id": "PCF-09-3",
+      "epic_temp_id": "PC-09",
+      "task_type": "service_layer",
+      "priority": "high",
+      "title": "[sdk-projection][SERVICE] Deterministic replay on retract and supersede",
+      "description": "REPO: packages/sdk-projection/src/services. replayService rebuilds a subject's projection from the assertion event log rather than patching it, triggered when an identity link is retracted or an assertion is superseded. Replaying the same subject twice yields byte-identical projections. Replay evidence is appended to sdk-audit. Route: POST /api/projection/replay.",
+      "acceptance_criteria": [
+        "Replay is deterministic and idempotent",
+        "Retraction triggers automatic replay of affected subjects",
+        "Replay evidence appended to the audit chain",
+        "Replay of a 10k-assertion subject completes within the request budget"
+      ]
+    },
+    {
+      "feature_temp_id": "PCF-10-1",
+      "epic_temp_id": "PC-10",
+      "task_type": "service_layer",
+      "priority": "high",
+      "title": "[sdk-notification][SERVICE] Frequency caps and no-answer dedup window",
+      "description": "REPO: packages/sdk-notification/src/services. Add per-purpose channel decision inputs, a frequency_cap (max automated sends per channel per day, tenant-configurable) and a configurable no_answer_dedup_window so a retry inside the window never produces a duplicate burst. Existing quiet-hours, sms-consent STOP/HELP, delivery-receipt and provider endpoints are reused UNCHANGED. Additive only — a regression suite proves every existing notification endpoint is unaffected.",
+      "acceptance_criteria": [
+        "Frequency cap and dedup window are tenant-configurable",
+        "A retry inside the dedup window produces no duplicate send",
+        "All existing notification endpoints pass unchanged",
+        "Caps are evaluated per channel and per purpose"
+      ]
+    },
+    {
+      "feature_temp_id": "PCF-10-2",
+      "epic_temp_id": "PC-10",
+      "task_type": "service_layer",
+      "priority": "high",
+      "title": "[sdk-rebac][SERVICE] Bitemporal contextual-role relationships",
+      "description": "REPO: packages/sdk-rebac/src/services. Extend relationships with role_label, trust_state (CONFIRMED|CANDIDATE|DOCUMENTED), valid_from, valid_to and evidence_refs[], so MULTIPLE roles coexist for the same subject-object pair with independent validity. Extend PUT /api/relationships/:relationship_id/scope to CLOSE a relationship by setting valid_to rather than deleting it, keeping it visible in provenance. Evidence references are required for CONFIRMED and DOCUMENTED trust states.",
+      "acceptance_criteria": [
+        "Multiple concurrent roles per pair with independent trust and validity",
+        "Closing sets valid_to and never deletes the row",
+        "Evidence required for CONFIRMED and DOCUMENTED states",
+        "Existing relationship and role-assignment endpoints unchanged"
+      ]
+    },
+    {
+      "feature_temp_id": "PCF-10-3",
+      "epic_temp_id": "PC-10",
+      "task_type": "service_layer",
+      "priority": "medium",
+      "title": "[sdk-lead-scoring][SERVICE] B2B firmographic and intent feature families",
+      "description": "REPO: packages/sdk-lead-scoring/src/services. Register B2B firmographic and intent feature families (company size, segment, domain age and authority, technology signals, page and pricing intent, form completeness, source quality, response recency) alongside the shipped geo and field-service-tuned features. Reuse POST /api/lead-scoring/models, PUT /weights/:feature, POST /score and POST /next-best-action unchanged — this is a feature-registry addition, not an API change.",
+      "acceptance_criteria": [
+        "B2B features registered and weightable through existing endpoints",
+        "Existing geo-tuned features remain available and unchanged",
+        "No API surface change required",
+        "Scoring explains feature attribution per result"
+      ]
+    },
+    {
+      "feature_temp_id": "PCF-11-2",
+      "epic_temp_id": "PC-11",
+      "task_type": "backend",
+      "priority": "high",
+      "title": "[sdk-connectors][BACKEND] Meta, LinkedIn, TikTok and Google lead-form adapters",
+      "description": "REPO: packages/sdk-connectors/src/adapters. Meta/Instagram/Facebook (lead form webhook, source lead id, form and version, campaign/ad/creative, DM and comment context, permission fields), LinkedIn Lead Gen (campaign and form ids, company and profile, message context), TikTok, Google/YouTube (lead form or landing event, click and UTM, form proof, timestamp, identity validation). Each with provider signature verification and idempotency keyed on platform + source event id so a replayed delivery is a no-op. The raw payload is archived even when the downstream record is rejected.",
+      "acceptance_criteria": [
+        "Each adapter captures its full required field set including permission evidence",
+        "Signature verification rejects unsigned or wrongly-signed payloads",
+        "Replayed delivery is a no-op",
+        "Raw payload archived even on downstream rejection"
+      ]
+    },
+    {
+      "feature_temp_id": "PCF-11-3",
+      "epic_temp_id": "PC-11",
+      "task_type": "backend",
+      "priority": "medium",
+      "title": "[sdk-connectors][BACKEND] Website and chat adapter",
+      "description": "REPO: packages/sdk-connectors/src/adapters. Website and chat adapter capturing demo, pricing and contact events with page, referrer and session context, form version, submitted permissions, conversation transcript and bot-to-human handoff state. Same signature verification and idempotency contract as the social adapters, with the raw event archived independently of downstream acceptance.",
+      "acceptance_criteria": [
+        "Transcript and handoff state captured",
+        "Submitted permission fields preserved verbatim",
+        "Idempotent on repeated delivery",
+        "Raw event archived independently of downstream acceptance"
+      ]
+    },
+    {
+      "feature_temp_id": "PCF-12-1",
+      "epic_temp_id": "PC-12",
+      "task_type": "backend",
+      "priority": "high",
+      "title": "[platform][BACKEND] Registry publishing and package configuration",
+      "description": "REPO: ProjexCloud root. Add publishConfig.registry to the new packages (sdk-source-record, sdk-import, sdk-sla, sdk-coverage, sdk-data-credits) and to the workspace-only packages verticals depend on (sdk-crm, sdk-assignment, sdk-identity-resolver, sdk-lead-scoring, sdk-ingest, sdk-audit, sdk-conversation, sdk-parsing, sdk-evidence). Publish @projexlight/* to the private Verdaccio registry — localhost:4873 in dev, npm.projexcloud.com in production — with semver discipline and a changeset per release.",
+      "acceptance_criteria": [
+        "All listed packages installable from the registry as versioned deps",
+        "Semver respected with a changeset per release",
+        "A vertical builds with zero vendored SDK source",
+        "Dev and production registries both resolve"
+      ]
+    },
+    {
+      "feature_temp_id": "PCF-12-2",
+      "epic_temp_id": "PC-12",
+      "task_type": "backend",
+      "priority": "high",
+      "title": "[platform][BACKEND] Gateway route registration and boot migrations",
+      "description": "REPO: ProjexCloud api-gateway. Register each new SDK's Fastify routes following the established gateway pattern, with a single ordered idempotent runMigrations([...]) boot call per SDK so a fresh environment self-provisions its schema on first start and re-running on every boot is safe. Verify boot order: migrations create or upgrade schema, then seed scripts populate producer-less reference rows, then the suite runs.",
+      "acceptance_criteria": [
+        "A fresh environment self-provisions on first boot",
+        "Re-running migrations on every boot is safe",
+        "Route registration follows the existing gateway pattern",
+        "Boot order verified end to end"
+      ]
+    },
+    {
+      "feature_temp_id": "PCF-12-3",
+      "epic_temp_id": "PC-12",
+      "task_type": "backend",
+      "priority": "high",
+      "title": "[platform][BACKEND] SDK catalog regeneration and discovery keywords",
+      "description": "REPO: ProjexCloud mcp-server/data. Regenerate sdk-catalog.json and sdk-catalog-index.json so projexlight_get_sdk_api resolves every new endpoint with its method, path, requiresAuth, payload_shape, fieldEnums and dependsOn. Update sdk_count and api_count. Author reuse_when keyword sets that route a future vertical to these SDKs rather than rebuilding — e.g. provenance, source record, origin, attestation for sdk-source-record; sla, response time, escalation, business hours for sdk-sla; coverage, availability, pto, on-call, capacity for sdk-coverage; credits, capability, enrichment, provider, budget for sdk-data-credits; import, mapping, csv, dry run, rollback for sdk-import.",
+      "acceptance_criteria": [
+        "get_sdk_api resolves every new endpoint with a full spec",
+        "reuse_when keywords route discovery to the new SDKs",
+        "sdk_count and api_count updated",
+        "Catalog index remains under the compact-map size budget"
+      ]
+    },
+    {
+      "feature_temp_id": "PCF-12-4",
+      "epic_temp_id": "PC-12",
+      "task_type": "testing",
+      "priority": "critical",
+      "title": "[platform][TEST] Consumption contract and CI vertical-neutrality gate",
+      "description": "REPO: ProjexCloud docs + CI. Publish the written consumption contract documenting which SDK owns which table, which domain events it emits, and what an application may and may not extend locally. Implement the CI NEUTRALITY GATE: an automated grep-based test asserting no vertical name, stage name, role name, purpose label or business rule appears in the source of any new or enhanced package. The gate must FAIL a build that introduces such a literal, naming the offending file and line.",
+      "acceptance_criteria": [
+        "Neutrality gate fails a build containing a vertical-specific literal",
+        "Failure output names the offending file and line",
+        "Consumption contract published and reviewed",
+        "Gate runs on every pull request touching packages/"
+      ]
+    },
+    {
+      "feature_temp_id": "PCF-12-4",
+      "epic_temp_id": "PC-12",
+      "task_type": "testing",
+      "priority": "high",
+      "title": "[platform][TEST] Cross-SDK composition integration suite",
+      "description": "REPO: ProjexCloud tests. Prove the new SDKs compose: (1) capture a source record, normalize via sdk-parsing, promote through the ladder, verify both records survive a link and the explained projection names the survivor and the reason; (2) run a full import through dry-run, commit, lineage verification and rollback; (3) start an SLA clock on a subject, verify the ladder fires correctly across a working-window boundary and that a backup takeover preserves the timestamp; (4) request a capability from a REQUEST_ONLY role, verify it blocks until approved then settles to zero on no-match; (5) verify the audit chain is unbroken across the entire composed flow.",
+      "acceptance_criteria": [
+        "All five composition flows pass end to end",
+        "Audit chain verifies unbroken across the composed flow",
+        "Every mutating call proven idempotent by replay",
+        "Suite runs in CI against a fresh self-provisioned environment"
+      ]
+    }
+  ]
+}

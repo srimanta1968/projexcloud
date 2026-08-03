@@ -1,0 +1,148 @@
+{
+  "name": "POST /api/parsing/contact/extract — propose contact fields with confidence + evidence",
+  "endpoint": "/api/parsing/contact/extract",
+  "method": "POST",
+  "sdk": "sdk-parsing",
+  "sourceFile": "packages/sdk-parsing/src/server/routes.ts",
+  "taskId": "f3ff62e5-3a81-4c8e-a3cf-f373e6daaa3d",
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "featureId": "e75144eb-ddc7-493e-ad62-57009f1ca14e",
+  "epicId": "411badaa-f7ec-4184-a944-2e7a2c3f58e7",
+  "requiresAuth": true,
+  "testability": "auto",
+  "expectedStatus": 200,
+  "priority": 40,
+  "dependsOn": [
+    "POST /api/auth/signup-tenant"
+  ],
+  "coversCriterion": [
+    "f3ff62e5-3a81-4c8e-a3cf-f373e6daaa3d#AC1",
+    "f3ff62e5-3a81-4c8e-a3cf-f373e6daaa3d#AC2",
+    "f3ff62e5-3a81-4c8e-a3cf-f373e6daaa3d#AC3",
+    "f3ff62e5-3a81-4c8e-a3cf-f373e6daaa3d#AC4"
+  ],
+  "description": "Extracts contact-field PROPOSALS from one captured input. An action endpoint, so 200 rather than 201 — nothing is persisted; extraction guesses and a human confirms, which is why the response is proposals and never a finished contact. Supports eight capture surfaces via source_kind (SMART_PASTE, EMAIL_SIGNATURE, BUSINESS_CARD_OCR, VCARD, VCARD_MULTI, MOBILE_CONTACTS, BROWSER_SELECTION, VOICE_TRANSCRIPT). Proves all four criteria. AC1: the deterministic local parser ALWAYS runs first and unconditionally; the sdk-ai-gateway LLM adjunct is reached only when required fields remain unresolved after it AND allow_llm is explicitly true — an absent allow_llm is opt-OUT, because sending tenant text to a model must be the caller's decision; llm_reason is always populated so the skip is auditable rather than invisible. AC2: every proposal carries confidence 0..1 and an evidence span {start,end,snippet} indexing into raw. AC3: nothing is fabricated — each proposal is re-verified by slicing its span out of raw and confirming the normalised slice contains the normalised value; failures are DROPPED into rejected[] with a reason, never silently kept, and the guard applies to LLM output identically, which is what stops a model's plausible-but-absent company name reaching the caller. AC4: schema resolves tenant-first then platform via sdk-taxonomy lookupExtractionSchema, with a builtin last resort so a fresh install still extracts; schema.source reports which answered. QA edge cases: raw is required even for MOBILE_CONTACTS, because evidence spans index into it and without it the guard would be blind — the orchestrator serialises the structured payload to JSON and passes that as raw so device contacts are verified by the same rule as everything else; values are returned VERBATIM (a phone reformatted to E.164 would no longer appear in the source and be indistinguishable from an invented one); a taxonomy outage falls back to the builtin rather than failing the paste; VOICE_TRANSCRIPT reconstructs 'x at y dot com' into an address but its evidence points at the ORIGINAL spoken characters and confidence is capped well below typed input; EMAIL_SIGNATURE keeps every handle and qualifies them work/mobile/home/fax rather than collapsing to one, and offers the email domain only as org_candidate (a domain is evidence of a company, not its name), never promoted to organization.",
+  "testCases": [
+    {
+      "name": "Email signature yields multiple qualified handles",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "payload": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "source_kind": "EMAIL_SIGNATURE",
+        "raw": "Jane Okonkwo\nHead of Platform Engineering\nAcme Technologies Ltd\nWork: +44 20 7946 0958\njane.okonkwo@acme-tech.com"
+      },
+      "expectedStatus": 200
+    },
+    {
+      "name": "vCard parses declared properties at high confidence",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "payload": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "source_kind": "VCARD",
+        "raw": "BEGIN:VCARD\nVERSION:3.0\nFN:Ada Lovelace\nORG:Analytical Engines;R&D\nTITLE:Chief Mathematician\nTEL;TYPE=CELL:+44 7700 900999\nEMAIL:ada@analytical.example\nEND:VCARD"
+      },
+      "expectedStatus": 200
+    },
+    {
+      "name": "Voice transcript reconstructs a spoken address at reduced confidence",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "payload": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "source_kind": "VOICE_TRANSCRIPT",
+        "raw": "her email is grace at navy dot example and her number is 202 555 0199"
+      },
+      "expectedStatus": 200
+    },
+    {
+      "name": "LLM is not reached when the caller did not opt in",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "payload": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "source_kind": "SMART_PASTE",
+        "raw": "no contact details here",
+        "required_fields": [
+          "email"
+        ]
+      },
+      "expectedStatus": 200
+    }
+  ],
+  "errorCases": [
+    {
+      "name": "raw is required because evidence spans index into it",
+      "status": 400,
+      "code": "VALIDATION_ERROR",
+      "message": "raw is required — evidence spans index into it",
+      "when": "raw is absent or empty for any source_kind, including MOBILE_CONTACTS",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "payload": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "source_kind": "SMART_PASTE"
+      },
+      "expectedStatus": 400,
+      "expectedError": {
+        "code": "VALIDATION_ERROR"
+      }
+    },
+    {
+      "name": "An unknown source_kind is refused and the valid ones are named",
+      "status": 400,
+      "code": "VALIDATION_ERROR",
+      "message": "source_kind must be one of: SMART_PASTE, EMAIL_SIGNATURE, BUSINESS_CARD_OCR, VCARD, VCARD_MULTI, MOBILE_CONTACTS, BROWSER_SELECTION, VOICE_TRANSCRIPT",
+      "when": "source_kind is not one of the eight registered capture surfaces",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "payload": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "source_kind": "TELEPATHY",
+        "raw": "x"
+      },
+      "expectedStatus": 400,
+      "expectedError": {
+        "code": "VALIDATION_ERROR"
+      }
+    },
+    {
+      "name": "Missing tenant_id is refused",
+      "status": 400,
+      "code": "VALIDATION_ERROR",
+      "message": "tenant_id is required",
+      "when": "tenant_id is absent, so the schema cannot be resolved tenant-first",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "payload": {
+        "source_kind": "SMART_PASTE",
+        "raw": "x@y.com"
+      },
+      "expectedStatus": 400,
+      "expectedError": {
+        "code": "VALIDATION_ERROR"
+      }
+    },
+    {
+      "name": "Unauthenticated is refused by the default-deny gate",
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "missing or invalid tenant token",
+      "when": "no valid tenant Bearer token — extraction reads customer text",
+      "payload": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "source_kind": "SMART_PASTE",
+        "raw": "x@y.com"
+      },
+      "expectedStatus": 401
+    }
+  ]
+}

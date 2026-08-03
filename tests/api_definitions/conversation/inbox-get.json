@@ -1,0 +1,121 @@
+{
+  "name": "GET /api/conversations/inbox — agent inbox with unread / awaiting-reply / channel filters",
+  "endpoint": "/api/conversations/inbox",
+  "sdk": "sdk-conversation",
+  "sourceFile": "packages/sdk-conversation/src/server/routes.ts",
+  "method": "GET",
+  "requiresAuth": true,
+  "expectedStatus": 200,
+  "taskId": "e5a557ae-1ca4-4476-850b-0107e9b23db1",
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "featureId": "41f67890-b988-4afc-935a-1ce48d600677",
+  "epicId": "54b75cbb-e257-4e64-a356-3817f73256e2",
+  "priority": 32,
+  "testability": "auto",
+  "dependsOn": [
+    "POST /api/auth/signup-tenant",
+    "POST /api/conversations/threads",
+    "POST /api/conversations/messages"
+  ],
+  "coversCriterion": ["e5a557ae-1ca4-4476-850b-0107e9b23db1#AC4"],
+  "description": "The agent inbox: threads for a tenant, most recently active first, with three independent filters that AND together — unread=true (at least one unread INBOUND message), awaiting_reply=true (we spoke last and are waiting on them) and channel=<CHANNEL>. Proves AC4. Reads the trigger-maintained rollup columns (unread_count, status, channel_set) rather than joining messages, which is why those columns exist; channel_set is GIN-indexed. The channel filter is 'has this thread EVER carried that channel' (channel_set @> ARRAY[channel]), not 'the latest message was that channel' — the latter would make a conversation vanish from the SMS view the moment somebody replied by email, which is the opposite of what an omnichannel inbox is for. QA edge cases: only the literal string 'true' enables a flag, so ?unread=false correctly means 'do not filter' rather than silently becoming unread-only (any-truthy parsing is the bug this guards against); closed threads are excluded unless include_closed=true; an unknown channel value is a 400 rather than a silently empty list, since an empty 200 is indistinguishable from 'no matches'; limit is clamped to 1..200 and offset floored at 0, so absurd paging cannot be used to pull the whole table; the response echoes the filters it actually applied so a caller can tell an empty inbox from a mis-parsed query. requiresAuth applies to this GET exactly as to the POSTs (MUST-52) — tenant_id is a query param but the Bearer is what scopes the read.",
+  "testCases": [
+    {
+      "name": "Unfiltered inbox returns the tenant's open threads",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "queryParams": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}"
+      },
+      "expectedStatus": 200
+    },
+    {
+      "name": "Filter by unread",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "queryParams": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "unread": "true"
+      },
+      "expectedStatus": 200
+    },
+    {
+      "name": "Filter by awaiting reply",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "queryParams": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "awaiting_reply": "true"
+      },
+      "expectedStatus": 200
+    },
+    {
+      "name": "Filter by channel",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "queryParams": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "channel": "SMS"
+      },
+      "expectedStatus": 200
+    },
+    {
+      "name": "Filters combine — unread SMS only",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "queryParams": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "unread": "true",
+        "channel": "SMS"
+      },
+      "expectedStatus": 200
+    }
+  ],
+  "errorCases": [
+    {
+      "name": "Missing tenant_id is refused rather than returning every tenant's inbox",
+      "status": 400,
+      "code": "VALIDATION_ERROR",
+      "message": "tenant_id query param required",
+      "when": "the tenant_id query parameter is absent",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "queryParams": {},
+      "expectedStatus": 400,
+      "expectedError": { "code": "VALIDATION_ERROR" }
+    },
+    {
+      "name": "An unknown channel is a 400, not a silently empty inbox",
+      "status": 400,
+      "code": "VALIDATION_ERROR",
+      "message": "channel must be one of: EMAIL, SMS, VOICE, VOICEMAIL, SOCIAL_DM, WEB_CHAT, IN_PERSON, INTERNAL_NOTE",
+      "when": "channel is not one of the eight enumerated values — returning an empty 200 would be indistinguishable from 'no matching threads'",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "queryParams": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "channel": "TELEPATHY"
+      },
+      "expectedStatus": 400,
+      "expectedError": { "code": "VALIDATION_ERROR" }
+    },
+    {
+      "name": "Unauthenticated is refused by the default-deny gate",
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "missing or invalid tenant token",
+      "when": "no valid tenant Bearer token on the request — GET is gated exactly as POST",
+      "queryParams": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}"
+      },
+      "expectedStatus": 401
+    }
+  ]
+}

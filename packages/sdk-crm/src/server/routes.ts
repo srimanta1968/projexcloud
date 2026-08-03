@@ -38,6 +38,26 @@ import {
   StageTransitionError,
   DealNotFoundError as StageDealNotFoundError,
 } from '../services/stageGuardService';
+import {
+  setSubjectNextAction,
+  getOpenSubjectNextAction,
+  checkSubjectSaveGate,
+  InvalidNextAction,
+} from '../services/subjectNextActionService';
+import {
+  listOverdue,
+  reschedule,
+  ReasonRequired,
+  InvalidDueDate,
+  DueDateUnchanged,
+  ManagerReasonRequired,
+  NextActionNotFound,
+} from '../services/overdueService';
+import {
+  upsertCloseReasonType,
+  pipelineAging,
+  CloseReasonInvalid,
+} from '../services/closeReasonService';
 
 const STAGES: DealStage[] = ['qualifying', 'proposal', 'negotiation', 'closed-won', 'closed-lost'];
 const NEXT_ACTION_TYPES = ['call', 'email', 'meeting', 'task', 'linkedin', 'sms', 'proposal', 'other'];
@@ -358,6 +378,188 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
         if (err instanceof DealNotFoundError) return reply.code(404).send({ error: 'NotFound', details: ['deal not found'] });
         throw err;
       }
+    },
+  );
+
+  /* ----------------------------- subject-generic NEXT action + save-gate (TK-4072) */
+  /*
+   * The deal-scoped routes above stay exactly as they are. These are the general case:
+   * a lead, a contact, a ticket and a deal are all subjects, addressed by a
+   * `<kind>:<id>` ref, and the gate does not care which.
+   *
+   * subject_kind is NOT accepted from the caller — it is parsed from the ref, so a
+   * request cannot carry a ref and a kind that disagree, which is the sort of mismatch
+   * nobody notices until a report counts the same subject twice. deal_id is not
+   * accepted either: the ref is the identity, and the legacy FK is back-filled by the
+   * service only when the deal actually exists.
+   */
+
+  // Commit (and supersede) the subject's single open NEXT action.
+  app.post<{ Params: { subject_ref: string } }>(
+    '/api/crm/subjects/:subject_ref/next-action', { preHandler: requireAuth }, async (req, reply) => {
+      const body = (req.body ?? {}) as Partial<{
+        tenant_id: string; action_type: string; owner_persona_id: string;
+        due_at: string; purpose: string; intended_outcome: string;
+      }>;
+      if (!body.tenant_id) {
+        return reply.code(400).send({ error: 'ValidationError', details: ['tenant_id is required'] });
+      }
+      try {
+        const next_action = await setSubjectNextAction({
+          tenant_id: body.tenant_id,
+          subject_ref: req.params.subject_ref,
+          action_type: body.action_type,
+          owner_persona_id: body.owner_persona_id,
+          due_at: body.due_at,
+          purpose: body.purpose,
+          intended_outcome: body.intended_outcome,
+        });
+        return reply.code(201).send({ data: { next_action } });
+      } catch (err) {
+        if (err instanceof InvalidNextAction) {
+          // Every missing element, individually — collapsing them into one sentence is
+          // what turns the form into a guessing game.
+          return reply.code(400).send({ error: 'NEXT_ACTION_INCOMPLETE', details: err.missing });
+        }
+        throw err;
+      }
+    },
+  );
+
+  // Read the subject's open NEXT action.
+  app.get<{ Params: { subject_ref: string }; Querystring: { tenant_id?: string } }>(
+    '/api/crm/subjects/:subject_ref/next-action', { preHandler: requireAuth }, async (req, reply) => {
+      if (!req.query.tenant_id) return reply.code(400).send({ error: 'ValidationError', details: ['tenant_id query param required'] });
+      const next_action = await getOpenSubjectNextAction(req.query.tenant_id, req.params.subject_ref);
+      if (!next_action) return reply.code(404).send({ error: 'NotFound', details: ['no open next action for this subject'] });
+      return reply.code(200).send({ data: { next_action } });
+    },
+  );
+
+  // The structured save-gate verdict. A refusal is an answer, so it is a 200 with
+  // allowed:false and one entry per missing element — not an error a client has to parse.
+  app.get<{ Params: { subject_ref: string }; Querystring: { tenant_id?: string } }>(
+    '/api/crm/subjects/:subject_ref/save-gate', { preHandler: requireAuth }, async (req, reply) => {
+      if (!req.query.tenant_id) return reply.code(400).send({ error: 'ValidationError', details: ['tenant_id query param required'] });
+      const gate = await checkSubjectSaveGate(req.query.tenant_id, req.params.subject_ref);
+      return reply.code(200).send({ data: { gate } });
+    },
+  );
+
+  /* ------------------------------------- overdue queue + date-push governance (TK-4072) */
+
+  app.get<{ Querystring: { tenant_id?: string; subject_kind?: string; owner_persona_id?: string; limit?: string } }>(
+    '/api/crm/next-actions/overdue', { preHandler: requireAuth }, async (req, reply) => {
+      if (!req.query.tenant_id) return reply.code(400).send({ error: 'ValidationError', details: ['tenant_id query param required'] });
+      const queue = await listOverdue({
+        tenant_id: req.query.tenant_id,
+        subject_kind: req.query.subject_kind,
+        owner_persona_id: req.query.owner_persona_id,
+        limit: req.query.limit ? Number(req.query.limit) : undefined,
+      });
+      return reply.code(200).send({ data: { queue } });
+    },
+  );
+
+  // Move a due date. The reason is required by the service AND by a table constraint —
+  // a push nobody explained is the whole problem in miniature.
+  app.post<{ Params: { id: string } }>(
+    '/api/crm/next-actions/:id/reschedule', { preHandler: requireAuth }, async (req, reply) => {
+      const body = (req.body ?? {}) as Partial<{
+        tenant_id: string; new_due_at: string; reason: string; pushed_by: string; approved_by: string;
+      }>;
+      if (!body.tenant_id || !body.new_due_at) {
+        return reply.code(400).send({ error: 'ValidationError', details: ['tenant_id and new_due_at are required'] });
+      }
+      try {
+        const result = await reschedule({
+          tenant_id: body.tenant_id,
+          next_action_id: req.params.id,
+          new_due_at: body.new_due_at,
+          reason: body.reason ?? '',
+          pushed_by: body.pushed_by,
+          approved_by: body.approved_by,
+        });
+        return reply.code(200).send({ data: { reschedule: result } });
+      } catch (err) {
+        if (err instanceof ReasonRequired) {
+          return reply.code(400).send({ error: err.code, details: [err.message] });
+        }
+        // A malformed date is a bad REQUEST; an unchanged date is a well-formed request
+        // the STATE refuses, which is the same distinction ManagerReasonRequired draws
+        // below. Both previously surfaced as RESCHEDULE_REASON_REQUIRED, which sent
+        // callers to inspect a field that was never the problem.
+        if (err instanceof InvalidDueDate) {
+          return reply.code(400).send({ error: err.code, details: [err.message] });
+        }
+        if (err instanceof DueDateUnchanged) {
+          return reply.code(409).send({ error: err.code, details: [err.message], due_at: err.due_at });
+        }
+        if (err instanceof ManagerReasonRequired) {
+          // 409, not 400: the request is well-formed, the STATE refuses it.
+          return reply.code(409).send({
+            error: err.code,
+            details: [err.message],
+            push_count: err.push_count,
+            threshold: err.threshold,
+          });
+        }
+        if (err instanceof NextActionNotFound) {
+          return reply.code(404).send({ error: err.code, details: [err.message] });
+        }
+        throw err;
+      }
+    },
+  );
+
+  /* --------------------------- close-reason taxonomy + stage aging (TK-4072) */
+
+  // Upsert on (tenant_id, code) — hence 200: re-sending a code edits it. The taxonomy is
+  // the tenant's, so adding a reason is an INSERT rather than a release.
+  app.post('/api/crm/close-reasons', { preHandler: requireAuth }, async (req, reply) => {
+    const body = (req.body ?? {}) as Partial<{
+      tenant_id: string; code: string; label: string;
+      outcome_class: 'won' | 'lost' | 'disqualified' | 'paused';
+      reactivation_allowed: boolean; reactivation_after_days: number | null;
+      requires_competitor: boolean; requires_learning_note: boolean; sort_order: number;
+    }>;
+    if (!body.tenant_id) {
+      return reply.code(400).send({ error: 'ValidationError', details: ['tenant_id is required'] });
+    }
+    try {
+      const close_reason = await upsertCloseReasonType({
+        tenant_id: body.tenant_id,
+        code: body.code as string,
+        label: body.label as string,
+        outcome_class: body.outcome_class,
+        reactivation_allowed: body.reactivation_allowed,
+        reactivation_after_days: body.reactivation_after_days,
+        requires_competitor: body.requires_competitor,
+        requires_learning_note: body.requires_learning_note,
+        sort_order: body.sort_order,
+      });
+      return reply.code(200).send({ data: { close_reason } });
+    } catch (err) {
+      if (err instanceof CloseReasonInvalid) {
+        return reply.code(400).send({ error: err.code, details: [err.message] });
+      }
+      throw err;
+    }
+  });
+
+  // Stage aging in BUSINESS days. business_days_available says whether a calendar was
+  // wired, so a caller can tell a business-day number from a calendar-day one.
+  app.get<{ Querystring: { tenant_id?: string; stage?: string; owner_persona_id?: string; min_business_days?: string; limit?: string } }>(
+    '/api/crm/pipeline/aging', { preHandler: requireAuth }, async (req, reply) => {
+      if (!req.query.tenant_id) return reply.code(400).send({ error: 'ValidationError', details: ['tenant_id query param required'] });
+      const aging = await pipelineAging({
+        tenant_id: req.query.tenant_id,
+        stage: req.query.stage,
+        owner_persona_id: req.query.owner_persona_id,
+        min_business_days: req.query.min_business_days !== undefined ? Number(req.query.min_business_days) : undefined,
+        limit: req.query.limit ? Number(req.query.limit) : undefined,
+      });
+      return reply.code(200).send({ data: { aging } });
     },
   );
 }

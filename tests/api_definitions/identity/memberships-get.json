@@ -1,0 +1,43 @@
+{
+  "name": "GET /api/memberships — the providers and apps this person is subscribed to",
+  "endpoint": "/api/memberships",
+  "method": "GET",
+  "sdk": "sdk-identity",
+  "sourceFile": "packages/sdk-identity/src/server/handlers/subscriptionController.ts",
+  "requiresAuth": true,
+  "expectedStatus": 200,
+  "testability": "auto",
+  "epicId": "84ab818d-0000-0000-0000-000000000000",
+  "description": "Lists every tenant and app the signed-in person holds an active membership in — the read behind a single login that works across several providers. One email is one identity.person GLOBALLY (identity.alias is UNIQUE (kind, value_hash)), and that one person may hold memberships in any number of tenants, which is exactly what lets one credential open several providers apps. Until now nothing exposed that list: listMemberships() was internal and the only exposed read was scoped to a single app_identity, so a client had no way to learn the tenant_id it must send to obtain a scoped token, and an app-switcher could not be built at all. THE SUBJECT COMES FROM THE VERIFIED TOKEN AND THERE IS DELIBERATELY NO PARAMETER TO OVERRIDE IT: accepting a person_id would let any authenticated caller enumerate another persons provider relationships, which is precisely the cross-tenant disclosure the default-deny gate exists to prevent. Retired apps are omitted because a membership in one is a door that does not open. Each row carries the tenant, its app, the business unit, the role template and whether an app_identity has been minted yet — the app_identity mints itself on first per-app login, so false simply means they have not entered that app.",
+  "testCases": [
+    {
+      "name": "A signed-in person sees their memberships",
+      "payload": {},
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "data": {}
+      }
+    }
+  ],
+  "expectedResponse": {
+    "data": {}
+  },
+  "errorCases": [
+    {
+      "name": "401 - no bearer token",
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "the route is behind requireAuth; the subscription list is personal data and is never public",
+      "payload": {}
+    },
+    {
+      "name": "401 - invalid or expired token",
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "the token fails verification, so no subject can be trusted from it",
+      "payload": {}
+    }
+  ]
+}

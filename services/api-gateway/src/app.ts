@@ -114,7 +114,7 @@ import {
   stopKeyCache,
   setUsageReporter as setKeyUsageReporter,
 } from '@projexlight/sdk-api-keys';
-import { migrationsDir as projectionMigrations } from '@projexlight/sdk-projection';
+import { migrationsDir as projectionMigrations, server as projectionServer } from '@projexlight/sdk-projection';
 import {
   migrationsDir as mediaMigrations,
   server as mediaServer,
@@ -289,8 +289,8 @@ import { migrationsDir as connectorGithubMigrations } from '@projexlight/connect
 // migrations + scaffolds in this drop; full executors follow per the
 // projexlight per-task workflow (TK-3331 onward).
 import { migrationsDir as ragMigrations }              from '@projexlight/sdk-knowledge-rag';
-import { migrationsDir as parsingMigrations }          from '@projexlight/sdk-parsing';
-import { migrationsDir as conversationMigrations }     from '@projexlight/sdk-conversation';
+import { migrationsDir as parsingMigrations, server as parsingServer } from '@projexlight/sdk-parsing';
+import { migrationsDir as conversationMigrations, server as conversationServer } from '@projexlight/sdk-conversation';
 import { migrationsDir as recommendationMigrations }   from '@projexlight/sdk-recommendation';
 import {
   migrationsDir as analyticsMigrations,
@@ -645,6 +645,9 @@ app.register(eventServer.registerRoutes);
 app.register(crmServer.registerRoutes);
 app.register(assignmentServer.registerRoutes);
 app.register(sequenceServer.registerRoutes);
+app.register(conversationServer.registerRoutes);
+app.register(parsingServer.registerRoutes);
+app.register(projectionServer.registerRoutes);
 app.register(schedulingServer.registerRoutes);
 app.register(schedulingServer.registerPublicRoutes);
 app.register(deliverabilityServer.registerRoutes);
@@ -1316,6 +1319,18 @@ const start = async (): Promise<void> => {
       // store (config.config_value); references no other schema, ordering free.
       { sdk: 'sdk-config',              dir: configMigrations },
     ]);
+
+    // MIGRATE_ONLY=1 — apply every SDK migration, then exit 0 without starting the server.
+    //
+    // Exists so CI can bring a database up to schema using THIS list rather than a second
+    // copy of it. A duplicated list is guaranteed to drift the moment an SDK is added, and
+    // the failure mode is silent: the suites that need the missing table skip or return
+    // early and the run still reports green. Reusing the boot path makes the CI schema and
+    // the production schema the same thing by construction.
+    if (process.env.MIGRATE_ONLY === '1') {
+      console.log('[api-gateway] MIGRATE_ONLY=1 — migrations applied, exiting without serving.');
+      process.exit(0);
+    }
 
     // EP-341 — lift env-only provider defaults into the config plane at platform
     // scope so resolveConfig returns a platform default when no tenant/app override

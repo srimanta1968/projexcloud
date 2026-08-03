@@ -288,6 +288,99 @@ check_credential_sync() {
     return 0  # Match
 }
 
+# Convert a registry projectPath into a path THIS shell can stat.
+#
+# The registry stores the normalized Unix form (/c/Users/... on Windows). Git-Bash,
+# macOS and Linux can stat that directly. WSL cannot: there the same folder lives
+# under /mnt/c/..., so a bare [ -d /c/Users/... ] is always false and would make
+# every Windows project look deleted.
+# On NATIVE LINUX, pin the containers to the invoking uid:gid.
+#
+# Docker there runs as root, so everything the MCP writes into your project
+# (.mcp-logs/, test-results/, feedback/) lands root-owned and you cannot clean it
+# up without sudo. Docker Desktop (macOS/Windows) maps ownership inside its VM and
+# actually NEEDS root for git-hook installation, so this is deliberately skipped
+# there -- including WSL, which goes through Docker Desktop.
+ensure_run_as_env() {
+    local env_file="${1:-$SCRIPT_DIR/.env}"
+    [ -f "$env_file" ] || return 0
+    [ "$(uname -s)" = "Linux" ] || return 0
+    [ -n "${WSL_DISTRO_NAME:-}" ] && return 0
+    grep -qi microsoft /proc/version 2>/dev/null && return 0
+    grep -q '^MCP_RUN_AS=' "$env_file" 2>/dev/null && return 0
+    echo "MCP_RUN_AS=$(id -u):$(id -g)" >> "$env_file"
+    log "Set MCP_RUN_AS=$(id -u):$(id -g) — container-written files stay owned by you"
+}
+
+host_testable_path() {
+    local p="$1"
+    if [ -n "${WSL_DISTRO_NAME:-}" ] || grep -qi microsoft /proc/version 2>/dev/null; then
+        if [[ "$p" =~ ^/([a-zA-Z])(/.*)?$ ]]; then
+            echo "/mnt/${BASH_REMATCH[1],,}${BASH_REMATCH[2]}"
+            return 0
+        fi
+    fi
+    echo "$p"
+}
+
+# Remove registry entries whose project FOLDER is genuinely gone from disk.
+#
+# This lives on the HOST on purpose. The MCP containers can only see their own
+# mounts (/workspace, /projects/additionalN), so from inside them "unmounted" and
+# "deleted" are the same observation -- acting on it there destroyed live project
+# registrations, apiKey included. The containers now only ever DEMOTE. This is the
+# single place with enough information to actually delete.
+prune_deleted_projects() {
+    command -v jq &> /dev/null || return 0
+    local reg="$REGISTRY_FILE"
+    [ -f "$reg" ] || return 0
+
+    local total gone=() pid path testable
+    total=$(jq -r 'length' "$reg" 2>/dev/null || echo 0)
+    [ "$total" -gt 0 ] 2>/dev/null || return 0
+
+    # NOTE the `tr -d '\r'`: jq built for MSYS/Git-Bash emits CRLF, and a trailing
+    # CR inside $path makes [ -d ] fail for EVERY project -- i.e. the prune would
+    # consider the entire registry deleted. Strip it before any comparison.
+    while IFS=$'\t' read -r pid path; do
+        pid="${pid%$'\r'}"; path="${path%$'\r'}"
+        [ -z "$pid" ] && continue
+        # No recorded path -> we cannot prove it is gone, so never touch it.
+        if [ -z "$path" ] || [ "$path" = "null" ]; then
+            continue
+        fi
+        testable="$(host_testable_path "$path")"
+        [ -d "$testable" ] || gone+=("$pid")
+    done < <(jq -r 'to_entries[] | "\(.key)\t\(.value.projectPath // "")"' "$reg" 2>/dev/null | tr -d '\r')
+
+    [ ${#gone[@]} -eq 0 ] && return 0
+
+    # Safety net: if EVERY entry looks missing, the path conversion is wrong for
+    # this platform (or the registry is mid-write) -- never wipe the whole file.
+    if [ ${#gone[@]} -ge "$total" ]; then
+        warn "Registry prune skipped: all $total project paths look missing (path-translation issue?)"
+        return 0
+    fi
+
+    log "Pruning ${#gone[@]} registry entr(y/ies) whose folder no longer exists:"
+    local p
+    for p in "${gone[@]}"; do
+        log "  - $p ($(jq -r --arg i "$p" '.[$i].projectName // "?"' "$reg"))"
+    done
+
+    cp "$reg" "${reg}.bak" 2>/dev/null || true
+    local ptmp="${reg}.tmp"
+    local filter='.'
+    for p in "${gone[@]}"; do filter="$filter | del(.[\"$p\"])"; done
+    if jq "$filter" "$reg" > "$ptmp" 2>/dev/null && [ -s "$ptmp" ] && jq -e . "$ptmp" >/dev/null 2>&1; then
+        mv "$ptmp" "$reg"
+        log "Registry pruned (backup at $(basename "$reg").bak)"
+    else
+        rm -f "$ptmp"
+        warn "Registry prune failed (jq) - registry left unchanged"
+    fi
+}
+
 # Ensure THIS project's registry entry has COMPLETE metadata (owner OR guest).
 #
 # Why this exists: on a fresh/empty registry the container self-registers a BARE
@@ -504,6 +597,9 @@ auto_fix_credentials() {
     # projectName). The container's fresh self-registration leaves these empty even
     # when the apiKey matches, which breaks set_context-by-path.
     complete_project_metadata
+    # Host-side cleanup: drop entries whose folder is really gone. Runs AFTER
+    # registration so THIS project is present and can never prune itself.
+    prune_deleted_projects
     return 0
 }
 
@@ -888,13 +984,37 @@ setup_dev_mcp() {
         warn "Dev MCP not responding after wait. Will restart..."
     fi
 
+    # Containers MUST be created from the OWNER's mcp-server dir.
+    #
+    # dev-mcp-compose.yml mounts `../:/workspace` — relative to whichever
+    # directory compose runs in. Running it from a GUEST silently makes that guest
+    # /workspace, and the MCP server then sees the registered owner's path missing
+    # from the container, concludes "owner folder repurposed", evicts that project
+    # and persists a registry containing only the new one:
+    #
+    #   Loaded 2 registered projects from /registry/registered_projects.json
+    #   Owner folder repurposed: evicting <owner>, promoting live <guest>
+    #   Saved 1 registered projects to shared registry
+    #
+    # The owner's folder was never deleted — merely unmounted — but the container
+    # cannot tell those apart. reload_containers_from_registry already resolves the
+    # owner dir before running compose; container CREATION must do the same.
+    local mcp_dir="$SCRIPT_DIR"
+    local owner_dir_for_compose
+    owner_dir_for_compose=$(get_owner_env_dir)
+    if [ -n "$owner_dir_for_compose" ] && [ "$owner_dir_for_compose" != "$SCRIPT_DIR" ] \
+       && [ -x "$owner_dir_for_compose/setup-dev-mcp.sh" ]; then
+        info "Delegating container creation to the owner project: $owner_dir_for_compose"
+        mcp_dir="$owner_dir_for_compose"
+    fi
+
     # Use SKIP_IMAGE_CHECK to avoid re-pulling image (setup-dev-mcp.sh handles this)
     if container_exists "$DEV_MCP_CONTAINER"; then
         warn "Dev MCP container exists but not healthy. Restarting..."
-        SKIP_IMAGE_CHECK=true "$SCRIPT_DIR/setup-dev-mcp.sh" restart
+        SKIP_IMAGE_CHECK=true "$mcp_dir/setup-dev-mcp.sh" restart
     else
         log "Creating new Dev MCP container..."
-        "$SCRIPT_DIR/setup-dev-mcp.sh" start
+        "$mcp_dir/setup-dev-mcp.sh" start
     fi
 
     # Wait for health after start/restart
@@ -936,13 +1056,25 @@ setup_test_mcp() {
         warn "Test MCP not responding after wait. Will restart..."
     fi
 
+    # Same ownership rule as the Dev MCP above: test-mcp-compose.yml also mounts
+    # the project relative to the directory compose runs in, so a guest running it
+    # would re-home the workspace and desync the two containers.
+    local test_mcp_dir="$SCRIPT_DIR"
+    local owner_dir_for_test
+    owner_dir_for_test=$(get_owner_env_dir)
+    if [ -n "$owner_dir_for_test" ] && [ "$owner_dir_for_test" != "$SCRIPT_DIR" ] \
+       && [ -x "$owner_dir_for_test/setup-test-mcp.sh" ]; then
+        info "Delegating Test MCP creation to the owner project: $owner_dir_for_test"
+        test_mcp_dir="$owner_dir_for_test"
+    fi
+
     # Use SKIP_IMAGE_CHECK to avoid re-pulling image
     if container_exists "$TEST_MCP_CONTAINER"; then
         warn "Test MCP container exists but not healthy. Restarting..."
-        SKIP_IMAGE_CHECK=true "$SCRIPT_DIR/setup-test-mcp.sh" restart
+        SKIP_IMAGE_CHECK=true "$test_mcp_dir/setup-test-mcp.sh" restart
     else
         log "Creating new Test MCP container..."
-        "$SCRIPT_DIR/setup-test-mcp.sh" start
+        "$test_mcp_dir/setup-test-mcp.sh" start
     fi
 
     # Wait for health after start/restart
@@ -1518,31 +1650,175 @@ recover_env_from_registry() {
     # previous sed operations, etc. Running this function is idempotent —
     # if .env already matches the registry, the file ends up identical.
 
+    # Step 0: last-known-good backup of the owner .env before ANY rewrite.
+    # This function is on the default (no-argument) setup path, so it runs on
+    # essentially every invocation — the backup is a single rolling file rather
+    # than a timestamped one so repeated runs cannot litter the directory.
+    # It is only refreshed from a .env that still looks sane, so a corrupt file
+    # can never overwrite a good backup.
+    local env_backup="${env_file}.bak"
+    if [ -s "$env_file" ] && grep -qE '^[A-Za-z_][A-Za-z0-9_]*=' "$env_file" 2>/dev/null; then
+        cp "$env_file" "$env_backup" 2>/dev/null || true
+    fi
+
+    # Everything that is NOT a derived multi-project line must survive the rebuild.
+    # Captured up front so the result can be verified before the new file is kept.
+    local preserved_before
+    preserved_before=$(grep -E '^[A-Za-z_][A-Za-z0-9_]*=' "$env_file" 2>/dev/null \
+        | grep -cvE '^(PROJECT_PATH_MAPPINGS|ADDITIONAL_PROJECT_[0-9]+|PROJEX_REGISTRY_DIR_HOST)=' \
+        | tr -d '[:space:]')
+    preserved_before=${preserved_before:-0}
+
     local tmp
     tmp=$(mktemp "${TMPDIR:-/tmp}/env_rebuild.XXXXXX")
 
     # Step 1: strip all multi-project entries (data lines AND their
     # comment headers) from .env. Non-multi-project content is preserved.
-    awk '
+    # The mv is guarded on a NON-EMPTY result: a failed/interrupted awk that
+    # produced an empty file would otherwise truncate the owner's .env, taking
+    # MCP_ENCRYPTION_KEY with it and breaking every project on this machine.
+    if awk '
         /^ADDITIONAL_PROJECT_[0-9]+=/                   { next }
         /^# *Additional project [0-9]+ volume mount/    { next }
         /^PROJECT_PATH_MAPPINGS=/                       { next }
         /^# *Multi-project path mappings/               { next }
+        /^# *Shared project registry host dir/          { next }
         { print }
-    ' "$env_file" > "$tmp" && mv "$tmp" "$env_file"
+    ' "$env_file" > "$tmp" 2>/dev/null && [ -s "$tmp" ]; then
+        mv "$tmp" "$env_file"
+    else
+        rm -f "$tmp"
+        warn "Could not rewrite $env_file safely - leaving it untouched"
+        return 0
+    fi
 
     # Step 2: collapse runs of blank lines created by the strip.
     tmp=$(mktemp "${TMPDIR:-/tmp}/env_rebuild.XXXXXX")
-    awk 'NR==1{p=$0; print; next} !(p=="" && $0==""){print; p=$0}' \
-        "$env_file" > "$tmp" && mv "$tmp" "$env_file"
+    if awk 'NR==1{p=$0; print; next} !(p=="" && $0==""){print; p=$0}' \
+        "$env_file" > "$tmp" 2>/dev/null && [ -s "$tmp" ]; then
+        mv "$tmp" "$env_file"
+    else
+        rm -f "$tmp"
+    fi
+
+    # Step 2b: assign container slots to any guest that is registered but has no
+    # usable containerPath.
+    #
+    # A project registered through the MCP API (/api/projects/register) gets a
+    # registry row but no slot — the API cannot add a Docker bind mount to a
+    # running container, so it leaves containerPath "". Without this step that
+    # project stays invisible forever: it is registered, but has no mount and no
+    # valid mapping. Assigning here — inside the one function that regenerates
+    # from the registry — makes the whole thing self-healing.
+    #
+    # NOTE: slot paths are built INSIDE jq from a numeric --arg. Passing
+    # "/projects/additionalN" as a jq argument would be rewritten by Git Bash/MSYS
+    # path conversion into "C:/Program Files/Git/projects/additionalN".
+    # The assignment runs as ONE jq program over the whole registry rather than a
+    # shell loop issuing one jq write per project. A per-project loop is unsafe
+    # here: an empty element in the id list makes `.[$k].containerPath = ...`
+    # CREATE a new "" key instead of updating an existing one, which silently
+    # corrupts the registry and emits ADDITIONAL_PROJECT_N=null downstream.
+    # A single pass also cannot lose an earlier write to a later read.
+    local slots_before slots_after rtmp
+    slots_before=$(jq -r '[ .[] | select((.containerPath // "") | test("^/projects/additional([1-9]|10)$")) ] | length' \
+                      "$reg_file" 2>/dev/null || echo 0)
+
+    rtmp=$(mktemp "${TMPDIR:-/tmp}/registry_slot.XXXXXX")
+    if jq '
+        def is_slot: test("^/projects/additional([1-9]|10)$");
+        def slot_of: capture("^/projects/additional(?<n>[1-9]|10)$").n | tonumber;
+        def norm_path: (. // "") | sub("/+$"; "");
+
+        # Winners: the most recent registration per distinct guest FOLDER.
+        # Re-running setup cannot duplicate a project (the registry is an object
+        # keyed by projectId, so a re-register overwrites in place), but a folder
+        # re-exported under a NEW projectId leaves the old id behind. Both entries
+        # then claim a slot for the same directory — mounting it twice and wasting
+        # one of only three slots, while PROJECT_PATH_MAPPINGS (keyed by path)
+        # silently collapses to whichever was written last.
+        ([ to_entries[] | select(.value.isOwner != true) ]
+         | group_by(.value.projectPath | norm_path)
+         | map(sort_by(.value.registeredAt // "") | last | .key)) as $winners
+
+        # Release slots held by superseded duplicates so the capacity comes back.
+        # NOTE: the key is bound to $k first. Writing `$winners | index(.key)`
+        # evaluates .key against the ARRAY, not the entry ("Cannot index array").
+        | reduce ( to_entries[]
+                   | select(.value.isOwner != true)
+                   | .key as $k
+                   | select(($winners | index($k)) == null)
+                   | $k ) as $dup (. ; .[$dup].containerPath = "")
+
+        # Slots already held keep their assignment so existing mounts stay stable.
+        | [ .[] | (.containerPath // "") | select(is_slot) | slot_of ] as $taken
+        # Winners still lacking a usable slot, oldest registration first so
+        # assignment is deterministic. The whole expression is parenthesised so the
+        # binding does not consume the pipeline: without the parens the reduce below
+        # would receive the array of keys as its input instead of the registry.
+        | ([ to_entries[]
+             | select(.value.isOwner != true)
+             | select(.key as $k | ($winners | index($k)) != null)
+             | select(((.value.containerPath // "") | is_slot) | not) ]
+           | sort_by(.value.registeredAt // "")
+           | map(.key)) as $pending
+        | reduce range(0; ($pending | length)) as $i
+            ({ reg: ., taken: $taken };
+             ([ range(1; 11) ] - .taken | sort | first) as $free
+             | if $free == null then .          # out of slots: leave untouched
+               else .reg[$pending[$i]].containerPath = ("/projects/additional" + ($free | tostring))
+                    | .taken += [$free]
+                    | .
+               end)
+        | .reg
+    ' "$reg_file" > "$rtmp" 2>/dev/null && [ -s "$rtmp" ] && jq -e . "$rtmp" >/dev/null 2>&1; then
+        # Rolling last-known-good copy before replacing the shared registry. The
+        # jq -e above already proved the replacement is valid JSON, so this can
+        # never archive a corrupt file over a good one.
+        cp "$reg_file" "${reg_file}.bak" 2>/dev/null || true
+        mv "$rtmp" "$reg_file"
+        slots_after=$(jq -r '[ .[] | select((.containerPath // "") | test("^/projects/additional([1-9]|10)$")) ] | length' \
+                         "$reg_file" 2>/dev/null || echo 0)
+        if [ "$slots_after" -gt "$slots_before" ]; then
+            log "Assigned container slots to $((slots_after - slots_before)) newly registered project(s)"
+        fi
+        # Genuinely unplaceable projects only. A superseded duplicate (same folder,
+        # older projectId) intentionally has its slot released and must NOT be
+        # reported as "out of slots" — that warning would fire on every run and
+        # tell the user to unregister something when nothing is actually wrong.
+        local still_pending
+        still_pending=$(jq -r '
+            [ .[]
+              | select((.containerPath // "") | test("^/projects/additional([1-9]|10)$"))
+              | (.projectPath // "") | sub("/+$"; "") ] as $served
+            | [ to_entries[]
+                | select(.value.isOwner != true)
+                | select(((.value.containerPath // "") | test("^/projects/additional([1-9]|10)$")) | not)
+                | ((.value.projectPath // "") | sub("/+$"; "")) as $p
+                | select(($served | index($p)) == null) ]
+            | length' "$reg_file" 2>/dev/null || echo 0)
+        if [ "$still_pending" -gt 0 ]; then
+            warn "$still_pending registered project(s) could not be given a container slot (max 3)."
+            warn "Unregister one at http://localhost:${DEV_MCP_PORT}/projects to free a slot."
+        fi
+    else
+        rm -f "$rtmp"
+        warn "Could not assign container slots in the registry - continuing with existing values"
+    fi
 
     # Step 3: rebuild PROJECT_PATH_MAPPINGS from every registered project
     # (both owner and additional). jq produces deterministic, valid JSON
     # with no duplicate keys.
+    #
+    # The emptiness test is explicit: in jq only null and false are falsy, so a
+    # bare `select(.value.containerPath)` ACCEPTS "" and emits a mapping entry
+    # pointing at nothing. That mismatch against the startswith() filter used for
+    # ADDITIONAL_PROJECT_N below is what produced entries like
+    # {"/c/Users/srima/projex_crm": ""} with no corresponding mount.
     local fresh_mappings
     fresh_mappings=$(jq -r '
         to_entries
-        | map(select(.value.containerPath and .value.projectPath))
+        | map(select(((.value.containerPath // "") != "") and ((.value.projectPath // "") != "")))
         | map({(.value.projectPath): .value.containerPath})
         | add
         | if . == null then {} else . end
@@ -1589,6 +1865,36 @@ recover_env_from_registry() {
         done <<< "$additional_projects"
     fi
 
+    # The registry pointer must live in the OWNER's .env — that is the file the
+    # compose stack reads. ensure_registry_env defaults to $SCRIPT_DIR/.env, so a
+    # guest running setup-all would otherwise write it only into its own .env and
+    # the container would silently fall back to the 'projex_registry' named volume
+    # (compose default). That fallback is a DIFFERENT file from ~/.projexlight, so
+    # every guest registration written here would be invisible to the container.
+    ensure_registry_env "$env_file"
+
+    # Final integrity gate. Everything that was not a derived multi-project line
+    # (MCP_ENCRYPTION_KEY, PROJEXLIGHT_API_URL, ports, ...) must still be present.
+    # If the rebuild dropped any of it, restore the last-known-good copy rather
+    # than leaving a half-written .env — a truncated owner .env breaks every
+    # project sharing these containers, not just this one.
+    local preserved_after
+    preserved_after=$(grep -E '^[A-Za-z_][A-Za-z0-9_]*=' "$env_file" 2>/dev/null \
+        | grep -cvE '^(PROJECT_PATH_MAPPINGS|ADDITIONAL_PROJECT_[0-9]+|PROJEX_REGISTRY_DIR_HOST)=' \
+        | tr -d '[:space:]')
+    preserved_after=${preserved_after:-0}
+
+    if [ "$preserved_after" -lt "$preserved_before" ]; then
+        if [ -s "$env_backup" ]; then
+            cp "$env_backup" "$env_file" 2>/dev/null || true
+            error "Rebuild would have dropped $((preserved_before - preserved_after)) setting(s) from $env_file"
+            error "Restored the previous version from $env_backup - no changes applied."
+        else
+            error "Rebuild dropped settings from $env_file and no backup was available."
+        fi
+        return 1
+    fi
+
     log "Rebuilt multi-project .env from registry (${emitted} additional slot(s))"
 }
 
@@ -1597,6 +1903,7 @@ recover_env_from_registry() {
 # is reloaded. Called AFTER registration so the new entry is included.
 reload_containers_from_registry() {
     recover_env_from_registry
+    ensure_run_as_env
     local owner_dir; owner_dir=$(get_owner_env_dir)
     if [ -z "$owner_dir" ]; then
         warn "Owner dir not found; cannot reload containers from registry"
@@ -1665,6 +1972,7 @@ run_setup() {
     # Recover .env from registered_projects.json (survives Docker restarts)
     # This must run BEFORE containers start so volume mounts are correct
     recover_env_from_registry
+    ensure_run_as_env
     echo ""
 
     # Determine if this is the first project
@@ -1910,6 +2218,7 @@ case "${1:-}" in
         # Complete owner metadata (projectPath/expiresAt/projectName) even when the
         # apiKey matches — fixes the bare fresh self-registration that breaks set_context.
         complete_project_metadata
+        prune_deleted_projects
         log "Done! Try your MCP tool call again."
         ;;
     --install-hooks)

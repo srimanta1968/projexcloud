@@ -1,0 +1,98 @@
+{
+  "name": "Consumption contract and CI vertical-neutrality gate (P16 EP-387)",
+  "endpoint": "internal://platform/ci.neutralityGate",
+  "sdk": "platform",
+  "sourceFile": "scripts/ci/neutrality-gate.js",
+  "method": "INTERNAL_FUNCTION",
+  "requiresAuth": false,
+  "expectedStatus": 200,
+  "taskId": "128225a7-e23f-42b0-9131-0b41102af66e",
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "featureId": "33655ac4-1866-4d03-b21d-e03a26f75b93",
+  "epicId": "42f1aac8-aba4-44cf-90a9-aadc0ac57bd3",
+  "priority": 103,
+  "testability": "manual",
+  "skipReason": "A CI gate and a markdown document — no runtime route exists. Verified by tests/platform/neutralityGate.test.ts (20 assertions), which plants REAL violations in a scratch package and asserts the gate exits non-zero naming file:line, then removes them; plus assertions over docs/CONSUMPTION-CONTRACT.md and .github/workflows/neutrality-gate.yml.",
+  "coversCriterion": [
+    "128225a7-e23f-42b0-9131-0b41102af66e#AC1",
+    "128225a7-e23f-42b0-9131-0b41102af66e#AC2",
+    "128225a7-e23f-42b0-9131-0b41102af66e#AC3",
+    "128225a7-e23f-42b0-9131-0b41102af66e#AC4"
+  ],
+  "description": "Publishes the written consumption contract and implements the CI neutrality gate. Proves all four criteria. WHY IT IS MECHANICAL: ProjexCloud is one horizontal platform — the same sdk-sla serves healthcare, field service and logistics tenants — so the moment a vertical's vocabulary leaks into an SDK it stops being reusable in the others and the usual remedy is a fork, which is how a platform quietly becomes four codebases. A domain word in a variable name reads as helpful specificity in review rather than as coupling, so it is close to invisible until the second vertical arrives; machines notice it every time. AC1: the gate greps SDK source for vertical nouns, business stage names, role-name branches and hardcoded business rules, exiting 1 on any hit — tested by PLANTING each violation class in a scratch package and asserting the non-zero exit, i.e. by pulling the alarm rather than reading it. AC2: output leads with file:line, then the category and the offending text, and closes by telling the author what to do instead (resolver, config value, tenant-configurable rule) with a pointer to the contract — a gate that says only 'neutrality violated' gets suppressed because nobody can act on it. AC3: docs/CONSUMPTION-CONTRACT.md states the governing rule (an SDK owns a mechanism; an application owns its meaning), the table ownership per SDK, the domain events and the fact that emission is best-effort so a 2xx does not prove an event landed, and exactly what an application may and may not extend. AC4: .github/workflows/neutrality-gate.yml runs on pull_request filtered to packages/**, and also on push to main so a direct push cannot bypass it. QA edge cases: comments are deliberately NOT scanned — a comment saying 'holds no patient-specific logic' is the author documenting neutrality, and flagging it would teach people to delete the explanation rather than the coupling; tests are not scanned because fixtures need concrete data to be readable; apps/** is out of scope because a vertical application is supposed to know its own domain; the gate is dependency-free and the workflow has no install step, since a gate that breaks on unrelated dependency issues gets disabled. PRECEDENT: on its first run the gate found real pre-existing coupling — sdk-parsing had patient_name, medication and prescription hardcoded as classifier and extractor defaults. Rather than allowlist them, the vocabulary moved to document-vocabulary.json as replaceable data, leaving the TypeScript holding only the mechanism; behaviour was unchanged and all 40 sdk-parsing tests stayed green.",
+  "testCases": [
+    {
+      "name": "The current tree passes the gate",
+      "payload": { "scenario": "clean_tree", "expected_exit": 0, "expected_output": "neutrality gate passed" },
+      "expectedStatus": 200,
+      "expectedResponse": { "success": true }
+    },
+    {
+      "name": "A planted vertical noun fails the build with file:line",
+      "payload": {
+        "scenario": "planted_violation",
+        "content": "export function f(patient: string) { return patient; }",
+        "expected_exit": 1,
+        "expected_output_contains": ["NEUTRALITY GATE FAILED", "offender.ts:3", "[vertical noun]"]
+      },
+      "expectedStatus": 200,
+      "expectedResponse": { "success": true }
+    },
+    {
+      "name": "Stage names, role branches and hardcoded rules all fail",
+      "payload": {
+        "scenario": "violation_classes",
+        "cases": ["const stage = 'CLAIM_SUBMITTED'", "role === 'nurse'", "SLA_HOURS = 24"],
+        "expected_exit": 1
+      },
+      "expectedStatus": 200,
+      "expectedResponse": { "success": true }
+    },
+    {
+      "name": "Comments, tests and SQL comments are deliberately not flagged",
+      "payload": {
+        "scenario": "intentional_exclusions",
+        "cases": [
+          "// This deliberately holds no patient-specific logic.",
+          "/* Neutral by design: no patient or prescription concepts live here. */",
+          "-- no patient data here",
+          "tests/a.test.ts containing a domain fixture"
+        ],
+        "expected_exit": 0
+      },
+      "expectedStatus": 200,
+      "expectedResponse": { "success": true }
+    },
+    {
+      "name": "The workflow gates pull requests touching packages/",
+      "payload": {
+        "scenario": "ci_wiring",
+        "expected_trigger": "pull_request",
+        "expected_path_filter": "packages/**",
+        "expected_also_on_push_to": "main",
+        "expected_no_install_step": true
+      },
+      "expectedStatus": 200,
+      "expectedResponse": { "success": true }
+    }
+  ],
+  "expectedResponse": { "success": true },
+  "errorCases": [
+    {
+      "name": "A vertical literal in SDK source fails the build",
+      "status": null,
+      "code": "NEUTRALITY_VIOLATION",
+      "message": "NEUTRALITY GATE FAILED — <n> vertical-specific literal(s) in SDK source.",
+      "when": "a vertical noun, stage name, role branch or hardcoded business rule appears in the source of a platform package; the build fails and the offending file:line is named so the author can act",
+      "payload": { "scenario": "violation", "command": "node scripts/ci/neutrality-gate.js" }
+    },
+    {
+      "name": "Suppressing rather than fixing is the wrong response",
+      "status": null,
+      "code": "NEUTRALITY_SUPPRESSED",
+      "message": "Move the concept behind a caller-supplied resolver, a config value, or a tenant-configurable rule",
+      "when": "an author is tempted to allowlist a literal instead of removing the coupling; the contract records the sdk-parsing precedent showing the correct fix is to push the domain out to configuration, which preserved behaviour and kept every test green",
+      "payload": { "scenario": "allowlist_attempt" }
+    }
+  ]
+}

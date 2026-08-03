@@ -1,0 +1,109 @@
+{
+  "name": "conversation.reply.* event contracts (PCF-08-2)",
+  "endpoint": "events://conversation.reply",
+  "sdk": "sdk-conversation",
+  "sourceFile": "packages/contracts/src/events.ts",
+  "method": "EVENT_CONTRACT",
+  "requiresAuth": false,
+  "expectedStatus": 200,
+  "taskId": "c6160bb2-8afb-462b-9217-853443b9fd12",
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "featureId": "349aa653-edbb-4171-894a-13c6f6248854",
+  "epicId": "54b75cbb-e257-4e64-a356-3817f73256e2",
+  "priority": 21,
+  "testability": "manual",
+  "skipReason": "Contract-only declaration in packages/contracts/src/events.ts — no route, no handler, nothing for the request/response runner to call. Producer-side emission is asserted against the real audit ledger by packages/sdk-conversation/tests/replyDetection.integration.test.ts plus a direct audit.entry query (10 conversation.reply.linked.v1 and 14 conversation.reply.unmatched.v1 rows observed on the verification run).",
+  "coversCriterion": [
+    "c6160bb2-8afb-462b-9217-853443b9fd12#AC2"
+  ],
+  "description": "Contract anchor for the two domain events emitted by reply detection, both registered in packages/contracts/src/events.ts with an event-sourcing conflict policy. conversation.reply.linked.v1 (regulated retention) fires when an inbound message is bound to its originating outbound; conversation.reply.unmatched.v1 (operational retention) fires when no rung of the ladder matched. Proves AC2 (a domain event is emitted on linkage). The linked payload is deliberately self-sufficient — message_id, thread_id, parent_message_id, parent_thread_id, channel, method, confidence, occurred_at and parent_occurred_at — so a consumer can pause a sequence and open an owner task from the event alone, with no follow-up read and no polling, which is the whole point of emitting it. QA edge cases: registration is enforced, not advisory — appendAuditEntry calls assertRegisteredEventType and an unregistered type THROWS, but emitEvent catches and only console.warns, so an unregistered or failing emit is invisible from the caller's return value and shows up only as a MISSING audit row; that is the regression worth asserting, and it is why correctness must be checked by querying audit.entry rather than by trusting a successful detectAndLinkReply result. 'confidence' distinguishes proof (PROVIDER_REPLY_ID / EMAIL_HEADER) from strong (PROVIDER_THREAD_KEY) and heuristic (CHANNEL_RECENCY) so a consumer can require proof before taking an irreversible action; treating every linked event as equally certain is the misuse to watch for. Retention differs on purpose: the linked event is conversation evidence in regulated verticals, while the unmatched event is a work-queue signal whose underlying message is already retained in the regulated message table.",
+  "testCases": [
+    {
+      "name": "Both event types registered with the expected retention and conflict policy",
+      "payload": {
+        "event_types": [
+          "conversation.reply.linked.v1",
+          "conversation.reply.unmatched.v1"
+        ],
+        "expected_retention": {
+          "conversation.reply.linked.v1": "regulated",
+          "conversation.reply.unmatched.v1": "operational"
+        },
+        "conflict_policy": "event-sourcing",
+        "schema_state": "active",
+        "schema_version": 1
+      },
+      "expectedStatus": 200,
+      "expectedResponse": { "success": true }
+    },
+    {
+      "name": "linked payload carries everything needed to pause automation without a follow-up read",
+      "payload": {
+        "event_type": "conversation.reply.linked.v1",
+        "required_payload_fields": [
+          "message_id",
+          "thread_id",
+          "parent_message_id",
+          "parent_thread_id",
+          "channel",
+          "method",
+          "confidence",
+          "occurred_at",
+          "parent_occurred_at"
+        ],
+        "expected_confidence_values": ["proof", "strong", "heuristic"]
+      },
+      "expectedStatus": 200,
+      "expectedResponse": { "success": true }
+    },
+    {
+      "name": "unmatched payload names the message and why it could not be linked",
+      "payload": {
+        "event_type": "conversation.reply.unmatched.v1",
+        "required_payload_fields": [
+          "message_id",
+          "thread_id",
+          "channel",
+          "occurred_at",
+          "provider_in_reply_to_key",
+          "reason"
+        ],
+        "expected_reason": "no outbound message matched any resolution strategy"
+      },
+      "expectedStatus": 200,
+      "expectedResponse": { "success": true }
+    },
+    {
+      "name": "Emission is observable in the audit ledger, not in the caller's return value",
+      "payload": {
+        "scenario": "assert_via_audit_ledger",
+        "query": "SELECT event_type, count(*) FROM audit.entry WHERE event_type LIKE 'conversation.reply%' GROUP BY event_type",
+        "expected_event_types_present": [
+          "conversation.reply.linked.v1",
+          "conversation.reply.unmatched.v1"
+        ]
+      },
+      "expectedStatus": 200,
+      "expectedResponse": { "success": true }
+    }
+  ],
+  "expectedResponse": { "success": true },
+  "errorCases": [
+    {
+      "name": "An unregistered event_type is rejected at the contract layer before any write",
+      "status": null,
+      "code": "UNREGISTERED_EVENT_TYPE",
+      "message": "Unregistered event_type: <type>. Add it to EVENT_TYPE_REGISTRY first.",
+      "when": "a producer emits an event_type absent from EVENT_TYPE_REGISTRY (OC-2); assertRegisteredEventType throws inside appendAuditEntry before the chain is touched, so no partial row is written",
+      "payload": { "event_type": "conversation.reply.linked.v2" }
+    },
+    {
+      "name": "A failed emit is swallowed and surfaces only as a missing ledger row",
+      "status": null,
+      "code": "EMIT_BEST_EFFORT_SWALLOWED",
+      "message": "[audit.emit] failed event_type=<type> actor=sdk-conversation: <reason>",
+      "when": "the audit append throws (unregistered type, DB down, FK violation) — emitEvent catches, console.warns and returns null so reply detection is never blocked; the linkage still commits, which is exactly why the ledger and not the return value is the assertion point",
+      "payload": { "scenario": "audit_ledger_unavailable" }
+    }
+  ]
+}

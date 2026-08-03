@@ -1,0 +1,57 @@
+{
+  "name": "GET /api/auth/verification-status - email verification state for an address",
+  "endpoint": "/api/auth/verification-status",
+  "sdk": "sdk-identity",
+  "method": "GET",
+  "requiresAuth": false,
+  "expectedStatus": 200,
+  "taskId": "04644b76-81e7-4329-baab-e09ba5ec3c31",
+  "featureId": "2d00c83d-9593-41c7-9b5b-d0079ff79a5c",
+  "epicId": "9c09e562-b1f5-481e-983b-a4aae8891e8a",
+  "sprintId": "efcf9cbd-5e84-469e-946e-efcabf8c88e1",
+  "priority": 16,
+  "testability": "auto",
+  "dependsOn": [
+    "POST /api/auth/register"
+  ],
+  "queryParams": {
+    "email": "{{cache:auth.register.request.email}}"
+  },
+  "testCases": [
+    {
+      "name": "Freshly-registered address exists but is not yet verified",
+      "queryParams": {
+        "email": "{{cache:auth.register.request.email}}"
+      },
+      "expectedStatus": 200,
+      "testType": "positive"
+    },
+    {
+      "name": "Unknown address reports exists=false rather than 404",
+      "queryParams": {
+        "email": "no-such-account-{{dynamic:timestamp}}@example.com"
+      },
+      "expectedStatus": 200,
+      "testType": "positive"
+    }
+  ],
+  "expectedResponse": {
+    "data": {
+      "exists": "boolean",
+      "verified": "boolean"
+    }
+  },
+  "description": "Reports whether an email address is known to the system and whether it has completed email verification. Public and additive by design: it never gates register, signup or login — the UI calls it to decide whether to prompt the user to request a fresh verification email. An unknown address is NOT an error; it returns 200 with exists=false so the endpoint cannot be used to distinguish 'no account' from 'server error'. verified is derived from whether the stored person row has a non-null verified_at.",
+  "fieldEnums": {
+    "exists": [true, false],
+    "verified": [true, false]
+  },
+  "errorCases": [
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "email query param is required",
+      "when": "The email query parameter is absent, empty, or not a string"
+    }
+  ]
+}

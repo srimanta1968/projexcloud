@@ -36,17 +36,45 @@
   "_generated": true,
   "testability": "auto",
   "fieldEnums": {
-    "to_status": ["ACTIVE", "MIGRATING", "DRAINING", "MAINTENANCE", "RETIRED", "QUARANTINE"]
+    "to_status": [
+      "ACTIVE",
+      "MIGRATING",
+      "DRAINING",
+      "MAINTENANCE",
+      "RETIRED",
+      "QUARANTINE"
+    ]
   },
   "statusTransitions": {
     "entity": "pool",
     "field": "status",
-    "flow": ["ACTIVE", "MAINTENANCE", "DRAINING", "RETIRED"],
+    "flow": [
+      "ACTIVE",
+      "MAINTENANCE",
+      "DRAINING",
+      "RETIRED"
+    ],
     "transitions": [
-      { "from": "ACTIVE", "to": "MAINTENANCE", "via": "PATCH /admin/pools/:pool_index/status" },
-      { "from": "MAINTENANCE", "to": "ACTIVE", "via": "PATCH /admin/pools/:pool_index/status" },
-      { "from": "ACTIVE", "to": "DRAINING", "via": "PATCH /admin/pools/:pool_index/status" },
-      { "from": "DRAINING", "to": "RETIRED", "via": "PATCH /admin/pools/:pool_index/status" }
+      {
+        "from": "ACTIVE",
+        "to": "MAINTENANCE",
+        "via": "PATCH /admin/pools/:pool_index/status"
+      },
+      {
+        "from": "MAINTENANCE",
+        "to": "ACTIVE",
+        "via": "PATCH /admin/pools/:pool_index/status"
+      },
+      {
+        "from": "ACTIVE",
+        "to": "DRAINING",
+        "via": "PATCH /admin/pools/:pool_index/status"
+      },
+      {
+        "from": "DRAINING",
+        "to": "RETIRED",
+        "via": "PATCH /admin/pools/:pool_index/status"
+      }
     ]
   },
   "testCases": [
@@ -56,7 +84,7 @@
         "x-admin-ops-token": "{{var:ADMIN_OPS_TOKEN}}"
       },
       "pathParams": {
-        "pool_index": "{{var:pool_index}}"
+        "pool_index": "{{cache:admin.pools.create.response.data.pool_index}}"
       },
       "payload": {
         "to_status": "MAINTENANCE",
@@ -65,5 +93,8 @@
       },
       "expectedStatus": 200
     }
+  ],
+  "dependsOn": [
+    "POST /admin/pools"
   ]
 }

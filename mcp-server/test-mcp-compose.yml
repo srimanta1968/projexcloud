@@ -19,7 +19,12 @@ services:
   test-mcp-server:
     image: projexlight/projex-test-mcp:latest
     container_name: projexlight-test-mcp
-    user: root  # Required for git hooks installation on Windows
+    # Defaults to root (required for git-hook installation on Windows). On NATIVE
+    # LINUX set MCP_RUN_AS="$(id -u):$(id -g)" in .env so files written into your
+    # project are not root-owned; setup-all.sh sets it automatically there.
+    user: "${MCP_RUN_AS:-root}"
+    security_opt:
+      - no-new-privileges:true
     ports:
       # Bind to loopback only — see dev-mcp-compose.yml for rationale.
       # Override with MCP_TEST_BIND=0.0.0.0 only if you know what you're doing.
@@ -33,9 +38,18 @@ services:
       - ${PROJECT_PATH:-../}:/workspace                                  # Project root (read-write for git hooks)
 
       # Additional projects (dynamically mounted via setup-all.sh)
+      # Slot count MUST match MAX_ADDITIONAL_PROJECTS in project_context.py and
+      # the dev-mcp-compose.yml slots — both containers share one registry.
       - ${ADDITIONAL_PROJECT_1:-/dev/null}:/projects/additional1
       - ${ADDITIONAL_PROJECT_2:-/dev/null}:/projects/additional2
       - ${ADDITIONAL_PROJECT_3:-/dev/null}:/projects/additional3
+      - ${ADDITIONAL_PROJECT_4:-/dev/null}:/projects/additional4
+      - ${ADDITIONAL_PROJECT_5:-/dev/null}:/projects/additional5
+      - ${ADDITIONAL_PROJECT_6:-/dev/null}:/projects/additional6
+      - ${ADDITIONAL_PROJECT_7:-/dev/null}:/projects/additional7
+      - ${ADDITIONAL_PROJECT_8:-/dev/null}:/projects/additional8
+      - ${ADDITIONAL_PROJECT_9:-/dev/null}:/projects/additional9
+      - ${ADDITIONAL_PROJECT_10:-/dev/null}:/projects/additional10
 
       # ============================================================
       # PER-PROJECT CONFIG & DATA DIRECTORIES

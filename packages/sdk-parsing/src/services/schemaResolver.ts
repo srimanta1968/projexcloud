@@ -1,4 +1,5 @@
 import type { ExtractionFieldSpec } from './backends';
+import VOCABULARY from './document-vocabulary.json';
 
 /**
  * Schema resolver — given a classified document_kind, return the field
@@ -11,24 +12,17 @@ import type { ExtractionFieldSpec } from './backends';
  * taxonomy schema.
  */
 
-const BUILTIN_SCHEMAS: Record<string, ExtractionFieldSpec[]> = {
-  invoice: [
-    { name: 'invoice_number', type: 'string', required: true },
-    { name: 'amount', type: 'currency', required: true },
-    { name: 'due_date', type: 'date', required: false },
-  ],
-  prescription: [
-    { name: 'patient_name', type: 'string', required: true },
-    { name: 'medication', type: 'string', required: true },
-    { name: 'dosage', type: 'string', required: true },
-  ],
-  contract: [
-    { name: 'invoice_number', type: 'string', required: false },
-  ],
-  'lab-result': [
-    { name: 'patient_name', type: 'string', required: true },
-  ],
-};
+/*
+ * Loaded from document-vocabulary.json rather than written here (P16 EP-387).
+ *
+ * These field sets are vertical-specific by nature — an invoice, a prescription and a lab
+ * result belong to different industries. Holding them in TypeScript made sdk-parsing
+ * implicitly a healthcare/finance package, so the next vertical would fork it instead of
+ * configuring it. As data they are a replaceable default; sdk-taxonomy still wins whenever
+ * it resolves, which is the production path.
+ */
+const BUILTIN_SCHEMAS: Record<string, ExtractionFieldSpec[]> =
+  VOCABULARY.builtin_schemas as unknown as Record<string, ExtractionFieldSpec[]>;
 
 export interface ResolveSchemaInput {
   document_kind: string;

@@ -25,6 +25,7 @@ scale-out workers.
 | Doc | Audience | Use it to… |
 |-----|----------|-----------|
 | [dev-environment.md](./dev-environment.md) | Developers | Run the full stack locally on Windows/macOS/Linux |
+| [sdk-api-access.md](./sdk-api-access.md) | Developers integrating **another project** | Issue a tenant-scoped API key, pick its scopes, and point your app at ProjexCloud (local or cloud) |
 | [production-overview.md](./production-overview.md) | DevOps | Understand the prod architecture, env, migrations, seeding, scaling & security — **read first** |
 | [production-aws-ec2.md](./production-aws-ec2.md) | DevOps (AWS) | Deploy on EC2 + RDS + ElastiCache (+ optional MSK) |
 | [production-digitalocean.md](./production-digitalocean.md) | DevOps (DigitalOcean) | Deploy on a Droplet + Managed Postgres + Managed Redis |

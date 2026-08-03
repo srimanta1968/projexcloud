@@ -1,0 +1,114 @@
+{
+  "name": "B2B firmographic + intent feature registry (P16 EP-385)",
+  "endpoint": "internal://sdk-lead-scoring/b2bFeatures.evaluateB2BFeatures",
+  "sdk": "sdk-lead-scoring",
+  "sourceFile": "packages/sdk-lead-scoring/src/services/b2bFeatures.ts",
+  "method": "INTERNAL_FUNCTION",
+  "requiresAuth": false,
+  "expectedStatus": 200,
+  "taskId": "ee47e29c-1075-4b3e-814c-e0aa37be05a4",
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "featureId": "b357d702-a332-4c5d-a6a1-0e126b0be184",
+  "epicId": "bd0b5996-171f-46f2-8ead-0b72593f97df",
+  "priority": 80,
+  "testability": "manual",
+  "skipReason": "Internal (non-HTTP) registry — this task adds NO route, which is itself acceptance criterion AC3. The features are exercised through the unchanged POST /api/lead-scoring/models, PUT /api/lead-scoring/weights/:feature and POST /api/lead-scoring/score endpoints, whose own definitions are unmodified. The registry and its attribution are executed by packages/sdk-lead-scoring/tests/b2bFeatures.test.ts (16 cases), and the 23 pre-existing featureBackends/nextBestAction tests passing unchanged is the executable proof of AC2.",
+  "coversCriterion": [
+    "ee47e29c-1075-4b3e-814c-e0aa37be05a4#AC1",
+    "ee47e29c-1075-4b3e-814c-e0aa37be05a4#AC2",
+    "ee47e29c-1075-4b3e-814c-e0aa37be05a4#AC3",
+    "ee47e29c-1075-4b3e-814c-e0aa37be05a4#AC4"
+  ],
+  "description": "Registers ten B2B features across three families — firmographic (company size, segment, domain age, domain authority, technology signals), intent (page intent, pricing intent, response recency) and quality (form completeness, source quality) — alongside the shipped geo/field-service features. Proves all four criteria. AC3 is structural: no route was added or altered, because PUT /api/lead-scoring/weights/:feature already addresses features BY NAME rather than from a fixed list, and resolveWeights already returns every weight row of the model into the same normalised pool — so a new feature becomes weightable simply by existing (AC1). AC2: the four shipped subscorers keep their own code path and weights; a caller that supplies no b2b evidence gets exactly the score it got before, and the pre-existing test suites pass unmodified. AC4: scoreContact now returns `attribution` — per feature the raw 0..1 value, its weight, its contribution (raw x weight) and a human explanation — covering the shipped features AND the B2B ones, so the attribution is the whole explanation of the number rather than half of it, ordered by contribution so the first entry answers 'why this score'. QA edge cases: a MISSING signal returns evidence:false and contributes zero rather than scoring the lead down — absent is not the same as bad, and conflating them would silently penalise every lead whose enrichment has not run; unevidenced features are still REPORTED so a fully-enriched lead and an unknown one stay distinguishable even when their scores match; company size peaks INSIDE the tenant's ideal band rather than rising with headcount, since a 50,000-person enterprise is often a worse fit than a 200-person one; pricing intent DECAYS to zero at 30 days, so a months-old visit cannot keep a lead permanently hot; an unrated acquisition source and a segment with no declared targets both score neutral rather than zero, because rating a new channel zero would bury it before it ever produced the data to rate it; every scorer clamps to 0..1 under absurd input; only features the model carries a weight for are evaluated, so a model registering one B2B feature does not silently gain the other nine.",
+  "testCases": [
+    {
+      "name": "All ten features register across the three families",
+      "payload": {
+        "scenario": "registry_contents",
+        "expected_families": ["firmographic", "intent", "quality"],
+        "expected_feature_count": 10,
+        "expected_default_weights_sum": 1
+      },
+      "expectedStatus": 200,
+      "expectedResponse": { "success": true }
+    },
+    {
+      "name": "A missing signal is evidence:false and contributes zero",
+      "payload": {
+        "scenario": "absent_is_not_zero",
+        "signals": null,
+        "weights": { "b2b_company_size": 0.5 },
+        "expected_subtotal": 0,
+        "expected_evidence": false,
+        "expected_still_reported": true
+      },
+      "expectedStatus": 200,
+      "expectedResponse": { "success": true }
+    },
+    {
+      "name": "Company size peaks inside the ideal band",
+      "payload": {
+        "scenario": "company_size_band",
+        "in_band": { "employee_count": 200, "ideal_min": 10, "ideal_max": 1000, "expected_value": 1 },
+        "far_above": { "employee_count": 50000, "ideal_min": 10, "ideal_max": 1000, "expected_lower_than_in_band": true }
+      },
+      "expectedStatus": 200,
+      "expectedResponse": { "success": true }
+    },
+    {
+      "name": "Pricing intent decays to zero at thirty days",
+      "payload": {
+        "scenario": "pricing_intent_decay",
+        "cases": [
+          { "pricing_views": 3, "days_since_last_pricing_view": 0 },
+          { "pricing_views": 3, "days_since_last_pricing_view": 7 },
+          { "pricing_views": 3, "days_since_last_pricing_view": 60, "expected_value": 0 }
+        ],
+        "expected_monotonic_decreasing": true
+      },
+      "expectedStatus": 200,
+      "expectedResponse": { "success": true }
+    },
+    {
+      "name": "Attribution carries raw, weight, contribution and an explanation, ordered by contribution",
+      "payload": {
+        "scenario": "attribution_shape",
+        "required_fields": ["feature", "family", "raw", "weight", "contribution", "evidence", "explanation"],
+        "expected_ordered_by": "contribution desc",
+        "expected_subtotal_equals_sum_of_contributions": true
+      },
+      "expectedStatus": 200,
+      "expectedResponse": { "success": true }
+    },
+    {
+      "name": "Only weighted features are evaluated",
+      "payload": {
+        "scenario": "weight_gated",
+        "weights": { "b2b_pricing_intent": 1 },
+        "expected_attribution_length": 1,
+        "expected_feature": "b2b_pricing_intent"
+      },
+      "expectedStatus": 200,
+      "expectedResponse": { "success": true }
+    }
+  ],
+  "expectedResponse": { "success": true },
+  "errorCases": [
+    {
+      "name": "An unknown feature id resolves to undefined rather than throwing",
+      "status": null,
+      "code": "FEATURE_NOT_REGISTERED",
+      "message": "getB2BFeature(<id>) returns undefined",
+      "when": "a caller asks for a feature that was never registered — returning undefined lets the caller decide, whereas throwing would take down a whole scoring run because one weight row named a retired feature",
+      "payload": { "scenario": "unknown_feature_id", "feature_id": "b2b_not_a_feature" }
+    },
+    {
+      "name": "A weight naming an unregistered feature is ignored, not fatal",
+      "status": null,
+      "code": "UNKNOWN_WEIGHT_IGNORED",
+      "message": "weights referencing unregistered features contribute nothing",
+      "when": "a model still carries a weight row for a feature that has since been removed from the registry; evaluateB2BFeatures iterates the REGISTRY and skips unknown weights, so a stale row degrades the score rather than failing the request",
+      "payload": { "scenario": "stale_weight_row", "weights": { "b2b_retired_feature": 0.5 } }
+    }
+  ]
+}

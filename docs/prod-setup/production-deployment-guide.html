@@ -1,0 +1,436 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ProjexCloud — Production Deployment Guide</title>
+<style>
+  :root{
+    --bg:#ffffff; --fg:#1c2024; --muted:#5b6672; --line:#e4e8ec; --card:#f7f9fb;
+    --accent:#2563eb; --accent-soft:#eaf1ff; --warn-bg:#fff4e5; --warn-line:#f0b060;
+    --danger-bg:#fdecec; --danger-line:#e5776f; --ok-bg:#e9f7ef; --ok-line:#5cb87f;
+    --code-bg:#f0f3f6; --code-fg:#0f2540; --th:#eef2f6;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{
+      --bg:#0f1419; --fg:#e6edf3; --muted:#93a1b0; --line:#232c36; --card:#161d25;
+      --accent:#6ea8fe; --accent-soft:#16233b; --warn-bg:#2a2113; --warn-line:#7a5a1e;
+      --danger-bg:#2a1615; --danger-line:#7a3a34; --ok-bg:#12241a; --ok-line:#2f6b45;
+      --code-bg:#111820; --code-fg:#cbe2ff; --th:#1a222c;
+    }
+  }
+  :root[data-theme="light"]{
+    --bg:#ffffff; --fg:#1c2024; --muted:#5b6672; --line:#e4e8ec; --card:#f7f9fb;
+    --accent:#2563eb; --accent-soft:#eaf1ff; --warn-bg:#fff4e5; --warn-line:#f0b060;
+    --danger-bg:#fdecec; --danger-line:#e5776f; --ok-bg:#e9f7ef; --ok-line:#5cb87f;
+    --code-bg:#f0f3f6; --code-fg:#0f2540; --th:#eef2f6;
+  }
+  :root[data-theme="dark"]{
+    --bg:#0f1419; --fg:#e6edf3; --muted:#93a1b0; --line:#232c36; --card:#161d25;
+    --accent:#6ea8fe; --accent-soft:#16233b; --warn-bg:#2a2113; --warn-line:#7a5a1e;
+    --danger-bg:#2a1615; --danger-line:#7a3a34; --ok-bg:#12241a; --ok-line:#2f6b45;
+    --code-bg:#111820; --code-fg:#cbe2ff; --th:#1a222c;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--fg);
+    font:16px/1.62 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;}
+  .wrap{max-width:920px;margin:0 auto;padding:2.4rem 1.3rem 5rem;}
+  header.doc{border-bottom:1px solid var(--line);padding-bottom:1.4rem;margin-bottom:2rem;}
+  header.doc .kicker{color:var(--accent);font-weight:600;font-size:.8rem;letter-spacing:.08em;text-transform:uppercase;}
+  h1{font-size:2rem;line-height:1.15;margin:.3rem 0 .5rem;}
+  h2{font-size:1.35rem;margin:2.6rem 0 .8rem;padding-top:.6rem;border-top:1px solid var(--line);}
+  h3{font-size:1.06rem;margin:1.6rem 0 .5rem;}
+  p,li{color:var(--fg)}
+  .sub{color:var(--muted);font-size:1.02rem;}
+  a{color:var(--accent);text-decoration:none} a:hover{text-decoration:underline}
+  code{background:var(--code-bg);color:var(--code-fg);padding:.1em .38em;border-radius:5px;
+    font:.87em/1.5 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;}
+  pre{background:var(--code-bg);color:var(--code-fg);padding:1rem 1.1rem;border-radius:9px;
+    overflow-x:auto;border:1px solid var(--line);}
+  pre code{background:none;padding:0;}
+  .toc{background:var(--card);border:1px solid var(--line);border-radius:11px;padding:1rem 1.3rem;margin:1.4rem 0;}
+  .toc ol{margin:.3rem 0;padding-left:1.3rem;} .toc li{margin:.15rem 0;}
+  .tablewrap{overflow-x:auto;margin:1rem 0;}
+  table{border-collapse:collapse;width:100%;font-size:.92rem;min-width:520px;}
+  th,td{text-align:left;padding:.55rem .7rem;border-bottom:1px solid var(--line);vertical-align:top;}
+  th{background:var(--th);font-weight:600;}
+  .callout{border-radius:10px;padding:.9rem 1.1rem;margin:1.1rem 0;border-left:4px solid var(--accent);
+    background:var(--accent-soft);}
+  .callout.warn{background:var(--warn-bg);border-left-color:var(--warn-line);}
+  .callout.danger{background:var(--danger-bg);border-left-color:var(--danger-line);}
+  .callout.ok{background:var(--ok-bg);border-left-color:var(--ok-line);}
+  .callout .tag{font-weight:700;font-size:.78rem;letter-spacing:.05em;text-transform:uppercase;display:block;margin-bottom:.2rem;}
+  .pill{display:inline-block;font-size:.72rem;font-weight:600;padding:.1rem .5rem;border-radius:999px;
+    background:var(--accent-soft);color:var(--accent);border:1px solid var(--line);}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:.8rem;margin:1rem 0;}
+  @media(max-width:640px){.grid{grid-template-columns:1fr}}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:.9rem 1.1rem;}
+  .card h4{margin:.1rem 0 .4rem;font-size:.98rem;}
+  .muted{color:var(--muted);font-size:.9rem;}
+  footer{margin-top:3rem;padding-top:1.2rem;border-top:1px solid var(--line);color:var(--muted);font-size:.85rem;}
+  ul.check{list-style:none;padding-left:0;} ul.check li{padding-left:1.7rem;position:relative;margin:.35rem 0;}
+  ul.check li::before{content:"☐";position:absolute;left:0;color:var(--accent);font-size:1.05em;}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="doc">
+  <div class="kicker">ProjexCloud · Infrastructure</div>
+  <h1>Production Deployment Guide</h1>
+  <p class="sub">What an actual large-scale production system needs — and why the current
+  “mini” test box is <em>not</em> that. Written from the running system’s real architecture.</p>
+  <p class="muted">Scope: moving ProjexCloud from the single 2-core / ~4&nbsp;GB test EC2 box to a
+  proper multi-tier production deployment. Read the “Known gaps” checklist before go-live.</p>
+</header>
+
+<div class="callout danger">
+  <span class="tag">The one thing to internalise</span>
+  Almost every performance compromise in the current stack exists because <strong>ClickHouse,
+  Postgres, Redis, the api-gateway and three portals are all crammed onto one 2-core / 3.9&nbsp;GB
+  box.</strong> Production is not “the same box, bigger” — it is <strong>separate tiers</strong>.
+  The test-box tuning (shrunken caches, disabled telemetry, 1&nbsp;GB memory ceiling) must be
+  <strong>reverted</strong> on real hardware or it will silently cripple it.
+</div>
+
+<div class="toc">
+  <strong>Contents</strong>
+  <ol>
+    <li><a href="#components">System components</a></li>
+    <li><a href="#topology">Target production topology</a></li>
+    <li><a href="#sizing">Instance sizing (starting points)</a></li>
+    <li><a href="#clickhouse">ClickHouse: mini vs production config</a></li>
+    <li><a href="#postgres">Postgres &amp; Redis</a></li>
+    <li><a href="#deploy">Deploy pipeline</a></li>
+    <li><a href="#secrets">Secrets &amp; configuration</a></li>
+    <li><a href="#auth">Auth &amp; sessions</a></li>
+    <li><a href="#observability">Observability &amp; logging</a></li>
+    <li><a href="#gaps">Known gaps — pre-production checklist</a></li>
+  </ol>
+</div>
+
+<h2 id="components">1. System components</h2>
+<p>The stack is a pnpm/Turbo monorepo. The api-gateway (Fastify) mounts ~90 workspace SDKs as
+route plugins; the portals are Next.js apps; nginx terminates TLS and fronts everything.</p>
+<div class="tablewrap">
+<table>
+  <thead><tr><th>Component</th><th>Role</th><th>Port</th><th>Prod tier</th></tr></thead>
+  <tbody>
+    <tr><td><code>api-gateway</code></td><td>Fastify API, mounts all SDK routers, runs SDK migrations on boot</td><td>3000</td><td>App tier (scale horizontally)</td></tr>
+    <tr><td><code>portal-workspace / -tenant / -console</code></td><td>Next.js portals</td><td>3300 / 3200 / 3100</td><td>App tier</td></tr>
+    <tr><td><code>registry-mcp</code> (discovery)</td><td>SDK registry / discovery</td><td>3600</td><td>App tier</td></tr>
+    <tr><td><code>Postgres</code> (pgvector)</td><td>OLTP — primary datastore, per-tenant sharding</td><td>5432</td><td>Dedicated / managed</td></tr>
+    <tr><td><code>Redis</code></td><td>Cache, route cache, cross-replica pub/sub invalidation</td><td>6379</td><td>Dedicated / managed</td></tr>
+    <tr><td><code>ClickHouse</code></td><td>OLAP — metering, telemetry rollups</td><td>8123 / 9000</td><td>Dedicated / managed</td></tr>
+    <tr><td><code>nginx</code></td><td>TLS termination, reverse proxy, static landing</td><td>80 / 443</td><td>Edge / LB tier</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2 id="topology">2. Target production topology</h2>
+<p>The current box runs all of the above in one Docker Compose stack. For production, split by
+failure domain and resource profile:</p>
+<div class="grid">
+  <div class="card"><h4>Edge / LB</h4><p class="muted">nginx or a managed load balancer (ALB). TLS,
+    WAF, rate limiting. Fronts N gateway replicas + the portals.</p></div>
+  <div class="card"><h4>App tier</h4><p class="muted">2+ api-gateway replicas behind the LB, plus the
+    three portals. Stateless — scale horizontally. The admin-ops-token cache already uses Redis
+    pub/sub for cross-replica invalidation, so multi-replica is a supported design.</p></div>
+  <div class="card"><h4>Data tier — OLTP</h4><p class="muted">Postgres on its own instance or a managed
+    service (RDS/Aurora). Connection pooling (PgBouncer) in front.</p></div>
+  <div class="card"><h4>Data tier — OLAP</h4><p class="muted"><strong>Dedicated</strong> ClickHouse
+    instance or a managed OLAP service. Never co-located with OLTP + app.</p></div>
+  <div class="card"><h4>Cache / bus</h4><p class="muted">Redis on its own instance or managed
+    (ElastiCache). Used for caching and cross-replica invalidation.</p></div>
+  <div class="card"><h4>Registry</h4><p class="muted">registry-mcp alongside the app tier; its
+    artifacts are currently bind-mounted (the untracked <code>local-artifacts</code> override).</p></div>
+</div>
+<div class="callout">
+  <span class="tag">Why separate ClickHouse</span>
+  On the test box ClickHouse pinned both cores at 200%+ and starved Postgres — the observed
+  gateway DB timeouts were a <em>scheduling</em> problem, not a Postgres problem. Isolating OLAP
+  removes that entire class of incident.
+</div>
+
+<h2 id="arch">2A. Architecture model — modular monolith vs microservices</h2>
+<p>ProjexCloud today is a <strong>modular monolith</strong>, not microservices: <strong>one</strong>
+api-gateway process mounts all <strong>76 SDKs</strong> (69&nbsp;<code>sdk-*</code> + 7&nbsp;<code>hdk-*</code>)
+as in-process route plugins. It already has two clean separation axes, which is why it is well-placed
+to extract services later:</p>
+<div class="tablewrap">
+<table>
+  <thead><tr><th>Axis</th><th>Mechanism today</th><th>Meaning</th></tr></thead>
+  <tbody>
+    <tr><td><strong>Vertical — by domain</strong></td><td>Each SDK owns its own Postgres <strong>schema</strong>
+      (<code>identity.</code>, <code>consent.</code>, <code>billing.</code>, <code>connector_*</code>, …) — 76 schemas in one DB</td>
+      <td>“Schema-per-service” — the logical microservice boundaries are already drawn</td></tr>
+    <tr><td><strong>Horizontal — by tenant</strong></td><td><code>db-runtime</code> keeps a
+      <code>Map&lt;pool_index, pg.Pool&gt;</code>; each <code>pool_index</code> (from the JWT’s
+      <code>admin_pool_index</code>/<code>app_pool_index</code>) can point at a <strong>different Postgres
+      cluster</strong> via <code>routing.tenant_pool_map</code></td>
+      <td>Tenants are already shardable across physical clusters — no code change to add a shard</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h3>Pod counts: current vs full microservices</h3>
+<div class="tablewrap">
+<table>
+  <thead><tr><th></th><th>Modular monolith (today)</th><th>Full microservices (SDK-per-service)</th></tr></thead>
+  <tbody>
+    <tr><td>Services / pods</td><td><strong>~7–9</strong> app-tier (2 gateway + portals + registry)</td>
+      <td><strong>76 services</strong> → ~<strong>150+ pods</strong> at 2 replicas each, + portals + a BFF/gateway + infra</td></tr>
+    <tr><td>Databases</td><td><strong>1</strong> logical Postgres (76 schemas), shardable per tenant</td>
+      <td><strong>76</strong> databases (DB-per-service) × each tenant shard</td></tr>
+    <tr><td>Inter-SDK calls</td><td>In-process function calls (nanoseconds, transactional)</td>
+      <td>Network RPC — retries, timeouts, tracing, versioned contracts</td></tr>
+    <tr><td>Cross-domain query</td><td>SQL JOIN across schemas (~30 join sites exist)</td>
+      <td>No cross-DB JOIN — needs API composition or data duplication (CQRS/events)</td></tr>
+    <tr><td>Transactions</td><td>Single-DB ACID</td><td>Distributed (sagas / outbox)</td></tr>
+    <tr><td>Ops surface</td><td>1 image, 1 deploy, 1 migration run</td><td>76 pipelines, 76 migration owners, service mesh, per-service dashboards</td></tr>
+    <tr><td>Right when</td><td>Nearly always — up to very large scale</td><td>Specific team-ownership / independent-scale / blast-radius needs</td></tr>
+  </tbody>
+</table>
+</div>
+
+<div class="callout danger">
+  <span class="tag">Recommendation: do NOT go full microservices</span>
+  76 services + 76 databases is a ~20× jump in operational surface for no benefit at current scale,
+  and the ~30 cross-schema JOINs (persona, identity, webhook, lineage, meter, billing…) would each
+  become a network call or a data-duplication problem. The monolith is the right default well past
+  early scale.
+</div>
+<div class="callout ok">
+  <span class="tag">The right path: strangler extraction</span>
+  Because every SDK already owns a schema, you can extract <em>individual</em> SDKs when one actually
+  needs independent scale or isolation — <strong>without a rewrite</strong>. Extract the few hot/heavy
+  ones first (candidates: <code>sdk-ai-gateway</code>, <code>sdk-ingest</code>, <code>meter</code>/OLAP,
+  media/HDK), give each its own pod + its own database (promote its schema to a standalone DB, repoint
+  that SDK’s <code>dataService</code> pool), and leave the rest in the gateway. Watch the cross-schema
+  JOINs into the extracted schema — those are the seams to convert to API/event calls first.
+</div>
+
+<h2 id="sizing">3. Instance sizing (starting points)</h2>
+<p class="muted">These are reasoned starting points, not hard requirements — right-size against
+real load and data volume. The point is the <em>ratios and separation</em>, not exact numbers.</p>
+<div class="tablewrap">
+<table>
+  <thead><tr><th>Tier</th><th>Current (test)</th><th>Production starting point</th><th>Notes</th></tr></thead>
+  <tbody>
+    <tr><td>App (gateway + portals)</td><td>shared 2c/4GB</td><td>2× (4 vCPU / 8&nbsp;GB) replicas</td><td>Stateless; scale on CPU/req latency</td></tr>
+    <tr><td>Postgres</td><td>shared container</td><td>8 vCPU / 32&nbsp;GB+, provisioned IOPS</td><td>Managed service preferred; PgBouncer pooling</td></tr>
+    <tr><td>ClickHouse</td><td>1.4&nbsp;GB container (starved)</td><td>Dedicated 8–16 vCPU / 32–64&nbsp;GB</td><td>Fast local NVMe; scales caches to RAM</td></tr>
+    <tr><td>Redis</td><td>shared container</td><td>2 vCPU / 4–8&nbsp;GB, persistence on</td><td>Managed w/ failover</td></tr>
+    <tr><td>Disk (app box)</td><td>30&nbsp;GB (hit 80–86%)</td><td>100&nbsp;GB+ with alerting</td><td>Image + build cache growth is real; monitor</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h3>How many containers / replicas</h3>
+<p>Today it is <strong>one host, 8 single-instance containers</strong> (one Compose stack). A real
+production deployment needs an orchestrator (Kubernetes / ECS / Swarm) or a load balancer across
+multiple hosts — the single-host Compose file does not do multi-replica by itself. Minimum
+counts for a small-but-highly-available launch:</p>
+<div class="tablewrap">
+<table>
+  <thead><tr><th>Component</th><th>Now</th><th>Min for HA</th><th>Scale signal</th></tr></thead>
+  <tbody>
+    <tr><td><code>api-gateway</code></td><td>1</td><td><strong>2+</strong></td><td>CPU / p95 latency → add replicas (stateless)</td></tr>
+    <tr><td><code>portal-workspace</code></td><td>1</td><td>2</td><td>Request volume</td></tr>
+    <tr><td><code>portal-tenant</code></td><td>1</td><td>2</td><td>Request volume</td></tr>
+    <tr><td><code>portal-console</code></td><td>1</td><td>1–2</td><td>Low (admin surface)</td></tr>
+    <tr><td><code>registry-mcp</code></td><td>1</td><td>1–2</td><td>Usually 1</td></tr>
+    <tr><td>Postgres</td><td>1</td><td>1 primary + 1 standby</td><td>Or managed Multi-AZ (RDS/Aurora)</td></tr>
+    <tr><td>Redis</td><td>1</td><td>1 primary + 1 replica</td><td>Or managed (ElastiCache) w/ failover</td></tr>
+    <tr><td>ClickHouse</td><td>1 (starved)</td><td>1 dedicated</td><td>Cluster only at large OLAP scale</td></tr>
+    <tr><td>nginx / LB</td><td>1</td><td>Managed ALB, or 2× nginx</td><td>Edge HA</td></tr>
+  </tbody>
+</table>
+</div>
+<p class="muted">Rough total for a HA launch: ~<strong>7–9 app-tier containers</strong>
+(2 gateway + 2+2+1 portals + 1 registry) across ≥2 hosts, plus the data tier — either 3 managed
+services (Postgres, Redis, ClickHouse) or ~5 self-managed containers (2 pg + 2 redis + 1 CH) on
+their own hosts. The app tier scales out with load; the data tier scales up (bigger instances)
+before it scales out.</p>
+<div class="callout warn">
+  <span class="tag">Orchestration is a prerequisite for replicas</span>
+  Running 2+ of anything means moving off single-host Compose to Kubernetes / ECS / Swarm (or an LB
+  fronting multiple Compose hosts). The gateway is designed for it — its <code>ADMIN_OPS_TOKEN</code>
+  cache invalidates across replicas via Redis pub/sub — but the deploy tooling
+  (<code>deploy-service.sh</code>) is single-host and would need to become a CI→registry→rollout
+  pipeline.
+</div>
+
+<h2 id="clickhouse">4. ClickHouse: mini vs production config</h2>
+<p>The file <code>infra/clickhouse/config.d/tuning.xml</code> is a <strong>survival config for the
+1.4&nbsp;GB container</strong>. On a dedicated production box, most of it must be reverted — it
+trades away observability and query performance to fit tiny memory.</p>
+<div class="tablewrap">
+<table>
+  <thead><tr><th>Setting</th><th>Mini box (now)</th><th>Production (dedicated box)</th></tr></thead>
+  <tbody>
+    <tr><td><code>*_log</code> tables (metric_log, trace_log, asynchronous_metric_log, processors_profile_log)</td>
+      <td><span class="pill">disabled</span> merges couldn’t fit</td>
+      <td><strong>Re-enable.</strong> These are core observability — metrics history, query traces. Cheap on a big box.</td></tr>
+    <tr><td><code>uncompressed_cache_size</code></td><td><span class="pill">0</span></td><td>Restore (default 8&nbsp;GB scale, or size to RAM)</td></tr>
+    <tr><td><code>mark_cache_size</code></td><td>256&nbsp;MB</td><td>Raise substantially (default ~5&nbsp;GB); 256&nbsp;MB thrashes on real tables</td></tr>
+    <tr><td><code>index_mark_cache_size</code></td><td>128&nbsp;MB</td><td>Raise (default ~5&nbsp;GB)</td></tr>
+    <tr><td><code>max_server_memory_usage</code></td><td>1&nbsp;GB hard cap</td><td>Remove, or use the 0.9-of-RAM ratio</td></tr>
+    <tr><td>thread pools (schedule 16, max 256, concurrent 16)</td><td>throttled for 2 cores</td><td>Raise / defaults to use available cores</td></tr>
+    <tr><td><code>cap_add: [SYS_NICE]</code></td><td><span class="pill">keep</span></td><td><strong>Keep</strong> — always correct; without it ClickHouse spams <code>get_mempolicy</code></td></tr>
+    <tr><td><code>logging.xml</code> (server log-file rotation)</td><td>info level, 100M×3</td><td>Keep; optionally allow more retention</td></tr>
+    <tr><td><code>cpus</code> guardrail</td><td>1.5 (co-located)</td><td>Drop on a dedicated box</td></tr>
+  </tbody>
+</table>
+</div>
+<div class="callout warn">
+  <span class="tag">Silent carry-over risk</span>
+  If the mini profile follows a deploy to the big box, you get a 64&nbsp;GB ClickHouse
+  running with 256&nbsp;MB caches, a 1&nbsp;GB ceiling, and no telemetry — mysteriously slow, and no
+  metrics to debug it. <strong>This is now env-selectable</strong> (implemented): <code>tuning.xml</code>
+  is the small/co-located profile (default) and <code>tuning.prod.xml</code> is the dedicated-box
+  profile (telemetry on, caches/memory at defaults, just <code>SYS_NICE</code> + a memory ratio). The
+  compose file picks via <code>CH_TUNING_FILE</code> (plus <code>CH_MEM_LIMIT</code> / <code>CH_CPUS</code>).
+  On the big box set in <code>.env.prod</code>:
+  <code>CH_TUNING_FILE=tuning.prod.xml&nbsp;CH_MEM_LIMIT=48g&nbsp;CH_CPUS=0</code>.
+</div>
+<div class="callout ok">
+  <span class="tag">Root-cause reminder</span>
+  The memory-drain incident was ClickHouse’s own <code>*_log</code> self-telemetry tables spiraling
+  because cache config assumed a ~64&nbsp;GB box inside a 1.4&nbsp;GB container. On a correctly-sized
+  dedicated box that spiral cannot happen — so the fix is “separate + defaults,” not “disable
+  everything forever.”
+</div>
+
+<h2 id="postgres">5. Postgres &amp; Redis</h2>
+<h3>Postgres</h3>
+<ul>
+  <li>Own instance / managed service; <strong>PgBouncer</strong> in front (the gateway opens many
+    pools — per-tenant sharding + background workers).</li>
+  <li>The gateway auto-runs every SDK migration on boot — ensure the DB user has DDL rights and that
+    a cold start against a fresh DB is part of the runbook.</li>
+  <li>Automated backups + PITR; test restore. Provisioned IOPS storage.</li>
+</ul>
+<h3>Redis</h3>
+<ul>
+  <li>Own instance / managed with failover. Used for route cache and the admin-ops-token
+    cross-replica invalidation channel — <strong>required for multi-replica gateways</strong> so a
+    revoked ops-token stops working everywhere within Redis latency (not per-replica TTL).</li>
+  <li>Enable persistence if any cached state must survive restart.</li>
+</ul>
+
+<h2 id="deploy">6. Deploy pipeline</h2>
+<p>ProjexCloud is <strong>docker-compose based</strong>. It does <em>not</em> use
+<code>crm-server.sh</code> (that belongs to the separate ProjexCRM project).</p>
+<h3>Incremental redeploy of changed service(s) — the normal path</h3>
+<pre><code># on the prod host, from /home/ec2-user/projexcloud, with .env.prod present
+scripts/setup/deploy-service.sh api-gateway
+scripts/setup/deploy-service.sh api-gateway portal-console   # multiple
+NO_PULL=1 scripts/setup/deploy-service.sh api-gateway         # skip git pull</code></pre>
+<p>It does <code>git pull --ff-only origin main</code>, then rebuilds only the named service image(s)
+and recreates just those containers, then health-gates the gateway. Builds are
+<strong>Turbo/BuildKit-incremental</strong>: the pnpm store and <code>.turbo</code> cache are
+persisted BuildKit cache mounts, so unchanged packages restore their <code>dist/</code> from cache
+and only changed packages (+ dependents) recompile — a one-file change rebuilds in minutes.</p>
+<h3>No-build reconcile / boot / registry deploy</h3>
+<pre><code>./deploy.sh up       # reconcile to desired state with current images (no build)
+./deploy.sh deploy   # registry pull then up (when IMAGE_PREFIX/TAG set)
+./deploy.sh ps | logs &lt;svc&gt;</code></pre>
+<div class="callout warn">
+  <span class="tag">Production build strategy</span>
+  Building on the prod host is fine for a single box but does not scale. For a real fleet, build
+  images in <strong>CI</strong>, push to a registry (ECR), and deploy with <code>./deploy.sh deploy</code>
+  (image pull, no on-host build). The gateway Dockerfile already supports a scoped build
+  (<code>turbo run build --filter=@projexlight/api-gateway...</code>) once the gateway’s
+  <code>package.json</code> is confirmed to declare every SDK it imports.
+</div>
+<div class="callout">
+  <span class="tag">New SDKs</span>
+  The build compiles <em>all</em> packages, but a new SDK is only <em>served</em> if it is a
+  <code>workspace:*</code> dependency in the gateway <code>package.json</code> <strong>and</strong>
+  registered via <code>app.register(...)</code> in <code>services/api-gateway/src/app.ts</code>. Forgetting
+  the register line ships a silently-missing route — add both.
+</div>
+
+<h2 id="secrets">7. Secrets &amp; configuration</h2>
+<ul>
+  <li><code>.env.prod</code> holds all secrets (<code>JWT_SECRET</code>, <code>ADMIN_OPS_TOKEN</code>,
+    DB password, etc.). It is <strong>untracked</strong> — never commit it. In production, source
+    secrets from a manager (SSM Parameter Store / Secrets Manager), not a file on the box.</li>
+  <li><strong>One operator secret:</strong> <code>ADMIN_OPS_TOKEN</code> guards all
+    <code>/admin/*</code> routes (the former <code>FEDERATION_ADMIN_TOKEN</code> was consolidated into
+    it). It also has a DB-backed active-token set with cross-replica invalidation, so short-lived
+    tokens can be minted/revoked without a redeploy.</li>
+  <li>Add <code>.env.prod</code> to <code>.gitignore</code> so a stray <code>git clean</code> can never
+    delete production secrets.</li>
+</ul>
+
+<h2 id="auth">8. Auth &amp; sessions</h2>
+<ul>
+  <li><strong>Default-deny gate</strong> (<code>services/api-gateway/src/plugins/authGate.ts</code>): every
+    request needs a valid tenant JWT unless the path is public (auth/health/well-known/storm/metrics),
+    SAML, an OAuth callback, a signature-verified webhook, admin (self-guards via
+    <code>ADMIN_OPS_TOKEN</code>), or a WebSocket upgrade.</li>
+  <li><strong>Kill-switch:</strong> <code>AUTH_GATE_MODE = enforce</code> (default) <code>| report | off</code>.
+    <code>report</code> logs would-be blocks without blocking; <code>off</code> disables the gate. Flip
+    without a rebuild via <code>up -d --force-recreate api-gateway</code>.</li>
+</ul>
+<div class="callout danger">
+  <span class="tag">Fix before real users at scale</span>
+  <strong>JWT is 7-day expiry with no refresh endpoint.</strong> Tokens silently die at 7 days and the
+  client replays the dead one → 401 on every call until re-login. For production, add a short-lived
+  access token + rotating refresh token (httpOnly cookie) and a <code>/api/auth/refresh</code> route,
+  or at minimum client-side proactive re-auth. See the auth findings for the full design.
+</div>
+
+<h2 id="observability">9. Observability &amp; logging</h2>
+<ul>
+  <li><strong>Re-enable ClickHouse telemetry</strong> on the dedicated box (see §4) — you want
+    <code>metric_log</code>/<code>trace_log</code>/<code>query_log</code> for performance debugging.</li>
+  <li><code>/metrics</code> (Prometheus) is exposed on the gateway — scrape it. <code>/health</code> and
+    per-SDK <code>*/health</code> endpoints are public for load-balancer checks.</li>
+  <li><strong>nginx logrotate is broken</strong> on the current box: logrotate renamed
+    <code>access.log</code> but never signalled nginx, so nginx still writes to the old handle and the
+    live <code>access.log</code> is stale/missing. Fix with a <code>postrotate</code> that runs
+    <code>nginx -s reopen</code> (or <code>systemctl reload nginx</code>). Do this before relying on
+    access logs in prod.</li>
+  <li>Centralise logs (CloudWatch / Loki) and alert on disk usage — the test box hit 86%; build cache
+    and images grow.</li>
+</ul>
+
+<h2 id="gaps">10. Known gaps — pre-production checklist</h2>
+<p>Concrete items surfaced during this system’s hardening. Close these before a real production
+launch:</p>
+<ul class="check">
+  <li><strong>Separate ClickHouse</strong> onto a dedicated instance and switch to a production
+    ClickHouse profile (telemetry on, caches/memory at defaults, keep <code>SYS_NICE</code>).</li>
+  <li><span class="pill">done</span> <strong>ClickHouse config split</strong> — <code>tuning.xml</code>
+    (small) / <code>tuning.prod.xml</code> (dedicated) selected by <code>CH_TUNING_FILE</code>, so test
+    settings can’t silently follow a deploy. Set the prod profile when you provision the big box.</li>
+  <li><strong>Separate Postgres &amp; Redis</strong> onto their own instances / managed services;
+    add PgBouncer.</li>
+  <li><strong>JWT refresh flow</strong> — short access token + rotating refresh token + <code>/api/auth/refresh</code>.</li>
+  <li><strong>Per-handler tenant-scoping</strong> — the auth gate authenticates but does not yet scope
+    every SDK query by <code>tenant_id</code>; close the residual cross-tenant read (IDOR) risk on the
+    newly-gated routes.</li>
+  <li><strong>WebSocket auth</strong> — the two WS upgrade routes are gate-exempt; implement
+    <code>Sec-WebSocket-Protocol</code> token auth.</li>
+  <li><strong>Fix nginx logrotate</strong> (<code>nginx -s reopen</code> in <code>postrotate</code>).</li>
+  <li><strong>CI image builds + registry deploy</strong> instead of on-host builds for a fleet.</li>
+  <li><strong>Secrets from a manager</strong> (SSM / Secrets Manager); add <code>.env.prod</code> to
+    <code>.gitignore</code>.</li>
+  <li><strong>Backups + restore drill</strong> for Postgres; disk-usage alerting on every box.</li>
+  <li><strong>Multi-replica gateway</strong> behind a load balancer; verify Redis-backed ops-token
+    invalidation works across replicas.</li>
+</ul>
+
+<footer>
+  ProjexCloud production deployment guide. Reflects the system architecture and the hardening work on
+  the test deployment. Sizing figures are starting recommendations — right-size against real load.
+  Keep this in sync with <code>CLAUDE.md</code>, <code>deploy.sh</code>, and
+  <code>scripts/setup/deploy-service.sh</code>.
+</footer>
+
+</div>
+</body>
+</html>

@@ -1,0 +1,122 @@
+{
+  "name": "PUT /api/projection/survivorship-rules — set a tenant's attribute precedence",
+  "endpoint": "/api/projection/survivorship-rules",
+  "sdk": "sdk-projection",
+  "sourceFile": "packages/sdk-projection/src/server/routes.ts",
+  "method": "PUT",
+  "requiresAuth": true,
+  "expectedStatus": 200,
+  "taskId": "423e16dc-aa8f-424c-9654-ad142cf3edc9",
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "featureId": "a1fd7530-8829-4d23-9718-5cb1b427b96c",
+  "epicId": "411badaa-f7ec-4184-a944-2e7a2c3f58e7",
+  "priority": 50,
+  "testability": "auto",
+  "dependsOn": ["POST /api/auth/signup-tenant"],
+  "coversCriterion": ["423e16dc-aa8f-424c-9654-ad142cf3edc9#AC2"],
+  "description": "Upserts a tenant's survivorship rule set for one attribute (or '*', the catch-all). An upsert, so 200 rather than 201 — the same call creates or replaces. Proves AC2. criteria is an ORDERED array, not a set of weights: order IS the rule, and 'a verified value beats an unverified one, and only if that ties does origin matter' cannot be expressed as weights without inventing magic numbers — worse, weights make a loss unexplainable ('it scored 0.62') where an ordered list makes it a sentence. Valid criteria are verification_state, origin_class (both requiring a non-empty 'order' array, best first) and confidence, recency (both taking an optional direction, default desc). Resolution elsewhere is tenant-first then platform then a code builtin. QA edge cases: the PLATFORM row (tenant_id NULL) is deliberately unreachable from this endpoint — a tenant editing the shared default would change every other tenant's precedence, so a tenant overrides by writing its own row and the platform row is never edited in place, which keeps 'what does the platform say' answerable; a repeated criterion is a 400 rather than being accepted, because the second occurrence can never be reached and silently accepting it would leave the author believing it applies; duplicate entries inside an 'order' array are a 400 since their precedence would be ambiguous; validation happens at WRITE time on purpose — a bad rule discovered during a projection produces a wrong winner nobody notices, whereas the same rule refused at PUT produces an error the author can act on; an attribute-specific tenant rule beats the tenant catch-all, but a tenant catch-all still beats a platform-specific rule, because the tenant has deliberately stated a house policy.",
+  "captureResponse": {
+    "projection.rules.response.data.rule_set.rule_set_id": "data.rule_set.rule_set_id"
+  },
+  "testCases": [
+    {
+      "name": "Set a catch-all precedence for the tenant",
+      "headers": { "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}" },
+      "payload": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "attribute": "*",
+        "criteria": [
+          { "criterion": "verification_state", "order": ["verified", "unverified", "rejected"] },
+          { "criterion": "origin_class", "order": ["human_verified", "user_supplied", "import"] },
+          { "criterion": "confidence", "direction": "desc" },
+          { "criterion": "recency", "direction": "desc" }
+        ],
+        "updated_by": "api-regression"
+      },
+      "expectedStatus": 200
+    },
+    {
+      "name": "An attribute-specific override for phone",
+      "headers": { "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}" },
+      "payload": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "attribute": "phone",
+        "criteria": [{ "criterion": "recency", "direction": "desc" }]
+      },
+      "expectedStatus": 200
+    }
+  ],
+  "errorCases": [
+    {
+      "name": "An unknown criterion is refused at write time",
+      "status": 400,
+      "code": "VALIDATION_ERROR",
+      "message": "criteria[0].criterion must be one of: verification_state, origin_class, confidence, recency",
+      "when": "criteria contains a criterion name the comparator does not implement",
+      "headers": { "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}" },
+      "payload": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "criteria": [{ "criterion": "vibes" }]
+      },
+      "expectedStatus": 400,
+      "expectedError": { "code": "VALIDATION_ERROR" }
+    },
+    {
+      "name": "A repeated criterion is refused because the later one is unreachable",
+      "status": 400,
+      "code": "VALIDATION_ERROR",
+      "message": "criteria[1] repeats 'confidence' — the later one can never be reached",
+      "when": "the same criterion appears twice; the second is dead configuration the author would wrongly believe applies",
+      "headers": { "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}" },
+      "payload": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "criteria": [
+          { "criterion": "confidence", "direction": "desc" },
+          { "criterion": "confidence", "direction": "asc" }
+        ]
+      },
+      "expectedStatus": 400,
+      "expectedError": { "code": "VALIDATION_ERROR" }
+    },
+    {
+      "name": "An enumerated criterion with no order is refused",
+      "status": 400,
+      "code": "VALIDATION_ERROR",
+      "message": "criteria[0] ('origin_class') requires a non-empty 'order' array, best first",
+      "when": "verification_state or origin_class is given without an order array, leaving its precedence undefined",
+      "headers": { "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}" },
+      "payload": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "criteria": [{ "criterion": "origin_class" }]
+      },
+      "expectedStatus": 400,
+      "expectedError": { "code": "VALIDATION_ERROR" }
+    },
+    {
+      "name": "An empty criteria array is refused",
+      "status": 400,
+      "code": "VALIDATION_ERROR",
+      "message": "criteria must contain at least one criterion",
+      "when": "criteria is an empty array, which would make every contest a bare tie-break",
+      "headers": { "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}" },
+      "payload": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "criteria": []
+      },
+      "expectedStatus": 400,
+      "expectedError": { "code": "VALIDATION_ERROR" }
+    },
+    {
+      "name": "Unauthenticated is refused by the default-deny gate",
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "missing or invalid tenant token",
+      "when": "no valid tenant Bearer token — this writes the tenant's precedence policy",
+      "payload": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "criteria": [{ "criterion": "recency", "direction": "desc" }]
+      },
+      "expectedStatus": 401
+    }
+  ]
+}

@@ -1,0 +1,61 @@
+{
+  "name": "GET /api/notifications/frequency-policy — policies plus current usage against the cap",
+  "endpoint": "/api/notifications/frequency-policy",
+  "sdk": "sdk-notification",
+  "sourceFile": "packages/sdk-notification/src/server/routes.ts",
+  "method": "GET",
+  "requiresAuth": true,
+  "expectedStatus": 200,
+  "taskId": "9d3c7f66-6f78-422f-955f-eda4ad024295",
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "featureId": "85023098-3515-4f3a-8163-84a74c5ff8f3",
+  "epicId": "bd0b5996-171f-46f2-8ead-0b72593f97df",
+  "priority": 61,
+  "testability": "auto",
+  "dependsOn": ["POST /api/auth/signup-tenant", "PUT /api/notifications/frequency-policy"],
+  "coversCriterion": [
+    "9d3c7f66-6f78-422f-955f-eda4ad024295#AC1",
+    "9d3c7f66-6f78-422f-955f-eda4ad024295#AC4"
+  ],
+  "description": "Lists the frequency policies visible to a tenant — its own overrides AND the platform defaults they replace, each tagged source: tenant|platform — and, when a channel is named, the RESOLVED policy plus current usage (used_last_24h and remaining). Proves AC1 and AC4. Usage is included because the question a caller actually has is 'may I send now', not 'what rows exist'; making them fetch the policy and then count themselves would duplicate the precedence logic on the client, where it would drift. Returning platform rows alongside tenant ones lets a tenant see what it is overriding and what it would fall back to if the override were removed — the question asked immediately before deleting one. QA edge cases: requiresAuth applies to this GET exactly as to the PUT (MUST-52), so no Bearer is 401; a missing tenant_id is 400; remaining is null when the resolved policy is uncapped, which is distinct from 0 (blocked); usage counts only rows whose outcome is 'sent', so a deduped retry never inflates it — otherwise a retry storm would appear to exhaust the allowance without a single extra message having been delivered; purpose defaults to the catch-all '*' when omitted.",
+  "testCases": [
+    {
+      "name": "List all policies for the tenant",
+      "headers": { "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}" },
+      "queryParams": { "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}" },
+      "expectedStatus": 200
+    },
+    {
+      "name": "Resolved policy and usage for a named channel and purpose",
+      "headers": { "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}" },
+      "queryParams": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "channel": "sms",
+        "purpose": "marketing"
+      },
+      "expectedStatus": 200
+    }
+  ],
+  "errorCases": [
+    {
+      "name": "Missing tenant_id is refused",
+      "status": 400,
+      "code": "VALIDATION_ERROR",
+      "message": "tenant_id query param required",
+      "when": "the tenant_id query parameter is absent",
+      "headers": { "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}" },
+      "queryParams": {},
+      "expectedStatus": 400,
+      "expectedError": { "code": "VALIDATION_ERROR" }
+    },
+    {
+      "name": "Unauthenticated is refused by the default-deny gate",
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "missing or invalid tenant token",
+      "when": "no valid tenant Bearer token — GET is gated exactly as PUT",
+      "queryParams": { "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}" },
+      "expectedStatus": 401
+    }
+  ]
+}

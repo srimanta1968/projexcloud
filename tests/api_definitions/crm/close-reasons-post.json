@@ -1,0 +1,208 @@
+{
+  "sdk": "sdk-crm",
+  "sourceFile": "packages/sdk-crm/src/server/routes.ts",
+  "requiresAuth": true,
+  "taskId": "94a7a454-5ea6-43c5-a54f-495493441b5a",
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "featureId": "c611a832-fd3a-4930-8adf-22e1b3c70d36",
+  "epicId": "5622482a-4923-4f93-9dea-805cc54f3efd",
+  "testability": "auto",
+  "name": "POST /api/crm/close-reasons - Upsert a tenant close-reason code",
+  "endpoint": "/api/crm/close-reasons",
+  "method": "POST",
+  "expectedStatus": 200,
+  "priority": 65,
+  "description": "Upserts one code in the TENANT's close-reason taxonomy, so adding a reason is an INSERT rather than a release - a hard-coded list is a claim that every business loses the same way, and it is unfalsifiable because people just pick the closest option and the report reads back the categories that shipped. The code carries its own rules: whether a closed subject may be approached again, after how many days, and whether closing on it requires naming a competitor or writing a learning note. Upsert on (tenant_id, code), hence 200 rather than 201 - re-sending a code edits it in place and is idempotent. Edge cases: code and label are required and must be non-blank after trimming (400 VALIDATION_ERROR); outcome_class defaults to 'lost' and is constrained to won/lost/disqualified/paused; reactivation_after_days together with reactivation_allowed=false is refused - 'never come back, after 90 days' is two rules that contradict each other and whichever was meant, somebody downstream reads the other; reactivation_after_days must be >= 0; sort_order defaults to 100 and only orders the picker.",
+  "dependsOn": [
+    "POST /api/auth/signup-tenant"
+  ],
+  "fieldEnums": {
+    "outcome_class": [
+      "won",
+      "lost",
+      "disqualified",
+      "paused"
+    ]
+  },
+  "captureResponse": {
+    "crm.close-reasons.response.data.close_reason.close_reason_type_id": "data.close_reason.close_reason_type_id"
+  },
+  "testCases": [
+    {
+      "name": "Define a competitive-loss reason that demands a competitor and a learning note",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "payload": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "code": "lost-to-competitor",
+        "label": "Lost to a competing option",
+        "outcome_class": "lost",
+        "reactivation_allowed": true,
+        "reactivation_after_days": 90,
+        "requires_competitor": true,
+        "requires_learning_note": true,
+        "sort_order": 10
+      },
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "data": {
+          "close_reason": {
+            "close_reason_type_id": "string",
+            "code": "string",
+            "outcome_class": "string"
+          }
+        }
+      }
+    },
+    {
+      "name": "400 - a cooling-off period on a reason that forbids reactivation is refused",
+      "testType": "negative",
+      "coversErrorCase": "400|VALIDATION_ERROR|reactivation",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "payload": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "code": "never-a-buyer",
+        "label": "Not a real buyer",
+        "outcome_class": "disqualified",
+        "reactivation_allowed": false,
+        "reactivation_after_days": 90,
+        "requires_competitor": false,
+        "requires_learning_note": false,
+        "sort_order": 20
+      },
+      "expectedStatus": 400,
+      "expectedError": {
+        "code": "VALIDATION_ERROR",
+        "messageContains": "reactivation"
+      }
+    },
+    {
+      "name": "400 - code and label are required",
+      "testType": "negative",
+      "coversErrorCase": "400|VALIDATION_ERROR|code-label",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "payload": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "code": "  ",
+        "label": "",
+        "outcome_class": "lost",
+        "reactivation_allowed": true,
+        "reactivation_after_days": 30,
+        "requires_competitor": false,
+        "requires_learning_note": false,
+        "sort_order": 30
+      },
+      "expectedStatus": 400,
+      "expectedError": {
+        "code": "VALIDATION_ERROR",
+        "messageContains": "code and label are required"
+      }
+    },
+    {
+      "name": "400 - tenant_id is required",
+      "testType": "negative",
+      "coversErrorCase": "400|ValidationError",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "payload": {
+        "code": "lost-on-timing",
+        "label": "Lost on timing",
+        "outcome_class": "lost",
+        "reactivation_allowed": true,
+        "reactivation_after_days": 60,
+        "requires_competitor": false,
+        "requires_learning_note": false,
+        "sort_order": 40
+      },
+      "expectedStatus": 400,
+      "expectedError": {
+        "code": "ValidationError",
+        "messageContains": "tenant_id is required"
+      }
+    },
+    {
+      "name": "401 - missing bearer token",
+      "testType": "negative",
+      "coversErrorCase": "401|Unauthorized|missing",
+      "headers": {},
+      "payload": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "code": "lost-on-timing",
+        "label": "Lost on timing",
+        "outcome_class": "lost",
+        "reactivation_allowed": true,
+        "reactivation_after_days": 60,
+        "requires_competitor": false,
+        "requires_learning_note": false,
+        "sort_order": 40
+      },
+      "expectedStatus": 401,
+      "expectedError": {
+        "code": "Unauthorized",
+        "messageContains": "Missing bearer token"
+      }
+    },
+    {
+      "name": "401 - invalid or expired token",
+      "testType": "negative",
+      "coversErrorCase": "401|Unauthorized|invalid",
+      "headers": {
+        "Authorization": "Bearer {{static:invalid-token}}"
+      },
+      "payload": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "code": "lost-on-timing",
+        "label": "Lost on timing",
+        "outcome_class": "lost",
+        "reactivation_allowed": true,
+        "reactivation_after_days": 60,
+        "requires_competitor": false,
+        "requires_learning_note": false,
+        "sort_order": 40
+      },
+      "expectedStatus": 401,
+      "expectedError": {
+        "code": "Unauthorized",
+        "messageContains": "Invalid or expired token"
+      }
+    }
+  ],
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "Authorization header absent or not in the form \"Bearer <jwt>\""
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "JWT signature invalid, malformed, or past its exp claim"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "tenant_id is required",
+      "when": "body omits tenant_id"
+    },
+    {
+      "status": 400,
+      "code": "VALIDATION_ERROR",
+      "message": "code and label are required",
+      "when": "code or label is missing or blank after trimming"
+    },
+    {
+      "status": 400,
+      "code": "VALIDATION_ERROR",
+      "message": "reactivation_after_days makes no sense when reactivation is not allowed",
+      "when": "reactivation_allowed is false and reactivation_after_days is set"
+    }
+  ]
+}

@@ -117,6 +117,10 @@ export const EVENT_TYPE_REGISTRY: Record<string, EventTypeMetadata> = {
   /* --- Identity Projection (§5.7 / G4 closer) --- */
   'identity.projection.refreshed.v1': { event_type: 'identity.projection.refreshed.v1', retention_class: 'operational', conflict_policy: 'lww',            schema_state: 'active', compaction_policy: 'lww',  schema_version: 1 },
   'identity.projection.miss.v1':      { event_type: 'identity.projection.miss.v1',      retention_class: 'operational', conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+  /* Attribute-survivorship replay (P16 EP-382). Regulated: the replay record is the
+   * evidence that a retraction actually propagated, which is what an auditor asks for. */
+  'projection.replay.completed.v1':   { event_type: 'projection.replay.completed.v1',   retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+  'projection.assertion.retracted.v1': { event_type: 'projection.assertion.retracted.v1', retention_class: 'regulated', conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
 
   /* ============================================================
    * P3 additions per docs/v3.1/prd/P3-Canonical-Privacy-HDK.md §5.x.
@@ -349,6 +353,15 @@ export const EVENT_TYPE_REGISTRY: Record<string, EventTypeMetadata> = {
   'conversation.turn.recorded.v1':            { event_type: 'conversation.turn.recorded.v1',            retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
   'conversation.handoff.v1':                  { event_type: 'conversation.handoff.v1',                  retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
   'conversation.session.closed.v1':           { event_type: 'conversation.session.closed.v1',           retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+  /* Omnichannel thread + reply linkage (P16 EP-381). Thread lifecycle and a confirmed
+   * reply are conversation EVIDENCE in regulated verticals, so they match the session
+   * events above. 'reply.unmatched' is the triage signal for an inbound nobody could tie
+   * to an outbound — operational, because the message itself is already retained in the
+   * regulated message table and this event only says a human should look at it. */
+  'conversation.thread.opened.v1':            { event_type: 'conversation.thread.opened.v1',            retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+  'conversation.thread.closed.v1':            { event_type: 'conversation.thread.closed.v1',            retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+  'conversation.reply.linked.v1':             { event_type: 'conversation.reply.linked.v1',             retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+  'conversation.reply.unmatched.v1':          { event_type: 'conversation.reply.unmatched.v1',          retention_class: 'operational', conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
 
   /* --- sdk-recommendation (§5.4) --- */
   'recommendation.model.trained.v1':          { event_type: 'recommendation.model.trained.v1',          retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },

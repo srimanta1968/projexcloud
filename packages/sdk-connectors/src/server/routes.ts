@@ -1,4 +1,6 @@
 import { FastifyInstance } from 'fastify';
+import { LEAD_PLATFORMS, getLeadFormAdapter } from '../adapters/leadFormAdapters';
+import { ingestLeadForm, listLeadFormEvents, reprocessLeadFormEvent } from '../services/leadFormIngest';
 import { requireAuth } from '@projexlight/sdk-identity';
 import {
   callConnectorTool,
@@ -152,6 +154,86 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
     const event_type = typeof body.type === 'string' ? body.type : null;
     return reply.code(202).send({ data: { accepted: true, kind, event_type } });
   });
+
+  /* ---- Paid-social lead-form ingestion (P16 EP-386) --------------------------
+   * Unauthenticated like the generic inbound receiver above: these come from Meta /
+   * LinkedIn / TikTok / Google, not from a tenant session, and the provider signature IS
+   * the trust boundary. The tenant is identified by the path, and a wrong signature for
+   * that tenant's secret is rejected before anything is stored.
+   * -------------------------------------------------------------------------- */
+  app.post<{ Params: { tenant_id: string; platform: string } }>(
+    '/api/connectors/lead-forms/:tenant_id/:platform',
+    {
+      // The EXACT signed bytes are needed to verify the HMAC — re-serialising the parsed
+      // object reorders keys and changes whitespace, which breaks every signature.
+      config: { rawBody: true },
+    },
+    async (req, reply) => {
+      const platform = req.params.platform.toUpperCase();
+      if (!LEAD_PLATFORMS.includes(platform as never)) {
+        return reply.code(404).send({
+          error: 'UnknownPlatform', code: 'UNKNOWN_PLATFORM',
+          details: [`platform must be one of: ${LEAD_PLATFORMS.join(', ')}`],
+        });
+      }
+
+      const adapter = getLeadFormAdapter(platform)!;
+      const rawBody = (req as unknown as { rawBody?: string }).rawBody
+        ?? JSON.stringify(req.body ?? {});
+      const secret = process.env[`LEAD_FORM_SECRET_${platform}`] ?? process.env.LEAD_FORM_SECRET ?? '';
+
+      const result = await ingestLeadForm({
+        tenant_id: req.params.tenant_id,
+        platform,
+        raw_body: rawBody,
+        signature_header: req.headers[adapter.signatureHeader] as string | undefined,
+        signing_secret: secret,
+        parsed: req.body,
+      });
+
+      if (result.outcome === 'rejected' && !result.archived) {
+        // Nothing was stored — this failed at the trust boundary, so it is a 401 rather
+        // than a 422: the caller is not who they claim to be.
+        return reply.code(401).send({ error: 'InvalidSignature', code: 'INVALID_SIGNATURE', details: [result.reason ?? 'signature verification failed'] });
+      }
+      // 202 for everything past the boundary, including a rejected normalisation and a
+      // replay: the delivery WAS accepted and archived, and a provider that receives a
+      // 4xx here will simply retry forever against a payload we already hold.
+      return reply.code(202).send({ data: result });
+    },
+  );
+
+  app.get<{ Params: { tenant_id: string }; Querystring: { platform?: string; outcome?: string; limit?: string } }>(
+    '/api/connectors/lead-forms/:tenant_id',
+    { preHandler: requireAuth },
+    async (req, reply) => {
+      const events = await listLeadFormEvents({
+        tenant_id: req.params.tenant_id,
+        platform: req.query.platform?.toUpperCase(),
+        outcome: req.query.outcome as never,
+        limit: req.query.limit ? Number(req.query.limit) : undefined,
+      });
+      return reply.code(200).send({ data: { events } });
+    },
+  );
+
+  app.post<{ Params: { tenant_id: string; event_id: string } }>(
+    '/api/connectors/lead-forms/:tenant_id/events/:event_id/reprocess',
+    { preHandler: requireAuth },
+    async (req, reply) => {
+      try {
+        const result = await reprocessLeadFormEvent({
+          tenant_id: req.params.tenant_id, event_id: req.params.event_id,
+        });
+        return reply.code(200).send({ data: result });
+      } catch (err) {
+        if (/not found/.test((err as Error).message)) {
+          return reply.code(404).send({ error: 'NotFound', code: 'LEAD_FORM_EVENT_NOT_FOUND' });
+        }
+        throw err;
+      }
+    },
+  );
 
   // ---- Dead-letter queue (DLQ) — sync failures the manifest advertised ----
 

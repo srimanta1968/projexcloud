@@ -20,14 +20,14 @@
       },
       "expectedStatus": 200,
       "headers": {
-        "Authorization": "Bearer {{cache:auth.register.response.data.token}}"
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
       }
     }
   ],
   "expectedResponse": {
     "data": "array"
   },
-  "description": "Lists the API keys issued to the tenant named in the required tenant_id query param, delegating to sdk-api-keys so the canonical schema (prefix, key_hash BYTEA, scopes[], synthetic_persona_id) is honoured. Never returns key plaintext - only metadata. Gated by the gateway default-deny authGate, so a valid tenant JWT is required. Edge cases: tenant_id comes from the query string rather than the JWT, so a caller may list another tenant keys - tenant scoping must be tested explicitly, and an absent tenant_id is a 400 rather than an implicit self-scope; a tenant with no keys returns 200 with an empty array, not a 404; revoked keys are included in the result, so the caller must filter on state; there is no paging, so a tenant with many keys returns the whole set; a non-UUID tenant_id fails the uuid cast inside listKeys and surfaces as a 500 echoing the raw driver message.",
+  "description": "Lists the API keys issued to the tenant named in the required tenant_id query param, delegating to sdk-api-keys so the canonical schema (prefix, key_hash BYTEA, scopes[], synthetic_persona_id) is honoured. Never returns key plaintext - only metadata. Gated by the gateway default-deny authGate, so a valid tenant JWT is required. Edge cases: tenant_id comes from the query string rather than the JWT, so a caller may list another tenant keys - tenant scoping must be tested explicitly, and an absent tenant_id is a 400 rather than an implicit self-scope; a tenant with no keys returns 200 with an empty array, not a 404; revoked keys are included in the result, so the caller must filter on state; there is no paging, so a tenant with many keys returns the whole set; a non-UUID tenant_id fails the uuid cast inside listKeys and surfaces as a 500 echoing the raw driver message. AUTH FIX: these routes call tenantOf(req), which 400s with \"This credential carries no tenant context\" when the JWT has no tenant_id claim. The definition authenticated with the REGISTER token, and /api/auth/register creates only an identity.person — no tenant, no membership — so its six-layer JWT legitimately carries no tenant_id. signup-tenant creates org+app+tenant+membership and mints a tenant-scoped token, which is the credential identity this route actually accepts (MUST-52).",
   "errorCases": [
     {
       "status": 401,

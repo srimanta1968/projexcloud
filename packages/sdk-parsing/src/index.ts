@@ -8,6 +8,9 @@
  */
 export { migrationsDir } from './db';
 
+// Fastify surface — mounted by the api-gateway via app.register(parsingServer.registerRoutes).
+export * as server from './server';
+
 // Orchestrator (FR-PRS-1..6 / AC-1).
 export { parseDocument, getJob, listJobs } from './services/parseOrchestrator';
 export type { ParseDocumentInput, ParseDocumentResult } from './services/parseOrchestrator';
@@ -47,3 +50,42 @@ export type {
 // Schema resolver hook (composes with sdk-taxonomy in production).
 export { resolveSchema, setSchemaResolver, _resetSchemaResolver } from './services/schemaResolver';
 export type { ResolveSchemaInput, ResolvedSchema } from './services/schemaResolver';
+
+// Contact extraction (P16). Local-deterministic first, LLM strictly opt-in; every
+// proposal carries confidence + an evidence span, verified before it is returned.
+export {
+  extractContacts,
+  extractContactsBatch,
+  resolveContactSchema,
+  verifyEvidence,
+  setContactLlmAdjunct,
+  getContactLlmAdjunct,
+  CONTACT_DOCUMENT_KIND,
+  DEFAULT_CONTACT_FIELDS,
+} from './services/contactExtraction';
+export type {
+  ExtractContactsInput,
+  ExtractContactsResult,
+  ExtractContactsBatchItem,
+  BatchResultEntry,
+  ResolvedContactSchema,
+  ContactFieldSpec,
+  RejectedProposal,
+  ContactLlmAdjunct,
+} from './services/contactExtraction';
+
+export {
+  getContactBackend,
+  setContactBackend,
+  listContactBackends,
+  despeak,
+  CONTACT_SOURCE_KINDS,
+} from './services/contactBackends';
+export type {
+  ContactSourceKind,
+  ContactBackend,
+  ContactBackendInput,
+  ContactCandidate,
+  FieldProposal,
+  EvidenceSpan,
+} from './services/contactBackends';

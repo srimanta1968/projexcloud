@@ -41,6 +41,37 @@ export class ReasonRequired extends Error {
   }
 }
 
+/**
+ * These two used to be reported as RESCHEDULE_REASON_REQUIRED as well, which was simply
+ * untrue: a caller that supplied a perfectly good reason was told the reason was missing,
+ * and then went looking for a bug in the field they had filled in correctly. An error code
+ * is a diagnosis, and three different conditions sharing one code makes every one of them
+ * undiagnosable. They are separated here so the message names what actually happened.
+ */
+export class InvalidDueDate extends Error {
+  readonly code = 'RESCHEDULE_INVALID_DUE_DATE';
+  constructor(readonly received: unknown) {
+    super(
+      `new_due_at is not a valid date: ${JSON.stringify(received)} — expected an ISO 8601 ` +
+      'timestamp. (An unresolved test placeholder reaches the handler as a literal string ' +
+      'and lands here.)',
+    );
+    this.name = 'InvalidDueDate';
+  }
+}
+
+export class DueDateUnchanged extends Error {
+  readonly code = 'RESCHEDULE_DUE_DATE_UNCHANGED';
+  constructor(readonly due_at: string) {
+    super(
+      `new_due_at (${due_at}) is already this action's due date, so this is not a push. ` +
+      'Recording a no-op as a reschedule would inflate the push count and make the ' +
+      'date-slippage signal read worse than reality.',
+    );
+    this.name = 'DueDateUnchanged';
+  }
+}
+
 export class ManagerReasonRequired extends Error {
   readonly code = 'PUSH_THRESHOLD_REACHED';
   constructor(readonly push_count: number, readonly threshold: number) {
@@ -233,7 +264,7 @@ export async function reschedule(input: {
   if (!reason) throw new ReasonRequired();
   const due = input.new_due_at instanceof Date ? input.new_due_at : new Date(input.new_due_at);
   if (Number.isNaN(due.getTime())) {
-    throw new ReasonRequired();
+    throw new InvalidDueDate(input.new_due_at);
   }
 
   return dataService.tx(async (q) => {
@@ -252,7 +283,7 @@ export async function reschedule(input: {
 
     if (new Date(row.due_at).getTime() === due.getTime()) {
       // Not a push; a no-op somebody logged. The constraint refuses it too.
-      throw new ReasonRequired();
+      throw new DueDateUnchanged(String(row.due_at));
     }
 
     const policy = await q<{ push_threshold: number | null }>(

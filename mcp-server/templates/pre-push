@@ -112,10 +112,11 @@ echo -e "${BLUE}🚀 ProjexLight Pre-Push Hook${NC}"
 echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo -e "   OS Detected: ${GREEN}${OS_TYPE}${NC}"
 
-# Create report directories
-PREPUSH_REPORTS_DIR="${PROJECT_ROOT}/.projexlight/reports/pre-push"
-TODOS_REPORTS_DIR="${PROJECT_ROOT}/.projexlight/reports/todos"
-mkdir -p "$PREPUSH_REPORTS_DIR"
+# Create feedback directory (developer-readable per-category files the governance sticky
+# points to). Relocated from .projexlight/reports → test-results/feedback.
+PREPUSH_REPORTS_DIR="${PROJECT_ROOT}/test-results/feedback"
+TODOS_REPORTS_DIR="${PROJECT_ROOT}/test-results/feedback"
+mkdir -p "$PREPUSH_REPORTS_DIR/history"
 mkdir -p "$TODOS_REPORTS_DIR"
 
 # ============================================================
@@ -910,17 +911,21 @@ if [ $CURL_EXIT_CODE -eq 0 ] && [ -n "$API_TEST_RESULT" ]; then
     if [ "$SKIPPED" -gt 0 ]; then
         echo -e "  Tests skipped: ${YELLOW}${SKIPPED}${NC}"
 
-        # Show skipped test details with actionable guidance
+        # Write the skipped-APIs feedback file the governance sticky points to. The backend
+        # classifies each skip (fixable test-def vs needs-env/manual) and stickies your next
+        # task; this file holds each API's reason so the LLM can read & act on it.
+        echo "$API_TEST_RESULT" | jq '{reportType:"skipped_apis", source:"pre-push", timestamp:(now|todate), count:(.skippedTests|length), skipped:(.skippedTests // [])}' > "${PREPUSH_REPORTS_DIR}/skipped-apis.json" 2>/dev/null \
+          || echo "$API_TEST_RESULT" > "${PREPUSH_REPORTS_DIR}/skipped-apis.json"
+        echo -e "${BLUE}  📋 Skipped-APIs written: ${PREPUSH_REPORTS_DIR}/skipped-apis.json${NC}"
+
         SKIPPED_ENDPOINTS=$(echo "$API_TEST_RESULT" | jq -r '.skippedTests[]? | "   - \(.method) \(.endpoint): \(.errorMessage)"' 2>/dev/null || echo "")
         if [ -n "$SKIPPED_ENDPOINTS" ]; then
-            echo -e "${YELLOW}  Skipped tests (missing test definitions):${NC}"
+            echo -e "${YELLOW}  Skipped tests:${NC}"
             echo "$SKIPPED_ENDPOINTS"
-            echo ""
-            echo -e "${YELLOW}  🔧 TO FIX: Ask your LLM to create missing test definitions:${NC}"
-            echo -e "     \"Create test definition JSON files for the skipped APIs above."
-            echo -e "      Include proper payload with {{dynamic:...}} or {{cache:...}} placeholders."
-            echo -e "      Then run 'git push' again.\""
         fi
+    else
+        # No skips this run → clear a stale skipped-apis.json so it never misleads.
+        rm -f "${PREPUSH_REPORTS_DIR}/skipped-apis.json" 2>/dev/null || true
     fi
 
     if [ "$BLOCKING_CONFLICTS" -gt 0 ]; then
@@ -1011,8 +1016,8 @@ EOF
 
         # Generate API test failure report
         TIMESTAMP=$(date +%Y%m%d_%H%M%S)
-        FAILURE_REPORT_FILE="${PREPUSH_REPORTS_DIR}/api_failures_${TIMESTAMP}.json"
-        FAILURE_LATEST="${PREPUSH_REPORTS_DIR}/failures_latest.json"
+        FAILURE_REPORT_FILE="${PREPUSH_REPORTS_DIR}/history/api-test-failures_${TIMESTAMP}.json"
+        FAILURE_LATEST="${PREPUSH_REPORTS_DIR}/api-test-failures.json"
 
         FAILURE_REPORT=$(cat <<EOF
 {
@@ -1031,10 +1036,9 @@ EOF
   },
   "failed_tests": $(echo "$API_TEST_RESULT" | jq '.failedTests // []'),
   "skipped_tests": $(echo "$API_TEST_RESULT" | jq '.skippedTests // []'),
-  "llm_prompt": "Please analyze and fix the ${FAILED} failed API test(s). For each failure: 1) Read the error message to understand what went wrong, 2) Check the API implementation in the route file, 3) Verify test data in api_definitions is valid, 4) Fix the API code or test data as needed. Also check .projexlight/feedback/ for detailed error information.",
+  "llm_prompt": "Please analyze and fix the ${FAILED} failed API test(s). For each failure: 1) Read the error message to understand what went wrong, 2) Check the API implementation in the route file, 3) Verify test data in api_definitions is valid, 4) Fix the API code or test data as needed.",
   "investigation_paths": [
-    "${PROJECT_ROOT}/.projexlight/feedback/",
-    "${PROJECT_ROOT}/.projexlight/reports/",
+    "${PROJECT_ROOT}/test-results/feedback/",
     "${PROJECT_ROOT}/tests/api_definitions/"
   ],
   "commands": {
@@ -1056,25 +1060,13 @@ EOF
         echo -e "      ${YELLOW}docker logs projexlight-mcp${NC}"
         echo -e ""
         echo -e "   2. Review detailed failure reports:"
-        echo -e "      ${YELLOW}${PROJECT_ROOT}/.projexlight/feedback/${NC}"
-        echo -e "      ${YELLOW}${PROJECT_ROOT}/.projexlight/reports/${NC}"
+        echo -e "      ${YELLOW}${PROJECT_ROOT}/test-results/feedback/${NC}"
         echo ""
         echo -e "${BLUE}══════════════════════════════════════════════════════════════${NC}"
-        echo -e "${BLUE}🤖 LLM NEXT STEP - Call pending-test-failures to get fix instructions:${NC}"
-        echo -e "${BLUE}══════════════════════════════════════════════════════════════${NC}"
-        echo -e ""
-        echo -e "   ${GREEN}MCP Tool:${NC}  projexlight_get_pending_test_failures"
-        echo -e "   ${GREEN}curl:${NC}      curl http://localhost:8766/api/instruction/pending-test-failures"
-        echo -e ""
-        echo -e "   ${YELLOW}The response includes:${NC}"
-        echo -e "   - failures[] with ROOT_CAUSE_ANALYSIS for each"
-        echo -e "   - healingPrompt with step-by-step fix instructions"
-        echo -e "   - investigation_steps to find the root cause"
-        echo -e ""
-        echo -e "   ${YELLOW}After fixing:${NC}"
-        echo -e "   1. git add . && git commit -m 'fix: resolve API test failures'"
-        echo -e "   2. Call projexlight_clear_test_failures (or curl POST .../clear-test-failures)"
-        echo -e "   3. git push (to re-run tests)"
+        echo -e "${BLUE}🤖 The fixes are attached to your next task.${NC}"
+        echo -e "   Call ${GREEN}projexlight_get_next_task${NC} — it returns your next task with a"
+        echo -e "   'MUST FIX FIRST' sticky pointing to ${YELLOW}test-results/feedback/*.json${NC}."
+        echo -e "   Read & fix those, then continue. After fixing: git commit && git push (re-runs tests)."
         echo -e "${BLUE}══════════════════════════════════════════════════════════════${NC}"
         echo ""
 
@@ -1105,6 +1097,12 @@ EOF
     fi
 else
     echo -e "${YELLOW}⚠️  API testing returned no results${NC}"
+fi
+
+# Clear a stale api-test-failures.json when THIS run has no failures (fixed → don't linger).
+# The backend also strips the sticky on a clean push; together, findings never accumulate.
+if [ "${FAILED:-0}" -eq 0 ] 2>/dev/null; then
+    rm -f "${PREPUSH_REPORTS_DIR}/api-test-failures.json" 2>/dev/null || true
 fi
 
 # ============================================================
@@ -1158,10 +1156,10 @@ if [ "$HAS_VIOLATIONS" = true ] || [ "$HAS_TODOS" = true ]; then
     echo ""
     echo -e "${BLUE}💡 To fix issues with LLM:${NC}"
     if [ "$HAS_VIOLATIONS" = true ]; then
-        echo -e "   Violations: ${YELLOW}\"Read .projexlight/reports/pre-push/failures_latest.json and fix the issues\"${NC}"
+        echo -e "   Failures: ${YELLOW}\"Read test-results/feedback/api-test-failures.json and fix the issues\"${NC}"
     fi
     if [ "$HAS_TODOS" = true ]; then
-        echo -e "   TODOs: ${YELLOW}\"Read .projexlight/reports/todos/pre-push_latest.json and fix the TODO items\"${NC}"
+        echo -e "   TODOs: ${YELLOW}\"Read test-results/feedback/pre-push_latest.json and fix the TODO items\"${NC}"
     fi
 fi
 

@@ -1,0 +1,63 @@
+<clickhouse>
+    <!--
+      PRODUCTION ClickHouse profile — for a DEDICATED box (>= ~32GB RAM, >= 8 vCPU),
+      NOT co-located with Postgres/gateway/portals.
+
+      Counterpart to tuning.xml (the "small" survival profile for the 1.4GB
+      co-located test container). Select this one by setting, in .env.prod:
+
+          CH_TUNING_FILE=tuning.prod.xml
+          CH_MEM_LIMIT=48g          # or unset the container mem_limit entirely
+          CH_CPUS=0                 # 0 = no cpu cap on a dedicated box
+
+      Then recreate ONLY clickhouse:
+          docker compose ... up -d --force-recreate clickhouse
+
+      Key difference from the small profile: this KEEPS ClickHouse's real
+      defaults. Self-telemetry stays ON (observability), caches and memory scale
+      to the box. The small profile disabled all of that purely to survive
+      1.4GB — carrying those settings onto a big box would cripple it.
+    -->
+
+    <!--
+      Memory: use the box's RAM via the default ratio, stated explicitly.
+      0 = "no fixed cap, use max_server_memory_usage_to_ram_ratio". Do NOT set a
+      tiny fixed ceiling here (the small profile pinned it to 1GB).
+    -->
+    <max_server_memory_usage>0</max_server_memory_usage>
+    <max_server_memory_usage_to_ram_ratio>0.9</max_server_memory_usage_to_ram_ratio>
+
+    <!--
+      Caches: intentionally NOT overridden — ClickHouse's defaults (mark ~5GB,
+      uncompressed ~8GB, index-mark ~5GB) are correct for a dedicated box and are
+      what make queries fast on real data volume. The small profile shrank these
+      to 256MB/0/128MB, which would thrash here.
+    -->
+
+    <!--
+      Self-telemetry tables (system.metric_log, trace_log, asynchronous_metric_log,
+      processors_profile_log, query_log, part_log, …) are ENABLED by default and
+      intentionally NOT removed here. You want them in production for metrics
+      history and query-trace debugging. The small profile removed them because
+      their merges could not fit in 1.4GB and spiraled — a problem that only
+      exists on a starved box.
+
+      Keep their disk bounded with a TTL rather than by disabling them. Example
+      (30-day retention on the metric log):
+    -->
+    <metric_log>
+        <ttl>event_date + INTERVAL 30 DAY DELETE</ttl>
+    </metric_log>
+
+    <!--
+      Thread pools: left at defaults so ClickHouse uses the box's cores. The
+      small profile throttled these (schedule 16 / max 256 / concurrent 16) for
+      2 cores; do not carry that here.
+    -->
+
+    <!--
+      NOTE: SYS_NICE is a container capability (cap_add in
+      docker-compose.clickhouse.yml), not an XML setting — it stays for ALL box
+      sizes. Without it ClickHouse spams "get_mempolicy: Operation not permitted".
+    -->
+</clickhouse>

@@ -1,0 +1,106 @@
+{
+  "name": "POST /api/parsing/contact/extract-batch — extract many captures in one call",
+  "endpoint": "/api/parsing/contact/extract-batch",
+  "sdk": "sdk-parsing",
+  "sourceFile": "packages/sdk-parsing/src/server/routes.ts",
+  "method": "POST",
+  "requiresAuth": true,
+  "expectedStatus": 200,
+  "taskId": "f3ff62e5-3a81-4c8e-a3cf-f373e6daaa3d",
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "featureId": "e75144eb-ddc7-493e-ad62-57009f1ca14e",
+  "epicId": "411badaa-f7ec-4184-a944-2e7a2c3f58e7",
+  "priority": 41,
+  "testability": "auto",
+  "dependsOn": ["POST /api/auth/signup-tenant"],
+  "coversCriterion": [
+    "f3ff62e5-3a81-4c8e-a3cf-f373e6daaa3d#AC1",
+    "f3ff62e5-3a81-4c8e-a3cf-f373e6daaa3d#AC2"
+  ],
+  "description": "Runs contact extraction over up to 100 captures in one request, each with its own source_kind and raw. An action endpoint returning 200; nothing is persisted. Per-item isolation is the point: ONE malformed item does not fail the batch, because a caller pasting forty signatures should not lose thirty-nine to one bad entry. Each entry returns {id, ok, result|error} and the id is echoed back so a caller correlates by id rather than relying on array order, then retries exactly the failures. The response is 200 even when some items failed — the batch itself succeeded, and a 4xx would hide the items that extracted cleanly, so read ok_count/failed_count rather than the status code. allow_llm applies to the whole batch and defaults to opt-OUT exactly as on the single endpoint (AC1); every proposal carries confidence and a verified evidence span (AC2). QA edge cases: an empty items array is a 400 rather than a meaningless success; more than 100 items is a 400 naming the cap, so a caller learns the limit instead of silently having the tail dropped; per-item validation failures are reported with the offending INDEX (items[1].source_kind ...) so they can be found in a large payload; items[].raw is required for every item for the same evidence-span reason as the single endpoint.",
+  "testCases": [
+    {
+      "name": "Two valid captures both extract",
+      "headers": { "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}" },
+      "payload": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "items": [
+          { "id": "a", "source_kind": "SMART_PASTE", "raw": "jane@acme.com" },
+          { "id": "b", "source_kind": "EMAIL_SIGNATURE", "raw": "Bob Smith\nbob@acme.com" }
+        ]
+      },
+      "expectedStatus": 200
+    },
+    {
+      "name": "Mixed capture surfaces in one batch",
+      "headers": { "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}" },
+      "payload": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "items": [
+          { "id": "v", "source_kind": "VCARD", "raw": "BEGIN:VCARD\nFN:Ada Lovelace\nEMAIL:ada@x.example\nEND:VCARD" },
+          { "id": "t", "source_kind": "VOICE_TRANSCRIPT", "raw": "email is bob at acme dot com" }
+        ]
+      },
+      "expectedStatus": 200
+    }
+  ],
+  "errorCases": [
+    {
+      "name": "An empty batch is refused rather than returning a meaningless success",
+      "status": 400,
+      "code": "VALIDATION_ERROR",
+      "message": "items must be a non-empty array",
+      "when": "items is absent, not an array, or empty",
+      "headers": { "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}" },
+      "payload": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "items": []
+      },
+      "expectedStatus": 400,
+      "expectedError": { "code": "VALIDATION_ERROR" }
+    },
+    {
+      "name": "Exceeding the batch cap is refused with the cap named",
+      "status": 400,
+      "code": "VALIDATION_ERROR",
+      "message": "items may not exceed 100 per request",
+      "when": "more than 100 items are sent — the excess is refused loudly rather than silently truncated",
+      "headers": { "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}" },
+      "payload": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "items": "<101 SMART_PASTE items>"
+      },
+      "expectedStatus": 400,
+      "expectedError": { "code": "VALIDATION_ERROR" }
+    },
+    {
+      "name": "A malformed item is reported with its index",
+      "status": 400,
+      "code": "VALIDATION_ERROR",
+      "message": "items[1].source_kind must be one of: SMART_PASTE, EMAIL_SIGNATURE, BUSINESS_CARD_OCR, VCARD, VCARD_MULTI, MOBILE_CONTACTS, BROWSER_SELECTION, VOICE_TRANSCRIPT",
+      "when": "any item has a missing raw or an unknown source_kind",
+      "headers": { "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}" },
+      "payload": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "items": [
+          { "source_kind": "SMART_PASTE", "raw": "ok@x.com" },
+          { "source_kind": "NOPE", "raw": "y" }
+        ]
+      },
+      "expectedStatus": 400,
+      "expectedError": { "code": "VALIDATION_ERROR" }
+    },
+    {
+      "name": "Unauthenticated is refused by the default-deny gate",
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "missing or invalid tenant token",
+      "when": "no valid tenant Bearer token on the request",
+      "payload": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "items": [{ "source_kind": "SMART_PASTE", "raw": "x@y.com" }]
+      },
+      "expectedStatus": 401
+    }
+  ]
+}

@@ -1,0 +1,79 @@
+{
+  "name": "PUT /api/relationships/:relationship_id/scope — close by setting valid_to, never delete",
+  "endpoint": "/api/relationships/:relationship_id/scope",
+  "sdk": "sdk-rebac",
+  "sourceFile": "packages/sdk-rebac/src/server/handlers/rebacController.ts",
+  "method": "PUT",
+  "requiresAuth": true,
+  "expectedStatus": 200,
+  "taskId": "f50d45c1-6b9d-45ae-9f57-1806fae6d53e",
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "featureId": "0eca47ce-30fb-44e9-91c7-51ac09170762",
+  "epicId": "bd0b5996-171f-46f2-8ead-0b72593f97df",
+  "priority": 71,
+  "testability": "auto",
+  "dependsOn": ["POST /api/auth/signup-tenant", "POST /api/relationships/roles"],
+  "coversCriterion": [
+    "f50d45c1-6b9d-45ae-9f57-1806fae6d53e#AC2",
+    "f50d45c1-6b9d-45ae-9f57-1806fae6d53e#AC4"
+  ],
+  "description": "The existing scope endpoint, extended so a relationship can be CLOSED by setting valid_to rather than terminated destructively. Proves AC2 and AC4. Closing keeps the row answering 'who was the carer last March' — precisely the question asked when something has gone wrong, and one a deleted row cannot answer. AC4 is preserved by the shape of the extension: closing is opt-in via close:true, and a body WITHOUT it takes the pre-existing scope/status path completely unchanged, so every current caller is unaffected. The close branch is evaluated before validateUpdateScope on purpose, because a close needs neither a scope nor a status and requiring one would force callers to send a field they do not mean. QA edge cases: closing is IDEMPOTENT — a retry or a double-click returns the row with its ORIGINAL valid_to and closed_reason rather than moving the date, since the first close is when the role actually stopped being true; a closed role leaves the live view but is still returned with include_closed=true, and the underlying row count is unchanged (verified directly); closing frees the (pair, kind, role_label) slot so the same role can legitimately be re-granted later, leaving both the historical and the new row; valid_to may be back-dated but a CHECK forbids it preceding valid_from; closed_reason cannot be set without a valid_to; an unknown relationship_id is 404.",
+  "testCases": [
+    {
+      "name": "Close a role by setting valid_to",
+      "headers": { "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}" },
+      "pathParams": { "relationship_id": "{{cache:rebac.roles.response.data.role.relationship_id}}" },
+      "payload": { "close": true, "reason": "delegation ended" },
+      "expectedStatus": 200
+    },
+    {
+      "name": "Closing again is idempotent and keeps the original close date",
+      "headers": { "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}" },
+      "pathParams": { "relationship_id": "{{cache:rebac.roles.response.data.role.relationship_id}}" },
+      "payload": { "close": true, "reason": "second attempt" },
+      "expectedStatus": 200
+    },
+    {
+      "name": "The legacy scope-update path is unchanged",
+      "headers": { "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}" },
+      "pathParams": { "relationship_id": "{{cache:rebac.roles.response.data.role.relationship_id}}" },
+      "payload": { "scope": { "wards": ["ward-3"] } },
+      "expectedStatus": 200
+    }
+  ],
+  "errorCases": [
+    {
+      "name": "Closing an unknown relationship is 404",
+      "status": 404,
+      "code": "RELATIONSHIP_NOT_FOUND",
+      "message": "relationship not found",
+      "when": "relationship_id names no relationship",
+      "headers": { "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}" },
+      "pathParams": { "relationship_id": "00000000-0000-0000-0000-000000000000" },
+      "payload": { "close": true },
+      "expectedStatus": 404,
+      "expectedError": { "code": "RELATIONSHIP_NOT_FOUND" }
+    },
+    {
+      "name": "A legacy body with neither scope nor status is still refused",
+      "status": 400,
+      "code": "ValidationError",
+      "message": "at least one of scope or status is required",
+      "when": "close is not set and the body carries neither scope nor status — unchanged from before this feature",
+      "headers": { "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}" },
+      "pathParams": { "relationship_id": "{{cache:rebac.roles.response.data.role.relationship_id}}" },
+      "payload": {},
+      "expectedStatus": 400
+    },
+    {
+      "name": "Unauthenticated is refused by the default-deny gate",
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "missing or invalid tenant token",
+      "when": "no valid tenant Bearer token on the request",
+      "pathParams": { "relationship_id": "{{cache:rebac.roles.response.data.role.relationship_id}}" },
+      "payload": { "close": true },
+      "expectedStatus": 401
+    }
+  ]
+}

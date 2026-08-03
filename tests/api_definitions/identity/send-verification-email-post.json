@@ -1,0 +1,74 @@
+{
+  "name": "POST /api/auth/send-verification-email - issue a fresh verification link",
+  "endpoint": "/api/auth/send-verification-email",
+  "sdk": "sdk-identity",
+  "method": "POST",
+  "requiresAuth": false,
+  "expectedStatus": 202,
+  "taskId": "04644b76-81e7-4329-baab-e09ba5ec3c31",
+  "featureId": "2d00c83d-9593-41c7-9b5b-d0079ff79a5c",
+  "epicId": "9c09e562-b1f5-481e-983b-a4aae8891e8a",
+  "sprintId": "efcf9cbd-5e84-469e-946e-efcabf8c88e1",
+  "priority": 17,
+  "testability": "auto",
+  "dependsOn": [
+    "POST /api/auth/register"
+  ],
+  "body": {
+    "email": "{{cache:auth.register.request.email}}"
+  },
+  "testCases": [
+    {
+      "name": "Send a verification link to the freshly-registered address",
+      "payload": {
+        "email": "{{cache:auth.register.response.data.email}}"
+      },
+      "expectedStatus": 202,
+      "testType": "positive"
+    },
+    {
+      "name": "Missing email is rejected before any lookup",
+      "payload": {},
+      "expectedStatus": 400,
+      "testType": "negative"
+    },
+    {
+      "name": "Unknown address is a 404, not a silent success",
+      "payload": {
+        "email": "no-such-account-{{dynamic:timestamp}}@example.com"
+      },
+      "expectedStatus": 404,
+      "testType": "negative"
+    }
+  ],
+  "expectedResponse": {
+    "data": {
+      "sent": "boolean",
+      "email": "string"
+    }
+  },
+  "description": "Requests a new email-verification link for an existing account. Returns 202 Accepted rather than 200 because the send is handed to the notification layer and completes out of band — the response only confirms the request was accepted, never that delivery succeeded. Unlike verification-status this DOES distinguish an unknown address with a 404, since the caller has explicitly asked to send to it. Never gates register/signup/login. FIX: the success case referenced {{cache:auth.register.request.email}}, but captureResponse captures RESPONSES — there is no .request. namespace, so the ref resolved to nothing and the handler answered 404 NotFound (\"No account found for that email\"). The register definition captures the created address as auth.register.response.data.email (path data.user.email), which is the same person this endpoint must mail.",
+  "fieldEnums": {
+    "sent": [
+      true
+    ]
+  },
+  "errorCases": [
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "email is required",
+      "when": "The request body has no email, or it is empty/not a string"
+    },
+    {
+      "status": 404,
+      "code": "NotFound",
+      "message": "No account found for that email.",
+      "when": "The address does not correspond to any registered person"
+    }
+  ],
+  "captureResponse": {
+    "auth.sendVerification.response.data.email": "data.email",
+    "auth.sendVerification.response.data.sent": "data.sent"
+  }
+}

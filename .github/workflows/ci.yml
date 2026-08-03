@@ -10,18 +10,10 @@ jobs:
   build-test-lint:
     runs-on: ubuntu-latest
     services:
-      postgres:
-        image: postgres:16-alpine
-        env:
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: projexcloud_db
-        ports: ['5432:5432']
-        options: >-
-          --health-cmd "pg_isready -U postgres"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
+      # NOTE: Postgres is NOT a service here — it is built from the repo's own
+      # production Dockerfile in a step below. Plain postgres:16-alpine carries neither
+      # PostGIS nor pgvector, and the gateway aborts on boot without both, so no SDK
+      # migration could ever have run under it. See the "Start Postgres" step.
       redis:
         image: redis:7-alpine
         ports: ['6379:6379']
@@ -37,6 +29,35 @@ jobs:
           node-version: 20
           cache: 'pnpm'
 
+      # Build the SAME image production runs, rather than approximating it with a stock
+      # postgres. scripts/setup/postgres.Dockerfile is what docker-compose.prod.yml builds,
+      # so this is the one configuration where a green CI actually predicts a working deploy.
+      #
+      # KNOWN DIVERGENCE, deliberately not papered over here: the dev stack
+      # (mcp-server/postgres.Dockerfile) runs PostgreSQL 18 while production runs 16. CI
+      # follows PRODUCTION, because that is what a merge is a claim about. Aligning the two
+      # majors is a separate decision and is flagged rather than silently chosen here.
+      - name: Start Postgres (production image — PostGIS + pgvector)
+        run: |
+          docker build -t projexcloud/postgres-pgvector:ci \
+            -f scripts/setup/postgres.Dockerfile scripts/setup
+          docker run -d --name projexcloud_ci_pg \
+            -e POSTGRES_USER=postgres -e POSTGRES_PASSWORD=postgres \
+            -e POSTGRES_DB=projexcloud_db \
+            -p 5432:5432 projexcloud/postgres-pgvector:ci
+          for i in $(seq 1 60); do
+            docker exec projexcloud_ci_pg pg_isready -U postgres -q && break
+            sleep 2
+          done
+          docker exec projexcloud_ci_pg pg_isready -U postgres
+          # Prove both extensions are actually installable before anything depends on them,
+          # so a missing extension fails HERE with a clear message rather than as an opaque
+          # migration abort thirty steps later.
+          docker exec projexcloud_ci_pg psql -U postgres -d projexcloud_db \
+            -c 'CREATE EXTENSION IF NOT EXISTS vector; CREATE EXTENSION IF NOT EXISTS postgis;'
+          docker exec projexcloud_ci_pg psql -U postgres -d projexcloud_db \
+            -c "SELECT extname, extversion FROM pg_extension WHERE extname IN ('vector','postgis');"
+
       - name: Install
         run: pnpm install --frozen-lockfile
 
@@ -46,8 +67,40 @@ jobs:
       - name: Lint (OC-1..OC-10 doctrine enforcement)
         run: pnpm lint
 
+      # The DB-backed suites are gated behind opt-in env vars. No workflow set them, so the
+      # strongest evidence in the repo — dry-run refusing a write, interrupted-commit retry,
+      # rollback naming its blocker, per-transition audit counts with verifyChain — never
+      # executed anywhere. Setting them is the whole fix; the infrastructure already existed.
+      - name: Apply migrations (gateway boot path, MIGRATE_ONLY)
+        run: pnpm --filter @projexlight/api-gateway start
+        env:
+          MIGRATE_ONLY: '1'
+          DB_HOST: localhost
+          DB_PORT: '5432'
+          DB_USER: postgres
+          DB_PASSWORD: postgres
+          DB_NAME: projexcloud_db
+          REDIS_HOST: localhost
+          JWT_SECRET: ci-only-not-a-real-secret
+          ADMIN_OPS_TOKEN: ci-only-not-a-real-token
+
       - name: Test
         run: pnpm test
         env:
           DB_HOST: localhost
+          DB_PORT: '5432'
+          DB_USER: postgres
+          DB_PASSWORD: postgres
+          DB_NAME: projexcloud_db
           REDIS_HOST: localhost
+          # Opt-in gates for the integration suites (see above).
+          SOURCE_RECORD_IT: '1'
+          IMPORT_IT: '1'
+
+      # Derived artifacts drift the moment someone adds a route and forgets to regenerate.
+      # These checks write nothing; they fail the build naming exactly what is missing, so
+      # the catalog cannot go eighteen SDKs stale again without someone being told.
+      - name: Docs & catalog freshness
+        run: |
+          node scripts/catalog/sync-qa-apis.js --check
+          node scripts/catalog/regenerate-sdk-catalog.js --check

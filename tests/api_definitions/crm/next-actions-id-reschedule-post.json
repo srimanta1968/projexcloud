@@ -1,0 +1,217 @@
+{
+  "sdk": "sdk-crm",
+  "sourceFile": "packages/sdk-crm/src/server/routes.ts",
+  "requiresAuth": true,
+  "taskId": "94a7a454-5ea6-43c5-a54f-495493441b5a",
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "featureId": "c611a832-fd3a-4930-8adf-22e1b3c70d36",
+  "epicId": "5622482a-4923-4f93-9dea-805cc54f3efd",
+  "testability": "auto",
+  "name": "POST /api/crm/next-actions/:id/reschedule - Move a due date, with the reason on the record",
+  "endpoint": "/api/crm/next-actions/:id/reschedule",
+  "method": "POST",
+  "expectedStatus": 200,
+  "priority": 64,
+  "description": "Moves an open action's due date and logs the move: from, to, reason, who pushed it and who authorised it. Returns the new due_at, the incremented push_count, the frozen original_due_at and total_slip_minutes from the FIRST commitment - which is what a count alone cannot say. 200 rather than 201 because this is an action on an existing row, not a create. Edge cases: reason is REQUIRED and a blank or whitespace-only reason is refused with 400 RESCHEDULE_REASON_REQUIRED, enforced by a table constraint as well as by the service; moving a date to the value it already has is refused with the same code - that is a no-op somebody logged, not a push; once push_count reaches the tenant's push_threshold a further push needs approved_by and is otherwise refused with 409 PUSH_THRESHOLD_REACHED, because a ceiling that only warns is not a ceiling; with no overdue_policy row for the tenant the threshold is null and pushes are unlimited; an unknown id, or one whose action is completed or cancelled, returns 404 NEXT_ACTION_NOT_FOUND; original_due_at is frozen on the first push by a trigger and never moves again; the row is locked FOR UPDATE, so concurrent pushes serialise and each gets its own seq.",
+  "dependsOn": [
+    "POST /api/auth/signup-tenant",
+    "POST /api/personas",
+    "POST /api/crm/subjects/:subject_ref/next-action"
+  ],
+  "testCases": [
+    {
+      "name": "Push the date with a reason on the record",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "pathParams": {
+        "id": "{{cache:crm.subject-next-action.response.data.next_action.next_action_id}}"
+      },
+      "payload": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "new_due_at": "2027-03-15T10:00:00.000Z",
+        "reason": "Buyer moved the budget review to next week",
+        "pushed_by": "{{cache:personas.create.response.data.persona.persona_id}}",
+        "approved_by": "{{cache:personas.create.response.data.persona.persona_id}}"
+      },
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "data": {
+          "reschedule": {
+            "next_action_id": "string",
+            "due_at": "string",
+            "push_count": "number"
+          }
+        }
+      }
+    },
+    {
+      "name": "400 - a push with no reason is refused",
+      "testType": "negative",
+      "coversErrorCase": "400|RESCHEDULE_REASON_REQUIRED",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "pathParams": {
+        "id": "{{cache:crm.subject-next-action.response.data.next_action.next_action_id}}"
+      },
+      "payload": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "new_due_at": "{{dynamic:futuredatetime}}",
+        "reason": "   ",
+        "pushed_by": "{{cache:personas.create.response.data.persona.persona_id}}"
+      },
+      "expectedStatus": 400,
+      "expectedError": {
+        "code": "RESCHEDULE_REASON_REQUIRED"
+      }
+    },
+    {
+      "name": "400 - tenant_id and new_due_at are required",
+      "testType": "negative",
+      "coversErrorCase": "400|ValidationError",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "pathParams": {
+        "id": "{{cache:crm.subject-next-action.response.data.next_action.next_action_id}}"
+      },
+      "payload": {
+        "reason": "Buyer moved the budget review to next week",
+        "pushed_by": "{{cache:personas.create.response.data.persona.persona_id}}"
+      },
+      "expectedStatus": 400,
+      "expectedError": {
+        "code": "ValidationError",
+        "messageContains": "tenant_id and new_due_at are required"
+      }
+    },
+    {
+      "name": "404 - no open action with that id",
+      "testType": "negative",
+      "coversErrorCase": "404|NEXT_ACTION_NOT_FOUND",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "pathParams": {
+        "id": "{{dynamic:uuid}}"
+      },
+      "payload": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "new_due_at": "2027-03-15T10:00:00.000Z",
+        "reason": "Buyer moved the budget review to next week",
+        "pushed_by": "{{cache:personas.create.response.data.persona.persona_id}}"
+      },
+      "expectedStatus": 404,
+      "expectedError": {
+        "code": "NEXT_ACTION_NOT_FOUND"
+      }
+    },
+    {
+      "name": "401 - missing bearer token",
+      "testType": "negative",
+      "coversErrorCase": "401|Unauthorized|missing",
+      "headers": {},
+      "pathParams": {
+        "id": "{{cache:crm.subject-next-action.response.data.next_action.next_action_id}}"
+      },
+      "payload": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "new_due_at": "2027-03-15T10:00:00.000Z",
+        "reason": "Buyer moved the budget review to next week",
+        "pushed_by": "{{cache:personas.create.response.data.persona.persona_id}}"
+      },
+      "expectedStatus": 401,
+      "expectedError": {
+        "code": "Unauthorized",
+        "messageContains": "Missing bearer token"
+      }
+    },
+    {
+      "name": "401 - invalid or expired token",
+      "testType": "negative",
+      "coversErrorCase": "401|Unauthorized|invalid",
+      "headers": {
+        "Authorization": "Bearer {{static:invalid-token}}"
+      },
+      "pathParams": {
+        "id": "{{cache:crm.subject-next-action.response.data.next_action.next_action_id}}"
+      },
+      "payload": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "new_due_at": "2027-03-15T10:00:00.000Z",
+        "reason": "Buyer moved the budget review to next week",
+        "pushed_by": "{{cache:personas.create.response.data.persona.persona_id}}"
+      },
+      "expectedStatus": 401,
+      "expectedError": {
+        "code": "Unauthorized",
+        "messageContains": "Invalid or expired token"
+      }
+    }
+  ],
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "Authorization header absent or not in the form \"Bearer <jwt>\""
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "JWT signature invalid, malformed, or past its exp claim"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "tenant_id and new_due_at are required",
+      "when": "body omits tenant_id or new_due_at"
+    },
+    {
+      "status": 400,
+      "code": "RESCHEDULE_REASON_REQUIRED",
+      "message": "moving a due date requires a reason",
+      "when": "reason is missing or blank, new_due_at is unparseable, or the new date equals the current one"
+    },
+    {
+      "status": 404,
+      "code": "NEXT_ACTION_NOT_FOUND",
+      "message": "no open next action",
+      "when": "the id does not exist for this tenant, or its action is completed or cancelled"
+    },
+    {
+      "status": 409,
+      "code": "PUSH_THRESHOLD_REACHED",
+      "message": "this action has already been pushed at or past the threshold - a further push needs a manager's authorisation",
+      "when": "push_count >= the tenant's push_threshold and approved_by is absent or blank",
+      "reproducible": false,
+      "notReproducibleBecause": "Requires a crm.overdue_policy row carrying push_threshold, and no endpoint creates one - upsertOverduePolicy has no HTTP surface yet. Covered by packages/sdk-crm/tests/overdue.integration.test.ts until that route exists; do NOT schedule a dataset for it."
+    },
+    {
+      "name": "400 - new_due_at is not a parseable date",
+      "status": 400,
+      "code": "RESCHEDULE_INVALID_DUE_DATE",
+      "message": "new_due_at is not a valid date",
+      "when": "the date cannot be parsed. Previously reported as RESCHEDULE_REASON_REQUIRED, which named a field that was correctly supplied and sent the caller looking in the wrong place.",
+      "payload": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "new_due_at": "not-a-date",
+        "reason": "Buyer moved the budget review"
+      }
+    },
+    {
+      "name": "409 - the new date equals the current due date",
+      "status": 409,
+      "code": "RESCHEDULE_DUE_DATE_UNCHANGED",
+      "message": "is already this action's due date, so this is not a push",
+      "when": "a caller re-sends the current due date. Well-formed request, refused by STATE, so 409 rather than 400 — and counting it would inflate push_count and make date-slippage read worse than it is.",
+      "payload": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "new_due_at": "{{dynamic:futuredatetime}}",
+        "reason": "Buyer moved the budget review"
+      }
+    }
+  ]
+}

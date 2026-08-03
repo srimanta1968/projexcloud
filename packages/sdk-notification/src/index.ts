@@ -75,3 +75,22 @@ export { registerTwilioSmsAdapter, twilioSmsAdapter } from './services/twilioSms
 export { registerApnsPushAdapter, apnsPushAdapter } from './services/apnsPushAdapter';
 export { registerFcmPushAdapter, fcmPushAdapter } from './services/fcmPushAdapter';
 export { registerSlackOutboundAdapter, slackOutboundAdapter } from './services/slackOutboundAdapter';
+
+// Frequency caps + no-answer dedup window (P16 EP-383). Additive: existing sends are
+// unaffected unless a caller opts in via purpose / respect_frequency_cap / dedup_key.
+export {
+  resolveFrequencyPolicy,
+  setFrequencyPolicy,
+  listFrequencyPolicies,
+  reserveSend,
+  releaseSend,
+  getSendUsage,
+  computeDedupKey,
+  BUILTIN_POLICY,
+} from './services/frequencyCap';
+export type {
+  FrequencyPolicy,
+  CapDecision,
+  ReserveSendInput,
+  SetFrequencyPolicyInput,
+} from './services/frequencyCap';

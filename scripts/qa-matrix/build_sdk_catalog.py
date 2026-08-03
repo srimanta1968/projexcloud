@@ -38,11 +38,21 @@ DOCS_BASE = GATEWAY_BASE_URL + "/workspace/docs/api/index.html"
 # export from here (PRD-FR2 / M2). Written only if the directory already exists.
 AI_APPGEN_DATA = os.path.abspath(os.path.join(ROOT, "..", "..", "ai-appgen", "mcp", "dist", "data"))
 
+# Sibling consuming projects that keep their own copy of the catalog. LeadFlow's dev-MCP
+# resolves SDK reuse questions against this file, so a stale copy there tells a LeadFlow
+# developer that a capability does not exist and they write it again — the same failure the
+# catalog exists to prevent, just one repo over. Listed here so `python build_sdk_catalog.py`
+# refreshes it rather than someone remembering to copy the file across.
+SIBLING_MCP_DATA = [
+    os.path.abspath(os.path.join(ROOT, "..", "LeadFlow", "mcp-server", "data")),
+]
+
 # ── 9 business groups → their member SDKs (authoritative; reconciles to the hub
 #    catalog table: 20/133, 8/111, 8/68, 10/56, 6/55, 7/53, 11/28, 1/18, 4/16). ──
 GROUPS = [
     ("Platform & Multi-Tenancy", [
         "api-gateway", "contracts", "pool-federation-runtime", "sdk-asset",
+        "sdk-config", "registry-mcp",
         "sdk-assignment", "sdk-command", "sdk-device", "sdk-diagnostic-telemetry",
         "sdk-dispatch", "sdk-feature-flags", "sdk-geo", "sdk-media", "sdk-pool-router",
         "sdk-resource-registry", "sdk-storm", "sdk-tenant", "sdk-tenant-lifecycle",
@@ -51,10 +61,26 @@ GROUPS = [
     ("Outreach & Communication", [
         "sdk-sequence", "sdk-scheduling", "sdk-deliverability", "sdk-notification",
         "sdk-offer-catalog", "sdk-handoff", "sdk-incident", "connector-twilio-voice",
+        # P16: omnichannel threading + reply detection is a communication capability,
+        # not a CRM one — it threads messages regardless of what the subject is.
+        "sdk-conversation",
     ]),
     ("CRM & Engagement", [
         "sdk-crm", "sdk-engagement", "sdk-lead-scoring", "sdk-campaign",
         "sdk-content", "sdk-service-request", "sdk-event", "sdk-social",
+        # P16: response-time clocks and who-is-available, both scoped to engagement work.
+        "sdk-sla", "sdk-coverage",
+    ]),
+    ("Data Provenance & Ingest", [
+        # P16. Kept as its own group rather than folded into Platform: these four answer
+        # "where did this value come from and which one wins", which is the question a
+        # developer searches for by name. Buried under a generic group they read as
+        # infrastructure and get rebuilt as custom code — the exact cost the catalog exists
+        # to prevent.
+        "sdk-source-record",   # provenance capture / chain of custody
+        "sdk-projection",      # attribute survivorship + explainable replay
+        "sdk-import",          # governed bulk import, dry-run and rollback
+        "sdk-parsing",         # contact extraction; proposes, persists nothing
     ]),
     ("Governance, Consent & Security", [
         "sdk-consent", "sdk-rebac", "sdk-policy", "sdk-data-rights", "sdk-vault",
@@ -74,12 +100,33 @@ GROUPS = [
         "hdk-video-editor", "hdk-watermark",
     ]),
     ("Connectors & Integration", ["sdk-connectors"]),
-    ("Billing, Metering & Analytics", ["sdk-billing", "sdk-payment", "sdk-meter", "sdk-analytics"]),
+    ("Billing, Metering & Analytics", [
+        "sdk-billing", "sdk-payment", "sdk-meter", "sdk-analytics",
+        # P16: prepaid capability credits — metered spend against enrichment providers.
+        "sdk-data-credits",
+    ]),
 ]
 
 # Per-SDK one-line summary + discovery keywords (reuse_when). These drive an AI
 # builder's "which SDK covers X?" matching, so keep the keywords capability-oriented.
 SDK_META = {
+    # ── P16 SDKs ──────────────────────────────────────────────────────────────────
+    # Keywords are the words a developer types when they HAVE the problem, not the
+    # SDK's own vocabulary. Someone about to rebuild provenance searches "where did
+    # this come from"; they never search "sdk-source-record", because if they knew it
+    # existed they would not be rebuilding it. Falling back to the package name (the
+    # default below) is therefore the same as being undiscoverable.
+    "sdk-source-record": ("Provenance capture: immutable source records, origin class, raw evidence and chain of custody", ["provenance", "source record", "origin", "attestation", "chain of custody", "where did this come from", "audit trail of a value", "who told us this"]),
+    "sdk-projection": ("Attribute-level survivorship: which asserted value wins, with an explainable reason and deterministic replay", ["survivorship", "which value wins", "explain projection", "attribute conflict", "losing assertion", "conflicting data", "replay", "why is this field wrong"]),
+    "sdk-import": ("Governed bulk import: column mapping templates, dry run, commit and rollback", ["import", "mapping", "csv", "dry run", "rollback", "bulk upload", "column mapping", "spreadsheet", "data migration"]),
+    "sdk-parsing": ("Contact extraction from unstructured text; proposes candidates with evidence spans and persists nothing", ["contact extraction", "smart paste", "business card", "vcard", "email signature", "ocr", "parse contact", "extract from text"]),
+    "sdk-conversation": ("Omnichannel threading: unified inbox, reply detection, internal notes and compose guardrails", ["conversation", "thread", "omnichannel", "inbox", "transcript", "internal note", "reply detection", "compose guardrail", "message history"]),
+    "sdk-sla": ("Service-level clocks: targets, business hours, pause/resume, breach and escalation", ["sla", "response time", "escalation", "business hours", "breach", "time to first response", "due by", "overdue"]),
+    "sdk-coverage": ("Who is available to take work: schedules, PTO, holidays, on-call and capacity", ["coverage", "availability", "pto", "on-call", "capacity", "who is working", "holiday", "out of office", "shift"]),
+    "sdk-data-credits": ("Prepaid capability credits: balances, reservation, consumption and top-up against enrichment providers", ["credits", "capability", "enrichment", "provider", "budget", "metered spend", "top up", "quota", "prepaid"]),
+    "sdk-config": ("Tenant-scoped configuration values and typed settings resolution", ["config", "setting", "tenant configuration", "preference", "parameter", "feature configuration"]),
+    "registry-mcp": ("MCP server registry: tool registration, discovery and invocation brokering", ["mcp", "tool registry", "server registration", "tool discovery", "agent tools"]),
+
     # Platform & Multi-Tenancy
     "api-gateway": ("Platform gateway: admin ops, active-active profiles, pool federation, health, cross-cutting endpoints", ["gateway", "admin", "platform", "health", "routing", "active-active", "federation"]),
     "contracts": ("Shared event/data contracts and schema registry", ["contract", "schema", "event contract", "registry"]),
@@ -96,7 +143,7 @@ SDK_META = {
     "sdk-pool-router": ("Tenant→pool routing resolution", ["pool", "routing", "tenant routing", "shard", "resolve"]),
     "sdk-resource-registry": ("Resource ownership registry (GitOps, no-owner-no-resource)", ["resource", "ownership", "registry", "owner", "gitops"]),
     "sdk-storm": ("Storm/load event ingestion endpoint", ["storm", "load", "spike", "event ingest"]),
-    "sdk-tenant": ("Tenant records, settings, and membership", ["tenant", "organization", "workspace", "account", "multi-tenant"]),
+    "sdk-tenant": ("Tenant records, settings, and membership", ["tenant", "organization", "workspace", "account", "multi-tenant", "tenant signup", "onboarding", "provisioning", "business unit", "role template", "tenant admin", "isolation tier", "parent tenant", "become a provider", "sub tenant"]),
     "sdk-tenant-lifecycle": ("Tenant provisioning, suspension, and offboarding lifecycle", ["tenant lifecycle", "provisioning", "onboarding", "suspend", "offboard"]),
     "sdk-webhook": ("Outbound webhooks: endpoints, deliveries, signing", ["webhook", "callback", "event delivery", "subscription", "signature"]),
     "sdk-workflow": ("Durable workflow/saga orchestration", ["workflow", "saga", "orchestration", "state machine", "process", "steps"]),
@@ -105,7 +152,7 @@ SDK_META = {
     "sdk-sequence": ("Multi-touch outreach sequences/cadences: steps, enrollment, advancement", ["sequence", "cadence", "drip", "outreach", "follow-up", "multi-touch", "enrollment"]),
     "sdk-scheduling": ("Calendar, appointments, availability, booking, no-show, public booking links", ["scheduling", "appointment", "booking", "calendar", "availability", "meeting", "no-show", "reschedule"]),
     "sdk-deliverability": ("Email/SMS deliverability: domains, warmup, suppression, bounce/complaint handling", ["deliverability", "email", "domain", "warmup", "suppression", "bounce", "spam", "dkim", "spf"]),
-    "sdk-notification": ("Multi-channel notifications (email/SMS/push/in-app) + provider adapters + templates", ["notification", "email", "sms", "push", "in-app", "alert", "message", "template", "provider"]),
+    "sdk-notification": ("Multi-channel notifications (email/SMS/push/in-app) + provider adapters + templates", ["notification", "email", "sms", "push", "in-app", "alert", "message", "template", "provider", "frequency cap", "dedup", "quiet hours", "send throttle", "no answer retry", "do not contact too often"]),
     "sdk-offer-catalog": ("Offers, quotes, pricing, feature-status matrix, publish gating", ["offer", "quote", "pricing", "catalog", "proposal", "package", "plan"]),
     "sdk-handoff": ("Human/agent handoff sagas — route, accept, resolve work", ["handoff", "escalation", "transfer", "routing", "assignment", "agent handoff"]),
     "sdk-incident": ("Incident tickets: create, triage, assign, status transitions, audit", ["incident", "ticket", "triage", "outage", "on-call", "alerting"]),
@@ -113,7 +160,7 @@ SDK_META = {
     # CRM & Engagement
     "sdk-crm": ("Contacts, deals, pipelines, and activities (canonical CRM)", ["crm", "contact", "deal", "lead", "pipeline", "opportunity", "account", "activity"]),
     "sdk-engagement": ("Engagement events/timeline across channels", ["engagement", "timeline", "interaction", "activity", "touchpoint"]),
-    "sdk-lead-scoring": ("Lead scoring models, scoring, and next-best-action", ["lead scoring", "score", "ml model", "next best action", "prioritize", "ranking"]),
+    "sdk-lead-scoring": ("Lead scoring models, scoring, and next-best-action", ["lead scoring", "score", "ml model", "next best action", "prioritize", "ranking", "firmographic", "intent signal", "company size", "b2b features", "prioritise leads"]),
     "sdk-campaign": ("Marketing campaigns and membership", ["campaign", "marketing", "blast", "audience", "segment"]),
     "sdk-content": ("Content items, templates, and rendering", ["content", "template", "cms", "copy"]),
     "sdk-service-request": ("Service requests / support tickets", ["service request", "ticket", "support", "case", "request"]),
@@ -121,8 +168,8 @@ SDK_META = {
     "sdk-social": ("Social profiles and posting", ["social", "post", "profile", "social media"]),
     # Governance, Consent & Security
     "sdk-consent": ("Consent capture, purpose binding, revocation, consent-gated auth", ["consent", "opt-in", "opt-out", "gdpr", "purpose", "permission", "privacy"]),
-    "sdk-rebac": ("Relationship-based access control (ReBAC) graph", ["rebac", "authorization", "relationship", "access control", "permission", "graph"]),
-    "sdk-policy": ("Policy decision point (ABAC/PDP) with obligations", ["policy", "abac", "pdp", "authorization", "decision", "rule", "obligation"]),
+    "sdk-rebac": ("Relationship-based access control (ReBAC) graph", ["rebac", "authorization", "relationship", "access control", "permission", "graph", "contextual role", "delegate", "acts on behalf of", "trust state", "evidence", "who may act for whom", "can this user", "ownership", "sharing", "team access"]),
+    "sdk-policy": ("Policy decision point (ABAC/PDP) with obligations", ["policy", "abac", "pdp", "authorization", "decision", "rule", "obligation", "access policy", "permit or deny", "attribute based", "conditional access", "guardrail"]),
     "sdk-data-rights": ("Data subject rights (DSAR): access, erasure, portability", ["data rights", "dsar", "gdpr", "erasure", "right to be forgotten", "subject access", "privacy"]),
     "sdk-vault": ("Encrypted vault for secrets/keys (envelope encryption)", ["vault", "secret", "encryption", "key", "kms", "envelope"]),
     "sdk-secrets": ("Secret storage and retrieval", ["secret", "credential", "token", "secure store"]),
@@ -131,10 +178,10 @@ SDK_META = {
     "sdk-evidence": ("Evidence capture and chain-of-custody", ["evidence", "chain of custody", "proof", "forensic"]),
     "sdk-trace": ("Distributed trace / lineage records", ["trace", "lineage", "span", "distributed tracing", "provenance"]),
     # Identity & Access (AIM)
-    "sdk-identity": ("Six-layer canonical identity: persons, credentials, authentication", ["identity", "user", "auth", "login", "person", "credential", "authentication", "account"]),
-    "sdk-persona": ("Personas — role-scoped identity facets (L4)", ["persona", "role", "identity facet", "actor", "profile role"]),
+    "sdk-identity": ("Six-layer canonical identity: persons, credentials, authentication", ["identity", "user", "auth", "login", "person", "credential", "authentication", "account", "signup", "sign up", "register", "registration", "sign in", "session", "password", "email verification", "forgot password", "jwt", "bearer token", "who is logged in", "same person across tenants", "one email one person"]),
+    "sdk-persona": ("Personas — role-scoped identity facets (L4)", ["persona", "role", "identity facet", "actor", "profile role", "app user", "end user", "member", "seat", "user role", "acting identity", "persona id", "one user many apps", "join another tenant", "switch tenant"]),
     "sdk-identity-resolver": ("Identity resolution / EMPI / MDM matching and merge", ["identity resolution", "empi", "mdm", "match", "dedupe", "merge", "golden record"]),
-    "sdk-api-keys": ("API key issuance, rotation, and scopes", ["api key", "token", "credential", "key rotation", "scope", "service account"]),
+    "sdk-api-keys": ("API key issuance, rotation, and scopes", ["api key", "token", "credential", "key rotation", "scope", "service account", "application", "client credentials", "machine to machine", "m2m", "secret key", "pk_live", "publishable key", "server to server"]),
     "sdk-principal-token": ("Minted, audience-bound platform principal tokens", ["principal token", "service identity", "internal token", "audience", "minted token"]),
     "sdk-profile": ("User/persona profiles and preferences", ["profile", "preferences", "user profile", "settings"]),
     # AI & Agents
@@ -158,7 +205,7 @@ SDK_META = {
     "hdk-video-editor": ("On-device video editing (HDK)", ["video editor", "trim", "edit video"]),
     "hdk-watermark": ("On-device watermarking (HDK)", ["watermark", "stamp", "overlay", "brand image"]),
     # Connectors & Integration
-    "sdk-connectors": ("Enterprise connector framework (Salesforce, Slack, M365, Snowflake, …)", ["connector", "integration", "salesforce", "slack", "m365", "snowflake", "sync", "third-party", "external system"]),
+    "sdk-connectors": ("Enterprise connector framework (Salesforce, Slack, M365, Snowflake, …)", ["connector", "integration", "salesforce", "slack", "m365", "snowflake", "sync", "third-party", "external system", "lead form", "meta", "facebook", "instagram", "linkedin", "tiktok", "google ads", "web chat", "webhook ingest"]),
     # Billing, Metering & Analytics
     "sdk-billing": ("Invoicing and billing", ["billing", "invoice", "charge", "subscription", "bill"]),
     "sdk-payment": ("Payments and payment methods", ["payment", "pay", "card", "stripe", "checkout", "transaction"]),
@@ -203,6 +250,151 @@ PLATFORM_INTERNAL_SDKS = {
 }
 
 
+# ── The auth playbook carried INSIDE both catalog artifacts ────────────────────────────
+#
+# WHY THIS LIVES IN THE CATALOG. An AI coding agent building a tenant app has to solve
+# authentication before it can call anything else, and the endpoint list alone does not
+# teach it: nothing in "POST /api/auth/register" says that it creates a person but NOT an
+# app user, or that signup-tenant is catastrophic if called for an end user, or that the
+# API key rides the same Authorization header as the JWT. Left to infer, an agent invents a
+# users table and its own login — rebuilding the one thing the platform most needs it not
+# to. So the flows ship WITH the map.
+#
+# Kept terse on purpose: this is loaded into context on every discovery call.
+AUTH_PLAYBOOK = {
+    "model": (
+        "Four principals, each with its own credential: PLATFORM OPERATOR (ADMIN_OPS_TOKEN, "
+        "/admin/* only, rejects tenant JWTs); TENANT ADMIN (human, password -> JWT); TENANT "
+        "APPLICATION (machine, pk_live_/pk_test_ API key); APP END USER (human, password -> "
+        "JWT scoped to an app_id). The gateway is DEFAULT-DENY: every path needs a valid "
+        "tenant JWT unless explicitly public."
+    ),
+    "critical": [
+        "The API key and the JWT use the SAME header: 'Authorization: Bearer <value>'. The "
+        "gateway distinguishes them by the pk_live_/pk_test_ prefix. There is NO X-API-Key header.",
+        "POST /api/auth/signup-tenant provisions an ENTIRE TENANT (org + app + tenant + "
+        "membership). NEVER call it to register an end user of an app — use /api/auth/register.",
+        "Credential-management routes (/api/applications, /api/api-keys) require a HUMAN JWT and "
+        "reject an API key by design: a key that can mint another key cannot be contained.",
+        "Do NOT build your own users/roles/sessions tables. identity + persona + tenant + rebac "
+        "+ policy already own that; a parallel table breaks tenant isolation and the audit chain.",
+        "A human JWT carries NO scopes. Authority is resolved from the persona and its grants at "
+        "request time, so a revoked role takes effect immediately rather than at token expiry.",
+        "THE SAME IS TRUE OF A MACHINE TOKEN, and this is the step everyone misses: exchanging a "
+        "pk_ key via POST /api/auth/token returns a token carrying scopes (e.g. ['crm']) and "
+        "actor {kind: service} — and it will STILL 403. The scopes on the token are not the "
+        "authority; the credential is bound to a SYNTHETIC PERSONA that starts with NO grants. "
+        "You must grant it: POST /api/personas/{persona_id}/roles. A valid key plus a successful "
+        "token exchange plus 403 on every call is not a broken key — it is an ungranted persona.",
+        "Everything downstream keys on persona_id (L4), not on person_id and not on a user_id.",
+    ],
+    "flows": {
+        "tenant_signup": [
+            "POST /api/auth/signup-tenant  -> person + alias + credential + org + app + tenant "
+            "+ tenant_membership + app_identity + profile band (one transaction)",
+            "POST /api/auth/send-verification-email  -> purpose-scoped short-lived token",
+            "POST /api/auth/verify-email",
+            "POST /api/auth/login  (optional tenant_id selects the membership)  -> six-layer JWT",
+        ],
+        "register_an_application_and_key": [
+            "POST /api/applications                        (human JWT) -> application_id",
+            "POST /api/applications/{application_id}/keys  (human JWT) -> pk_live_/pk_test_",
+            "POST /api/auth/token                          (public, client_credentials) -> short-lived token",
+            "rotate: POST /api/api-keys/{key_id}/rotate | revoke: POST /api/api-keys/{key_id}/revoke",
+            "POST /api/personas/{persona_id}/roles   <- REQUIRED. The key's synthetic persona has no "
+            "grants until you add them, so every call 403s no matter how valid the key is.",
+            "environment (live|test) is a property of the APPLICATION, not the key, so a test "
+            "app can never mint a credential that reaches production data.",
+        ],
+        "app_end_user_signup": [
+            "POST /api/auth/register                       -> identity.person (+ alias, credential)",
+            "POST /api/app-identities                      -> app_identity, UNIQUE (person_id, app_id)",
+            "POST /api/app-identities/{id}/memberships     -> tenant + bu_id + starting role_template_id",
+            "POST /api/personas                            -> persona_id  (the acting identity)",
+            "POST /api/auth/login                          -> end-user JWT",
+            "One human in two of your apps is ONE person_id with TWO app_identities and TWO "
+            "personas — not two accounts. Delete at persona level so other apps are unaffected.",
+        ],
+        "person_joins_another_tenant": [
+            "SUPPORTED, and it needs no new person. identity.alias has UNIQUE (kind, value_hash), "
+            "so one email is one identity.person GLOBALLY — a human who is already a tenant admin "
+            "somewhere is the same person_id when they join a different tenant's app.",
+            "POST /api/memberships                        -> tenant_membership for the OTHER tenant",
+            "POST /api/app-identities                     -> app_identity for that tenant's app_id",
+            "POST /api/memberships/{membership_id}/personas -> a SECOND persona, independent roles",
+            "Their existing personas are untouched. Login with tenant_id selects which membership "
+            "the JWT is minted against; omit it to get a person-level token and let them choose.",
+            "DO NOT call /api/auth/register again for this person — it will fail on the unique "
+            "alias, and that failure is the constraint doing its job.",
+        ],
+        "app_user_becomes_a_provider": [
+            "RESOLVED (EP-328). POST /api/auth/signup-tenant now REUSES the existing person when the "
+            "caller sends a verified token for THAT SAME person; anonymous callers still get "
+            "PersonExistsError. A second identity.person for one human would split their audit "
+            "trail across two ids that nothing can reconcile, so reuse is the only safe repair.",
+            "Compose it instead, from an authorised caller:",
+            "POST /api/tenants                            -> the new tenant (+ its tenant.app row)",
+            "POST /api/memberships                        -> bind the EXISTING person_id to it",
+            "POST /api/memberships/{membership_id}/personas -> owner persona + owner role_template",
+            "POST /api/applications                       -> their application, then keys",
+            "Correct fix if you need self-service: make signup-tenant reuse the existing person_id "
+            "when the alias matches AND the caller proves control of it (verified session or "
+            "re-auth), rather than refusing. Creating a second person for the same human would "
+            "break MDM convergence and split their audit trail.",
+        ],
+        "single_login_many_providers": [
+            "SUPPORTED. A person has ONE identity.credential, so one password works across every "
+            "provider's app they belong to. Which app they enter is chosen at LOGIN, not signup.",
+            "POST /api/auth/login {email,password}                  -> person-level token (no tenant claims)",
+            "GET  /api/memberships                                  -> every tenant+app they are subscribed to",
+            "POST /api/auth/login {email,password,tenant_id,app_id} -> scoped token; app_identity auto-mints",
+            "Subscription is PROVIDER-controlled: login with a tenant_id returns 403 NoMembership "
+            "unless a membership exists, so nobody self-joins by guessing an id. The provider "
+            "admits them via POST /api/memberships.",
+            "CAVEAT: the credential is global, so a provider collecting the password on their own "
+            "page holds one that works at other providers too. For mutually-untrusting providers, "
+            "host login centrally and redirect. There is no OIDC authorize endpoint yet.",
+        ],
+        "get_an_api_key": [
+            "An API key belongs to an APPLICATION, which belongs to a TENANT. Order matters.",
+            "POST /api/auth/login {email,password,tenant_id}        -> human JWT (steps below need it)",
+            "POST /api/applications {name,slug,environment}         -> application_id",
+            "POST /api/applications/{application_id}/keys           -> pk_live_/pk_test_ (SHOWN ONCE)",
+            "call:  Authorization: Bearer pk_live_...   (same header as a JWT)",
+            "POST /api/auth/token (client_credentials)              -> short-lived token, preferred "
+            "when the credential would otherwise sit on a device or in a browser",
+            "rotate POST /api/api-keys/{key_id}/rotate | revoke POST /api/api-keys/{key_id}/revoke | "
+            "kill all POST /api/applications/{application_id}/disable",
+            "environment (live|test) is fixed on the APPLICATION and cannot be flipped; the prefix "
+            "derives from it, so a test app can never mint a credential that reaches production.",
+            "The secret is returned ONCE — only a hash is stored, so there is no 'show it again' call.",
+            "Mint ONE KEY PER CONSUMER (web backend, mobile BFF, each CI pipeline) so revocation is "
+            "about one consumer rather than an outage for all of them.",
+        ],
+        "roles_and_access": [
+            "RBAC  tenant.role_template keyed (tenant_id, app_id, name); tenant_id NULL = a "
+            "platform default for the app, tenant_id set = that tenant's override of the same "
+            "role name. parent_role_template_id gives inheritance.",
+            "POST /api/personas/{persona_id}/roles         -> grant beyond the starting template",
+            "ReBAC (sdk-rebac)  'may THIS persona act on THAT record' — owner/delegate/account "
+            "team relationships, with trust state and evidence. Use when authority comes from a "
+            "relationship rather than from a role.",
+            "ABAC (sdk-policy)  'do the attributes permit it right now' — region, consent, time, "
+            "record state. Use when the decision does not depend on identity.",
+            "They compose RBAC -> ReBAC -> ABAC.",
+        ],
+    },
+    "multi_app_caveat": (
+        "tenant.tenant.app_id is NOT NULL, so a tenant row belongs to exactly ONE app, while "
+        "tenant.app_pool_index (jsonb app->pool) assumes several. To model one tenant owning "
+        "several apps today, use the tenant hierarchy (parent_tenant_id / root_tenant_id): a "
+        "root tenant per customer and a child tenant per app. Do not assume one tenant row can "
+        "span apps."
+    ),
+    "guide": "docs/v3.1/developer-hub/authentication.html",
+}
+
+
 def is_admin_endpoint(endpoint):
     return endpoint.startswith("/admin/") or endpoint.startswith("/api/admin/")
 
@@ -225,8 +417,25 @@ def main():
     if missing:
         raise SystemExit(f"ERROR: grouped SDKs absent from qa-apis.json (stale mapping): {missing}")
 
+    # Guard: every SDK must carry real discovery metadata.
+    #
+    # This previously fell back to (title-cased name, [sdk]) — which builds cleanly and
+    # ships an SDK whose only search keyword is its own package name. Nobody searching for
+    # a CAPABILITY ever types that, so the SDK is present in the catalog and still
+    # undiscoverable, and the developer rebuilds it as custom code. A silent default that
+    # produces a broken-but-valid artifact is worse than no default: the build says success.
+    # This is the failure that left ten SDKs unfindable, so it now stops the build.
+    undocumented = sorted(set(by_sdk) - set(SDK_META) - PLATFORM_INTERNAL_SDKS)
+    if undocumented:
+        raise SystemExit(
+            f"ERROR: SDKs missing SDK_META (summary + reuse_when keywords): {undocumented}\n"
+            "  Add an entry to SDK_META in this file. reuse_when must be the words a\n"
+            "  developer types when they HAVE the problem — 'response time', 'who is\n"
+            "  working' — not the SDK name, which nobody searches for."
+        )
+
     def sdk_entry(sdk):
-        summary, reuse_when = SDK_META.get(sdk, (sdk.replace("-", " ").title(), [sdk]))
+        summary, reuse_when = SDK_META[sdk]
         endpoints = by_sdk[sdk]
         apis_out = []
         for (method, endpoint) in sorted(endpoints.keys(), key=lambda x: (x[1], x[0])):
@@ -280,7 +489,7 @@ def main():
     catalog = {
         "version": VERSION,
         "gateway_base_url": GATEWAY_BASE_URL,
-        "auth": "Authenticate as a tenant (login -> JWT) and send Authorization: Bearer <token> on every call.",
+        "auth": AUTH_PLAYBOOK,
         "api_reference": DOCS_BASE,
         "sdk_count": sum(g["sdk_count"] for g in groups_out),
         "api_count": sum(g["api_count"] for g in groups_out),
@@ -309,6 +518,96 @@ def main():
         ],
     }
 
+    # ── AGENTS.md — the prose rendering of AUTH_PLAYBOOK ─────────────────────────
+    #
+    # WHY A SECOND FORMAT. JSON is right for lookup and wrong for procedure. Auth is
+    # almost entirely procedure and PROHIBITION ("never call signup-tenant for an end
+    # user"), and an obligation stated as a JSON array member lands weaker than one
+    # stated as a sentence. Agents also auto-load AGENTS.md by convention, whereas a
+    # README reads as human-facing and gets skipped.
+    #
+    # GENERATED, never hand-written: hand-maintaining a second copy of these facts is
+    # exactly how the catalog went eighteen SDKs stale. One source, two renderings.
+    def render_agents_md(catalog, index):
+        pb = AUTH_PLAYBOOK
+        L = []
+        L.append("# ProjexCloud — agent guide")
+        L.append("")
+        L.append("<!-- GENERATED by scripts/qa-matrix/build_sdk_catalog.py — do not edit by hand. -->")
+        L.append("")
+        L.append(f"{catalog['sdk_count']} SDKs, {catalog['api_count']} tenant-callable APIs. "
+                 f"Gateway: `{catalog['gateway_base_url']}`")
+        L.append("")
+        L.append("## Read this before writing any code")
+        L.append("")
+        L.append("**Do not rebuild what an SDK already covers.** Match your capability against "
+                 "`sdk-catalog-index.json` (`reuse_when` keywords) first, then fetch that endpoint's "
+                 "full spec from `sdk-catalog.json`. `openapi.json` is there if you want a generated "
+                 "client.")
+        L.append("")
+        L.append("## Authentication")
+        L.append("")
+        L.append(pb["model"])
+        L.append("")
+        L.append("### Rules that will cost you if you get them wrong")
+        L.append("")
+        for c in pb["critical"]:
+            L.append(f"- {c}")
+        L.append("")
+        titles = {
+            "tenant_signup": "A tenant signs up (bootstrap — no credential needed)",
+            "register_an_application_and_key": "A tenant registers an application and a machine key",
+            "app_end_user_signup": "An end user signs up inside a tenant's app",
+            "person_joins_another_tenant": "An existing user joins ANOTHER tenant's app",
+            "app_user_becomes_a_provider": "An existing app user becomes a provider (own tenant + apps)",
+            "single_login_many_providers": "One login across many providers' apps",
+            "get_an_api_key": "Getting an API key for an app (every step)",
+            "roles_and_access": "Roles, relationships and policy",
+        }
+        for key, steps in pb["flows"].items():
+            L.append(f"### {titles.get(key, key)}")
+            L.append("")
+            L.append("```")
+            for st in steps:
+                L.append(st)
+            L.append("```")
+            L.append("")
+        L.append("### One tenant, many apps")
+        L.append("")
+        L.append(pb["multi_app_caveat"])
+        L.append("")
+        L.append("## Files in this bundle")
+        L.append("")
+        L.append("| File | Use it for |")
+        L.append("| --- | --- |")
+        L.append("| `AGENTS.md` | This file. Auth flows and the rules. |")
+        L.append("| `sdk-catalog-index.json` | Capability discovery — which SDK covers X. Load this first. |")
+        L.append("| `sdk-catalog.json` | Full per-endpoint spec, once you have a match. |")
+        L.append("| `openapi.json` | OpenAPI 3.1 — point a client generator at it. |")
+        L.append("")
+        L.append(f"Human guide: `{pb['guide']}`")
+        L.append("")
+        return chr(10).join(L)
+
+    def render_readme_md(catalog):
+        return chr(10).join([
+            "# ProjexCloud API library",
+            "",
+            "<!-- GENERATED by scripts/qa-matrix/build_sdk_catalog.py — do not edit by hand. -->",
+            "",
+            f"{catalog['sdk_count']} SDKs and {catalog['api_count']} tenant-callable APIs for "
+            f"`{catalog['gateway_base_url']}`.",
+            "",
+            "**If you are an AI coding agent, read `AGENTS.md` first** — it carries the "
+            "authentication flows and the rules that prevent the expensive mistakes.",
+            "",
+            "- `AGENTS.md` — auth flows, prohibitions, what not to rebuild",
+            "- `sdk-catalog-index.json` — compact capability map (start here to find an SDK)",
+            "- `sdk-catalog.json` — full endpoint specs",
+            "- `openapi.json` — OpenAPI 3.1 for client generation",
+            "",
+        ])
+
     def _targets(basename):
         ts = [
             os.path.join(ROOT, "docs", "v3.1", "api_docs", basename),
@@ -317,9 +616,25 @@ def main():
         ]
         if os.path.isdir(AI_APPGEN_DATA):
             ts.append(os.path.join(AI_APPGEN_DATA, basename))
+        # Only refresh a sibling copy that already exists — creating one in a checkout that
+        # never had it would leave a file nobody updates, which is how stale copies start.
+        for d in SIBLING_MCP_DATA:
+            if os.path.isdir(d):
+                ts.append(os.path.join(d, basename))
         return ts
 
     written = []
+    # Markdown is tallied separately: `written` carries (path, bytes) pairs used for the
+    # size report below, and mixing bare names into it broke that unpack.
+    md_written = []
+    for text, basename in ((render_agents_md(catalog, index), "AGENTS.md"),
+                           (render_readme_md(catalog), "README.md")):
+        for t in _targets(basename):
+            os.makedirs(os.path.dirname(t), exist_ok=True)
+            with open(t, "w", encoding="utf-8") as f:
+                f.write(text)
+        md_written.append((basename, len(text.encode("utf-8"))))
+
     for obj, basename in ((catalog, "sdk-catalog.json"), (index, "sdk-catalog-index.json")):
         # Index is minified (LLM reads it into context — every token counts); the full
         # catalog stays pretty-printed (also browsed/diffed by humans).

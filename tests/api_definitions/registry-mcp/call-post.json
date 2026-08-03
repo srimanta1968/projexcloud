@@ -1,0 +1,98 @@
+{
+  "name": "POST /api/mcp/tools/:tool_id/invoke — invoke a registered MCP tool under a capability token",
+  "endpoint": "/api/mcp/tools/:tool_id/invoke",
+  "sdk": "registry-mcp",
+  "sourceFile": "services/registry-mcp/src/app.ts",
+  "method": "POST",
+  "requiresAuth": true,
+  "expectedStatus": 400,
+  "priority": 30,
+  "testability": "auto",
+  "dependsOn": [
+    "POST /api/auth/register"
+  ],
+  "headers": {
+    "Authorization": "Bearer {{cache:auth.register.response.data.token}}"
+  },
+  "body": {
+    "name": "list_sdks",
+    "arguments": {}
+  },
+  "testCases": [
+    {
+      "name": "400 - a tool_id that is not a UUID is refused before it reaches the query",
+      "pathParams": {
+        "tool_id": "not-a-uuid"
+      },
+      "payload": {
+        "agent_run_id": "{{dynamic:uuid}}",
+        "capability_token_id": "{{dynamic:uuid}}",
+        "args": {},
+        "trace_id": "{{dynamic:uuid}}"
+      },
+      "expectedStatus": 400,
+      "expectedResponse": {
+        "success": false
+      }
+    },
+    {
+      "name": "400 - a well-formed tool_id with an incomplete body names what is missing",
+      "pathParams": {
+        "tool_id": "{{dynamic:uuid}}"
+      },
+      "payload": {
+        "args": {}
+      },
+      "expectedStatus": 400,
+      "expectedResponse": {
+        "success": false
+      }
+    }
+  ],
+  "expectedResponse": {
+    "content": "array",
+    "isError": "boolean"
+  },
+  "description": "Invokes a registered MCP tool. RETARGETED: this definition previously pointed at POST /mcp/v1/call with a {name, arguments} body — a route and a contract that do not exist on the gateway, so it could only ever 404. The real surface is /api/mcp/tools/:tool_id/invoke, gated by requireAuth, taking {agent_run_id, capability_token_id, args, trace_id}. The cases below cover the two validation contracts the handler states explicitly and which need no producer chain: a tool_id that is not a UUID is refused with 400 rather than being allowed to reach the UUID query and surface as a Postgres 22P02 500, and a well-formed tool_id with an incomplete body is refused with 400 naming the missing fields. The happy path additionally requires a live agent run and a minted capability token, so it is left to the integration suite rather than asserted here with fabricated ids.",
+  "fieldEnums": {
+    "isError": [
+      true,
+      false
+    ]
+  },
+  "errorCases": [
+    {
+      "name": "400 - malformed tool_id",
+      "status": 400,
+      "code": "BAD_TOOL_ID",
+      "message": "tool_id must be a valid UUID",
+      "when": "the path carries a literal placeholder or any non-UUID; refused deliberately so it cannot reach the UUID query and 500 as Postgres 22P02",
+      "payload": {
+        "args": {}
+      }
+    },
+    {
+      "name": "400 - missing required invocation fields",
+      "status": 400,
+      "code": "ValidationError",
+      "message": "agent_run_id, capability_token_id, args and trace_id are required",
+      "when": "any of the four required body fields is absent — an invocation without a capability token is exactly what the gate exists to refuse",
+      "payload": {
+        "args": {}
+      }
+    },
+    {
+      "name": "401 - missing bearer token",
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "authentication required",
+      "when": "the route is behind requireAuth, so an unauthenticated invoke never reaches the handler",
+      "payload": {
+        "args": {}
+      }
+    }
+  ],
+  "captureResponse": {
+    "registryMcp.call.response.isError": "isError"
+  }
+}

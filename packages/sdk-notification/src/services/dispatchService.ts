@@ -1,4 +1,5 @@
 import { getQuietHours, isInQuietHours } from './quietHours';
+import { reserveSend, releaseSend } from './frequencyCap';
 import { sendWithFailover, type SendArgs } from './providerAdapters';
 import type { NotificationChannel } from '../models/notification.model';
 
@@ -23,6 +24,19 @@ export interface UnifiedDispatchInput {
   subject_persona_id?: string;
   respect_quiet_hours?: boolean;
   metadata?: Record<string, unknown>;
+
+  /*
+   * P16 EP-383 — frequency caps and the no-answer dedup window. ALL OPTIONAL, and every
+   * one defaults off: a caller that omits them takes exactly the path it took before this
+   * feature existed, which is what keeps the change additive for existing endpoints.
+   */
+  /** What the send is FOR. Caps are per purpose, so an OTP is not throttled by marketing. */
+  purpose?: string;
+  /** Enforce the tenant's per-channel/per-purpose daily cap. Off unless asked. */
+  respect_frequency_cap?: boolean;
+  /** Supply to enable dedup, or set auto_dedup to derive it from the message itself. */
+  dedup_key?: string;
+  auto_dedup?: boolean;
 }
 
 export interface UnifiedDispatchResult {
@@ -31,6 +45,8 @@ export interface UnifiedDispatchResult {
   provider_message_id?: string | null;
   delivered_status?: string;
   reason?: string;
+  /** Set when a cap or the dedup window stopped the send, so a caller can tell them apart. */
+  blocked_by?: 'dedup' | 'cap';
 }
 
 /**
@@ -59,6 +75,33 @@ export async function unifiedDispatch(input: UnifiedDispatchInput): Promise<Unif
     const q = isInQuietHours(record);
     if (q.quiet) return { status: 'deferred', reason: q.reason };
   }
+
+  /*
+   * Cap + dedup (P16 EP-383). Reached ONLY when the caller opted in, so existing endpoints
+   * are untouched. Placed after quiet hours deliberately: a deferred send has not happened,
+   * so reserving a cap unit for it would charge the tenant for a message still to come.
+   */
+  const wantsGuard = input.respect_frequency_cap === true
+    || input.auto_dedup === true
+    || input.dedup_key !== undefined;
+  let ledgerId: string | null = null;
+
+  if (wantsGuard) {
+    const decision = await reserveSend({
+      tenant_id: input.tenant_id,
+      channel: input.channel,
+      purpose: input.purpose,
+      destination: input.destination,
+      body: input.body,
+      dedup_key: input.dedup_key,
+      auto_dedup: input.auto_dedup,
+    });
+    if (!decision.allowed) {
+      return { status: 'suppressed', reason: decision.reason, blocked_by: decision.blocked_by };
+    }
+    ledgerId = decision.ledger_id;
+  }
+
   try {
     const args: SendArgs = {
       channel: input.channel, destination: input.destination,
@@ -66,6 +109,10 @@ export async function unifiedDispatch(input: UnifiedDispatchInput): Promise<Unif
     };
     const r = await sendWithFailover(input.channel, args);
     const failed = r.delivered_status === 'failed' || r.delivered_status === 'bounced';
+    // A failed send must not burn the cap or arm the dedup window — otherwise a provider
+    // outage exhausts the allowance on messages nobody received, and the window then
+    // blocks the very retry meant to fix it.
+    if (failed) await releaseSend(ledgerId).catch(() => undefined);
     return {
       status: failed ? 'failed' : 'sent',
       provider: r.provider,
@@ -73,6 +120,7 @@ export async function unifiedDispatch(input: UnifiedDispatchInput): Promise<Unif
       delivered_status: r.delivered_status,
     };
   } catch (err) {
+    await releaseSend(ledgerId).catch(() => undefined);
     return { status: 'failed', reason: (err as Error).message };
   }
 }
