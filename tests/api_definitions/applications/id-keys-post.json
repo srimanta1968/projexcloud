@@ -1,0 +1,100 @@
+{
+  "sdk": "sdk-api-keys",
+  "sourceFile": "packages/sdk-api-keys/src/server/routes.ts",
+  "requiresAuth": true,
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "epicId": "783fc94b-6992-49a5-a492-74ee0450a92f",
+  "testability": "auto",
+  "name": "POST /api/applications/{application_id}/keys - Issue a key for an application",
+  "endpoint": "/api/applications/:application_id/keys",
+  "method": "POST",
+  "expectedStatus": 201,
+  "taskId": "bcf23c76-2e69-48c2-af3f-84acc9e636d2",
+  "featureId": "888ec9d8-5cbb-4d77-9082-fd78b08334ad",
+  "priority": 23,
+  "description": "Mints a credential under an application and returns the plaintext EXACTLY ONCE - only a keyed one-way hash and a display prefix are stored, so a lost value can only be replaced by rotating. The prefix follows the environment of the application (pk_test_ or pk_live_) rather than being chosen by the caller. scopes follow domain.resource.action and may use a tail wildcard such as sla.* so a key does not silently stop working when a new resource ships. rate_limit_rpm is enforced per key with 429 and the RateLimit headers; expires_at must be in the future. Answers 201, 404 for an application belonging to another tenant, and 409 when the application is disabled.",
+  "dependsOn": [
+    "POST /api/auth/signup-tenant",
+    "POST /api/applications"
+  ],
+  "fieldEnums": {
+    "scopes": [
+      "sla.clock.read",
+      "sla.clock.write",
+      "sla.policy.read",
+      "crm.contact.read",
+      "notification.send.write"
+    ],
+    "environment": [
+      "live",
+      "test"
+    ],
+    "status": [
+      "active",
+      "rotating",
+      "revoked",
+      "expired"
+    ]
+  },
+  "testCases": [
+    {
+      "name": "Issue a scoped, rate-limited, expiring key",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "pathParams": {
+        "application_id": "{{cache:applications.create.response.data.application.application_id}}"
+      },
+      "payload": {
+        "name": "nightly sync",
+        "scopes": [
+          "sla.clock.read",
+          "sla.clock.write"
+        ],
+        "rate_limit_rpm": 600,
+        "expires_at": "{{dynamic:futuredatetime+30d}}"
+      },
+      "expectedStatus": 201,
+      "expectedResponse": {
+        "data": {
+          "key": {
+            "key_id": "string",
+            "prefix": "string",
+            "environment": "string"
+          },
+          "plaintext": "string"
+        }
+      }
+    }
+  ],
+  "errorCases": [
+    {
+      "name": "Scopes are required - an unscoped key is authority without a boundary",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "pathParams": {
+        "application_id": "{{cache:applications.create.response.data.application.application_id}}"
+      },
+      "payload": {
+        "name": "no scopes"
+      },
+      "expectedStatus": 400
+    },
+    {
+      "name": "An application in another tenant answers 404",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "pathParams": {
+        "application_id": "00000000-0000-0000-0000-0000000000ff"
+      },
+      "payload": {
+        "scopes": [
+          "sla.clock.read"
+        ]
+      },
+      "expectedStatus": 404
+    }
+  ]
+}

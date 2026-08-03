@@ -1,0 +1,72 @@
+{
+  "name": "POST /api/sla/tick - Evaluate the ladder and fire what is due",
+  "endpoint": "/api/sla/tick",
+  "sdk": "sdk-sla",
+  "sourceFile": "packages/sdk-sla/src/server/routes.ts",
+  "method": "POST",
+  "requiresAuth": true,
+  "expectedStatus": 200,
+  "taskId": "1dbcb185-1bb8-4af9-93ae-8438ba8fd513",
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "featureId": "af5400b6-00aa-4d5c-82f6-d9819457333f",
+  "epicId": "39365400-aca0-4a86-9791-5771d19998f4",
+  "priority": 58,
+  "testability": "auto",
+  "description": "Evaluate every running clock against its ladder and fire whatever has come due. Safe to call as often as you like from as many callers as you like: each rung is claimed by inserting a ledger row under a UNIQUE (clock_id, rung_id), so of N concurrent ticks exactly one fires a given rung and the rest report it as skipped_duplicate. No lock is held across the action, because an escalation that pages somebody twice is worse than one that pages them a second late. Also safe to call LATE — a rung that came due an hour ago fires now, and both fire_at and fired_at are recorded so the report shows the ladder ran behind rather than pretending it did not. Failed and stale-claimed firings are retried in the same pass with exponential backoff, never re-firing anything already fired. A rung whose action has no registered handler FAILS visibly instead of being recorded as a silent success. Returns 200 with the counters. Required: tenant_id.",
+  "dependsOn": [
+    "POST /api/auth/signup-tenant",
+    "POST /api/sla/clocks/:clock_id/resume"
+  ],
+  "fieldEnums": {
+    "severity": [
+      "info",
+      "warning",
+      "urgent",
+      "critical"
+    ],
+    "firing_state": [
+      "claimed",
+      "fired",
+      "failed"
+    ]
+  },
+  "testCases": [
+    {
+      "name": "Tick the tenant — the overdue clock has a rung waiting",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "payload": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "limit": 100,
+        "actor_id": "qa-runner"
+      },
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "data": {
+          "clocks_scanned": "number",
+          "rungs_due": "number",
+          "rungs_fired": "number",
+          "rungs_failed": "number",
+          "rungs_skipped_duplicate": "number",
+          "rungs_retried": "number",
+          "errors": "array"
+        }
+      }
+    }
+  ],
+  "errorCases": [
+    {
+      "status": 400,
+      "code": "VALIDATION_ERROR",
+      "message": "tenant_id is required",
+      "when": "a required field is missing from the request"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "missing or invalid token",
+      "when": "no valid tenant Bearer token on the request"
+    }
+  ]
+}

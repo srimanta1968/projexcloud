@@ -2,7 +2,7 @@
   "name": "POST /admin/federation/iceberg-catalogs — api-gateway",
   "endpoint": "/admin/federation/iceberg-catalogs",
   "method": "POST",
-  "description": "Registers (or updates) a federation.iceberg_catalog row so the lineage-projector worker can resolve a target table_ref, giving ops an alternative to raw SQL and preserving the auto-migrate doctrine. Upsert semantics: ON CONFLICT (catalog_id) DO UPDATE overwrites region, backend, root_url, capacity_tier and status, so re-posting an existing catalog_id is an update and still returns 201, never 409. capacity_tier defaults to \"standard\" and status to \"active\". QA edge cases: backend is validated against the closed set glue|nessie|hive and anything else is a 400; catalog_id, region, backend and root_url are all required and empty strings count as missing; root_url is not URL-validated; status is NOT validated in the handler, so an out-of-enum status reaches the DB check constraint and returns 500 rather than 400.",
+  "description": "Registers (or updates) a federation.iceberg_catalog row so the lineage-projector worker can resolve a target table_ref, giving ops an alternative to raw SQL and preserving the auto-migrate doctrine. Upsert semantics: ON CONFLICT (catalog_id) DO UPDATE overwrites region, backend, root_url, capacity_tier and status, so re-posting an existing catalog_id is an update and still returns 201, never 409. capacity_tier defaults to \"standard\" and status to \"active\". QA edge cases: backend is validated against the closed set glue|nessie|hive and anything else is a 400; catalog_id, region, backend and root_url are all required and empty strings count as missing; root_url is not URL-validated; status is NOT validated in the handler, so an out-of-enum status reaches the DB check constraint and returns 500 rather than 400. IDEMPOTENCY (MUST-47): federation.iceberg_catalog carries UNIQUE (region, backend). catalog_id was already {{dynamic:slug}} but that is the PRIMARY KEY, not the unique pair — so a second run re-sent region=us-east-1 + backend=nessie and died on federation_iceberg_catalog_region_backend_uq with a 500. backend is CHECK-constrained to glue|nessie|hive and cannot be randomised, so region carries the uniqueness instead.",
   "errorCases": [
     {
       "status": 401,
@@ -36,8 +36,16 @@
   "_generated": true,
   "testability": "auto",
   "fieldEnums": {
-    "backend": ["glue", "nessie", "hive"],
-    "status": ["active", "degraded", "retired"]
+    "backend": [
+      "glue",
+      "nessie",
+      "hive"
+    ],
+    "status": [
+      "active",
+      "degraded",
+      "retired"
+    ]
   },
   "captureResponse": {
     "federation-iceberg-catalogs.create.response.data.catalog_id": "data.catalog_id"
@@ -49,8 +57,8 @@
         "x-admin-ops-token": "{{var:ADMIN_OPS_TOKEN}}"
       },
       "payload": {
-        "catalog_id": "qa-iceberg-catalog-useast",
-        "region": "us-east-1",
+        "catalog_id": "qa-iceberg-catalog-{{dynamic:slug}}",
+        "region": "us-east-1-{{dynamic:slug}}",
         "backend": "nessie",
         "root_url": "https://nessie.example.com/api/v1",
         "capacity_tier": "standard",

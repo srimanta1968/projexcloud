@@ -1,4 +1,5 @@
 import { randomUUID } from 'crypto';
+import { evaluateB2BFeatures, type B2BSignals, type FeatureAttribution } from './b2bFeatures';
 import { dataService } from '@projexlight/db-runtime';
 import { appendAuditEntry } from '@projexlight/sdk-audit';
 import type {
@@ -46,6 +47,11 @@ export interface ScoreContactInput {
   expertise?: ExpertiseInput;
   intent?: IntentInput;
   storm_impact?: StormImpactInput;
+  /**
+   * P16 EP-385 — B2B firmographic / intent evidence. OPTIONAL: a caller that omits it
+   * gets exactly the geo/field-service score it got before, so no API surface changed.
+   */
+  b2b?: B2BSignals;
 }
 
 export interface ScoreContactResult {
@@ -53,6 +59,12 @@ export interface ScoreContactResult {
   components: Required<LeadScoreSubscores>;
   weights: Record<string, number>;
   model_id: string;
+  /**
+   * Per-feature attribution — raw value, weight, contribution and a human explanation.
+   * A score that cannot say why it is 38 is unarguable, and the first question anyone
+   * asks about a low score is which input caused it.
+   */
+  attribution?: FeatureAttribution[];
 }
 
 interface ScoreRow {
@@ -126,12 +138,41 @@ export async function scoreContact(input: ScoreContactInput): Promise<ScoreConta
     storm_impact,
   };
 
-  const composite =
+  const geoComposite =
     proximity * (weights.proximity ?? 0) +
     expertise * (weights.expertise ?? 0) +
     intent * (weights.intent ?? 0) +
     storm_impact * (weights.storm_impact ?? 0);
+
+  /*
+   * B2B features contribute only when the model carries a weight for them, so a tenant
+   * that never registered any scores exactly as before. Their weights already sit in the
+   * same normalised pool as the four shipped features, because resolveWeights returns
+   * every row of the model and normalizeWeights divides by the total — which is precisely
+   * why this needed no API change: PUT /weights/:feature already accepts any feature name.
+   */
+  const b2b = evaluateB2BFeatures(input.b2b, weights);
+  const composite = geoComposite + b2b.subtotal;
   const score100 = Number((composite * 100).toFixed(4));
+
+  // The four shipped features are reported alongside the B2B ones so the attribution is
+  // the WHOLE explanation of the number, not just the new half of it.
+  const attribution: FeatureAttribution[] = [
+    ...(['proximity', 'expertise', 'intent', 'storm_impact'] as const).map((f) => {
+      const raw = components[f];
+      const weight = weights[f] ?? 0;
+      return {
+        feature: f,
+        family: 'field_service' as never,
+        raw: Number(raw.toFixed(4)),
+        weight,
+        contribution: Number((raw * weight).toFixed(4)),
+        evidence: true,
+        explanation: `${f} subscore ${raw.toFixed(4)} at weight ${weight.toFixed(4)}`,
+      };
+    }),
+    ...b2b.attribution,
+  ].sort((a, b) => b.contribution - a.contribution || a.feature.localeCompare(b.feature));
 
   const scoreId = randomUUID();
   const row = await dataService.one<ScoreRow>(
@@ -180,6 +221,7 @@ export async function scoreContact(input: ScoreContactInput): Promise<ScoreConta
     components,
     weights,
     model_id: model.model_id,
+    attribution,
   };
 }
 

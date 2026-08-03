@@ -1,0 +1,120 @@
+{
+  "name": "POST /api/sla/calendars - Create a business calendar",
+  "endpoint": "/api/sla/calendars",
+  "sdk": "sdk-sla",
+  "sourceFile": "packages/sdk-sla/src/server/routes.ts",
+  "method": "POST",
+  "requiresAuth": true,
+  "expectedStatus": 201,
+  "taskId": "1dbcb185-1bb8-4af9-93ae-8438ba8fd513",
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "featureId": "af5400b6-00aa-4d5c-82f6-d9819457333f",
+  "epicId": "39365400-aca0-4a86-9791-5771d19998f4",
+  "priority": 90,
+  "testability": "auto",
+  "description": "Create the business calendar a promise is measured against: a NAMED IANA timezone (never a fixed UTC offset — the constraint and the service both refuse \"+05:30\" or \"UTC-5\", because an offset cannot know about DST and a due date computed from one is wrong twice a year), per-weekday working windows keyed 1=Monday..7=Sunday, an optional late-coverage extension that keeps a signal arriving one minute before close due the same evening rather than deferring to tomorrow, a weekend rule and a holiday date list. Returns 201 with the stored calendar. Required: tenant_id, slug, name, timezone and a non-empty working_windows — a calendar with no open minute can never produce a due date, so it is refused at creation rather than at the first clock.",
+  "dependsOn": [
+    "POST /api/auth/signup-tenant"
+  ],
+  "fieldEnums": {
+    "weekend_rule": [
+      "saturday_sunday",
+      "friday_saturday",
+      "sunday_only",
+      "none"
+    ]
+  },
+  "testCases": [
+    {
+      "name": "A Monday-to-Friday calendar in a named zone with a late-coverage extension",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "payload": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "slug": "support-hours-{{dynamic:uuid}}",
+        "name": "Support hours",
+        "description": "Weekday cover with a half-hour of late coverage",
+        "timezone": "America/New_York",
+        "working_windows": {
+          "1": [
+            {
+              "start": "09:00",
+              "end": "17:00"
+            }
+          ],
+          "2": [
+            {
+              "start": "09:00",
+              "end": "17:00"
+            }
+          ],
+          "3": [
+            {
+              "start": "09:00",
+              "end": "17:00"
+            }
+          ],
+          "4": [
+            {
+              "start": "09:00",
+              "end": "17:00"
+            }
+          ],
+          "5": [
+            {
+              "start": "09:00",
+              "end": "17:00"
+            }
+          ]
+        },
+        "late_coverage_extension_minutes": 30,
+        "weekend_rule": "saturday_sunday",
+        "holiday_dates": [
+          "2026-12-25"
+        ],
+        "metadata": {
+          "owner": "qa-runner"
+        }
+      },
+      "expectedStatus": 201,
+      "expectedResponse": {
+        "data": {
+          "calendar": {
+            "calendar_id": "string",
+            "timezone": "string"
+          }
+        }
+      }
+    }
+  ],
+  "captureResponse": {
+    "sla.calendar.create.response.data.calendar.calendar_id": "data.calendar.calendar_id"
+  },
+  "errorCases": [
+    {
+      "status": 400,
+      "code": "VALIDATION_ERROR",
+      "message": "tenant_id, slug, name and timezone are required",
+      "when": "a required field is missing from the request"
+    },
+    {
+      "status": 400,
+      "code": "VALIDATION_ERROR",
+      "message": "working_windows is required — a calendar with no open minute can never make a due date",
+      "when": "working_windows is absent or empty"
+    },
+    {
+      "status": 422,
+      "code": "FIXED_OFFSET_TIMEZONE_REJECTED",
+      "message": "timezone '+05:30' is a fixed offset, not a zone",
+      "when": "the timezone is an offset or an unresolvable zone name"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "missing or invalid token",
+      "when": "no valid tenant Bearer token on the request"
+    }
+  ]
+}

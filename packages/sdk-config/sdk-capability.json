@@ -1,0 +1,108 @@
+{
+  "name": "@projexlight/sdk-config",
+  "version": "1.0.0",
+  "schema_version": "1.0",
+  "summary": "Unified multi-scope configuration & secrets plane (EP-341). Stores config values and secret references at four scopes — platform, tenant, app and app_user — and resolves the most-specific active value along the app_user -> app -> tenant -> platform precedence chain. Backs provider bindings (payment, email, AI-gateway) so runtime handlers return a debuggable 503 PROVIDER_NOT_CONFIGURED instead of a 500 when a provider is unset.",
+  "tags": [
+    "configuration",
+    "secrets",
+    "multi-tenant",
+    "feature-flags",
+    "provider-config"
+  ],
+  "provides": {
+    "endpoints": [
+      {
+        "method": "GET",
+        "path": "/api/config/resolve",
+        "description": "Resolve the most-specific active value for a key in the caller's context, walking app_user -> app -> tenant -> platform.",
+        "kind": "query",
+        "auth_scopes": ["config:read"]
+      },
+      {
+        "method": "GET",
+        "path": "/api/config",
+        "description": "List the active config rows for a given scope (platform|tenant|app|app_user), defaulting scope_id from the caller's JWT.",
+        "kind": "query",
+        "auth_scopes": ["config:read"]
+      },
+      {
+        "method": "GET",
+        "path": "/api/config/value",
+        "description": "Fetch a single config row by exact scope/scope_id/key; 404 when no active row exists.",
+        "kind": "query",
+        "auth_scopes": ["config:read"]
+      },
+      {
+        "method": "POST",
+        "path": "/api/config",
+        "description": "Upsert a config value (non-secret `value`) or secret pointer (`secret_ref`) at a scope; ownership-guarded per scope (platform operators / owning-tenant admins / the user themselves).",
+        "kind": "mutation",
+        "auth_scopes": ["config:write"]
+      },
+      {
+        "method": "POST",
+        "path": "/api/config/revoke",
+        "description": "Soft-delete (revoke) a config value so it no longer resolves; ownership-guarded.",
+        "kind": "mutation",
+        "auth_scopes": ["config:write"]
+      },
+      {
+        "method": "POST",
+        "path": "/api/config/rotate",
+        "description": "Rotate a secret value's envelope pointer (secret_ref) in place without changing the key; ownership-guarded.",
+        "kind": "mutation",
+        "auth_scopes": ["config:write"]
+      }
+    ],
+    "events": [],
+    "models": [
+      {
+        "schema": "config",
+        "table": "config_value",
+        "description": "One row per (scope, scope_id, key) with a jsonb value or a secret_ref, status and set_by audit; UNIQUE(scope, scope_id, key)."
+      }
+    ],
+    "hooks": [],
+    "ui_components": []
+  },
+  "consumes": {
+    "events": [],
+    "infra": ["postgres"],
+    "config_keys": []
+  },
+  "scenarios": [
+    {
+      "id": "resolve-scope-chain",
+      "title": "Resolve a value along the scope precedence chain",
+      "when_to_use": "When a runtime handler needs the effective value of a key for the current caller, honouring app_user overrides before falling back to app, tenant, then platform defaults.",
+      "example_code": "import { resolveConfig } from '@projexlight/sdk-config';\n\nconst row = await resolveConfig('payment.provider', {\n  tenant_id: req.auth.tenant_id,\n  app_id: req.auth.app_id,\n  app_user_id: req.auth.sub,\n});\n// row?.scope tells you WHICH level won: 'app_user' | 'app' | 'tenant' | 'platform'\nconst provider = row?.value?.provider ?? null;",
+      "expected_outcome": "Returns the most-specific active row (or null). row.scope names the winning level and row.value carries the resolved jsonb, so the caller knows both the value and where it came from."
+    },
+    {
+      "id": "guard-provider-503",
+      "title": "Set a tenant provider and guard a handler with a debuggable 503",
+      "when_to_use": "When a feature (payments, email, AI-gateway) must not run until its provider is configured, and you want a clear 503 the operator can act on rather than an opaque 500.",
+      "example_code": "import { setConfig, checkProviderConfigured } from '@projexlight/sdk-config';\n\nawait setConfig({ scope: 'tenant', scope_id: tenantId, key: 'payment.provider', value: { provider: 'stripe' }, set_by: userId });\n\n// in the route handler:\nconst notConfigured = await checkProviderConfigured('payment.provider', ctxFrom(req));\nif (notConfigured) return reply.code(503).send(notConfigured);",
+      "expected_outcome": "Before setConfig the guard returns a { error: 'PROVIDER_NOT_CONFIGURED', provider_key, message, scopes_checked } body (send it as 503). After setConfig the guard returns null and the handler proceeds."
+    },
+    {
+      "id": "rotate-secret-ref",
+      "title": "Store a secret reference and rotate it in place",
+      "when_to_use": "When a scope needs to point at a secret held in the sdk-secrets envelope store (an API key, webhook secret) and later rotate the pointer without changing the key or its consumers.",
+      "example_code": "import { setConfig, rotateConfigSecret } from '@projexlight/sdk-config';\n\nawait setConfig({ scope: 'tenant', scope_id: tenantId, key: 'email.provider.apiKey', secret_ref: 'secret://tenant/email-key-v1', set_by: userId });\n\n// later, rotate to a new envelope pointer atomically:\nawait rotateConfigSecret('tenant', tenantId, 'email.provider.apiKey', 'secret://tenant/email-key-v2', userId);",
+      "expected_outcome": "The config row keeps the same (scope, scope_id, key) but its secret_ref now points at the new envelope; resolveConfig returns the rotated secret_ref and never the plaintext secret."
+    }
+  ],
+  "compliance_posture": {
+    "regimes": ["SOC2", "GDPR"],
+    "notes": "Stores configuration and secret POINTERS (secret_ref) only — never plaintext secrets, which live in the sdk-secrets envelope store. Rows are tenant/app/user scoped and soft-deleted (revoked) rather than hard-deleted, preserving set_by/status audit. Config values may hold tenant business data, so treat exports under GDPR data-subject scope."
+  },
+  "pool_placement": "app",
+  "pricing_skus": [],
+  "links": {
+    "readme": "packages/sdk-config/README.md",
+    "source": "packages/sdk-config/src/",
+    "prd_section": "EP-341 Unified Multi-Scope Configuration & Secrets Plane"
+  }
+}

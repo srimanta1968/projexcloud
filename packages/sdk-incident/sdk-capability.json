@@ -1,0 +1,135 @@
+{
+  "name": "@projexlight/sdk-incident",
+  "version": "0.1.0",
+  "schema_version": "1.0",
+  "summary": "Exception/incident record & evidence plane (P15·E3). Tracks operational incidents through a validated status lifecycle (open -> investigating -> mitigated -> resolved -> closed, cancellable while pre-resolved) with severity, SLA deadline, owner/reporter persona and affected-records context. Every transition is guarded against the allowed-transition map and emits a lifecycle event via sdk-audit. Provides a tenant-scoped SLA-breach scan (still-active incidents past sla_due_at) and an append-only evidence timeline (detected/root_cause/recovery/verification/note) that is notarised into the sdk-audit hash chain and stores the entry id/seq/hash back as an immutability receipt; UPDATE/DELETE on evidence is blocked by a database trigger.",
+  "tags": [
+    "incident",
+    "sla",
+    "lifecycle",
+    "evidence",
+    "audit-chain",
+    "multi-tenant"
+  ],
+  "provides": {
+    "endpoints": [
+      {
+        "method": "POST",
+        "path": "/api/incidents",
+        "description": "Open a new incident for a tenant; requires tenant_id, incident_type and title and returns the created record with a fresh incident_id and default status 'open'.",
+        "kind": "mutation",
+        "auth_scopes": ["incident:write"]
+      },
+      {
+        "method": "GET",
+        "path": "/api/incidents/sla-breaches",
+        "description": "Scan for still-active incidents (not resolved/closed/cancelled) whose sla_due_at deadline has passed for the given tenant_id; powered by the partial incident_sla_idx.",
+        "kind": "query",
+        "auth_scopes": ["incident:read"]
+      },
+      {
+        "method": "GET",
+        "path": "/api/incidents",
+        "description": "List a tenant's incidents with optional status/severity/owner_persona_id filters and limit/offset paging.",
+        "kind": "query",
+        "auth_scopes": ["incident:read"]
+      },
+      {
+        "method": "GET",
+        "path": "/api/incidents/:incident_id",
+        "description": "Fetch a single incident by id within the caller's tenant_id; 404 when no matching row exists.",
+        "kind": "query",
+        "auth_scopes": ["incident:read"]
+      },
+      {
+        "method": "PATCH",
+        "path": "/api/incidents/:incident_id",
+        "description": "Update editable incident fields (title, description, severity, root_cause, recovery, verification, owner, subject_ref, sla_due_at, metadata); status is NOT editable here — use the transition endpoint.",
+        "kind": "mutation",
+        "auth_scopes": ["incident:write"]
+      },
+      {
+        "method": "POST",
+        "path": "/api/incidents/:incident_id/transition",
+        "description": "Advance an incident to a new status through the validated transition map; stamps resolved_at/closed_at as appropriate and emits an incident.transitioned.v1 audit event. Returns 409 InvalidTransition when the move is not allowed.",
+        "kind": "mutation",
+        "auth_scopes": ["incident:write"]
+      },
+      {
+        "method": "POST",
+        "path": "/api/incidents/:incident_id/evidence",
+        "description": "Append one append-only timeline entry (detected/root_cause/recovery/verification/note) to an incident; the entry is written to the sdk-audit hash chain and the receipt (audit entry id/seq/hash) is returned with the row. No edit/delete exists.",
+        "kind": "mutation",
+        "auth_scopes": ["incident:write"]
+      },
+      {
+        "method": "GET",
+        "path": "/api/incidents/:incident_id/evidence",
+        "description": "Read an incident's evidence timeline oldest-first, optionally filtered to one kind, with limit/offset paging.",
+        "kind": "query",
+        "auth_scopes": ["incident:read"]
+      }
+    ],
+    "events": [],
+    "models": [
+      {
+        "schema": "incident",
+        "table": "incident",
+        "description": "One row per operational exception/incident: type, title, severity, lifecycle status, affected_records, root_cause/recovery/verification narrative, owner/reporter persona, sla_due_at and the opened/detected/resolved/closed timestamps. Tenant-scoped and persona-keyed."
+      },
+      {
+        "schema": "incident",
+        "table": "evidence",
+        "description": "Append-only evidence timeline (detected/root_cause/recovery/verification/note) mirrored into the sdk-audit hash chain; stores the audit entry_id/seq/entry_hash as the immutability receipt. UPDATE/DELETE blocked by a database trigger; FK to incident is ON DELETE RESTRICT."
+      }
+    ],
+    "hooks": [],
+    "ui_components": []
+  },
+  "consumes": {
+    "events": [],
+    "infra": ["postgres"],
+    "config_keys": []
+  },
+  "scenarios": [
+    {
+      "id": "open-incident",
+      "title": "Open an incident and set its SLA deadline",
+      "when_to_use": "When an operational exception is detected and you need to record it, assign an owner and start an SLA clock so it surfaces in the breach scan if it runs late.",
+      "example_code": "import { createIncident } from '@projexlight/sdk-incident';\n\nconst incident = await createIncident({\n  tenant_id: req.auth.tenant_id,\n  incident_type: 'data.export.failed',\n  title: 'Nightly export job failed for tenant',\n  severity: 'high',\n  owner_persona_id: req.auth.sub,\n  sla_due_at: new Date(Date.now() + 4 * 3600_000).toISOString(),\n});\nconsole.log(incident.incident_id, incident.status); // <uuid> 'open'",
+      "expected_outcome": "A new incident.incident row is created with status 'open', the given severity and sla_due_at, and the returned record carries its generated incident_id ready for transitions and evidence."
+    },
+    {
+      "id": "transition-status",
+      "title": "Advance an incident through its lifecycle",
+      "when_to_use": "When an incident moves forward (or is cancelled) and you want the transition validated against the allowed-transition map, timestamps stamped, and a lifecycle event emitted to sdk-audit.",
+      "example_code": "import { transitionIncident, isValidTransition, InvalidIncidentTransition } from '@projexlight/sdk-incident';\n\nif (!isValidTransition('open', 'investigating')) throw new Error('blocked');\ntry {\n  const rec = await transitionIncident(tenantId, incidentId, 'investigating');\n  console.log(rec?.status); // 'investigating'\n} catch (err) {\n  if (err instanceof InvalidIncidentTransition) {\n    // 409: move not allowed from the current status\n  }\n}",
+      "expected_outcome": "The incident's status advances to 'investigating', updated_at (and resolved_at/closed_at on those targets) is stamped, and an incident.transitioned.v1 event is written to the audit chain. An illegal move throws InvalidIncidentTransition (mapped to HTTP 409)."
+    },
+    {
+      "id": "append-evidence",
+      "title": "Notarise root-cause evidence into the audit chain",
+      "when_to_use": "When you need to record an immutable timeline beat (detected, root_cause, recovery, verification or a note) that must be tamper-evident and never editable afterwards.",
+      "example_code": "import { appendEvidence, EVIDENCE_KINDS } from '@projexlight/sdk-incident';\n\nconst evidence = await appendEvidence({\n  tenant_id: tenantId,\n  incident_id: incidentId,\n  kind: 'root_cause',\n  body: 'Connection pool exhausted by a 30-day setInterval overflow.',\n  recorded_by_persona_id: req.auth.sub,\n});\nconsole.log(evidence.audit_entry_hash); // hex receipt proving immutability",
+      "expected_outcome": "An append-only incident.evidence row is written and mirrored into the sdk-audit hash chain; the returned record carries the audit_entry_id/audit_seq/audit_entry_hash receipt, and the incident's root_cause summary column is projected from the entry. Any later UPDATE/DELETE is rejected by the database trigger."
+    },
+    {
+      "id": "query-sla-breaches",
+      "title": "Scan for SLA-breaching incidents",
+      "when_to_use": "When a scheduler or dashboard needs the tenant's still-active incidents whose SLA deadline has already passed, so they can be escalated or alerted on.",
+      "example_code": "import { findSlaBreaches, notifySlaBreach } from '@projexlight/sdk-incident';\n\nconst breached = await findSlaBreaches(tenantId, { limit: 50 });\nfor (const incident of breached) {\n  await notifySlaBreach(incident);\n}\nconsole.log(`${breached.length} incidents past SLA`);",
+      "expected_outcome": "Returns tenant-scoped incidents whose sla_due_at is in the past and whose status is not resolved/closed/cancelled (served by the partial incident_sla_idx), ready to escalate; resolved and closed incidents are excluded even if their deadline passed."
+    }
+  ],
+  "compliance_posture": {
+    "regimes": ["SOC2", "GDPR"],
+    "notes": "The evidence timeline is append-only and tamper-evident: every entry is notarised into the sdk-audit hash chain and its entry_hash is stored as an immutability receipt, while a database trigger rejects all UPDATE/DELETE on incident.evidence and the FK to incident is ON DELETE RESTRICT, so an incident that has been written about cannot be erased. This supports SOC2 audit-trail and incident-management controls and long-term evidence retention. Incident and evidence bodies can hold tenant business data and persona references (owner/reporter/recorded_by), so treat exports under GDPR data-subject scope; all rows are tenant-scoped."
+  },
+  "pool_placement": "evidence",
+  "pricing_skus": [],
+  "links": {
+    "readme": "packages/sdk-incident/README.md",
+    "source": "packages/sdk-incident/src/",
+    "prd_section": "P15·E3 Exception/Incident Record & Evidence"
+  }
+}

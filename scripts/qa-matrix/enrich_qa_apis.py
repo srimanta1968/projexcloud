@@ -43,10 +43,25 @@ WAVES = [
     (3, "W3 · Canonical Entities + Privacy", [
         "persons", "personas", "profile", "memberships", "app-identities", "devices",
         "flags", "geo", "resolver", "data-rights", "role-assignments", "identity",
-        "hdk-idp", "hdk-permissions", "hdk-sync"]),
+        "hdk-idp", "hdk-permissions", "hdk-sync",
+        # P16 provenance/projection pair. source-record captures the assertions that
+        # projection later ranks, so it must be up FIRST — testing survivorship before
+        # anything can assert is testing an empty table and calling it a pass. Both sit
+        # at the canonical-entity layer: they key on subject_ref, which persons/personas
+        # mint, and depend on nothing above this wave.
+        "sdk-source-record", "source-records", "sdk-projection", "projection",
+        # Pure extraction — proposes contacts and persists NOTHING (that zero-write
+        # property is itself under test), so its only real dependency is auth. Early.
+        "sdk-parsing", "parsing"]),
     (4, "W4 · Operational Core + Billing", [
         "billing", "payments", "approvals", "connectors", "media", "notifications",
-        "search", "webhooks", "workflows"]),
+        "search", "webhooks", "workflows",
+        # Governed bulk ingest: writes canonical records through the W3 entities and is
+        # metered, so it follows both. Its rollback tests need billing up to assert that
+        # a reversal also reverses the meter.
+        "sdk-import", "imports",
+        # Metered capability spend — sits directly on billing.
+        "sdk-data-credits", "data-credits"]),
     (5, "W5 · Engagement (Domain Layer)", [
         "sdk-engagement", "sdk-crm", "sdk-campaign", "sdk-lead-scoring", "sdk-social",
         "sdk-content", "sdk-service-request", "sdk-event", "sdk-approval",
@@ -55,7 +70,13 @@ WAVES = [
         "sdk-sequence", "sequences", "sequence-templates",
         "sdk-scheduling", "scheduling", "sdk-deliverability", "deliverability",
         "sdk-offer-catalog", "offers", "sdk-handoff", "handoff",
-        "sdk-incident", "incident", "connector-twilio-voice", "voice"]),
+        "sdk-incident", "incident", "connector-twilio-voice", "voice",
+        # P16 engagement-domain SDKs. All three hang off crm/persona and the notification
+        # layer, so they belong here rather than in the agent-runtime wave the default
+        # would have dropped them into.
+        "sdk-conversation", "conversations",       # threads on a crm subject
+        "sdk-sla", "sla",                          # clocks over crm work items
+        "sdk-coverage", "coverage"]),              # who is available to be assigned
     (6, "W6 · Knowledge, Semantic & Agent Runtime", [
         "semantic-service", "agent-runtime-agents", "agent-runtime-runs",
         "agent-runtime-tokens", "sdk-agent-runtime", "ai-gateway", "sdk-ai-gateway",

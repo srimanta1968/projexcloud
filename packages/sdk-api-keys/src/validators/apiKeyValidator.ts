@@ -22,6 +22,12 @@ export function validateIssueKey(body: unknown): ValidationResult<IssueApiKeyInp
     errors.push('rate_limit_rpm must be a positive number');
   }
   if (expires_at && Number.isNaN(Date.parse(expires_at))) errors.push('expires_at must be ISO-8601');
+  // An expiry already in the past would mint a credential that is dead on
+  // arrival — accepted by the schema, refused by the very next request, and
+  // debugged as "the key does not work" rather than "the key expired".
+  if (expires_at && !Number.isNaN(Date.parse(expires_at)) && Date.parse(expires_at) <= Date.now()) {
+    errors.push('expires_at must be in the future');
+  }
 
   if (errors.length > 0) return { ok: false, errors };
   return { ok: true, value: { tenant_id, scopes: scopes!, rate_limit_rpm, expires_at } };

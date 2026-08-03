@@ -1,0 +1,112 @@
+{
+  "name": "POST /api/source-rights/attestations - Sign a source-rights attestation",
+  "endpoint": "/api/source-rights/attestations",
+  "sdk": "sdk-source-record",
+  "sourceFile": "packages/sdk-source-record/src/server/routes.ts",
+  "method": "POST",
+  "requiresAuth": true,
+  "expectedStatus": 201,
+  "taskId": "3837bea9-c427-4ec0-a9c7-c2bd94c51c38",
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "featureId": "32707c6f-ae2c-4e31-bf2f-2c39c0f5cc2e",
+  "epicId": "fa43f2ff-2e6e-4f27-894a-4992cc2dace9",
+  "priority": 51,
+  "testability": "auto",
+  "description": "Record and sign the answer to \"were we allowed to hold this, and what may we do with it?\". The signature covers the TERMS, not just the row: source fingerprint, mapping version and the normalized permitted-use set, so a later claim of broader permissions cannot pass as the original grant. permitted_uses is trimmed, lower-cased, deduped and sorted before signing, so the same grant always signs identically. HARD RULE: an origin_class of LICENSED_THIRD_PARTY or PARTNER_PROVIDED is REFUSED with 422 unless an evidence blob reference is present — bought or partner-supplied data must carry its paperwork, and the refusal happens before anything is written. evidence_payload is captured through sdk-evidence when that bridge is wired; with no bridge it does NOT satisfy the rule, because a fabricated blob id is exactly the failure this prevents. The row is immutable once signed. Either capture_id or source_fingerprint must be present to bind the signature to. Required: tenant_id, attestor_principal, origin_class, permitted_uses[].",
+  "dependsOn": [
+    "POST /api/auth/signup-tenant",
+    "POST /api/source-records"
+  ],
+  "fieldEnums": {
+    "origin_class": [
+      "USER_PROVIDED",
+      "FIRST_PARTY_DIRECT",
+      "TENANT_FIRST_PARTY_CRM",
+      "USER_AUTHORIZED_CONTACT_STORE",
+      "PUBLIC_RECORD",
+      "LICENSED_THIRD_PARTY",
+      "PARTNER_PROVIDED",
+      "UNKNOWN_QUARANTINED"
+    ],
+    "evidence_kind": [
+      "RAW_PAYLOAD",
+      "API_RESPONSE",
+      "DOCUMENT",
+      "SCREENSHOT",
+      "LICENSE_TERMS",
+      "CONSENT_RECEIPT",
+      "SIGNATURE",
+      "OTHER"
+    ]
+  },
+  "testCases": [
+    {
+      "name": "Sign a licensed-source attestation with its licence evidence",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "payload": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "attestor_principal": "principal:compliance-officer",
+        "origin_class": "LICENSED_THIRD_PARTY",
+        "permitted_uses": [
+          "outreach",
+          "analytics"
+        ],
+        "capture_id": "{{cache:source-record.capture.response.data.source_record.capture_id}}",
+        "source_fingerprint": "{{cache:source-record.capture.response.data.source_record.fingerprint}}",
+        "jurisdiction": "EU",
+        "license_ref": "LIC-{{dynamic:slug}}",
+        "collection_period_start": "{{dynamic:pastdatetime-30d}}",
+        "collection_period_end": "{{dynamic:futuredatetime+365d}}",
+        "evidence_blob_ref": "evidence:{{dynamic:uuid}}",
+        "evidence_kind": "LICENSE_TERMS",
+        "mapping_version": "map-{{dynamic:slug}}",
+        "metadata": {
+          "reviewed_by": "qa-runner"
+        },
+        "purpose": "rights attestation",
+        "causation_id": "{{dynamic:uuid}}"
+      },
+      "expectedStatus": 201,
+      "expectedResponse": {
+        "data": {
+          "attestation": {
+            "attestation_id": "string",
+            "signature": "string",
+            "origin_class": "string"
+          }
+        }
+      }
+    }
+  ],
+  "captureResponse": {
+    "source-record.attestation.create.response.data.attestation.attestation_id": "data.attestation.attestation_id"
+  },
+  "errorCases": [
+    {
+      "status": 400,
+      "code": "VALIDATION_ERROR",
+      "message": "tenant_id, attestor_principal, origin_class and permitted_uses[] are required",
+      "when": "any required field is missing, or permitted_uses is not an array"
+    },
+    {
+      "status": 422,
+      "code": "ATTESTATION_EVIDENCE_REQUIRED",
+      "message": "origin_class LICENSED_THIRD_PARTY requires an evidence blob reference before it can be attested",
+      "when": "origin_class is LICENSED_THIRD_PARTY or PARTNER_PROVIDED and no evidence blob reference resolved"
+    },
+    {
+      "status": 422,
+      "code": "SOURCE_FINGERPRINT_REQUIRED",
+      "message": "an attestation needs either a capture_id to read the fingerprint from, or an explicit source_fingerprint",
+      "when": "neither capture_id nor source_fingerprint identifies what the signature covers"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "missing or invalid token",
+      "when": "no valid tenant Bearer token on the request"
+    }
+  ]
+}

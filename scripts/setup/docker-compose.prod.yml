@@ -124,6 +124,31 @@ services:
     restart: unless-stopped
     networks: [projex]
 
+  # One-shot GLOBAL reference-data seeder. Runs AFTER the gateway is healthy (so
+  # all SDK migrations have created the tables), applies every idempotent
+  # tests/setup_scripts/*.sql EXCEPT tenant-scoped ({{cache:...}}) seeds, then
+  # exits. Safe on every `up` (ON CONFLICT DO NOTHING). This is what makes a
+  # fresh qa/staging/prod auto-populate the migration-only reference rows the
+  # app requires by fixed id (taxonomy versions, routing pools, trace, federation,
+  # empi links, ontology). Tenant-scoped rows are resolved at runtime from the
+  # signup cache and are intentionally NOT seeded here.
+  db-seed:
+    image: postgres:16-alpine
+    container_name: projexcloud_db_seed
+    depends_on:
+      api-gateway:
+        condition: service_healthy
+    env_file:
+      - ${ENV_FILE:-../../.env.prod}
+    volumes:
+      - ../../tests/setup_scripts:/seeds:ro
+      - ./seed-reference-data.sh:/seed-reference-data.sh:ro
+    entrypoint: ["/bin/sh", "/seed-reference-data.sh"]
+    environment:
+      SEED_DIR: /seeds
+    restart: "no"
+    networks: [projex]
+
 volumes:
   pg_data:
   redis_data:

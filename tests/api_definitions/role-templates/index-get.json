@@ -1,0 +1,51 @@
+{
+  "name": "GET /api/role-templates — role templates for an app, platform defaults and tenant overrides",
+  "endpoint": "/api/role-templates",
+  "method": "GET",
+  "sdk": "sdk-tenant",
+  "sourceFile": "packages/sdk-tenant/src/server/routes.ts",
+  "requiresAuth": true,
+  "expectedStatus": 200,
+  "testability": "auto",
+  "taskId": "50023aa6-745d-406b-9dba-6e9a9d5da5a0",
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "epicId": "b7b01410-f1b7-4919-a8cd-d7eb77b9e953",
+  "featureId": "4e38857d-60d2-4e26-a208-0f7877b94e0f",
+  "description": "Lists role templates for one app. tenant.role_template is keyed (tenant_id, app_id, name) with a NULLABLE tenant_id, and that nullability carries the whole model: a NULL row is the PLATFORM DEFAULT shipped with the app (unique on app_id+name) and a tenant_id row is that tenant OVERRIDING the same role name (unique on tenant_id+app_id+name). A tenant can therefore redefine what Manager means without forking the app, and a tenant that never touches it keeps inheriting. The response must let a client tell the two apart WITHOUT comparing tenant_id itself — the roles screen renders inherited rows read-only and offers override as a deliberate action, and if it had to infer origin client-side the two would eventually be confused and every tenant would end up owning a private copy of every default role, which is exactly the fork the nullable column exists to avoid. parent_role_template_id is returned so the inheritance chain can be shown and a permission traced to the ancestor that grants it.",
+  "testCases": [
+    {
+      "name": "List role templates for an app",
+      "queryParams": {
+        "app_id": "{{cache:auth.signup-tenant.response.data.app_id}}"
+      },
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "data": {}
+      }
+    }
+  ],
+  "expectedResponse": {
+    "data": {}
+  },
+  "dependsOn": [
+    "POST /api/auth/signup-tenant"
+  ],
+  "errorCases": [
+    {
+      "name": "401 - no bearer token",
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "authentication required",
+      "when": "role templates describe who may do what inside a tenant, so the list is never public",
+      "payload": {}
+    },
+    {
+      "name": "400 - app_id is required",
+      "status": 400,
+      "code": "ValidationError",
+      "message": "app_id is required",
+      "when": "templates are per-app; an unscoped list would mix roles from apps the caller may not administer",
+      "payload": {}
+    }
+  ]
+}

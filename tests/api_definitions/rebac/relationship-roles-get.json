@@ -1,0 +1,81 @@
+{
+  "name": "GET /api/relationships/roles — live roles, or what held at a past instant",
+  "endpoint": "/api/relationships/roles",
+  "sdk": "sdk-rebac",
+  "sourceFile": "packages/sdk-rebac/src/server/routes.ts",
+  "method": "GET",
+  "requiresAuth": true,
+  "expectedStatus": 200,
+  "taskId": "f50d45c1-6b9d-45ae-9f57-1806fae6d53e",
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "featureId": "0eca47ce-30fb-44e9-91c7-51ac09170762",
+  "epicId": "bd0b5996-171f-46f2-8ead-0b72593f97df",
+  "priority": 72,
+  "testability": "auto",
+  "dependsOn": ["POST /api/auth/signup-tenant", "POST /api/relationships/roles"],
+  "coversCriterion": [
+    "f50d45c1-6b9d-45ae-9f57-1806fae6d53e#AC1",
+    "f50d45c1-6b9d-45ae-9f57-1806fae6d53e#AC2"
+  ],
+  "description": "Lists the contextual roles held by a persona, filtered by counterparty, kind, label or trust_state. Proves AC1 (several roles coexist per pair, each with its own trust and validity) and AC2 (closed roles are still retrievable). The as_of parameter is the bitemporal read — valid_from <= t AND (valid_to IS NULL OR valid_to > t) — which lets 'who was the carer last March' be answered from the SAME rows that answer 'who is the carer now'. That is the point of storing validity on the row: no snapshot table, no parallel history table, and therefore no way for the two to disagree. QA edge cases: the default view is live-as-of-now, so a closed role disappears from it while remaining fully retrievable with include_closed=true — losing is a date on the row, never a deletion; as_of correctly excludes a role whose valid_from is later than the instant asked about, which is what distinguishes a real bitemporal read from a naive 'not closed yet' filter; requiresAuth applies to this GET exactly as to the POST (MUST-52); a missing persona_a is 400 since the query would otherwise span every persona; limit is clamped to 1..1000; results are ordered by valid_from DESC then relationship_id so the response is stable across repeated reads.",
+  "testCases": [
+    {
+      "name": "Live roles for a pair",
+      "headers": { "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}" },
+      "queryParams": {
+        "persona_a": "{{cache:personas.create.response.data.persona.persona_id}}",
+        "persona_b": "{{cache:personas.create-second.response.data.persona.persona_id}}"
+      },
+      "expectedStatus": 200
+    },
+    {
+      "name": "Provenance view including closed roles",
+      "headers": { "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}" },
+      "queryParams": {
+        "persona_a": "{{cache:personas.create.response.data.persona.persona_id}}",
+        "include_closed": "true"
+      },
+      "expectedStatus": 200
+    },
+    {
+      "name": "What held at a past instant",
+      "headers": { "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}" },
+      "queryParams": {
+        "persona_a": "{{cache:personas.create.response.data.persona.persona_id}}",
+        "as_of": "{{dynamic:pastdatetime}}"
+      },
+      "expectedStatus": 200
+    },
+    {
+      "name": "Filter by trust state",
+      "headers": { "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}" },
+      "queryParams": {
+        "persona_a": "{{cache:personas.create.response.data.persona.persona_id}}",
+        "trust_state": "DOCUMENTED"
+      },
+      "expectedStatus": 200
+    }
+  ],
+  "errorCases": [
+    {
+      "name": "Missing persona_a is refused",
+      "status": 400,
+      "code": "VALIDATION_ERROR",
+      "message": "persona_a query param required",
+      "when": "persona_a is absent, which would make the query span every persona",
+      "headers": { "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}" },
+      "queryParams": {},
+      "expectedStatus": 400,
+      "expectedError": { "code": "VALIDATION_ERROR" }
+    },
+    {
+      "name": "Unauthenticated is refused by the default-deny gate",
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "missing or invalid tenant token",
+      "when": "no valid tenant Bearer token — GET is gated exactly as POST",
+      "queryParams": { "persona_a": "{{cache:personas.create.response.data.persona.persona_id}}" },
+      "expectedStatus": 401
+    }
+  ]
+}

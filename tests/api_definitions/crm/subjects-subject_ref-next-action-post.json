@@ -1,0 +1,182 @@
+{
+  "sdk": "sdk-crm",
+  "sourceFile": "packages/sdk-crm/src/server/routes.ts",
+  "requiresAuth": true,
+  "taskId": "94a7a454-5ea6-43c5-a54f-495493441b5a",
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "featureId": "c611a832-fd3a-4930-8adf-22e1b3c70d36",
+  "epicId": "5622482a-4923-4f93-9dea-805cc54f3efd",
+  "testability": "auto",
+  "name": "POST /api/crm/subjects/:subject_ref/next-action - Commit a next action on any subject",
+  "endpoint": "/api/crm/subjects/:subject_ref/next-action",
+  "method": "POST",
+  "expectedStatus": 201,
+  "priority": 60,
+  "description": "Commits the single open NEXT action for ANY subject - a lead, a contact, a ticket or a deal - addressed by its subject_ref (`<kind>:<id>`, e.g. `lead:abc123`). All five elements of the commitment are required: action_type, owner_persona_id, due_at (an exact instant), purpose and intended_outcome. Edge cases: a missing or blank element returns 400 NEXT_ACTION_INCOMPLETE with EVERY missing element listed individually in details[] (field + message), never just the first one, so a client can render each against its own input; committing again SUPERSEDES the prior open action (it is cancelled, not queued behind), so exactly one action is open per subject at any time; subject_kind is parsed from the ref prefix and cannot be sent separately, so a ref and a kind can never disagree; the legacy deal FK is back-filled only when the ref is `deal:<uuid>` AND that deal exists for the tenant, so naming a deal that is gone still records the action instead of failing on a constraint; due_at is stored as sent, and a past instant is accepted (it simply lands in the overdue queue immediately).",
+  "dependsOn": [
+    "POST /api/auth/signup-tenant",
+    "POST /api/personas"
+  ],
+  "fieldEnums": {
+    "action_type": [
+      "call",
+      "email",
+      "meeting",
+      "task",
+      "linkedin",
+      "sms",
+      "proposal",
+      "other"
+    ]
+  },
+  "captureResponse": {
+    "crm.subject-next-action.response.data.next_action.next_action_id": "data.next_action.next_action_id"
+  },
+  "testCases": [
+    {
+      "name": "Commit a call with all five elements of the commitment",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "pathParams": {
+        "subject_ref": "{{var:crm_subject_ref}}"
+      },
+      "payload": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "action_type": "call",
+        "owner_persona_id": "{{cache:personas.create.response.data.persona.persona_id}}",
+        "due_at": "{{dynamic:futuredatetime}}",
+        "purpose": "Confirm the budget holder and the decision date",
+        "intended_outcome": "A named budget holder and a decision date agreed in writing"
+      },
+      "expectedStatus": 201,
+      "expectedResponse": {
+        "data": {
+          "next_action": {
+            "next_action_id": "string",
+            "subject_ref": "string",
+            "action_type": "string",
+            "status": "string"
+          }
+        }
+      }
+    },
+    {
+      "name": "400 - every missing element is named, not just the first",
+      "testType": "negative",
+      "coversErrorCase": "400|NEXT_ACTION_INCOMPLETE",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "pathParams": {
+        "subject_ref": "{{var:crm_subject_ref}}"
+      },
+      "payload": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "action_type": "call",
+        "owner_persona_id": "{{cache:personas.create.response.data.persona.persona_id}}",
+        "due_at": "{{dynamic:futuredatetime}}",
+        "purpose": "",
+        "intended_outcome": ""
+      },
+      "expectedStatus": 400,
+      "expectedError": {
+        "code": "NEXT_ACTION_INCOMPLETE"
+      }
+    },
+    {
+      "name": "400 - tenant_id is required",
+      "testType": "negative",
+      "coversErrorCase": "400|ValidationError",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "pathParams": {
+        "subject_ref": "{{var:crm_subject_ref}}"
+      },
+      "payload": {
+        "action_type": "call",
+        "owner_persona_id": "{{cache:personas.create.response.data.persona.persona_id}}",
+        "due_at": "{{dynamic:futuredatetime}}",
+        "purpose": "Confirm the budget holder",
+        "intended_outcome": "A named budget holder"
+      },
+      "expectedStatus": 400,
+      "expectedError": {
+        "code": "ValidationError"
+      }
+    },
+    {
+      "name": "401 - missing bearer token",
+      "testType": "negative",
+      "coversErrorCase": "401|Unauthorized|missing",
+      "headers": {},
+      "pathParams": {
+        "subject_ref": "{{var:crm_subject_ref}}"
+      },
+      "payload": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "action_type": "call",
+        "owner_persona_id": "{{cache:personas.create.response.data.persona.persona_id}}",
+        "due_at": "{{dynamic:futuredatetime}}",
+        "purpose": "Confirm the budget holder",
+        "intended_outcome": "A named budget holder"
+      },
+      "expectedStatus": 401,
+      "expectedError": {
+        "code": "Unauthorized",
+        "messageContains": "Missing bearer token"
+      }
+    },
+    {
+      "name": "401 - invalid or expired token",
+      "testType": "negative",
+      "coversErrorCase": "401|Unauthorized|invalid",
+      "headers": {
+        "Authorization": "Bearer {{static:invalid-token}}"
+      },
+      "pathParams": {
+        "subject_ref": "{{var:crm_subject_ref}}"
+      },
+      "payload": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "action_type": "call",
+        "owner_persona_id": "{{cache:personas.create.response.data.persona.persona_id}}",
+        "due_at": "{{dynamic:futuredatetime}}",
+        "purpose": "Confirm the budget holder",
+        "intended_outcome": "A named budget holder"
+      },
+      "expectedStatus": 401,
+      "expectedError": {
+        "code": "Unauthorized",
+        "messageContains": "Invalid or expired token"
+      }
+    }
+  ],
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "Authorization header absent or not in the form \"Bearer <jwt>\""
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "JWT signature invalid, malformed, or past its exp claim"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "tenant_id is required",
+      "when": "body omits tenant_id"
+    },
+    {
+      "status": 400,
+      "code": "NEXT_ACTION_INCOMPLETE",
+      "message": "this subject cannot be saved until its next action is complete",
+      "when": "action_type is not one of the eight types, or owner_persona_id / due_at / purpose / intended_outcome is missing or blank - details[] carries one {field, message} entry per missing element"
+    }
+  ]
+}

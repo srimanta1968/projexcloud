@@ -1,0 +1,62 @@
+{
+  "name": "GET /api/sla/clocks/:clock_id/firings - Read the firing ledger",
+  "endpoint": "/api/sla/clocks/:clock_id/firings",
+  "sdk": "sdk-sla",
+  "sourceFile": "packages/sdk-sla/src/server/routes.ts",
+  "method": "GET",
+  "requiresAuth": true,
+  "expectedStatus": 200,
+  "taskId": "1dbcb185-1bb8-4af9-93ae-8438ba8fd513",
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "featureId": "af5400b6-00aa-4d5c-82f6-d9819457333f",
+  "epicId": "39365400-aca0-4a86-9791-5771d19998f4",
+  "priority": 56,
+  "testability": "auto",
+  "description": "The ledger for one clock: which rungs fired, when they were DUE versus when they actually went (so lateness is visible), how many attempts each took, who the audience resolved to at fire time, the action result and the last error on anything that failed. One row per rung per clock, forever — that uniqueness is what makes exactly-once true. Returns 200 with firings and a count.",
+  "dependsOn": [
+    "POST /api/auth/signup-tenant",
+    "POST /api/sla/tick"
+  ],
+  "fieldEnums": {
+    "firing_state": [
+      "claimed",
+      "fired",
+      "failed"
+    ]
+  },
+  "testCases": [
+    {
+      "name": "Read the ledger for the ticked clock",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "pathParams": {
+        "clock_id": "{{cache:sla.clock.create.response.data.clock.clock_id}}"
+      },
+      "queryParams": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}"
+      },
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "data": {
+          "firings": "array",
+          "count": "number"
+        }
+      }
+    }
+  ],
+  "errorCases": [
+    {
+      "status": 400,
+      "code": "VALIDATION_ERROR",
+      "message": "tenant_id query param required",
+      "when": "a required field is missing from the request"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "missing or invalid token",
+      "when": "no valid tenant Bearer token on the request"
+    }
+  ]
+}

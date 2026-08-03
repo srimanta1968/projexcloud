@@ -1,0 +1,76 @@
+{
+  "sdk": "sdk-assignment",
+  "sourceFile": "packages/sdk-assignment/src/server/routes.ts",
+  "requiresAuth": true,
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "epicId": "af159e51-90a4-46cf-8d57-444515cfbe56",
+  "taskId": "efd127bc-a016-41e2-8831-bca0388ebba1",
+  "priority": 15,
+  "testability": "auto",
+  "name": "GET /api/assignments/:record_id - One assignment and its whole history",
+  "endpoint": "/api/assignments/:record_id",
+  "method": "GET",
+  "expectedStatus": 200,
+  "description": "The assignment as it stands, plus every prior owner and why they stopped being one. The history is the answer to \"this has bounced three times, why\" - a count tells an operator nothing, while \"wrong specialty, wrong specialty, out of area\" tells them the routing rules are wrong. QA edge cases: original_persona_id is who owned it FIRST and never changes, while primary_persona_id is who owns it now; entries are sequenced and cannot be rewritten; a system fallback carries no reason, because a reason is demanded of a person who had a choice.",
+  "dependsOn": [
+    "POST /api/auth/signup-tenant",
+    "POST /api/assignments"
+  ],
+  "testCases": [
+    {
+      "name": "Read an assignment with its history",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "pathParams": {
+        "record_id": "{{cache:assignment.assignments.create.record_id}}"
+      },
+      "queryParams": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}"
+      },
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "data": {
+          "record_id": "string",
+          "history": "array"
+        }
+      }
+    }
+  ],
+  "errorCases": [
+    {
+      "name": "An unknown assignment is refused",
+      "status": 404,
+      "code": "ASSIGNMENT_NOT_FOUND",
+      "message": "no assignment <id>",
+      "when": "the id names nothing belonging to this tenant",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "pathParams": {
+        "record_id": "{{var:absent_uuid}}"
+      },
+      "queryParams": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}"
+      },
+      "expectedStatus": 404,
+      "expectedError": {
+        "code": "ASSIGNMENT_NOT_FOUND"
+      }
+    },
+    {
+      "name": "Unauthenticated is refused by the default-deny gate",
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "missing or invalid tenant token",
+      "when": "no valid tenant Bearer token or scoped API key on the request",
+      "expectedStatus": 401,
+      "pathParams": {
+        "record_id": "{{cache:assignment.assignments.create.record_id}}"
+      },
+      "queryParams": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}"
+      }
+    }
+  ]
+}

@@ -1,0 +1,553 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Authentication &amp; Identity — ProjexCloud Developer Hub</title>
+<style>
+  :root{--bg:#0d1117;--panel:#161b22;--line:#30363d;--tx:#e6edf3;--dim:#8b949e;--acc:#58a6ff;--ok:#3fb950;--warn:#d29922;--err:#f85149;--code:#1f2428}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--tx);font:15px/1.65 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
+  .wrap{max-width:1080px;margin:0 auto;padding:32px 24px 96px}
+  h1{font-size:30px;margin:0 0 6px;letter-spacing:-.02em}
+  h2{font-size:21px;margin:44px 0 12px;padding-bottom:8px;border-bottom:1px solid var(--line)}
+  h3{font-size:16px;margin:26px 0 8px;color:var(--acc)}
+  p,li{color:#c9d1d9}
+  .lede{color:var(--dim);font-size:16px;margin:0 0 8px}
+  code{background:var(--code);padding:2px 6px;border-radius:4px;font:13px ui-monospace,SFMono-Regular,Menlo,monospace;color:#a5d6ff}
+  pre{background:var(--code);border:1px solid var(--line);border-radius:8px;padding:14px 16px;overflow-x:auto}
+  pre code{background:none;padding:0;color:#c9d1d9;font-size:12.5px;line-height:1.6}
+  table{width:100%;border-collapse:collapse;margin:14px 0;font-size:14px;display:block;overflow-x:auto}
+  th,td{border:1px solid var(--line);padding:9px 11px;text-align:left;vertical-align:top}
+  th{background:var(--panel);font-weight:600}
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:16px 18px;margin:16px 0}
+  .warn{border-left:3px solid var(--warn)}
+  .err{border-left:3px solid var(--err)}
+  .ok{border-left:3px solid var(--ok)}
+  .tag{display:inline-block;font-size:11px;padding:2px 8px;border-radius:20px;border:1px solid var(--line);color:var(--dim);margin-right:6px}
+  .m{font-weight:700;font-size:11px;padding:2px 7px;border-radius:4px;color:#000}
+  .post{background:#3fb950}.get{background:#58a6ff}.del{background:#f85149;color:#fff}
+  a{color:var(--acc)}
+  .lvl{display:flex;gap:10px;align-items:flex-start;margin:10px 0}
+  .lvl .n{flex:0 0 26px;height:26px;border-radius:50%;background:var(--acc);color:#0d1117;font-weight:700;display:flex;align-items:center;justify-content:center;font-size:13px}
+  hr{border:0;border-top:1px solid var(--line);margin:32px 0}
+  .crumb{font-size:13px;color:var(--dim);margin-bottom:18px}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<div class="crumb"><a href="index.html">Developer Hub</a> › Authentication &amp; Identity</div>
+
+<h1>Authentication &amp; Identity</h1>
+<p class="lede">How the platform owner, a tenant, a tenant's applications, and an application's
+end users each obtain credentials — and where their roles and policies come from.</p>
+
+<div class="panel warn">
+<strong>The gateway is default-deny.</strong> One root <code>onRequest</code> hook
+(<code>services/api-gateway/src/plugins/authGate.ts</code>) requires a valid tenant JWT for
+every path unless it is on the public allowlist (auth bootstrap, health, <code>.well-known</code>,
+metrics, SAML, OAuth callback, signed webhooks), self-guards as admin, or is a WebSocket
+upgrade. An endpoint you did not explicitly make public is closed. Kill-switch:
+<code>AUTH_GATE_MODE=enforce|report|off</code>.
+</div>
+
+<h2>The four principals</h2>
+
+<table>
+<tr><th>Principal</th><th>Who</th><th>Credential</th><th>Presented as</th></tr>
+<tr>
+  <td><strong>Platform operator</strong></td>
+  <td>You, running ProjexCloud</td>
+  <td><code>ADMIN_OPS_TOKEN</code> (one shared operator secret)</td>
+  <td>Admin header on <code>/admin/*</code></td>
+</tr>
+<tr>
+  <td><strong>Tenant admin</strong><br><span class="tag">human</span></td>
+  <td>LeadFlow's own staff — the tenant owner</td>
+  <td>Password → JWT</td>
+  <td><code>Authorization: Bearer &lt;jwt&gt;</code></td>
+</tr>
+<tr>
+  <td><strong>Tenant application</strong><br><span class="tag">machine</span></td>
+  <td>An app LeadFlow built on the SDKs</td>
+  <td>API key <code>pk_live_…</code> / <code>pk_test_…</code></td>
+  <td><code>Authorization: Bearer pk_live_…</code></td>
+</tr>
+<tr>
+  <td><strong>App end user</strong><br><span class="tag">human</span></td>
+  <td>LeadFlow's customers — millions of them</td>
+  <td>Password → JWT, scoped to an <code>app_id</code></td>
+  <td><code>Authorization: Bearer &lt;jwt&gt;</code></td>
+</tr>
+</table>
+
+<div class="panel err">
+<strong>Both the JWT and the API key arrive in the same header.</strong> The gateway tells them
+apart by the <code>pk_live_</code> / <code>pk_test_</code> prefix — there is no
+<code>X-API-Key</code> header. Sending the key anywhere else is the single most common
+integration mistake.
+</div>
+
+<hr>
+
+<h2>Level 1 — Platform operator</h2>
+
+<p>Operator routes are not part of the tenant API. They self-guard with
+<code>ADMIN_OPS_TOKEN</code> and <em>reject a tenant JWT</em>, which is why they are excluded
+from the published tenant OpenAPI spec: offering them to tenants would advertise calls that can
+only ever fail.</p>
+
+<pre><code>curl -X POST https://cloud.projexlight.com/admin/federation/profiles \
+  -H "Authorization: Bearer $ADMIN_OPS_TOKEN" \
+  -H "Content-Type: application/json" -d '{ ... }'</code></pre>
+
+<p>There is exactly one operator secret; the former <code>FEDERATION_ADMIN_TOKEN</code> was
+consolidated into it. Rotate it at the environment, not per call. Operator endpoints are
+published separately via <code>openapi-operator.json</code>
+(<code>node scripts/catalog/build-openapi.js --include-admin</code>).</p>
+
+<hr>
+
+<h2>Level 2 — Tenant signs up</h2>
+
+<p>This is the bootstrap call, and the only one that needs no credential. It is a single
+transaction that creates the entire spine for a new tenant.</p>
+
+<p><span class="m post">POST</span> <code>/api/auth/signup-tenant</code> <span class="tag">public</span></p>
+
+<pre><code>curl -X POST https://cloud.projexlight.com/api/auth/signup-tenant \
+  -H "Content-Type: application/json" \
+  -d '{
+        "email": "ops@leadflow.io",
+        "password": "•••••••••",
+        "org_name": "LeadFlow",
+        "app_id": "leadflow",
+        "display_name": "LeadFlow Production",
+        "region": "us-east-1"
+      }'</code></pre>
+
+<p>In one transaction it writes:</p>
+<div class="lvl"><div class="n">1</div><div><code>identity.person</code> — the human being, independent of any tenant. This row is the root of identity and is never duplicated per app.</div></div>
+<div class="lvl"><div class="n">2</div><div><code>identity.alias</code> (email, envelope-encrypted) and <code>identity.credential</code> (password) — <em>how</em> that person proves who they are.</div></div>
+<div class="lvl"><div class="n">3</div><div><code>tenant.org</code> → <code>tenant.app</code> → <code>tenant.tenant</code> — the organisation, the application, and the tenant record (<code>isolation_tier</code> <code>S</code>, status <code>trial</code>).</div></div>
+<div class="lvl"><div class="n">4</div><div><code>identity.tenant_membership</code> — binds the person to the tenant, and carries <code>bu_id</code> and <code>role_template_id</code>.</div></div>
+<div class="lvl"><div class="n">5</div><div><code>identity.app_identity</code> — that person's identity <em>within that app</em>, unique on <code>(person_id, app_id)</code>.</div></div>
+<div class="lvl"><div class="n">6</div><div><code>profile.band_l2</code> — the display/profile band, so a portal can greet the user without a second fetch.</div></div>
+
+<h3>Verify the email</h3>
+<p><span class="m post">POST</span> <code>/api/auth/send-verification-email</code> ·
+<span class="m post">POST</span> <code>/api/auth/verify-email</code> ·
+<span class="m get">GET</span> <code>/api/auth/verification-status</code></p>
+<p>The alias is written with <code>verified_at NULL</code>. Verification uses a
+purpose-scoped, short-lived token — deliberately not a session token, so a verification link
+that leaks cannot be replayed as a login.</p>
+
+<h3>Log in and get a token</h3>
+<p><span class="m post">POST</span> <code>/api/auth/login</code> <span class="tag">public</span></p>
+<pre><code>curl -X POST https://cloud.projexlight.com/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{ "email":"ops@leadflow.io", "password":"•••", "tenant_id":"&lt;optional&gt;" }'</code></pre>
+<p>Passing <code>tenant_id</code> selects which membership the token is minted against. Omit it
+and you get a person-level token carrying no tenant claims — useful when a person belongs to
+several tenants and must choose.</p>
+
+<h3>The six-layer JWT</h3>
+<p>Authority is <em>not</em> a list of scopes on a human's token. It is derived from the persona
+and its grants at request time, so revoking a role takes effect immediately instead of when the
+token expires.</p>
+<pre><code>{
+  "sub": "&lt;person_id&gt;",  "email": "...",  "display_name": "...",
+  "org_id": "...",  "app_id": "leadflow",  "tenant_id": "...",  "bu_id": "...",
+  "parent_tenant_id": null,  "root_tenant_id": "...",  "reseller_id": null,
+  "primary_persona_id": "...",  "all_persona_ids": ["..."],
+  "admin_pool_index": "...",  "app_pool_index": { "leadflow": "pool-3" },
+  "actor": { "kind": "human" },  "amr": ["pwd"]
+  // "scopes" is present ONLY on machine tokens. An empty array on a human token
+  // would read as "no authority" rather than "not scope-based".
+}</code></pre>
+
+<hr>
+
+<h2>Level 3 — The tenant registers an application</h2>
+
+<p>An application is the unit a machine credential belongs to. Create it with a
+<strong>human JWT</strong> — these routes reject an API key on purpose.</p>
+
+<div class="panel ok">
+<strong>Why management routes refuse keys.</strong> A key that can mint another key cannot be
+contained: revoking the leaked one does not help if it already issued three more with wider
+scopes. Credential management is an act of administration and stays with a signed-in person.
+The gate lets a key reach every <em>other</em> tenant route — this exception is the point.
+</div>
+
+<table>
+<tr><th>Step</th><th>Endpoint</th><th>Auth</th></tr>
+<tr><td>Create the application</td><td><span class="m post">POST</span> <code>/api/applications</code></td><td>human JWT</td></tr>
+<tr><td>Mint a key</td><td><span class="m post">POST</span> <code>/api/applications/{application_id}/keys</code></td><td>human JWT</td></tr>
+<tr><td>Rotate</td><td><span class="m post">POST</span> <code>/api/api-keys/{key_id}/rotate</code></td><td>human JWT</td></tr>
+<tr><td>Revoke</td><td><span class="m post">POST</span> <code>/api/api-keys/{key_id}/revoke</code></td><td>human JWT</td></tr>
+<tr><td>Disable the whole app</td><td><span class="m post">POST</span> <code>/api/applications/{application_id}/disable</code></td><td>human JWT</td></tr>
+<tr><td>Exchange for a short-lived token</td><td><span class="m post">POST</span> <code>/api/auth/token</code></td><td>public · <code>client_credentials</code></td></tr>
+</table>
+
+<p><code>environment</code> is a property of the <strong>application</strong>, not of an
+individual key, and the prefix is derived from it. A test application therefore cannot mint a
+credential that reaches production data by accident — the guarantee is structural rather than a
+naming convention someone has to honour.</p>
+
+<pre><code># Machine-to-machine: the key IS the bearer.
+curl https://cloud.projexlight.com/api/crm/next-actions \
+  -H "Authorization: Bearer pk_live_a1b2c3..."</code></pre>
+
+<hr>
+
+<h2>Level 4 — App end users sign up</h2>
+
+<p>These are your tenant's customers, and there may be millions per app. They never touch
+<code>signup-tenant</code>; that call provisions a tenant and would be catastrophic here.</p>
+
+<p><span class="m post">POST</span> <code>/api/auth/register</code> <span class="tag">public</span></p>
+<p>Creates the <code>identity.person</code> plus alias and credential. To make that person a
+user <em>of a specific app</em>, attach the app-scoped rows:</p>
+
+<table>
+<tr><th>Endpoint</th><th>Creates</th><th>Why it is separate</th></tr>
+<tr><td><span class="m post">POST</span> <code>/api/app-identities</code></td><td><code>identity.app_identity</code></td><td>One person, many apps — unique on <code>(person_id, app_id)</code>. The same human in two of your apps is one <code>person_id</code> with two app identities, not two accounts.</td></tr>
+<tr><td><span class="m post">POST</span> <code>/api/app-identities/{id}/memberships</code></td><td><code>tenant_membership</code></td><td>Which tenant, which business unit, and the starting <code>role_template_id</code>.</td></tr>
+<tr><td><span class="m post">POST</span> <code>/api/personas</code></td><td><code>persona.persona</code></td><td>The acting identity: <code>kind</code> + <code>primary_role_template_id</code>. Everything downstream keys on <code>persona_id</code>.</td></tr>
+<tr><td><span class="m post">POST</span> <code>/api/personas/{persona_id}/roles</code></td><td>role assignment</td><td>Grants beyond the starting template.</td></tr>
+<tr><td><span class="m del">POST</span> <code>/api/personas/{persona_id}/shred</code></td><td>—</td><td>Crypto-shred one persona without erasing the person, who may still be a user of your other apps.</td></tr>
+</table>
+
+<h3>Why the person / persona split matters at scale</h3>
+<p>The row an end user's data hangs off is the <strong>persona</strong>, not the person. That is
+what lets one human be a customer in <code>leadflow-crm</code> and a contractor in
+<code>leadflow-field</code> with different roles, different business units, and independent
+deletion — while still being recognised as one person for MDM and consent. It also means an
+app-level deletion request shreds a persona rather than tearing a hole through every other app
+that person uses.</p>
+
+<hr>
+
+<h2 id="one-person">One person, many roles — the model that makes the rest work</h2>
+
+<p><code>identity.person</code> has seven columns and <strong>not one of them says what the
+person is</strong>:</p>
+<pre><code>person_id · home_region · person_key_ref · status · mdm_method · created_at · erased_at</code></pre>
+
+<p>There is no <code>kind</code>, no <code>type</code>, no <code>is_provider</code>. That is
+deliberate and it is what makes every scenario below possible. "Tenant admin", "app user" and
+"provider" are not properties of a human — they are <em>relationships</em>, and they live one
+layer up.</p>
+
+<svg viewBox="0 0 900 340" width="100%" style="max-width:900px;background:#161b22;border:1px solid #30363d;border-radius:8px" role="img" aria-label="Identity layering diagram">
+  <defs><marker id="a" markerWidth="9" markerHeight="9" refX="8" refY="3" orient="auto"><path d="M0,0 L0,6 L8,3 z" fill="#58a6ff"/></marker></defs>
+  <text x="20" y="26" fill="#8b949e" font-size="12" font-family="monospace">L1 · the human — created once, never duplicated</text>
+  <rect x="330" y="38" width="240" height="42" rx="6" fill="#1f6feb" opacity=".22" stroke="#58a6ff"/>
+  <text x="450" y="58" fill="#e6edf3" font-size="13" font-family="monospace" text-anchor="middle">identity.person</text>
+  <text x="450" y="73" fill="#8b949e" font-size="10.5" font-family="monospace" text-anchor="middle">UNIQUE(kind,value_hash) on alias → 1 email = 1 person</text>
+
+  <text x="20" y="118" fill="#8b949e" font-size="12" font-family="monospace">L3 · which tenant — one row per tenant they belong to</text>
+  <line x1="450" y1="80" x2="200" y2="130" stroke="#58a6ff" stroke-width="1.4" marker-end="url(#a)"/>
+  <line x1="450" y1="80" x2="450" y2="130" stroke="#58a6ff" stroke-width="1.4" marker-end="url(#a)"/>
+  <line x1="450" y1="80" x2="710" y2="130" stroke="#58a6ff" stroke-width="1.4" marker-end="url(#a)"/>
+  <rect x="90"  y="132" width="220" height="40" rx="6" fill="#238636" opacity=".2" stroke="#3fb950"/>
+  <rect x="345" y="132" width="210" height="40" rx="6" fill="#238636" opacity=".2" stroke="#3fb950"/>
+  <rect x="600" y="132" width="220" height="40" rx="6" fill="#d29922" opacity=".2" stroke="#d29922"/>
+  <text x="200" y="150" fill="#e6edf3" font-size="12" font-family="monospace" text-anchor="middle">membership → Tenant A</text>
+  <text x="200" y="165" fill="#8b949e" font-size="10.5" font-family="monospace" text-anchor="middle">tenant admin of LeadFlow</text>
+  <text x="450" y="150" fill="#e6edf3" font-size="12" font-family="monospace" text-anchor="middle">membership → Tenant B</text>
+  <text x="450" y="165" fill="#8b949e" font-size="10.5" font-family="monospace" text-anchor="middle">app user of someone else's app</text>
+  <text x="710" y="150" fill="#e6edf3" font-size="12" font-family="monospace" text-anchor="middle">membership → Tenant C</text>
+  <text x="710" y="165" fill="#8b949e" font-size="10.5" font-family="monospace" text-anchor="middle">their OWN tenant, added later</text>
+
+  <text x="20" y="212" fill="#8b949e" font-size="12" font-family="monospace">L4 · the acting identity — everything downstream keys on this</text>
+  <line x1="200" y1="172" x2="200" y2="224" stroke="#58a6ff" stroke-width="1.4" marker-end="url(#a)"/>
+  <line x1="450" y1="172" x2="450" y2="224" stroke="#58a6ff" stroke-width="1.4" marker-end="url(#a)"/>
+  <line x1="710" y1="172" x2="710" y2="224" stroke="#58a6ff" stroke-width="1.4" marker-end="url(#a)"/>
+  <rect x="105" y="226" width="190" height="38" rx="6" fill="#30363d" stroke="#8b949e"/>
+  <rect x="355" y="226" width="190" height="38" rx="6" fill="#30363d" stroke="#8b949e"/>
+  <rect x="615" y="226" width="190" height="38" rx="6" fill="#30363d" stroke="#8b949e"/>
+  <text x="200" y="249" fill="#e6edf3" font-size="12" font-family="monospace" text-anchor="middle">persona · owner</text>
+  <text x="450" y="249" fill="#e6edf3" font-size="12" font-family="monospace" text-anchor="middle">persona · agent</text>
+  <text x="710" y="249" fill="#e6edf3" font-size="12" font-family="monospace" text-anchor="middle">persona · owner</text>
+
+  <line x1="710" y1="264" x2="710" y2="292" stroke="#d29922" stroke-width="1.4" marker-end="url(#a)"/>
+  <rect x="590" y="294" width="240" height="34" rx="6" fill="#d29922" opacity=".18" stroke="#d29922"/>
+  <text x="710" y="316" fill="#e6edf3" font-size="11.5" font-family="monospace" text-anchor="middle">application.owner_persona_id</text>
+  <text x="300" y="316" fill="#8b949e" font-size="11" font-family="monospace" text-anchor="middle">← "provider" is persona-level ownership, not a person flag</text>
+</svg>
+
+<div class="panel ok">
+<strong>So: do you need a separate person for provider and user? No — and you could not create
+one if you wanted to.</strong> <code>identity.alias</code> declares
+<code>UNIQUE (kind, value_hash)</code>, so a given email resolves to exactly one
+<code>person_id</code> across the whole platform. A user who later becomes a provider is
+<em>necessarily</em> the same person. There is no merge step, no account linking, and no
+identity migration — because the split never happened.
+</div>
+
+<h2>Use case A — an existing user joins another tenant's app</h2>
+<p><span class="tag">supported today</span> Nothing new is created at the person layer.</p>
+<pre><code>POST /api/memberships                            → tenant_membership for the OTHER tenant
+POST /api/app-identities                         → app_identity for that tenant's app_id
+POST /api/memberships/{membership_id}/personas   → a SECOND persona, independent roles
+POST /api/auth/login  { tenant_id }              → JWT minted against that membership</code></pre>
+<p>Their existing personas are untouched. Omitting <code>tenant_id</code> at login returns a
+person-level token carrying no tenant claims, which is how you let someone who belongs to
+several tenants choose.</p>
+<div class="panel warn">
+Do <strong>not</strong> call <code>/api/auth/register</code> again for this person. It fails on
+the unique alias — and that failure is the constraint doing its job, not a bug to work around.
+</div>
+
+<h2>Use case B — an app user becomes a provider</h2>
+<p><span class="tag">gap</span> The data model supports it completely. The <em>provisioning
+endpoint</em> does not.</p>
+
+<div class="panel err">
+<code>POST /api/auth/signup-tenant</code> throws <code>PersonExistsError</code> when the email
+already has an alias, and <code>POST /api/tenants</code> accepts no <code>person_id</code> to
+bind an owner. So neither call promotes an existing user, and there is no self-service path.
+</div>
+
+<p>Compose it from an authorised caller today:</p>
+<pre><code>POST /api/tenants                                → the new tenant (+ its tenant.app row)
+POST /api/memberships                            → bind the EXISTING person_id to it
+POST /api/memberships/{membership_id}/personas   → owner persona + owner role_template
+POST /api/applications                           → their application
+POST /api/applications/{application_id}/keys     → pk_live_…</code></pre>
+
+<p><strong>The right fix</strong> is to make <code>signup-tenant</code> reuse the existing
+<code>person_id</code> when the alias matches <em>and</em> the caller proves control of it
+(a verified session, or re-authentication) instead of refusing outright. It is a change at one
+call site, not a schema change. Creating a second person for the same human would be the wrong
+repair: it breaks MDM convergence and splits their audit trail permanently.</p>
+
+<hr>
+
+<h2 id="single-login">Use case C — one login, many providers</h2>
+<p><span class="tag">supported today</span> A person has exactly one
+<code>identity.credential</code>, so <strong>one password works everywhere</strong>. Which
+provider's app you enter is chosen at login, not at signup.</p>
+
+<pre><code># No tenant named → a person-level token, no tenant claims. Use it to discover.
+POST /api/auth/login { email, password }
+
+# List what this person is subscribed to  ← the switcher reads this
+GET  /api/memberships
+     → [{ tenant_id, tenant_display_name, app_id, app_display_name,
+           bu_id, role_template_name, has_app_identity, joined_at }, …]
+
+# Enter one provider's app → scoped token; app_identity auto-mints on first login
+POST /api/auth/login { email, password, tenant_id, app_id }</code></pre>
+
+<div class="panel ok">
+<strong>Subscription is provider-controlled, not self-service.</strong> Logging in with a
+<code>tenant_id</code> returns <code>403 NoMembership</code> unless a membership already
+exists, so nobody can self-join a tenant by guessing an id. The provider admits them with
+<code>POST /api/memberships</code>; the <code>app_identity</code> then mints itself on first
+login (FR-IDN-5). The gate is the membership, and it sits with the provider.
+</div>
+
+<div class="panel warn">
+<strong>Design consequence worth knowing.</strong> Because the credential is global, a provider
+who collects the password on their own page holds a credential that also works at every other
+provider. If you intend providers to be mutually untrusting, host login centrally (the platform
+domain) and hand providers a redirect flow, so the password is only ever typed on your domain.
+There is no OAuth/OIDC authorize endpoint today — inbound SAML and OAuth callback exist, but
+ProjexCloud does not yet act as the IdP.
+</div>
+
+<hr>
+
+<h2 id="api-keys">Getting an API key — every step</h2>
+
+<p>An API key belongs to an <strong>application</strong>, and an application belongs to a
+<strong>tenant</strong>. So the order is: be a tenant → sign in as a human → create the
+application → mint the key.</p>
+
+<h3>Step 0 — you need a human JWT, not a key</h3>
+<pre><code>POST /api/auth/login { email, password, tenant_id }
+     → { token }        # every step below sends: Authorization: Bearer &lt;token&gt;</code></pre>
+<div class="panel err">
+Key-management routes reject an API key by design. A key that can mint another key cannot be
+contained — revoking the leaked one does not help once it has issued three more. Minting stays
+with a signed-in person.
+</div>
+
+<h3>Step 1 — create the application</h3>
+<pre><code>POST /api/applications
+{
+  "name": "LeadFlow Mobile",
+  "slug": "leadflow-mobile",
+  "description": "iOS + Android client",
+  "environment": "test"          // "live" or "test" — see the warning below
+}
+     → { application_id, slug, environment, status: "active" }</code></pre>
+<div class="panel warn">
+<strong><code>environment</code> is fixed on the APPLICATION, not on the key</strong>, and the
+key prefix is derived from it. A <code>test</code> application can never mint a credential that
+reaches production data — the guarantee is structural, not a naming convention. You cannot flip
+it later; create a second application for production.
+</div>
+
+<h3>Step 2 — mint the key</h3>
+<pre><code>POST /api/applications/{application_id}/keys
+{ "name": "server-side worker", "scopes": ["crm:read", "crm:write"] }
+     → { key_id, api_key: "pk_test_a1b2c3…", prefix, created_at }</code></pre>
+<p>The full secret is returned <strong>once</strong>. Store it in your secret manager at that
+moment — the platform keeps only a hash, so there is no "show me the key again" call by design.</p>
+
+<h3>Step 3 — call the API with it</h3>
+<pre><code>curl https://cloud.projexlight.com/api/crm/next-actions \
+  -H "Authorization: Bearer pk_live_a1b2c3…"</code></pre>
+<p>Same header as a JWT. The gateway routes on the <code>pk_</code> prefix.</p>
+
+<div class="panel err">
+<strong>A valid key that 403s on every call is not a broken key — it is an ungranted persona.</strong>
+The exchange succeeds and hands you a token carrying <code>scopes</code> and
+<code>actor: {kind: service}</code>, which looks authoritative and is not. Those scopes are not the
+authority: the credential is bound to a <strong>synthetic persona that starts with no grants</strong>,
+and authority resolves from the persona at request time — the same rule as for a human JWT, which
+is easy to miss because a machine token, unlike a human one, <em>does</em> carry scopes. Grant it
+before you integrate:
+<pre><code>POST /api/personas/{persona_id}/roles</code></pre>
+</div>
+
+<h3>Step 4 — optionally exchange it for a short-lived token</h3>
+<pre><code>POST /api/auth/token          # public, client_credentials
+{ "grant_type": "client_credentials", "client_id": "…", "client_secret": "…" }
+     → { access_token, expires_in }</code></pre>
+<p>Prefer this when the credential would otherwise sit on a device or in a browser: a
+short-lived token limits the blast radius of a leak to its lifetime.</p>
+
+<h3>Step 5 — rotate and revoke</h3>
+<table>
+<tr><th>Action</th><th>Call</th><th>Effect</th></tr>
+<tr><td>Rotate</td><td><span class="m post">POST</span> <code>/api/api-keys/{key_id}/rotate</code></td><td>Issues a new secret for the same key record. Deploy the new value, then revoke the old.</td></tr>
+<tr><td>Revoke one key</td><td><span class="m post">POST</span> <code>/api/api-keys/{key_id}/revoke</code></td><td>That credential stops working; the application's other keys are untouched — which is the reason to mint one key per consumer rather than sharing one.</td></tr>
+<tr><td>Disable everything</td><td><span class="m post">POST</span> <code>/api/applications/{application_id}/disable</code></td><td>Kills every key the application holds at once.</td></tr>
+<tr><td>List</td><td><span class="m get">GET</span> <code>/api/applications/{application_id}/keys</code></td><td>Metadata and prefixes only — never the secrets.</td></tr>
+</table>
+
+<div class="panel ok">
+<strong>Mint one key per consumer.</strong> One key for the web backend, one for the mobile BFF,
+one per CI pipeline. Revocation is then a decision about one consumer instead of an outage for
+all of them.
+</div>
+
+<hr>
+
+<h2>Roles and policy</h2>
+
+<h3>Role templates — the reusable shape</h3>
+<p><code>tenant.role_template</code> is keyed on <code>(tenant_id, app_id, name)</code> with
+<code>parent_role_template_id</code> for inheritance and a JSONB <code>permissions</code> map.</p>
+<p>The important detail is that <code>tenant_id</code> is <strong>nullable</strong>:</p>
+<ul>
+  <li><code>tenant_id IS NULL</code> → a <em>platform-default</em> template for an app, unique on <code>(app_id, name)</code>. Ship your app's standard roles once.</li>
+  <li><code>tenant_id</code> set → a <em>tenant override</em> of that same role name. A tenant can redefine "Manager" without forking your app.</li>
+</ul>
+
+<h3>Three layers of authorisation, and when each applies</h3>
+<table>
+<tr><th>Layer</th><th>SDK</th><th>Answers</th><th>Reach for it when</th></tr>
+<tr><td>RBAC</td><td>role templates</td><td>"What may this <em>role</em> do?"</td><td>Permissions are the same for everyone holding the role.</td></tr>
+<tr><td>ReBAC</td><td><code>sdk-rebac</code></td><td>"May <em>this</em> persona act on <em>that</em> record?"</td><td>Authority comes from a relationship — owner, delegate, carer, account team. Contextual roles carry a trust state and evidence.</td></tr>
+<tr><td>ABAC</td><td><code>sdk-policy</code></td><td>"Do the attributes permit it <em>right now</em>?"</td><td>The decision depends on region, consent, time, or record state rather than on identity.</td></tr>
+</table>
+
+<p>They compose in that order, and a human token deliberately carries no scopes so that a
+revoked grant takes effect on the next request rather than at token expiry.</p>
+
+<hr>
+
+<h2 id="multi-app">Multiple apps under one tenant — read this before you model it</h2>
+
+<div class="panel err">
+<strong>The schema does not currently support one tenant owning many apps in the way you may
+expect.</strong> <code>tenant.tenant.app_id</code> is <code>TEXT NOT NULL REFERENCES
+tenant.app(app_id)</code> — a tenant row belongs to exactly <em>one</em> app. Meanwhile the same
+table carries <code>app_pool_index JSONB</code>, a map of app → pool, which assumes a tenant
+spans <em>several</em>. Those two facts contradict each other, and the JWT follows the
+single-<code>app_id</code> side.
+</div>
+
+<p>Three ways to model "LeadFlow owns five apps" with what exists today:</p>
+
+<table>
+<tr><th>Option</th><th>How</th><th>Cost</th></tr>
+<tr>
+  <td><strong>A. Tenant hierarchy</strong> <span class="tag">no migration</span></td>
+  <td>One root tenant for LeadFlow, one child tenant per app via <code>parent_tenant_id</code> / <code>root_tenant_id</code>. Billing and org roll up to the root.</td>
+  <td>Works now and the columns already exist. Cross-app queries must walk <code>root_tenant_id</code>, and a person needs a membership per child tenant.</td>
+</tr>
+<tr>
+  <td><strong>B. Join table</strong> <span class="tag">migration</span></td>
+  <td>Add <code>tenant.tenant_app (tenant_id, app_id)</code>, make <code>tenant.app_id</code> nullable, and treat it as the tenant's <em>primary</em> app for back-compat.</td>
+  <td>The honest fix, and it makes <code>app_pool_index</code> coherent. Touches every query that assumes one app per tenant — do it deliberately, not incidentally.</td>
+</tr>
+<tr>
+  <td><strong>C. One tenant per app</strong> <span class="tag">no migration</span></td>
+  <td>Five flat tenants, related only in your own billing layer.</td>
+  <td>Simplest, but "LeadFlow" stops existing as a platform concept and nothing rolls up.</td>
+</tr>
+</table>
+
+<p><strong>Recommendation:</strong> start with <strong>A</strong> — it needs no migration, the
+hierarchy columns are already indexed, and <code>root_tenant_id</code> is already carried in the
+JWT so app-to-app authorisation can be answered from the token. Move to <strong>B</strong> when
+cross-app queries become common enough that walking the hierarchy is the bottleneck.</p>
+
+<h3>Scale note</h3>
+<p>Millions of end users per app is a routing question, not an identity one.
+<code>app_pool_index</code> maps an app to its database pool and <code>admin_pool_index</code>
+keeps tenant administration on a separate pool from end-user traffic, so a busy app cannot
+starve the console. Isolation tier (<code>S</code> shared / <code>P</code> private /
+<code>G</code> dedicated) is per tenant, so a large customer can be moved without touching the
+others. The audit ledger is chained <em>per pool</em> — each pool's sequence restarts at 1, so
+verify a chain within one pool rather than across them.</p>
+
+<hr>
+
+<h2>End-to-end: a new LeadFlow customer</h2>
+<pre><code># 1 · LeadFlow onboards (once)
+POST /api/auth/signup-tenant   → person + org + app + tenant + membership + app_identity
+POST /api/auth/verify-email
+POST /api/auth/login           → tenant-admin JWT
+
+# 2 · LeadFlow registers an app and a machine credential (human JWT)
+POST /api/applications                          → application_id
+POST /api/applications/{application_id}/keys    → pk_live_...
+
+# 3 · LeadFlow defines the roles its customers can hold
+POST /api/role-templates                       → "Agent", "Manager"
+
+# 4 · A LeadFlow customer signs up in the app (public)
+POST /api/auth/register                         → person_id
+POST /api/app-identities                        → app_identity (person × app)
+POST /api/app-identities/{id}/memberships       → tenant + bu + role_template
+POST /api/personas                              → persona_id  ← everything keys on this
+POST /api/auth/login                            → end-user JWT
+
+# 5 · Finer-grained authority as the relationship demands it
+POST /api/rebac/...                             → "this agent owns that account"
+POST /api/policy/...                            → "...only in-region, only with consent"</code></pre>
+
+<hr>
+
+<h2>Reference</h2>
+<ul>
+  <li><a href="../api_docs/openapi.json">openapi.json</a> — the full tenant API library, 607 operations across 77 SDKs. Point any client generator at it.</li>
+  <li><a href="../api_docs/index.html">API reference</a> — human-browsable, 85 SDKs / 679 endpoints (includes operator routes).</li>
+  <li><a href="../api_docs/sdk-catalog.json">sdk-catalog.json</a> — capability discovery for AI builders (reuse-vs-rebuild).</li>
+  <li><a href="../AIM-Identity-Model-v3.1.html">AIM Identity Model</a> — the six-layer model in full.</li>
+  <li><a href="api-keys-and-project-setup.html">API keys &amp; project setup</a></li>
+  <li><code>docs/CONSUMPTION-CONTRACT.md</code> — which SDK owns which table, and what an app may extend locally.</li>
+</ul>
+
+</div>
+</body>
+</html>

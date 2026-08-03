@@ -1,0 +1,57 @@
+{
+  "name": "GET /api/parsing/contact/schemas — resolved contact schema (tenant-first, platform fallback)",
+  "endpoint": "/api/parsing/contact/schemas",
+  "sdk": "sdk-parsing",
+  "sourceFile": "packages/sdk-parsing/src/server/routes.ts",
+  "method": "GET",
+  "requiresAuth": true,
+  "expectedStatus": 200,
+  "taskId": "f3ff62e5-3a81-4c8e-a3cf-f373e6daaa3d",
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "featureId": "e75144eb-ddc7-493e-ad62-57009f1ca14e",
+  "epicId": "411badaa-f7ec-4184-a944-2e7a2c3f58e7",
+  "priority": 42,
+  "testability": "auto",
+  "dependsOn": ["POST /api/auth/signup-tenant"],
+  "coversCriterion": ["f3ff62e5-3a81-4c8e-a3cf-f373e6daaa3d#AC4"],
+  "description": "Returns the contact extraction schema that WOULD be applied for this tenant, plus the list of supported capture surfaces. Proves AC4. Resolution is tenant-first with platform fallback, delegated to the existing sdk-taxonomy lookupExtractionSchema — whose query already ranks tenant versions above platform ones via ORDER BY (v.tenant_id IS NOT NULL) DESC — rather than reimplemented here, since a second resolver would be a second thing to keep correct. A builtin field set is the last resort so a fresh install can extract contacts before anyone has seeded a taxonomy; failing hard there would make the feature undemonstrable on day one. schema.source is returned as tenant|platform|builtin so a caller can TELL which of the three answered instead of inferring it from the field list. source_kinds is returned so a client builds its capture UI from the server response rather than hard-coding a list that drifts the moment a backend is registered. QA edge cases: requiresAuth applies to this GET exactly as to the POSTs (MUST-52), so no Bearer is 401; a missing tenant_id is 400 because without it the tenant-first half of the resolution is meaningless; a taxonomy outage returns the builtin with source='builtin' and a 200 rather than a 5xx, matching the extract endpoint's degrade-don't-fail behaviour; taxonomy_version_id is optional and is only echoed back on the builtin path.",
+  "testCases": [
+    {
+      "name": "Resolve the contact schema for a tenant",
+      "headers": { "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}" },
+      "queryParams": { "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}" },
+      "expectedStatus": 200
+    },
+    {
+      "name": "Response lists every supported capture surface",
+      "headers": { "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}" },
+      "queryParams": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "taxonomy_version_id": "builtin-v1"
+      },
+      "expectedStatus": 200
+    }
+  ],
+  "errorCases": [
+    {
+      "name": "Missing tenant_id is refused",
+      "status": 400,
+      "code": "VALIDATION_ERROR",
+      "message": "tenant_id query param required",
+      "when": "tenant_id is absent, which makes tenant-first resolution meaningless",
+      "headers": { "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}" },
+      "queryParams": {},
+      "expectedStatus": 400,
+      "expectedError": { "code": "VALIDATION_ERROR" }
+    },
+    {
+      "name": "Unauthenticated is refused by the default-deny gate",
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "missing or invalid tenant token",
+      "when": "no valid tenant Bearer token — GET is gated exactly as POST",
+      "queryParams": { "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}" },
+      "expectedStatus": 401
+    }
+  ]
+}

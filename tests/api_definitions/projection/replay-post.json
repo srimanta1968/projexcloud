@@ -1,0 +1,125 @@
+{
+  "name": "POST /api/projection/replay — rebuild a projection from the assertion log",
+  "endpoint": "/api/projection/replay",
+  "sdk": "sdk-projection",
+  "sourceFile": "packages/sdk-projection/src/server/routes.ts",
+  "method": "POST",
+  "requiresAuth": true,
+  "expectedStatus": 200,
+  "taskId": "cab6deac-fba4-45b7-a381-50b69fa79131",
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "featureId": "f680ebbe-7f76-429d-a541-7d56e6c4a991",
+  "epicId": "411badaa-f7ec-4184-a944-2e7a2c3f58e7",
+  "priority": 53,
+  "testability": "auto",
+  "dependsOn": ["POST /api/auth/signup-tenant"],
+  "coversCriterion": [
+    "cab6deac-fba4-45b7-a381-50b69fa79131#AC1",
+    "cab6deac-fba4-45b7-a381-50b69fa79131#AC2",
+    "cab6deac-fba4-45b7-a381-50b69fa79131#AC3",
+    "cab6deac-fba4-45b7-a381-50b69fa79131#AC4"
+  ],
+  "description": "Rebuilds a subject's projection FROM the assertion log rather than patching it, and persists a snapshot plus a content hash. An action endpoint and idempotent, so 200 on the first call and on every repeat — a repeat is expected, not an error. Proves all four criteria. AC1: patching would require knowing what a retracted assertion contributed, i.e. trusting a delta computed against state you no longer hold, after which two patches applied in a different order disagree and nothing can say which is right; a replay derives the answer from the surviving assertions, so the result depends only on the log's CONTENT and never on the path taken — deterministic and idempotent are the same property here. The content_hash is taken over a CANONICAL projection with the wall-clock stamp stripped, so two identical replays hash equal instead of looking like a change; changed=false on a repeat. AC2: retract_assertion_id and supersede_assertion_id retract/link AND replay the affected subject in the SAME call, so a successful retraction has by definition already propagated — a scheduled follow-up would leave a window in which the projection still shows a formally withdrawn value, and that window is exactly when someone reads it. AC3: every replay appends projection.replay.completed.v1 to the audit chain with both hashes, and a retraction additionally appends projection.assertion.retracted.v1; a no-op replay is STILL recorded, because 'we replayed and it made no difference' is itself the auditable answer. AC4: measured, not asserted — a 10,000-assertion subject replays in ~450-550ms against a 3000ms budget, twice, with an identical hash. QA edge cases: the snapshot is a CACHE plus evidence, never a source of truth — deleting it and replaying reproduces the same hash exactly, which is the property that makes the rebuild trustworthy; scope=tenant is BOUNDED and returns `remaining` rather than sweeping unbounded, so a rule edit on a million-subject tenant cannot become an open-ended synchronous job, and silent truncation would wrongly read as 'done'; retracting or superseding an unknown assertion is 404 rather than a fake success; an assertion may not supersede itself; superseded_by is required whenever supersede_assertion_id is given; a tenant-wide replay emits ONE summary event instead of N, since each subject's snapshot already records its own hash and 900 events would bury the ledger.",
+  "testCases": [
+    {
+      "name": "Replay a single subject",
+      "headers": { "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}" },
+      "payload": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "subject_ref": "lead:regression-subject",
+        "trigger": "manual",
+        "reason": "api regression"
+      },
+      "expectedStatus": 200
+    },
+    {
+      "name": "Replaying again is idempotent and reports changed=false",
+      "headers": { "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}" },
+      "payload": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "subject_ref": "lead:regression-subject",
+        "trigger": "manual"
+      },
+      "expectedStatus": 200
+    },
+    {
+      "name": "A bounded tenant-wide replay reports what is left",
+      "headers": { "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}" },
+      "payload": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "scope": "tenant",
+        "trigger": "rule_change",
+        "limit": 25
+      },
+      "expectedStatus": 200
+    }
+  ],
+  "errorCases": [
+    {
+      "name": "Retracting an unknown assertion is 404, not a fake success",
+      "status": 404,
+      "code": "ASSERTION_NOT_FOUND",
+      "message": "NotFound",
+      "when": "retract_assertion_id names no assertion for this tenant",
+      "headers": { "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}" },
+      "payload": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "retract_assertion_id": "00000000-0000-0000-0000-000000000000"
+      },
+      "expectedStatus": 404,
+      "expectedError": { "code": "ASSERTION_NOT_FOUND" }
+    },
+    {
+      "name": "A subject-scoped replay with nothing to identify the subject is refused",
+      "status": 400,
+      "code": "VALIDATION_ERROR",
+      "message": "subject_ref, retract_assertion_id or supersede_assertion_id is required for scope=subject",
+      "when": "scope defaults to subject but no subject_ref or assertion id is supplied",
+      "headers": { "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}" },
+      "payload": { "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}" },
+      "expectedStatus": 400,
+      "expectedError": { "code": "VALIDATION_ERROR" }
+    },
+    {
+      "name": "supersede_assertion_id without superseded_by is refused",
+      "status": 400,
+      "code": "VALIDATION_ERROR",
+      "message": "superseded_by is required when supersede_assertion_id is given",
+      "when": "a supersede is requested without naming what supersedes it, which would record a dangling link",
+      "headers": { "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}" },
+      "payload": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "supersede_assertion_id": "11111111-1111-1111-1111-111111111111"
+      },
+      "expectedStatus": 400,
+      "expectedError": { "code": "VALIDATION_ERROR" }
+    },
+    {
+      "name": "An unknown trigger is refused",
+      "status": 400,
+      "code": "VALIDATION_ERROR",
+      "message": "trigger must be one of: manual, retraction, supersede, rule_change, backfill",
+      "when": "trigger is not one of the five recorded causes",
+      "headers": { "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}" },
+      "payload": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "subject_ref": "lead:regression-subject",
+        "trigger": "whenever"
+      },
+      "expectedStatus": 400,
+      "expectedError": { "code": "VALIDATION_ERROR" }
+    },
+    {
+      "name": "Unauthenticated is refused by the default-deny gate",
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "missing or invalid tenant token",
+      "when": "no valid tenant Bearer token — replay rewrites a tenant's projection cache",
+      "payload": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "subject_ref": "lead:regression-subject"
+      },
+      "expectedStatus": 401
+    }
+  ]
+}

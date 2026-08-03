@@ -1,92 +1,67 @@
 {
-  "name": "POST /api/api-keys/:key_id/revoke - Revoke API key",
-  "endpoint": "/api/api-keys/:key_id/revoke",
   "sdk": "sdk-api-keys",
-  "method": "POST",
+  "sourceFile": "packages/sdk-api-keys/src/server/routes.ts",
   "requiresAuth": true,
-  "expectedStatus": 200,
-  "taskId": "649c02dd-6922-48af-a637-c88aea12d665",
-  "sprintId": "8ef1d09e-dd8e-4daf-8d03-54dcd9f812f8",
-  "featureId": "7a33ef6c-2dad-4c40-a8a2-f414c13e6c48",
-  "epicId": "00996d23-f667-4a82-9285-7728ba357e7b",
-  "priority": 60,
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "epicId": "783fc94b-6992-49a5-a492-74ee0450a92f",
   "testability": "auto",
+  "name": "POST /api/api-keys/{key_id}/revoke - Revoke immediately",
+  "endpoint": "/api/api-keys/:key_id/revoke",
+  "method": "POST",
+  "expectedStatus": 200,
+  "taskId": "bcf23c76-2e69-48c2-af3f-84acc9e636d2",
+  "featureId": "888ec9d8-5cbb-4d77-9082-fd78b08334ad",
+  "priority": 30,
+  "description": "Stops a credential at once and broadcasts the revocation over Redis so every gateway replica drops its cached copy within a second rather than at cache expiry. Tenant-constrained, and a key_id belonging to somebody else answers 404 rather than 403 so the response cannot be used to confirm that an id is real. Revoking twice answers 404, because the second call changes nothing.",
   "dependsOn": [
     "POST /api/auth/signup-tenant",
-    "POST /api/api-keys"
+    "POST /api/applications",
+    "POST /api/applications/{application_id}/keys"
   ],
-  "testCases": [
-    {
-      "name": "Revoke the freshly-issued key",
-      "headers": {
-        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
-      },
-      "pathParams": {
-        "key_id": "{{cache:api-keys.create.response.data.key.key_id}}"
-      },
-      "payload": {},
-      "expectedStatus": 200
-    }
-  ],
-  "statusTransitions": {
-    "entity": "api-key",
-    "field": "status",
-    "flow": [
+  "fieldEnums": {
+    "status": [
       "active",
       "rotating",
       "revoked",
       "expired"
-    ],
-    "transitions": [
-      {
-        "from": "active",
-        "to": "revoked",
-        "via": "POST /api/api-keys/:key_id/revoke"
-      },
-      {
-        "from": "rotating",
-        "to": "revoked",
-        "via": "POST /api/api-keys/:key_id/revoke"
-      }
     ]
   },
-  "expectedResponse": {
-    "data": {
-      "key": {
-        "key_id": "string",
-        "status": "string"
+  "testCases": [
+    {
+      "name": "Revoke the issued key",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "pathParams": {
+        "key_id": "{{cache:applications.id-keys.response.data.key.key_id}}"
+      },
+      "payload": {
+        "reason": "rotated out of service"
+      },
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "data": {
+          "key": {
+            "key_id": "string",
+            "status": "string"
+          }
+        }
       }
     }
-  },
-  "captureResponse": {
-    "api-keys.revoke.response.data.key.key_id": "data.key.key_id",
-    "api-keys.revoke.response.data.key.status": "data.key.status"
-  },
-  "description": "Immediately revokes an API key by id so it stops authenticating, returning the updated key record. Edge cases: revokeKey only matches an ACTIVE key, so revoking a key that is already revoked returns 404 NotFound (\"No active key with id ...\") rather than a 200 no-op — the call is therefore not idempotent and a retry after a successful revoke will 404; an unknown key_id is likewise 404; a malformed (non-UUID) key_id fails the query cast and surfaces as a 500, since the route performs no id-format validation; there is no tenant ownership check against the JWT, so authorization rests on key ids being unguessable; revocation is immediate with no grace period, unlike rotate.",
+  ],
   "errorCases": [
     {
-      "status": 401,
-      "code": "Unauthorized",
-      "message": "Missing bearer token",
-      "when": "No Authorization: Bearer <jwt> header on a requireAuth route"
-    },
-    {
-      "status": 401,
-      "code": "Unauthorized",
-      "message": "Invalid or expired token",
-      "when": "Bearer token fails verifyJwt (bad signature, malformed, or exp in the past)"
-    },
-    {
-      "status": 404,
-      "code": "NotFound",
-      "message": "No active key with id <key_id>",
-      "when": "No active key matches key_id — it does not exist, or it was already revoked"
-    },
-    {
-      "status": 500,
-      "code": "InternalError",
-      "message": "InternalError",
-      "when": "revokeKey throws — e.g. key_id is not a valid UUID and the query cast fails, or the database is unreachable"
+      "name": "A key in another tenant answers 404",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "pathParams": {
+        "key_id": "00000000-0000-0000-0000-0000000000ff"
+      },
+      "payload": {
+        "reason": "not mine"
+      },
+      "expectedStatus": 404
     }
   ]
 }

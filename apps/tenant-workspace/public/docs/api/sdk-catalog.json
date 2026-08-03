@@ -1,16 +1,132 @@
 {
   "version": "2026.07.21",
   "gateway_base_url": "https://cloud.projexlight.com",
-  "auth": "Authenticate as a tenant (login -> JWT) and send Authorization: Bearer <token> on every call.",
+  "auth": {
+    "model": "Four principals, each with its own credential: PLATFORM OPERATOR (ADMIN_OPS_TOKEN, /admin/* only, rejects tenant JWTs); TENANT ADMIN (human, password -> JWT); TENANT APPLICATION (machine, pk_live_/pk_test_ API key); APP END USER (human, password -> JWT scoped to an app_id). The gateway is DEFAULT-DENY: every path needs a valid tenant JWT unless explicitly public.",
+    "critical": [
+      "The API key and the JWT use the SAME header: 'Authorization: Bearer <value>'. The gateway distinguishes them by the pk_live_/pk_test_ prefix. There is NO X-API-Key header.",
+      "POST /api/auth/signup-tenant provisions an ENTIRE TENANT (org + app + tenant + membership). NEVER call it to register an end user of an app — use /api/auth/register.",
+      "Credential-management routes (/api/applications, /api/api-keys) require a HUMAN JWT and reject an API key by design: a key that can mint another key cannot be contained.",
+      "Do NOT build your own users/roles/sessions tables. identity + persona + tenant + rebac + policy already own that; a parallel table breaks tenant isolation and the audit chain.",
+      "A human JWT carries NO scopes. Authority is resolved from the persona and its grants at request time, so a revoked role takes effect immediately rather than at token expiry.",
+      "THE SAME IS TRUE OF A MACHINE TOKEN, and this is the step everyone misses: exchanging a pk_ key via POST /api/auth/token returns a token carrying scopes (e.g. ['crm']) and actor {kind: service} — and it will STILL 403. The scopes on the token are not the authority; the credential is bound to a SYNTHETIC PERSONA that starts with NO grants. You must grant it: POST /api/personas/{persona_id}/roles. A valid key plus a successful token exchange plus 403 on every call is not a broken key — it is an ungranted persona.",
+      "Everything downstream keys on persona_id (L4), not on person_id and not on a user_id."
+    ],
+    "flows": {
+      "tenant_signup": [
+        "POST /api/auth/signup-tenant  -> person + alias + credential + org + app + tenant + tenant_membership + app_identity + profile band (one transaction)",
+        "POST /api/auth/send-verification-email  -> purpose-scoped short-lived token",
+        "POST /api/auth/verify-email",
+        "POST /api/auth/login  (optional tenant_id selects the membership)  -> six-layer JWT"
+      ],
+      "register_an_application_and_key": [
+        "POST /api/applications                        (human JWT) -> application_id",
+        "POST /api/applications/{application_id}/keys  (human JWT) -> pk_live_/pk_test_",
+        "POST /api/auth/token                          (public, client_credentials) -> short-lived token",
+        "rotate: POST /api/api-keys/{key_id}/rotate | revoke: POST /api/api-keys/{key_id}/revoke",
+        "POST /api/personas/{persona_id}/roles   <- REQUIRED. The key's synthetic persona has no grants until you add them, so every call 403s no matter how valid the key is.",
+        "environment (live|test) is a property of the APPLICATION, not the key, so a test app can never mint a credential that reaches production data."
+      ],
+      "app_end_user_signup": [
+        "POST /api/auth/register                       -> identity.person (+ alias, credential)",
+        "POST /api/app-identities                      -> app_identity, UNIQUE (person_id, app_id)",
+        "POST /api/app-identities/{id}/memberships     -> tenant + bu_id + starting role_template_id",
+        "POST /api/personas                            -> persona_id  (the acting identity)",
+        "POST /api/auth/login                          -> end-user JWT",
+        "One human in two of your apps is ONE person_id with TWO app_identities and TWO personas — not two accounts. Delete at persona level so other apps are unaffected."
+      ],
+      "person_joins_another_tenant": [
+        "SUPPORTED, and it needs no new person. identity.alias has UNIQUE (kind, value_hash), so one email is one identity.person GLOBALLY — a human who is already a tenant admin somewhere is the same person_id when they join a different tenant's app.",
+        "POST /api/memberships                        -> tenant_membership for the OTHER tenant",
+        "POST /api/app-identities                     -> app_identity for that tenant's app_id",
+        "POST /api/memberships/{membership_id}/personas -> a SECOND persona, independent roles",
+        "Their existing personas are untouched. Login with tenant_id selects which membership the JWT is minted against; omit it to get a person-level token and let them choose.",
+        "DO NOT call /api/auth/register again for this person — it will fail on the unique alias, and that failure is the constraint doing its job."
+      ],
+      "app_user_becomes_a_provider": [
+        "RESOLVED (EP-328). POST /api/auth/signup-tenant now REUSES the existing person when the caller sends a verified token for THAT SAME person; anonymous callers still get PersonExistsError. A second identity.person for one human would split their audit trail across two ids that nothing can reconcile, so reuse is the only safe repair.",
+        "Compose it instead, from an authorised caller:",
+        "POST /api/tenants                            -> the new tenant (+ its tenant.app row)",
+        "POST /api/memberships                        -> bind the EXISTING person_id to it",
+        "POST /api/memberships/{membership_id}/personas -> owner persona + owner role_template",
+        "POST /api/applications                       -> their application, then keys",
+        "Correct fix if you need self-service: make signup-tenant reuse the existing person_id when the alias matches AND the caller proves control of it (verified session or re-auth), rather than refusing. Creating a second person for the same human would break MDM convergence and split their audit trail."
+      ],
+      "single_login_many_providers": [
+        "SUPPORTED. A person has ONE identity.credential, so one password works across every provider's app they belong to. Which app they enter is chosen at LOGIN, not signup.",
+        "POST /api/auth/login {email,password}                  -> person-level token (no tenant claims)",
+        "GET  /api/memberships                                  -> every tenant+app they are subscribed to",
+        "POST /api/auth/login {email,password,tenant_id,app_id} -> scoped token; app_identity auto-mints",
+        "Subscription is PROVIDER-controlled: login with a tenant_id returns 403 NoMembership unless a membership exists, so nobody self-joins by guessing an id. The provider admits them via POST /api/memberships.",
+        "CAVEAT: the credential is global, so a provider collecting the password on their own page holds one that works at other providers too. For mutually-untrusting providers, host login centrally and redirect. There is no OIDC authorize endpoint yet."
+      ],
+      "get_an_api_key": [
+        "An API key belongs to an APPLICATION, which belongs to a TENANT. Order matters.",
+        "POST /api/auth/login {email,password,tenant_id}        -> human JWT (steps below need it)",
+        "POST /api/applications {name,slug,environment}         -> application_id",
+        "POST /api/applications/{application_id}/keys           -> pk_live_/pk_test_ (SHOWN ONCE)",
+        "call:  Authorization: Bearer pk_live_...   (same header as a JWT)",
+        "POST /api/auth/token (client_credentials)              -> short-lived token, preferred when the credential would otherwise sit on a device or in a browser",
+        "rotate POST /api/api-keys/{key_id}/rotate | revoke POST /api/api-keys/{key_id}/revoke | kill all POST /api/applications/{application_id}/disable",
+        "environment (live|test) is fixed on the APPLICATION and cannot be flipped; the prefix derives from it, so a test app can never mint a credential that reaches production.",
+        "The secret is returned ONCE — only a hash is stored, so there is no 'show it again' call.",
+        "Mint ONE KEY PER CONSUMER (web backend, mobile BFF, each CI pipeline) so revocation is about one consumer rather than an outage for all of them."
+      ],
+      "roles_and_access": [
+        "RBAC  tenant.role_template keyed (tenant_id, app_id, name); tenant_id NULL = a platform default for the app, tenant_id set = that tenant's override of the same role name. parent_role_template_id gives inheritance.",
+        "POST /api/personas/{persona_id}/roles         -> grant beyond the starting template",
+        "ReBAC (sdk-rebac)  'may THIS persona act on THAT record' — owner/delegate/account team relationships, with trust state and evidence. Use when authority comes from a relationship rather than from a role.",
+        "ABAC (sdk-policy)  'do the attributes permit it right now' — region, consent, time, record state. Use when the decision does not depend on identity.",
+        "They compose RBAC -> ReBAC -> ABAC."
+      ]
+    },
+    "multi_app_caveat": "tenant.tenant.app_id is NOT NULL, so a tenant row belongs to exactly ONE app, while tenant.app_pool_index (jsonb app->pool) assumes several. To model one tenant owning several apps today, use the tenant hierarchy (parent_tenant_id / root_tenant_id): a root tenant per customer and a child tenant per app. Do not assume one tenant row can span apps.",
+    "guide": "docs/v3.1/developer-hub/authentication.html"
+  },
   "api_reference": "https://cloud.projexlight.com/workspace/docs/api/index.html",
-  "sdk_count": 67,
-  "api_count": 472,
+  "sdk_count": 77,
+  "api_count": 609,
   "groups": [
     {
       "name": "Platform & Multi-Tenancy",
-      "sdk_count": 13,
-      "api_count": 67,
+      "sdk_count": 15,
+      "api_count": 88,
       "sdks": [
+        {
+          "sdk": "registry-mcp",
+          "group": "Platform & Multi-Tenancy",
+          "summary": "MCP server registry: tool registration, discovery and invocation brokering",
+          "reuse_when": [
+            "mcp",
+            "tool registry",
+            "server registration",
+            "tool discovery",
+            "agent tools"
+          ],
+          "api_count": 1,
+          "docs_url": "https://cloud.projexlight.com/workspace/docs/api/index.html#sdk-registry-mcp",
+          "apis": [
+            {
+              "method": "POST",
+              "endpoint": "/mcp/v1/call",
+              "requiresAuth": true,
+              "summary": "Invoke a read tool and receive an MCP content envelope",
+              "payload_shape": [
+                "arguments",
+                "name"
+              ],
+              "fieldEnums": {
+                "isError": [
+                  true,
+                  false
+                ]
+              },
+              "dependsOn": [
+                "POST /api/auth/register"
+              ]
+            }
+          ]
+        },
         {
           "sdk": "sdk-asset",
           "group": "Platform & Multi-Tenancy",
@@ -112,7 +228,7 @@
             "owner",
             "allocation"
           ],
-          "api_count": 1,
+          "api_count": 14,
           "docs_url": "https://cloud.projexlight.com/workspace/docs/api/index.html#sdk-sdk-assignment",
           "apis": [
             {
@@ -138,6 +254,238 @@
               },
               "dependsOn": [
                 "POST /api/auth/signup-tenant"
+              ]
+            },
+            {
+              "method": "GET",
+              "endpoint": "/api/assignment/decisions",
+              "requiresAuth": true,
+              "summary": "Read one recorded decision by id",
+              "payload_shape": [],
+              "fieldEnums": {
+                "outcome": [
+                  "ASSIGNED",
+                  "FALLBACK",
+                  "REVIEW",
+                  "UNROUTABLE"
+                ]
+              },
+              "dependsOn": [
+                "POST /api/auth/signup-tenant",
+                "POST /api/assignment/route"
+              ]
+            },
+            {
+              "method": "GET",
+              "endpoint": "/api/assignment/rotation",
+              "requiresAuth": true,
+              "summary": "Read the rotation cursors",
+              "payload_shape": [],
+              "fieldEnums": {
+                "strategy": [
+                  "default",
+                  "round_robin",
+                  "fair_share"
+                ]
+              },
+              "dependsOn": [
+                "POST /api/auth/signup-tenant"
+              ]
+            },
+            {
+              "method": "POST",
+              "endpoint": "/api/assignment/route",
+              "requiresAuth": true,
+              "summary": "Route a subject through the pipeline",
+              "payload_shape": [
+                "candidate_persona_ids",
+                "dry_run",
+                "persona_specialties",
+                "rule_set_name",
+                "subject",
+                "subject_ref",
+                "tenant_id"
+              ],
+              "fieldEnums": {
+                "dry_run": [
+                  "true",
+                  "false"
+                ]
+              },
+              "dependsOn": [
+                "POST /api/auth/signup-tenant",
+                "POST /api/assignment/routes"
+              ]
+            },
+            {
+              "method": "GET",
+              "endpoint": "/api/assignment/routes",
+              "requiresAuth": true,
+              "summary": "List rule versions",
+              "payload_shape": [],
+              "fieldEnums": {},
+              "dependsOn": [
+                "POST /api/auth/signup-tenant",
+                "POST /api/assignment/routes"
+              ]
+            },
+            {
+              "method": "POST",
+              "endpoint": "/api/assignment/routes",
+              "requiresAuth": true,
+              "summary": "Publish a rule set and make it active",
+              "payload_shape": [
+                "activate",
+                "name",
+                "published_by",
+                "rules",
+                "tenant_id"
+              ],
+              "fieldEnums": {
+                "activate": [
+                  "true",
+                  "false"
+                ]
+              },
+              "dependsOn": [
+                "POST /api/auth/signup-tenant"
+              ]
+            },
+            {
+              "method": "POST",
+              "endpoint": "/api/assignment/simulate",
+              "requiresAuth": true,
+              "summary": "Simulate a candidate rule version",
+              "payload_shape": [
+                "candidate_persona_ids",
+                "candidate_version",
+                "limit",
+                "persona_specialties",
+                "rule_set_name",
+                "skew_tolerance",
+                "tenant_id"
+              ],
+              "fieldEnums": {},
+              "dependsOn": [
+                "POST /api/auth/signup-tenant",
+                "POST /api/assignment/routes",
+                "POST /api/assignment/route"
+              ]
+            },
+            {
+              "method": "PUT",
+              "endpoint": "/api/assignment/workload/:persona_id",
+              "requiresAuth": true,
+              "summary": "Upsert a persona workload profile",
+              "payload_shape": [
+                "available_from",
+                "available_to",
+                "capacity_per_day",
+                "skills"
+              ],
+              "fieldEnums": {},
+              "dependsOn": [
+                "POST /api/auth/signup-tenant"
+              ]
+            },
+            {
+              "method": "POST",
+              "endpoint": "/api/assignments",
+              "requiresAuth": true,
+              "summary": "Offer a subject with a backup and a manager",
+              "payload_shape": [
+                "acceptance_window_minutes",
+                "actor",
+                "backup_persona_id",
+                "manager_persona_id",
+                "metadata",
+                "primary_persona_id",
+                "routing_decision_id",
+                "source_timestamp",
+                "subject_ref",
+                "tenant_id"
+              ],
+              "fieldEnums": {},
+              "dependsOn": [
+                "POST /api/auth/signup-tenant",
+                "POST /api/personas"
+              ]
+            },
+            {
+              "method": "GET",
+              "endpoint": "/api/assignments/:record_id",
+              "requiresAuth": true,
+              "summary": "Read an assignment with its history",
+              "payload_shape": [],
+              "fieldEnums": {},
+              "dependsOn": [
+                "POST /api/auth/signup-tenant",
+                "POST /api/assignments"
+              ]
+            },
+            {
+              "method": "POST",
+              "endpoint": "/api/assignments/:record_id/accept",
+              "requiresAuth": true,
+              "summary": "Accept an offered assignment",
+              "payload_shape": [
+                "actor",
+                "persona_id",
+                "tenant_id"
+              ],
+              "fieldEnums": {},
+              "dependsOn": [
+                "POST /api/auth/signup-tenant",
+                "POST /api/assignments"
+              ]
+            },
+            {
+              "method": "POST",
+              "endpoint": "/api/assignments/:record_id/decline",
+              "requiresAuth": true,
+              "summary": "Decline with a reason",
+              "payload_shape": [
+                "actor",
+                "reason",
+                "tenant_id"
+              ],
+              "fieldEnums": {},
+              "dependsOn": [
+                "POST /api/auth/signup-tenant",
+                "POST /api/assignments"
+              ]
+            },
+            {
+              "method": "POST",
+              "endpoint": "/api/assignments/:record_id/reassign",
+              "requiresAuth": true,
+              "summary": "Reassign with a reason",
+              "payload_shape": [
+                "actor",
+                "reason",
+                "tenant_id",
+                "to_persona_id"
+              ],
+              "fieldEnums": {},
+              "dependsOn": [
+                "POST /api/auth/signup-tenant",
+                "POST /api/assignments",
+                "POST /api/personas"
+              ]
+            },
+            {
+              "method": "POST",
+              "endpoint": "/api/assignments/sweep",
+              "requiresAuth": true,
+              "summary": "Sweep expired offers",
+              "payload_shape": [
+                "limit",
+                "tenant_id"
+              ],
+              "fieldEnums": {},
+              "dependsOn": [
+                "POST /api/auth/signup-tenant",
+                "POST /api/assignments"
               ]
             }
           ]
@@ -240,6 +588,141 @@
               "dependsOn": [
                 "POST /api/auth/signup-tenant",
                 "POST /api/assets"
+              ]
+            }
+          ]
+        },
+        {
+          "sdk": "sdk-config",
+          "group": "Platform & Multi-Tenancy",
+          "summary": "Tenant-scoped configuration values and typed settings resolution",
+          "reuse_when": [
+            "config",
+            "setting",
+            "tenant configuration",
+            "preference",
+            "parameter",
+            "feature configuration"
+          ],
+          "api_count": 6,
+          "docs_url": "https://cloud.projexlight.com/workspace/docs/api/index.html#sdk-sdk-config",
+          "apis": [
+            {
+              "method": "GET",
+              "endpoint": "/api/config",
+              "requiresAuth": true,
+              "summary": "List tenant-scoped config",
+              "payload_shape": [],
+              "fieldEnums": {
+                "scope": [
+                  "platform",
+                  "tenant",
+                  "app",
+                  "app_user"
+                ]
+              },
+              "dependsOn": [
+                "POST /api/auth/signup-tenant",
+                "POST /api/config"
+              ]
+            },
+            {
+              "method": "POST",
+              "endpoint": "/api/config",
+              "requiresAuth": true,
+              "summary": "Set a tenant-scoped config value",
+              "payload_shape": [
+                "key",
+                "scope",
+                "scope_id",
+                "value"
+              ],
+              "fieldEnums": {
+                "scope": [
+                  "platform",
+                  "tenant",
+                  "app",
+                  "app_user"
+                ]
+              },
+              "dependsOn": [
+                "POST /api/auth/signup-tenant"
+              ]
+            },
+            {
+              "method": "GET",
+              "endpoint": "/api/config/resolve",
+              "requiresAuth": true,
+              "summary": "Resolve a key set at tenant scope",
+              "payload_shape": [],
+              "fieldEnums": {},
+              "dependsOn": [
+                "POST /api/auth/signup-tenant",
+                "POST /api/config"
+              ]
+            },
+            {
+              "method": "POST",
+              "endpoint": "/api/config/revoke",
+              "requiresAuth": true,
+              "summary": "Revoke a tenant config value",
+              "payload_shape": [
+                "key",
+                "scope",
+                "scope_id"
+              ],
+              "fieldEnums": {
+                "scope": [
+                  "platform",
+                  "tenant",
+                  "app",
+                  "app_user"
+                ]
+              },
+              "dependsOn": [
+                "POST /api/auth/signup-tenant"
+              ]
+            },
+            {
+              "method": "POST",
+              "endpoint": "/api/config/rotate",
+              "requiresAuth": true,
+              "summary": "Rotate a tenant secret config value",
+              "payload_shape": [
+                "key",
+                "scope",
+                "scope_id",
+                "secret_ref"
+              ],
+              "fieldEnums": {
+                "scope": [
+                  "platform",
+                  "tenant",
+                  "app",
+                  "app_user"
+                ]
+              },
+              "dependsOn": [
+                "POST /api/auth/signup-tenant"
+              ]
+            },
+            {
+              "method": "GET",
+              "endpoint": "/api/config/value",
+              "requiresAuth": true,
+              "summary": "Get one tenant config row",
+              "payload_shape": [],
+              "fieldEnums": {
+                "scope": [
+                  "platform",
+                  "tenant",
+                  "app",
+                  "app_user"
+                ]
+              },
+              "dependsOn": [
+                "POST /api/auth/signup-tenant",
+                "POST /api/config"
               ]
             }
           ]
@@ -893,9 +1376,19 @@
             "organization",
             "workspace",
             "account",
-            "multi-tenant"
+            "multi-tenant",
+            "tenant signup",
+            "onboarding",
+            "provisioning",
+            "business unit",
+            "role template",
+            "tenant admin",
+            "isolation tier",
+            "parent tenant",
+            "become a provider",
+            "sub tenant"
           ],
-          "api_count": 9,
+          "api_count": 10,
           "docs_url": "https://cloud.projexlight.com/workspace/docs/api/index.html#sdk-sdk-tenant",
           "apis": [
             {
@@ -946,6 +1439,17 @@
                   "consolidated"
                 ]
               },
+              "dependsOn": [
+                "POST /api/auth/signup-tenant"
+              ]
+            },
+            {
+              "method": "GET",
+              "endpoint": "/api/role-templates",
+              "requiresAuth": true,
+              "summary": "List role templates for an app",
+              "payload_shape": [],
+              "fieldEnums": {},
               "dependsOn": [
                 "POST /api/auth/signup-tenant"
               ]
@@ -1423,8 +1927,8 @@
     },
     {
       "name": "Outreach & Communication",
-      "sdk_count": 8,
-      "api_count": 109,
+      "sdk_count": 9,
+      "api_count": 116,
       "sdks": [
         {
           "sdk": "connector-twilio-voice",
@@ -1675,6 +2179,109 @@
                 "POST /api/auth/signup-tenant",
                 "POST /api/voice/tracking-numbers",
                 "POST /api/voice/calls"
+              ]
+            }
+          ]
+        },
+        {
+          "sdk": "sdk-conversation",
+          "group": "Outreach & Communication",
+          "summary": "Omnichannel threading: unified inbox, reply detection, internal notes and compose guardrails",
+          "reuse_when": [
+            "conversation",
+            "thread",
+            "omnichannel",
+            "inbox",
+            "transcript",
+            "internal note",
+            "reply detection",
+            "compose guardrail",
+            "message history"
+          ],
+          "api_count": 5,
+          "docs_url": "https://cloud.projexlight.com/workspace/docs/api/index.html#sdk-sdk-conversation",
+          "apis": [
+            {
+              "method": "POST",
+              "endpoint": "/api/conversations/compose-guardrail",
+              "requiresAuth": true,
+              "summary": "Opt-out outranks quiet hours in the reason list",
+              "payload_shape": [
+                "channel_facts",
+                "channels",
+                "tenant_id"
+              ],
+              "fieldEnums": {},
+              "dependsOn": [
+                "POST /api/auth/signup-tenant"
+              ]
+            },
+            {
+              "method": "GET",
+              "endpoint": "/api/conversations/inbox",
+              "requiresAuth": true,
+              "summary": "Unfiltered inbox returns the tenant's open threads",
+              "payload_shape": [],
+              "fieldEnums": {},
+              "dependsOn": [
+                "POST /api/auth/signup-tenant",
+                "POST /api/conversations/threads",
+                "POST /api/conversations/messages"
+              ]
+            },
+            {
+              "method": "POST",
+              "endpoint": "/api/conversations/messages",
+              "requiresAuth": true,
+              "summary": "Record an outbound SMS on the thread",
+              "payload_shape": [
+                "actor",
+                "body_preview",
+                "body_ref",
+                "channel",
+                "direction",
+                "occurred_at",
+                "provider_message_key",
+                "tenant_id",
+                "thread_id"
+              ],
+              "fieldEnums": {},
+              "dependsOn": [
+                "POST /api/auth/signup-tenant",
+                "POST /api/conversations/threads"
+              ]
+            },
+            {
+              "method": "POST",
+              "endpoint": "/api/conversations/threads",
+              "requiresAuth": true,
+              "summary": "Open a thread with purpose and an eligibility snapshot",
+              "payload_shape": [
+                "eligibility_snapshot",
+                "metadata",
+                "purpose",
+                "related_object_ref",
+                "sender_identity_ref",
+                "subject_kind",
+                "subject_ref",
+                "tenant_id"
+              ],
+              "fieldEnums": {},
+              "dependsOn": [
+                "POST /api/auth/signup-tenant"
+              ]
+            },
+            {
+              "method": "GET",
+              "endpoint": "/api/conversations/threads/:id",
+              "requiresAuth": true,
+              "summary": "Fetch the thread and its messages",
+              "payload_shape": [],
+              "fieldEnums": {},
+              "dependsOn": [
+                "POST /api/auth/signup-tenant",
+                "POST /api/conversations/threads",
+                "POST /api/conversations/messages"
               ]
             }
           ]
@@ -2456,9 +3063,15 @@
             "alert",
             "message",
             "template",
-            "provider"
+            "provider",
+            "frequency cap",
+            "dedup",
+            "quiet hours",
+            "send throttle",
+            "no answer retry",
+            "do not contact too often"
           ],
-          "api_count": 16,
+          "api_count": 18,
           "docs_url": "https://cloud.projexlight.com/workspace/docs/api/index.html#sdk-sdk-notification",
           "apis": [
             {
@@ -2506,6 +3119,36 @@
                   "slack"
                 ]
               },
+              "dependsOn": [
+                "POST /api/auth/signup-tenant"
+              ]
+            },
+            {
+              "method": "GET",
+              "endpoint": "/api/notifications/frequency-policy",
+              "requiresAuth": true,
+              "summary": "List all policies for the tenant",
+              "payload_shape": [],
+              "fieldEnums": {},
+              "dependsOn": [
+                "POST /api/auth/signup-tenant",
+                "PUT /api/notifications/frequency-policy"
+              ]
+            },
+            {
+              "method": "PUT",
+              "endpoint": "/api/notifications/frequency-policy",
+              "requiresAuth": true,
+              "summary": "Cap marketing SMS at 5 a day with a 15-minute dedup window",
+              "payload_shape": [
+                "channel",
+                "dedup_window_seconds",
+                "max_per_day",
+                "purpose",
+                "tenant_id",
+                "updated_by"
+              ],
+              "fieldEnums": {},
               "dependsOn": [
                 "POST /api/auth/signup-tenant"
               ]
@@ -3835,8 +4478,8 @@
     },
     {
       "name": "CRM & Engagement",
-      "sdk_count": 8,
-      "api_count": 68,
+      "sdk_count": 10,
+      "api_count": 116,
       "sdks": [
         {
           "sdk": "sdk-campaign",
@@ -4080,6 +4723,274 @@
           ]
         },
         {
+          "sdk": "sdk-coverage",
+          "group": "CRM & Engagement",
+          "summary": "Who is available to take work: schedules, PTO, holidays, on-call and capacity",
+          "reuse_when": [
+            "coverage",
+            "availability",
+            "pto",
+            "on-call",
+            "capacity",
+            "who is working",
+            "holiday",
+            "out of office",
+            "shift"
+          ],
+          "api_count": 11,
+          "docs_url": "https://cloud.projexlight.com/workspace/docs/api/index.html#sdk-sdk-coverage",
+          "apis": [
+            {
+              "method": "POST",
+              "endpoint": "/api/coverage/backup-designations",
+              "requiresAuth": true,
+              "summary": "A backup with a five-minute acceptance window",
+              "payload_shape": [
+                "acceptance_window_minutes",
+                "backup_persona_id",
+                "primary_persona_id",
+                "scope",
+                "tenant_id"
+              ],
+              "fieldEnums": {},
+              "dependsOn": [
+                "POST /api/auth/signup-tenant",
+                "POST /api/personas"
+              ]
+            },
+            {
+              "method": "POST",
+              "endpoint": "/api/coverage/capacity-policies",
+              "requiresAuth": true,
+              "summary": "Per-band limits with a reserved-headroom threshold",
+              "payload_shape": [
+                "daily_cap",
+                "freeze_threshold",
+                "freeze_threshold_by_band",
+                "max_concurrent_by_band",
+                "persona_id",
+                "tenant_id"
+              ],
+              "fieldEnums": {},
+              "dependsOn": [
+                "POST /api/auth/signup-tenant",
+                "POST /api/personas"
+              ]
+            },
+            {
+              "method": "GET",
+              "endpoint": "/api/coverage/eligible",
+              "requiresAuth": true,
+              "summary": "Ask who can act now, with reasons for those who cannot",
+              "payload_shape": [],
+              "fieldEnums": {
+                "include_ineligible": [
+                  "true",
+                  "false"
+                ],
+                "ignore_presence": [
+                  "true",
+                  "false"
+                ]
+              },
+              "dependsOn": [
+                "POST /api/auth/signup-tenant",
+                "POST /api/coverage/schedules",
+                "PUT /api/coverage/presence"
+              ]
+            },
+            {
+              "method": "GET",
+              "endpoint": "/api/coverage/gaps",
+              "requiresAuth": true,
+              "summary": "Look ahead over the next week for tier 1",
+              "payload_shape": [],
+              "fieldEnums": {
+                "tier": [
+                  "1",
+                  "2",
+                  "3"
+                ]
+              },
+              "dependsOn": [
+                "POST /api/auth/signup-tenant",
+                "POST /api/coverage/on-call"
+              ]
+            },
+            {
+              "method": "POST",
+              "endpoint": "/api/coverage/holiday-calendars",
+              "requiresAuth": true,
+              "summary": "A regional list with named owner",
+              "payload_shape": [
+                "dates",
+                "maintained_by",
+                "name",
+                "region",
+                "tenant_id"
+              ],
+              "fieldEnums": {},
+              "dependsOn": [
+                "POST /api/auth/signup-tenant"
+              ]
+            },
+            {
+              "method": "POST",
+              "endpoint": "/api/coverage/on-call",
+              "requiresAuth": true,
+              "summary": "Tier 1 for the coming week",
+              "payload_shape": [
+                "ends_at",
+                "persona_id",
+                "rotation_ref",
+                "starts_at",
+                "tenant_id",
+                "tier"
+              ],
+              "fieldEnums": {
+                "tier": [
+                  "1",
+                  "2",
+                  "3"
+                ]
+              },
+              "dependsOn": [
+                "POST /api/auth/signup-tenant",
+                "POST /api/personas"
+              ]
+            },
+            {
+              "method": "GET",
+              "endpoint": "/api/coverage/on-call/current",
+              "requiresAuth": true,
+              "summary": "Resolve the current audience for a rotation",
+              "payload_shape": [],
+              "fieldEnums": {
+                "tier": [
+                  "1",
+                  "2",
+                  "3"
+                ]
+              },
+              "dependsOn": [
+                "POST /api/auth/signup-tenant",
+                "POST /api/coverage/on-call"
+              ]
+            },
+            {
+              "method": "PUT",
+              "endpoint": "/api/coverage/presence",
+              "requiresAuth": true,
+              "summary": "A manual claim of being available",
+              "payload_shape": [
+                "manual_hold_minutes",
+                "persona_id",
+                "source",
+                "status",
+                "tenant_id"
+              ],
+              "fieldEnums": {
+                "status": [
+                  "AVAILABLE",
+                  "MEETING",
+                  "OFFLINE",
+                  "PTO",
+                  "ON_CALL"
+                ],
+                "source": [
+                  "MANUAL",
+                  "CALENDAR",
+                  "SYSTEM"
+                ]
+              },
+              "dependsOn": [
+                "POST /api/auth/signup-tenant",
+                "POST /api/personas"
+              ]
+            },
+            {
+              "method": "GET",
+              "endpoint": "/api/coverage/schedules",
+              "requiresAuth": true,
+              "summary": "List every schedule in the tenant",
+              "payload_shape": [],
+              "fieldEnums": {
+                "weekday": [
+                  "0",
+                  "1",
+                  "2",
+                  "3",
+                  "4",
+                  "5",
+                  "6"
+                ]
+              },
+              "dependsOn": [
+                "POST /api/auth/signup-tenant",
+                "POST /api/coverage/schedules"
+              ]
+            },
+            {
+              "method": "POST",
+              "endpoint": "/api/coverage/schedules",
+              "requiresAuth": true,
+              "summary": "A weekday schedule in the persona own timezone",
+              "payload_shape": [
+                "iana_timezone",
+                "persona_id",
+                "tenant_id",
+                "weekly_windows"
+              ],
+              "fieldEnums": {
+                "weekday": [
+                  "0",
+                  "1",
+                  "2",
+                  "3",
+                  "4",
+                  "5",
+                  "6"
+                ]
+              },
+              "dependsOn": [
+                "POST /api/auth/signup-tenant",
+                "POST /api/personas"
+              ]
+            },
+            {
+              "method": "POST",
+              "endpoint": "/api/coverage/time-off",
+              "requiresAuth": true,
+              "summary": "A day of PTO",
+              "payload_shape": [
+                "ends_at",
+                "kind",
+                "persona_id",
+                "reason",
+                "starts_at",
+                "tenant_id"
+              ],
+              "fieldEnums": {
+                "kind": [
+                  "PTO",
+                  "MEETING",
+                  "OUTAGE",
+                  "HOLIDAY"
+                ],
+                "source": [
+                  "MANUAL",
+                  "CALENDAR",
+                  "SYSTEM"
+                ]
+              },
+              "dependsOn": [
+                "POST /api/auth/signup-tenant",
+                "POST /api/personas"
+              ]
+            }
+          ]
+        },
+        {
           "sdk": "sdk-crm",
           "group": "CRM & Engagement",
           "summary": "Contacts, deals, pipelines, and activities (canonical CRM)",
@@ -4093,7 +5004,7 @@
             "account",
             "activity"
           ],
-          "api_count": 21,
+          "api_count": 28,
           "docs_url": "https://cloud.projexlight.com/workspace/docs/api/index.html#sdk-sdk-crm",
           "apis": [
             {
@@ -4238,6 +5149,34 @@
                 "POST /api/personas",
                 "POST /api/vault/keys",
                 "POST /api/encounters"
+              ]
+            },
+            {
+              "method": "POST",
+              "endpoint": "/api/crm/close-reasons",
+              "requiresAuth": true,
+              "summary": "Define a competitive-loss reason that demands a competitor and a learning note",
+              "payload_shape": [
+                "code",
+                "label",
+                "outcome_class",
+                "reactivation_after_days",
+                "reactivation_allowed",
+                "requires_competitor",
+                "requires_learning_note",
+                "sort_order",
+                "tenant_id"
+              ],
+              "fieldEnums": {
+                "outcome_class": [
+                  "won",
+                  "lost",
+                  "disqualified",
+                  "paused"
+                ]
+              },
+              "dependsOn": [
+                "POST /api/auth/signup-tenant"
               ]
             },
             {
@@ -4578,6 +5517,50 @@
               ]
             },
             {
+              "method": "POST",
+              "endpoint": "/api/crm/next-actions/:id/reschedule",
+              "requiresAuth": true,
+              "summary": "Push the date with a reason on the record",
+              "payload_shape": [
+                "approved_by",
+                "new_due_at",
+                "pushed_by",
+                "reason",
+                "tenant_id"
+              ],
+              "fieldEnums": {},
+              "dependsOn": [
+                "POST /api/auth/signup-tenant",
+                "POST /api/personas",
+                "POST /api/crm/subjects/:subject_ref/next-action"
+              ]
+            },
+            {
+              "method": "GET",
+              "endpoint": "/api/crm/next-actions/overdue",
+              "requiresAuth": true,
+              "summary": "Read the overdue queue for the tenant",
+              "payload_shape": [],
+              "fieldEnums": {},
+              "dependsOn": [
+                "POST /api/auth/signup-tenant",
+                "POST /api/personas",
+                "POST /api/crm/subjects/:subject_ref/next-action"
+              ]
+            },
+            {
+              "method": "GET",
+              "endpoint": "/api/crm/pipeline/aging",
+              "requiresAuth": true,
+              "summary": "Read the aging report for the tenant",
+              "payload_shape": [],
+              "fieldEnums": {},
+              "dependsOn": [
+                "POST /api/auth/signup-tenant",
+                "POST /api/personas"
+              ]
+            },
+            {
               "method": "GET",
               "endpoint": "/api/crm/pipeline/board",
               "requiresAuth": true,
@@ -4597,6 +5580,62 @@
               "fieldEnums": {},
               "dependsOn": [
                 "POST /api/auth/signup-tenant"
+              ]
+            },
+            {
+              "method": "GET",
+              "endpoint": "/api/crm/subjects/:subject_ref/next-action",
+              "requiresAuth": true,
+              "summary": "Read the action just committed",
+              "payload_shape": [],
+              "fieldEnums": {},
+              "dependsOn": [
+                "POST /api/auth/signup-tenant",
+                "POST /api/personas",
+                "POST /api/crm/subjects/:subject_ref/next-action"
+              ]
+            },
+            {
+              "method": "POST",
+              "endpoint": "/api/crm/subjects/:subject_ref/next-action",
+              "requiresAuth": true,
+              "summary": "Commit a call with all five elements of the commitment",
+              "payload_shape": [
+                "action_type",
+                "due_at",
+                "intended_outcome",
+                "owner_persona_id",
+                "purpose",
+                "tenant_id"
+              ],
+              "fieldEnums": {
+                "action_type": [
+                  "call",
+                  "email",
+                  "meeting",
+                  "task",
+                  "linkedin",
+                  "sms",
+                  "proposal",
+                  "other"
+                ]
+              },
+              "dependsOn": [
+                "POST /api/auth/signup-tenant",
+                "POST /api/personas"
+              ]
+            },
+            {
+              "method": "GET",
+              "endpoint": "/api/crm/subjects/:subject_ref/save-gate",
+              "requiresAuth": true,
+              "summary": "Allowed once a complete action is committed",
+              "payload_shape": [],
+              "fieldEnums": {},
+              "dependsOn": [
+                "POST /api/auth/signup-tenant",
+                "POST /api/personas",
+                "POST /api/crm/subjects/:subject_ref/next-action"
               ]
             }
           ]
@@ -5166,7 +6205,12 @@
             "ml model",
             "next best action",
             "prioritize",
-            "ranking"
+            "ranking",
+            "firmographic",
+            "intent signal",
+            "company size",
+            "b2b features",
+            "prioritise leads"
           ],
           "api_count": 9,
           "docs_url": "https://cloud.projexlight.com/workspace/docs/api/index.html#sdk-sdk-lead-scoring",
@@ -5436,6 +6480,817 @@
           ]
         },
         {
+          "sdk": "sdk-sla",
+          "group": "CRM & Engagement",
+          "summary": "Service-level clocks: targets, business hours, pause/resume, breach and escalation",
+          "reuse_when": [
+            "sla",
+            "response time",
+            "escalation",
+            "business hours",
+            "breach",
+            "time to first response",
+            "due by",
+            "overdue"
+          ],
+          "api_count": 30,
+          "docs_url": "https://cloud.projexlight.com/workspace/docs/api/index.html#sdk-sdk-sla",
+          "apis": [
+            {
+              "method": "GET",
+              "endpoint": "/api/sla/at-risk",
+              "requiresAuth": true,
+              "summary": "Everything due within two hours, overdue included",
+              "payload_shape": [],
+              "fieldEnums": {
+                "severity": [
+                  "info",
+                  "warning",
+                  "urgent",
+                  "critical"
+                ],
+                "state": [
+                  "running",
+                  "paused",
+                  "satisfied",
+                  "breached",
+                  "cancelled"
+                ],
+                "include_overdue": [
+                  "true",
+                  "false"
+                ]
+              },
+              "dependsOn": [
+                "POST /api/auth/signup-tenant",
+                "POST /api/sla/clocks"
+              ]
+            },
+            {
+              "method": "GET",
+              "endpoint": "/api/sla/attainment",
+              "requiresAuth": true,
+              "summary": "Attainment for the last thirty days across every dimension",
+              "payload_shape": [],
+              "fieldEnums": {
+                "dimensions": [
+                  "source",
+                  "owner",
+                  "day",
+                  "hour",
+                  "reason",
+                  "policy"
+                ],
+                "reason_code": [
+                  "awaiting_capacity",
+                  "no_capacity",
+                  "missed_handoff",
+                  "upstream_outage",
+                  "provider_down",
+                  "process_gap",
+                  "cause_not_recorded"
+                ],
+                "state": [
+                  "running",
+                  "paused",
+                  "satisfied",
+                  "breached",
+                  "cancelled"
+                ]
+              },
+              "dependsOn": [
+                "POST /api/auth/signup-tenant",
+                "POST /api/sla/clocks/:clock_id/satisfy"
+              ]
+            },
+            {
+              "method": "GET",
+              "endpoint": "/api/sla/breach-reasons",
+              "requiresAuth": true,
+              "summary": "Read the taxonomy",
+              "payload_shape": [],
+              "fieldEnums": {
+                "code": [
+                  "awaiting_capacity",
+                  "no_capacity",
+                  "missed_handoff",
+                  "upstream_outage",
+                  "provider_down",
+                  "process_gap",
+                  "cause_not_recorded"
+                ],
+                "category": [
+                  "capacity",
+                  "process",
+                  "external"
+                ]
+              },
+              "dependsOn": [
+                "POST /api/auth/signup-tenant",
+                "POST /api/sla/breach-reasons"
+              ]
+            },
+            {
+              "method": "POST",
+              "endpoint": "/api/sla/breach-reasons",
+              "requiresAuth": true,
+              "summary": "Give the auto-registered code a label and a category",
+              "payload_shape": [
+                "category",
+                "code",
+                "label",
+                "tenant_id"
+              ],
+              "fieldEnums": {
+                "code": [
+                  "awaiting_capacity",
+                  "no_capacity",
+                  "missed_handoff",
+                  "upstream_outage",
+                  "provider_down",
+                  "process_gap",
+                  "cause_not_recorded"
+                ],
+                "category": [
+                  "capacity",
+                  "process",
+                  "external"
+                ]
+              },
+              "dependsOn": [
+                "POST /api/auth/signup-tenant"
+              ]
+            },
+            {
+              "method": "POST",
+              "endpoint": "/api/sla/breach-scan",
+              "requiresAuth": true,
+              "summary": "Scan the tenant — the ten-day-old clock is well past due",
+              "payload_shape": [
+                "actor_id",
+                "limit",
+                "tenant_id"
+              ],
+              "fieldEnums": {
+                "state": [
+                  "running",
+                  "paused",
+                  "satisfied",
+                  "breached",
+                  "cancelled"
+                ]
+              },
+              "dependsOn": [
+                "POST /api/auth/signup-tenant",
+                "GET /api/sla/at-risk"
+              ]
+            },
+            {
+              "method": "GET",
+              "endpoint": "/api/sla/breaches",
+              "requiresAuth": true,
+              "summary": "List every recorded miss for this tenant",
+              "payload_shape": [],
+              "fieldEnums": {
+                "reason_code": [
+                  "awaiting_capacity",
+                  "no_capacity",
+                  "missed_handoff",
+                  "upstream_outage",
+                  "provider_down",
+                  "process_gap",
+                  "cause_not_recorded"
+                ],
+                "unrecovered_only": [
+                  "true",
+                  "false"
+                ]
+              },
+              "dependsOn": [
+                "POST /api/auth/signup-tenant",
+                "POST /api/sla/clocks/:clock_id/breach"
+              ]
+            },
+            {
+              "method": "GET",
+              "endpoint": "/api/sla/breaches/:breach_id",
+              "requiresAuth": true,
+              "summary": "Read the breach recorded above",
+              "payload_shape": [],
+              "fieldEnums": {
+                "reason_code": [
+                  "awaiting_capacity",
+                  "no_capacity",
+                  "missed_handoff",
+                  "upstream_outage",
+                  "provider_down",
+                  "process_gap",
+                  "cause_not_recorded"
+                ]
+              },
+              "dependsOn": [
+                "POST /api/auth/signup-tenant",
+                "POST /api/sla/clocks/:clock_id/breach"
+              ]
+            },
+            {
+              "method": "POST",
+              "endpoint": "/api/sla/breaches/:breach_id/recovery",
+              "requiresAuth": true,
+              "summary": "The backup answered the next morning",
+              "payload_shape": [
+                "recovered_by",
+                "recovery_action",
+                "tenant_id"
+              ],
+              "fieldEnums": {
+                "reason_code": [
+                  "awaiting_capacity",
+                  "no_capacity",
+                  "missed_handoff",
+                  "upstream_outage",
+                  "provider_down",
+                  "process_gap",
+                  "cause_not_recorded"
+                ]
+              },
+              "dependsOn": [
+                "POST /api/auth/signup-tenant",
+                "POST /api/sla/clocks/:clock_id/breach"
+              ]
+            },
+            {
+              "method": "GET",
+              "endpoint": "/api/sla/calendars",
+              "requiresAuth": true,
+              "summary": "List the active calendars for this tenant",
+              "payload_shape": [],
+              "fieldEnums": {
+                "weekend_rule": [
+                  "saturday_sunday",
+                  "friday_saturday",
+                  "sunday_only",
+                  "none"
+                ],
+                "is_active": [
+                  "true",
+                  "false"
+                ]
+              },
+              "dependsOn": [
+                "POST /api/auth/signup-tenant",
+                "POST /api/sla/calendars"
+              ]
+            },
+            {
+              "method": "POST",
+              "endpoint": "/api/sla/calendars",
+              "requiresAuth": true,
+              "summary": "A Monday-to-Friday calendar in a named zone with a late-coverage extension",
+              "payload_shape": [
+                "description",
+                "holiday_dates",
+                "late_coverage_extension_minutes",
+                "metadata",
+                "name",
+                "slug",
+                "tenant_id",
+                "timezone",
+                "weekend_rule",
+                "working_windows"
+              ],
+              "fieldEnums": {
+                "weekend_rule": [
+                  "saturday_sunday",
+                  "friday_saturday",
+                  "sunday_only",
+                  "none"
+                ]
+              },
+              "dependsOn": [
+                "POST /api/auth/signup-tenant"
+              ]
+            },
+            {
+              "method": "GET",
+              "endpoint": "/api/sla/calendars/:calendar_id",
+              "requiresAuth": true,
+              "summary": "Read the calendar created above",
+              "payload_shape": [],
+              "fieldEnums": {
+                "weekend_rule": [
+                  "saturday_sunday",
+                  "friday_saturday",
+                  "sunday_only",
+                  "none"
+                ]
+              },
+              "dependsOn": [
+                "POST /api/auth/signup-tenant",
+                "POST /api/sla/calendars"
+              ]
+            },
+            {
+              "method": "GET",
+              "endpoint": "/api/sla/clocks",
+              "requiresAuth": true,
+              "summary": "List the running clocks for this tenant",
+              "payload_shape": [],
+              "fieldEnums": {
+                "state": [
+                  "running",
+                  "paused",
+                  "satisfied",
+                  "breached",
+                  "cancelled"
+                ]
+              },
+              "dependsOn": [
+                "POST /api/auth/signup-tenant",
+                "POST /api/sla/clocks"
+              ]
+            },
+            {
+              "method": "POST",
+              "endpoint": "/api/sla/clocks",
+              "requiresAuth": true,
+              "summary": "A signal that arrived ten days ago — long past its two-hour promise",
+              "payload_shape": [
+                "actor_id",
+                "metadata",
+                "owner_ref",
+                "policy_id",
+                "source_timestamp",
+                "subject_ref",
+                "tenant_id"
+              ],
+              "fieldEnums": {
+                "state": [
+                  "running",
+                  "paused",
+                  "satisfied",
+                  "breached",
+                  "cancelled"
+                ]
+              },
+              "dependsOn": [
+                "POST /api/auth/signup-tenant",
+                "POST /api/sla/policies"
+              ]
+            },
+            {
+              "method": "GET",
+              "endpoint": "/api/sla/clocks/:clock_id",
+              "requiresAuth": true,
+              "summary": "Read the overdue clock created above",
+              "payload_shape": [],
+              "fieldEnums": {
+                "state": [
+                  "running",
+                  "paused",
+                  "satisfied",
+                  "breached",
+                  "cancelled"
+                ]
+              },
+              "dependsOn": [
+                "POST /api/auth/signup-tenant",
+                "POST /api/sla/clocks"
+              ]
+            },
+            {
+              "method": "POST",
+              "endpoint": "/api/sla/clocks/:clock_id/breach",
+              "requiresAuth": true,
+              "summary": "Explain the miss: nobody was available on the roster",
+              "payload_shape": [
+                "actor_id",
+                "is_systemic",
+                "metadata",
+                "reason_code",
+                "reason_detail",
+                "recorded_by",
+                "source_ref",
+                "tenant_id"
+              ],
+              "fieldEnums": {
+                "reason_code": [
+                  "awaiting_capacity",
+                  "no_capacity",
+                  "missed_handoff",
+                  "upstream_outage",
+                  "provider_down",
+                  "process_gap",
+                  "cause_not_recorded"
+                ],
+                "state": [
+                  "running",
+                  "paused",
+                  "satisfied",
+                  "breached",
+                  "cancelled"
+                ]
+              },
+              "dependsOn": [
+                "POST /api/auth/signup-tenant",
+                "POST /api/sla/breach-scan"
+              ]
+            },
+            {
+              "method": "POST",
+              "endpoint": "/api/sla/clocks/:clock_id/cancel",
+              "requiresAuth": true,
+              "summary": "Cancel because the subject withdrew",
+              "payload_shape": [
+                "actor_id",
+                "reason",
+                "tenant_id"
+              ],
+              "fieldEnums": {
+                "state": [
+                  "running",
+                  "paused",
+                  "satisfied",
+                  "breached",
+                  "cancelled"
+                ]
+              },
+              "dependsOn": [
+                "POST /api/auth/signup-tenant",
+                "POST /api/sla/clocks"
+              ]
+            },
+            {
+              "method": "GET",
+              "endpoint": "/api/sla/clocks/:clock_id/firings",
+              "requiresAuth": true,
+              "summary": "Read the ledger for the ticked clock",
+              "payload_shape": [],
+              "fieldEnums": {
+                "firing_state": [
+                  "claimed",
+                  "fired",
+                  "failed"
+                ]
+              },
+              "dependsOn": [
+                "POST /api/auth/signup-tenant",
+                "POST /api/sla/tick"
+              ]
+            },
+            {
+              "method": "POST",
+              "endpoint": "/api/sla/clocks/:clock_id/pause",
+              "requiresAuth": true,
+              "summary": "Pause on the one reason this policy allows",
+              "payload_shape": [
+                "actor_id",
+                "reason",
+                "tenant_id"
+              ],
+              "fieldEnums": {
+                "state": [
+                  "running",
+                  "paused",
+                  "satisfied",
+                  "breached",
+                  "cancelled"
+                ],
+                "pause_reason": [
+                  "awaiting_subject_reply"
+                ]
+              },
+              "dependsOn": [
+                "POST /api/auth/signup-tenant",
+                "POST /api/sla/clocks/:clock_id/reassign"
+              ]
+            },
+            {
+              "method": "POST",
+              "endpoint": "/api/sla/clocks/:clock_id/reassign",
+              "requiresAuth": true,
+              "summary": "Hand the overdue request to the backup owner",
+              "payload_shape": [
+                "actor_id",
+                "owner_ref",
+                "reason",
+                "tenant_id"
+              ],
+              "fieldEnums": {
+                "state": [
+                  "running",
+                  "paused",
+                  "satisfied",
+                  "breached",
+                  "cancelled"
+                ]
+              },
+              "dependsOn": [
+                "POST /api/auth/signup-tenant",
+                "POST /api/sla/clocks"
+              ]
+            },
+            {
+              "method": "POST",
+              "endpoint": "/api/sla/clocks/:clock_id/resume",
+              "requiresAuth": true,
+              "summary": "Resume the paused clock",
+              "payload_shape": [
+                "actor_id",
+                "tenant_id"
+              ],
+              "fieldEnums": {
+                "state": [
+                  "running",
+                  "paused",
+                  "satisfied",
+                  "breached",
+                  "cancelled"
+                ]
+              },
+              "dependsOn": [
+                "POST /api/auth/signup-tenant",
+                "POST /api/sla/clocks/:clock_id/pause"
+              ]
+            },
+            {
+              "method": "POST",
+              "endpoint": "/api/sla/clocks/:clock_id/satisfy",
+              "requiresAuth": true,
+              "summary": "Satisfy with an accepted evidence kind, a reference and a named actor",
+              "payload_shape": [
+                "actor_id",
+                "evidence_count",
+                "evidence_kind",
+                "evidence_ref",
+                "satisfied_by",
+                "tenant_id"
+              ],
+              "fieldEnums": {
+                "state": [
+                  "running",
+                  "paused",
+                  "satisfied",
+                  "breached",
+                  "cancelled"
+                ],
+                "evidence_kind": [
+                  "outbound_reply",
+                  "resolution"
+                ]
+              },
+              "dependsOn": [
+                "POST /api/auth/signup-tenant",
+                "POST /api/sla/breaches/:breach_id/recovery"
+              ]
+            },
+            {
+              "method": "POST",
+              "endpoint": "/api/sla/clocks/merge",
+              "requiresAuth": true,
+              "summary": "Merge the duplicate request into the original",
+              "payload_shape": [
+                "actor_id",
+                "merged_clock_id",
+                "surviving_clock_id",
+                "tenant_id"
+              ],
+              "fieldEnums": {
+                "state": [
+                  "running",
+                  "paused",
+                  "satisfied",
+                  "breached",
+                  "cancelled"
+                ]
+              },
+              "dependsOn": [
+                "POST /api/auth/signup-tenant",
+                "POST /api/sla/clocks"
+              ]
+            },
+            {
+              "method": "GET",
+              "endpoint": "/api/sla/policies",
+              "requiresAuth": true,
+              "summary": "List active request policies",
+              "payload_shape": [],
+              "fieldEnums": {
+                "is_active": [
+                  "true",
+                  "false"
+                ]
+              },
+              "dependsOn": [
+                "POST /api/auth/signup-tenant",
+                "POST /api/sla/policies"
+              ]
+            },
+            {
+              "method": "POST",
+              "endpoint": "/api/sla/policies",
+              "requiresAuth": true,
+              "summary": "A two-hour response promise with one legal pause and a real satisfaction contract",
+              "payload_shape": [
+                "calendar_id",
+                "description",
+                "duration_minutes",
+                "metadata",
+                "name",
+                "pause_conditions",
+                "qualifying_predicate",
+                "satisfaction_contract",
+                "slug",
+                "subject_kind",
+                "tenant_id"
+              ],
+              "fieldEnums": {
+                "predicate_op": [
+                  "eq",
+                  "ne",
+                  "in",
+                  "not_in",
+                  "gte",
+                  "lte",
+                  "exists"
+                ],
+                "accepted_kinds": [
+                  "outbound_reply",
+                  "resolution"
+                ]
+              },
+              "dependsOn": [
+                "POST /api/auth/signup-tenant",
+                "POST /api/sla/calendars"
+              ]
+            },
+            {
+              "method": "GET",
+              "endpoint": "/api/sla/policies/:policy_id",
+              "requiresAuth": true,
+              "summary": "Read the policy created above",
+              "payload_shape": [],
+              "fieldEnums": {
+                "predicate_op": [
+                  "eq",
+                  "ne",
+                  "in",
+                  "not_in",
+                  "gte",
+                  "lte",
+                  "exists"
+                ]
+              },
+              "dependsOn": [
+                "POST /api/auth/signup-tenant",
+                "POST /api/sla/policies"
+              ]
+            },
+            {
+              "method": "GET",
+              "endpoint": "/api/sla/policies/:policy_id/rungs",
+              "requiresAuth": true,
+              "summary": "Read the ladder including retired rungs",
+              "payload_shape": [],
+              "fieldEnums": {
+                "severity": [
+                  "info",
+                  "warning",
+                  "urgent",
+                  "critical"
+                ],
+                "audience_kind": [
+                  "owner",
+                  "refs",
+                  "on_call"
+                ],
+                "include_inactive": [
+                  "true",
+                  "false"
+                ]
+              },
+              "dependsOn": [
+                "POST /api/auth/signup-tenant",
+                "POST /api/sla/policies/:policy_id/rungs"
+              ]
+            },
+            {
+              "method": "POST",
+              "endpoint": "/api/sla/policies/:policy_id/rungs",
+              "requiresAuth": true,
+              "summary": "Warn the owner thirty business minutes before the deadline",
+              "payload_shape": [
+                "action",
+                "action_config",
+                "audience",
+                "label",
+                "metadata",
+                "minutes_before_due",
+                "remediation_hint",
+                "rung_index",
+                "severity",
+                "tenant_id"
+              ],
+              "fieldEnums": {
+                "severity": [
+                  "info",
+                  "warning",
+                  "urgent",
+                  "critical"
+                ],
+                "audience_kind": [
+                  "owner",
+                  "refs",
+                  "on_call"
+                ]
+              },
+              "dependsOn": [
+                "POST /api/auth/signup-tenant",
+                "POST /api/sla/policies"
+              ]
+            },
+            {
+              "method": "PATCH",
+              "endpoint": "/api/sla/rungs/:rung_id",
+              "requiresAuth": true,
+              "summary": "Restore the rung (idempotent when it is already active)",
+              "payload_shape": [
+                "is_active",
+                "tenant_id"
+              ],
+              "fieldEnums": {
+                "severity": [
+                  "info",
+                  "warning",
+                  "urgent",
+                  "critical"
+                ],
+                "is_active": [
+                  "true",
+                  "false"
+                ]
+              },
+              "dependsOn": [
+                "POST /api/auth/signup-tenant",
+                "POST /api/sla/policies/:policy_id/rungs"
+              ]
+            },
+            {
+              "method": "POST",
+              "endpoint": "/api/sla/systemic-incidents/open-pending",
+              "requiresAuth": true,
+              "summary": "Drain the pending queue (zero when every group already opened)",
+              "payload_shape": [
+                "limit",
+                "tenant_id"
+              ],
+              "fieldEnums": {
+                "reason_code": [
+                  "awaiting_capacity",
+                  "no_capacity",
+                  "missed_handoff",
+                  "upstream_outage",
+                  "provider_down",
+                  "process_gap",
+                  "cause_not_recorded"
+                ]
+              },
+              "dependsOn": [
+                "POST /api/auth/signup-tenant",
+                "POST /api/sla/clocks/:clock_id/breach"
+              ]
+            },
+            {
+              "method": "POST",
+              "endpoint": "/api/sla/tick",
+              "requiresAuth": true,
+              "summary": "Tick the tenant — the overdue clock has a rung waiting",
+              "payload_shape": [
+                "actor_id",
+                "limit",
+                "tenant_id"
+              ],
+              "fieldEnums": {
+                "severity": [
+                  "info",
+                  "warning",
+                  "urgent",
+                  "critical"
+                ],
+                "firing_state": [
+                  "claimed",
+                  "fired",
+                  "failed"
+                ]
+              },
+              "dependsOn": [
+                "POST /api/auth/signup-tenant",
+                "POST /api/sla/clocks/:clock_id/resume"
+              ]
+            }
+          ]
+        },
+        {
           "sdk": "sdk-social",
           "group": "CRM & Engagement",
           "summary": "Social profiles and posting",
@@ -5536,9 +7391,1126 @@
       ]
     },
     {
+      "name": "Data Provenance & Ingest",
+      "sdk_count": 4,
+      "api_count": 34,
+      "sdks": [
+        {
+          "sdk": "sdk-import",
+          "group": "Data Provenance & Ingest",
+          "summary": "Governed bulk import: column mapping templates, dry run, commit and rollback",
+          "reuse_when": [
+            "import",
+            "mapping",
+            "csv",
+            "dry run",
+            "rollback",
+            "bulk upload",
+            "column mapping",
+            "spreadsheet",
+            "data migration"
+          ],
+          "api_count": 14,
+          "docs_url": "https://cloud.projexlight.com/workspace/docs/api/index.html#sdk-sdk-import",
+          "apis": [
+            {
+              "method": "GET",
+              "endpoint": "/api/imports/mapping-templates",
+              "requiresAuth": true,
+              "summary": "List the tenant's mapping templates",
+              "payload_shape": [],
+              "fieldEnums": {
+                "kind": [
+                  "certified",
+                  "custom"
+                ],
+                "crosswalk_strategy": [
+                  "preserve_existing",
+                  "add_alias",
+                  "reject_conflict"
+                ]
+              },
+              "dependsOn": [
+                "POST /api/auth/signup-tenant",
+                "POST /api/imports/mapping-templates"
+              ]
+            },
+            {
+              "method": "POST",
+              "endpoint": "/api/imports/mapping-templates",
+              "requiresAuth": true,
+              "summary": "Create a custom mapping template",
+              "payload_shape": [
+                "created_by",
+                "crosswalk_strategy",
+                "description",
+                "field_map",
+                "kind",
+                "metadata",
+                "name",
+                "slug",
+                "tenant_id",
+                "transforms",
+                "value_crosswalks"
+              ],
+              "fieldEnums": {
+                "kind": [
+                  "certified",
+                  "custom"
+                ],
+                "crosswalk_strategy": [
+                  "preserve_existing",
+                  "add_alias",
+                  "reject_conflict"
+                ],
+                "target": [
+                  "person.given_name",
+                  "person.family_name",
+                  "person.full_name",
+                  "person.date_of_birth",
+                  "contact.email",
+                  "contact.phone",
+                  "contact.handle",
+                  "org.name",
+                  "org.domain",
+                  "org.size",
+                  "place.address_line1",
+                  "place.address_line2",
+                  "place.locality",
+                  "place.region",
+                  "place.postal_code",
+                  "place.country",
+                  "external.id",
+                  "attribute.custom",
+                  "unmapped"
+                ]
+              },
+              "dependsOn": [
+                "POST /api/auth/signup-tenant"
+              ]
+            },
+            {
+              "method": "POST",
+              "endpoint": "/api/imports/mapping-templates/:template_id/version",
+              "requiresAuth": true,
+              "summary": "Publish version 2 of the template",
+              "payload_shape": [
+                "created_by",
+                "crosswalk_strategy",
+                "description",
+                "field_map",
+                "name",
+                "tenant_id",
+                "transforms",
+                "value_crosswalks"
+              ],
+              "fieldEnums": {
+                "crosswalk_strategy": [
+                  "preserve_existing",
+                  "add_alias",
+                  "reject_conflict"
+                ],
+                "target": [
+                  "person.given_name",
+                  "person.family_name",
+                  "person.full_name",
+                  "person.date_of_birth",
+                  "contact.email",
+                  "contact.phone",
+                  "contact.handle",
+                  "org.name",
+                  "org.domain",
+                  "org.size",
+                  "place.address_line1",
+                  "place.address_line2",
+                  "place.locality",
+                  "place.region",
+                  "place.postal_code",
+                  "place.country",
+                  "external.id",
+                  "attribute.custom",
+                  "unmapped"
+                ]
+              },
+              "dependsOn": [
+                "POST /api/auth/signup-tenant",
+                "POST /api/imports/mapping-templates"
+              ]
+            },
+            {
+              "method": "GET",
+              "endpoint": "/api/imports/runs",
+              "requiresAuth": true,
+              "summary": "List runs for the tenant",
+              "payload_shape": [],
+              "fieldEnums": {
+                "status": [
+                  "draft",
+                  "previewing",
+                  "mapping",
+                  "dry_run",
+                  "committing",
+                  "complete",
+                  "quarantined",
+                  "rolled_back"
+                ]
+              },
+              "dependsOn": [
+                "POST /api/auth/signup-tenant",
+                "POST /api/imports/runs"
+              ]
+            },
+            {
+              "method": "POST",
+              "endpoint": "/api/imports/runs",
+              "requiresAuth": true,
+              "summary": "Open a run for an uploaded delimited file",
+              "payload_shape": [
+                "attestation_id",
+                "file_fingerprint",
+                "file_name",
+                "metadata",
+                "rollback_window_hours",
+                "row_count",
+                "source_kind",
+                "source_ref",
+                "started_by",
+                "tenant_id"
+              ],
+              "fieldEnums": {
+                "status": [
+                  "draft",
+                  "previewing",
+                  "mapping",
+                  "dry_run",
+                  "committing",
+                  "complete",
+                  "quarantined",
+                  "rolled_back"
+                ]
+              },
+              "dependsOn": [
+                "POST /api/auth/signup-tenant"
+              ]
+            },
+            {
+              "method": "GET",
+              "endpoint": "/api/imports/runs/:run_id",
+              "requiresAuth": true,
+              "summary": "Read the run created by the producer",
+              "payload_shape": [],
+              "fieldEnums": {
+                "status": [
+                  "draft",
+                  "previewing",
+                  "mapping",
+                  "dry_run",
+                  "committing",
+                  "complete",
+                  "quarantined",
+                  "rolled_back"
+                ],
+                "action": [
+                  "created",
+                  "linked",
+                  "updated",
+                  "asserted",
+                  "reversed"
+                ]
+              },
+              "dependsOn": [
+                "POST /api/auth/signup-tenant",
+                "POST /api/imports/runs"
+              ]
+            },
+            {
+              "method": "POST",
+              "endpoint": "/api/imports/runs/:run_id/commit",
+              "requiresAuth": true,
+              "summary": "Commit the dry-run-verified rows",
+              "payload_shape": [
+                "actor_id",
+                "consent",
+                "rows",
+                "tenant_id"
+              ],
+              "fieldEnums": {
+                "status": [
+                  "draft",
+                  "previewing",
+                  "mapping",
+                  "dry_run",
+                  "committing",
+                  "complete",
+                  "quarantined",
+                  "rolled_back"
+                ]
+              },
+              "dependsOn": [
+                "POST /api/auth/signup-tenant",
+                "POST /api/imports/runs",
+                "POST /api/imports/runs/:run_id/preview",
+                "PUT /api/imports/runs/:run_id/mapping",
+                "POST /api/imports/runs/:run_id/transform-plan",
+                "POST /api/imports/runs/:run_id/dry-run"
+              ]
+            },
+            {
+              "method": "POST",
+              "endpoint": "/api/imports/runs/:run_id/dry-run",
+              "requiresAuth": true,
+              "summary": "Dry-run the mapped rows",
+              "payload_shape": [
+                "rows",
+                "tenant_id"
+              ],
+              "fieldEnums": {
+                "status": [
+                  "draft",
+                  "previewing",
+                  "mapping",
+                  "dry_run",
+                  "committing",
+                  "complete",
+                  "quarantined",
+                  "rolled_back"
+                ]
+              },
+              "dependsOn": [
+                "POST /api/auth/signup-tenant",
+                "POST /api/imports/runs",
+                "POST /api/imports/runs/:run_id/preview",
+                "PUT /api/imports/runs/:run_id/mapping",
+                "POST /api/imports/runs/:run_id/transform-plan"
+              ]
+            },
+            {
+              "method": "GET",
+              "endpoint": "/api/imports/runs/:run_id/exceptions",
+              "requiresAuth": true,
+              "summary": "Download the exception file for the committed run",
+              "payload_shape": [],
+              "fieldEnums": {
+                "reason_code": [
+                  "INVALID_VALUE",
+                  "NEEDS_REVIEW",
+                  "CONSENT_NOT_EVIDENCED"
+                ]
+              },
+              "dependsOn": [
+                "POST /api/auth/signup-tenant",
+                "POST /api/imports/runs",
+                "POST /api/imports/runs/:run_id/preview",
+                "PUT /api/imports/runs/:run_id/mapping",
+                "POST /api/imports/runs/:run_id/transform-plan",
+                "POST /api/imports/runs/:run_id/commit"
+              ]
+            },
+            {
+              "method": "PUT",
+              "endpoint": "/api/imports/runs/:run_id/mapping",
+              "requiresAuth": true,
+              "summary": "Confirm every proposed column mapping",
+              "payload_shape": [
+                "confirmations",
+                "mapping_template_id",
+                "tenant_id"
+              ],
+              "fieldEnums": {
+                "target": [
+                  "person.given_name",
+                  "person.family_name",
+                  "person.full_name",
+                  "person.date_of_birth",
+                  "contact.email",
+                  "contact.phone",
+                  "contact.handle",
+                  "org.name",
+                  "org.domain",
+                  "org.size",
+                  "place.address_line1",
+                  "place.address_line2",
+                  "place.locality",
+                  "place.region",
+                  "place.postal_code",
+                  "place.country",
+                  "external.id",
+                  "attribute.custom",
+                  "unmapped"
+                ],
+                "status": [
+                  "draft",
+                  "previewing",
+                  "mapping",
+                  "dry_run",
+                  "committing",
+                  "complete",
+                  "quarantined",
+                  "rolled_back"
+                ]
+              },
+              "dependsOn": [
+                "POST /api/auth/signup-tenant",
+                "POST /api/imports/runs",
+                "POST /api/imports/runs/:run_id/preview"
+              ]
+            },
+            {
+              "method": "POST",
+              "endpoint": "/api/imports/runs/:run_id/mapping-suggestions",
+              "requiresAuth": true,
+              "summary": "Ask for mapping suggestions on the previewed run",
+              "payload_shape": [
+                "tenant_id"
+              ],
+              "fieldEnums": {
+                "target": [
+                  "person.given_name",
+                  "person.family_name",
+                  "person.full_name",
+                  "person.date_of_birth",
+                  "contact.email",
+                  "contact.phone",
+                  "contact.handle",
+                  "org.name",
+                  "org.domain",
+                  "org.size",
+                  "place.address_line1",
+                  "place.address_line2",
+                  "place.locality",
+                  "place.region",
+                  "place.postal_code",
+                  "place.country",
+                  "external.id",
+                  "attribute.custom",
+                  "unmapped"
+                ]
+              },
+              "dependsOn": [
+                "POST /api/auth/signup-tenant",
+                "POST /api/imports/runs",
+                "POST /api/imports/runs/:run_id/preview"
+              ]
+            },
+            {
+              "method": "POST",
+              "endpoint": "/api/imports/runs/:run_id/preview",
+              "requiresAuth": true,
+              "summary": "Preview the uploaded delimited content",
+              "payload_shape": [
+                "content",
+                "delimiter",
+                "encoding",
+                "has_header_row",
+                "sample_size",
+                "tenant_id"
+              ],
+              "fieldEnums": {
+                "status": [
+                  "draft",
+                  "previewing",
+                  "mapping",
+                  "dry_run",
+                  "committing",
+                  "complete",
+                  "quarantined",
+                  "rolled_back"
+                ]
+              },
+              "dependsOn": [
+                "POST /api/auth/signup-tenant",
+                "POST /api/imports/runs"
+              ]
+            },
+            {
+              "method": "POST",
+              "endpoint": "/api/imports/runs/:run_id/rollback",
+              "requiresAuth": true,
+              "summary": "Roll the committed run back inside its window",
+              "payload_shape": [
+                "actor_id",
+                "reason",
+                "tenant_id"
+              ],
+              "fieldEnums": {
+                "status": [
+                  "draft",
+                  "previewing",
+                  "mapping",
+                  "dry_run",
+                  "committing",
+                  "complete",
+                  "quarantined",
+                  "rolled_back"
+                ]
+              },
+              "dependsOn": [
+                "POST /api/auth/signup-tenant",
+                "POST /api/imports/runs",
+                "POST /api/imports/runs/:run_id/preview",
+                "PUT /api/imports/runs/:run_id/mapping",
+                "POST /api/imports/runs/:run_id/transform-plan",
+                "POST /api/imports/runs/:run_id/dry-run",
+                "POST /api/imports/runs/:run_id/commit"
+              ]
+            },
+            {
+              "method": "POST",
+              "endpoint": "/api/imports/runs/:run_id/transform-plan",
+              "requiresAuth": true,
+              "summary": "Build the transform plan for the confirmed mapping",
+              "payload_shape": [
+                "default_calling_region",
+                "default_country",
+                "enable_source_state_mapping",
+                "tenant_id"
+              ],
+              "fieldEnums": {
+                "target": [
+                  "person.given_name",
+                  "person.family_name",
+                  "person.full_name",
+                  "person.date_of_birth",
+                  "contact.email",
+                  "contact.phone",
+                  "contact.handle",
+                  "org.name",
+                  "org.domain",
+                  "org.size",
+                  "place.address_line1",
+                  "place.address_line2",
+                  "place.locality",
+                  "place.region",
+                  "place.postal_code",
+                  "place.country",
+                  "external.id",
+                  "attribute.custom",
+                  "unmapped"
+                ]
+              },
+              "dependsOn": [
+                "POST /api/auth/signup-tenant",
+                "POST /api/imports/runs",
+                "POST /api/imports/runs/:run_id/preview",
+                "PUT /api/imports/runs/:run_id/mapping"
+              ]
+            }
+          ]
+        },
+        {
+          "sdk": "sdk-parsing",
+          "group": "Data Provenance & Ingest",
+          "summary": "Contact extraction from unstructured text; proposes candidates with evidence spans and persists nothing",
+          "reuse_when": [
+            "contact extraction",
+            "smart paste",
+            "business card",
+            "vcard",
+            "email signature",
+            "ocr",
+            "parse contact",
+            "extract from text"
+          ],
+          "api_count": 3,
+          "docs_url": "https://cloud.projexlight.com/workspace/docs/api/index.html#sdk-sdk-parsing",
+          "apis": [
+            {
+              "method": "POST",
+              "endpoint": "/api/parsing/contact/extract",
+              "requiresAuth": true,
+              "summary": "Email signature yields multiple qualified handles",
+              "payload_shape": [
+                "raw",
+                "source_kind",
+                "tenant_id"
+              ],
+              "fieldEnums": {},
+              "dependsOn": [
+                "POST /api/auth/signup-tenant"
+              ]
+            },
+            {
+              "method": "POST",
+              "endpoint": "/api/parsing/contact/extract-batch",
+              "requiresAuth": true,
+              "summary": "Two valid captures both extract",
+              "payload_shape": [
+                "items",
+                "tenant_id"
+              ],
+              "fieldEnums": {},
+              "dependsOn": [
+                "POST /api/auth/signup-tenant"
+              ]
+            },
+            {
+              "method": "GET",
+              "endpoint": "/api/parsing/contact/schemas",
+              "requiresAuth": true,
+              "summary": "Resolve the contact schema for a tenant",
+              "payload_shape": [],
+              "fieldEnums": {},
+              "dependsOn": [
+                "POST /api/auth/signup-tenant"
+              ]
+            }
+          ]
+        },
+        {
+          "sdk": "sdk-projection",
+          "group": "Data Provenance & Ingest",
+          "summary": "Attribute-level survivorship: which asserted value wins, with an explainable reason and deterministic replay",
+          "reuse_when": [
+            "survivorship",
+            "which value wins",
+            "explain projection",
+            "attribute conflict",
+            "losing assertion",
+            "conflicting data",
+            "replay",
+            "why is this field wrong"
+          ],
+          "api_count": 4,
+          "docs_url": "https://cloud.projexlight.com/workspace/docs/api/index.html#sdk-sdk-projection",
+          "apis": [
+            {
+              "method": "POST",
+              "endpoint": "/api/projection/replay",
+              "requiresAuth": true,
+              "summary": "Replay a single subject",
+              "payload_shape": [
+                "reason",
+                "subject_ref",
+                "tenant_id",
+                "trigger"
+              ],
+              "fieldEnums": {},
+              "dependsOn": [
+                "POST /api/auth/signup-tenant"
+              ]
+            },
+            {
+              "method": "GET",
+              "endpoint": "/api/projection/subject/:subject_ref/explained",
+              "requiresAuth": true,
+              "summary": "Explained projection for a subject",
+              "payload_shape": [],
+              "fieldEnums": {},
+              "dependsOn": [
+                "POST /api/auth/signup-tenant",
+                "PUT /api/projection/survivorship-rules"
+              ]
+            },
+            {
+              "method": "GET",
+              "endpoint": "/api/projection/survivorship-rules",
+              "requiresAuth": true,
+              "summary": "List rule sets for the tenant",
+              "payload_shape": [],
+              "fieldEnums": {},
+              "dependsOn": [
+                "POST /api/auth/signup-tenant",
+                "PUT /api/projection/survivorship-rules"
+              ]
+            },
+            {
+              "method": "PUT",
+              "endpoint": "/api/projection/survivorship-rules",
+              "requiresAuth": true,
+              "summary": "Set a catch-all precedence for the tenant",
+              "payload_shape": [
+                "attribute",
+                "criteria",
+                "tenant_id",
+                "updated_by"
+              ],
+              "fieldEnums": {},
+              "dependsOn": [
+                "POST /api/auth/signup-tenant"
+              ]
+            }
+          ]
+        },
+        {
+          "sdk": "sdk-source-record",
+          "group": "Data Provenance & Ingest",
+          "summary": "Provenance capture: immutable source records, origin class, raw evidence and chain of custody",
+          "reuse_when": [
+            "provenance",
+            "source record",
+            "origin",
+            "attestation",
+            "chain of custody",
+            "where did this come from",
+            "audit trail of a value",
+            "who told us this"
+          ],
+          "api_count": 13,
+          "docs_url": "https://cloud.projexlight.com/workspace/docs/api/index.html#sdk-sdk-source-record",
+          "apis": [
+            {
+              "method": "GET",
+              "endpoint": "/api/source-assertions",
+              "requiresAuth": true,
+              "summary": "List every coexisting claim for the subject and attribute",
+              "payload_shape": [],
+              "fieldEnums": {
+                "origin_class": [
+                  "USER_PROVIDED",
+                  "FIRST_PARTY_DIRECT",
+                  "TENANT_FIRST_PARTY_CRM",
+                  "USER_AUTHORIZED_CONTACT_STORE",
+                  "PUBLIC_RECORD",
+                  "LICENSED_THIRD_PARTY",
+                  "PARTNER_PROVIDED",
+                  "UNKNOWN_QUARANTINED"
+                ],
+                "status": [
+                  "SURVIVES",
+                  "ASSERTION",
+                  "SUPERSEDED",
+                  "PRIMARY"
+                ]
+              },
+              "dependsOn": [
+                "POST /api/auth/signup-tenant",
+                "POST /api/source-records",
+                "POST /api/source-assertions"
+              ]
+            },
+            {
+              "method": "POST",
+              "endpoint": "/api/source-assertions",
+              "requiresAuth": true,
+              "summary": "Write a licensed third-party email claim",
+              "payload_shape": [
+                "actor_id",
+                "attribute",
+                "capture_id",
+                "causation_id",
+                "confidence",
+                "effective_from",
+                "effective_to",
+                "evidence_ref",
+                "is_pii",
+                "metadata",
+                "origin_class",
+                "purpose",
+                "retrieved_at",
+                "status",
+                "subject_ref",
+                "tenant_id",
+                "value"
+              ],
+              "fieldEnums": {
+                "origin_class": [
+                  "USER_PROVIDED",
+                  "FIRST_PARTY_DIRECT",
+                  "TENANT_FIRST_PARTY_CRM",
+                  "USER_AUTHORIZED_CONTACT_STORE",
+                  "PUBLIC_RECORD",
+                  "LICENSED_THIRD_PARTY",
+                  "PARTNER_PROVIDED",
+                  "UNKNOWN_QUARANTINED"
+                ],
+                "status": [
+                  "SURVIVES",
+                  "ASSERTION",
+                  "SUPERSEDED",
+                  "PRIMARY"
+                ]
+              },
+              "dependsOn": [
+                "POST /api/auth/signup-tenant",
+                "POST /api/source-records"
+              ]
+            },
+            {
+              "method": "POST",
+              "endpoint": "/api/source-assertions/:assertion_id/supersede",
+              "requiresAuth": true,
+              "summary": "Supersede the licensed claim with a corrected one",
+              "payload_shape": [
+                "actor_id",
+                "attribute",
+                "capture_id",
+                "causation_id",
+                "confidence",
+                "effective_from",
+                "effective_to",
+                "evidence_ref",
+                "is_pii",
+                "metadata",
+                "origin_class",
+                "purpose",
+                "reason",
+                "retrieved_at",
+                "status",
+                "subject_ref",
+                "tenant_id",
+                "value"
+              ],
+              "fieldEnums": {
+                "origin_class": [
+                  "USER_PROVIDED",
+                  "FIRST_PARTY_DIRECT",
+                  "TENANT_FIRST_PARTY_CRM",
+                  "USER_AUTHORIZED_CONTACT_STORE",
+                  "PUBLIC_RECORD",
+                  "LICENSED_THIRD_PARTY",
+                  "PARTNER_PROVIDED",
+                  "UNKNOWN_QUARANTINED"
+                ],
+                "status": [
+                  "SURVIVES",
+                  "ASSERTION",
+                  "SUPERSEDED",
+                  "PRIMARY"
+                ]
+              },
+              "dependsOn": [
+                "POST /api/auth/signup-tenant",
+                "POST /api/source-records",
+                "POST /api/source-assertions"
+              ]
+            },
+            {
+              "method": "GET",
+              "endpoint": "/api/source-records",
+              "requiresAuth": true,
+              "summary": "List captures for the tenant",
+              "payload_shape": [],
+              "fieldEnums": {
+                "trust_state": [
+                  "P0_CAPTURED",
+                  "P1_NORMALIZED",
+                  "P2_CANDIDATE",
+                  "P3_LINKED",
+                  "P4_DIRECT"
+                ],
+                "origin_class": [
+                  "USER_PROVIDED",
+                  "FIRST_PARTY_DIRECT",
+                  "TENANT_FIRST_PARTY_CRM",
+                  "USER_AUTHORIZED_CONTACT_STORE",
+                  "PUBLIC_RECORD",
+                  "LICENSED_THIRD_PARTY",
+                  "PARTNER_PROVIDED",
+                  "UNKNOWN_QUARANTINED"
+                ]
+              },
+              "dependsOn": [
+                "POST /api/auth/signup-tenant",
+                "POST /api/source-records"
+              ]
+            },
+            {
+              "method": "POST",
+              "endpoint": "/api/source-records",
+              "requiresAuth": true,
+              "summary": "Capture a public-record payload at P0_CAPTURED",
+              "payload_shape": [
+                "actor_id",
+                "causation_id",
+                "evidence_kind",
+                "evidence_ref",
+                "fingerprint",
+                "metadata",
+                "origin_class",
+                "purpose",
+                "raw_evidence",
+                "retrieved_at",
+                "source_external_id",
+                "source_system",
+                "subject_ref",
+                "tenant_id"
+              ],
+              "fieldEnums": {
+                "origin_class": [
+                  "USER_PROVIDED",
+                  "FIRST_PARTY_DIRECT",
+                  "TENANT_FIRST_PARTY_CRM",
+                  "USER_AUTHORIZED_CONTACT_STORE",
+                  "PUBLIC_RECORD",
+                  "LICENSED_THIRD_PARTY",
+                  "PARTNER_PROVIDED",
+                  "UNKNOWN_QUARANTINED"
+                ],
+                "evidence_kind": [
+                  "RAW_PAYLOAD",
+                  "API_RESPONSE",
+                  "DOCUMENT",
+                  "SCREENSHOT",
+                  "LICENSE_TERMS",
+                  "CONSENT_RECEIPT",
+                  "SIGNATURE",
+                  "OTHER"
+                ],
+                "trust_state": [
+                  "P0_CAPTURED",
+                  "P1_NORMALIZED",
+                  "P2_CANDIDATE",
+                  "P3_LINKED",
+                  "P4_DIRECT"
+                ]
+              },
+              "dependsOn": [
+                "POST /api/auth/signup-tenant"
+              ]
+            },
+            {
+              "method": "GET",
+              "endpoint": "/api/source-records/:capture_id",
+              "requiresAuth": true,
+              "summary": "Read the capture created by the producer",
+              "payload_shape": [],
+              "fieldEnums": {
+                "trust_state": [
+                  "P0_CAPTURED",
+                  "P1_NORMALIZED",
+                  "P2_CANDIDATE",
+                  "P3_LINKED",
+                  "P4_DIRECT"
+                ],
+                "origin_class": [
+                  "USER_PROVIDED",
+                  "FIRST_PARTY_DIRECT",
+                  "TENANT_FIRST_PARTY_CRM",
+                  "USER_AUTHORIZED_CONTACT_STORE",
+                  "PUBLIC_RECORD",
+                  "LICENSED_THIRD_PARTY",
+                  "PARTNER_PROVIDED",
+                  "UNKNOWN_QUARANTINED"
+                ]
+              },
+              "dependsOn": [
+                "POST /api/auth/signup-tenant",
+                "POST /api/source-records"
+              ]
+            },
+            {
+              "method": "POST",
+              "endpoint": "/api/source-records/:capture_id/crosswalks",
+              "requiresAuth": true,
+              "summary": "Link the capture to its external system identifier",
+              "payload_shape": [
+                "actor_id",
+                "causation_id",
+                "external_id",
+                "external_system",
+                "metadata",
+                "purpose",
+                "subject_ref",
+                "tenant_id"
+              ],
+              "fieldEnums": {},
+              "dependsOn": [
+                "POST /api/auth/signup-tenant",
+                "POST /api/source-records"
+              ]
+            },
+            {
+              "method": "POST",
+              "endpoint": "/api/source-records/:capture_id/normalize",
+              "requiresAuth": true,
+              "summary": "Normalize the capture to P1_NORMALIZED",
+              "payload_shape": [
+                "actor_id",
+                "causation_id",
+                "purpose",
+                "tenant_id"
+              ],
+              "fieldEnums": {
+                "trust_state": [
+                  "P0_CAPTURED",
+                  "P1_NORMALIZED",
+                  "P2_CANDIDATE",
+                  "P3_LINKED",
+                  "P4_DIRECT"
+                ]
+              },
+              "dependsOn": [
+                "POST /api/auth/signup-tenant",
+                "POST /api/source-records"
+              ]
+            },
+            {
+              "method": "POST",
+              "endpoint": "/api/source-records/:capture_id/promote",
+              "requiresAuth": true,
+              "summary": "Promote the normalized capture to P2_CANDIDATE",
+              "payload_shape": [
+                "actor_id",
+                "causation_id",
+                "decision_ref",
+                "evidence_origin_class",
+                "evidence_ref",
+                "purpose",
+                "subject_ref",
+                "tenant_id",
+                "to_state"
+              ],
+              "fieldEnums": {
+                "to_state": [
+                  "P0_CAPTURED",
+                  "P1_NORMALIZED",
+                  "P2_CANDIDATE",
+                  "P3_LINKED",
+                  "P4_DIRECT"
+                ],
+                "evidence_origin_class": [
+                  "USER_PROVIDED",
+                  "FIRST_PARTY_DIRECT",
+                  "TENANT_FIRST_PARTY_CRM",
+                  "USER_AUTHORIZED_CONTACT_STORE",
+                  "PUBLIC_RECORD",
+                  "LICENSED_THIRD_PARTY",
+                  "PARTNER_PROVIDED",
+                  "UNKNOWN_QUARANTINED"
+                ],
+                "trust_state": [
+                  "P0_CAPTURED",
+                  "P1_NORMALIZED",
+                  "P2_CANDIDATE",
+                  "P3_LINKED",
+                  "P4_DIRECT"
+                ]
+              },
+              "dependsOn": [
+                "POST /api/auth/signup-tenant",
+                "POST /api/source-records",
+                "POST /api/source-records/:capture_id/normalize"
+              ]
+            },
+            {
+              "method": "GET",
+              "endpoint": "/api/source-rights/attestations",
+              "requiresAuth": true,
+              "summary": "List attestations for the capture",
+              "payload_shape": [],
+              "fieldEnums": {
+                "origin_class": [
+                  "USER_PROVIDED",
+                  "FIRST_PARTY_DIRECT",
+                  "TENANT_FIRST_PARTY_CRM",
+                  "USER_AUTHORIZED_CONTACT_STORE",
+                  "PUBLIC_RECORD",
+                  "LICENSED_THIRD_PARTY",
+                  "PARTNER_PROVIDED",
+                  "UNKNOWN_QUARANTINED"
+                ]
+              },
+              "dependsOn": [
+                "POST /api/auth/signup-tenant",
+                "POST /api/source-records",
+                "POST /api/source-rights/attestations"
+              ]
+            },
+            {
+              "method": "POST",
+              "endpoint": "/api/source-rights/attestations",
+              "requiresAuth": true,
+              "summary": "Sign a licensed-source attestation with its licence evidence",
+              "payload_shape": [
+                "attestor_principal",
+                "capture_id",
+                "causation_id",
+                "collection_period_end",
+                "collection_period_start",
+                "evidence_blob_ref",
+                "evidence_kind",
+                "jurisdiction",
+                "license_ref",
+                "mapping_version",
+                "metadata",
+                "origin_class",
+                "permitted_uses",
+                "purpose",
+                "source_fingerprint",
+                "tenant_id"
+              ],
+              "fieldEnums": {
+                "origin_class": [
+                  "USER_PROVIDED",
+                  "FIRST_PARTY_DIRECT",
+                  "TENANT_FIRST_PARTY_CRM",
+                  "USER_AUTHORIZED_CONTACT_STORE",
+                  "PUBLIC_RECORD",
+                  "LICENSED_THIRD_PARTY",
+                  "PARTNER_PROVIDED",
+                  "UNKNOWN_QUARANTINED"
+                ],
+                "evidence_kind": [
+                  "RAW_PAYLOAD",
+                  "API_RESPONSE",
+                  "DOCUMENT",
+                  "SCREENSHOT",
+                  "LICENSE_TERMS",
+                  "CONSENT_RECEIPT",
+                  "SIGNATURE",
+                  "OTHER"
+                ]
+              },
+              "dependsOn": [
+                "POST /api/auth/signup-tenant",
+                "POST /api/source-records"
+              ]
+            },
+            {
+              "method": "GET",
+              "endpoint": "/api/source-rights/attestations/:attestation_id",
+              "requiresAuth": true,
+              "summary": "Read the attestation just signed",
+              "payload_shape": [],
+              "fieldEnums": {
+                "origin_class": [
+                  "USER_PROVIDED",
+                  "FIRST_PARTY_DIRECT",
+                  "TENANT_FIRST_PARTY_CRM",
+                  "USER_AUTHORIZED_CONTACT_STORE",
+                  "PUBLIC_RECORD",
+                  "LICENSED_THIRD_PARTY",
+                  "PARTNER_PROVIDED",
+                  "UNKNOWN_QUARANTINED"
+                ],
+                "evidence_kind": [
+                  "RAW_PAYLOAD",
+                  "API_RESPONSE",
+                  "DOCUMENT",
+                  "SCREENSHOT",
+                  "LICENSE_TERMS",
+                  "CONSENT_RECEIPT",
+                  "SIGNATURE",
+                  "OTHER"
+                ]
+              },
+              "dependsOn": [
+                "POST /api/auth/signup-tenant",
+                "POST /api/source-records",
+                "POST /api/source-rights/attestations"
+              ]
+            },
+            {
+              "method": "GET",
+              "endpoint": "/api/source-rights/permitted-use",
+              "requiresAuth": true,
+              "summary": "Check an attested purpose against the signed rights",
+              "payload_shape": [],
+              "fieldEnums": {},
+              "dependsOn": [
+                "POST /api/auth/signup-tenant",
+                "POST /api/source-records",
+                "POST /api/source-rights/attestations"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
       "name": "Governance, Consent & Security",
       "sdk_count": 10,
-      "api_count": 56,
+      "api_count": 58,
       "sdks": [
         {
           "sdk": "sdk-approval",
@@ -6292,7 +9264,12 @@
             "authorization",
             "decision",
             "rule",
-            "obligation"
+            "obligation",
+            "access policy",
+            "permit or deny",
+            "attribute based",
+            "conditional access",
+            "guardrail"
           ],
           "api_count": 3,
           "docs_url": "https://cloud.projexlight.com/workspace/docs/api/index.html#sdk-sdk-policy",
@@ -6372,9 +9349,19 @@
             "relationship",
             "access control",
             "permission",
-            "graph"
+            "graph",
+            "contextual role",
+            "delegate",
+            "acts on behalf of",
+            "trust state",
+            "evidence",
+            "who may act for whom",
+            "can this user",
+            "ownership",
+            "sharing",
+            "team access"
           ],
-          "api_count": 6,
+          "api_count": 8,
           "docs_url": "https://cloud.projexlight.com/workspace/docs/api/index.html#sdk-sdk-rebac",
           "apis": [
             {
@@ -6443,6 +9430,37 @@
                 "POST /api/app-identities",
                 "POST /api/memberships",
                 "POST /api/personas"
+              ]
+            },
+            {
+              "method": "GET",
+              "endpoint": "/api/relationships/roles",
+              "requiresAuth": true,
+              "summary": "Live roles for a pair",
+              "payload_shape": [],
+              "fieldEnums": {},
+              "dependsOn": [
+                "POST /api/auth/signup-tenant",
+                "POST /api/relationships/roles"
+              ]
+            },
+            {
+              "method": "POST",
+              "endpoint": "/api/relationships/roles",
+              "requiresAuth": true,
+              "summary": "Grant a DOCUMENTED carer role with evidence",
+              "payload_shape": [
+                "evidence_refs",
+                "kind",
+                "persona_a",
+                "persona_b",
+                "role_label",
+                "trust_state",
+                "valid_from"
+              ],
+              "fieldEnums": {},
+              "dependsOn": [
+                "POST /api/auth/signup-tenant"
               ]
             },
             {
@@ -6769,7 +9787,7 @@
     {
       "name": "Identity & Access (AIM)",
       "sdk_count": 5,
-      "api_count": 57,
+      "api_count": 64,
       "sdks": [
         {
           "sdk": "sdk-api-keys",
@@ -6781,9 +9799,17 @@
             "credential",
             "key rotation",
             "scope",
-            "service account"
+            "service account",
+            "application",
+            "client credentials",
+            "machine to machine",
+            "m2m",
+            "secret key",
+            "pk_live",
+            "publishable key",
+            "server to server"
           ],
-          "api_count": 7,
+          "api_count": 13,
           "docs_url": "https://cloud.projexlight.com/workspace/docs/api/index.html#sdk-sdk-api-keys",
           "apis": [
             {
@@ -6836,6 +9862,156 @@
               "dependsOn": [
                 "POST /api/auth/signup-tenant",
                 "POST /api/api-keys"
+              ]
+            },
+            {
+              "method": "GET",
+              "endpoint": "/api/applications",
+              "requiresAuth": true,
+              "summary": "List after creating one",
+              "payload_shape": [],
+              "fieldEnums": {
+                "environment": [
+                  "live",
+                  "test"
+                ],
+                "status": [
+                  "active",
+                  "disabled"
+                ]
+              },
+              "dependsOn": [
+                "POST /api/auth/signup-tenant",
+                "POST /api/applications"
+              ]
+            },
+            {
+              "method": "POST",
+              "endpoint": "/api/applications",
+              "requiresAuth": true,
+              "summary": "Create a live application",
+              "payload_shape": [
+                "description",
+                "environment",
+                "name"
+              ],
+              "fieldEnums": {
+                "environment": [
+                  "live",
+                  "test"
+                ],
+                "status": [
+                  "active",
+                  "disabled"
+                ]
+              },
+              "dependsOn": [
+                "POST /api/auth/signup-tenant"
+              ]
+            },
+            {
+              "method": "GET",
+              "endpoint": "/api/applications/:application_id",
+              "requiresAuth": true,
+              "summary": "Read the application just created",
+              "payload_shape": [],
+              "fieldEnums": {
+                "status": [
+                  "active",
+                  "rotating",
+                  "revoked",
+                  "expired"
+                ],
+                "environment": [
+                  "live",
+                  "test"
+                ]
+              },
+              "dependsOn": [
+                "POST /api/auth/signup-tenant",
+                "POST /api/applications"
+              ]
+            },
+            {
+              "method": "POST",
+              "endpoint": "/api/applications/:application_id/disable",
+              "requiresAuth": true,
+              "summary": "Disable the application and revoke what it owns",
+              "payload_shape": [],
+              "fieldEnums": {
+                "status": [
+                  "active",
+                  "disabled"
+                ]
+              },
+              "dependsOn": [
+                "POST /api/auth/signup-tenant",
+                "POST /api/applications"
+              ]
+            },
+            {
+              "method": "POST",
+              "endpoint": "/api/applications/:application_id/keys",
+              "requiresAuth": true,
+              "summary": "Issue a scoped, rate-limited, expiring key",
+              "payload_shape": [
+                "expires_at",
+                "name",
+                "rate_limit_rpm",
+                "scopes"
+              ],
+              "fieldEnums": {
+                "scopes": [
+                  "sla.clock.read",
+                  "sla.clock.write",
+                  "sla.policy.read",
+                  "crm.contact.read",
+                  "notification.send.write"
+                ],
+                "environment": [
+                  "live",
+                  "test"
+                ],
+                "status": [
+                  "active",
+                  "rotating",
+                  "revoked",
+                  "expired"
+                ]
+              },
+              "dependsOn": [
+                "POST /api/auth/signup-tenant",
+                "POST /api/applications"
+              ]
+            },
+            {
+              "method": "POST",
+              "endpoint": "/api/auth/token",
+              "requiresAuth": false,
+              "summary": "Exchange a key for a service token",
+              "payload_shape": [
+                "client_id",
+                "client_secret",
+                "grant_type"
+              ],
+              "fieldEnums": {
+                "grant_type": [
+                  "client_credentials"
+                ],
+                "token_type": [
+                  "Bearer"
+                ],
+                "error": [
+                  "invalid_request",
+                  "invalid_client",
+                  "invalid_scope",
+                  "unsupported_grant_type"
+                ]
+              },
+              "dependsOn": [
+                "POST /api/auth/signup-tenant",
+                "POST /api/applications",
+                "POST /api/applications/{application_id}/keys"
               ]
             },
             {
@@ -6896,9 +10072,23 @@
             "person",
             "credential",
             "authentication",
-            "account"
+            "account",
+            "signup",
+            "sign up",
+            "register",
+            "registration",
+            "sign in",
+            "session",
+            "password",
+            "email verification",
+            "forgot password",
+            "jwt",
+            "bearer token",
+            "who is logged in",
+            "same person across tenants",
+            "one email one person"
           ],
-          "api_count": 20,
+          "api_count": 21,
           "docs_url": "https://cloud.projexlight.com/workspace/docs/api/index.html#sdk-sdk-identity",
           "apis": [
             {
@@ -7090,6 +10280,15 @@
               "dependsOn": [
                 "POST /api/auth/signup-tenant"
               ]
+            },
+            {
+              "method": "GET",
+              "endpoint": "/api/memberships",
+              "requiresAuth": true,
+              "summary": "A signed-in person sees their memberships",
+              "payload_shape": [],
+              "fieldEnums": {},
+              "dependsOn": []
             },
             {
               "method": "POST",
@@ -7367,7 +10566,17 @@
             "role",
             "identity facet",
             "actor",
-            "profile role"
+            "profile role",
+            "app user",
+            "end user",
+            "member",
+            "seat",
+            "user role",
+            "acting identity",
+            "persona id",
+            "one user many apps",
+            "join another tenant",
+            "switch tenant"
           ],
           "api_count": 16,
           "docs_url": "https://cloud.projexlight.com/workspace/docs/api/index.html#sdk-sdk-persona",
@@ -9328,7 +12537,7 @@
     {
       "name": "Connectors & Integration",
       "sdk_count": 1,
-      "api_count": 18,
+      "api_count": 22,
       "sdks": [
         {
           "sdk": "sdk-connectors",
@@ -9343,9 +12552,18 @@
             "snowflake",
             "sync",
             "third-party",
-            "external system"
+            "external system",
+            "lead form",
+            "meta",
+            "facebook",
+            "instagram",
+            "linkedin",
+            "tiktok",
+            "google ads",
+            "web chat",
+            "webhook ingest"
           ],
-          "api_count": 18,
+          "api_count": 22,
           "docs_url": "https://cloud.projexlight.com/workspace/docs/api/index.html#sdk-sdk-connectors",
           "apis": [
             {
@@ -9555,6 +12773,65 @@
               ]
             },
             {
+              "method": "GET",
+              "endpoint": "/api/connectors/lead-forms/:tenant_id",
+              "requiresAuth": true,
+              "summary": "List all archived deliveries for the tenant",
+              "payload_shape": [],
+              "fieldEnums": {},
+              "dependsOn": [
+                "POST /api/auth/signup-tenant"
+              ]
+            },
+            {
+              "method": "POST",
+              "endpoint": "/api/connectors/lead-forms/:tenant_id/:platform",
+              "requiresAuth": false,
+              "summary": "Meta lead form with valid signature is accepted and archived",
+              "payload_shape": [
+                "entry"
+              ],
+              "fieldEnums": {},
+              "dependsOn": []
+            },
+            {
+              "method": "POST",
+              "endpoint": "/api/connectors/lead-forms/:tenant_id/events/:event_id/reprocess",
+              "requiresAuth": true,
+              "summary": "Re-process a previously rejected delivery",
+              "payload_shape": [],
+              "fieldEnums": {},
+              "dependsOn": [
+                "POST /api/auth/signup-tenant"
+              ]
+            },
+            {
+              "method": "POST",
+              "endpoint": "/api/connectors/lead-forms/:tenant_id/website",
+              "requiresAuth": false,
+              "summary": "Chat lead with transcript and human handoff",
+              "payload_shape": [
+                "event_id",
+                "event_kind",
+                "fields",
+                "form_id",
+                "form_version",
+                "handoff",
+                "page_title",
+                "page_url",
+                "permissions",
+                "referrer",
+                "session_id",
+                "submitted_at",
+                "transcript",
+                "utm_campaign",
+                "utm_medium",
+                "utm_source"
+              ],
+              "fieldEnums": {},
+              "dependsOn": []
+            },
+            {
               "method": "POST",
               "endpoint": "/api/connectors/slack/events",
               "requiresAuth": false,
@@ -9645,8 +12922,8 @@
     },
     {
       "name": "Billing, Metering & Analytics",
-      "sdk_count": 4,
-      "api_count": 16,
+      "sdk_count": 5,
+      "api_count": 30,
       "sdks": [
         {
           "sdk": "sdk-analytics",
@@ -9883,6 +13160,250 @@
           ]
         },
         {
+          "sdk": "sdk-data-credits",
+          "group": "Billing, Metering & Analytics",
+          "summary": "Prepaid capability credits: balances, reservation, consumption and top-up against enrichment providers",
+          "reuse_when": [
+            "credits",
+            "capability",
+            "enrichment",
+            "provider",
+            "budget",
+            "metered spend",
+            "top up",
+            "quota",
+            "prepaid"
+          ],
+          "api_count": 13,
+          "docs_url": "https://cloud.projexlight.com/workspace/docs/api/index.html#sdk-sdk-data-credits",
+          "apis": [
+            {
+              "method": "GET",
+              "endpoint": "/api/capabilities",
+              "requiresAuth": true,
+              "summary": "List the outcomes this tenant can buy",
+              "payload_shape": [],
+              "fieldEnums": {},
+              "dependsOn": [
+                "POST /api/auth/signup-tenant"
+              ]
+            },
+            {
+              "method": "GET",
+              "endpoint": "/api/capabilities/estimate",
+              "requiresAuth": true,
+              "summary": "Quote a capability for this tenant",
+              "payload_shape": [],
+              "fieldEnums": {},
+              "dependsOn": [
+                "POST /api/auth/signup-tenant"
+              ]
+            },
+            {
+              "method": "GET",
+              "endpoint": "/api/capability-requests",
+              "requiresAuth": true,
+              "summary": "List recent requests",
+              "payload_shape": [],
+              "fieldEnums": {
+                "status": [
+                  "PENDING_APPROVAL",
+                  "APPROVED",
+                  "REJECTED",
+                  "EXECUTING",
+                  "COMPLETED",
+                  "FAILED"
+                ]
+              },
+              "dependsOn": [
+                "POST /api/auth/signup-tenant",
+                "POST /api/capability-requests"
+              ]
+            },
+            {
+              "method": "POST",
+              "endpoint": "/api/capability-requests",
+              "requiresAuth": true,
+              "summary": "Ask for an outcome about a subject",
+              "payload_shape": [
+                "capability_key",
+                "metadata",
+                "requested_by_persona_id",
+                "role_ref",
+                "subject_fingerprint",
+                "tenant_id"
+              ],
+              "fieldEnums": {},
+              "dependsOn": [
+                "POST /api/auth/signup-tenant",
+                "POST /api/personas"
+              ]
+            },
+            {
+              "method": "GET",
+              "endpoint": "/api/capability-requests/:request_id",
+              "requiresAuth": true,
+              "summary": "Read one request",
+              "payload_shape": [],
+              "fieldEnums": {},
+              "dependsOn": [
+                "POST /api/auth/signup-tenant",
+                "POST /api/capability-requests"
+              ]
+            },
+            {
+              "method": "POST",
+              "endpoint": "/api/capability-requests/:request_id/approve",
+              "requiresAuth": true,
+              "summary": "Approve a waiting request",
+              "payload_shape": [
+                "approval_ref",
+                "approved",
+                "decided_by",
+                "tenant_id"
+              ],
+              "fieldEnums": {
+                "approved": [
+                  "true",
+                  "false"
+                ]
+              },
+              "dependsOn": [
+                "POST /api/auth/signup-tenant",
+                "POST /api/capability-requests"
+              ]
+            },
+            {
+              "method": "POST",
+              "endpoint": "/api/capability-requests/:request_id/execute",
+              "requiresAuth": true,
+              "summary": "Execute an approved request",
+              "payload_shape": [
+                "subject",
+                "tenant_id"
+              ],
+              "fieldEnums": {},
+              "dependsOn": [
+                "POST /api/auth/signup-tenant",
+                "POST /api/capability-requests"
+              ]
+            },
+            {
+              "method": "GET",
+              "endpoint": "/api/credits/balance",
+              "requiresAuth": true,
+              "summary": "Read the credit balance",
+              "payload_shape": [],
+              "fieldEnums": {},
+              "dependsOn": [
+                "POST /api/auth/signup-tenant"
+              ]
+            },
+            {
+              "method": "GET",
+              "endpoint": "/api/credits/budgets",
+              "requiresAuth": true,
+              "summary": "List the budget policies",
+              "payload_shape": [],
+              "fieldEnums": {},
+              "dependsOn": [
+                "POST /api/auth/signup-tenant"
+              ]
+            },
+            {
+              "method": "PUT",
+              "endpoint": "/api/credits/budgets",
+              "requiresAuth": true,
+              "summary": "Cap a role at a rolling daily limit with a bulk gate",
+              "payload_shape": [
+                "bulk_approval_threshold",
+                "daily_cap",
+                "is_active",
+                "mode",
+                "role_ref",
+                "tenant_id"
+              ],
+              "fieldEnums": {
+                "mode": [
+                  "REQUEST_ONLY",
+                  "DAILY_CAP",
+                  "FULL"
+                ],
+                "is_active": [
+                  "true",
+                  "false"
+                ]
+              },
+              "dependsOn": [
+                "POST /api/auth/signup-tenant"
+              ]
+            },
+            {
+              "method": "GET",
+              "endpoint": "/api/credits/ledger",
+              "requiresAuth": true,
+              "summary": "Export the ledger for one request",
+              "payload_shape": [],
+              "fieldEnums": {
+                "entry_type": [
+                  "GRANT",
+                  "RESERVATION",
+                  "CHARGE",
+                  "REFUND",
+                  "RELEASE",
+                  "ADJUSTMENT"
+                ]
+              },
+              "dependsOn": [
+                "POST /api/auth/signup-tenant",
+                "POST /api/capability-requests"
+              ]
+            },
+            {
+              "method": "POST",
+              "endpoint": "/api/credits/reservations",
+              "requiresAuth": true,
+              "summary": "Hold credits for a self-run lookup",
+              "payload_shape": [
+                "capability_key",
+                "metadata",
+                "requested_by_persona_id",
+                "role_ref",
+                "subject_fingerprint",
+                "tenant_id"
+              ],
+              "fieldEnums": {},
+              "dependsOn": [
+                "POST /api/auth/signup-tenant",
+                "POST /api/personas"
+              ]
+            },
+            {
+              "method": "POST",
+              "endpoint": "/api/credits/reservations/:reservation_id/settle",
+              "requiresAuth": true,
+              "summary": "Settle a hold as a no-match, charging nothing",
+              "payload_shape": [
+                "outcome",
+                "result",
+                "tenant_id"
+              ],
+              "fieldEnums": {
+                "outcome": [
+                  "MATCHED",
+                  "NO_MATCH",
+                  "TECHNICAL_FAILURE",
+                  "CACHE_HIT"
+                ]
+              },
+              "dependsOn": [
+                "POST /api/auth/signup-tenant",
+                "POST /api/credits/reservations"
+              ]
+            }
+          ]
+        },
+        {
           "sdk": "sdk-meter",
           "group": "Billing, Metering & Analytics",
           "summary": "Usage metering / metered events",
@@ -9932,7 +13453,7 @@
             "checkout",
             "transaction"
           ],
-          "api_count": 4,
+          "api_count": 5,
           "docs_url": "https://cloud.projexlight.com/workspace/docs/api/index.html#sdk-sdk-payment",
           "apis": [
             {
@@ -10017,6 +13538,22 @@
                   "bank-account",
                   "upi",
                   "wallet"
+                ]
+              },
+              "dependsOn": [
+                "POST /api/auth/signup-tenant"
+              ]
+            },
+            {
+              "method": "GET",
+              "endpoint": "/api/payments/provider",
+              "requiresAuth": true,
+              "summary": "Resolve the tenant's payment collection provider",
+              "payload_shape": [],
+              "fieldEnums": {
+                "level": [
+                  "collect",
+                  "billing"
                 ]
               },
               "dependsOn": [

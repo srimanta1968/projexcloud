@@ -1,0 +1,122 @@
+{
+  "sdk": "sdk-data-credits",
+  "sourceFile": "packages/sdk-data-credits/src/server/routes.ts",
+  "requiresAuth": true,
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "epicId": "fefd6ec9-2fd1-4d19-8fa0-fbfb090590bb",
+  "featureId": "51042c0e-c450-4b84-9a22-9c09ec7b9f44",
+  "taskId": "5604f877-e1ba-40bb-b324-44f43ebcb1ac",
+  "testability": "semi-auto",
+  "priority": 15,
+  "name": "POST /api/capability-requests - Ask for an outcome and hold the credits",
+  "endpoint": "/api/capability-requests",
+  "method": "POST",
+  "expectedStatus": 201,
+  "description": "Creates the request and HOLDS the quoted credits in one transaction. The hold exists because both alternatives are worse: charging up front turns every no-match into a refund somebody has to promise to make later, and charging afterwards lets a thousand concurrent requests run against a balance of five. The subject is a FINGERPRINT, never the raw phone number or email - the broker does not need the raw value to bill, cache or audit, and a table of everything every tenant ever looked up is a breach waiting for an excuse. The role_ref decides the governance: a REQUEST_ONLY role (or any request at or above the bulk-approval threshold, whatever the role) comes back with status PENDING_APPROVAL and cannot execute until it is approved; a FULL role comes back APPROVED. QA edge cases: a refused hold writes NOTHING - no orphan request is left behind, because the whole reserve is one transaction; two concurrent reserves cannot both spend the last credit (the account row is read FOR UPDATE); the same subject may be requested repeatedly and each request gets its own hold; a daily-capped role that has exhausted its window is 403 DAILY_CAP_EXCEEDED, which is NOT the same as 402 INSUFFICIENT_CREDITS - the tenant HAS the credits, this requester may not spend them.",
+  "dependsOn": [
+    "POST /api/auth/signup-tenant",
+    "POST /api/personas"
+  ],
+  "setupScript": "data_credits_account.sql",
+  "captureResponse": {
+    "capability-requests.create.request_id": "data.request_id",
+    "capability-requests.create.reservation_id": "data.reservation_id"
+  },
+  "testCases": [
+    {
+      "name": "Ask for an outcome about a subject",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "payload": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "capability_key": "{{var:data_credits_capability_key}}",
+        "subject_fingerprint": "fp-{{dynamic:slug}}",
+        "requested_by_persona_id": "{{cache:personas.create.response.data.persona.persona_id}}",
+        "role_ref": "{{static:analyst}}",
+        "metadata": {
+          "source": "api-test"
+        }
+      },
+      "expectedStatus": 201,
+      "expectedResponse": {
+        "data": {
+          "request_id": "string",
+          "reservation_id": "string",
+          "estimated_credits": "number",
+          "status": "string"
+        }
+      }
+    }
+  ],
+  "errorCases": [
+    {
+      "name": "A request with no capability_key is refused",
+      "status": 400,
+      "code": "VALIDATION_ERROR",
+      "message": "capability_key is required",
+      "when": "the payload omits capability_key or subject_fingerprint",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "payload": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "subject_fingerprint": "fp-{{dynamic:slug}}"
+      },
+      "expectedStatus": 400,
+      "expectedError": {
+        "code": "VALIDATION_ERROR"
+      }
+    },
+    {
+      "name": "An unknown outcome is refused",
+      "status": 404,
+      "code": "CAPABILITY_NOT_FOUND",
+      "message": "no such capability for this tenant",
+      "when": "capability_key names nothing in the catalog",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "payload": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "capability_key": "{{static:validate.nothing-at-all}}",
+        "subject_fingerprint": "fp-{{dynamic:slug}}"
+      },
+      "expectedStatus": 404,
+      "expectedError": {
+        "code": "CAPABILITY_NOT_FOUND"
+      }
+    },
+    {
+      "status": 402,
+      "code": "INSUFFICIENT_CREDITS",
+      "message": "this request needs N credits and M are available",
+      "when": "the account balance minus existing holds cannot cover the quoted price"
+    },
+    {
+      "status": 403,
+      "code": "DAILY_CAP_EXCEEDED",
+      "message": "this role has spent X of Y credits in the last 24 hours",
+      "when": "the requester's role is under a DAILY_CAP policy whose rolling window is full"
+    },
+    {
+      "name": "Unauthenticated is refused by the default-deny gate",
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "missing or invalid tenant token",
+      "when": "no valid tenant Bearer token on the request",
+      "expectedStatus": 401,
+      "payload": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "capability_key": "{{var:data_credits_capability_key}}",
+        "subject_fingerprint": "fp-x"
+      }
+    }
+  ],
+  "statusTransitions": {
+    "capability_request": [
+      "none -> PENDING_APPROVAL via POST /api/capability-requests (role is REQUEST_ONLY, or the price is at/above the bulk threshold)",
+      "none -> APPROVED via POST /api/capability-requests (role has FULL authority or a daily cap with room)"
+    ]
+  }
+}

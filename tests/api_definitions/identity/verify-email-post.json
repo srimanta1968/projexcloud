@@ -1,0 +1,70 @@
+{
+  "name": "POST /api/auth/verify-email - redeem a verification token",
+  "endpoint": "/api/auth/verify-email",
+  "sdk": "sdk-identity",
+  "method": "POST",
+  "requiresAuth": false,
+  "expectedStatus": 200,
+  "taskId": "04644b76-81e7-4329-baab-e09ba5ec3c31",
+  "featureId": "2d00c83d-9593-41c7-9b5b-d0079ff79a5c",
+  "epicId": "9c09e562-b1f5-481e-983b-a4aae8891e8a",
+  "sprintId": "efcf9cbd-5e84-469e-946e-efcabf8c88e1",
+  "priority": 18,
+  "testability": "auto",
+  "dependsOn": [],
+  "body": {
+    "token": "invalid-token-for-negative-coverage"
+  },
+  "testCases": [
+    {
+      "name": "Missing token is rejected before any verification attempt",
+      "payload": {},
+      "expectedStatus": 400,
+      "testType": "negative"
+    },
+    {
+      "name": "Malformed token is rejected as invalid, not as a server error",
+      "payload": {
+        "token": "not-a-real-jwt"
+      },
+      "expectedStatus": 400,
+      "testType": "negative"
+    }
+  ],
+  "expectedResponse": {
+    "data": {
+      "verified": "boolean",
+      "email": "string"
+    }
+  },
+  "description": "Redeems the signed token embedded in a verification email and marks the corresponding address verified, returning the address that was confirmed. This is the endpoint the emailed link resolves to. An expired or tampered token yields 400 InvalidToken rather than 401, because the caller is an anonymous link-follower with no credential to reject — the token is request data, not authentication. A well-formed token whose email no longer exists yields 404. NOTE ON COVERAGE: the 200 path needs a signed token delivered only by email, so it is not reachable from an API run; the automated cases here cover the rejection paths. Do not mark the definition manual for that reason — testability is decided after execution, not in advance.",
+  "fieldEnums": {
+    "verified": [
+      true
+    ]
+  },
+  "errorCases": [
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "token is required",
+      "when": "The request body has no token, or it is empty/not a string"
+    },
+    {
+      "status": 400,
+      "code": "InvalidToken",
+      "message": "The verification link is invalid or has expired.",
+      "when": "The token fails signature verification or its expiry has passed"
+    },
+    {
+      "status": 404,
+      "code": "NotFound",
+      "message": "No matching email found to verify.",
+      "when": "The token verifies but its email claim matches no stored person"
+    }
+  ],
+  "captureResponse": {
+    "auth.verifyEmail.response.data.verified": "data.verified",
+    "auth.verifyEmail.response.data.email": "data.email"
+  }
+}

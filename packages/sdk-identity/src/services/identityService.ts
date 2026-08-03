@@ -146,6 +146,15 @@ export interface SignupTenantInput {
   password: string;
   company_name: string;
   region?: string;
+  /**
+   * The person_id the CALLER has already proven control of, taken from a verified JWT —
+   * never from the request body. Supplied when an existing app user is becoming a provider
+   * in their own right: the email already has an alias, and creating a second person for the
+   * same human would split their audit trail and break MDM convergence permanently. When it
+   * matches the alias owner, this signup attaches a NEW org/app/tenant to that existing
+   * person instead of refusing. Absent or mismatched, the duplicate-email refusal stands.
+   */
+  authenticated_person_id?: string;
   /** Optional founder identity fields, written to the L2 profile band / phone alias. */
   given_name?: string;
   family_name?: string;
@@ -189,28 +198,51 @@ export async function signupTenant(input: SignupTenantInput): Promise<SignupTena
       `SELECT person_id FROM identity.alias WHERE kind = 'email' AND value_hash = $1`,
       [emailHash],
     );
-    if (dup.rows.length > 0) {
+    const existingPersonId = dup.rows.length > 0 ? dup.rows[0].person_id : null;
+
+    // AN EXISTING USER BECOMING A PROVIDER.
+    //
+    // The refusal below is still the default, and deliberately so: an unauthenticated caller
+    // naming an email that already exists must not be told anything, let alone be allowed to
+    // attach a tenant to a stranger's identity. But when the caller arrives holding a verified
+    // token for THAT SAME person, the situation is different — they are an app user who now
+    // wants their own tenant, and refusing them would force a second identity.person for one
+    // human. That is the one outcome to avoid: identity.alias is UNIQUE (kind, value_hash), so
+    // the duplicate could only ever be created with a different email, permanently splitting
+    // the person's memberships, personas and audit trail across two ids that nothing can
+    // reconcile afterwards.
+    const reusingPerson = existingPersonId !== null
+      && input.authenticated_person_id === existingPersonId;
+
+    if (existingPersonId !== null && !reusingPerson) {
       throw new PersonExistsError(`A person with email ${input.email} already exists`);
     }
 
-    const person = await q<{ person_id: string }>(
-      `INSERT INTO identity.person (home_region) VALUES ($1) RETURNING person_id`,
-      [region],
-    );
-    const person_id = person.rows[0].person_id;
+    let person_id: string;
+    if (reusingPerson) {
+      person_id = existingPersonId as string;
+      // No alias, no credential, no person row. They already have all three, and the password
+      // supplied here is ignored rather than silently rotating the one they log in with.
+    } else {
+      const person = await q<{ person_id: string }>(
+        `INSERT INTO identity.person (home_region) VALUES ($1) RETURNING person_id`,
+        [region],
+      );
+      person_id = person.rows[0].person_id;
 
-    await q(
-      // Email starts UNVERIFIED (verify via /api/auth/verify-email before login).
-      `INSERT INTO identity.alias (person_id, kind, value_envelope, value_hash, verified_at)
-       VALUES ($1, 'email', $2, $3, NULL)`,
-      [person_id, Buffer.from(input.email, 'utf-8'), emailHash],
-    );
+      await q(
+        // Email starts UNVERIFIED (verify via /api/auth/verify-email before login).
+        `INSERT INTO identity.alias (person_id, kind, value_envelope, value_hash, verified_at)
+         VALUES ($1, 'email', $2, $3, NULL)`,
+        [person_id, Buffer.from(input.email, 'utf-8'), emailHash],
+      );
 
-    await q(
-      `INSERT INTO identity.credential (person_id, kind, secret_envelope, status)
-       VALUES ($1, 'password', $2, 'active')`,
-      [person_id, Buffer.from(passwordHash, 'utf-8')],
-    );
+      await q(
+        `INSERT INTO identity.credential (person_id, kind, secret_envelope, status)
+         VALUES ($1, 'password', $2, 'active')`,
+        [person_id, Buffer.from(passwordHash, 'utf-8')],
+      );
+    }
 
     const org = await q<{ org_id: string }>(
       `INSERT INTO tenant.org (name) VALUES ($1) RETURNING org_id`,

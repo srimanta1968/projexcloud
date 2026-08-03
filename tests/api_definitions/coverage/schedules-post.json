@@ -1,0 +1,115 @@
+{
+  "sdk": "sdk-coverage",
+  "sourceFile": "packages/sdk-coverage/src/server/routes.ts",
+  "requiresAuth": true,
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "epicId": "75f3f5a3-faa8-4b82-badf-4feda46c00e7",
+  "featureId": "5f6dc00d-cb8f-4a54-9a19-9b1e0f0b2f5a",
+  "taskId": "422472b0-117e-4cb0-9f90-0c6962439155",
+  "testability": "auto",
+  "name": "POST /api/coverage/schedules - Set a working schedule",
+  "endpoint": "/api/coverage/schedules",
+  "method": "POST",
+  "expectedStatus": 201,
+  "priority": 10,
+  "description": "Upserts the recurring working windows for one persona in ONE named IANA timezone. The timezone is validated at write time rather than at the first sweep - an unresolvable zone accepted here would surface as a persona mysteriously never eligible, hours later and far from the cause. weekly_windows is an array of {weekday 0-6, start HH:MM, end HH:MM} in the persona local wall time, which is the only representation that survives a DST change without being silently wrong for an hour twice a year. One ACTIVE schedule per persona; re-posting replaces it.",
+  "dependsOn": [
+    "POST /api/auth/signup-tenant",
+    "POST /api/personas"
+  ],
+  "fieldEnums": {
+    "weekday": [
+      "0",
+      "1",
+      "2",
+      "3",
+      "4",
+      "5",
+      "6"
+    ]
+  },
+  "testCases": [
+    {
+      "name": "A weekday schedule in the persona own timezone",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "payload": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "persona_id": "{{cache:personas.create.response.data.persona.persona_id}}",
+        "iana_timezone": "America/Chicago",
+        "weekly_windows": [
+          {
+            "weekday": 1,
+            "start": "09:00",
+            "end": "17:00"
+          },
+          {
+            "weekday": 2,
+            "start": "09:00",
+            "end": "17:00"
+          }
+        ]
+      },
+      "expectedStatus": 201,
+      "expectedResponse": {
+        "data": {
+          "schedule": {
+            "schedule_id": "string",
+            "iana_timezone": "string"
+          }
+        }
+      }
+    }
+  ],
+  "errorCases": [
+    {
+      "name": "A fixed UTC offset is refused - it cannot express DST",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "payload": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "persona_id": "{{cache:personas.create.response.data.persona.persona_id}}",
+        "iana_timezone": "+05:30",
+        "weekly_windows": [
+          {
+            "weekday": 1,
+            "start": "09:00",
+            "end": "17:00"
+          }
+        ]
+      },
+      "expectedStatus": 422
+    },
+    {
+      "name": "An unresolvable zone is refused at write time",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "payload": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "persona_id": "{{cache:personas.create.response.data.persona.persona_id}}",
+        "iana_timezone": "Nowhere/Fictional",
+        "weekly_windows": [
+          {
+            "weekday": 1,
+            "start": "09:00",
+            "end": "17:00"
+          }
+        ]
+      },
+      "expectedStatus": 422
+    },
+    {
+      "name": "Unauthenticated",
+      "payload": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}"
+      },
+      "expectedStatus": 401
+    }
+  ],
+  "captureResponse": {
+    "coverage.schedules.create.schedule_id": "data.schedule.schedule_id"
+  }
+}

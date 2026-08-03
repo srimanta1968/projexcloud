@@ -1,0 +1,141 @@
+{
+  "sdk": "sdk-crm",
+  "sourceFile": "packages/sdk-crm/src/server/routes.ts",
+  "requiresAuth": true,
+  "taskId": "94a7a454-5ea6-43c5-a54f-495493441b5a",
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "featureId": "c611a832-fd3a-4930-8adf-22e1b3c70d36",
+  "epicId": "5622482a-4923-4f93-9dea-805cc54f3efd",
+  "testability": "auto",
+  "name": "GET /api/crm/subjects/:subject_ref/next-action - Read the open next action",
+  "endpoint": "/api/crm/subjects/:subject_ref/next-action",
+  "method": "GET",
+  "expectedStatus": 200,
+  "priority": 61,
+  "description": "Returns the single open NEXT action for a subject, with its five committed elements plus push_count and original_due_at so a caller can see how far the commitment has already slipped. Edge cases: tenant_id query param is required (400 without it); a subject that has never had an action, or whose only action was completed, cancelled or superseded, returns 404 NotFound rather than an empty object - 'no commitment' is a state a caller must handle, not an empty shape it can render; the lookup is scoped to the tenant, so another tenant's action on the same subject_ref is invisible.",
+  "dependsOn": [
+    "POST /api/auth/signup-tenant",
+    "POST /api/personas",
+    "POST /api/crm/subjects/:subject_ref/next-action"
+  ],
+  "testCases": [
+    {
+      "name": "Read the action just committed",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "pathParams": {
+        "subject_ref": "{{var:crm_subject_ref}}"
+      },
+      "queryParams": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}"
+      },
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "data": {
+          "next_action": {
+            "next_action_id": "string",
+            "subject_ref": "string",
+            "status": "string"
+          }
+        }
+      }
+    },
+    {
+      "name": "400 - tenant_id query param is required",
+      "testType": "negative",
+      "coversErrorCase": "400|ValidationError",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "pathParams": {
+        "subject_ref": "{{var:crm_subject_ref}}"
+      },
+      "expectedStatus": 400,
+      "expectedError": {
+        "code": "ValidationError",
+        "messageContains": "tenant_id query param required"
+      }
+    },
+    {
+      "name": "404 - a subject with no open action",
+      "testType": "negative",
+      "coversErrorCase": "404|NotFound",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "pathParams": {
+        "subject_ref": "{{dynamic:uuid}}"
+      },
+      "queryParams": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}"
+      },
+      "expectedStatus": 404,
+      "expectedError": {
+        "code": "NotFound"
+      }
+    },
+    {
+      "name": "401 - missing bearer token",
+      "testType": "negative",
+      "coversErrorCase": "401|Unauthorized|missing",
+      "headers": {},
+      "pathParams": {
+        "subject_ref": "{{var:crm_subject_ref}}"
+      },
+      "queryParams": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}"
+      },
+      "expectedStatus": 401,
+      "expectedError": {
+        "code": "Unauthorized",
+        "messageContains": "Missing bearer token"
+      }
+    },
+    {
+      "name": "401 - invalid or expired token",
+      "testType": "negative",
+      "coversErrorCase": "401|Unauthorized|invalid",
+      "headers": {
+        "Authorization": "Bearer {{static:invalid-token}}"
+      },
+      "pathParams": {
+        "subject_ref": "{{var:crm_subject_ref}}"
+      },
+      "queryParams": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}"
+      },
+      "expectedStatus": 401,
+      "expectedError": {
+        "code": "Unauthorized",
+        "messageContains": "Invalid or expired token"
+      }
+    }
+  ],
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "Authorization header absent or not in the form \"Bearer <jwt>\""
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "JWT signature invalid, malformed, or past its exp claim"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "tenant_id query param required",
+      "when": "tenant_id query param omitted"
+    },
+    {
+      "status": 404,
+      "code": "NotFound",
+      "message": "no open next action for this subject",
+      "when": "the subject has no action in status 'open' for this tenant"
+    }
+  ]
+}

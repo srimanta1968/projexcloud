@@ -70,6 +70,17 @@ type ClickHouseUsageEvent = {
   trace_id: string;
 } & Record<string, unknown>;
 
+/**
+ * ClickHouse's DateTime64 parser rejects the trailing 'Z' (and offsets) on ISO-8601
+ * strings — occurred_at arrives as e.g. `2026-07-17T22:12:59.377Z`. Normalize to the
+ * `YYYY-MM-DD HH:MM:SS.fff` form it accepts, in UTC (the column is DateTime64(3,'UTC')).
+ */
+function toClickHouseDateTime(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso.replace('T', ' ').replace('Z', '');
+  return d.toISOString().slice(0, 23).replace('T', ' ');
+}
+
 function toClickHouseRow(e: UsageEventV1): ClickHouseUsageEvent {
   return {
     event_id: e.event_id,
@@ -88,7 +99,7 @@ function toClickHouseRow(e: UsageEventV1): ClickHouseUsageEvent {
     latency_ms: e.dimensions.latency_ms ?? 0,
     bytes_in: e.dimensions.bytes_in ?? 0,
     bytes_out: e.dimensions.bytes_out ?? 0,
-    occurred_at: e.occurred_at,
+    occurred_at: toClickHouseDateTime(e.occurred_at),
     trace_id: e.trace_id ?? '',
   };
 }
@@ -234,7 +245,10 @@ async function main(): Promise<void> {
       initClickHouse({
         url: process.env.CLICKHOUSE_URL || 'http://localhost:8123',
         username: process.env.CLICKHOUSE_USER || 'default',
-        password: process.env.CLICKHOUSE_PASSWORD || 'clickhouse',
+        // The dev ClickHouse container (infra/clickhouse/init) sets no password on
+        // the 'default' user, and the api-gateway defaults to an empty password too.
+        // Default to empty here so both services agree; override via CLICKHOUSE_PASSWORD.
+        password: process.env.CLICKHOUSE_PASSWORD || '',
         database: 'meter',
       });
       log.info('meter-collector ClickHouse client initialized');

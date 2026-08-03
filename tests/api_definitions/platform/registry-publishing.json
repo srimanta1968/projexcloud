@@ -1,0 +1,101 @@
+{
+  "name": "Registry publishing and package configuration (P16 EP-387)",
+  "endpoint": "internal://platform/release.normalizePublishConfig",
+  "sdk": "platform",
+  "sourceFile": "scripts/release/normalize-publish-config.js",
+  "method": "INTERNAL_FUNCTION",
+  "requiresAuth": false,
+  "expectedStatus": 200,
+  "taskId": "67285c4c-d019-4fcd-a9d9-da1842515628",
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "featureId": "e7d8124c-e4d0-49ae-96d5-9b1405eae066",
+  "epicId": "42f1aac8-aba4-44cf-90a9-aadc0ac57bd3",
+  "priority": 100,
+  "testability": "manual",
+  "skipReason": "Build-and-release configuration, not a runtime surface — there is no route to call. Verified by tests/platform/registryPublishing.test.ts (52 assertions over every package.json, the .npmrc, the changeset and the resolver script), and by the CI drift gate `node scripts/release/normalize-publish-config.js --check`.",
+  "coversCriterion": [
+    "67285c4c-d019-4fcd-a9d9-da1842515628#AC1",
+    "67285c4c-d019-4fcd-a9d9-da1842515628#AC2",
+    "67285c4c-d019-4fcd-a9d9-da1842515628#AC3",
+    "67285c4c-d019-4fcd-a9d9-da1842515628#AC4"
+  ],
+  "description": "Makes every vertical-facing @projexlight SDK installable from the private registry. Proves all four criteria. AC1: the fourteen listed packages get private:false (a private package is SKIPPED by npm publish without an error, so a vertical would get a bare 404), a publishConfig, real main/types (without which the install succeeds and every import fails — a worse failure than not installing) and a files list that ships dist plus src/db/migrations, since the migration runner reads those .sql files at gateway boot and omitting them would install cleanly then run the service against an unmigrated schema. AC4: publishConfig.registry is deliberately ABSENT everywhere. npm resolves the publish target as publishConfig.registry > .npmrc scope registry > default, so the hardcoded http://localhost:4873/ that all 24 pre-existing publishConfigs carried would have BEATEN anything CI set — a production release would have published to a developer laptop and reported success. The scope registry now lives only in .npmrc, and scripts/release/set-registry.js resolves dev vs prod without mutating that tracked file (a release that rewrites .npmrc leaves the tree dirty and silently points the next developer's install at production). AC2: a changeset accompanies the release, bumping all fourteen minor — minor rather than patch because going from unpublishable to publishable is new consumable surface, and not major because no existing API changed; the test also asserts the changeset config does not ignore any of them, since an ignored package never gets bumped and consumers keep resolving a stale build. AC3: the publishable set is the TRANSITIVE CLOSURE of the listed packages, not the list. That distinction was found by a failing test: sdk-conversation depends on @projexlight/db-runtime, and publishing only the former means `pnpm add @projexlight/sdk-conversation` succeeds and then cannot resolve db-runtime, leaving a consumer no option but to vendor the source — the exact outcome this epic exists to end. The closure walk brought 46 packages in, including db-runtime, redis-runtime, sdk-vault, sdk-meter and sdk-pool-router.",
+  "testCases": [
+    {
+      "name": "All fourteen listed packages are publishable with resolvable entrypoints",
+      "payload": {
+        "scenario": "required_publishable",
+        "packages": [
+          "sdk-source-record", "sdk-import", "sdk-sla", "sdk-coverage", "sdk-data-credits",
+          "sdk-crm", "sdk-assignment", "sdk-identity-resolver", "sdk-lead-scoring",
+          "sdk-ingest", "sdk-audit", "sdk-conversation", "sdk-parsing", "sdk-evidence"
+        ],
+        "expected_private": false,
+        "expected_publishConfig_access": "restricted",
+        "expected_files_includes": ["dist"]
+      },
+      "expectedStatus": 200,
+      "expectedResponse": { "success": true }
+    },
+    {
+      "name": "No package hardcodes a registry, so production and dev can differ",
+      "payload": {
+        "scenario": "no_hardcoded_registry",
+        "expected_offenders": [],
+        "expected_scope_registry_declarations_in_npmrc": 1
+      },
+      "expectedStatus": 200,
+      "expectedResponse": { "success": true }
+    },
+    {
+      "name": "The resolver returns different registries for dev and prod",
+      "payload": {
+        "scenario": "registry_resolution",
+        "dev_contains": "4873",
+        "prod_contains": "npm.projexcloud.com",
+        "expected_distinct": true
+      },
+      "expectedStatus": 200,
+      "expectedResponse": { "success": true }
+    },
+    {
+      "name": "Every workspace dependency of a publishable package is itself publishable",
+      "payload": {
+        "scenario": "transitive_closure",
+        "expected_unpublishable_edges": [],
+        "closure_size": 46
+      },
+      "expectedStatus": 200,
+      "expectedResponse": { "success": true }
+    },
+    {
+      "name": "A changeset bumps every listed package and none is ignored",
+      "payload": {
+        "scenario": "changeset_present",
+        "expected_bump": "minor",
+        "expected_ignored_overlap": []
+      },
+      "expectedStatus": 200,
+      "expectedResponse": { "success": true }
+    }
+  ],
+  "expectedResponse": { "success": true },
+  "errorCases": [
+    {
+      "name": "Drift in publishConfig fails the CI gate",
+      "status": null,
+      "code": "PUBLISH_CONFIG_DRIFT",
+      "message": "publishConfig drift detected: needs normalising: <package>",
+      "when": "a package is added or edited so its publishConfig, private flag, entrypoints or files list no longer match the normaliser — `--check` exits non-zero rather than rewriting, so CI fails instead of producing a dirty tree",
+      "payload": { "scenario": "drift_check", "command": "node scripts/release/normalize-publish-config.js --check" }
+    },
+    {
+      "name": "An unknown release environment fails loudly rather than defaulting",
+      "status": null,
+      "code": "UNKNOWN_REGISTRY_ENVIRONMENT",
+      "message": "unknown environment '<env>' — expected one of: dev, prod",
+      "when": "set-registry.js is called with anything but dev or prod; defaulting silently would let a typo publish to the wrong registry",
+      "payload": { "scenario": "unknown_env", "argv": ["staging"] }
+    }
+  ]
+}

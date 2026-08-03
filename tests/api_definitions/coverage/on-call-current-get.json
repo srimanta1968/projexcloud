@@ -1,0 +1,58 @@
+{
+  "sdk": "sdk-coverage",
+  "sourceFile": "packages/sdk-coverage/src/server/routes.ts",
+  "requiresAuth": true,
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "epicId": "75f3f5a3-faa8-4b82-badf-4feda46c00e7",
+  "featureId": "5f6dc00d-cb8f-4a54-9a19-9b1e0f0b2f5a",
+  "taskId": "422472b0-117e-4cb0-9f90-0c6962439155",
+  "testability": "auto",
+  "name": "GET /api/coverage/on-call/current - Who is on call at an instant",
+  "endpoint": "/api/coverage/on-call/current",
+  "method": "GET",
+  "expectedStatus": 200,
+  "priority": 18,
+  "description": "The on-call audience at an instant, in tier order so the caller pages tier 1 before tier 2, plus whoever is manager-on-duty. The interval test is half-open, so at exactly a handover instant the outgoing shift is off and the incoming one is on - neither doubled up nor a second uncovered. Reports uncovered=true explicitly when nobody is on call: a caller that reads an empty list as \"no result\" will escalate into the void, which is precisely the failure this endpoint exists to prevent.",
+  "dependsOn": [
+    "POST /api/auth/signup-tenant",
+    "POST /api/coverage/on-call"
+  ],
+  "fieldEnums": {
+    "tier": [
+      "1",
+      "2",
+      "3"
+    ]
+  },
+  "testCases": [
+    {
+      "name": "Resolve the current audience for a rotation",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "queryParams": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "rotation_ref": "primary",
+        "at": "{{dynamic:futuredatetime+2h}}"
+      },
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "data": {
+          "tiers": "array",
+          "persona_ids": "array",
+          "manager_on_duty_ids": "array",
+          "uncovered": "boolean"
+        }
+      }
+    }
+  ],
+  "errorCases": [
+    {
+      "name": "tenant_id is required",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "expectedStatus": 400
+    }
+  ]
+}

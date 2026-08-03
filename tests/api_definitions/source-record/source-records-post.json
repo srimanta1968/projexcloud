@@ -1,0 +1,142 @@
+{
+  "name": "POST /api/source-records - Capture an immutable source record at P0",
+  "endpoint": "/api/source-records",
+  "sdk": "sdk-source-record",
+  "sourceFile": "packages/sdk-source-record/src/server/routes.ts",
+  "method": "POST",
+  "requiresAuth": true,
+  "expectedStatus": 201,
+  "taskId": "3837bea9-c427-4ec0-a9c7-c2bd94c51c38",
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "featureId": "32707c6f-ae2c-4e31-bf2f-2c39c0f5cc2e",
+  "epicId": "fa43f2ff-2e6e-4f27-894a-4992cc2dace9",
+  "priority": 60,
+  "testability": "auto",
+  "description": "Land one retrieval from one source system as an immutable capture at trust state P0_CAPTURED. raw_evidence is stored exactly as received and is frozen by a database trigger, as is origin_class. Idempotent on the content fingerprint: a repeat of the same payload for the same tenant returns the ORIGINAL capture with created=false instead of forking a second lineage (the fingerprint is derived from the payload with object keys sorted, so a re-serialized body still dedupes). Edge case that matters: an absent or unrecognised origin_class does NOT default to anything plausible — the record lands UNKNOWN_QUARANTINED with quarantine_reason set and quarantined=true, and a quarantined record is refused every later promotion. Required: tenant_id, source_system, raw_evidence.",
+  "dependsOn": [
+    "POST /api/auth/signup-tenant"
+  ],
+  "fieldEnums": {
+    "origin_class": [
+      "USER_PROVIDED",
+      "FIRST_PARTY_DIRECT",
+      "TENANT_FIRST_PARTY_CRM",
+      "USER_AUTHORIZED_CONTACT_STORE",
+      "PUBLIC_RECORD",
+      "LICENSED_THIRD_PARTY",
+      "PARTNER_PROVIDED",
+      "UNKNOWN_QUARANTINED"
+    ],
+    "evidence_kind": [
+      "RAW_PAYLOAD",
+      "API_RESPONSE",
+      "DOCUMENT",
+      "SCREENSHOT",
+      "LICENSE_TERMS",
+      "CONSENT_RECEIPT",
+      "SIGNATURE",
+      "OTHER"
+    ],
+    "trust_state": [
+      "P0_CAPTURED",
+      "P1_NORMALIZED",
+      "P2_CANDIDATE",
+      "P3_LINKED",
+      "P4_DIRECT"
+    ]
+  },
+  "statusTransitions": {
+    "entity": "source_record.source_record",
+    "field": "trust_state",
+    "flow": [
+      "P0_CAPTURED",
+      "P1_NORMALIZED",
+      "P2_CANDIDATE",
+      "P3_LINKED",
+      "P4_DIRECT"
+    ],
+    "transitions": [
+      {
+        "from": "P0_CAPTURED",
+        "to": "P1_NORMALIZED",
+        "via": "POST /api/source-records/:capture_id/normalize"
+      },
+      {
+        "from": "P1_NORMALIZED",
+        "to": "P2_CANDIDATE",
+        "via": "POST /api/source-records/:capture_id/promote (requires a normalized payload)"
+      },
+      {
+        "from": "P2_CANDIDATE",
+        "to": "P3_LINKED",
+        "via": "POST /api/source-records/:capture_id/promote (requires subject_ref)"
+      },
+      {
+        "from": "P3_LINKED",
+        "to": "P4_DIRECT",
+        "via": "POST /api/source-records/:capture_id/promote (requires a FIRST-PARTY evidence_ref)"
+      }
+    ]
+  },
+  "testCases": [
+    {
+      "name": "Capture a public-record payload at P0_CAPTURED",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "payload": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "source_system": "registry-{{dynamic:slug}}",
+        "raw_evidence": {
+          "record_id": "{{dynamic:uuid}}",
+          "email": "{{dynamic:email}}",
+          "display_name": "{{dynamic:name}}"
+        },
+        "fingerprint": "fp-{{dynamic:uuid}}",
+        "source_external_id": "ext-{{dynamic:slug}}",
+        "origin_class": "PUBLIC_RECORD",
+        "evidence_kind": "API_RESPONSE",
+        "evidence_ref": "evidence:{{dynamic:uuid}}",
+        "subject_ref": "subject:{{dynamic:uuid}}",
+        "retrieved_at": "{{dynamic:pastdatetime-1h}}",
+        "metadata": {
+          "ingest_batch": "{{dynamic:slug}}"
+        },
+        "actor_id": "qa-runner",
+        "purpose": "provenance capture",
+        "causation_id": "{{dynamic:uuid}}"
+      },
+      "expectedStatus": 201,
+      "expectedResponse": {
+        "data": {
+          "source_record": {
+            "capture_id": "string",
+            "trust_state": "string",
+            "origin_class": "string"
+          },
+          "created": "boolean"
+        }
+      }
+    }
+  ],
+  "captureResponse": {
+    "source-record.capture.response.data.source_record.capture_id": "data.source_record.capture_id",
+    "source-record.capture.response.data.source_record.fingerprint": "data.source_record.fingerprint",
+    "source-record.capture.response.data.source_record.subject_ref": "data.source_record.subject_ref",
+    "source-record.capture.response.data.source_record.trust_state": "data.source_record.trust_state"
+  },
+  "errorCases": [
+    {
+      "status": 400,
+      "code": "VALIDATION_ERROR",
+      "message": "tenant_id, source_system and raw_evidence are required",
+      "when": "any of the three required fields is missing from the body"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "missing or invalid token",
+      "when": "no valid tenant Bearer token on the request"
+    }
+  ]
+}

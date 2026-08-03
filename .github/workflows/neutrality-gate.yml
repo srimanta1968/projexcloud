@@ -1,0 +1,40 @@
+name: Vertical neutrality gate
+
+# Runs on every pull request that touches a platform package. The path filter is the
+# point: these SDKs ship to every vertical, so a domain literal introduced here is what
+# makes the next vertical fork the package instead of reusing it. Gating only on
+# packages/** keeps the check fast enough that nobody is tempted to skip it.
+on:
+  pull_request:
+    paths:
+      - 'packages/**'
+      - 'scripts/ci/neutrality-gate.js'
+      - '.github/workflows/neutrality-gate.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'packages/**'
+
+jobs:
+  neutrality:
+    name: No vertical-specific literals in SDK source
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      # No install step: the gate is dependency-free by design. A gate that needs the
+      # workspace to install first fails for unrelated reasons and gets disabled.
+      - name: Run neutrality gate
+        run: node scripts/ci/neutrality-gate.js
+
+      # These two guard the same class of drift — configuration that silently stops
+      # matching reality — and are cheap enough to run in the same job.
+      - name: Verify publishConfig has not drifted
+        run: node scripts/release/normalize-publish-config.js --check
+
+      - name: Verify the SDK catalog lists every endpoint
+        run: node scripts/catalog/regenerate-sdk-catalog.js --check

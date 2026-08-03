@@ -1,0 +1,144 @@
+{
+  "name": "POST /api/sla/clocks/:clock_id/pause - Park the clock on a listed reason",
+  "endpoint": "/api/sla/clocks/:clock_id/pause",
+  "sdk": "sdk-sla",
+  "sourceFile": "packages/sdk-sla/src/server/routes.ts",
+  "method": "POST",
+  "requiresAuth": true,
+  "expectedStatus": 200,
+  "taskId": "1dbcb185-1bb8-4af9-93ae-8438ba8fd513",
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "featureId": "af5400b6-00aa-4d5c-82f6-d9819457333f",
+  "epicId": "39365400-aca0-4a86-9791-5771d19998f4",
+  "priority": 64,
+  "testability": "auto",
+  "description": "Pause the clock so time spent waiting on somebody else does not burn the responder's promise. The reason MUST appear in the policy's pause_conditions, otherwise 422 PAUSE_REASON_NOT_ALLOWED naming what is allowed — an unconstrained pause button is how a breach becomes invisible, and each listed condition also carries a max_minutes cap. Pausing does not move due_at: the deadline is the promise that was made, and paused time explains a miss rather than excusing it, while elapsed business minutes exclude the parked interval. Only a running clock can pause; anything else is 409. Returns 200. Required: tenant_id, reason.",
+  "dependsOn": [
+    "POST /api/auth/signup-tenant",
+    "POST /api/sla/clocks/:clock_id/reassign"
+  ],
+  "fieldEnums": {
+    "state": [
+      "running",
+      "paused",
+      "satisfied",
+      "breached",
+      "cancelled"
+    ],
+    "pause_reason": [
+      "awaiting_subject_reply"
+    ]
+  },
+  "statusTransitions": {
+    "entity": "sla.sla_clock",
+    "field": "state",
+    "note": "at_risk is a DERIVED view over running/paused clocks approaching due_at (GET /api/sla/at-risk), not a stored state — the column can only hold the five values in fieldEnums.state.",
+    "flow": [
+      "running",
+      "paused",
+      "satisfied",
+      "breached",
+      "cancelled"
+    ],
+    "transitions": [
+      {
+        "from": "running",
+        "to": "paused",
+        "via": "POST /api/sla/clocks/:clock_id/pause"
+      },
+      {
+        "from": "paused",
+        "to": "running",
+        "via": "POST /api/sla/clocks/:clock_id/resume"
+      },
+      {
+        "from": "running",
+        "to": "satisfied",
+        "via": "POST /api/sla/clocks/:clock_id/satisfy"
+      },
+      {
+        "from": "paused",
+        "to": "satisfied",
+        "via": "POST /api/sla/clocks/:clock_id/satisfy"
+      },
+      {
+        "from": "running",
+        "to": "breached",
+        "via": "POST /api/sla/breach-scan"
+      },
+      {
+        "from": "breached",
+        "to": "satisfied",
+        "via": "POST /api/sla/clocks/:clock_id/satisfy",
+        "note": "a missed promise can still be kept, late — satisfied_at then sits after due_at so attainment still counts it as a miss"
+      },
+      {
+        "from": "running",
+        "to": "cancelled",
+        "via": "POST /api/sla/clocks/:clock_id/cancel"
+      },
+      {
+        "from": "paused",
+        "to": "cancelled",
+        "via": "POST /api/sla/clocks/:clock_id/cancel"
+      },
+      {
+        "from": "breached",
+        "to": "cancelled",
+        "via": "POST /api/sla/clocks/:clock_id/cancel"
+      }
+    ]
+  },
+  "testCases": [
+    {
+      "name": "Pause on the one reason this policy allows",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "pathParams": {
+        "clock_id": "{{cache:sla.clock.create.response.data.clock.clock_id}}"
+      },
+      "payload": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "reason": "awaiting_subject_reply",
+        "actor_id": "qa-runner"
+      },
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "data": {
+          "clock": {
+            "clock_id": "string",
+            "state": "string",
+            "paused_at": "string"
+          }
+        }
+      }
+    }
+  ],
+  "errorCases": [
+    {
+      "status": 400,
+      "code": "VALIDATION_ERROR",
+      "message": "tenant_id and reason are required",
+      "when": "a required field is missing from the request"
+    },
+    {
+      "status": 422,
+      "code": "PAUSE_REASON_NOT_ALLOWED",
+      "message": "'because_i_said_so' is not a pause condition on this policy",
+      "when": "the reason is not listed in the policy pause_conditions"
+    },
+    {
+      "status": 409,
+      "code": "INVALID_CLOCK_TRANSITION",
+      "message": "clock <id> cannot move paused -> paused",
+      "when": "the clock is not running"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "missing or invalid token",
+      "when": "no valid tenant Bearer token on the request"
+    }
+  ]
+}

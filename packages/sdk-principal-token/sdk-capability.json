@@ -1,0 +1,71 @@
+{
+  "name": "@projexlight/sdk-principal-token",
+  "version": "1.0.0",
+  "schema_version": "1.0",
+  "summary": "P10/E2 platform principal token — the trust primitive for delegated auth between the gateway and downstream services. The api-gateway mints a signed (HS256), audience-bound, short-TTL JWT from the SERVER-RESOLVED IdentityContext (mintPrincipalToken); claims derive only from resolved context, never from request input, which closes the confused-deputy class. Downstream services verify iss/aud/exp and signature (verifyPrincipalToken) via a Fastify preHandler (requirePrincipalToken) that also strips spoofable forwarded identity headers (x-user-id, x-tenant-id, ...) so identity is trusted ONLY from the verified token. Signing keys rotate (rotateSigningKey / startPrincipalKeyRotation), are stored AES-256-GCM wrapped at rest by a vault-sourced wrap key, and honor a retire_after overlap window so rotation never invalidates in-flight short-TTL tokens.",
+  "tags": [
+    "auth",
+    "jwt",
+    "principal-token",
+    "key-rotation",
+    "zero-trust"
+  ],
+  "provides": {
+    "endpoints": [],
+    "events": [],
+    "models": [
+      {
+        "schema": "principal_token",
+        "table": "signing_key",
+        "description": "Rotating HS256 signing keys. One row per key (kid UUID PK) holding the AES-256-GCM secret_wrapped (base64(iv).base64(tag).base64(ct)), a status of active|retiring|retired, and a retire_after overlap instant. A partial unique index enforces at most one active key; retiring keys still verify until retire_after passes."
+      }
+    ],
+    "hooks": [],
+    "ui_components": []
+  },
+  "consumes": {
+    "events": [],
+    "infra": ["postgres"],
+    "config_keys": [
+      "PRINCIPAL_TOKEN_TTL_SECONDS",
+      "PRINCIPAL_TOKEN_MAX_TTL_SECONDS",
+      "PRINCIPAL_TOKEN_ISSUER",
+      "PRINCIPAL_TOKEN_WRAP_KEY"
+    ]
+  },
+  "scenarios": [
+    {
+      "id": "mint-audience-bound-principal-token",
+      "title": "Mint a scoped, audience-bound principal token at the gateway",
+      "when_to_use": "In the api-gateway, after resolving the caller's IdentityContext, when forwarding a request to a downstream service that must trust the caller's identity without re-resolving it. The token binds to a single target service (aud) and is short-lived.",
+      "example_code": "import { mintPrincipalToken } from '@projexlight/sdk-principal-token';\n\n// `resolved` is the server-resolved IdentityContext (never request input).\nconst token = await mintPrincipalToken(resolved, {\n  audience: 'sdk-orders',\n  ttlSeconds: 120,\n  actorKind: 'human',\n});\nreq.headers['x-principal-token'] = token; // forward downstream",
+      "expected_outcome": "Returns a signed HS256 JWT whose claims (sub/app_id/tenant_id/scopes/roles/personas) come only from the resolved principal, with aud='sdk-orders' and an exp capped at MAX_PRINCIPAL_TOKEN_TTL_SECONDS. The token is signed by the current active signing key and carries its kid header."
+    },
+    {
+      "id": "verify-principal-token-downstream",
+      "title": "Verify a presented principal token in a downstream service",
+      "when_to_use": "In any downstream service (or Fastify route) that receives a gateway-minted token and must establish trusted identity while rejecting spoofable forwarded identity headers.",
+      "example_code": "import { requirePrincipalToken } from '@projexlight/sdk-principal-token';\n\napp.addHook('preHandler', requirePrincipalToken({ audience: 'sdk-orders' }));\n\napp.get('/orders', async (req) => {\n  // req.principal is the verified claims set; forwarded identity headers were stripped.\n  return listOrders(req.principal!.tenant_id, req.principal!.scopes);\n});",
+      "expected_outcome": "Forwarded identity headers (x-user-id, x-tenant-id, ...) are deleted, the token from x-principal-token or Authorization: Bearer is verified for iss/aud/exp/signature, and req.principal is set to the verified claims. A missing token yields 401 PrincipalTokenRequired; an invalid/wrong-audience token yields 401 InvalidPrincipalToken."
+    },
+    {
+      "id": "rotate-signing-key-with-overlap",
+      "title": "Rotate the signing key without invalidating in-flight tokens",
+      "when_to_use": "On a scheduled cadence, or immediately on suspected key compromise, to roll the HS256 signing key while tokens already minted under the old key stay verifiable until they expire.",
+      "example_code": "import { startPrincipalKeyRotation } from '@projexlight/sdk-principal-token';\n\nconst handle = startPrincipalKeyRotation({\n  intervalMs: 24 * 60 * 60 * 1000,\n  onRotate: (kid) => audit.emit('principal.signing_key.rotated', { kid }),\n});\n\n// force an immediate rotation on suspected compromise:\nawait handle.rotateNow();",
+      "expected_outcome": "The current active key transitions to 'retiring' with retire_after = now() + MAX_PRINCIPAL_TOKEN_TTL_SECONDS and a fresh active key is minted. verifyPrincipalToken tries the header-kid key first but still accepts retiring keys inside the overlap window, so in-flight short-TTL tokens keep verifying. onRotate fires with the new kid for audit."
+    }
+  ],
+  "compliance_posture": {
+    "regimes": ["SOC2"],
+    "notes": "Bearer-token trust primitive for service-to-service auth. Signing secrets are NEVER persisted in plaintext — they are AES-256-GCM wrapped by a vault-sourced wrap key (PRINCIPAL_TOKEN_WRAP_KEY or a wired vault provider), and production boot fails closed if no real wrap key is present. Tokens are least-privilege: audience-bound to a single service and short-TTL (default 300s, hard-capped at MAX_PRINCIPAL_TOKEN_TTL_SECONDS) to bound blast radius. Claims are minted solely from server-resolved identity, never request input, and downstream verification strips spoofable forwarded identity headers — closing the confused-deputy class. Key rotation with a retire_after overlap window supports periodic re-keying and emergency revocation on compromise via onRotate/rotateNow audit hooks."
+  },
+  "pool_placement": "app",
+  "pricing_skus": [],
+  "links": {
+    "readme": "packages/sdk-principal-token/README.md",
+    "source": "packages/sdk-principal-token/src/",
+    "prd_section": "P10/E2 Platform Principal Token"
+  },
+  "no_endpoints": true
+}

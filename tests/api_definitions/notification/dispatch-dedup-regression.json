@@ -1,0 +1,104 @@
+{
+  "name": "POST /api/notifications/dispatch — dedup window + cap opt-in, legacy path unchanged",
+  "endpoint": "/api/notifications/dispatch",
+  "sdk": "sdk-notification",
+  "sourceFile": "packages/sdk-notification/src/server/routes.ts",
+  "method": "POST",
+  "requiresAuth": true,
+  "expectedStatus": 200,
+  "taskId": "9d3c7f66-6f78-422f-955f-eda4ad024295",
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "featureId": "85023098-3515-4f3a-8163-84a74c5ff8f3",
+  "epicId": "bd0b5996-171f-46f2-8ead-0b72593f97df",
+  "priority": 62,
+  "testability": "auto",
+  "dependsOn": ["POST /api/auth/signup-tenant", "PUT /api/notifications/frequency-policy"],
+  "coversCriterion": [
+    "9d3c7f66-6f78-422f-955f-eda4ad024295#AC2",
+    "9d3c7f66-6f78-422f-955f-eda4ad024295#AC3"
+  ],
+  "description": "The existing unified dispatch transport, now accepting four OPTIONAL fields — purpose, respect_frequency_cap, dedup_key, auto_dedup — that enable the P16 frequency cap and no-answer dedup window. Proves AC2 and AC3. AC3 is a property of the shape: a caller that supplies none of the four never reaches the guard at all and takes exactly the path it took before, writing nothing to the send ledger — every pre-existing notification endpoint (send, templates, quiet-hours, providers, sms-settings, sms-consent, delivery-receipts, inbound webhooks) is untouched, and the dispatch contract is additive rather than modified. AC2: with auto_dedup (or an explicit dedup_key), a retry of the SAME message inside the window returns status 'suppressed' with blocked_by 'dedup' instead of producing a duplicate burst; the check is an INSERT ... ON CONFLICT DO NOTHING against a partial unique index, so concurrent retries cannot both decide they are first — a read-then-write check would let exactly that happen under the retry storm this exists to stop. QA edge cases: the guard runs AFTER quiet hours, because a deferred send has not happened and reserving a cap unit for it would charge the tenant for a message still to come; a FAILED provider send releases the reservation, so an outage cannot burn the daily allowance on messages nobody received and then have the window block the retry meant to fix it; dedup is evaluated BEFORE the cap, so a retry of a message that already went out is reported as a duplicate rather than as a cap denial — 'cap reached' would tell the caller their message did not send when it did; a different body to the same recipient is a different send and is not collapsed; blocked_by distinguishes 'dedup' from 'cap' so a caller can tell 'already sent' from 'you are over your limit'.",
+  "testCases": [
+    {
+      "name": "Legacy call with no opt-in behaves exactly as before",
+      "headers": { "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}" },
+      "payload": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "channel": "email",
+        "destination": "regression@example.test",
+        "body": "legacy path unchanged"
+      },
+      "expectedStatus": 200
+    },
+    {
+      "name": "Opting into dedup suppresses an identical retry",
+      "headers": { "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}" },
+      "payload": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "channel": "sms",
+        "destination": "+15550100",
+        "body": "We tried to reach you",
+        "purpose": "no_answer",
+        "auto_dedup": true
+      },
+      "expectedStatus": 200
+    },
+    {
+      "name": "Opting into the cap on a capped channel",
+      "headers": { "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}" },
+      "payload": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "channel": "sms",
+        "destination": "+15550101",
+        "body": "campaign message",
+        "purpose": "marketing",
+        "respect_frequency_cap": true
+      },
+      "expectedStatus": 200
+    }
+  ],
+  "errorCases": [
+    {
+      "name": "A missing required dispatch field is refused",
+      "status": 400,
+      "code": "ValidationError",
+      "message": "tenant_id, channel, destination and body are required",
+      "when": "any of tenant_id, channel, destination or body is absent — unchanged from before this feature",
+      "headers": { "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}" },
+      "payload": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "channel": "sms"
+      },
+      "expectedStatus": 400
+    },
+    {
+      "name": "An unsupported channel is refused",
+      "status": 400,
+      "code": "ValidationError",
+      "message": "channel must be one of email, sms, whatsapp, push, slack",
+      "when": "channel is outside the supported dispatch set — unchanged from before this feature",
+      "headers": { "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}" },
+      "payload": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "channel": "telepathy",
+        "destination": "x",
+        "body": "y"
+      },
+      "expectedStatus": 400
+    },
+    {
+      "name": "Unauthenticated is refused by the default-deny gate",
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "missing or invalid tenant token",
+      "when": "no valid tenant Bearer token or tenant-scoped API key on the request",
+      "payload": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "channel": "email",
+        "destination": "x@y.test",
+        "body": "z"
+      },
+      "expectedStatus": 401
+    }
+  ]
+}

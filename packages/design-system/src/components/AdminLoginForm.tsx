@@ -61,6 +61,11 @@ export function AdminLoginForm({ apiBase = DEFAULT_API_BASE, returnTo }: AdminLo
       <Field label="Email" htmlFor="login-email">
         <Input
           id="login-email"
+          // A form input with no `name` is addressable only by id. That breaks native form
+          // submission, password managers, and any tool that locates fields by name — which
+          // is how the BDD runner looks them up, so every auth-gated scenario silently sat on
+          // /login: it found no field, filled nothing, and never submitted.
+          name="email"
           type="email"
           required
           autoComplete="email"
@@ -72,6 +77,7 @@ export function AdminLoginForm({ apiBase = DEFAULT_API_BASE, returnTo }: AdminLo
       <Field label="Password" htmlFor="login-password">
         <Input
           id="login-password"
+          name="password"
           type="password"
           required
           autoComplete="current-password"

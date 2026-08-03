@@ -1,0 +1,52 @@
+{
+  "sdk": "sdk-assignment",
+  "sourceFile": "packages/sdk-assignment/src/server/routes.ts",
+  "requiresAuth": true,
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "epicId": "af159e51-90a4-46cf-8d57-444515cfbe56",
+  "taskId": "efd127bc-a016-41e2-8831-bca0388ebba1",
+  "priority": 15,
+  "testability": "auto",
+  "name": "POST /api/assignments/sweep - Hand over every expired offer",
+  "endpoint": "/api/assignments/sweep",
+  "method": "POST",
+  "expectedStatus": 200,
+  "description": "Scans offers whose acceptance window has run out and moves each to its backup. Returns what moved AND what could not: an offer that expired with NO backup is reported as STRANDED rather than skipped, because that is the case most in need of a human and a sweep that counted it as \"nothing to do\" is how a subject sits unowned for a day. QA edge cases: safe to run repeatedly - an offer already accepted or already moved is re-checked under a row lock and left alone, so a concurrent accept wins; system fallbacks are recorded in the history with actor system:acceptance-window and no reason; limit is clamped to 1000.",
+  "dependsOn": [
+    "POST /api/auth/signup-tenant",
+    "POST /api/assignments"
+  ],
+  "testCases": [
+    {
+      "name": "Sweep expired offers",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "payload": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "limit": 100
+      },
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "data": {
+          "scanned": "number",
+          "fell_back": "array",
+          "stranded": "array"
+        }
+      }
+    }
+  ],
+  "errorCases": [
+    {
+      "name": "Unauthenticated is refused by the default-deny gate",
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "missing or invalid tenant token",
+      "when": "no valid tenant Bearer token or scoped API key on the request",
+      "expectedStatus": 401,
+      "payload": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}"
+      }
+    }
+  ]
+}

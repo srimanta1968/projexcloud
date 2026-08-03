@@ -1,0 +1,138 @@
+{
+  "sdk": "sdk-crm",
+  "sourceFile": "packages/sdk-crm/src/server/routes.ts",
+  "requiresAuth": true,
+  "taskId": "94a7a454-5ea6-43c5-a54f-495493441b5a",
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "featureId": "c611a832-fd3a-4930-8adf-22e1b3c70d36",
+  "epicId": "5622482a-4923-4f93-9dea-805cc54f3efd",
+  "testability": "auto",
+  "name": "GET /api/crm/subjects/:subject_ref/save-gate - Structured save-gate verdict",
+  "endpoint": "/api/crm/subjects/:subject_ref/save-gate",
+  "method": "GET",
+  "expectedStatus": 200,
+  "priority": 62,
+  "description": "Answers whether a subject may be saved, and if not, exactly what is missing. Returns {allowed, subject_ref, missing[], next_action_id}, where missing[] carries one {field, message} entry per element - never collapsed into a single sentence, because a verdict of 'next action incomplete' forces the user to guess which of five fields is wrong. Edge cases: tenant_id query param is required (400 without it); the verdict is 200 whether allowed is true or false - a refusal is an answer, not an error, so a client can render it inline and there is no 404 for an unknown subject either; a subject with NO open action is refused with the single element `next_action`; a subject whose open action is missing several elements gets one entry per element in one pass; the gate is subject-kind agnostic and answers identically for a lead, a ticket or a deal.",
+  "dependsOn": [
+    "POST /api/auth/signup-tenant",
+    "POST /api/personas",
+    "POST /api/crm/subjects/:subject_ref/next-action"
+  ],
+  "testCases": [
+    {
+      "name": "Allowed once a complete action is committed",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "pathParams": {
+        "subject_ref": "{{var:crm_subject_ref}}"
+      },
+      "queryParams": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}"
+      },
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "data": {
+          "gate": {
+            "allowed": "boolean",
+            "subject_ref": "string",
+            "missing": "array"
+          }
+        }
+      }
+    },
+    {
+      "name": "A subject with no commitment is refused with a named element, still 200",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "pathParams": {
+        "subject_ref": "{{dynamic:uuid}}"
+      },
+      "queryParams": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}"
+      },
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "data": {
+          "gate": {
+            "allowed": "boolean",
+            "missing": "array"
+          }
+        }
+      }
+    },
+    {
+      "name": "400 - tenant_id query param is required",
+      "testType": "negative",
+      "coversErrorCase": "400|ValidationError",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "pathParams": {
+        "subject_ref": "{{var:crm_subject_ref}}"
+      },
+      "expectedStatus": 400,
+      "expectedError": {
+        "code": "ValidationError",
+        "messageContains": "tenant_id query param required"
+      }
+    },
+    {
+      "name": "401 - missing bearer token",
+      "testType": "negative",
+      "coversErrorCase": "401|Unauthorized|missing",
+      "headers": {},
+      "pathParams": {
+        "subject_ref": "{{var:crm_subject_ref}}"
+      },
+      "queryParams": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}"
+      },
+      "expectedStatus": 401,
+      "expectedError": {
+        "code": "Unauthorized",
+        "messageContains": "Missing bearer token"
+      }
+    },
+    {
+      "name": "401 - invalid or expired token",
+      "testType": "negative",
+      "coversErrorCase": "401|Unauthorized|invalid",
+      "headers": {
+        "Authorization": "Bearer {{static:invalid-token}}"
+      },
+      "pathParams": {
+        "subject_ref": "{{var:crm_subject_ref}}"
+      },
+      "queryParams": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}"
+      },
+      "expectedStatus": 401,
+      "expectedError": {
+        "code": "Unauthorized",
+        "messageContains": "Invalid or expired token"
+      }
+    }
+  ],
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "Authorization header absent or not in the form \"Bearer <jwt>\""
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "JWT signature invalid, malformed, or past its exp claim"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "tenant_id query param required",
+      "when": "tenant_id query param omitted"
+    }
+  ]
+}

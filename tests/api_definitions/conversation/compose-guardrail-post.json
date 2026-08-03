@@ -1,0 +1,157 @@
+{
+  "name": "POST /api/conversations/compose-guardrail — per-channel allow/review/deny with ordered reasons",
+  "endpoint": "/api/conversations/compose-guardrail",
+  "sdk": "sdk-conversation",
+  "sourceFile": "packages/sdk-conversation/src/server/routes.ts",
+  "method": "POST",
+  "requiresAuth": true,
+  "expectedStatus": 200,
+  "taskId": "e5a557ae-1ca4-4476-850b-0107e9b23db1",
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "featureId": "41f67890-b988-4afc-935a-1ce48d600677",
+  "epicId": "54b75cbb-e257-4e64-a356-3817f73256e2",
+  "priority": 34,
+  "testability": "auto",
+  "dependsOn": ["POST /api/auth/signup-tenant"],
+  "coversCriterion": [
+    "e5a557ae-1ca4-4476-850b-0107e9b23db1#AC1",
+    "e5a557ae-1ca4-4476-850b-0107e9b23db1#AC2",
+    "e5a557ae-1ca4-4476-850b-0107e9b23db1#AC3"
+  ],
+  "description": "Evaluates whether the tenant may compose on each requested channel, returning allow|review|deny per channel plus an ORDERED, human-readable reason list — never a bare boolean (AC1). It is an action endpoint, not a create, so the success status is 200. The ordering is the contract: reasons a human cannot resolve by waiting come first (LEGAL_HOLD, OPTED_OUT, SUPPRESSED, MISSING_CONSENT, NO_SENDER_IDENTITY) ahead of ones that clear on their own (FREQUENCY_CAP, RATE_LIMITED, QUIET_HOURS), so reasons[0] is the thing actually worth telling the user; every runner-up is retained because clearing only the headline would send the caller round the loop twice. Decision inputs come entirely from the caller (AC2/AC3): over HTTP a resolver function cannot be passed, so the caller sends channel_facts — the output ITS resolver produced — and this endpoint only ranks and explains. The SDK holds no consent table, no quiet-hours calendar, no DNC list and no policy constants, so a vertical changes its rules by changing its resolver, never by forking this package. QA edge cases: a channel the caller says nothing about resolves to no facts, hence no reasons, hence allow — silence must not become an invented denial, which would be this package holding an opinion about consent; available and has_sender_identity are the only flags read as 'false is bad', and undefined is deliberately NOT the same as false; identical facts must yield an identical verdict on every customer-facing channel, since any difference would betray a hard-coded assumption about that channel's regime; INTERNAL_NOTE is never passed to the resolver at all (a note to a colleague is not contact with the customer) and is never returned as recommended_channel; a closed thread yields review rather than deny because reopening is a decision a human can make; recommended_channel is the FIRST allowed channel in the caller's own submitted order, since they listed them in preference order and re-ordering would itself be policy. 401 without a tenant Bearer; 400 for an empty channels array, an unknown channel, or a missing channel_facts.",
+  "testCases": [
+    {
+      "name": "Opt-out outranks quiet hours in the reason list",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "payload": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "channels": ["SMS"],
+        "channel_facts": {
+          "SMS": { "opted_out": true, "quiet_hours": true }
+        }
+      },
+      "expectedStatus": 200
+    },
+    {
+      "name": "A channel with no reported facts is allowed, not invented into a denial",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "payload": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "channels": ["EMAIL"],
+        "channel_facts": { "EMAIL": {} }
+      },
+      "expectedStatus": 200
+    },
+    {
+      "name": "Mixed verdicts across channels, recommending the first allowed one",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "payload": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "channels": ["SMS", "EMAIL", "VOICE"],
+        "channel_facts": {
+          "SMS": { "suppressed": true },
+          "EMAIL": {},
+          "VOICE": { "quiet_hours": true }
+        }
+      },
+      "expectedStatus": 200
+    },
+    {
+      "name": "A closed thread is review, not deny",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "payload": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "thread_id": "{{cache:conversations.threads.response.data.thread.thread_id}}",
+        "thread_status": "closed",
+        "channels": ["EMAIL"],
+        "channel_facts": { "EMAIL": {} }
+      },
+      "expectedStatus": 200
+    },
+    {
+      "name": "An internal note bypasses recipient policy entirely",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "payload": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "channels": ["INTERNAL_NOTE"],
+        "channel_facts": { "INTERNAL_NOTE": { "opted_out": true } }
+      },
+      "expectedStatus": 200
+    }
+  ],
+  "errorCases": [
+    {
+      "name": "An empty channels array is refused rather than returning an empty decision",
+      "status": 400,
+      "code": "VALIDATION_ERROR",
+      "message": "channels must be a non-empty array",
+      "when": "channels is absent, not an array, or empty",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "payload": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "channels": [],
+        "channel_facts": {}
+      },
+      "expectedStatus": 400,
+      "expectedError": { "code": "VALIDATION_ERROR" }
+    },
+    {
+      "name": "Missing resolver output is refused — the SDK cannot decide on its own",
+      "status": 400,
+      "code": "VALIDATION_ERROR",
+      "message": "channel_facts is required — this SDK holds no consent or policy logic and cannot decide without resolver output",
+      "when": "channel_facts is absent or not an object; guessing here would embed policy this package must not own",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "payload": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "channels": ["EMAIL"]
+      },
+      "expectedStatus": 400,
+      "expectedError": { "code": "VALIDATION_ERROR" }
+    },
+    {
+      "name": "An unknown channel is refused",
+      "status": 400,
+      "code": "VALIDATION_ERROR",
+      "message": "unknown channel(s): TELEPATHY",
+      "when": "channels contains a value outside the eight enumerated channels",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "payload": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "channels": ["TELEPATHY"],
+        "channel_facts": { "TELEPATHY": {} }
+      },
+      "expectedStatus": 400,
+      "expectedError": { "code": "VALIDATION_ERROR" }
+    },
+    {
+      "name": "Unauthenticated is refused by the default-deny gate",
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "missing or invalid tenant token",
+      "when": "no valid tenant Bearer token on the request",
+      "payload": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "channels": ["EMAIL"],
+        "channel_facts": { "EMAIL": {} }
+      },
+      "expectedStatus": 401
+    }
+  ]
+}

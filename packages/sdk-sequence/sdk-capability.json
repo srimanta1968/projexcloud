@@ -1,0 +1,192 @@
+{
+  "name": "@projexlight/sdk-sequence",
+  "version": "0.1.0",
+  "schema_version": "1.0",
+  "summary": "Multi-touch cadence orchestration engine (P14·E1). Defines tenant-scoped outreach/nurture sequences as an ordered list of channel steps (email/sms/call/linkedin/task/wait), enrolls L4 subject personas idempotently by manual call or by event trigger (form_submit/reply/stage_change), and advances due sends through a durable step-executor tick loop that is send-window gated and dedupe-guarded. Adds reactive control (pause-on-reply, stop-on-optout/payment, resume, replace-CTA) and a guard engine (per-subject frequency caps, content dedup, and a per-(tenant,channel) circuit breaker) with an append-only decision audit log. Re-homed from the projex_crm outreach_* tables, normalized (the steps JSONB blob becomes a first-class step table) and re-keyed from user/org scoping to tenant_id + persona identity.",
+  "tags": [
+    "outreach",
+    "sequences",
+    "cadence",
+    "nurture",
+    "scheduler",
+    "multi-tenant"
+  ],
+  "provides": {
+    "endpoints": [
+      {
+        "method": "POST",
+        "path": "/api/sequences",
+        "description": "Create a tenant-scoped cadence definition (name, type, owner persona, default flag); returns 201 with the new sequence.",
+        "kind": "mutation",
+        "auth_scopes": ["sequence:write"]
+      },
+      {
+        "method": "GET",
+        "path": "/api/sequences",
+        "description": "List all sequences for a tenant (tenant_id query param required).",
+        "kind": "query",
+        "auth_scopes": ["sequence:read"]
+      },
+      {
+        "method": "GET",
+        "path": "/api/sequences/:sequence_id",
+        "description": "Fetch one sequence by id within the caller's tenant; 404 when it does not exist.",
+        "kind": "query",
+        "auth_scopes": ["sequence:read"]
+      },
+      {
+        "method": "POST",
+        "path": "/api/sequence-templates",
+        "description": "Create a reusable channel message template (subject/body/variables) that steps reference by template_id.",
+        "kind": "mutation",
+        "auth_scopes": ["sequence:write"]
+      },
+      {
+        "method": "POST",
+        "path": "/api/sequences/:sequence_id/steps",
+        "description": "Append an ordered step (channel, action, delay/schedule, optional template) to a sequence; unique per (sequence, step_number).",
+        "kind": "mutation",
+        "auth_scopes": ["sequence:write"]
+      },
+      {
+        "method": "POST",
+        "path": "/api/sequences/:sequence_id/triggers",
+        "description": "Attach an event-based enrollment rule (form_submit/reply/stage_change enter|exit) to a sequence.",
+        "kind": "mutation",
+        "auth_scopes": ["sequence:write"]
+      },
+      {
+        "method": "POST",
+        "path": "/api/sequences/:sequence_id/enroll",
+        "description": "Enroll a subject persona into a sequence idempotently; 201 on a new run, 200 when the persona was already enrolled.",
+        "kind": "mutation",
+        "auth_scopes": ["sequence:write"]
+      },
+      {
+        "method": "POST",
+        "path": "/api/sequences/tick",
+        "description": "Run one durable step-executor tick that claims due execution steps (send-window gated, idempotent next-step enqueue); scheduler/cron-driven, also runs on a timer when SEQUENCE_EXECUTOR_ENABLED.",
+        "kind": "mutation",
+        "auth_scopes": ["sequence:execute"]
+      },
+      {
+        "method": "POST",
+        "path": "/api/sequences/enrollments/:enrollment_id/control",
+        "description": "Apply reactive control to an enrollment: pause, resume, stop, or replace_cta, with reason/event capture and queued-step cancellation.",
+        "kind": "mutation",
+        "auth_scopes": ["sequence:write"]
+      },
+      {
+        "method": "POST",
+        "path": "/api/sequences/guards/check",
+        "description": "Evaluate frequency-cap and circuit-breaker guards for a prospective send; returns an allow/block decision and logs it to the guard audit trail.",
+        "kind": "query",
+        "auth_scopes": ["sequence:read"]
+      },
+      {
+        "method": "POST",
+        "path": "/api/sequences/guards/outcome",
+        "description": "Record a channel send outcome (success/failure) to drive the per-(tenant,channel) circuit breaker state.",
+        "kind": "mutation",
+        "auth_scopes": ["sequence:write"]
+      },
+      {
+        "method": "GET",
+        "path": "/api/sequences/guards/log",
+        "description": "List the append-only guard decision audit log for a tenant, optionally filtered by allow|block decision and limit.",
+        "kind": "query",
+        "auth_scopes": ["sequence:read"]
+      }
+    ],
+    "events": [],
+    "models": [
+      {
+        "schema": "sequence",
+        "table": "template",
+        "description": "Reusable channel message body (parity: outreach_templates) with subject, body, variables and channel; referenced by steps via template_id, UNIQUE per (tenant_id, name)."
+      },
+      {
+        "schema": "sequence",
+        "table": "sequence",
+        "description": "The cadence definition (parity: outreach_sequences): tenant-scoped, typed (lead/customer/onboarding/nurture/custom), status draft|active|paused|archived, at most one default per (tenant, type)."
+      },
+      {
+        "schema": "sequence",
+        "table": "step",
+        "description": "Normalized ordered step definition (was outreach_sequences.steps JSONB): one row per touch with channel, action, schedule_mode/delay_seconds and optional template, UNIQUE per (sequence_id, step_number)."
+      },
+      {
+        "schema": "sequence",
+        "table": "execution_step",
+        "description": "Runtime execution state (parity: sequence_execution_steps): one scheduled touch per enrolled subject_persona_id grouped by enrollment_id, polled by the tick loop on (status, next_run_at), dedupe-keyed for idempotent enqueue."
+      },
+      {
+        "schema": "sequence",
+        "table": "trigger",
+        "description": "Event-based enrollment rule (parity: stage_sequence_triggers, generalized): fires on form_submit/reply/stage_change/manual/booking/tag_added at enter|exit, one rule per (sequence, event, stage, edge)."
+      },
+      {
+        "schema": "sequence",
+        "table": "guard_config",
+        "description": "Per-tenant frequency-cap and breaker configuration (cooldown, max_messages per rolling window, breaker thresholds); a missing row means use the defaults."
+      },
+      {
+        "schema": "sequence",
+        "table": "circuit_breaker",
+        "description": "Per-(tenant, channel) circuit breaker state (closed -> open -> half_open -> closed) with failure/success counts, opened after too many failures and half-opened after cooldown to probe."
+      },
+      {
+        "schema": "sequence",
+        "table": "guard_log",
+        "description": "Append-only audit log of every guard decision (allow|block with reason: cooldown/max_messages/duplicate/circuit_open), keyed by tenant and subject_persona_id with a content dedupe_hash."
+      }
+    ],
+    "hooks": [],
+    "ui_components": []
+  },
+  "consumes": {
+    "events": [],
+    "infra": ["postgres"],
+    "config_keys": ["SEQUENCE_EXECUTOR_ENABLED"]
+  },
+  "scenarios": [
+    {
+      "id": "define-sequence-with-steps",
+      "title": "Define a nurture sequence and add ordered steps",
+      "when_to_use": "When setting up a new multi-touch cadence: create the sequence definition, then append the ordered touches (an email now, a follow-up email after a delay) that enrolled subjects will run through.",
+      "example_code": "import { createSequence, addStep } from '@projexlight/sdk-sequence';\n\nconst seq = await createSequence({ tenant_id, name: 'Trial Nurture', sequence_type: 'nurture' });\nawait addStep({ tenant_id, sequence_id: seq.sequence_id, step_number: 1, channel: 'email', action: 'send', schedule_mode: 'immediate' });\nawait addStep({ tenant_id, sequence_id: seq.sequence_id, step_number: 2, channel: 'email', action: 'send', schedule_mode: 'delay', delay_seconds: 259200 });",
+      "expected_outcome": "A sequence.sequence row is created and two sequence.step rows are attached (step_number 1 and 2, unique per sequence); the second step is scheduled three days after the first when enrollments run."
+    },
+    {
+      "id": "enroll-persona-idempotent",
+      "title": "Enroll a subject persona idempotently",
+      "when_to_use": "When a contact/lead (resolved to its L4 subject persona) should start a sequence — from a form submit, a manual add, or an event trigger — without double-enrolling a persona that is already running.",
+      "example_code": "import { enroll } from '@projexlight/sdk-sequence';\n\nconst result = await enroll({ tenant_id, sequence_id: seq.sequence_id, subject_persona_id, event_type: 'form_submit' });\nif (result.already_enrolled) {\n  console.log('persona already running this sequence, no-op');\n}",
+      "expected_outcome": "On a first enrollment the subject's execution_step rows are queued and already_enrolled is false (the route returns 201); a repeat call returns already_enrolled true and enqueues nothing (the route returns 200)."
+    },
+    {
+      "id": "advance-enrollments-via-tick",
+      "title": "Advance due sends with the executor tick",
+      "when_to_use": "When driving the scheduler on demand (or verifying it in a test) rather than waiting for the SEQUENCE_EXECUTOR_ENABLED timer — process the batch of execution steps whose next_run_at is due.",
+      "example_code": "import { runSequenceTick } from '@projexlight/sdk-sequence';\n\nconst tick = await runSequenceTick(50);\nconsole.log(`claimed ${tick.claimed}, sent ${tick.sent}, deferred ${tick.deferred}`);",
+      "expected_outcome": "Up to batch_size due execution steps are claimed (send-window gated), each eligible touch is sent and its next step enqueued idempotently; the returned TickResult reports how many were claimed, sent, skipped and deferred."
+    },
+    {
+      "id": "frequency-guard-before-send",
+      "title": "Check frequency guards before a channel send",
+      "when_to_use": "When a send handler must respect per-subject cooldown / max-messages caps, content dedup, and the per-channel circuit breaker before actually dispatching a message.",
+      "example_code": "import { checkFrequencyGuards, recordChannelOutcome } from '@projexlight/sdk-sequence';\n\nconst decision = await checkFrequencyGuards({ tenant_id, subject_persona_id, channel: 'email', dedupe_hash });\nif (decision.decision === 'block') return; // e.g. cooldown / max_messages / circuit_open\nawait recordChannelOutcome(tenant_id, 'email', true);",
+      "expected_outcome": "checkFrequencyGuards returns an allow/block decision (with a reason when blocked) and appends a sequence.guard_log row; recordChannelOutcome updates the per-(tenant,channel) circuit_breaker so repeated failures eventually open it."
+    }
+  ],
+  "compliance_posture": {
+    "regimes": ["SOC2", "GDPR"],
+    "notes": "Drives outbound outreach across email/SMS/call/LinkedIn, so consent and opt-out obligations apply (GDPR/ePrivacy, CAN-SPAM, TCPA). Reactive control provides stop-on-optout that cancels queued steps, and the guard engine enforces per-subject frequency caps plus a per-channel circuit breaker to prevent over-messaging; every allow/block decision is written to an append-only guard_log audit trail. All rows are tenant-scoped and keyed on L4 subject_persona_id (no direct PII stored beyond the persona reference), so subject-erasure and export requests resolve through the identity spine."
+  },
+  "pool_placement": "app",
+  "pricing_skus": [],
+  "links": {
+    "readme": "packages/sdk-sequence/README.md",
+    "source": "packages/sdk-sequence/src/"
+  }
+}

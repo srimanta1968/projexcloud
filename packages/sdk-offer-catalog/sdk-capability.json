@@ -1,0 +1,174 @@
+{
+  "name": "@projexlight/sdk-offer-catalog",
+  "version": "0.1.0",
+  "schema_version": "1.0",
+  "summary": "Versioned offer truth + feature-status matrix (P15·E1). An offer is a stable, tenant-scoped identity whose content lives in immutable offer_version rows (draft -> beta/roadmap -> live -> retired), linked by parent_version_id lineage. A publish gate routes each version through sdk-approval (approval_status not_required -> pending -> approved/rejected); activation atomically demotes the prior live version to retired and promotes the target to live in one transaction, so at most one live version ever exists per offer. resolveCurrentVersion returns the best-available truth via a live -> beta -> draft fallback, and a version-stamp / check-reference pair lets consumers (e.g. CRM at quote time) pin an offer_version_id and later detect when it has been superseded. Each version also carries a feature-status matrix (included/excluded/beta/roadmap/add_on/deprecated).",
+  "tags": [
+    "offer-catalog",
+    "versioning",
+    "publish-approval",
+    "multi-tenant",
+    "feature-matrix"
+  ],
+  "provides": {
+    "endpoints": [
+      {
+        "method": "POST",
+        "path": "/api/offers",
+        "description": "Create a stable offer identity (name, slug, optional owner persona); 409 when the tenant already has an offer with that slug.",
+        "kind": "mutation",
+        "auth_scopes": ["offer:write"]
+      },
+      {
+        "method": "GET",
+        "path": "/api/offers/:offer_id",
+        "description": "Fetch one offer identity by id for the tenant (tenant_id query param required); 404 when it does not resolve.",
+        "kind": "query",
+        "auth_scopes": ["offer:read"]
+      },
+      {
+        "method": "POST",
+        "path": "/api/offers/:offer_id/versions",
+        "description": "Create an immutable offer version (starts in draft) with optional title/price/currency/body and parent_version_id lineage; 409 on a duplicate version string.",
+        "kind": "mutation",
+        "auth_scopes": ["offer:write"]
+      },
+      {
+        "method": "GET",
+        "path": "/api/offers/:offer_id/versions",
+        "description": "List all versions of an offer for the tenant, newest first.",
+        "kind": "query",
+        "auth_scopes": ["offer:read"]
+      },
+      {
+        "method": "POST",
+        "path": "/api/offers/:offer_id/versions/:version_id/activate",
+        "description": "Activate a version: atomically demote the prior live version to retired and promote this one to live; 409 PublishNotApproved when its publish request is pending/rejected.",
+        "kind": "mutation",
+        "auth_scopes": ["offer:publish"]
+      },
+      {
+        "method": "POST",
+        "path": "/api/offers/:offer_id/versions/:version_id/publish-request",
+        "description": "File a publish-approval request for a version (subject = offer_version_id) via sdk-approval, moving approval_status to pending and storing the approval_ref.",
+        "kind": "mutation",
+        "auth_scopes": ["offer:publish"]
+      },
+      {
+        "method": "POST",
+        "path": "/api/offers/:offer_id/versions/:version_id/publish-decision",
+        "description": "Record the publish-gate decision (approved | rejected) returned from sdk-approval, unblocking or blocking a later activate.",
+        "kind": "mutation",
+        "auth_scopes": ["offer:publish"]
+      },
+      {
+        "method": "GET",
+        "path": "/api/offers/:offer_id/current",
+        "description": "Resolve the current version with a live -> beta -> most-recent-draft fallback, returning { version, source } so the caller always gets the best-available truth.",
+        "kind": "query",
+        "auth_scopes": ["offer:read"]
+      },
+      {
+        "method": "GET",
+        "path": "/api/offers/:offer_id/version-stamp",
+        "description": "Return the version a consumer should pin (offer_version_id + version + status + stamped_at) from the current-with-fallback resolution; 404 when the offer has no current version.",
+        "kind": "query",
+        "auth_scopes": ["offer:read"]
+      },
+      {
+        "method": "POST",
+        "path": "/api/offers/:offer_id/check-reference",
+        "description": "Stale-reference guard: given a pinned offer_version_id, report whether it is still current or has been superseded (used by CRM at quote time).",
+        "kind": "query",
+        "auth_scopes": ["offer:read"]
+      },
+      {
+        "method": "POST",
+        "path": "/api/offers/:offer_id/versions/:version_id/features",
+        "description": "Upsert one feature's status within a version (matrix cell), idempotent per (version, feature_key); status must be one of included/excluded/beta/roadmap/add_on/deprecated.",
+        "kind": "mutation",
+        "auth_scopes": ["offer:write"]
+      },
+      {
+        "method": "GET",
+        "path": "/api/offers/:offer_id/versions/:version_id/features",
+        "description": "Read a version's feature-status matrix ordered by sort_order then feature_key.",
+        "kind": "query",
+        "auth_scopes": ["offer:read"]
+      },
+      {
+        "method": "GET",
+        "path": "/api/offers/:offer_id/versions/:version_id",
+        "description": "Fetch one offer version by id for the tenant; 404 when it does not resolve.",
+        "kind": "query",
+        "auth_scopes": ["offer:read"]
+      }
+    ],
+    "events": [
+      {
+        "name": "offer_catalog.version.activated.v1",
+        "description": "Emitted after a version is promoted to live (and the prior live retired), carrying offer_id, offer_version_id and version.",
+        "retention_class": "operational",
+        "conflict_policy": "lww"
+      }
+    ],
+    "models": [
+      {
+        "schema": "offer_catalog",
+        "table": "offer",
+        "description": "Stable, tenant-scoped offer identity (name, slug, owner_persona_id, metadata); content lives in immutable offer_version rows. UNIQUE(tenant_id, slug)."
+      },
+      {
+        "schema": "offer_catalog",
+        "table": "offer_version",
+        "description": "Immutable versioned offer truth with status (draft/live/beta/roadmap/retired), parent_version_id lineage, price/currency/body and the publish-gate columns (approval_status/ref/timestamps). At most one live version per offer; RESTRICT — never deleted, superseded by a new version."
+      },
+      {
+        "schema": "offer_catalog",
+        "table": "offer_feature",
+        "description": "Feature-status matrix pinned (RESTRICT) to one immutable offer_version; one row per (offer_version_id, feature_key) with status included/excluded/beta/roadmap/add_on/deprecated and sort_order."
+      }
+    ],
+    "hooks": [],
+    "ui_components": []
+  },
+  "consumes": {
+    "events": [],
+    "infra": ["postgres"],
+    "config_keys": []
+  },
+  "scenarios": [
+    {
+      "id": "create-offer-and-draft-version",
+      "title": "Create an offer identity and its first draft version",
+      "when_to_use": "When onboarding a new sellable offer: register the stable identity once, then attach an immutable draft version that carries the priced content and feature matrix.",
+      "example_code": "import { createOffer, createOfferVersion } from '@projexlight/sdk-offer-catalog';\n\nconst offer = await createOffer({\n  tenantId, name: 'Pro Plan', slug: 'pro-plan', ownerPersonaId,\n});\nconst version = await createOfferVersion({\n  tenantId, offerId: offer.offer_id, version: '2026.1',\n  title: 'Pro Plan', price: 99, currency: 'USD',\n  body: { seats: 25 },\n});\n// version.status === 'draft'",
+      "expected_outcome": "The offer row is inserted (unique per tenant_id+slug) and a new offer_version is created in status 'draft'; a duplicate slug throws 23505 (409) and a duplicate version string for the offer throws the offer_version_unique conflict."
+    },
+    {
+      "id": "publish-gate-approve-then-activate",
+      "title": "Route a version through the publish gate, then activate it live",
+      "when_to_use": "When a draft version must be reviewed before going live: file a publish request, record the sdk-approval decision, and only then activate — activation is blocked while the request is pending or rejected.",
+      "example_code": "import { requestPublishApproval, recordPublishDecision, activateOfferVersion } from '@projexlight/sdk-offer-catalog';\n\nawait requestPublishApproval(tenantId, offerId, versionId); // approval_status -> 'pending'\nawait recordPublishDecision(tenantId, versionId, 'approved');\nconst live = await activateOfferVersion(tenantId, offerId, versionId);\n// live.status === 'live'; any prior live version is now 'retired'",
+      "expected_outcome": "The version's approval_status walks pending -> approved; activateOfferVersion atomically retires the prior live version and promotes this one to live (emitting offer_catalog.version.activated.v1). Calling activate while still pending/rejected throws PublishNotApprovedError (409)."
+    },
+    {
+      "id": "resolve-current-and-check-stale-pin",
+      "title": "Resolve the current version and detect a stale pinned reference",
+      "when_to_use": "When a consumer (e.g. CRM at quote time) needs the best-available current version to pin, and later must confirm the pin has not been superseded by a newer live version.",
+      "example_code": "import { resolveCurrentVersion, checkVersionReference } from '@projexlight/sdk-offer-catalog';\n\nconst { version, source } = await resolveCurrentVersion(tenantId, offerId);\nconst pinnedId = version.offer_version_id; // stamp it on the quote\n\n// later, revalidate the pin:\nconst ref = await checkVersionReference(tenantId, offerId, pinnedId);\nif (ref.stale) console.warn(ref.reason, '->', ref.current_offer_version_id);",
+      "expected_outcome": "resolveCurrentVersion returns { version, source } via the live -> beta -> draft fallback ('none' when the offer has no versions). checkVersionReference reports stale=false while the pin is current and stale=true once a newer version supersedes it, naming the current_offer_version_id."
+    }
+  ],
+  "compliance_posture": {
+    "regimes": ["SOC2"],
+    "notes": "All offer, version and feature data is strictly tenant-scoped (tenant_id on every table and in every query predicate) and identity-aligned (owner/created_by persona ids). Versions are immutable and never hard-deleted (ON DELETE RESTRICT) — a new version supersedes an old one — giving an append-only price/offer history. Publish gating routes changes through sdk-approval and activation emits an audit event via sdk-audit, so who published what and when is traceable. No PII beyond persona references; price/currency data may fall under tenant business-record retention. No HIPAA/PCI/FedRAMP-specific handling."
+  },
+  "pool_placement": "app",
+  "pricing_skus": [],
+  "links": {
+    "readme": "packages/sdk-offer-catalog/README.md",
+    "source": "packages/sdk-offer-catalog/src/",
+    "prd_section": "P15·E1 Versioned Offer Truth + Feature-Status Matrix"
+  }
+}

@@ -1,0 +1,163 @@
+{
+  "name": "POST /api/source-records/:capture_id/promote - Climb one rung of the trust ladder",
+  "endpoint": "/api/source-records/:capture_id/promote",
+  "sdk": "sdk-source-record",
+  "sourceFile": "packages/sdk-source-record/src/server/routes.ts",
+  "method": "POST",
+  "requiresAuth": true,
+  "expectedStatus": 200,
+  "taskId": "3837bea9-c427-4ec0-a9c7-c2bd94c51c38",
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "featureId": "32707c6f-ae2c-4e31-bf2f-2c39c0f5cc2e",
+  "epicId": "fa43f2ff-2e6e-4f27-894a-4992cc2dace9",
+  "priority": 56,
+  "testability": "auto",
+  "description": "Promote a capture exactly ONE rung, if that rung's evidence requirement is met. Skipping a rung or moving backwards is refused with 409 INVALID_TRUST_TRANSITION listing what IS allowed. Per-rung requirements: P2_CANDIDATE needs a normalized payload; P3_LINKED needs a subject_ref; P4_DIRECT needs an evidence_ref whose evidence_origin_class is FIRST-PARTY (USER_PROVIDED, FIRST_PARTY_DIRECT, TENANT_FIRST_PARTY_CRM or USER_AUTHORIZED_CONTACT_STORE). A LICENSED_THIRD_PARTY or PUBLIC_RECORD evidence reference does NOT satisfy P4 and is refused with a typed 422 naming the missing first-party evidence — P4 asserts the subject themselves told us, so bought data can never reach it. Every refusal leaves the record where it was and appends NO audit entry claiming promotion. Concurrent double-promotion is a no-op for the loser (the update is guarded on the current state). Returns 200: it moves an existing resource. Required: tenant_id, to_state.",
+  "dependsOn": [
+    "POST /api/auth/signup-tenant",
+    "POST /api/source-records",
+    "POST /api/source-records/:capture_id/normalize"
+  ],
+  "fieldEnums": {
+    "to_state": [
+      "P0_CAPTURED",
+      "P1_NORMALIZED",
+      "P2_CANDIDATE",
+      "P3_LINKED",
+      "P4_DIRECT"
+    ],
+    "evidence_origin_class": [
+      "USER_PROVIDED",
+      "FIRST_PARTY_DIRECT",
+      "TENANT_FIRST_PARTY_CRM",
+      "USER_AUTHORIZED_CONTACT_STORE",
+      "PUBLIC_RECORD",
+      "LICENSED_THIRD_PARTY",
+      "PARTNER_PROVIDED",
+      "UNKNOWN_QUARANTINED"
+    ],
+    "trust_state": [
+      "P0_CAPTURED",
+      "P1_NORMALIZED",
+      "P2_CANDIDATE",
+      "P3_LINKED",
+      "P4_DIRECT"
+    ]
+  },
+  "statusTransitions": {
+    "entity": "source_record.source_record",
+    "field": "trust_state",
+    "flow": [
+      "P0_CAPTURED",
+      "P1_NORMALIZED",
+      "P2_CANDIDATE",
+      "P3_LINKED",
+      "P4_DIRECT"
+    ],
+    "transitions": [
+      {
+        "from": "P0_CAPTURED",
+        "to": "P1_NORMALIZED",
+        "via": "POST /api/source-records/:capture_id/normalize"
+      },
+      {
+        "from": "P1_NORMALIZED",
+        "to": "P2_CANDIDATE",
+        "via": "POST /api/source-records/:capture_id/promote (requires a normalized payload)"
+      },
+      {
+        "from": "P2_CANDIDATE",
+        "to": "P3_LINKED",
+        "via": "POST /api/source-records/:capture_id/promote (requires subject_ref)"
+      },
+      {
+        "from": "P3_LINKED",
+        "to": "P4_DIRECT",
+        "via": "POST /api/source-records/:capture_id/promote (requires a FIRST-PARTY evidence_ref)"
+      }
+    ]
+  },
+  "testCases": [
+    {
+      "name": "Promote the normalized capture to P2_CANDIDATE",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "pathParams": {
+        "capture_id": "{{cache:source-record.capture.response.data.source_record.capture_id}}"
+      },
+      "payload": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "to_state": "P2_CANDIDATE",
+        "subject_ref": "{{cache:source-record.capture.response.data.source_record.subject_ref}}",
+        "evidence_ref": "evidence:{{dynamic:uuid}}",
+        "evidence_origin_class": "FIRST_PARTY_DIRECT",
+        "actor_id": "qa-runner",
+        "purpose": "trust promotion",
+        "decision_ref": "decision:{{dynamic:uuid}}",
+        "causation_id": "{{dynamic:uuid}}"
+      },
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "data": {
+          "source_record": {
+            "trust_state": "string"
+          }
+        }
+      }
+    }
+  ],
+  "captureResponse": {
+    "source-record.promote.response.data.source_record.trust_state": "data.source_record.trust_state"
+  },
+  "errorCases": [
+    {
+      "status": 400,
+      "code": "VALIDATION_ERROR",
+      "message": "tenant_id and to_state are required",
+      "when": "either field missing from the body"
+    },
+    {
+      "status": 404,
+      "code": "SOURCE_RECORD_NOT_FOUND",
+      "message": "capture <id> not found for tenant",
+      "when": "the capture does not exist for this tenant"
+    },
+    {
+      "status": 409,
+      "code": "RECORD_QUARANTINED",
+      "message": "capture <id> is quarantined and cannot be promoted",
+      "when": "the capture has no established provenance (UNKNOWN_QUARANTINED)"
+    },
+    {
+      "status": 409,
+      "code": "INVALID_TRUST_TRANSITION",
+      "message": "<from> -> <to> is not a legal promotion",
+      "when": "the requested state skips a rung, repeats one or moves down the ladder"
+    },
+    {
+      "status": 422,
+      "code": "NORMALIZATION_REQUIRED",
+      "message": "cannot promote <id> P1_NORMALIZED -> P2_CANDIDATE: missing normalized payload",
+      "when": "promoting to P2_CANDIDATE before the capture has been normalized"
+    },
+    {
+      "status": 422,
+      "code": "SUBJECT_REF_REQUIRED",
+      "message": "cannot promote <id> P2_CANDIDATE -> P3_LINKED: missing subject_ref",
+      "when": "promoting to P3_LINKED with no subject to link to"
+    },
+    {
+      "status": 422,
+      "code": "FIRST_PARTY_EVIDENCE_REQUIRED",
+      "message": "cannot promote <id> P3_LINKED -> P4_DIRECT: missing first-party evidence reference",
+      "when": "promoting to P4_DIRECT with no evidence_ref, or with evidence whose origin is not first-party"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "missing or invalid token",
+      "when": "no valid tenant Bearer token on the request"
+    }
+  ]
+}

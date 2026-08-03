@@ -1,0 +1,50 @@
+{
+  "sdk": "sdk-api-keys",
+  "sourceFile": "packages/sdk-api-keys/src/server/routes.ts",
+  "requiresAuth": true,
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "epicId": "783fc94b-6992-49a5-a492-74ee0450a92f",
+  "testability": "auto",
+  "name": "GET /api/applications - List the applications of this tenant",
+  "endpoint": "/api/applications",
+  "method": "GET",
+  "expectedStatus": 200,
+  "taskId": "bcf23c76-2e69-48c2-af3f-84acc9e636d2",
+  "featureId": "888ec9d8-5cbb-4d77-9082-fd78b08334ad",
+  "priority": 21,
+  "description": "Every application belonging to the calling tenant, newest first. Scoped from the caller claims, so there is no tenant_id parameter to get wrong and no way to enumerate the applications of another tenant. Returns 200 with applications.",
+  "dependsOn": [
+    "POST /api/auth/signup-tenant",
+    "POST /api/applications"
+  ],
+  "fieldEnums": {
+    "environment": [
+      "live",
+      "test"
+    ],
+    "status": [
+      "active",
+      "disabled"
+    ]
+  },
+  "testCases": [
+    {
+      "name": "List after creating one",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "data": {
+          "applications": "array"
+        }
+      }
+    }
+  ],
+  "errorCases": [
+    {
+      "name": "Unauthenticated",
+      "expectedStatus": 401
+    }
+  ]
+}

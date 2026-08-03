@@ -1,0 +1,125 @@
+{
+  "sdk": "sdk-data-credits",
+  "sourceFile": "packages/sdk-data-credits/src/server/routes.ts",
+  "requiresAuth": true,
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "epicId": "fefd6ec9-2fd1-4d19-8fa0-fbfb090590bb",
+  "featureId": "51042c0e-c450-4b84-9a22-9c09ec7b9f44",
+  "taskId": "5604f877-e1ba-40bb-b324-44f43ebcb1ac",
+  "testability": "auto",
+  "priority": 15,
+  "name": "POST /api/capability-requests/:request_id/approve - Decide a request that is waiting",
+  "endpoint": "/api/capability-requests/:request_id/approve",
+  "method": "POST",
+  "expectedStatus": 200,
+  "description": "Records the decision a PENDING_APPROVAL request is waiting for. Approving lets it execute and stamps the sdk-approval reference; approving twice is a NO-OP that returns the original decision time, because an approval webhook that retries is ordinary and failing the retry would leave a decision that WAS made looking like one that was not. Sending approved=false REFUSES the request and gives the held credits back - the endpoint has to be able to do this, because a refusal that only changed a status would leave the hold sitting against the tenant's available balance forever, which is the quiet version of losing their money. A refusal is recorded as a CANCELLATION of the reservation rather than as a settlement: the four settlement outcomes are all statements about a lookup that happened, and a refused request never looked at anything. QA edge cases: a refusal with no reason is 400 - \"it was cancelled\" with no reason is unanswerable three weeks later; approving a request that is already APPROVED is a no-op, but REJECTING one is 409 NOT_AWAITING_APPROVAL because the hold is already committed to it; rejecting an already-rejected request releases nothing a second time.",
+  "dependsOn": [
+    "POST /api/auth/signup-tenant",
+    "POST /api/capability-requests"
+  ],
+  "fieldEnums": {
+    "approved": [
+      "true",
+      "false"
+    ]
+  },
+  "testCases": [
+    {
+      "name": "Approve a waiting request",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "pathParams": {
+        "request_id": "{{cache:capability-requests.create.request_id}}"
+      },
+      "payload": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "approved": true,
+        "approval_ref": "apr-{{dynamic:slug}}",
+        "decided_by": "{{static:qa-manager}}"
+      },
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "data": {
+          "request_id": "string",
+          "status": "string"
+        }
+      }
+    }
+  ],
+  "errorCases": [
+    {
+      "name": "A refusal with no reason is refused",
+      "status": 400,
+      "code": "VALIDATION_ERROR",
+      "message": "a refusal must carry a reason",
+      "when": "approved=false is sent without a reason",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "pathParams": {
+        "request_id": "{{cache:capability-requests.create.request_id}}"
+      },
+      "payload": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "approved": false
+      },
+      "expectedStatus": 400,
+      "expectedError": {
+        "code": "VALIDATION_ERROR"
+      }
+    },
+    {
+      "status": 409,
+      "code": "NOT_AWAITING_APPROVAL",
+      "message": "request <id> is <status>, not waiting for an approval decision",
+      "when": "the request has already been decided or has already executed"
+    },
+    {
+      "name": "An unknown request id is refused",
+      "status": 404,
+      "code": "CAPABILITY_REQUEST_NOT_FOUND",
+      "message": "no capability request <id>",
+      "when": "the id names nothing belonging to this tenant",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "pathParams": {
+        "request_id": "{{var:absent_uuid}}"
+      },
+      "payload": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "approved": true
+      },
+      "expectedStatus": 404,
+      "expectedError": {
+        "code": "CAPABILITY_REQUEST_NOT_FOUND"
+      }
+    },
+    {
+      "name": "Unauthenticated is refused by the default-deny gate",
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "missing or invalid tenant token",
+      "when": "no valid tenant Bearer token on the request",
+      "expectedStatus": 401,
+      "pathParams": {
+        "request_id": "{{cache:capability-requests.create.request_id}}"
+      },
+      "payload": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "approved": true
+      }
+    }
+  ],
+  "statusTransitions": {
+    "capability_request": [
+      "PENDING_APPROVAL -> APPROVED via POST /api/capability-requests/:request_id/approve with approved=true",
+      "PENDING_APPROVAL -> REJECTED via POST /api/capability-requests/:request_id/approve with approved=false (the hold is released)"
+    ]
+  },
+  "captureResponse": {
+    "capability-requests.approve.request_id": "data.request_id",
+    "capability-requests.approve.status": "data.status"
+  }
+}

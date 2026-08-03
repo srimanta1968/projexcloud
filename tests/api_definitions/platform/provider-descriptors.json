@@ -1,0 +1,83 @@
+{
+  "name": "Provider descriptor registry and secret-field routing (Tenant Governance · TK-4131/TK-4132)",
+  "endpoint": "internal://platform/config.providerDescriptors",
+  "sdk": "platform",
+  "sourceFile": "apps/tenant-admin/src/lib/providerDescriptors.ts",
+  "method": "INTERNAL_FUNCTION",
+  "requiresAuth": false,
+  "expectedStatus": 200,
+  "testability": "manual",
+  "taskId": "5ca75e28-86b6-4d3b-9937-7815abdcde24",
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "epicId": "b7b01410-f1b7-4919-a8cd-d7eb77b9e953",
+  "featureId": "0b2f3421-4729-43a6-a67f-61bf880617f4",
+  "skipReason": "A typed data registry and a pure split function — no runtime route exists. Verified by tests/platform/scopedConfig.test.ts (9 assertions), which loops EVERY descriptor rather than one example.",
+  "description": "Declares each configurable provider (cloud region, object storage, email, payment, AI) as data rather than as page code, so adding a provider is adding a descriptor instead of writing another settings page — the config page previously carried this list inline, which is why each portal grew its own copy. Every field declares whether it is a SECRET, and splitSecretFields() is the single enforcement point for the rule that matters: config_value.value is plain JSONB and is returned by ordinary GET /api/config reads, so a credential written there is readable by every caller allowed to read configuration. Secrets are therefore routed to secret_ref (the sdk-secrets envelope) and never into value. The driver name deliberately STAYS in value: knowing a tenant uses SendGrid is not a credential, and requiring a vault decrypt to learn it would make every send path pay for it. The test asserts the negative for every descriptor with traceable per-field values, so a provider added later cannot silently regress the rule, and asserts the INVERSE too — Stripe publishable_key must not be secret, because vaulting it would break the browser client that has to embed it.",
+  "testCases": [
+    {
+      "name": "No secret-flagged field reaches config_value.value, for every descriptor",
+      "payload": {
+        "scenario": "exhaustive_secret_split"
+      },
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "success": true
+      }
+    },
+    {
+      "name": "A publishable key is not treated as a secret",
+      "payload": {
+        "scenario": "publishable_key_not_secret"
+      },
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "success": true
+      }
+    },
+    {
+      "name": "Every provider category has at least one descriptor",
+      "payload": {
+        "scenario": "category_coverage"
+      },
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "success": true
+      }
+    },
+    {
+      "name": "Blank fields are omitted rather than stored as empty strings",
+      "payload": {
+        "scenario": "blank_omitted"
+      },
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "success": true
+      }
+    }
+  ],
+  "expectedResponse": {
+    "success": true
+  },
+  "errorCases": [
+    {
+      "name": "A credential-shaped field left unflagged fails the suite",
+      "status": null,
+      "code": "UNFLAGGED_CREDENTIAL",
+      "message": "credential fields not marked secret",
+      "when": "someone adds a provider with an api_key/token/password field and forgets the secret flag; the check is on the DATA rather than on anyone remembering the convention, because the resulting leak would be silent",
+      "payload": {
+        "scenario": "unflagged_credential"
+      }
+    },
+    {
+      "name": "A secret written into value would fail the suite",
+      "status": null,
+      "code": "SECRET_IN_PLAIN_VALUE",
+      "message": "leaked secret field into config_value.value",
+      "when": "splitSecretFields is bypassed or a page writes the raw form to /api/config; value is returned by ordinary config reads so this is a disclosure, not a style issue",
+      "payload": {
+        "scenario": "secret_in_value"
+      }
+    }
+  ]
+}

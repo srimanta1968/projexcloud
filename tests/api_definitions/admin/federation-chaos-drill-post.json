@@ -2,7 +2,7 @@
   "name": "POST /admin/federation/chaos-drill — api-gateway",
   "endpoint": "/admin/federation/chaos-drill",
   "method": "POST",
-  "description": "Runs an operator-triggered federation chaos drill (P7 FR-FED-3 / AC-6): performs a failover from from_region to to_region for the given federation and records a failover_event with trigger=\"chaos-drill\" so monthly RPO/RTO drills produce auditable, production-condition numbers. Returns 200 { success: true, data: <failover event> }. QA edge cases: all three of federation_id, from_region and to_region are required and empty strings count as missing; there is no check that from_region differs from to_region, nor that either region is a member of the federation — an unknown federation_id or region surfaces from the orchestrator as a 500 with the raw message rather than a 404; each call writes a new failover_event, so it is NOT idempotent and repeated drills accumulate rows; this route depends on the gateway-internal orchestrator started at boot (FEDERATION_ORCHESTRATOR_ENABLED), unlike POST /admin/chaos-drill which has no orchestrator in the gateway mount.",
+  "description": "Runs an operator-triggered federation chaos drill (P7 FR-FED-3 / AC-6): performs a failover from from_region to to_region for the given federation and records a failover_event with trigger=\"chaos-drill\" so monthly RPO/RTO drills produce auditable, production-condition numbers. Returns 200 { success: true, data: <failover event> }. QA edge cases: all three of federation_id, from_region and to_region are required and empty strings count as missing; there is no check that from_region differs from to_region, nor that either region is a member of the federation — an unknown federation_id or region surfaces from the orchestrator as a 500 with the raw message rather than a 404; each call writes a new failover_event, so it is NOT idempotent and repeated drills accumulate rows; this route depends on the gateway-internal orchestrator started at boot (FEDERATION_ORCHESTRATOR_ENABLED), unlike POST /admin/chaos-drill which has no orchestrator in the gateway mount. FK FIX: failover_event.federation_id REFERENCES federation.federation(federation_id). The previous {{cache:admin.federation-config...}} came from POST /admin/identity/federation-configs, which creates an IDENTITY federation (SAML/OIDC) in a different table — the id never matched and every run died on failover_event_federation_id_fkey. No API creates a federation.federation row (it is an operator/manifest-populated runtime registry), so per MUST-46 this is a legitimate {{var:}} case, backed by the idempotent seed tests/setup_scripts/federation_seed_federation.sql.",
   "errorCases": [
     {
       "status": 401,
@@ -46,5 +46,6 @@
       },
       "expectedStatus": 200
     }
-  ]
+  ],
+  "dependsOn": []
 }

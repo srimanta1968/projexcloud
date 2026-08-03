@@ -1,0 +1,121 @@
+{
+  "name": "POST /api/source-assertions - Write a bitemporal claim",
+  "endpoint": "/api/source-assertions",
+  "sdk": "sdk-source-record",
+  "sourceFile": "packages/sdk-source-record/src/server/routes.ts",
+  "method": "POST",
+  "requiresAuth": true,
+  "expectedStatus": 201,
+  "taskId": "3837bea9-c427-4ec0-a9c7-c2bd94c51c38",
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "featureId": "32707c6f-ae2c-4e31-bf2f-2c39c0f5cc2e",
+  "epicId": "fa43f2ff-2e6e-4f27-894a-4992cc2dace9",
+  "priority": 54,
+  "testability": "auto",
+  "description": "Write one claim: per this origin, over this effective period, the subject's <attribute> was <value>, retrieved at <retrieved_at>. The two time axes are deliberately separate — effective_from/effective_to say when the fact held in the world, retrieved_at says when we learned it — so a late-arriving source can correct history without pretending we knew earlier. Conflicting claims for the same subject+attribute from different origins are the NORMAL case and coexist; nothing here resolves a display value (that is sdk-projection). A value whose attribute is a direct identifier (email, phone, address, national_id, names, date_of_birth...) is envelope-encrypted BEFORE the insert, so the plaintext never reaches the column, the query log or a replica — the response returns value_encrypted:true and a vault_key_ref. Once written, the claim is immutable: correcting it means superseding it. Required: tenant_id, subject_ref, attribute, value, origin_class.",
+  "dependsOn": [
+    "POST /api/auth/signup-tenant",
+    "POST /api/source-records"
+  ],
+  "fieldEnums": {
+    "origin_class": [
+      "USER_PROVIDED",
+      "FIRST_PARTY_DIRECT",
+      "TENANT_FIRST_PARTY_CRM",
+      "USER_AUTHORIZED_CONTACT_STORE",
+      "PUBLIC_RECORD",
+      "LICENSED_THIRD_PARTY",
+      "PARTNER_PROVIDED",
+      "UNKNOWN_QUARANTINED"
+    ],
+    "status": [
+      "SURVIVES",
+      "ASSERTION",
+      "SUPERSEDED",
+      "PRIMARY"
+    ]
+  },
+  "statusTransitions": {
+    "entity": "source_record.source_assertion",
+    "field": "status",
+    "flow": [
+      "ASSERTION",
+      "SUPERSEDED"
+    ],
+    "transitions": [
+      {
+        "from": "ASSERTION",
+        "to": "SUPERSEDED",
+        "via": "POST /api/source-assertions/:assertion_id/supersede (the row is stamped, never rewritten or deleted)"
+      },
+      {
+        "from": "ASSERTION",
+        "to": "SURVIVES",
+        "via": "sdk-projection marking the survivorship winner"
+      },
+      {
+        "from": "ASSERTION",
+        "to": "PRIMARY",
+        "via": "an operator pinning a claim as authoritative"
+      }
+    ]
+  },
+  "testCases": [
+    {
+      "name": "Write a licensed third-party email claim",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "payload": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "capture_id": "{{cache:source-record.capture.response.data.source_record.capture_id}}",
+        "subject_ref": "{{cache:source-record.capture.response.data.source_record.subject_ref}}",
+        "attribute": "email",
+        "value": "{{dynamic:email}}",
+        "origin_class": "LICENSED_THIRD_PARTY",
+        "confidence": 0.62,
+        "effective_from": "{{dynamic:pastdatetime-30d}}",
+        "effective_to": "{{dynamic:futuredatetime+30d}}",
+        "retrieved_at": "{{dynamic:pastdatetime-1h}}",
+        "status": "ASSERTION",
+        "evidence_ref": "evidence:{{dynamic:uuid}}",
+        "is_pii": true,
+        "metadata": {
+          "batch": "{{dynamic:slug}}"
+        },
+        "actor_id": "qa-runner",
+        "purpose": "claim capture",
+        "causation_id": "{{dynamic:uuid}}"
+      },
+      "expectedStatus": 201,
+      "expectedResponse": {
+        "data": {
+          "assertion": {
+            "assertion_id": "string",
+            "status": "string",
+            "value_encrypted": "boolean"
+          }
+        }
+      }
+    }
+  ],
+  "captureResponse": {
+    "source-record.assertion.create.response.data.assertion.assertion_id": "data.assertion.assertion_id",
+    "source-record.assertion.create.response.data.assertion.subject_ref": "data.assertion.subject_ref",
+    "source-record.assertion.create.response.data.assertion.status": "data.assertion.status"
+  },
+  "errorCases": [
+    {
+      "status": 400,
+      "code": "VALIDATION_ERROR",
+      "message": "tenant_id, subject_ref, attribute, value and origin_class are required",
+      "when": "any required field is missing from the body"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "missing or invalid token",
+      "when": "no valid tenant Bearer token on the request"
+    }
+  ]
+}

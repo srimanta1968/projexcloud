@@ -2,6 +2,8 @@ import { cookies } from 'next/headers';
 import { revalidatePath } from 'next/cache';
 import { SESSION_COOKIE } from '@projexlight/design-system/auth';
 import { ConfigForm, PageHeader } from '@projexlight/design-system';
+import { PROVIDER_DESCRIPTORS, toConfigEntry, splitSecretFields } from '@/lib/providerDescriptors';
+import { resolveEntry, originLabel, saveProvider, removeOverride } from '@/lib/scopedConfig';
 import type { ConfigEntry } from '@projexlight/design-system';
 
 /**
@@ -148,9 +150,52 @@ async function revokeConfigAction(key: string): Promise<{ ok: boolean; error?: s
   }
 }
 
+/**
+ * Persist one provider from its descriptor. Secrets are routed to secret_ref by
+ * splitSecretFields via saveProvider — never written into config_value.value, which is
+ * plain JSONB returned by ordinary config reads.
+ */
+async function saveProviderAction(formData: FormData): Promise<void> {
+  'use server';
+  const descriptorKey = String(formData.get('__descriptor') ?? '');
+  const descriptor = PROVIDER_DESCRIPTORS.find(
+    (d) => `${d.key}:${d.driver}` === descriptorKey,
+  );
+  if (!descriptor) return;
+
+  const submitted: Record<string, unknown> = {};
+  for (const f of descriptor.fields) {
+    const v = formData.get(f.name);
+    if (typeof v === 'string' && v.trim()) submitted[f.name] = v.trim();
+  }
+  await saveProvider(descriptor, submitted, { scope: 'tenant' });
+  revalidatePath('/config');
+}
+
+/** Remove the tenant override so the key falls BACK to the platform default. */
+async function removeOverrideAction(formData: FormData): Promise<void> {
+  'use server';
+  const key = String(formData.get('__key') ?? '');
+  if (!key) return;
+  await removeOverride(key, { scope: 'tenant' });
+  revalidatePath('/config');
+}
+
 export default async function ConfigPage(): Promise<JSX.Element> {
   const rows = await fetchTenantConfig();
   const byKey = new Map(rows.map((r) => [r.key, r]));
+
+  // Resolve each provider key through the chain so the card can state WHICH scope
+  // answered. Without this the page is scope-blind: an admin cannot tell a value
+  // inherited from the platform from one set here, and so cannot tell whether editing
+  // it affects one app or all of them.
+  const providerKeys = [...new Set(PROVIDER_DESCRIPTORS.map((d) => d.key))];
+  const resolved = await Promise.all(
+    providerKeys.map((k) => resolveEntry(k, { scope: 'tenant' })),
+  );
+  const originByKey = new Map(
+    resolved.map((r) => [r.key, { label: originLabel(r, 'tenant'), overridden: r.overriddenHere }]),
+  );
 
   const entries: ConfigEntry[] = TENANT_CARDS.map((c) => {
     const row = byKey.get(c.key);
@@ -182,6 +227,64 @@ export default async function ConfigPage(): Promise<JSX.Element> {
         onSave={saveConfigAction}
         onRevoke={revokeConfigAction}
       />
+
+      {/* ── Providers, rendered from descriptors ───────────────────────────── */}
+      <section className="mt-10">
+        <h2 className="text-lg font-medium mb-1">Providers</h2>
+        <p className="text-sm text-gray-500 mb-4">
+          Each card shows which scope currently answers for that key. Saving here creates a
+          tenant-scope value that all of your apps inherit unless an app overrides it.
+        </p>
+
+        {PROVIDER_DESCRIPTORS.map((d) => {
+          const origin = originByKey.get(d.key);
+          return (
+            <div key={`${d.key}:${d.driver}`} className="border rounded p-4 mb-4">
+              <div className="flex items-baseline justify-between mb-1">
+                <h3 className="font-medium">{d.label}</h3>
+                {/* The origin badge — AC1. */}
+                <span className="text-xs text-gray-500" data-testid={`origin-${d.key}`}>
+                  {origin?.label ?? 'Not configured'}
+                </span>
+              </div>
+              <p className="text-sm text-gray-500 mb-3">{d.description}</p>
+
+              <form action={saveProviderAction} className="space-y-2">
+                <input type="hidden" name="__descriptor" value={`${d.key}:${d.driver}`} />
+                {d.fields.map((f) => (
+                  <div key={f.name}>
+                    <label className="block text-xs text-gray-600" htmlFor={`${d.driver}-${f.name}`}>
+                      {f.label}{f.secret ? ' (stored in the vault)' : ''}
+                    </label>
+                    <input
+                      id={`${d.driver}-${f.name}`}
+                      name={f.name}
+                      type={f.secret ? 'password' : 'text'}
+                      placeholder={f.placeholder}
+                      className="border rounded px-2 py-1 text-sm w-full"
+                    />
+                    {f.hint && <p className="text-xs text-gray-400 mt-0.5">{f.hint}</p>}
+                  </div>
+                ))}
+                <button type="submit" className="text-sm px-3 py-1 border rounded">
+                  Save for all my apps
+                </button>
+              </form>
+
+              {/* Removal is a FALLBACK, not a delete — AC3. Offered only when an override
+                  actually exists here, so the button never lies about what it will do. */}
+              {origin?.overridden && (
+                <form action={removeOverrideAction} className="mt-2">
+                  <input type="hidden" name="__key" value={d.key} />
+                  <button type="submit" className="text-xs px-2 py-1 border rounded">
+                    Remove override (falls back to the platform default)
+                  </button>
+                </form>
+              )}
+            </div>
+          );
+        })}
+      </section>
     </div>
   );
 }

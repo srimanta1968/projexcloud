@@ -117,6 +117,10 @@ export const EVENT_TYPE_REGISTRY: Record<string, EventTypeMetadata> = {
   /* --- Identity Projection (§5.7 / G4 closer) --- */
   'identity.projection.refreshed.v1': { event_type: 'identity.projection.refreshed.v1', retention_class: 'operational', conflict_policy: 'lww',            schema_state: 'active', compaction_policy: 'lww',  schema_version: 1 },
   'identity.projection.miss.v1':      { event_type: 'identity.projection.miss.v1',      retention_class: 'operational', conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+  /* Attribute-survivorship replay (P16 EP-382). Regulated: the replay record is the
+   * evidence that a retraction actually propagated, which is what an auditor asks for. */
+  'projection.replay.completed.v1':   { event_type: 'projection.replay.completed.v1',   retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+  'projection.assertion.retracted.v1': { event_type: 'projection.assertion.retracted.v1', retention_class: 'regulated', conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
 
   /* ============================================================
    * P3 additions per docs/v3.1/prd/P3-Canonical-Privacy-HDK.md §5.x.
@@ -349,6 +353,15 @@ export const EVENT_TYPE_REGISTRY: Record<string, EventTypeMetadata> = {
   'conversation.turn.recorded.v1':            { event_type: 'conversation.turn.recorded.v1',            retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
   'conversation.handoff.v1':                  { event_type: 'conversation.handoff.v1',                  retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
   'conversation.session.closed.v1':           { event_type: 'conversation.session.closed.v1',           retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+  /* Omnichannel thread + reply linkage (P16 EP-381). Thread lifecycle and a confirmed
+   * reply are conversation EVIDENCE in regulated verticals, so they match the session
+   * events above. 'reply.unmatched' is the triage signal for an inbound nobody could tie
+   * to an outbound — operational, because the message itself is already retained in the
+   * regulated message table and this event only says a human should look at it. */
+  'conversation.thread.opened.v1':            { event_type: 'conversation.thread.opened.v1',            retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+  'conversation.thread.closed.v1':            { event_type: 'conversation.thread.closed.v1',            retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+  'conversation.reply.linked.v1':             { event_type: 'conversation.reply.linked.v1',             retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+  'conversation.reply.unmatched.v1':          { event_type: 'conversation.reply.unmatched.v1',          retention_class: 'operational', conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
 
   /* --- sdk-recommendation (§5.4) --- */
   'recommendation.model.trained.v1':          { event_type: 'recommendation.model.trained.v1',          retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
@@ -510,6 +523,42 @@ export const EVENT_TYPE_REGISTRY: Record<string, EventTypeMetadata> = {
   'mdm.merge.performed.v1':                   { event_type: 'mdm.merge.performed.v1',                   retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
   'mdm.merge.reversed.v1':                    { event_type: 'mdm.merge.reversed.v1',                    retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
   'mdm.calibration.drift.v1':                 { event_type: 'mdm.calibration.drift.v1',                 retention_class: 'operational', conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+
+  /* ============================================================
+   * P16 — sdk-source-record (EP-374). The provenance kernel: every capture,
+   * every trust-ladder transition and every rights attestation is regulated
+   * retention, because these ARE the chain of custody an auditor replays.
+   * ============================================================ */
+  'source-record.captured.v1':                { event_type: 'source-record.captured.v1',                retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+  'source-record.normalized.v1':              { event_type: 'source-record.normalized.v1',              retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+  'source-record.promoted.v1':                { event_type: 'source-record.promoted.v1',                retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+  'source-record.quarantined.v1':             { event_type: 'source-record.quarantined.v1',             retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+  'source-record.assertion.written.v1':       { event_type: 'source-record.assertion.written.v1',       retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+  'source-record.assertion.superseded.v1':    { event_type: 'source-record.assertion.superseded.v1',    retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+  'source-record.attestation.signed.v1':      { event_type: 'source-record.attestation.signed.v1',      retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+  'source-record.crosswalk.linked.v1':        { event_type: 'source-record.crosswalk.linked.v1',        retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+
+  /* --- P16 · sdk-import (EP-375) — governed import runs. Regulated: a commit
+   * and its rollback are the provenance of everything the run created. --- */
+  'import.run.committed.v1':                  { event_type: 'import.run.committed.v1',                  retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+  'import.run.rolled-back.v1':                { event_type: 'import.run.rolled-back.v1',                retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+  'import.run.quarantined.v1':                { event_type: 'import.run.quarantined.v1',                retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+
+  /* --- P16 · sdk-sla (EP-376) — business-clock SLA. Clock lifecycle is
+   * operational; a breach is regulated, because a missed promise is what an
+   * auditor and a customer both come back to. --- */
+  'sla.clock.started.v1':                     { event_type: 'sla.clock.started.v1',                     retention_class: 'operational', conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+  'sla.clock.paused.v1':                      { event_type: 'sla.clock.paused.v1',                      retention_class: 'operational', conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+  'sla.clock.resumed.v1':                     { event_type: 'sla.clock.resumed.v1',                     retention_class: 'operational', conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+  'sla.clock.satisfied.v1':                   { event_type: 'sla.clock.satisfied.v1',                   retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+  'sla.clock.cancelled.v1':                   { event_type: 'sla.clock.cancelled.v1',                   retention_class: 'operational', conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+  'sla.clock.reassigned.v1':                  { event_type: 'sla.clock.reassigned.v1',                  retention_class: 'operational', conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+  'sla.clock.merged.v1':                      { event_type: 'sla.clock.merged.v1',                      retention_class: 'operational', conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+  'sla.rung.fired.v1':                        { event_type: 'sla.rung.fired.v1',                        retention_class: 'operational', conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+  // The deadline passing and somebody explaining WHY are two separate facts, so
+  // they are two separate events. This one carries cause_recorded: false.
+  'sla.clock.breached.v1':                    { event_type: 'sla.clock.breached.v1',                    retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+  'sla.breach.recorded.v1':                   { event_type: 'sla.breach.recorded.v1',                   retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
 };
 
 /* ============================================================

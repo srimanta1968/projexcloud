@@ -1,0 +1,141 @@
+{
+  "name": "POST /api/imports/runs - Start a governed import run",
+  "endpoint": "/api/imports/runs",
+  "sdk": "sdk-import",
+  "sourceFile": "packages/sdk-import/src/server/routes.ts",
+  "method": "POST",
+  "requiresAuth": true,
+  "expectedStatus": 201,
+  "taskId": "f6e9a813-82ee-4f15-97cf-e4a9a3f8f772",
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "priority": 60,
+  "testability": "auto",
+  "description": "Open a governed import. The run is the unit of governance: preview, mapping, transform plan, dry run, commit and rollback all hang off it. UNIQUE(tenant_id, file_fingerprint, source_kind) is the COMMIT IDEMPOTENCY KEY, so submitting the same file for the same source twice is refused with 409 DUPLICATE_IMPORT_RUN carrying existing_run_id — the caller almost always wants to continue that run rather than fork a second one. rollback_window_hours sets how long after commit an undo stays possible (default 24h); the DEADLINE itself is derived at commit time and cannot be supplied or extended. Required: tenant_id, source_kind, file_fingerprint.",
+  "dependsOn": [
+    "POST /api/auth/signup-tenant"
+  ],
+  "fieldEnums": {
+    "status": [
+      "draft",
+      "previewing",
+      "mapping",
+      "dry_run",
+      "committing",
+      "complete",
+      "quarantined",
+      "rolled_back"
+    ]
+  },
+  "statusTransitions": {
+    "entity": "import.import_run",
+    "field": "status",
+    "flow": [
+      "draft",
+      "previewing",
+      "mapping",
+      "dry_run",
+      "committing",
+      "complete",
+      "quarantined",
+      "rolled_back"
+    ],
+    "transitions": [
+      {
+        "from": "draft",
+        "to": "previewing",
+        "via": "POST /api/imports/runs/:run_id/preview"
+      },
+      {
+        "from": "previewing",
+        "to": "mapping",
+        "via": "PUT /api/imports/runs/:run_id/mapping"
+      },
+      {
+        "from": "mapping",
+        "to": "dry_run",
+        "via": "POST /api/imports/runs/:run_id/dry-run"
+      },
+      {
+        "from": "dry_run",
+        "to": "committing",
+        "via": "POST /api/imports/runs/:run_id/commit (internal)"
+      },
+      {
+        "from": "committing",
+        "to": "complete",
+        "via": "POST /api/imports/runs/:run_id/commit"
+      },
+      {
+        "from": "complete",
+        "to": "rolled_back",
+        "via": "POST /api/imports/runs/:run_id/rollback (inside the deadline only)"
+      },
+      {
+        "from": "draft",
+        "to": "quarantined",
+        "via": "a governance failure parks the run for a human"
+      },
+      {
+        "from": "quarantined",
+        "to": "mapping",
+        "via": "a human resolves the parked run and re-maps"
+      }
+    ]
+  },
+  "testCases": [
+    {
+      "name": "Open a run for an uploaded delimited file",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "payload": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "source_kind": "csv_upload",
+        "file_fingerprint": "fp-{{dynamic:uuid}}",
+        "source_ref": "upload://{{dynamic:uuid}}",
+        "file_name": "contacts-{{dynamic:slug}}.csv",
+        "attestation_id": "{{dynamic:uuid}}",
+        "row_count": 2,
+        "rollback_window_hours": 24,
+        "started_by": "qa-runner",
+        "metadata": {
+          "channel": "qa"
+        }
+      },
+      "expectedStatus": 201,
+      "expectedResponse": {
+        "data": {
+          "run": {
+            "run_id": "string",
+            "status": "string"
+          }
+        }
+      }
+    }
+  ],
+  "captureResponse": {
+    "imports.run.create.response.data.run.run_id": "data.run.run_id",
+    "imports.run.create.response.data.run.status": "data.run.status",
+    "imports.run.create.response.data.run.correlation_id": "data.run.correlation_id"
+  },
+  "errorCases": [
+    {
+      "status": 400,
+      "code": "VALIDATION_ERROR",
+      "message": "tenant_id, source_kind and file_fingerprint are required",
+      "when": "any required field is missing from the body"
+    },
+    {
+      "status": 409,
+      "code": "DUPLICATE_IMPORT_RUN",
+      "message": "file <fingerprint> was already submitted for this source",
+      "when": "a run already exists for this (tenant, file_fingerprint, source_kind)"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "missing or invalid token",
+      "when": "no valid tenant Bearer token on the request"
+    }
+  ]
+}

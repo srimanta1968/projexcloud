@@ -1,0 +1,104 @@
+{
+  "sdk": "sdk-assignment",
+  "sourceFile": "packages/sdk-assignment/src/server/routes.ts",
+  "requiresAuth": true,
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "epicId": "af159e51-90a4-46cf-8d57-444515cfbe56",
+  "taskId": "efd127bc-a016-41e2-8831-bca0388ebba1",
+  "priority": 15,
+  "testability": "auto",
+  "name": "POST /api/assignment/simulate - Replay history against a candidate, changing nothing",
+  "endpoint": "/api/assignment/simulate",
+  "method": "POST",
+  "expectedStatus": 200,
+  "description": "Replays recorded decisions through a candidate rule VERSION and reports what would have changed: per-persona actual versus candidate, the outcome mix, the subjects whose destination moves, and a skew audit naming both over-allocation and starvation. SIDE EFFECT FREE, and it proves it rather than claiming it - the response carries a side_effects block that must be all zeros (assignments, notifications, clocks, and decisions written, counted from the table before and after). Returns 200, not 201, because nothing was created. QA edge cases: the candidate is evaluated BY VERSION and is never activated - activating a rule set to try it out is the experiment changing production; the EP-335 rotation cursor is read but never advanced; history is replayed as the rules SAW it (the trace records the fields each rule read), so a candidate rule reading a field the history never carried comes out AMBIGUOUS and goes to review rather than being silently defaulted.",
+  "dependsOn": [
+    "POST /api/auth/signup-tenant",
+    "POST /api/assignment/routes",
+    "POST /api/assignment/route"
+  ],
+  "testCases": [
+    {
+      "name": "Simulate a candidate rule version",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "payload": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "candidate_version": "{{cache:assignment.routes.publish.version}}",
+        "rule_set_name": "default",
+        "candidate_persona_ids": [
+          "{{cache:personas.create.response.data.persona.persona_id}}"
+        ],
+        "persona_specialties": {},
+        "limit": 200,
+        "skew_tolerance": 0.5
+      },
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "data": {
+          "subjects_replayed": "number",
+          "per_persona": "array",
+          "skew": "object",
+          "side_effects": "object"
+        }
+      }
+    }
+  ],
+  "errorCases": [
+    {
+      "name": "A simulation with no candidate version is refused",
+      "status": 400,
+      "code": "VALIDATION_ERROR",
+      "message": "candidate_version (number) is required",
+      "when": "candidate_version is missing or not a number",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "payload": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "candidate_persona_ids": [
+          "{{cache:personas.create.response.data.persona.persona_id}}"
+        ]
+      },
+      "expectedStatus": 400,
+      "expectedError": {
+        "code": "VALIDATION_ERROR"
+      }
+    },
+    {
+      "name": "An empty candidate list is refused",
+      "status": 400,
+      "code": "VALIDATION_ERROR",
+      "message": "candidate_persona_ids must be a non-empty array",
+      "when": "no candidates are supplied",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "payload": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "candidate_version": 1,
+        "candidate_persona_ids": []
+      },
+      "expectedStatus": 400,
+      "expectedError": {
+        "code": "VALIDATION_ERROR"
+      }
+    },
+    {
+      "name": "Unauthenticated is refused by the default-deny gate",
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "missing or invalid tenant token",
+      "when": "no valid tenant Bearer token or scoped API key on the request",
+      "expectedStatus": 401,
+      "payload": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "candidate_version": 1,
+        "candidate_persona_ids": [
+          "{{cache:personas.create.response.data.persona.persona_id}}"
+        ]
+      }
+    }
+  ]
+}

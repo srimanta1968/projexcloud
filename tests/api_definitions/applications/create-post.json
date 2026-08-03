@@ -1,0 +1,83 @@
+{
+  "sdk": "sdk-api-keys",
+  "sourceFile": "packages/sdk-api-keys/src/server/routes.ts",
+  "requiresAuth": true,
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "epicId": "783fc94b-6992-49a5-a492-74ee0450a92f",
+  "testability": "auto",
+  "name": "POST /api/applications - Register a tenant application",
+  "endpoint": "/api/applications",
+  "method": "POST",
+  "expectedStatus": 201,
+  "taskId": "bcf23c76-2e69-48c2-af3f-84acc9e636d2",
+  "featureId": "888ec9d8-5cbb-4d77-9082-fd78b08334ad",
+  "priority": 20,
+  "description": "Creates the application a credential belongs to. One per thing that calls the platform - a backend, a scheduled job, a staging copy - so a leak, a rotation and a usage figure are each scoped to one integration rather than to the whole tenant. environment is a property of the APPLICATION, not of an individual key: a test application mints pk_test_ credentials and a live one mints pk_live_, so the two can never be confused by inspection. The tenant is taken from the caller JWT and never from the payload. slug is derived from the name, is unique within the tenant, and is the client_id used by the client_credentials grant. Answers 201 with the application, or 409 when that slug is already taken in this tenant.",
+  "dependsOn": [
+    "POST /api/auth/signup-tenant"
+  ],
+  "fieldEnums": {
+    "environment": [
+      "live",
+      "test"
+    ],
+    "status": [
+      "active",
+      "disabled"
+    ]
+  },
+  "testCases": [
+    {
+      "name": "Create a live application",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "payload": {
+        "name": "Journey backend",
+        "environment": "live",
+        "description": "Server-to-server calls from our backend"
+      },
+      "expectedStatus": 201,
+      "expectedResponse": {
+        "data": {
+          "application": {
+            "application_id": "string",
+            "slug": "string",
+            "environment": "string",
+            "status": "string"
+          }
+        }
+      }
+    },
+    {
+      "name": "Create a test application so a leaked dev key cannot touch live data",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "payload": {
+        "name": "Journey staging",
+        "environment": "test"
+      },
+      "expectedStatus": 201
+    }
+  ],
+  "errorCases": [
+    {
+      "name": "Name is required",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "payload": {
+        "environment": "live"
+      },
+      "expectedStatus": 400
+    },
+    {
+      "name": "Unauthenticated callers are refused by the default-deny gate",
+      "payload": {
+        "name": "nope"
+      },
+      "expectedStatus": 401
+    }
+  ]
+}

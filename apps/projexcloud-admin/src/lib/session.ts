@@ -2,7 +2,12 @@ import { cookies } from 'next/headers';
 import { SESSION_COOKIE, resolveSession, type SessionUser } from '@projexlight/design-system/auth';
 import { isPlatformOperator } from './operator';
 
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:3500';
+// Server-side (middleware / next-headers): runs inside the Next process, so
+// localhost is correct here. Port corrected from 3500 -> 4000 to match
+// GATEWAY_PORT in .env; the old value pointed at a dead port and failed
+// silently. Client-side callers derive the host from window.location
+// instead, because the browser is not always on this machine.
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE || `http://localhost:${process.env.GATEWAY_PORT || 4000}`;
 
 /**
  * Guards a privileged server action: resolves the session cookie against the

@@ -17,9 +17,13 @@ version: '3.8'
 services:
   # ProjexLight DEV MCP Server - Code Review & Development Agent
   dev-mcp-server:
-    image: projexlight-dev-mcp-local:latest  # TEMP: local plain-Python build for testing the fix (revert to projexlight/projex-dev-mcp:latest before Nuitka)
+    image: projexlight/projex-dev-mcp:latest
     container_name: projexlight-dev-mcp
-    user: root  # Required for git hooks installation on Windows
+    # Defaults to root (required for git-hook installation on Windows). On NATIVE
+    # LINUX set MCP_RUN_AS="$(id -u):$(id -g)" in .env so files the container writes
+    # into your project (.mcp-logs/, test-results/, feedback/) are not root-owned;
+    # setup-all.sh sets it automatically there.
+    user: "${MCP_RUN_AS:-root}"
     ports:
       # Bind to loopback only — the MCP HTTP API has no per-request auth and
       # is meant to be reached by tooling on the same machine. Binding to
@@ -39,10 +43,21 @@ services:
       - ../:/workspace                             # Project root (read-write for git hooks)
 
       # Additional projects (dynamically mounted via setup-all.sh)
-      # These are set via .env file when new projects are registered
+      # These are set via .env file when new projects are registered.
+      # Slot count MUST match MAX_ADDITIONAL_PROJECTS in src/core/project_context.py.
+      # Explicit per-project slots are deliberate: the container sees ONLY the
+      # directories a developer registered — never a broad parent of $HOME, which
+      # would expose ~/.ssh, ~/.aws and every other project to a root process.
       - ${ADDITIONAL_PROJECT_1:-/dev/null}:/projects/additional1
       - ${ADDITIONAL_PROJECT_2:-/dev/null}:/projects/additional2
       - ${ADDITIONAL_PROJECT_3:-/dev/null}:/projects/additional3
+      - ${ADDITIONAL_PROJECT_4:-/dev/null}:/projects/additional4
+      - ${ADDITIONAL_PROJECT_5:-/dev/null}:/projects/additional5
+      - ${ADDITIONAL_PROJECT_6:-/dev/null}:/projects/additional6
+      - ${ADDITIONAL_PROJECT_7:-/dev/null}:/projects/additional7
+      - ${ADDITIONAL_PROJECT_8:-/dev/null}:/projects/additional8
+      - ${ADDITIONAL_PROJECT_9:-/dev/null}:/projects/additional9
+      - ${ADDITIONAL_PROJECT_10:-/dev/null}:/projects/additional10
 
       # ============================================================
       # PER-PROJECT CONFIG & DATA DIRECTORIES
@@ -68,6 +83,17 @@ services:
       # Owner project: ../.projexlight is accessible via /workspace/.projexlight
       # Additional projects: accessible via /projects/additionalN/.projexlight
 
+    # ============================================================
+    # PRIVILEGE HARDENING
+    # ============================================================
+    # The container mounts developer source trees read-write, so it should not
+    # also be able to escalate. no-new-privileges is safe on every platform.
+    #
+    # (`user` is declared with the image/container settings above.)
+    security_opt:
+      - no-new-privileges:true
+    # Optional further lock-down; verify your workflows before enabling:
+    #   cap_drop: [ALL]
     extra_hosts:
       - "host.docker.internal:host-gateway"        # Enable host network access
     env_file:

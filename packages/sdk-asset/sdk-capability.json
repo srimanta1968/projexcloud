@@ -1,0 +1,87 @@
+{
+  "name": "@projexlight/sdk-asset",
+  "version": "1.0.0",
+  "schema_version": "1.0",
+  "summary": "Digital-twin registry and sensor-telemetry plane for physical-AI fleets. A robot is modeled as an `asset` (linked to its device_uuid for enrollment/attestation), composed of a self-referential `component` tree (torso -> arm -> hand -> finger, leg, ...), where each component carries a `sensor` catalog. Per-sensor time-series land in `sensor_reading` (Postgres for dev, mirrored to ClickHouse at fleet scale) and are downsampled into 1-minute and 1-hour rollup tiers. registerAsset bulk-defines the whole twin in one transaction; getTwin rehydrates the nested tree; ingestReadings/queryReadings handle raw and rolled-up telemetry; and a background rollup job (backfill1m/rebuild1h/runSensorRollup) keeps the aggregate tiers current off the hot ingest path.",
+  "tags": [
+    "digital-twin",
+    "physical-ai",
+    "fleet-registry",
+    "sensor-telemetry",
+    "time-series-rollup"
+  ],
+  "provides": {
+    "endpoints": [],
+    "events": [],
+    "models": [
+      {
+        "schema": "asset",
+        "table": "asset",
+        "description": "One row per registered robot/device (the digital-twin root): tenant_id + optional bu_id scoping, device_uuid linking to device.device for enrollment/attestation, model, display_name and status. Indexed by tenant_id and device_uuid."
+      },
+      {
+        "schema": "asset",
+        "table": "component",
+        "description": "Self-referential component tree for an asset (parent_component_id -> component_id, ON DELETE CASCADE): torso/head/arm/hand/finger/leg kinds with an optional name and jsonb position. Indexed by asset_id and parent_component_id."
+      },
+      {
+        "schema": "asset",
+        "table": "sensor",
+        "description": "Sensor catalog attached to a component (and denormalized asset_id): kind (force, temperature, joint_angle, camera, ...), unit and optional min_value/max_value/sample_rate_hz calibration bounds. CASCADE-deleted with its component/asset."
+      },
+      {
+        "schema": "asset",
+        "table": "sensor_reading",
+        "description": "Per-sensor time-series readings keyed by (sensor_id, asset_id, tenant_id, ts, value, quality). Postgres-backed in dev and mirrored to ClickHouse at fleet scale with the same shape; source for the 1m/1h rollup tiers. Indexed by (sensor_id, ts DESC) and (asset_id, ts DESC)."
+      }
+    ],
+    "hooks": [],
+    "ui_components": []
+  },
+  "consumes": {
+    "events": [],
+    "infra": ["postgres", "clickhouse"],
+    "config_keys": ["ASSET_ROLLUP_INTERVAL_MS", "ASSET_ROLLUP_TRAILING_HOURS"]
+  },
+  "scenarios": [
+    {
+      "id": "register-robot-digital-twin",
+      "title": "Register a robot and its component/sensor tree in one transaction",
+      "when_to_use": "When a new physical-AI unit is enrolled and you need to persist its full digital twin — the asset root plus a nested component hierarchy and each component's sensors — atomically.",
+      "example_code": "import { registerAsset } from '@projexlight/sdk-asset';\n\nconst { asset_id } = await registerAsset({\n  tenant_id: req.auth.tenant_id,\n  device_uuid: 'dev-9f2c',\n  model: 'humanoid-v2',\n  display_name: 'Cell-A Picker',\n  components: [\n    { kind: 'arm', name: 'left-arm', sensors: [\n      { kind: 'joint_angle', unit: 'deg', min_value: -180, max_value: 180, sample_rate_hz: 100 },\n      { kind: 'force', unit: 'N', sample_rate_hz: 50 },\n    ], children: [\n      { kind: 'hand', sensors: [{ kind: 'temperature', unit: 'C' }] },\n    ] },\n  ],\n});",
+      "expected_outcome": "The asset, its nested components and sensors are inserted in a single dataService.tx transaction; the call returns the new asset_id (or rolls the whole tree back on any failure)."
+    },
+    {
+      "id": "rehydrate-twin-tree",
+      "title": "Rehydrate the full digital twin for inspection or a UI",
+      "when_to_use": "When a caller needs the complete asset -> nested components -> sensors structure, for example to render a twin viewer or validate a fleet unit's topology.",
+      "example_code": "import { getTwin } from '@projexlight/sdk-asset';\n\nconst twin = await getTwin(assetId);\nif (!twin) return reply.code(404).send({ error: 'asset_not_found' });\nfor (const root of twin.components) {\n  console.log(root.kind, root.sensors.map((s) => s.kind), root.children.length);\n}",
+      "expected_outcome": "Returns a TwinNode with the asset fields and a reassembled component forest (each ComponentNode carrying its sensors and children), or null when the asset_id does not exist."
+    },
+    {
+      "id": "ingest-and-query-readings",
+      "title": "Batch-ingest sensor readings and query a rolled-up view",
+      "when_to_use": "When streaming telemetry off a fleet unit and later reading it back either raw or aggregated per time bucket (second/minute/hour/day) for dashboards or anomaly checks.",
+      "example_code": "import { ingestReadings, queryReadings } from '@projexlight/sdk-asset';\n\nawait ingestReadings([\n  { sensor_id: sensorId, asset_id: assetId, tenant_id: tenantId, value: 12.4, quality: 'ok' },\n  { sensor_id: sensorId, asset_id: assetId, tenant_id: tenantId, value: 12.9 },\n]);\n\nconst hourly = await queryReadings(assetId, {\n  sensor_id: sensorId,\n  from: '2026-07-23T00:00:00Z',\n  bucket: 'hour',\n});",
+      "expected_outcome": "ingestReadings returns { ingested: 2 }; queryReadings with a valid bucket returns per-bucket aggregates (n/min/max/avg/last), and without a bucket returns raw (ts, value, quality) rows, newest first (LIMIT 5000)."
+    },
+    {
+      "id": "backfill-rollup-window",
+      "title": "Recompute rollup tiers for a replayed/backfilled window",
+      "when_to_use": "When historical or replayed telemetry the streaming materialized view never saw needs its 1m and 1h ClickHouse rollups rebuilt, off the hot ingest path. Requires initClickHouse() first.",
+      "example_code": "import { runSensorRollup, startSensorRollupJob } from '@projexlight/sdk-asset';\n\n// one-off idempotent rebuild of a specific window\nconst result = await runSensorRollup({\n  from: '2026-07-20T00:00:00Z',\n  to: '2026-07-21T00:00:00Z',\n});\n\n// or start the periodic trailing-window catch-up loop at boot\nconst stop = startSensorRollupJob();",
+      "expected_outcome": "runSensorRollup backfills the 1m tier from raw then rebuilds the 1h tier for the window (delete-then-reinsert, safe to re-run) and returns { rebuilt_1m: true, rebuilt_1h: true }; startSensorRollupJob returns a stop() that clears the interval."
+    }
+  ],
+  "compliance_posture": {
+    "regimes": ["SOC2"],
+    "notes": "All rows are tenant_id-scoped (with optional bu_id) so fleet twins and telemetry stay isolated per tenant. assets carry a device_uuid linking to device.device for enrollment/attestation rather than embedding credentials, and sensor_reading holds numeric measurements plus a quality flag — no PII — though high-volume telemetry is mirrored to ClickHouse and should inherit the same tenant-scoped retention controls."
+  },
+  "pool_placement": "app",
+  "pricing_skus": [],
+  "links": {
+    "readme": "packages/sdk-asset/README.md",
+    "source": "packages/sdk-asset/src/"
+  },
+  "no_endpoints": true
+}

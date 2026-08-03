@@ -57,3 +57,13 @@ export {
   haversineKm,
 } from './services/geofence';
 export type { GeoPoint, GeofenceChecker } from './services/geofence';
+
+// P16 · EP-379 — the six-step routing pipeline, its decision trace, and rules as
+// versioned DATA (a routing rule changes weekly; a deploy does not).
+export * from './services/routingService';
+
+// P16 · EP-379 — ownership over time, with the source timestamp frozen.
+export * from './services/lifecycleService';
+
+// P16 · EP-379 — replaying history against a candidate, with nothing happening.
+export * from './services/simulationService';

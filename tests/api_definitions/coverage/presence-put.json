@@ -1,0 +1,95 @@
+{
+  "sdk": "sdk-coverage",
+  "sourceFile": "packages/sdk-coverage/src/server/routes.ts",
+  "requiresAuth": true,
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "epicId": "75f3f5a3-faa8-4b82-badf-4feda46c00e7",
+  "featureId": "5f6dc00d-cb8f-4a54-9a19-9b1e0f0b2f5a",
+  "taskId": "422472b0-117e-4cb0-9f90-0c6962439155",
+  "testability": "auto",
+  "name": "PUT /api/coverage/presence - Set live presence",
+  "endpoint": "/api/coverage/presence",
+  "method": "PUT",
+  "expectedStatus": 200,
+  "priority": 14,
+  "description": "Sets a persona live presence, recording WHERE the claim came from. A MANUAL claim outranks an automated one until manual_hold_until: somebody saying \"I am here\" must not be overwritten two seconds later by a calendar that still thinks they are in a meeting, and equally a manual toggle cannot win forever or the calendar could never recover. A CALENDAR or SYSTEM write arriving inside a live manual hold is accepted as a no-op and reports which claim currently stands, rather than failing - the sync is not wrong, it is simply outranked.",
+  "dependsOn": [
+    "POST /api/auth/signup-tenant",
+    "POST /api/personas"
+  ],
+  "fieldEnums": {
+    "status": [
+      "AVAILABLE",
+      "MEETING",
+      "OFFLINE",
+      "PTO",
+      "ON_CALL"
+    ],
+    "source": [
+      "MANUAL",
+      "CALENDAR",
+      "SYSTEM"
+    ]
+  },
+  "testCases": [
+    {
+      "name": "A manual claim of being available",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "payload": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "persona_id": "{{cache:personas.create.response.data.persona.persona_id}}",
+        "status": "AVAILABLE",
+        "source": "MANUAL",
+        "manual_hold_minutes": 30
+      },
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "data": {
+          "presence": {
+            "status": "string",
+            "source": "string"
+          }
+        }
+      }
+    },
+    {
+      "name": "A calendar sync inside the hold is outranked, not rejected",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "payload": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "persona_id": "{{cache:personas.create.response.data.persona.persona_id}}",
+        "status": "MEETING",
+        "source": "CALENDAR",
+        "source_ref": "cal-evt-2"
+      },
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "data": {
+          "presence": {
+            "status": "string"
+          },
+          "applied": "boolean"
+        }
+      }
+    }
+  ],
+  "errorCases": [
+    {
+      "name": "An unknown status is refused",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "payload": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "persona_id": "{{cache:personas.create.response.data.persona.persona_id}}",
+        "status": "LUNCH",
+        "source": "MANUAL"
+      },
+      "expectedStatus": 422
+    }
+  ]
+}

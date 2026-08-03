@@ -1,0 +1,313 @@
+{
+  "name": "@projexlight/sdk-scheduling",
+  "version": "0.1.0",
+  "schema_version": "1.0",
+  "summary": "Calendar, booking & no-show engine (P14·E2) re-homed from projex_crm calendar.service as a reusable, tenant-scoped, persona-keyed SDK. Hosts define reusable meeting types (15/30/45/60 min with buffers) and per-weekday business hours in an IANA timezone; the engine generates timezone-correct open slots and books appointments with double-booking prevention. A shareable public booking link (Calendly-style slug) lets an anonymous external invitee self-book, confirm and cancel using a high-entropy capability token — never a raw appointment_id — through an allowlisted /api/scheduling/public/ surface. The full booking lifecycle (confirm / reschedule / cancel), RFC 5545 ICS invites, an append-only booking-event timeline, timed reminder fan-out (24h/2h/15m), no-show detection with rescue rebooking, and two-way calendar provider sync (Google / Microsoft / CalDAV) round out the surface.",
+  "tags": [
+    "scheduling",
+    "calendar",
+    "booking",
+    "availability",
+    "multi-tenant",
+    "public-booking"
+  ],
+  "provides": {
+    "endpoints": [
+      {
+        "method": "GET",
+        "path": "/api/scheduling/public/links/:slug",
+        "description": "Public render-the-page payload for a booking link; an unknown, inactive or expired slug is an indistinguishable 404.",
+        "kind": "query"
+      },
+      {
+        "method": "GET",
+        "path": "/api/scheduling/public/links/:slug/availability",
+        "description": "Public open slots for one date (YYYY-MM-DD) on a booking link, enforcing the link's min-notice / max-days-ahead window server-side.",
+        "kind": "query"
+      },
+      {
+        "method": "POST",
+        "path": "/api/scheduling/public/links/:slug/book",
+        "description": "Anonymous invitee books a slot on a link; returns the appointment plus the capability token they use to confirm or cancel later.",
+        "kind": "mutation"
+      },
+      {
+        "method": "POST",
+        "path": "/api/scheduling/public/appointments/:public_token/confirm",
+        "description": "Confirm a publicly booked appointment using only its capability token; an unknown token returns 404 without revealing whether the token or the appointment was wrong.",
+        "kind": "mutation"
+      },
+      {
+        "method": "POST",
+        "path": "/api/scheduling/public/appointments/:public_token/cancel",
+        "description": "Cancel a publicly booked appointment using only its capability token, with an optional reason.",
+        "kind": "mutation"
+      },
+      {
+        "method": "POST",
+        "path": "/api/scheduling/meeting-types",
+        "description": "Create a reusable meeting type (name, slug, duration and booking buffers) for a host; slug is unique per tenant (409 on conflict).",
+        "kind": "mutation",
+        "auth_scopes": ["scheduling:write"]
+      },
+      {
+        "method": "GET",
+        "path": "/api/scheduling/meeting-types",
+        "description": "List the tenant's meeting types.",
+        "kind": "query",
+        "auth_scopes": ["scheduling:read"]
+      },
+      {
+        "method": "POST",
+        "path": "/api/scheduling/availability-rules",
+        "description": "Upsert a host's per-weekday business hours (weekday 0-6, start/end wall-clock time in an IANA timezone); re-setting a weekday overwrites the rule.",
+        "kind": "mutation",
+        "auth_scopes": ["scheduling:write"]
+      },
+      {
+        "method": "GET",
+        "path": "/api/scheduling/availability-rules",
+        "description": "List a host's availability rules for the tenant.",
+        "kind": "query",
+        "auth_scopes": ["scheduling:read"]
+      },
+      {
+        "method": "GET",
+        "path": "/api/scheduling/availability",
+        "description": "Compute timezone-correct open slots for a host on a date, bounded by business hours and with already-booked windows removed.",
+        "kind": "query",
+        "auth_scopes": ["scheduling:read"]
+      },
+      {
+        "method": "POST",
+        "path": "/api/scheduling/appointments",
+        "description": "Book an appointment for a host with double-booking prevention (409 on overlap) and an end-after-start check (400).",
+        "kind": "mutation",
+        "auth_scopes": ["scheduling:write"]
+      },
+      {
+        "method": "GET",
+        "path": "/api/scheduling/appointments",
+        "description": "List a tenant's appointments, filterable by host, subject, status and start-time window.",
+        "kind": "query",
+        "auth_scopes": ["scheduling:read"]
+      },
+      {
+        "method": "GET",
+        "path": "/api/scheduling/appointments/:appointment_id",
+        "description": "Fetch a single appointment by id for the tenant; 404 when absent.",
+        "kind": "query",
+        "auth_scopes": ["scheduling:read"]
+      },
+      {
+        "method": "POST",
+        "path": "/api/scheduling/appointments/:appointment_id/confirm",
+        "description": "Confirm a pending appointment, advancing its lifecycle status and stamping confirmed_at.",
+        "kind": "mutation",
+        "auth_scopes": ["scheduling:write"]
+      },
+      {
+        "method": "POST",
+        "path": "/api/scheduling/appointments/:appointment_id/reschedule",
+        "description": "Reschedule an appointment to a new start/end window, re-checking overlap and incrementing the RFC 5545 ICS sequence.",
+        "kind": "mutation",
+        "auth_scopes": ["scheduling:write"]
+      },
+      {
+        "method": "POST",
+        "path": "/api/scheduling/appointments/:appointment_id/cancel",
+        "description": "Cancel an appointment with an optional reason, stamping cancelled_at.",
+        "kind": "mutation",
+        "auth_scopes": ["scheduling:write"]
+      },
+      {
+        "method": "GET",
+        "path": "/api/scheduling/appointments/:appointment_id/ics",
+        "description": "Return the appointment's RFC 5545 ICS invite as a text/calendar attachment for the current state.",
+        "kind": "query",
+        "auth_scopes": ["scheduling:read"]
+      },
+      {
+        "method": "GET",
+        "path": "/api/scheduling/appointments/:appointment_id/events",
+        "description": "List the append-only booking lifecycle timeline (created/confirmed/rescheduled/cancelled/notified) for an appointment.",
+        "kind": "query",
+        "auth_scopes": ["scheduling:read"]
+      },
+      {
+        "method": "POST",
+        "path": "/api/scheduling/scheduling-links",
+        "description": "Create a shareable public booking link binding a host + meeting type to a globally-unique slug (409 on conflict).",
+        "kind": "mutation",
+        "auth_scopes": ["scheduling:write"]
+      },
+      {
+        "method": "GET",
+        "path": "/api/scheduling/scheduling-links",
+        "description": "List the tenant's scheduling links.",
+        "kind": "query",
+        "auth_scopes": ["scheduling:read"]
+      },
+      {
+        "method": "GET",
+        "path": "/api/scheduling/scheduling-links/:link_id",
+        "description": "Fetch a single scheduling link by id for the tenant; 404 when absent.",
+        "kind": "query",
+        "auth_scopes": ["scheduling:read"]
+      },
+      {
+        "method": "POST",
+        "path": "/api/scheduling/appointments/:appointment_id/reminders",
+        "description": "Schedule the reminder fan-out (default 24h/2h/15m, or custom offsets) for an appointment; idempotent per (appointment, offset).",
+        "kind": "mutation",
+        "auth_scopes": ["scheduling:write"]
+      },
+      {
+        "method": "GET",
+        "path": "/api/scheduling/appointments/:appointment_id/reminders",
+        "description": "List the scheduled reminders for an appointment.",
+        "kind": "query",
+        "auth_scopes": ["scheduling:read"]
+      },
+      {
+        "method": "POST",
+        "path": "/api/scheduling/reminders/tick",
+        "description": "On-demand drain of due reminders (claims pending rows past remind_at and fires the notifier); also runs on a timer when the worker is enabled.",
+        "kind": "mutation",
+        "auth_scopes": ["scheduling:admin"]
+      },
+      {
+        "method": "POST",
+        "path": "/api/scheduling/no-show/scan",
+        "description": "On-demand no-show scan marking confirmed appointments past end_time + grace as no_show so a rescue rebook can be offered.",
+        "kind": "mutation",
+        "auth_scopes": ["scheduling:admin"]
+      },
+      {
+        "method": "POST",
+        "path": "/api/scheduling/appointments/:appointment_id/rebook",
+        "description": "Rescue-rebook a no-show or cancelled appointment into a new confirmed slot, re-checking overlap and end-after-start.",
+        "kind": "mutation",
+        "auth_scopes": ["scheduling:write"]
+      },
+      {
+        "method": "POST",
+        "path": "/api/scheduling/calendar-connections",
+        "description": "Bind a host to an external calendar provider (google|microsoft|caldav) via an sdk-connectors install for two-way sync.",
+        "kind": "mutation",
+        "auth_scopes": ["scheduling:write"]
+      },
+      {
+        "method": "GET",
+        "path": "/api/scheduling/calendar-connections",
+        "description": "List the tenant's calendar connections, optionally filtered by host.",
+        "kind": "query",
+        "auth_scopes": ["scheduling:read"]
+      },
+      {
+        "method": "GET",
+        "path": "/api/scheduling/calendar-connections/:connection_id",
+        "description": "Fetch a single calendar connection by id for the tenant; 404 when absent.",
+        "kind": "query",
+        "auth_scopes": ["scheduling:read"]
+      },
+      {
+        "method": "POST",
+        "path": "/api/scheduling/calendar-connections/:connection_id/sync",
+        "description": "Run a two-way sync for a connection (push unmapped appointments, pull provider changes); 422 with remediation on a provider error.",
+        "kind": "mutation",
+        "auth_scopes": ["scheduling:write"]
+      },
+      {
+        "method": "POST",
+        "path": "/api/scheduling/appointments/:appointment_id/calendar-push",
+        "description": "Push a single appointment to a connection's external calendar (propagating create/update/cancel to the mapped provider event).",
+        "kind": "mutation",
+        "auth_scopes": ["scheduling:write"]
+      }
+    ],
+    "events": [],
+    "models": [
+      {
+        "schema": "scheduling",
+        "table": "meeting_type",
+        "description": "Reusable bookable meeting kind (name, per-tenant-unique slug, duration and before/after buffers, location type). Referenced by availability slotting, appointments and scheduling links so a host offers a fixed menu of meeting kinds."
+      },
+      {
+        "schema": "scheduling",
+        "table": "availability_rule",
+        "description": "Per-weekday business hours for a host (weekday 0-6, start/end TIME) in an IANA timezone with a slot interval; a weekday with no active rule is a closed day (zero slots). One rule per (host, weekday) — upserted."
+      },
+      {
+        "schema": "scheduling",
+        "table": "appointment",
+        "description": "A booked calendar slot (parity: calendar_appointments) keyed on host_persona_id and optional subject_persona_id, overlap-guarded per host for double-book prevention. Carries lifecycle status/timestamps, ICS uid + RFC 5545 sequence, no-show/reminder bookkeeping and a nullable public_token capability for anonymous confirm/cancel."
+      },
+      {
+        "schema": "scheduling",
+        "table": "scheduling_link",
+        "description": "Shareable public booking link (Calendly-style) binding a host + meeting type to a globally-unique slug, with a booking window (max_days_ahead, min_notice_minutes) and optional expiry, so an external invitee can self-book."
+      },
+      {
+        "schema": "scheduling",
+        "table": "booking_event",
+        "description": "Append-only booking lifecycle timeline — one row per transition/notification (created/confirmed/rescheduled/cancelled/reminded/completed/no_show/notified) — powering booking history and the notification audit."
+      },
+      {
+        "schema": "scheduling",
+        "table": "reminder",
+        "description": "A single scheduled pre-meeting reminder for an appointment (e.g. 1440/120/15 minutes before), unique per (appointment, offset). A worker claims due pending rows (remind_at <= now) and fires the notifier."
+      },
+      {
+        "schema": "scheduling",
+        "table": "calendar_connection",
+        "description": "Host-to-external-provider binding (Google Workspace / Microsoft 365 / CalDAV) via an sdk-connectors install, holding sync direction, delta cursor (sync_token) and status for two-way calendar sync. Unique per (host, provider, external calendar)."
+      },
+      {
+        "schema": "scheduling",
+        "table": "calendar_sync_map",
+        "description": "Appointment-to-external-event id mapping (one per connection + appointment) with etag and last-write direction, so reschedule/cancel propagate to the right provider event and echo loops are guarded."
+      }
+    ],
+    "hooks": [],
+    "ui_components": []
+  },
+  "consumes": {
+    "events": [],
+    "infra": ["postgres"],
+    "config_keys": []
+  },
+  "scenarios": [
+    {
+      "id": "define-meeting-type-and-hours",
+      "title": "Define a meeting type and a host's weekly business hours",
+      "when_to_use": "When onboarding a host so the availability engine can generate bookable slots — you need at least one meeting type (duration + buffers) and per-weekday hours in the host's timezone.",
+      "example_code": "import { createMeetingType, upsertAvailabilityRule } from '@projexlight/sdk-scheduling';\n\nconst meetingType = await createMeetingType({\n  tenant_id, host_persona_id: hostId,\n  name: 'Intro Call', slug: 'intro-call', duration_minutes: 30,\n  buffer_before_minutes: 5, buffer_after_minutes: 5, location_type: 'video',\n});\n\n// Monday-Friday 09:00-17:00 New York time, 30-minute slots.\nfor (const weekday of [1, 2, 3, 4, 5]) {\n  await upsertAvailabilityRule({\n    tenant_id, host_persona_id: hostId, weekday,\n    start_time: '09:00', end_time: '17:00',\n    timezone: 'America/New_York', slot_interval_minutes: 30,\n  });\n}",
+      "expected_outcome": "A meeting_type row exists with the per-tenant-unique slug, and five availability_rule rows (one per weekday, upserted) bound the host's bookable window. Weekends have no active rule and are treated as closed days with zero slots."
+    },
+    {
+      "id": "public-visitor-books-a-slot",
+      "title": "Anonymous visitor books a slot through a public link",
+      "when_to_use": "When an external prospect (no tenant login) needs to self-book against a host's availability via a shared Calendly-style link, receiving a capability token to manage the booking.",
+      "example_code": "// 1) Host creates the shareable link (authenticated).\nimport { createSchedulingLink } from '@projexlight/sdk-scheduling';\nconst link = await createSchedulingLink({\n  tenant_id, host_persona_id: hostId, slug: 'meet-jane',\n  meeting_type_id: meetingType.meeting_type_id, max_days_ahead: 30, min_notice_minutes: 60,\n});\n\n// 2) Visitor (anonymous) fetches slots and books one via the public routes.\nconst res = await fetch('/api/scheduling/public/links/meet-jane/book', {\n  method: 'POST', headers: { 'content-type': 'application/json' },\n  body: JSON.stringify({\n    start_time: '2026-08-01T15:00:00Z',\n    invitee_name: 'Sam Prospect', invitee_email: 'sam@example.com',\n    timezone: 'America/New_York',\n  }),\n});\nconst { data } = await res.json(); // { appointment, public_token }",
+      "expected_outcome": "The public /book route (allowlisted, no auth) creates a confirmed appointment source='public_link' inside the link's booking window and returns a high-entropy public_token. The slot is now double-book-protected, and the token is the sole key for later confirm/cancel — a raw appointment_id will not work."
+    },
+    {
+      "id": "cancel-public-booking-by-token",
+      "title": "Visitor cancels their booking with the capability token",
+      "when_to_use": "When the anonymous invitee needs to cancel the appointment they booked, using only the token issued at booking time (no tenant JWT, no appointment_id).",
+      "example_code": "import { cancelByToken } from '@projexlight/sdk-scheduling';\n\nconst appointment = await cancelByToken(publicToken, 'Something came up');\nif (!appointment) {\n  // Unknown token: indistinguishable 404 — never reveal whether the\n  // token was wrong or the appointment merely absent.\n  throw new Error('NotFound');\n}\n// appointment.status === 'cancelled'; cancelled_at is stamped and the\n// host's slot is freed for rebooking.",
+      "expected_outcome": "The appointment matching the token is cancelled (status='cancelled', cancelled_at set, reason recorded) and a booking_event is appended. An unknown or non-public token resolves to null, which the route maps to a 404 that leaks nothing about token validity — preventing IDOR/enumeration."
+    }
+  ],
+  "compliance_posture": {
+    "regimes": ["SOC2", "GDPR"],
+    "notes": "Stores PII of external, unauthenticated bookers (invitee name, email, notes) alongside timezone and meeting metadata, so appointment/booking_event data falls under GDPR data-subject scope. The public booking surface is anonymous: confirm/cancel are gated ONLY by a high-entropy per-booking public_token (never a raw appointment_id) to prevent IDOR, and unknown links/tokens return an indistinguishable 404 to block enumeration. Every appointment is tenant-scoped and persona-keyed; the booking_event timeline is append-only for audit. Booking implies invitee consent to be contacted for reminders; two-way calendar sync exports appointment data to external providers (Google/Microsoft/CalDAV) via sdk-connectors OAuth grants — treat that as a cross-processor data flow."
+  },
+  "pool_placement": "app",
+  "pricing_skus": [],
+  "links": {
+    "readme": "packages/sdk-scheduling/README.md",
+    "source": "packages/sdk-scheduling/src/"
+  }
+}

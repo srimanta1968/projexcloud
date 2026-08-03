@@ -4,6 +4,9 @@ import {
   checkRelationshipHandler,
   createRelationshipHandler,
   updateScopeHandler,
+  grantRoleHandler,
+  listRolesHandler,
+  attestRoleHandler,
 } from './handlers/rebacController';
 
 /**
@@ -29,6 +32,27 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
         req.log.error(err);
         if (!reply.sent) reply.code(500).send({ error: 'InternalError' });
       }
+    },
+  );
+
+  /* ---- Bitemporal contextual roles (P16 EP-384). NEW routes only. ---- */
+
+  app.post('/api/relationships/roles', { preHandler: requireAuth }, async (req, reply) => {
+    try { await grantRoleHandler(req, reply); }
+    catch (err) { req.log.error(err); if (!reply.sent) reply.code(500).send({ error: 'InternalError' }); }
+  });
+
+  app.get('/api/relationships/roles', { preHandler: requireAuth }, async (req, reply) => {
+    try { await listRolesHandler(req, reply); }
+    catch (err) { req.log.error(err); if (!reply.sent) reply.code(500).send({ error: 'InternalError' }); }
+  });
+
+  app.post<{ Params: { relationship_id: string } }>(
+    '/api/relationships/:relationship_id/attest',
+    { preHandler: requireAuth },
+    async (req, reply) => {
+      try { await attestRoleHandler(req, reply); }
+      catch (err) { req.log.error(err); if (!reply.sent) reply.code(500).send({ error: 'InternalError' }); }
     },
   );
 

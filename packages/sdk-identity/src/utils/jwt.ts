@@ -40,6 +40,12 @@ export interface SixLayerJwtClaims {
   encounter_id?: string | null;
   actor?: { kind: ActorKind };
   amr?: string[];
+  /**
+   * Present only on machine tokens minted from an API key. A human's authority
+   * comes from their persona and ReBAC grants, so a human token carries none —
+   * an empty array here would read as "no authority" rather than "not scoped".
+   */
+  scopes?: string[];
 }
 
 /**
@@ -56,6 +62,25 @@ export interface JwtPayload {
  */
 export function signJwt(payload: JwtPayload | SixLayerJwtClaims): string {
   const options: SignOptions = { expiresIn: jwtExpiresIn() as SignOptions['expiresIn'] };
+  return jwt.sign(payload as object, jwtSecret(), options);
+}
+
+/**
+ * Signs a token with an EXPLICIT lifetime in seconds, for credentials that must
+ * be short-lived regardless of the platform-wide JWT_EXPIRES_IN default.
+ *
+ * A machine token minted from an API key is the motivating case: it cannot be
+ * revoked before it expires, so its lifetime IS the revocation delay, and the
+ * 7-day default that suits a signed-in human would leave a week-long window
+ * after a key is revoked. Callers pass minutes, not days.
+ *
+ * Kept separate from `signJwt` rather than adding an optional argument because
+ * `jsonwebtoken` rejects a payload carrying `exp` alongside an `expiresIn`
+ * option — the two ways of saying the same thing cannot be mixed, and a caller
+ * doing so gets an opaque runtime error.
+ */
+export function signJwtWithTtl(payload: SixLayerJwtClaims, ttlSeconds: number): string {
+  const options: SignOptions = { expiresIn: ttlSeconds };
   return jwt.sign(payload as object, jwtSecret(), options);
 }
 

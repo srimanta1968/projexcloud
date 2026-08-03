@@ -1,0 +1,99 @@
+{
+  "name": "GET /api/conversations/threads/:id — thread with its messages in occurred_at order",
+  "endpoint": "/api/conversations/threads/:id",
+  "sdk": "sdk-conversation",
+  "sourceFile": "packages/sdk-conversation/src/server/routes.ts",
+  "method": "GET",
+  "requiresAuth": true,
+  "expectedStatus": 200,
+  "taskId": "e5a557ae-1ca4-4476-850b-0107e9b23db1",
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "featureId": "41f67890-b988-4afc-935a-1ce48d600677",
+  "epicId": "54b75cbb-e257-4e64-a356-3817f73256e2",
+  "priority": 33,
+  "testability": "auto",
+  "dependsOn": [
+    "POST /api/auth/signup-tenant",
+    "POST /api/conversations/threads",
+    "POST /api/conversations/messages"
+  ],
+  "coversCriterion": [],
+  "description": "Returns one thread plus its messages, ordered strictly by occurred_at with received_at and message_id as tie-breakers only, so the order is total and stable across repeated reads. That ordering is the whole point: a provider tells you about a message when it gets around to it, so an SMS sent at 09:00 can reach the webhook after a reply sent at 09:04, and sorting by arrival would render the answer above the question. exclude_internal=true omits INTERNAL_NOTE rows, which is what a customer-visible transcript export wants. QA edge cases: a thread belonging to a DIFFERENT tenant returns 404, not 403 and not an empty 200 — a 403 would confirm the id exists to a caller who should not know that, and an empty 200 would do the same more quietly; an unknown id is likewise 404; requiresAuth applies to this GET (MUST-52), so no Bearer is 401; limit is clamped to 1..500 and offset floored at 0; messages is an empty array on a thread with no messages, never null.",
+  "testCases": [
+    {
+      "name": "Fetch the thread and its messages",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "pathParams": {
+        "id": "{{cache:conversations.threads.response.data.thread.thread_id}}"
+      },
+      "queryParams": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}"
+      },
+      "expectedStatus": 200
+    },
+    {
+      "name": "Customer-visible transcript excludes internal notes",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "pathParams": {
+        "id": "{{cache:conversations.threads.response.data.thread.thread_id}}"
+      },
+      "queryParams": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "exclude_internal": "true"
+      },
+      "expectedStatus": 200
+    }
+  ],
+  "errorCases": [
+    {
+      "name": "An unknown thread id is 404",
+      "status": 404,
+      "code": "THREAD_NOT_FOUND",
+      "message": "NotFound",
+      "when": "the id names no thread",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "pathParams": { "id": "00000000-0000-0000-0000-000000000000" },
+      "queryParams": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}"
+      },
+      "expectedStatus": 404,
+      "expectedError": { "code": "THREAD_NOT_FOUND" }
+    },
+    {
+      "name": "Missing tenant_id is refused",
+      "status": 400,
+      "code": "VALIDATION_ERROR",
+      "message": "tenant_id query param required",
+      "when": "the tenant_id query parameter is absent, so the read cannot be tenant-scoped",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "pathParams": {
+        "id": "{{cache:conversations.threads.response.data.thread.thread_id}}"
+      },
+      "queryParams": {},
+      "expectedStatus": 400,
+      "expectedError": { "code": "VALIDATION_ERROR" }
+    },
+    {
+      "name": "Unauthenticated is refused by the default-deny gate",
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "missing or invalid tenant token",
+      "when": "no valid tenant Bearer token on the request",
+      "pathParams": {
+        "id": "{{cache:conversations.threads.response.data.thread.thread_id}}"
+      },
+      "queryParams": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}"
+      },
+      "expectedStatus": 401
+    }
+  ]
+}

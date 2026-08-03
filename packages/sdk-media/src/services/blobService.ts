@@ -115,7 +115,7 @@ async function resolveVaultKeyRef(tenant_id: string, encounter_id?: string): Pro
   if (encounter_id) {
     const enc = await dataService.one<{ key_id: string }>(
       `SELECT key_id FROM vault.key
-        WHERE tier = 'encounter' AND subject_id = $1 AND state = 'active'
+        WHERE tier = 'encounter' AND scope_id = $1 AND state = 'active'
         LIMIT 1`,
       [encounter_id],
     );
@@ -123,7 +123,7 @@ async function resolveVaultKeyRef(tenant_id: string, encounter_id?: string): Pro
   }
   const tenantKey = await dataService.one<{ key_id: string }>(
     `SELECT key_id FROM vault.key
-      WHERE tier = 'tenant' AND subject_id = $1 AND state = 'active'
+      WHERE tier = 'tenant' AND scope_id = $1 AND state = 'active'
       LIMIT 1`,
     [tenant_id],
   );

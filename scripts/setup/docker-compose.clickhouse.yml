@@ -10,17 +10,24 @@ services:
       CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: "1"
     ulimits:
       nofile: { soft: 262144, hard: 262144 }
-    mem_limit: 1400m
+    # Container size + tuning profile are env-selectable so the same compose file
+    # serves the small co-located test box AND a dedicated production box. The
+    # defaults reproduce the current 1.4GB test behavior exactly — set these in
+    # .env.prod on a dedicated box (see infra/clickhouse/config.d/tuning.prod.xml):
+    #   CH_MEM_LIMIT=48g   CH_CPUS=0   CH_TUNING_FILE=tuning.prod.xml
+    mem_limit: ${CH_MEM_LIMIT:-1400m}
     # ClickHouse needs SYS_NICE for thread priorities; without it every
-    # get_mempolicy() call fails and it retries in a hot loop.
+    # get_mempolicy() call fails and it retries in a hot loop. Correct for ALL sizes.
     cap_add: [SYS_NICE]
-    # Guardrail: never let OLAP starve postgres/gateway on this 2-core box.
-    cpus: "1.5"
+    # cpu cap: guards a co-located box (default 1.5); set CH_CPUS=0 for no cap on
+    # a dedicated box.
+    cpus: "${CH_CPUS:-1.5}"
     volumes:
       - clickhouse_data:/var/lib/clickhouse
       - ../../infra/clickhouse/init:/docker-entrypoint-initdb.d:ro
       - ../../infra/clickhouse/config.d/logging.xml:/etc/clickhouse-server/config.d/logging.xml:ro
-      - ../../infra/clickhouse/config.d/tuning.xml:/etc/clickhouse-server/config.d/tuning.xml:ro
+      # Tuning profile: tuning.xml (small, default) or tuning.prod.xml (dedicated box).
+      - ../../infra/clickhouse/config.d/${CH_TUNING_FILE:-tuning.xml}:/etc/clickhouse-server/config.d/tuning.xml:ro
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:8123/ping"]
       interval: 15s

@@ -1,0 +1,166 @@
+{
+  "_readme": "Import-ready payload for projexlight_import_full. Run from a Claude Code session rooted at c:\\Users\\srima\\projex_verticals\\ProjexCloud so the MCP bridge injects PROJECT_ID=cf30e9b7-0b94-4b48-8571-ee41e1241131. The epic importer deduplicates on source_module, so keep it unique.",
+  "_sprint_id": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "_project_id": "cf30e9b7-0b94-4b48-8571-ee41e1241131",
+  "_stack": "fastify + typescript + postgresql (backend), nextjs + tailwind (frontend), jest + playwright (test)",
+  "epics": {
+    "epics": [
+      {
+        "temp_id": "PC-13",
+        "source_module": "platform-tenant-app-credentials",
+        "title": "Tenant Application Credentials - Per-App API Keys, Gateway Key Auth and Client-Credentials Tokens",
+        "description": "PLATFORM CAPABILITY. Lets a customer's own application call ProjexCloud server-to-server with a scoped, revocable machine credential instead of a human's email and password. WHAT ALREADY EXISTS: sdk-api-keys ships a full lifecycle (issue, list, rotate with a 24h grace window, revoke, PBKDF2 hash at rest, api-key.issued/rotated/revoked audit events); an uncommitted bridge (packages/sdk-api-keys/src/middleware/authOrApiKey.ts, untracked) projects a verified key into SixLayerJwtClaims; three SDKs (sdk-sla, sdk-assignment, sdk-notification) opted in; a tenant-admin page and a detailed developer-hub guide exist. WHAT IS BROKEN, AND WHY THIS EPIC EXISTS: (1) NO KEY CAN REACH ANY ROUTE - services/api-gateway/src/plugins/authGate.ts runs the JWT-only requireAuth as a root onRequest hook, which Fastify executes before any route preHandler, so a pk_live_ bearer fails verifyJwt and 401s platform-wide; the feature and its documentation are dead on arrival in enforce mode. (2) CROSS-TENANT TAKEOVER - the issue/list/revoke/rotate handlers read tenant_id and key_id from the request and never compare them to the caller's claims, so any signed-in user of tenant A can rotate tenant B's key and receive the new plaintext. (3) COVERAGE IS 3 OF ~68 mounted route modules, by per-SDK opt-in, so a newly added route silently defaults to JWT-only. (4) HOT PATH - verifyKey runs crypto.pbkdf2Sync at 310,000 iterations synchronously per request, blocking the event loop, plus a DB write per hit; nothing subscribes to the api-key:revoked channel it publishes to; rate_limit_rpm is stored and never enforced. (5) THE SCHEMA CANNOT EXPRESS PER-APP KEYS - no application id, name, created_by or environment column, while the code hard-codes pk_live_ and the docs promise pk_test_. (6) TWO COMPETING SURFACES - /api/api-keys/* in the SDK and an inline /api/keys/* block in app.ts, and the portal UI matches neither and sends no Authorization header. DESIGN DECISION (2026-07-30): per-application keys backed by an application registry, not one global key per tenant - the industry norm (Stripe restricted keys, SendGrid named keys, Twilio, AWS IAM, Auth0 M2M clients), because a global key makes a leak force every integration to rotate at once and makes per-app audit, metering and billing impossible. Credentials authenticate two ways: directly at the gate as Authorization: Bearer pk_..., and via RFC 6749 client_credentials exchange for a short-lived service JWT, which covers all ~68 SDKs centrally and moves key verification off the per-request path. OUT OF SCOPE BY CONSTRUCTION: /admin/*, /api/admin/* (ADMIN_OPS_TOKEN), /scim/* and the robot command-ack leaf self-guard with their own credentials and must keep refusing a tenant key."
+      }
+    ]
+  },
+  "features": {
+    "features": [
+      {
+        "temp_id": "PCF-13-1",
+        "epic_temp_id": "PC-13",
+        "source_feature_file": "apk-application-schema",
+        "title": "Application registry and per-app key schema",
+        "description": "Migration 002 for sdk-api-keys. NEW TABLE api_keys.application (application_id, tenant_id, name, slug, description, environment live|test, status active|disabled, owner_persona_id, created_by_persona_id, created_at, disabled_at) with UNIQUE(tenant_id, slug). ALTER api_keys.key ADD application_id, name, environment, created_by_persona_id, key_lookup BYTEA and last_used_ip. application_id is deliberately NULLABLE: sdk-command mints per-robot credentials into this same table via issueRobotCredential, and those are system credentials with no tenant application - a NOT NULL column would break robot command-ack at the next boot. FK ON DELETE RESTRICT so disabling an application can never orphan a live credential silently. Idempotent (IF NOT EXISTS / ADD COLUMN IF NOT EXISTS), safe to re-run every boot, applied through the gateway boot migration list per the platform's auto-migrate rule."
+      },
+      {
+        "temp_id": "PCF-13-2",
+        "epic_temp_id": "PC-13",
+        "source_feature_file": "apk-lifecycle-authz",
+        "title": "Application and key lifecycle with tenant-scoped authorization",
+        "description": "applicationService (create, list, get, disable) plus the rewritten key lifecycle. THE AUTHORIZATION DEFECT THIS CLOSES: issueKeyHandler, listKeysHandler, revokeKeyHandler and rotateKeyHandler take tenant_id and key_id from the request and never compare them to req.auth.tenant_id, so a user of one tenant can rotate another tenant's key and read the new plaintext out of the 201 response - a full takeover primitive. Tenant is resolved from the caller's claims ONLY; a payload tenant_id that disagrees is a 403; a key_id belonging to another tenant answers 404, not 403, because 403 confirms the key exists. Environment-correct minting: a test application mints pk_test_ and a live application mints pk_live_ - today generatePlaintext hard-codes pk_live_ while both the matcher and the published documentation promise pk_test_. Disabling an application revokes its keys in the same transaction."
+      },
+      {
+        "temp_id": "PCF-13-3",
+        "epic_temp_id": "PC-13",
+        "source_feature_file": "apk-gateway-gate",
+        "title": "Gateway key authentication at the default-deny gate",
+        "description": "THE BLOCKER, and the reason nothing else in this epic is observable until it lands. authGate.ts attaches one root onRequest hook calling sdk-identity's JWT-only requireAuth. Fastify runs onRequest strictly before route preHandler, so Authorization: Bearer pk_live_... matches the bearer regex, fails verifyJwt and returns 401 - requireAuthOrApiKeyForDomain on the three opted-in SDKs never executes. The gate learns the credential format: a pk_ bearer is verified, projected into SixLayerJwtClaims (actor.kind=service, amr=[api_key]) on req.auth, and checked against a centrally derived <domain>.<resource>.<action> scope, so coverage is universal and a newly added route is protected the moment it exists rather than defaulting to JWT-only. Payload tenant_id is cross-checked against the key's tenant. EXCLUSIONS PRESERVED EXACTLY: /admin/, /api/admin/, /scim/ and the /api/commands/:id/ack leaf keep self-guarding with their own credentials and must refuse a tenant key. AUTH_GATE_MODE=enforce|report|off semantics unchanged."
+      },
+      {
+        "temp_id": "PCF-13-4",
+        "epic_temp_id": "PC-13",
+        "source_feature_file": "apk-hot-path",
+        "title": "Verification hot path - HMAC lookup, cache and revocation propagation",
+        "description": "verifyKey runs crypto.pbkdf2Sync at 310,000 iterations SYNCHRONOUSLY on every request, blocking the whole gateway event loop for the duration, and writes last_used_at on every hit. A key is 192 bits of generated entropy rather than a human password, so a slow KDF buys nothing against brute force - the standard construction for a high-entropy bearer secret is a keyed HMAC-SHA256 over a server-side pepper, looked up by index. Adds the key_lookup index column, an in-process LRU with a short TTL, a Redis subscriber on the api-key:revoked channel the service ALREADY publishes to and which today has no consumer at all, and debounced last_used_at writes so telemetry does not cost a write per request. Dual-read: rows still carrying a pbkdf2 hash verify the old way and are upgraded in place on first use, so the migration invalidates nobody's credential."
+      },
+      {
+        "temp_id": "PCF-13-5",
+        "epic_temp_id": "PC-13",
+        "source_feature_file": "apk-rate-limit-metering",
+        "title": "Per-key rate limiting and per-application usage metering",
+        "description": "rate_limit_rpm is accepted by the validator, stored on the row, and enforced nowhere - an operator who sets it believes they have a control they do not have, which is worse than not offering it. Adds a Redis fixed-window counter per key answering 429 with Retry-After and the RateLimit-Limit / RateLimit-Remaining / RateLimit-Reset headers, a tenant-level ceiling that a per-key limit cannot exceed, and per-application usage emission to sdk-meter so consumption is attributable to the application that caused it. That attribution is the whole practical argument for one key per app over one per tenant, so it ships in the same epic rather than being deferred."
+      },
+      {
+        "temp_id": "PCF-13-6",
+        "epic_temp_id": "PC-13",
+        "source_feature_file": "apk-client-credentials",
+        "title": "Client-credentials token exchange",
+        "description": "POST /api/auth/token with grant_type=client_credentials, client_id = the application slug or id and client_secret = the plaintext key, answering a short-lived (default 15 minute) service JWT carrying the key's scopes, tenant and synthetic persona. Two payoffs: a high-volume caller pays credential verification once per token instead of once per request, and every existing JWT-only route accepts the result unchanged. RFC 6749 error shapes (invalid_client, invalid_scope, unsupported_grant_type), and the same deliberate ambiguity as key verification - invalid, revoked and expired all answer invalid_client so probing cannot confirm a client exists. A revoked key stops minting tokens immediately; tokens already issued run out on their own TTL, which is the documented trade for taking verification off the hot path."
+      },
+      {
+        "temp_id": "PCF-13-7",
+        "epic_temp_id": "PC-13",
+        "source_feature_file": "apk-surface-consolidation",
+        "title": "One key surface - consolidate /api/keys into /api/api-keys",
+        "description": "Two surfaces exist today: sdk-api-keys' /api/api-keys/* and an inline block in services/api-gateway/src/app.ts (around line 3403) mounting GET/POST /api/keys and POST /api/keys/:key_id/revoke with a different payload shape, no rotate, and no authorization at all. Two half-authorized doors into the same table is how one of them gets forgotten in the next audit. The inline block is retired; /api/keys/* survives only as a deprecated alias delegating to the SDK handlers and announcing itself with a Deprecation header and a Link to the replacement, so the tenant portal keeps working while it is rebuilt. Adds the application routes and api_definitions for the whole surface under tests/api_definitions/api-keys."
+      },
+      {
+        "temp_id": "PCF-13-8",
+        "epic_temp_id": "PC-13",
+        "source_feature_file": "apk-tenant-portal-ui",
+        "title": "Tenant portal - Applications and API keys",
+        "description": "apps/tenant-admin/src/app/api-keys/page.tsx exists and is broken in three independent ways: it posts {name, scope} to /api/keys - fields the schema does not have; it renders name, scope and issued_at, none of which listKeys returns; and it sends NO Authorization header, so the default-deny gate 401s every one of its fetches. Rebuilt as Applications -> application detail -> keys: create an application (name, environment), issue a key with a scope picker, expiry and rate limit, a one-time reveal with copy-to-clipboard behind an explicit acknowledgement that it is the only time it will be shown, rotate showing the grace-window countdown with both prefixes live at once, revoke with a required reason, and last-used plus recent usage per key. Authenticated with the portal session token."
+      },
+      {
+        "temp_id": "PCF-13-9",
+        "epic_temp_id": "PC-13",
+        "source_feature_file": "apk-developer-hub-docs",
+        "title": "Developer hub and portal docs corrected to the shipped behaviour",
+        "description": "docs/v3.1/developer-hub/index.html and api-keys-and-project-setup.html, plus the byte-identical copies under apps/tenant-admin/public/docs/hub and apps/tenant-workspace/public/docs/hub, describe the intended design accurately and in detail but are ahead of the code and wrong on specifics: index.html sends the reader to Workspace -> Settings -> API keys, a page that does not exist (the real one is tenant-admin /api-keys), then contradicts itself by telling them to authenticate with a JWT; the setup guide gives the local gateway as :3000 when it listens on :4000; both present key auth as generally available when three SDKs opted in and the gate blocked all of them. Rewritten for per-application keys, the token-exchange path, the real navigation and the real coverage, with a scope reference generated from the route table rather than hand-listed so it cannot drift, and the three copies kept identical to the canonical file by a check rather than by hand."
+      },
+      {
+        "temp_id": "PCF-13-10",
+        "epic_temp_id": "PC-13",
+        "source_feature_file": "apk-coverage-gate",
+        "title": "Coverage gate - tenant routes accept keys, operator surfaces refuse them",
+        "description": "An executable gate rather than a claim in a document. Enumerates the gateway's mounted route table and asserts that every tenant-callable route accepts a correctly scoped key, and that /admin/*, /api/admin/*, /scim/* and the robot command-ack leaf REFUSE one even when the key is valid, active and in-tenant. Plus the sharp cases: payload naming another tenant, missing scope, revoked mid-flight, expired, rotating inside the grace window, rotating after it, rate limit exceeded, and a pk_test_ credential presented to a live application's data. Modelled on the sdk-sla neutrality gate: the matcher is SELF-CHECKED - one test plants a deliberately unguarded route and asserts the enumeration catches it, because a gate that cannot fail is theatre."
+      }
+    ]
+  },
+  "scenarios": {
+    "scenarios": [
+      {
+        "temp_id": "PCS-13-01",
+        "feature_temp_id": "PCF-13-3",
+        "title": "A valid API key reaches a tenant SDK route",
+        "description": "Given an active pk_live_ key holding sla.clock.write for tenant T, When POST /api/sla/clocks is called with Authorization: Bearer <key> and a body naming tenant T, Then the request is served rather than 401'd at the gate, And req.auth.actor.kind is service with amr [api_key], And the audit entry attributes the write to the key's synthetic persona rather than to any human."
+      },
+      {
+        "temp_id": "PCS-13-02",
+        "feature_temp_id": "PCF-13-3",
+        "title": "An API key is refused by an operator surface",
+        "description": "Given a valid in-tenant key granted every scope the platform defines, When it calls a route under /api/admin/ or /scim/, Then the request is refused by that surface's own guard, And no administrative action is performed, And the refusal is identical to the one an unauthenticated caller receives."
+      },
+      {
+        "temp_id": "PCS-13-03",
+        "feature_temp_id": "PCF-13-2",
+        "title": "One tenant cannot rotate another tenant's key",
+        "description": "Given a user signed in to tenant A and an active key belonging to tenant B, When they call POST /api/api-keys/<tenant-B-key>/rotate, Then the response is 404 rather than 403, so the existence of the key is not confirmed, And no new plaintext is minted, And tenant B's key continues to authenticate."
+      },
+      {
+        "temp_id": "PCS-13-04",
+        "feature_temp_id": "PCF-13-4",
+        "title": "Revocation takes effect on every replica within a second",
+        "description": "Given two gateway replicas that have each cached the same key, When the key is revoked through replica 1, Then replica 2 refuses it within one second by way of the api-key:revoked subscription rather than waiting for its cache TTL, And the refusal wording is identical to that of a key that never existed."
+      },
+      {
+        "temp_id": "PCS-13-05",
+        "feature_temp_id": "PCF-13-2",
+        "title": "A test application mints a test-prefixed key",
+        "description": "Given an application created with environment=test, When a key is issued under it, Then the plaintext carries the pk_test_ prefix, And the stored record records environment test, And a live application issuing a key produces pk_live_ - so the two can never be confused by inspection."
+      },
+      {
+        "temp_id": "PCS-13-06",
+        "feature_temp_id": "PCF-13-1",
+        "title": "Robot credentials survive the application migration",
+        "description": "Given per-robot credentials minted into api_keys.key by sdk-command before this epic, When migration 002 adds the application columns, Then those rows remain valid with a NULL application_id, And POST /api/commands/:command_id/ack still authenticates with its pk_live_ credential, And nothing in the migration requires backfilling them into a synthetic application."
+      },
+      {
+        "temp_id": "PCS-13-07",
+        "feature_temp_id": "PCF-13-6",
+        "title": "Client credentials exchange returns a short-lived scoped token",
+        "description": "Given an active key holding sla.clock.write, When POST /api/auth/token is called with grant_type=client_credentials and that key as client_secret, Then the response carries access_token, token_type Bearer, expires_in no greater than 900 and the granted scope list, And the token is accepted on POST /api/sla/clocks, And refused on a route requiring a scope the key does not hold."
+      },
+      {
+        "temp_id": "PCS-13-08",
+        "feature_temp_id": "PCF-13-6",
+        "title": "A revoked key stops minting tokens immediately",
+        "description": "Given a key revoked one second ago, When a token exchange is attempted with it, Then the response is invalid_client, And a token issued before the revocation remains valid until its own expiry, And that window is stated in the response documentation rather than left for a caller to discover."
+      },
+      {
+        "temp_id": "PCS-13-09",
+        "feature_temp_id": "PCF-13-5",
+        "title": "An over-limit key is throttled with standard headers",
+        "description": "Given a key with rate_limit_rpm of 60 that has already made 60 calls this minute, When it makes a further call, Then the response is 429 carrying Retry-After and RateLimit-Limit, RateLimit-Remaining and RateLimit-Reset, And a second key belonging to the same tenant is unaffected, And the throttled call is not metered as usage."
+      },
+      {
+        "temp_id": "PCS-13-10",
+        "feature_temp_id": "PCF-13-8",
+        "title": "The one-time reveal cannot be recovered",
+        "description": "Given the portal has just issued a key and displayed its plaintext, When the operator navigates away without copying it, Then the plaintext appears in no list, detail view, cache or server log, And the only remedy the interface offers is rotation, And the copy control is accompanied by an explicit acknowledgement before the value is shown."
+      },
+      {
+        "temp_id": "PCS-13-11",
+        "feature_temp_id": "PCF-13-4",
+        "title": "An existing PBKDF2 key keeps working after the HMAC migration",
+        "description": "Given a key issued before this epic and stored only as a PBKDF2 hash, When it is presented after the migration, Then it verifies by the legacy path, And its record is upgraded in place with the HMAC lookup value, And a subsequent request for the same key takes the fast path without another PBKDF2 computation."
+      },
+      {
+        "temp_id": "PCS-13-12",
+        "feature_temp_id": "PCF-13-7",
+        "title": "The deprecated alias answers but announces itself",
+        "description": "Given a caller still using /api/keys, When it issues or lists a key, Then the response body is the sdk-api-keys shape rather than the retired inline one, And it carries a Deprecation header and a Link pointing at /api/api-keys, And the same tenant-scoped authorization applies as on the canonical route."
+      }
+    ]
+  }
+}

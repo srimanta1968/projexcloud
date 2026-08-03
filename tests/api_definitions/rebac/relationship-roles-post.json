@@ -1,0 +1,132 @@
+{
+  "name": "POST /api/relationships/roles — grant a bitemporal contextual role",
+  "endpoint": "/api/relationships/roles",
+  "sdk": "sdk-rebac",
+  "sourceFile": "packages/sdk-rebac/src/server/routes.ts",
+  "method": "POST",
+  "requiresAuth": true,
+  "expectedStatus": 201,
+  "taskId": "f50d45c1-6b9d-45ae-9f57-1806fae6d53e",
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "featureId": "0eca47ce-30fb-44e9-91c7-51ac09170762",
+  "epicId": "bd0b5996-171f-46f2-8ead-0b72593f97df",
+  "priority": 70,
+  "testability": "auto",
+  "dependsOn": ["POST /api/auth/signup-tenant"],
+  "coversCriterion": [
+    "f50d45c1-6b9d-45ae-9f57-1806fae6d53e#AC1",
+    "f50d45c1-6b9d-45ae-9f57-1806fae6d53e#AC3"
+  ],
+  "description": "Grants one contextual role between two personas. A collection-root create, so 201. Proves AC1 and AC3. A subject-object pair is no longer ONE relationship: someone can be a patient's daughter AND registered carer AND billing contact simultaneously, each with its own role_label, its own trust_state and its own valid_from/valid_to — collapsing them into a single edge would force a choice between losing the distinction and overwriting a role that is still true. TRUST AND VALIDITY ARE SEPARATE AXES on purpose: 'is this in force now' and 'how sure are we it is real' have different remedies (an expired carer role needs renewing, an unevidenced one needs a document), and a single status field answers 'inactive' to both. AC3: CONFIRMED and DOCUMENTED require at least one evidence_ref, enforced BOTH in the service (readable error) and by a CHECK constraint (so a backfill or direct insert cannot slip past); CANDIDATE requires none, which is also why it is the column default — any other default would have invalidated every pre-existing row the moment the column was added. QA edge cases: the evidence CHECK uses cardinality() rather than array_length(), because array_length('{}',1) returns NULL and a NULL CHECK PASSES — written the obvious way the constraint silently permits the exact row it exists to forbid; whitespace-only evidence refs are stripped and then count as absent; a persona cannot hold a role to itself; a duplicate LIVE role for the same (pair, kind, role_label) is a 409, but the same pair may hold unlimited DIFFERENT labels and unlimited CLOSED historical rows; the live-role uniqueness is scoped to labelled rows only, so pre-existing unlabelled edges — which the original schema legitimately permits in duplicate — keep working unchanged.",
+  "captureResponse": {
+    "rebac.roles.response.data.role.relationship_id": "data.role.relationship_id"
+  },
+  "testCases": [
+    {
+      "name": "Grant a DOCUMENTED carer role with evidence",
+      "headers": { "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}" },
+      "payload": {
+        "kind": "care-team",
+        "persona_a": "{{cache:personas.create.response.data.persona.persona_id}}",
+        "persona_b": "{{cache:personas.create-second.response.data.persona.persona_id}}",
+        "role_label": "registered_carer",
+        "trust_state": "DOCUMENTED",
+        "evidence_refs": ["doc:poa-77"],
+        "valid_from": "{{dynamic:pastdatetime}}"
+      },
+      "expectedStatus": 201
+    },
+    {
+      "name": "A CANDIDATE role needs no evidence",
+      "headers": { "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}" },
+      "payload": {
+        "kind": "care-team",
+        "persona_a": "{{cache:personas.create.response.data.persona.persona_id}}",
+        "persona_b": "{{cache:personas.create-second.response.data.persona.persona_id}}",
+        "role_label": "billing_contact",
+        "trust_state": "CANDIDATE"
+      },
+      "expectedStatus": 201
+    }
+  ],
+  "errorCases": [
+    {
+      "name": "CONFIRMED without evidence is refused",
+      "status": 400,
+      "code": "EVIDENCE_REQUIRED",
+      "message": "[sdk-rebac] trust_state 'CONFIRMED' requires at least one evidence_ref",
+      "when": "trust_state is CONFIRMED or DOCUMENTED and evidence_refs is empty or whitespace-only — such a row reads as checked to every downstream reader while resting on nothing",
+      "headers": { "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}" },
+      "payload": {
+        "kind": "care-team",
+        "persona_a": "{{cache:personas.create.response.data.persona.persona_id}}",
+        "persona_b": "{{cache:personas.create-second.response.data.persona.persona_id}}",
+        "role_label": "unevidenced",
+        "trust_state": "CONFIRMED"
+      },
+      "expectedStatus": 400,
+      "expectedError": { "code": "EVIDENCE_REQUIRED" }
+    },
+    {
+      "name": "An unknown trust_state is refused",
+      "status": 400,
+      "code": "VALIDATION_ERROR",
+      "message": "trust_state must be one of CONFIRMED, CANDIDATE, DOCUMENTED",
+      "when": "trust_state is outside the three recorded states",
+      "headers": { "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}" },
+      "payload": {
+        "kind": "care-team",
+        "persona_a": "{{cache:personas.create.response.data.persona.persona_id}}",
+        "persona_b": "{{cache:personas.create-second.response.data.persona.persona_id}}",
+        "trust_state": "PROBABLY"
+      },
+      "expectedStatus": 400,
+      "expectedError": { "code": "VALIDATION_ERROR" }
+    },
+    {
+      "name": "A missing persona is refused",
+      "status": 400,
+      "code": "VALIDATION_ERROR",
+      "message": "persona_b is required",
+      "when": "kind, persona_a or persona_b is absent",
+      "headers": { "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}" },
+      "payload": {
+        "kind": "care-team",
+        "persona_a": "{{cache:personas.create.response.data.persona.persona_id}}"
+      },
+      "expectedStatus": 400,
+      "expectedError": { "code": "VALIDATION_ERROR" }
+    },
+    {
+      "name": "A second LIVE role with the same label is a conflict",
+      "status": 409,
+      "code": "ROLE_ALREADY_LIVE",
+      "message": "a live role with this kind and label already exists for the pair",
+      "when": "an identical (pair, kind, role_label) role is already open — a duplicate, not a second role; close the first or use a different label",
+      "headers": { "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}" },
+      "payload": {
+        "kind": "care-team",
+        "persona_a": "{{cache:personas.create.response.data.persona.persona_id}}",
+        "persona_b": "{{cache:personas.create-second.response.data.persona.persona_id}}",
+        "role_label": "registered_carer",
+        "trust_state": "DOCUMENTED",
+        "evidence_refs": ["doc:duplicate"]
+      },
+      "expectedStatus": 409,
+      "expectedError": { "code": "ROLE_ALREADY_LIVE" }
+    },
+    {
+      "name": "Unauthenticated is refused by the default-deny gate",
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "missing or invalid tenant token",
+      "when": "no valid tenant Bearer token on the request",
+      "payload": {
+        "kind": "care-team",
+        "persona_a": "{{cache:personas.create.response.data.persona.persona_id}}",
+        "persona_b": "{{cache:personas.create-second.response.data.persona.persona_id}}"
+      },
+      "expectedStatus": 401
+    }
+  ]
+}

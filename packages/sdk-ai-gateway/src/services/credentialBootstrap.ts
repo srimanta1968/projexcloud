@@ -1,6 +1,11 @@
 import { dataService } from '@projexlight/db-runtime';
 import { appendAuditEntry } from '@projexlight/sdk-audit';
-import type { ProviderId } from '@projexlight/contracts';
+import type {
+  ProviderId,
+  CompletionRequest,
+  StreamChunk,
+} from '@projexlight/contracts';
+import { registerProvider, getProvider, type ProviderAdapter, type ProviderCompletionResult } from './providerAdapter';
 
 /**
  * LLM provider credentials bootstrap (I-3 / TK-3305).
@@ -78,6 +83,75 @@ export interface BootstrapResult {
 }
 
 /**
+ * Whether to auto-register the synthetic in-process LLM adapter. Mirrors the
+ * synthetic-in-dev gates used across the codebase (blobService S3 signer,
+ * notification providerAdapters, BYOK synthetic KMS): synthetic is fine outside
+ * production; production must register a real adapter (or opt in explicitly).
+ */
+const SYNTHETIC_LLM_ALLOWED = (): boolean => {
+  if (process.env.NODE_ENV !== 'production') return true;
+  return process.env.ALLOW_SYNTHETIC_AI_PROVIDERS === 'true';
+};
+
+/**
+ * Deterministic in-process LLM adapter for dev/test. Returns a synthetic
+ * completion so the ai-gateway pipeline (route → redact → provider → persist →
+ * audit) is exercisable without a live upstream provider call. The real vendor
+ * adapters (OpenAI/Anthropic/…) register over this via registerProvider() at
+ * boot in production.
+ */
+function makeSyntheticLlmAdapter(provider_id: ProviderId): ProviderAdapter {
+  const estTokens = (req: CompletionRequest): number => {
+    const text = typeof req.prompt === 'string' ? req.prompt : JSON.stringify(req.prompt);
+    return Math.max(1, Math.ceil(text.length / 4));
+  };
+  return {
+    provider_id,
+    async complete(request: CompletionRequest): Promise<ProviderCompletionResult> {
+      const tokens_in = estTokens(request);
+      const output = `[synthetic:${provider_id}] ${
+        typeof request.prompt === 'string' ? request.prompt : 'chat'
+      }`.slice(0, 500);
+      const tokens_out = Math.max(1, Math.ceil(output.length / 4));
+      return {
+        output,
+        tool_calls: [],
+        tokens_in,
+        tokens_out,
+        provider_cost: Number(((tokens_in + tokens_out) * 0.000001).toFixed(8)),
+        finish_reason: 'stop',
+      };
+    },
+    async *stream(request: CompletionRequest): AsyncIterable<StreamChunk> {
+      const result = await this.complete(request, Buffer.alloc(0));
+      yield {
+        completion_id: '',
+        index: 0,
+        delta: result.output,
+        finish_reason: 'stop',
+        tokens_so_far: result.tokens_out,
+      };
+    },
+  };
+}
+
+/**
+ * Registers the synthetic dev adapter for a provider when none is already
+ * registered and synthetic is allowed. Called per-provider from bootstrap so a
+ * real adapter registered earlier at boot always wins.
+ */
+function ensureSyntheticAdapter(provider_id: ProviderId): void {
+  if (!SYNTHETIC_LLM_ALLOWED()) return;
+  try {
+    getProvider(provider_id);
+    return; // a real adapter is already registered — leave it in place
+  } catch {
+    // none registered — install the synthetic dev adapter
+  }
+  registerProvider(makeSyntheticLlmAdapter(provider_id));
+}
+
+/**
  * Bootstrap LLM provider credentials from env into ai_gateway.provider.
  * Returns the per-provider outcome. In production with missing_required
  * non-empty, the caller should throw and refuse to start.
@@ -117,6 +191,11 @@ export async function bootstrapLLMCredentials(opts: { actorId?: string } = {}): 
       [spec.provider_id, spec.display_name, spec.base_url, envelope],
     );
     upserted.push(spec.provider_id);
+
+    // Ensure a provider adapter exists for this provider so completion calls
+    // can dispatch. In non-production this installs a synthetic dev adapter;
+    // production relies on a real adapter being registered at boot.
+    ensureSyntheticAdapter(spec.provider_id);
 
     try {
       await appendAuditEntry({

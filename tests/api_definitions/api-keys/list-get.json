@@ -1,62 +1,63 @@
 {
-  "name": "GET /api/api-keys - List API keys for a tenant",
-  "endpoint": "/api/api-keys",
   "sdk": "sdk-api-keys",
-  "method": "GET",
+  "sourceFile": "packages/sdk-api-keys/src/server/routes.ts",
   "requiresAuth": true,
-  "expectedStatus": 200,
-  "taskId": "134c7431-a225-48dc-bb01-c9c8506522f4",
-  "sprintId": "8ef1d09e-dd8e-4daf-8d03-54dcd9f812f8",
-  "featureId": "7a33ef6c-2dad-4c40-a8a2-f414c13e6c48",
-  "epicId": "00996d23-f667-4a82-9285-7728ba357e7b",
-  "priority": 40,
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "epicId": "783fc94b-6992-49a5-a492-74ee0450a92f",
   "testability": "auto",
+  "name": "GET /api/api-keys - List the keys of this tenant",
+  "endpoint": "/api/api-keys",
+  "method": "GET",
+  "expectedStatus": 200,
+  "taskId": "bcf23c76-2e69-48c2-af3f-84acc9e636d2",
+  "featureId": "888ec9d8-5cbb-4d77-9082-fd78b08334ad",
+  "priority": 28,
+  "description": "Every key belonging to the calling tenant, newest first, optionally narrowed to one application. Returns the display prefix and never the key itself or its hash - a list endpoint that could return a credential would make the one-time reveal meaningless. Tenant comes from the caller claims, so there is no tenant_id parameter and no way to list the credentials of somebody else.",
   "dependsOn": [
     "POST /api/auth/signup-tenant",
-    "POST /api/api-keys"
+    "POST /api/applications",
+    "POST /api/applications/{application_id}/keys"
   ],
+  "fieldEnums": {
+    "status": [
+      "active",
+      "rotating",
+      "revoked",
+      "expired"
+    ],
+    "environment": [
+      "live",
+      "test"
+    ]
+  },
   "testCases": [
     {
-      "name": "List keys for the tenant",
+      "name": "List every key of the tenant",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "data": {
+          "keys": "array"
+        }
+      }
+    },
+    {
+      "name": "Narrow to one application",
       "headers": {
         "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
       },
       "queryParams": {
-        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}"
+        "application_id": "{{cache:applications.create.response.data.application.application_id}}"
       },
       "expectedStatus": 200
     }
   ],
-  "expectedResponse": {
-    "data": {
-      "keys": "array"
-    }
-  },
-  "description": "Lists the API keys belonging to a tenant, identified by the required tenant_id query param, returning metadata only (the plaintext secret is never re-exposed after issue). Edge cases: tenant_id is mandatory and is trimmed, so a whitespace-only value is treated as missing and returns 400; a tenant with no keys returns 200 with an empty keys array rather than 404; tenant_id is read from the query string and not cross-checked against the JWT tenant_id, so scoping is by the supplied parameter — any authenticated caller who knows a tenant_id can enumerate that tenant's key metadata; the listing has no pagination or limit, so tenants with many keys return the full set in one response, and revoked/rotated keys remain in the listing with their status rather than being filtered out.",
   "errorCases": [
     {
-      "status": 401,
-      "code": "Unauthorized",
-      "message": "Missing bearer token",
-      "when": "No Authorization: Bearer <jwt> header on a requireAuth route"
-    },
-    {
-      "status": 401,
-      "code": "Unauthorized",
-      "message": "Invalid or expired token",
-      "when": "Bearer token fails verifyJwt (bad signature, malformed, or exp in the past)"
-    },
-    {
-      "status": 400,
-      "code": "ValidationError",
-      "message": "tenant_id query param is required",
-      "when": "The tenant_id query param is missing or trims to an empty string"
-    },
-    {
-      "status": 500,
-      "code": "InternalError",
-      "message": "InternalError",
-      "when": "listKeys throws — e.g. tenant_id is not a valid UUID and the query cast fails, or the database is unreachable"
+      "name": "Unauthenticated",
+      "expectedStatus": 401
     }
   ]
 }

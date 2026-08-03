@@ -61,6 +61,7 @@ import {
   setCatalogStatus,
   startSloAlarms,
   getRobotUsage,
+  report as meterReport,
 } from '@projexlight/sdk-meter';
 import { server as secretsServer } from '@projexlight/sdk-secrets';
 import { migrationsDir as tenantMigrations, server as tenantServer, createTenant as tenantCreate, listTenants as tenantList, ensureApp as appEnsure } from '@projexlight/sdk-tenant';
@@ -106,8 +107,14 @@ import {
   runDetections,
 } from '@projexlight/telemetry';
 import { migrationsDir as rebacMigrations, server as rebacServer } from '@projexlight/sdk-rebac';
-import { migrationsDir as apiKeysMigrations, server as apiKeysServer } from '@projexlight/sdk-api-keys';
-import { migrationsDir as projectionMigrations } from '@projexlight/sdk-projection';
+import {
+  migrationsDir as apiKeysMigrations,
+  server as apiKeysServer,
+  startKeyCacheInvalidation,
+  stopKeyCache,
+  setUsageReporter as setKeyUsageReporter,
+} from '@projexlight/sdk-api-keys';
+import { migrationsDir as projectionMigrations, server as projectionServer } from '@projexlight/sdk-projection';
 import {
   migrationsDir as mediaMigrations,
   server as mediaServer,
@@ -282,8 +289,8 @@ import { migrationsDir as connectorGithubMigrations } from '@projexlight/connect
 // migrations + scaffolds in this drop; full executors follow per the
 // projexlight per-task workflow (TK-3331 onward).
 import { migrationsDir as ragMigrations }              from '@projexlight/sdk-knowledge-rag';
-import { migrationsDir as parsingMigrations }          from '@projexlight/sdk-parsing';
-import { migrationsDir as conversationMigrations }     from '@projexlight/sdk-conversation';
+import { migrationsDir as parsingMigrations, server as parsingServer } from '@projexlight/sdk-parsing';
+import { migrationsDir as conversationMigrations, server as conversationServer } from '@projexlight/sdk-conversation';
 import { migrationsDir as recommendationMigrations }   from '@projexlight/sdk-recommendation';
 import {
   migrationsDir as analyticsMigrations,
@@ -336,6 +343,38 @@ import { migrationsDir as deliverabilityMigrations, server as deliverabilityServ
 import { migrationsDir as offerCatalogMigrations, server as offerCatalogServer } from '@projexlight/sdk-offer-catalog';
 import { migrationsDir as handoffMigrations, server as handoffServer, registerHandoffSaga, setHandoffApprovalCreator } from '@projexlight/sdk-handoff';
 import { migrationsDir as incidentMigrations, server as incidentServer } from '@projexlight/sdk-incident';
+// P16 · EP-374 — the provenance kernel. Every ingesting SDK lands its rows here.
+import {
+  migrationsDir as sourceRecordMigrations,
+  server as sourceRecordServer,
+} from '@projexlight/sdk-source-record';
+// P16 · EP-375 — governed import runs above sdk-ingest's write primitive.
+import {
+  migrationsDir as importMigrations,
+  server as importServer,
+} from '@projexlight/sdk-import';
+// P16 · EP-376 — business-clock SLA: calendars, policies, clocks, escalation
+// ladder, breach records and attainment.
+import {
+  migrationsDir as slaMigrations,
+  server as slaServer,
+  setOnCallResolver as setSlaOnCallResolver,
+} from '@projexlight/sdk-sla';
+// P16 · EP-377 — workforce coverage: schedules, time off, presence, capacity,
+// on-call. Migrations are wired as soon as they exist so the schema self-creates
+// at boot; the HTTP surface lands with task 95.
+import {
+  migrationsDir as coverageMigrations,
+  server as coverageServer,
+  makeSlaOnCallResolver,
+} from '@projexlight/sdk-coverage';
+// P16 · EP-378 — vendor-abstracted capability broker & credit ledger. Tenants buy
+// OUTCOMES; the provider chain, its credentials and the true vendor cost never cross
+// the tenant boundary.
+import {
+  migrationsDir as dataCreditsMigrations,
+  server as dataCreditsServer,
+} from '@projexlight/sdk-data-credits';
 import {
   migrationsDir as twilioVoiceMigrations,
   server as twilioVoiceServer,
@@ -452,6 +491,37 @@ app.register(cors, {
 app.register(obligationEnforcementPlugin);
 // P7 FR-DSP-2 — WebSocket plugin for dispatch live updates.
 app.register(websocket);
+
+/**
+ * An empty body with `Content-Type: application/json` means `{}`, not an error.
+ *
+ * Fastify's default JSON parser rejects it with 400 "Body cannot be empty".
+ * That is defensible for a route expecting a payload and actively wrong for the
+ * ones that take none: rotating a key, revoking a credential, disabling an
+ * application. Every one of those is a POST whose entire meaning is in the URL,
+ * and every ordinary HTTP client — fetch with a JSON content-type header, curl
+ * -X POST, a Next.js server action — sends exactly this shape. The portal's
+ * rotate button and a documented `curl -X POST .../rotate` both 400'd on it.
+ *
+ * Registered before the routes so it applies to the whole surface.
+ */
+app.addContentTypeParser(
+  'application/json',
+  { parseAs: 'string' },
+  (_req, body: string, done) => {
+    if (!body || body.trim() === '') {
+      done(null, {});
+      return;
+    }
+    try {
+      done(null, JSON.parse(body));
+    } catch (err) {
+      // Malformed JSON is still a client error — only EMPTY is reinterpreted.
+      (err as Error & { statusCode?: number }).statusCode = 400;
+      done(err as Error, undefined);
+    }
+  },
+);
 
 // Default-deny auth gate. Registered on the root instance BEFORE any route or
 // SDK router so its onRequest hook is inherited everywhere. Flips the gateway
@@ -575,12 +645,20 @@ app.register(eventServer.registerRoutes);
 app.register(crmServer.registerRoutes);
 app.register(assignmentServer.registerRoutes);
 app.register(sequenceServer.registerRoutes);
+app.register(conversationServer.registerRoutes);
+app.register(parsingServer.registerRoutes);
+app.register(projectionServer.registerRoutes);
 app.register(schedulingServer.registerRoutes);
 app.register(schedulingServer.registerPublicRoutes);
 app.register(deliverabilityServer.registerRoutes);
 app.register(offerCatalogServer.registerRoutes);
 app.register(handoffServer.registerRoutes);
 app.register(incidentServer.registerRoutes);
+app.register(sourceRecordServer.registerRoutes);
+app.register(importServer.registerRoutes);
+app.register(slaServer.registerRoutes);
+app.register(coverageServer.registerRoutes);
+app.register(dataCreditsServer.registerRoutes);
 app.register(twilioVoiceServer.registerRoutes);
 app.register(twilioVoiceServer.registerWebhookRoutes);
 app.register(serviceRequestServer.registerRoutes);
@@ -1225,11 +1303,34 @@ const start = async (): Promise<void> => {
       { sdk: 'sdk-offer-catalog',       dir: offerCatalogMigrations },
       { sdk: 'sdk-handoff',             dir: handoffMigrations },
       { sdk: 'sdk-incident',            dir: incidentMigrations },
+      // Self-contained (no cross-schema FKs) — ordering free.
+      { sdk: 'sdk-source-record',       dir: sourceRecordMigrations },
+      // Self-contained: entity refs are loose (kind, id) pairs, so ordering is free.
+      { sdk: 'sdk-import',              dir: importMigrations },
+      // Subject refs are loose strings — sdk-sla holds no FK into another schema.
+      { sdk: 'sdk-sla',                 dir: slaMigrations },
+      // persona_id / role_ref are loose refs too, so ordering is free.
+      { sdk: 'sdk-coverage',            dir: coverageMigrations },
+      // Self-contained: the ledger's request/reservation refs are deliberately loose
+      // (a financial record outlives the row it describes), so ordering is free.
+      { sdk: 'sdk-data-credits',        dir: dataCreditsMigrations },
       { sdk: 'connector-twilio-voice',  dir: twilioVoiceMigrations },
       // EP-341 — Unified Multi-Scope Configuration & Secrets Plane. Foundation
       // store (config.config_value); references no other schema, ordering free.
       { sdk: 'sdk-config',              dir: configMigrations },
     ]);
+
+    // MIGRATE_ONLY=1 — apply every SDK migration, then exit 0 without starting the server.
+    //
+    // Exists so CI can bring a database up to schema using THIS list rather than a second
+    // copy of it. A duplicated list is guaranteed to drift the moment an SDK is added, and
+    // the failure mode is silent: the suites that need the missing table skip or return
+    // early and the run still reports green. Reusing the boot path makes the CI schema and
+    // the production schema the same thing by construction.
+    if (process.env.MIGRATE_ONLY === '1') {
+      console.log('[api-gateway] MIGRATE_ONLY=1 — migrations applied, exiting without serving.');
+      process.exit(0);
+    }
 
     // EP-341 — lift env-only provider defaults into the config plane at platform
     // scope so resolveConfig returns a platform default when no tenant/app override
@@ -3372,50 +3473,15 @@ const start = async (): Promise<void> => {
       }
     });
 
-    // API keys (/api/keys)
-    app.get<{ Querystring: { tenant_id?: string } }>('/api/keys', async (req, reply) => {
-      const tenant_id = req.query.tenant_id;
-      if (!tenant_id) return reply.code(400).send({ success: false, error: 'tenant_id required' });
-      try {
-        // Delegate to sdk-api-keys so we honour the canonical schema
-        // (prefix / key_hash BYTEA / scopes[] / synthetic_persona_id).
-        const { listKeys } = await import('@projexlight/sdk-api-keys');
-        return { success: true, data: await listKeys(tenant_id) };
-      } catch (e) {
-        return reply.code(500).send({ success: false, error: (e as Error).message });
-      }
-    });
-
-    app.post<{
-      Body: { tenant_id?: string; name?: string; scope?: string; scopes?: string[] };
-    }>('/api/keys', async (req, reply) => {
-      const b = req.body ?? {};
-      const scopes = b.scopes ?? (b.scope ? [b.scope] : []);
-      if (!b.tenant_id || scopes.length === 0) {
-        return reply.code(400).send({ success: false, error: 'tenant_id + scope(s) required' });
-      }
-      try {
-        const { issueKey } = await import('@projexlight/sdk-api-keys');
-        const { key, plaintext } = await issueKey({ tenant_id: b.tenant_id, scopes });
-        // Plaintext returned exactly once — caller must capture.
-        return { success: true, data: { key_id: key.key_id, plaintext } };
-      } catch (e) {
-        return reply.code(500).send({ success: false, error: (e as Error).message });
-      }
-    });
-
-    app.post<{ Params: { key_id: string }; Body: { reason?: string } }>('/api/keys/:key_id/revoke', async (req, reply) => {
-      const reason = req.body?.reason?.trim();
-      if (!reason) return reply.code(400).send({ success: false, error: 'reason required' });
-      try {
-        const { revokeKey } = await import('@projexlight/sdk-api-keys');
-        const revoked = await revokeKey(req.params.key_id);
-        if (!revoked) return reply.code(404).send({ success: false, error: 'key not found or already revoked' });
-        return { success: true };
-      } catch (e) {
-        return reply.code(500).send({ success: false, error: (e as Error).message });
-      }
-    });
+    // API keys: /api/keys/* used to be implemented HERE, inline, with a payload
+    // shape that disagreed with sdk-api-keys, no rotate, and — because these
+    // routes carried no preHandler and read tenant_id straight from the request
+    // — no authorization at all beyond "is signed in somewhere". Two half-guarded
+    // doors into one table is how one of them gets missed in the next audit.
+    //
+    // The implementation now lives in sdk-api-keys (registered above as
+    // apiKeysServer), which mounts /api/api-keys/* plus a deprecated /api/keys/*
+    // alias that delegates to the same tenant-scoped handlers.
 
     // Webhooks (tenant-scoped)
     app.get<{ Querystring: { tenant_id?: string } }>('/api/webhooks/endpoints', async (req, reply) => {
@@ -3936,6 +4002,55 @@ const start = async (): Promise<void> => {
       enabled: process.env.WEBHOOK_DELIVERY_WORKER_ENABLED !== 'false',
       intervalMs: parseInt(process.env.WEBHOOK_DELIVERY_INTERVAL_MS || '5000', 10),
       batchSize: parseInt(process.env.WEBHOOK_DELIVERY_BATCH_SIZE || '50', 10),
+    });
+
+    // sdk-sla escalation -> sdk-coverage on-call roster.
+    // sdk-sla ships NO default resolver on purpose: firing a 'critical' rung at
+    // an empty audience because nobody wired the roster is worse than failing
+    // the firing, because the failure is visible in the ledger and recovers
+    // itself once a resolver exists. This is that resolver. It returns persona
+    // ids in tier order, and returns EMPTY rather than substituting a fallback
+    // when nobody is on call -- the gap is the thing the roster exists to
+    // surface, so hiding it behind a stand-in audience would defeat both SDKs.
+    setSlaOnCallResolver(makeSlaOnCallResolver());
+
+    // API-key verification cache invalidation. sdk-api-keys has published every
+    // revoke to `api-key:revoked` since it shipped, and nothing subscribed — so
+    // the multi-replica broadcast promised by FR-APK-5 did nothing at all. This
+    // is the subscriber: a revoke on any replica evicts the cached credential
+    // here within a second, instead of at the cache TTL.
+    await startKeyCacheInvalidation();
+
+    // Per-application usage attribution. sdk-api-keys stays free of a hard
+    // dependency on the metering stack -- it sits on the auth path of every
+    // machine call, and coupling that path to metering's failure modes would be
+    // the wrong trade. The reporter is injected here instead.
+    setKeyUsageReporter((event) => {
+      void meterReport({
+        sku: 'api.request',
+        units: 1,
+        dimensions: {
+          org_id: null,
+          // app_id carries the tenant APPLICATION, which is what makes a usage
+          // figure answer "which of my integrations did this".
+          app_id: event.application_id,
+          tenant_id: event.tenant_id,
+          bu_id: null,
+          persona_id: null,
+          encounter_id: null,
+          pool_index: 'admin',
+          region: process.env.REGION || 'us-east-1',
+          actor_kind: 'service',
+          actor_id: event.key_id,
+        },
+      }).catch(() => {
+        /* metering must never affect the request it describes */
+      });
+    });
+    app.addHook('onClose', async () => {
+      // Flushes debounced last_used_at so a shutdown does not lose the signal an
+      // operator uses to decide whether a key is safe to revoke.
+      await stopKeyCache();
     });
 
     // P14·E1 scheduler: sdk-sequence step-executor tick. OFF by default (opt-in)

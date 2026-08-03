@@ -1,3 +1,5 @@
+import VOCABULARY from './document-vocabulary.json';
+
 /**
  * Pluggable backends for sdk-parsing.
  *
@@ -111,12 +113,10 @@ export class LocalOcrBackend implements OcrBackend {
 /** Keyword-based classifier. Sufficient for AC-1 fixtures. */
 export class KeywordClassifierBackend implements ClassifierBackend {
   constructor(
-    private readonly rules: Array<{ kind: string; keywords: string[] }> = [
-      { kind: 'invoice', keywords: ['invoice', 'amount due', 'bill to'] },
-      { kind: 'prescription', keywords: ['rx', 'prescription', 'dosage', 'sig:'] },
-      { kind: 'contract', keywords: ['agreement', 'effective date', 'party of the first part'] },
-      { kind: 'lab-result', keywords: ['hemoglobin', 'glucose', 'lab result', 'reference range'] },
-    ],
+    // Loaded from document-vocabulary.json: these keywords are vertical-specific by
+    // nature, so holding them as DATA keeps this class a neutral mechanism that a tenant
+    // or vertical replaces, rather than an implicitly healthcare/finance package.
+    private readonly rules: Array<{ kind: string; keywords: string[] }> = VOCABULARY.classifier_rules,
   ) {}
 
   async classify(input: ClassifierInput): Promise<ClassifierOutput> {
@@ -141,14 +141,11 @@ export class KeywordClassifierBackend implements ClassifierBackend {
  * + the resolved taxonomy.extraction_schema.
  */
 export class RegexExtractorBackend implements ExtractorBackend {
-  private readonly patterns: Record<string, RegExp> = {
-    invoice_number: /invoice\s*(?:no\.?|#)\s*[:#]?\s*([A-Z0-9-]+)/i,
-    amount: /(?:amount due|total)\s*[:$]?\s*\$?\s*([0-9,]+\.\d{2})/i,
-    due_date: /due\s+(?:date|on)\s*[:]?\s*([A-Za-z]{3,9}\s+\d{1,2},?\s+\d{4}|\d{4}-\d{2}-\d{2})/i,
-    patient_name: /patient(?:\s+name)?\s*[:]\s*([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)/i,
-    medication: /(?:rx|prescription|medication)\s*[:]\s*([A-Z][a-zA-Z0-9 -]+)/i,
-    dosage: /(?:dosage|sig)\s*[:]\s*([0-9.]+\s*(?:mg|ml|mcg|g)(?:\s+\w+){0,3})/i,
-  };
+  // Compiled from document-vocabulary.json for the same reason as the classifier
+  // rules above — the mechanism is neutral, the vocabulary is replaceable data.
+  private readonly patterns: Record<string, RegExp> = Object.fromEntries(
+    Object.entries(VOCABULARY.extraction_patterns).map(([k, v]) => [k, new RegExp(v as string, 'i')]),
+  );
 
   async extract(input: ExtractorInput): Promise<{ fields: ExtractedFieldValue[] }> {
     const out: ExtractedFieldValue[] = [];

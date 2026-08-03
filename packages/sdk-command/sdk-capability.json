@@ -1,0 +1,70 @@
+{
+  "name": "@projexlight/sdk-command",
+  "version": "1.0.0",
+  "schema_version": "1.0",
+  "summary": "Command & control (actuation) plane for the physical-AI fleet (P12 · E1). Issues typed commands to a robot (asset) or one of its components, classifying risk from the command type and gating high/critical commands behind an approval grant (low/medium auto-approve). Authorization composes sdk-rebac (can the issuer actuate this asset?) and sdk-policy (geofence / time-window / condition) through pluggable, allow-by-default hooks that the api-gateway wires at boot. A background dispatcher flips approved commands to dispatched and publishes them onto a per-asset in-memory broker channel, which the gateway pipes to the robot/edge over WebSocket. The loop closes when the edge agent acks with a per-robot scoped credential (sdk-api-keys, not a user JWT), recording ok -> acked or failure -> failed back onto the command row. Every lifecycle transition emits a best-effort audit event.",
+  "tags": [
+    "command-control",
+    "physical-ai",
+    "robotics",
+    "actuation",
+    "approval-gating",
+    "multi-tenant"
+  ],
+  "provides": {
+    "endpoints": [],
+    "events": [],
+    "models": [
+      {
+        "schema": "command",
+        "table": "command",
+        "description": "One row per issued command targeting an asset (or component): typed `type` + jsonb `params`, a `risk_class` (low|medium|high|critical) that drives approval gating, and a `status` lifecycle (pending|approved|rejected|dispatched|acked|failed|expired|cancelled). Carries `approval_id` (sdk-approval grant when risky), issue/dispatch/ack timestamps, and the robot/edge feedback in `ack_result`. Indexed by tenant, by (asset, issued_at) and by (status, issued_at); target_* are plain uuids with no cross-schema FK so the migration is order-independent of sdk-asset."
+      }
+    ],
+    "hooks": [],
+    "ui_components": []
+  },
+  "consumes": {
+    "events": [],
+    "infra": ["postgres"],
+    "config_keys": [
+      "COMMAND_DISPATCH_INTERVAL_MS",
+      "COMMAND_DISPATCH_BATCH"
+    ]
+  },
+  "scenarios": [
+    {
+      "id": "issue-and-gate-risky-command",
+      "title": "Issue a command with risk-classified approval gating",
+      "when_to_use": "When an operator or app needs to actuate a robot and you want risky commands (estop, firmware_update, disable_safety) held for approval while routine ones (move, grip) go straight to dispatchable, with rebac + policy checks applied first.",
+      "example_code": "import { issueCommand, requiresApproval, classifyRisk } from '@projexlight/sdk-command';\n\nconst cmd = await issueCommand({\n  tenant_id: req.auth.tenant_id,\n  target_asset_id: assetId,\n  type: 'estop',\n  params: { reason: 'obstacle detected' },\n  issued_by: req.auth.sub,\n});\n// classifyRisk('estop') === 'high' => requiresApproval(cmd.risk_class) === true\nconsole.log(cmd.status); // 'pending' (gated, awaiting approval grant)",
+      "expected_outcome": "A command row is persisted. Because estop classifies as high risk, status is 'pending' and an approval grant is opened via the requestApproval hook; a 'command.gated' audit event is emitted. A low-risk type (e.g. 'move') would instead persist as 'approved' with a 'command.issued' event. If a rebac or policy hook denies, issueCommand throws CommandAuthorizationError."
+    },
+    {
+      "id": "approve-then-dispatch",
+      "title": "Approve a gated command and dispatch it to the asset",
+      "when_to_use": "When a pending high/critical command has cleared human/automated approval and must be pushed to the robot; typically the background dispatcher does this, but you can dispatch a single command explicitly after applying the decision.",
+      "example_code": "import { applyCommandApprovalDecision, dispatchCommand, getCommandBroker } from '@projexlight/sdk-command';\n\nconst approved = await applyCommandApprovalDecision(tenantId, commandId, {\n  approved: true,\n  decided_by: approverId,\n  reason: 'safe to proceed',\n});\n\nconst unsub = getCommandBroker().subscribe(approved.target_asset_id, (e) => sendToRobotWs(e));\nconst dispatched = await dispatchCommand(tenantId, commandId);\nconsole.log(dispatched?.status); // 'dispatched'",
+      "expected_outcome": "applyCommandApprovalDecision flips the row pending -> approved (or -> rejected) and audits it; a non-pending command yields null. dispatchCommand then flips approved -> dispatched, publishes a command.dispatched event to that asset's broker subscribers, and audits 'command.dispatched'. The subscribing WebSocket handler receives the event for exactly that asset."
+    },
+    {
+      "id": "robot-ack-with-credential",
+      "title": "Robot closes the loop by acking with a per-robot credential",
+      "when_to_use": "On the edge/robot side, to acknowledge a dispatched command using a scoped API key (not a user JWT). Use issueRobotCredential once to mint the key, then ackCommandWithCredential on each completion.",
+      "example_code": "import { issueRobotCredential, ackCommandWithCredential } from '@projexlight/sdk-command';\n\nconst cred = await issueRobotCredential({ tenant_id: tenantId, asset_id: assetId });\n// cred.plaintext is returned once; store it on the robot securely.\n\nconst result = await ackCommandWithCredential(cred.plaintext, commandId, {\n  ok: true,\n  code: 'DONE',\n  data: { position: [1.2, 0.4, 0.0] },\n});\nconsole.log(result.outcome); // 'ok'",
+      "expected_outcome": "issueRobotCredential returns a key scoped to command:ack + command:stream + asset:<assetId>, exposing plaintext exactly once. ackCommandWithCredential verifies the key is active and scoped to the command's asset, then records the ack: ok -> status 'acked', failure -> 'failed'. Non-scoped keys yield outcome 'forbidden', invalid keys 'unauthorized', a command not in 'dispatched' state 'conflict'."
+    }
+  ],
+  "compliance_posture": {
+    "regimes": ["SOC2"],
+    "notes": "Actuation of physical assets is safety-sensitive: high/critical command types (estop, firmware_update, disable_safety, self_destruct) are gated behind an approval grant and cannot dispatch until approved, and issuance is authorized via rebac + policy hooks (relationship, geofence, time-window). Every lifecycle transition (issued/gated/approved/rejected/dispatched/acked/failed) emits an audit event for an append-only ledger. Rows are strictly tenant-scoped and edge acks authenticate with per-robot scoped credentials (fail-closed), never user JWTs. Command params may carry operational data — treat exports under tenant data-scope."
+  },
+  "pool_placement": "app",
+  "pricing_skus": [],
+  "links": {
+    "readme": "packages/sdk-command/README.md",
+    "source": "packages/sdk-command/src/",
+    "prd_section": "P12 E1 Command & Control Plane for the Physical-AI Fleet"
+  },
+  "no_endpoints": true
+}

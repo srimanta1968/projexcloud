@@ -1,0 +1,144 @@
+{
+  "name": "Reply detection and outbound linkage (PCF-08-2)",
+  "endpoint": "internal://sdk-conversation/replyDetection.detectAndLinkReply",
+  "sdk": "sdk-conversation",
+  "sourceFile": "packages/sdk-conversation/src/services/replyDetection.ts",
+  "method": "INTERNAL_FUNCTION",
+  "requiresAuth": false,
+  "expectedStatus": 200,
+  "taskId": "c6160bb2-8afb-462b-9217-853443b9fd12",
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "featureId": "349aa653-edbb-4171-894a-13c6f6248854",
+  "epicId": "54b75cbb-e257-4e64-a356-3817f73256e2",
+  "priority": 20,
+  "testability": "manual",
+  "skipReason": "Internal (non-HTTP) service function — it has no route, so the request/response regression runner cannot reach it. It IS executed end-to-end against real Postgres by packages/sdk-conversation/tests/replyDetection.integration.test.ts (10 cases: all four ladder rungs, both recency bounds, the unmatched queue, the late-parent retry and the two schema invariants). The HTTP surface that will exercise it lands with the compose-guardrails-and-routes task.",
+  "coversCriterion": [
+    "c6160bb2-8afb-462b-9217-853443b9fd12#AC1",
+    "c6160bb2-8afb-462b-9217-853443b9fd12#AC3",
+    "c6160bb2-8afb-462b-9217-853443b9fd12#AC4"
+  ],
+  "description": "Binds an inbound message to the outbound message it answers, then persists the link on conversation.message (in_reply_to_message_id, reply_link_method, reply_linked_at). Resolution is a four-rung ladder tried strongest first: PROVIDER_REPLY_ID (the provider echoed our own message id — proof), EMAIL_HEADER (In-Reply-To, then References walked newest→oldest — proof), PROVIDER_THREAD_KEY (same carrier conversation or DM thread — strong), and CHANNEL_RECENCY (the most recent outbound on this thread+channel — a heuristic, bounded by CONVERSATION_REPLY_WINDOW_HOURS, default 72h). The rung used is recorded so a consumer can tell a carrier's own echo from a timing guess; the emitted event carries a matching confidence of proof|strong|heuristic. Proves AC1 (inbound replies link to their originating outbound) and AC3 (linkage works across EMAIL via headers, SOCIAL_DM via thread key, and SMS via recency, since SMS carries no threading at all). QA edge cases: resolution only ever considers direction='OUTBOUND' rows, so a mail loop that reflects our own id back on an inbound cannot create a reply-to-a-reply chain; the recency rung requires occurred_at <= the reply's occurred_at, so a backfilled outbound that ARRIVED late can never become the parent of a reply that predates it, and it will not reach past the window, so a reply months later is left for a human rather than attached to a dead campaign; ordering everywhere is by occurred_at (never arrival), matching migration 002. When nothing matches, the message is NOT dropped and NOT failed — it is retained, the trigger forces reply_link_state='UNMATCHED', the provider's claimed parent key is still persisted as evidence, and conversation.reply.unmatched.v1 is emitted (AC4); listUnmatchedInbound() is the triage queue and retryUnmatched() re-runs the ladder so a late-arriving parent links retroactively. Note the emit is best-effort (emitEvent swallows failures), so a successful link does not by itself prove the event was appended — assert the audit ledger, not the return value.",
+  "testCases": [
+    {
+      "name": "EMAIL: In-Reply-To naming our Message-ID links as proof",
+      "payload": {
+        "scenario": "provider_reply_id",
+        "channel": "EMAIL",
+        "signals": { "provider_in_reply_to_key": "<msgid-alpha@ours>" },
+        "expected_method": "PROVIDER_REPLY_ID",
+        "expected_confidence": "proof",
+        "expected_reply_link_state": "LINKED"
+      },
+      "expectedStatus": 200,
+      "expectedResponse": { "success": true }
+    },
+    {
+      "name": "EMAIL: falls back to References when In-Reply-To matches nothing",
+      "payload": {
+        "scenario": "email_references_fallback",
+        "channel": "EMAIL",
+        "signals": {
+          "provider_in_reply_to_key": "rewritten-by-client@theirs",
+          "provider_reference_keys": ["<root@theirs> <msgid-beta@ours>"]
+        },
+        "expected_method": "EMAIL_HEADER",
+        "expected_confidence": "proof"
+      },
+      "expectedStatus": 200,
+      "expectedResponse": { "success": true }
+    },
+    {
+      "name": "SOCIAL_DM: links by carrier thread key",
+      "payload": {
+        "scenario": "provider_thread_key",
+        "channel": "SOCIAL_DM",
+        "signals": { "provider_thread_key": "dm-convo-77" },
+        "expected_method": "PROVIDER_THREAD_KEY",
+        "expected_confidence": "strong"
+      },
+      "expectedStatus": 200,
+      "expectedResponse": { "success": true }
+    },
+    {
+      "name": "SMS: no threading signals — recency heuristic, marked as a guess",
+      "payload": {
+        "scenario": "channel_recency",
+        "channel": "SMS",
+        "signals": {},
+        "expected_method": "CHANNEL_RECENCY",
+        "expected_confidence": "heuristic"
+      },
+      "expectedStatus": 200,
+      "expectedResponse": { "success": true }
+    },
+    {
+      "name": "Recency never reaches past the window, nor forward in time",
+      "payload": {
+        "scenario": "recency_bounds",
+        "channel": "SMS",
+        "cases": [
+          { "outbound_occurred_at": "2026-01-01T09:00:00Z", "inbound_occurred_at": "2026-08-01T09:00:00Z", "expected_linked": false },
+          { "outbound_occurred_at": "2026-08-01T12:00:00Z", "inbound_occurred_at": "2026-08-01T10:00:00Z", "expected_linked": false }
+        ],
+        "expected_reply_link_state": "UNMATCHED"
+      },
+      "expectedStatus": 200,
+      "expectedResponse": { "success": true }
+    },
+    {
+      "name": "Unmatched inbound is retained and flagged, never dropped",
+      "payload": {
+        "scenario": "unmatched_retained",
+        "channel": "EMAIL",
+        "signals": { "provider_in_reply_to_key": "nothing-we-ever-sent@elsewhere" },
+        "expected_linked": false,
+        "expected_reply_link_state": "UNMATCHED",
+        "expected_row_still_exists": true,
+        "expected_provider_in_reply_to_key_persisted": "nothing-we-ever-sent@elsewhere",
+        "expected_in_triage_queue": true
+      },
+      "expectedStatus": 200,
+      "expectedResponse": { "success": true }
+    },
+    {
+      "name": "A late-arriving parent links on retryUnmatched",
+      "payload": {
+        "scenario": "late_parent_retry",
+        "channel": "EMAIL",
+        "expected_state_before_retry": "UNMATCHED",
+        "expected_state_after_retry": "LINKED",
+        "expected_method": "PROVIDER_REPLY_ID"
+      },
+      "expectedStatus": 200,
+      "expectedResponse": { "success": true }
+    }
+  ],
+  "expectedResponse": { "success": true },
+  "errorCases": [
+    {
+      "name": "Reply detection on a message that was never recorded is refused, not silently skipped",
+      "status": null,
+      "code": "INBOUND_MESSAGE_NOT_FOUND",
+      "message": "[sdk-conversation] inbound message <id> not found — record the message before running reply detection; it must never be dropped",
+      "when": "message_id names no row, or names a row whose direction is not INBOUND (an outbound message or an internal note has nothing to be a reply to)",
+      "payload": { "scenario": "unknown_message_id", "channel": "EMAIL" }
+    },
+    {
+      "name": "A resolved parent that cannot be written back is raised rather than reported as linked",
+      "status": null,
+      "code": "REPLY_LINK_WRITE_FAILED",
+      "message": "[sdk-conversation] could not link inbound message <id> to <parent_id>",
+      "when": "the ladder resolved a parent but the UPDATE matched no row — the message stopped being INBOUND concurrently, or the resolved parent is the message itself (guarded by message_id <> parent, backing migration 002's conv_message_not_own_reply)",
+      "payload": { "scenario": "self_reply_guard", "channel": "EMAIL" }
+    },
+    {
+      "name": "An unparseable occurred_at is refused rather than sorted to the epoch",
+      "status": null,
+      "code": "INVALID_OCCURRED_AT",
+      "message": "[sdk-conversation] invalid occurred_at: <value>",
+      "when": "occurred_at is not a Date and not a parseable date string; accepting it would place the reply at 1970 and let the recency rung match the wrong outbound",
+      "payload": { "scenario": "invalid_occurred_at", "channel": "SMS", "occurred_at": "not-a-date" }
+    }
+  ]
+}

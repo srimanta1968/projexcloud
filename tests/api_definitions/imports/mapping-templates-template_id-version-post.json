@@ -1,0 +1,97 @@
+{
+  "name": "POST /api/imports/mapping-templates/:template_id/version - Publish a new version",
+  "endpoint": "/api/imports/mapping-templates/:template_id/version",
+  "sdk": "sdk-import",
+  "sourceFile": "packages/sdk-import/src/server/routes.ts",
+  "method": "POST",
+  "requiresAuth": true,
+  "expectedStatus": 201,
+  "taskId": "f6e9a813-82ee-4f15-97cf-e4a9a3f8f772",
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "priority": 47,
+  "testability": "auto",
+  "description": "Publish the next version of a template as a NEW ROW, carrying the parent version's values for anything not overridden and recording parent_template_id so \"which mapping did v3 come from\" stays answerable. This is the supported way to change a template: once any run that referenced it has committed, the database trigger freezes its definition columns, since rewriting them would make that run's lineage describe a mapping that no longer exists. Returns 201 — a version is a new resource, not an edit. Required: tenant_id.",
+  "dependsOn": [
+    "POST /api/auth/signup-tenant",
+    "POST /api/imports/mapping-templates"
+  ],
+  "fieldEnums": {
+    "crosswalk_strategy": [
+      "preserve_existing",
+      "add_alias",
+      "reject_conflict"
+    ],
+    "target": [
+      "person.given_name",
+      "person.family_name",
+      "person.full_name",
+      "person.date_of_birth",
+      "contact.email",
+      "contact.phone",
+      "contact.handle",
+      "org.name",
+      "org.domain",
+      "org.size",
+      "place.address_line1",
+      "place.address_line2",
+      "place.locality",
+      "place.region",
+      "place.postal_code",
+      "place.country",
+      "external.id",
+      "attribute.custom",
+      "unmapped"
+    ]
+  },
+  "testCases": [
+    {
+      "name": "Publish version 2 of the template",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "pathParams": {
+        "template_id": "{{cache:imports.template.create.response.data.template.template_id}}"
+      },
+      "payload": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "name": "Contact extract mapping v2",
+        "description": "Adds the postal code column",
+        "field_map": {},
+        "transforms": [],
+        "value_crosswalks": {},
+        "crosswalk_strategy": "add_alias",
+        "created_by": "qa-runner"
+      },
+      "expectedStatus": 201,
+      "expectedResponse": {
+        "data": {
+          "template": {
+            "template_id": "string",
+            "version": "number",
+            "parent_template_id": "string"
+          }
+        }
+      }
+    }
+  ],
+  "errorCases": [
+    {
+      "status": 400,
+      "code": "VALIDATION_ERROR",
+      "message": "tenant_id is required",
+      "when": "tenant_id missing from the body"
+    },
+    {
+      "status": 404,
+      "code": "MAPPING_TEMPLATE_NOT_FOUND",
+      "message": "mapping template <id> not found for tenant",
+      "when": "the template does not exist, or belongs to another tenant"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "missing or invalid token",
+      "when": "no valid tenant Bearer token on the request"
+    }
+  ]
+}

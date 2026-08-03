@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Configuration, Roles &amp; Policy — ProjexCloud Developer Hub</title>
+<style>
+  :root{--bg:#0d1117;--panel:#161b22;--line:#30363d;--tx:#e6edf3;--dim:#8b949e;--acc:#58a6ff;--ok:#3fb950;--warn:#d29922;--err:#f85149;--code:#1f2428}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--tx);font:15px/1.65 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
+  .wrap{max-width:1080px;margin:0 auto;padding:32px 24px 96px}
+  h1{font-size:30px;margin:0 0 6px;letter-spacing:-.02em}
+  h2{font-size:21px;margin:44px 0 12px;padding-bottom:8px;border-bottom:1px solid var(--line)}
+  h3{font-size:16px;margin:26px 0 8px;color:var(--acc)}
+  p,li{color:#c9d1d9}
+  .lede{color:var(--dim);font-size:16px;margin:0 0 8px}
+  code{background:var(--code);padding:2px 6px;border-radius:4px;font:13px ui-monospace,SFMono-Regular,Menlo,monospace;color:#a5d6ff}
+  pre{background:var(--code);border:1px solid var(--line);border-radius:8px;padding:14px 16px;overflow-x:auto}
+  pre code{background:none;padding:0;color:#c9d1d9;font-size:12.5px;line-height:1.6}
+  table{width:100%;border-collapse:collapse;margin:14px 0;font-size:14px;display:block;overflow-x:auto}
+  th,td{border:1px solid var(--line);padding:9px 11px;text-align:left;vertical-align:top}
+  th{background:var(--panel);font-weight:600}
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:16px 18px;margin:16px 0}
+  .warn{border-left:3px solid var(--warn)}.err{border-left:3px solid var(--err)}.ok{border-left:3px solid var(--ok)}
+  .tag{display:inline-block;font-size:11px;padding:2px 8px;border-radius:20px;border:1px solid var(--line);color:var(--dim);margin-right:6px}
+  .m{font-weight:700;font-size:11px;padding:2px 7px;border-radius:4px;color:#000}
+  .post{background:#3fb950}.get{background:#58a6ff}
+  a{color:var(--acc)} hr{border:0;border-top:1px solid var(--line);margin:32px 0}
+  .crumb{font-size:13px;color:var(--dim);margin-bottom:18px}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<div class="crumb"><a href="index.html">Developer Hub</a> › Configuration, Roles &amp; Policy</div>
+
+<h1>Configuration, Roles &amp; Policy</h1>
+<p class="lede">How a tenant configures providers, roles and access rules once — globally across
+all their apps, or overridden per app — and how their apps read those values at runtime.</p>
+
+<h2>One mechanism: the four-scope config plane</h2>
+
+<p>Every tenant-settable value — an email provider, a storage bucket, a payment key, a feature
+threshold — lives in one table with one resolution rule.</p>
+
+<pre><code>config.config_value
+  scope       'platform' | 'tenant' | 'app' | 'app_user'
+  scope_id    ''         | tenant_id | app_id | app_user_id
+  key         'email.provider'
+  value       JSONB        ← non-secret settings
+  secret_ref  TEXT         ← pointer into the sdk-secrets envelope, for credentials
+  UNIQUE (scope, scope_id, key)</code></pre>
+
+<p><code>resolveConfig(key, ctx)</code> returns the <strong>most specific</strong> active row:</p>
+
+<pre><code>app_user  →  app  →  tenant  →  platform          (first match wins)</code></pre>
+
+<div class="panel ok">
+<strong>This is exactly the "global for all my apps, or per app" model, and it needs no new
+tables.</strong> Set <code>email.provider</code> at <code>tenant</code> scope and every one of
+that tenant's apps inherits it. Set the same key at <code>app</code> scope and that one app
+overrides it while the others keep inheriting. Delete the app row and it falls back — nothing
+to clean up, because the fallback is the absence of an override rather than a copied value.
+</div>
+
+<h3>Setting and reading</h3>
+<table>
+<tr><th>Call</th><th>Who</th><th>Purpose</th></tr>
+<tr><td><span class="m post">POST</span> <code>/api/config</code></td><td>tenant admin (JWT)</td><td>Set a value at a chosen scope.</td></tr>
+<tr><td><span class="m get">GET</span> <code>/api/config/resolve</code></td><td>the tenant's app</td><td>Resolve a key for a context — this is what your app calls at runtime.</td></tr>
+<tr><td><span class="m get">GET</span> <code>/api/config/value</code></td><td>tenant admin</td><td>Read one exact row (no chain walk) — for showing what is set <em>here</em>.</td></tr>
+<tr><td><span class="m post">POST</span> <code>/api/config/rotate</code></td><td>tenant admin</td><td>Rotate the secret behind <code>secret_ref</code>.</td></tr>
+<tr><td><span class="m post">POST</span> <code>/api/config/revoke</code></td><td>tenant admin</td><td>Mark revoked; resolution then falls through to the next scope.</td></tr>
+</table>
+
+<div class="panel err">
+<strong>Never put a credential in <code>value</code>.</strong> <code>value</code> is plain JSONB
+and is returned by reads. Secrets belong in <code>secret_ref</code>, which points at the
+sdk-secrets envelope — that is why the column exists, and why rotation is a separate call
+rather than an update to the row.
+</div>
+
+<h3>Worked example — an email provider for every app, except one</h3>
+<pre><code># 1 · tenant-wide default: every LeadFlow app sends through SendGrid
+POST /api/config
+{ "scope":"tenant", "scope_id":"&lt;tenant_id&gt;", "key":"email.provider",
+  "value": { "driver":"sendgrid", "from":"no-reply@leadflow.io" },
+  "secret_ref": "secret://tenant/&lt;tenant_id&gt;/sendgrid-api-key" }
+
+# 2 · one app overrides it (transactional mail through SES)
+POST /api/config
+{ "scope":"app", "scope_id":"leadflow-mobile", "key":"email.provider",
+  "value": { "driver":"ses", "region":"us-east-1", "from":"alerts@leadflow.io" },
+  "secret_ref": "secret://app/leadflow-mobile/ses-key" }
+
+# 3 · the app just asks — it does not know or care which scope answered
+GET /api/config/resolve?key=email.provider&amp;tenant_id=…&amp;app_id=leadflow-mobile
+    → { scope:"app", value:{ driver:"ses", … } }      ← the override
+GET /api/config/resolve?key=email.provider&amp;tenant_id=…&amp;app_id=leadflow-web
+    → { scope:"tenant", value:{ driver:"sendgrid", … } }  ← inherited</code></pre>
+
+<p>The same shape covers cloud region, object storage, payment provider, AI provider and any
+tenant-tunable threshold. <strong>Adding a new configurable is adding a key, not a migration.</strong></p>
+
+<hr>
+
+<h2>Roles — RBAC</h2>
+
+<p><code>tenant.role_template</code> is keyed <code>(tenant_id, app_id, name)</code> with
+<code>parent_role_template_id</code> for inheritance and a JSONB <code>permissions</code> map.
+The nullable <code>tenant_id</code> is the whole trick:</p>
+
+<table>
+<tr><th><code>tenant_id</code></th><th>Meaning</th><th>Unique on</th></tr>
+<tr><td><code>NULL</code></td><td><strong>Platform default</strong> for an app — the standard roles you ship.</td><td><code>(app_id, name)</code></td></tr>
+<tr><td>set</td><td><strong>Tenant override</strong> of that same role name.</td><td><code>(tenant_id, app_id, name)</code></td></tr>
+</table>
+
+<p>So a tenant can redefine what "Manager" means in your app <em>without forking it</em>, and a
+tenant that never touches it keeps inheriting your definition.</p>
+
+<pre><code>POST /api/role-templates                       # define/override a role for an app
+POST /api/role-assignments                     # assign it
+POST /api/personas/{persona_id}/roles          # grant beyond the starting template
+POST /api/role-assignments/{id}/revoke</code></pre>
+
+<h2>Policy — ABAC</h2>
+<pre><code>POST /api/policies                # create a rule
+GET  /api/policies/{policy_id}
+POST /api/policies/evaluate       # DRY RUN — permit/deny for a hypothetical context</code></pre>
+
+<div class="panel ok">
+<code>/api/policies/evaluate</code> matters more than it looks. A policy engine whose decisions
+cannot be previewed gets switched off the first time it denies something important, because
+nobody can tell a correct denial from a misconfigured one. Evaluate before you save.
+</div>
+
+<h3>Which of the three to reach for</h3>
+<table>
+<tr><th>Layer</th><th>Answers</th><th>Use when</th></tr>
+<tr><td>RBAC · role templates</td><td>What may this <em>role</em> do?</td><td>Permissions are identical for everyone holding the role.</td></tr>
+<tr><td>ReBAC · <code>sdk-rebac</code></td><td>May <em>this</em> persona act on <em>that</em> record?</td><td>Authority comes from a relationship — owner, delegate, account team.</td></tr>
+<tr><td>ABAC · <code>sdk-policy</code></td><td>Do the attributes permit it <em>right now</em>?</td><td>The decision turns on region, consent, time or record state, not identity.</td></tr>
+</table>
+<p>They compose in that order. A human JWT carries no scopes, so a revoked grant takes effect on
+the next request rather than at token expiry.</p>
+
+<hr>
+
+<h2>Tenant portal — what exists and what does not</h2>
+
+<p>Every API above is live. The portal reaches only some of them today.</p>
+
+<table>
+<tr><th>Concern</th><th>API</th><th><code>apps/tenant-admin</code> UI</th></tr>
+<tr><td>Applications &amp; API keys</td><td>live</td><td><code>applications/</code>, <code>api-keys/</code></td></tr>
+<tr><td>Members</td><td>live</td><td><code>members/</code></td></tr>
+<tr><td>Connectors · Notifications · AI · BYOK · Billing · Consent · Webhooks · Approvals</td><td>live</td><td>present</td></tr>
+<tr><td>Configuration</td><td>live</td><td><code>config/</code> + <code>lib/scopedConfig.ts</code> — resolves each key and reports which scope answered</td></tr>
+<tr><td><strong>Role templates</strong></td><td>live</td><td><code>roles/</code> — inherited defaults shown as inherited; override is explicit</td></tr>
+<tr><td><strong>Policies</strong></td><td>live</td><td><code>policies/</code> — with an evaluate-before-save dry run</td></tr>
+</table>
+
+<div class="panel ok">
+<strong>The screens now exist.</strong> Roles and Policies have pages, and configuration
+resolves each key through <code>lib/scopedConfig.ts</code> so every row reports the scope that
+answered — inherited from tenant, overridden here, or platform default. Provider setup is driven
+by <code>lib/providerDescriptors.ts</code>, where each field declares whether it is a secret and
+<code>splitSecretFields()</code> routes those to <code>secret_ref</code> so a credential can
+never land in <code>config_value.value</code> — which is plain JSONB returned by ordinary reads.
+That rule is enforced by a test that asserts it for EVERY descriptor, so a provider added later
+cannot quietly regress it.
+<br><br>Still open: these pages are written but not yet exercised against a running portal.
+</div>
+
+<h3>What that UI needs to get right</h3>
+<ul>
+  <li><strong>Show where a value came from.</strong> Every key should display the scope that
+      answered — inherited from tenant, or overridden here. A setting whose origin is invisible
+      is one an admin is afraid to change.</li>
+  <li><strong>Make override an explicit action</strong> ("apply to all apps" vs "override for
+      this app"), not a side effect of typing in a box.</li>
+  <li><strong>Render providers as typed forms.</strong> A provider descriptor registry lets
+      cloud/storage/email/payment settings appear as labelled fields with validation instead of
+      raw JSON, and routes credential fields to <code>secret_ref</code> automatically so a
+      secret cannot be pasted into <code>value</code> by accident.</li>
+  <li><strong>Dry-run policies before saving</strong> via <code>/api/policies/evaluate</code>.</li>
+  <li><strong>Show inherited platform-default roles as inherited</strong>, with override by name
+      rather than a copy the tenant then has to maintain.</li>
+</ul>
+
+<hr>
+<ul>
+  <li><a href="authentication.html">Authentication &amp; Identity</a> — the four principals, signup/login, API keys</li>
+  <li><a href="../api_docs/openapi.json">openapi.json</a> · <a href="../api_docs/index.html">API reference</a></li>
+  <li><code>docs/CONSUMPTION-CONTRACT.md</code> — which SDK owns which table</li>
+</ul>
+
+</div>
+</body>
+</html>

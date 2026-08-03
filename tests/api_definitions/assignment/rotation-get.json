@@ -1,0 +1,55 @@
+{
+  "sdk": "sdk-assignment",
+  "sourceFile": "packages/sdk-assignment/src/server/routes.ts",
+  "requiresAuth": true,
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "epicId": "af159e51-90a4-46cf-8d57-444515cfbe56",
+  "taskId": "efd127bc-a016-41e2-8831-bca0388ebba1",
+  "priority": 15,
+  "testability": "auto",
+  "name": "GET /api/assignment/rotation - The fair-share cursor, read only",
+  "endpoint": "/api/assignment/rotation",
+  "method": "GET",
+  "expectedStatus": 200,
+  "description": "Reads EP-335's rotation cursors without advancing them. The read-only part is the point: advancing a cursor from a GET would skew the real rotation for everybody who merely looked at it, and a dashboard polling this endpoint would silently starve whoever came next in the rota. QA edge cases: a tenant with no rotation yet gets an empty array, not a 404 - the cursor is created on first use by the assignment engine; filtering by pool_key or strategy narrows the list.",
+  "dependsOn": [
+    "POST /api/auth/signup-tenant"
+  ],
+  "fieldEnums": {
+    "strategy": [
+      "default",
+      "round_robin",
+      "fair_share"
+    ]
+  },
+  "testCases": [
+    {
+      "name": "Read the rotation cursors",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "queryParams": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}"
+      },
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "data": {
+          "cursors": "array"
+        }
+      }
+    }
+  ],
+  "errorCases": [
+    {
+      "name": "Unauthenticated is refused by the default-deny gate",
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "missing or invalid tenant token",
+      "when": "no valid tenant Bearer token or scoped API key on the request",
+      "expectedStatus": 401,
+      "queryParams": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}"
+      }
+    }
+  ]
+}

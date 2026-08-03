@@ -1,0 +1,107 @@
+{
+  "sdk": "sdk-crm",
+  "sourceFile": "packages/sdk-crm/src/server/routes.ts",
+  "requiresAuth": true,
+  "taskId": "94a7a454-5ea6-43c5-a54f-495493441b5a",
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "featureId": "c611a832-fd3a-4930-8adf-22e1b3c70d36",
+  "epicId": "5622482a-4923-4f93-9dea-805cc54f3efd",
+  "testability": "auto",
+  "name": "GET /api/crm/pipeline/aging - Business-day stage aging",
+  "endpoint": "/api/crm/pipeline/aging",
+  "method": "GET",
+  "expectedStatus": 200,
+  "priority": 66,
+  "description": "Reports how long each subject has sat in its current stage and how long it has been silent, counted in BUSINESS days: a deal that goes quiet on Friday is not two days stale on Sunday, and a queue that says otherwise trains people to ignore it every Monday. Edge cases: tenant_id query param is required (400 without it); business time comes from sdk-sla's calendars through a registered hook, and when nothing is wired the response says so with business_days_available=false and leaves business_days_in_stage null rather than silently answering in calendar days - calendar_days_in_stage is always present and is clearly labelled as the calendar figure; last_activity_at is set only by an explicit activity record, never by an edit, because aging is about silence and fixing a phone number is not contact; min_business_days filters on the business figure when one exists and falls back to the calendar figure when it does not; only the OPEN stage entry per subject is reported (exited_at IS NULL); limit is clamped to 1..2000 (default 200); an empty entries[] is a normal answer for a tenant with no stage entries, not a 404.",
+  "dependsOn": [
+    "POST /api/auth/signup-tenant",
+    "POST /api/personas"
+  ],
+  "testCases": [
+    {
+      "name": "Read the aging report for the tenant",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "queryParams": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "owner_persona_id": "{{cache:personas.create.response.data.persona.persona_id}}",
+        "min_business_days": "0",
+        "limit": "100"
+      },
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "data": {
+          "aging": {
+            "entries": "array",
+            "as_of": "string",
+            "business_days_available": "boolean"
+          }
+        }
+      }
+    },
+    {
+      "name": "400 - tenant_id query param is required",
+      "testType": "negative",
+      "coversErrorCase": "400|ValidationError",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "expectedStatus": 400,
+      "expectedError": {
+        "code": "ValidationError",
+        "messageContains": "tenant_id query param required"
+      }
+    },
+    {
+      "name": "401 - missing bearer token",
+      "testType": "negative",
+      "coversErrorCase": "401|Unauthorized|missing",
+      "headers": {},
+      "queryParams": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}"
+      },
+      "expectedStatus": 401,
+      "expectedError": {
+        "code": "Unauthorized",
+        "messageContains": "Missing bearer token"
+      }
+    },
+    {
+      "name": "401 - invalid or expired token",
+      "testType": "negative",
+      "coversErrorCase": "401|Unauthorized|invalid",
+      "headers": {
+        "Authorization": "Bearer {{static:invalid-token}}"
+      },
+      "queryParams": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}"
+      },
+      "expectedStatus": 401,
+      "expectedError": {
+        "code": "Unauthorized",
+        "messageContains": "Invalid or expired token"
+      }
+    }
+  ],
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "Authorization header absent or not in the form \"Bearer <jwt>\""
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "JWT signature invalid, malformed, or past its exp claim"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "tenant_id query param required",
+      "when": "tenant_id query param omitted"
+    }
+  ]
+}

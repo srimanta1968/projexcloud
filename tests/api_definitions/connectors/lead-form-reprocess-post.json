@@ -1,0 +1,57 @@
+{
+  "name": "POST /api/connectors/lead-forms/:tenant_id/events/:event_id/reprocess — recover a rejected lead",
+  "endpoint": "/api/connectors/lead-forms/:tenant_id/events/:event_id/reprocess",
+  "sdk": "sdk-connectors",
+  "sourceFile": "packages/sdk-connectors/src/server/routes.ts",
+  "method": "POST",
+  "requiresAuth": true,
+  "expectedStatus": 200,
+  "taskId": "552a31f9-7fc7-4353-9f96-41823a26464a",
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "featureId": "0204ef48-4a2a-4316-a58b-8f1a05cb16ca",
+  "epicId": "84ab818d-aeb2-47b4-ba3c-fb4b0b5662c4",
+  "priority": 92,
+  "testability": "auto",
+  "dependsOn": ["POST /api/auth/signup-tenant"],
+  "coversCriterion": ["552a31f9-7fc7-4353-9f96-41823a26464a#AC4"],
+  "description": "Re-runs normalisation over an ALREADY ARCHIVED delivery. An action endpoint, so 200. This is the payoff for archiving raw on rejection (AC4) and the reason that criterion is worth having: a mapping fixed today can recover leads rejected last week, which is simply impossible if the payload was discarded when normalisation first refused it — and the platform will not re-send a lead form. Re-processing reads the stored raw_payload, runs the current adapter, and flips the row to accepted (clearing rejection_reason) or re-records a new rejection reason. QA edge cases: the signature is NOT re-checked here, correctly — it was verified at ingest and the row would not exist otherwise, and re-verifying would require the original per-tenant secret which may since have rotated (the byte-exact raw_body column is retained separately so that verification remains POSSIBLE for audit, just not required for re-processing); re-processing an already-accepted event is harmless and idempotent, since it recomputes the same normalisation from the same bytes; an event_id belonging to a different tenant is 404 rather than 403, so the endpoint does not confirm the id exists to someone who should not know; requiresAuth applies — this mutates tenant data.",
+  "testCases": [
+    {
+      "name": "Re-process a previously rejected delivery",
+      "headers": { "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}" },
+      "pathParams": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "event_id": "{{cache:connectors.leadform.response.data.event_id}}"
+      },
+      "expectedStatus": 200
+    }
+  ],
+  "errorCases": [
+    {
+      "name": "An unknown event is 404",
+      "status": 404,
+      "code": "LEAD_FORM_EVENT_NOT_FOUND",
+      "message": "NotFound",
+      "when": "event_id names no archived delivery for this tenant — including one that belongs to a different tenant, which is 404 rather than 403 so the endpoint does not confirm the id exists",
+      "headers": { "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}" },
+      "pathParams": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "event_id": "00000000-0000-0000-0000-000000000000"
+      },
+      "expectedStatus": 404,
+      "expectedError": { "code": "LEAD_FORM_EVENT_NOT_FOUND" }
+    },
+    {
+      "name": "Unauthenticated is refused by the default-deny gate",
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "missing or invalid tenant token",
+      "when": "no valid tenant Bearer token — re-processing mutates tenant data",
+      "pathParams": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "event_id": "{{cache:connectors.leadform.response.data.event_id}}"
+      },
+      "expectedStatus": 401
+    }
+  ]
+}

@@ -82,8 +82,41 @@ function hashEntry(parts: {
 }
 
 /**
- * Appends a new entry to the per-pool chain. Updates `audit.chain_head` in the
- * same transaction. Per P1-Foundation-Spine §7.
+ * Serialisation key for one chain, derived from pool_index.
+ *
+ * A 63-bit FNV-1a so it fits a signed bigint. Computed here rather than with
+ * Postgres' `hashtext` because that function is an undocumented internal, and a
+ * foundation SDK should not bet the audit chain on it. Two different pools
+ * colliding onto the same key costs a little unnecessary serialisation and
+ * nothing else.
+ */
+function chainLockKey(pool_index: string): string {
+  let hash = 0xcbf29ce484222325n;
+  const prime = 0x100000001b3n;
+  const mask = 0xffffffffffffffffn;
+  for (let i = 0; i < pool_index.length; i++) {
+    hash = ((hash ^ BigInt(pool_index.charCodeAt(i))) * prime) & mask;
+  }
+  // Clear the top bit so the value is a valid positive bigint for advisory locks.
+  return (hash & 0x7fffffffffffffffn).toString();
+}
+
+/**
+ * Appends a new entry to the per-pool chain, in ONE transaction with the
+ * `audit.chain_head` update. Per P1-Foundation-Spine §7.
+ *
+ * THE TRANSACTION IS LOAD-BEARING, and it was missing until 2026-07-29: the three
+ * statements ran as separate autocommits, so the `FOR UPDATE` on chain_head took a
+ * lock that was released before it was used for anything. Two concurrent appends
+ * therefore read the same head_seq, both computed seq + 1, one inserted and the
+ * other died on the (pool_index, seq) unique index — and because emitEvent logs
+ * and swallows, that entry was silently LOST. An audit chain that drops entries
+ * whenever two things happen at once is not an audit chain.
+ *
+ * The advisory lock is taken FIRST because `SELECT ... FOR UPDATE` cannot lock a
+ * row that does not exist yet: on a brand-new pool both appends would find no head
+ * and race to seq 1 even inside a transaction. The lock is transaction-scoped, so
+ * it is released by COMMIT or ROLLBACK with nothing to leak.
  */
 export async function appendAuditEntry(input: AppendInput): Promise<LedgerEntry> {
   // FR-AUD-5 / AC-16: producer-side EventTypeRegistry enforcement.
@@ -95,11 +128,16 @@ export async function appendAuditEntry(input: AppendInput): Promise<LedgerEntry>
   const actor_kind: ActorKind = input.actor_kind ?? 'service';
   const expires_at = computeExpiresAt(retention_class, occurred_at);
 
-  try {
-    const head = await dataService.one<{ head_seq: string; head_hash: Buffer | null }>(
+  return dataService.tx(async (q) => {
+    // One appender per chain at a time. Everything below — the head read, the
+    // hash, the insert and the head update — is now a single atomic step.
+    await q(`SELECT pg_advisory_xact_lock($1::bigint)`, [chainLockKey(input.pool_index)]);
+
+    const headResult = await q<{ head_seq: string; head_hash: Buffer | null }>(
       `SELECT head_seq, head_hash FROM audit.chain_head WHERE pool_index = $1 FOR UPDATE`,
       [input.pool_index],
     );
+    const head = headResult.rows[0] ?? null;
     const prevSeq = head ? Number(head.head_seq) : 0;
     const seq = prevSeq + 1;
     const prevHash: Buffer | null = head?.head_hash ?? null;
@@ -116,7 +154,7 @@ export async function appendAuditEntry(input: AppendInput): Promise<LedgerEntry>
       occurred_at,
     });
 
-    const rows = await dataService.rows<LedgerEntry>(
+    const inserted = await q<LedgerEntry>(
       `INSERT INTO audit.entry (
          pool_index, seq, event_type, occurred_at, actor_kind, actor_id,
          tenant_id, org_id, app_id, bu_id, subject_kind, subject_id,
@@ -134,9 +172,9 @@ export async function appendAuditEntry(input: AppendInput): Promise<LedgerEntry>
         retention_class, expires_at,
       ],
     );
-    const entry = rows[0];
+    const entry = inserted.rows[0];
 
-    await dataService.query(
+    await q(
       `INSERT INTO audit.chain_head (pool_index, head_entry_id, head_seq, head_hash)
        VALUES ($1,$2,$3,$4)
        ON CONFLICT (pool_index) DO UPDATE
@@ -147,7 +185,5 @@ export async function appendAuditEntry(input: AppendInput): Promise<LedgerEntry>
     );
 
     return entry;
-  } catch (err) {
-    throw err;
-  }
+  });
 }

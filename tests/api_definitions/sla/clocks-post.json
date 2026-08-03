@@ -1,0 +1,150 @@
+{
+  "name": "POST /api/sla/clocks - Start a clock from the source timestamp",
+  "endpoint": "/api/sla/clocks",
+  "sdk": "sdk-sla",
+  "sourceFile": "packages/sdk-sla/src/server/routes.ts",
+  "method": "POST",
+  "requiresAuth": true,
+  "expectedStatus": 201,
+  "taskId": "1dbcb185-1bb8-4af9-93ae-8438ba8fd513",
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "featureId": "af5400b6-00aa-4d5c-82f6-d9819457333f",
+  "epicId": "39365400-aca0-4a86-9791-5771d19998f4",
+  "priority": 84,
+  "testability": "auto",
+  "description": "Start one promise about one subject. source_timestamp is WHEN THE SIGNAL HAPPENED — the message arrived, the form was submitted — not when the platform got around to noticing, and due_at is computed from it in business minutes on the policy calendar, so an overnight arrival is due after the promised amount of OPEN time rather than instantly breaching at opening. source_timestamp, started_at and due_at are then immutable, enforced by a database trigger: merge, reassignment and backup takeover move ownership and never the clock, because restarting it would erase the wait the person on the other end has already had. If a live clock already exists for this policy and subject the existing one is returned with created:false and 200 rather than a second clock, which would double-count the promise and fire the ladder twice. Returns 201 on a genuine start. Required: tenant_id, policy_id, subject_ref.",
+  "dependsOn": [
+    "POST /api/auth/signup-tenant",
+    "POST /api/sla/policies"
+  ],
+  "fieldEnums": {
+    "state": [
+      "running",
+      "paused",
+      "satisfied",
+      "breached",
+      "cancelled"
+    ]
+  },
+  "statusTransitions": {
+    "entity": "sla.sla_clock",
+    "field": "state",
+    "note": "at_risk is a DERIVED view over running/paused clocks approaching due_at (GET /api/sla/at-risk), not a stored state — the column can only hold the five values in fieldEnums.state.",
+    "flow": [
+      "running",
+      "paused",
+      "satisfied",
+      "breached",
+      "cancelled"
+    ],
+    "transitions": [
+      {
+        "from": "running",
+        "to": "paused",
+        "via": "POST /api/sla/clocks/:clock_id/pause"
+      },
+      {
+        "from": "paused",
+        "to": "running",
+        "via": "POST /api/sla/clocks/:clock_id/resume"
+      },
+      {
+        "from": "running",
+        "to": "satisfied",
+        "via": "POST /api/sla/clocks/:clock_id/satisfy"
+      },
+      {
+        "from": "paused",
+        "to": "satisfied",
+        "via": "POST /api/sla/clocks/:clock_id/satisfy"
+      },
+      {
+        "from": "running",
+        "to": "breached",
+        "via": "POST /api/sla/breach-scan"
+      },
+      {
+        "from": "breached",
+        "to": "satisfied",
+        "via": "POST /api/sla/clocks/:clock_id/satisfy",
+        "note": "a missed promise can still be kept, late — satisfied_at then sits after due_at so attainment still counts it as a miss"
+      },
+      {
+        "from": "running",
+        "to": "cancelled",
+        "via": "POST /api/sla/clocks/:clock_id/cancel"
+      },
+      {
+        "from": "paused",
+        "to": "cancelled",
+        "via": "POST /api/sla/clocks/:clock_id/cancel"
+      },
+      {
+        "from": "breached",
+        "to": "cancelled",
+        "via": "POST /api/sla/clocks/:clock_id/cancel"
+      }
+    ]
+  },
+  "testCases": [
+    {
+      "name": "A signal that arrived ten days ago — long past its two-hour promise",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "payload": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "policy_id": "{{cache:sla.policy.create.response.data.policy.policy_id}}",
+        "subject_ref": "request:{{dynamic:uuid}}",
+        "source_timestamp": "{{dynamic:pastdatetime-10d}}",
+        "owner_ref": "persona:{{dynamic:uuid}}",
+        "metadata": {
+          "source_ref": "web_form",
+          "priority": "high"
+        },
+        "actor_id": "qa-runner"
+      },
+      "expectedStatus": 201,
+      "expectedResponse": {
+        "data": {
+          "clock": {
+            "clock_id": "string",
+            "state": "string",
+            "due_at": "string"
+          },
+          "created": "boolean"
+        }
+      }
+    }
+  ],
+  "captureResponse": {
+    "sla.clock.create.response.data.clock.clock_id": "data.clock.clock_id",
+    "sla.clock.create.response.data.clock.subject_ref": "data.clock.subject_ref"
+  },
+  "errorCases": [
+    {
+      "status": 400,
+      "code": "VALIDATION_ERROR",
+      "message": "tenant_id, policy_id and subject_ref are required",
+      "when": "a required field is missing from the request"
+    },
+    {
+      "status": 404,
+      "code": "SLA_POLICY_NOT_FOUND",
+      "message": "policy <id> not found for tenant",
+      "when": "the policy does not exist for this tenant"
+    },
+    {
+      "status": 422,
+      "code": "CALENDAR_NEVER_OPEN",
+      "message": "calendar <id> is never open",
+      "when": "the policy calendar has no open minute, so no due date can be computed"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "missing or invalid token",
+      "when": "no valid tenant Bearer token on the request"
+    }
+  ]
+}

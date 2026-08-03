@@ -1,0 +1,108 @@
+{
+  "name": "SDK catalog regeneration and discovery keywords (P16 EP-387)",
+  "endpoint": "internal://platform/catalog.regenerateSdkCatalog",
+  "sdk": "platform",
+  "sourceFile": "scripts/catalog/regenerate-sdk-catalog.js",
+  "method": "INTERNAL_FUNCTION",
+  "requiresAuth": false,
+  "expectedStatus": 200,
+  "taskId": "270defeb-0f0e-4327-8e83-34a02c82aeac",
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "featureId": "76d15308-55cb-41b1-9100-e92a4ee42fdc",
+  "epicId": "42f1aac8-aba4-44cf-90a9-aadc0ac57bd3",
+  "priority": 102,
+  "testability": "manual",
+  "skipReason": "Build tooling that emits two data files — no runtime route exists to call. Verified by tests/platform/sdkCatalog.test.ts (47 assertions over the regenerated catalog and index) and by the CI drift gate `node scripts/catalog/regenerate-sdk-catalog.js --check`.",
+  "coversCriterion": [
+    "270defeb-0f0e-4327-8e83-34a02c82aeac#AC1",
+    "270defeb-0f0e-4327-8e83-34a02c82aeac#AC2",
+    "270defeb-0f0e-4327-8e83-34a02c82aeac#AC3",
+    "270defeb-0f0e-4327-8e83-34a02c82aeac#AC4"
+  ],
+  "description": "Regenerates mcp-server/data/sdk-catalog.json and sdk-catalog-index.json from tests/api_definitions/**, so projexlight_get_sdk_api resolves every endpoint this sprint added. Proves all four criteria. The stakes: the catalog is what an AI coding tool reads to decide reuse-vs-rebuild, so an SDK missing from it is for that purpose an SDK that does not exist — the tool cannot find it and writes the capability again. Endpoints are DERIVED from the api_definitions rather than typed by hand, because those definitions are already the contract and deriving is what stops catalog and reality drifting the moment somebody adds a route. AC1: each catalogued endpoint carries method, path, requiresAuth, payload_shape (field NAMES only — values are bulk that would bloat the artifact), fieldEnums and dependsOn; the auth contract survives into the catalog, including requiresAuth:false on the HMAC-gated lead-form webhook, since a consumer sending a Bearer token to a signature-authenticated endpoint would 401 with no explanation. AC3: sdk_count and api_count are RECOUNTED from the tree rather than incremented, so a hand-edited total cannot drift; the regeneration took the catalog from 67 SDKs / 469 APIs to 85 / 681, revealing it had been stale well beyond this sprint. AC4: the compact index is rebuilt from the catalog minus payloads and held under a 64 KB budget — it loads into a model's context on EVERY discovery call, so its size is a running cost and an index that crowds out the answer defeats its own purpose; it currently sits at ~26 KB. AC2: reuse_when keywords are the words someone WITH THE PROBLEM would type, not the SDK's own vocabulary — a developer about to rebuild SLA tracking types 'response time' or 'escalation', never 'sdk-sla', because if they knew it existed they would not be rebuilding it. QA edge cases: a test asserts every P16 SDK owns at least one keyword no other SDK claims, which is the property that actually makes routing work — some overlap is unavoidable and already widespread (31 pre-existing keywords are shared, e.g. 'escalation' across sdk-handoff and sdk-sla), so what matters is that each SDK has SOME phrase landing on it alone; a failing test caught 'golden record' being claimed by both sdk-projection and sdk-identity-resolver, and it was removed from projection because identity-resolver owns record-level MDM while projection is attribute-level survivorship; INTERNAL_FUNCTION and EVENT_CONTRACT definitions are excluded since they describe no HTTP surface, and the 'platform' pseudo-SDK is excluded because build tooling is not something a vertical installs.",
+  "testCases": [
+    {
+      "name": "Every P16 SDK is catalogued with full endpoint specs",
+      "payload": {
+        "scenario": "endpoints_resolvable",
+        "sdks": ["sdk-conversation", "sdk-parsing", "sdk-projection", "sdk-notification", "sdk-rebac", "sdk-connectors", "sdk-lead-scoring"],
+        "expected_fields_per_api": ["method", "endpoint", "requiresAuth", "payload_shape", "fieldEnums", "dependsOn"]
+      },
+      "expectedStatus": 200,
+      "expectedResponse": { "success": true }
+    },
+    {
+      "name": "The auth contract survives into the catalog",
+      "payload": {
+        "scenario": "auth_contract",
+        "cases": [
+          { "endpoint": "/api/conversations/compose-guardrail", "expected_requiresAuth": true },
+          { "endpoint": "/api/connectors/lead-forms/:tenant_id/:platform", "expected_requiresAuth": false, "reason": "HMAC-gated signed webhook" }
+        ]
+      },
+      "expectedStatus": 200,
+      "expectedResponse": { "success": true }
+    },
+    {
+      "name": "Briefed reuse_when keyword sets are present",
+      "payload": {
+        "scenario": "reuse_when_keywords",
+        "expected": {
+          "sdk-source-record": ["provenance", "source record", "origin", "attestation"],
+          "sdk-sla": ["sla", "response time", "escalation", "business hours"],
+          "sdk-coverage": ["coverage", "availability", "pto", "on-call", "capacity"],
+          "sdk-data-credits": ["credits", "capability", "enrichment", "provider", "budget"],
+          "sdk-import": ["import", "mapping", "csv", "dry run", "rollback"]
+        }
+      },
+      "expectedStatus": 200,
+      "expectedResponse": { "success": true }
+    },
+    {
+      "name": "Distinctive phrases route to exactly one SDK",
+      "payload": {
+        "scenario": "keyword_routing",
+        "smart paste": "sdk-parsing",
+        "survivorship": "sdk-projection",
+        "frequency cap": "sdk-notification",
+        "contextual role": "sdk-rebac",
+        "lead form": "sdk-connectors",
+        "golden record": "sdk-identity-resolver"
+      },
+      "expectedStatus": 200,
+      "expectedResponse": { "success": true }
+    },
+    {
+      "name": "Counts reconcile and the index stays under budget",
+      "payload": {
+        "scenario": "counts_and_budget",
+        "expected_sdk_count": 85,
+        "expected_api_count": 681,
+        "expected_index_under_kb": 64,
+        "expected_index_actual_kb": 26,
+        "expected_index_has_no_payloads": true
+      },
+      "expectedStatus": 200,
+      "expectedResponse": { "success": true }
+    }
+  ],
+  "expectedResponse": { "success": true },
+  "errorCases": [
+    {
+      "name": "Catalog drift fails the CI gate",
+      "status": null,
+      "code": "SDK_CATALOG_DRIFT",
+      "message": "sdk-catalog drift: an endpoint exists in tests/api_definitions that the catalog does not list.",
+      "when": "a route is added with an api_definition but the catalog is not regenerated — `--check` exits non-zero rather than rewriting, because an uncatalogued capability is one the next vertical rebuilds",
+      "payload": { "scenario": "drift_check", "command": "node scripts/catalog/regenerate-sdk-catalog.js --check" }
+    },
+    {
+      "name": "An oversized index is refused rather than silently shipped",
+      "status": null,
+      "code": "INDEX_OVER_BUDGET",
+      "message": "index is <n> KB, over the 64 KB budget",
+      "when": "the compact map grows past its budget; the generator exits non-zero and tells the author to trim summaries or keywords rather than raise the limit, because the file is loaded into context on every discovery call",
+      "payload": { "scenario": "budget_exceeded" }
+    }
+  ]
+}

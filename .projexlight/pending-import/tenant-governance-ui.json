@@ -1,0 +1,116 @@
+{
+  "_why_this_file_exists": "projexlight_import_features returns HTTP 400 for this project even for a minimal, schema-valid single feature against an epic created moments earlier in the same session (EPIC_TENANT_GOVERNANCE_UI imported OK, id b7b01410-f1b7-4919-a8cd-d7eb77b9e953). The failure is therefore tool/routing-side, not payload-side — consistent with the known dev-MCP project-resolution problem where an unregistered projectPath silently resolves elsewhere. The backlog is captured here so it is not lost, and so it can be replayed unchanged once feature import works. Tasks are NOT yet creatable either: projexlight_create_task requires a feature_id.",
+  "replay": [
+    "1. Verify the dev-MCP resolves to ProjexCloud (project cf30e9b7-0b94-4b48-8571-ee41e1241131), not LeadFlow.",
+    "2. projexlight_import_features with the `features` array below and epic_id_mapping { EPIC_TENANT_GOVERNANCE_UI: b7b01410-f1b7-4919-a8cd-d7eb77b9e953 }.",
+    "3. projexlight_create_tasks_bulk with the `tasks` below, substituting each returned feature_id, epic_id b7b01410-f1b7-4919-a8cd-d7eb77b9e953 and sprint_id d4876947-8d18-4538-8e9f-51ba3e0735a9."
+  ],
+
+  "epic": {
+    "temp_id": "EPIC_TENANT_GOVERNANCE_UI",
+    "id": "b7b01410-f1b7-4919-a8cd-d7eb77b9e953",
+    "status": "CREATED",
+    "title": "Tenant Self-Service Governance — Roles, Policies & Scoped Provider Configuration"
+  },
+
+  "features": [
+    {
+      "temp_id": "FEAT_ROLES_UI",
+      "epic_temp_id": "EPIC_TENANT_GOVERNANCE_UI",
+      "title": "Roles screen — manage role templates per app, inherit platform defaults, override by name",
+      "description": "A tenant admin can create, edit and retire role templates for each of their apps from the portal. tenant.role_template is keyed (tenant_id, app_id, name) with parent_role_template_id for inheritance and a JSONB permissions map, and the nullable tenant_id is the whole trick: a NULL row is the platform default shipped with an app (unique on app_id+name) and a tenant_id row is that tenant's OVERRIDE of the same role name (unique on tenant_id+app_id+name). The screen must render inherited platform defaults as INHERITED rather than as editable local rows, and offer 'override this role' as an explicit action — if overriding is implicit, a tenant ends up owning a copy of every default role and maintaining them forever, which is exactly the fork this design exists to prevent. Show the parent_role_template_id chain so an admin can see where a permission actually comes from. Backed by the live /api/role-templates and /api/role-assignments.",
+      "source_feature_file": "apps/tenant-admin/src/app/roles/page.tsx"
+    },
+    {
+      "temp_id": "FEAT_POLICIES_UI",
+      "epic_temp_id": "EPIC_TENANT_GOVERNANCE_UI",
+      "title": "Policies screen — ABAC rule builder with a dry run before save",
+      "description": "A tenant admin authors attribute-based rules over /api/policies and PREVIEWS a decision against /api/policies/evaluate before saving. The dry run is the point of the feature, not a nicety: a policy engine whose decisions cannot be previewed gets switched off the first time it denies something important, because nobody can distinguish a correct denial from a misconfigured one and the safe-looking response is always to disable the rule. Let an admin assemble a hypothetical context (persona, region, consent state, record state, time) and show permit/deny with the matched rule named. Also surface policy.decision history so 'why was this denied' is answerable after the fact rather than by guesswork.",
+      "source_feature_file": "apps/tenant-admin/src/app/policies/page.tsx"
+    },
+    {
+      "temp_id": "FEAT_SCOPED_CONFIG_UI",
+      "epic_temp_id": "EPIC_TENANT_GOVERNANCE_UI",
+      "title": "Scope-aware configuration screen — show which scope answered, make override explicit",
+      "description": "Rework apps/tenant-admin/src/app/config so a tenant can distinguish 'for every one of my apps' from 'only for this app'. The storage already supports it — config.config_value is unique on (scope, scope_id, key) and resolveConfig walks app_user -> app -> tenant -> platform, first match wins — but the current page is scope-blind, so the capability is unreachable. Every key must display WHICH scope answered (inherited from tenant, overridden here, platform default), because a setting whose origin is invisible is one an admin is afraid to change and therefore never changes. Creating an override must be an explicit action, not a side effect of typing into a field that silently writes at app scope. Removing an override must visibly fall back rather than appear to delete the setting. Uses GET /api/config/value for the exact row and GET /api/config/resolve for the effective result.",
+      "source_feature_file": "apps/tenant-admin/src/app/config/page.tsx"
+    },
+    {
+      "temp_id": "FEAT_PROVIDER_DESCRIPTORS",
+      "epic_temp_id": "EPIC_TENANT_GOVERNANCE_UI",
+      "title": "Provider descriptor registry — typed forms for cloud, storage, email and payment setup",
+      "description": "A declarative descriptor per provider (driver id, label, field list with types and validation, which fields are SECRET) so the portal renders a labelled validated form instead of a raw JSON textarea, and so adding a provider is adding a descriptor rather than writing another bespoke settings page. The security-critical part: fields marked secret are routed to secret_ref (the sdk-secrets envelope) automatically and never written into config_value.value, which is plain JSONB returned by ordinary reads — a credential pasted there leaks to every caller allowed to read configuration. Descriptors also drive POST /api/config/rotate and /api/config/revoke so a tenant can rotate a provider key from the UI. Covers cloud region, object storage, email provider, payment provider and AI provider.",
+      "source_feature_file": "apps/tenant-admin/src/lib/providerDescriptors.ts"
+    },
+    {
+      "temp_id": "FEAT_GOVERNANCE_DOCS",
+      "epic_temp_id": "EPIC_TENANT_GOVERNANCE_UI",
+      "title": "Document the configuration and governance model for tenant developers",
+      "description": "Publish and keep current the developer-facing explanation of the four-scope config plane, the RBAC/ReBAC/ABAC split, and how a tenant's own app reads these values at runtime via GET /api/config/resolve. DELIVERED: docs/v3.1/developer-hub/configuration-and-governance.html, linked from the hub index beside the authentication guide, and reflected in the AUTH_PLAYBOOK that generates AGENTS.md into every CLI export. Remaining work is keeping the portal capability table in that document honest as the screens above land — it currently, correctly, states that the roles and policies pages do not exist.",
+      "source_feature_file": "docs/v3.1/developer-hub/configuration-and-governance.html"
+    }
+  ],
+
+  "tasks": [
+    { "feature_temp_id": "FEAT_ROLES_UI", "task_type": "api_endpoint", "priority": "high",
+      "title": "Confirm and document the role-template API surface the roles screen consumes",
+      "description": "Pin the request/response contract of /api/role-templates and /api/role-assignments in api_definitions, including how a platform default (tenant_id IS NULL) is distinguished from a tenant override in the response, so the UI can render 'inherited' without inferring it.",
+      "acceptance_criteria": [
+        "api_definitions exist for list/create/update role-template and for assign/revoke",
+        "The response makes platform-default vs tenant-override explicit rather than requiring the client to compare tenant_id",
+        "Negative cases cover duplicate role name within (tenant_id, app_id) and an unknown parent_role_template_id"
+      ] },
+    { "feature_temp_id": "FEAT_ROLES_UI", "task_type": "frontend", "priority": "high",
+      "title": "Build the roles page with inherited defaults and explicit override",
+      "description": "apps/tenant-admin/src/app/roles: list role templates for a selected app, render platform defaults as inherited (read-only until overridden), offer an explicit 'override for my tenant' action, and show the parent_role_template_id inheritance chain with the origin of each permission.",
+      "acceptance_criteria": [
+        "Inherited defaults are visually distinct from tenant-owned rows and are not silently editable",
+        "Overriding is an explicit action and creates a row keyed (tenant_id, app_id, name)",
+        "Removing an override restores the inherited default rather than deleting the role",
+        "A role created here is immediately assignable to a persona"
+      ] },
+    { "feature_temp_id": "FEAT_POLICIES_UI", "task_type": "frontend", "priority": "high",
+      "title": "Build the policies page with an evaluate-before-save dry run",
+      "description": "apps/tenant-admin/src/app/policies: CRUD over /api/policies plus a context builder that calls /api/policies/evaluate and shows permit/deny with the matched rule named, before the rule is saved.",
+      "acceptance_criteria": [
+        "An admin can evaluate a hypothetical context without saving",
+        "The result names the matched rule, not just permit/deny",
+        "policy.decision history is browsable so a past denial can be explained",
+        "Saving is blocked while the rule is syntactically invalid"
+      ] },
+    { "feature_temp_id": "FEAT_SCOPED_CONFIG_UI", "task_type": "frontend", "priority": "critical",
+      "title": "Make the configuration screen scope-aware",
+      "description": "Show, for every key, which scope answered (platform default / inherited from tenant / overridden here). Make 'apply to all apps' and 'override for this app' distinct explicit actions. Make removal of an override visibly fall back instead of appearing to delete the setting.",
+      "acceptance_criteria": [
+        "Each row displays the scope that resolved it",
+        "Creating an override is explicit and never a side effect of editing a field",
+        "Deleting an override falls back to the inherited value and says so",
+        "A tenant-scope value set once is visibly inherited by every app of that tenant"
+      ] },
+    { "feature_temp_id": "FEAT_PROVIDER_DESCRIPTORS", "task_type": "service_layer", "priority": "high",
+      "title": "Define the provider descriptor schema and the initial descriptor set",
+      "description": "A typed descriptor per provider covering cloud region, object storage, email, payment and AI: driver id, label, fields with type/validation/help text, and an explicit secret flag per field. Adding a provider must be adding a descriptor, not writing a settings page.",
+      "acceptance_criteria": [
+        "Descriptor schema is typed and validated",
+        "Initial descriptors exist for at least one provider in each of the five categories",
+        "Every credential field is marked secret"
+      ] },
+    { "feature_temp_id": "FEAT_PROVIDER_DESCRIPTORS", "task_type": "frontend", "priority": "critical",
+      "title": "Render provider setup as typed forms and route secrets to secret_ref",
+      "description": "Drive the provider forms from the descriptors, and route every secret-flagged field to secret_ref via the sdk-secrets envelope. A secret must never reach config_value.value, which is plain JSONB returned by ordinary configuration reads.",
+      "acceptance_criteria": [
+        "A secret-flagged field is never written to config_value.value — asserted by a test, not by convention",
+        "Rotation and revoke are reachable from the form via /api/config/rotate and /api/config/revoke",
+        "Validation errors are shown per field rather than as a single JSON parse failure"
+      ] },
+    { "feature_temp_id": "FEAT_PROVIDER_DESCRIPTORS", "task_type": "testing", "priority": "high",
+      "title": "Prove scope resolution end to end for a provider setting",
+      "description": "Set an email provider at tenant scope, override it for one app, and assert both apps resolve the correct value through GET /api/config/resolve with no application code change. Then delete the override and assert fallback.",
+      "acceptance_criteria": [
+        "Tenant-scope value is inherited by an app with no override",
+        "App-scope override wins for that app only",
+        "Deleting the override restores inheritance",
+        "A revoked row falls through to the next scope rather than resolving to null"
+      ] }
+  ]
+}

@@ -1,0 +1,544 @@
+{
+  "_readme": "Import-ready payload for projexlight_import_full. MUST be run from a Claude Code session rooted at c:\\Users\\srima\\projex_verticals\\ProjexCloud so the MCP bridge injects PROJECT_ID=cf30e9b7-0b94-4b48-8571-ee41e1241131. NOTE: the importer deduplicates epics on source_module, so every epic below has a unique source_module.",
+  "_sprint_id": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "_project_id": "cf30e9b7-0b94-4b48-8571-ee41e1241131",
+  "_stack": "fastify + typescript + postgresql (backend), nextjs + tailwind (frontend), jest + playwright (test)",
+  "epics": {
+    "epics": [
+      {
+        "temp_id": "PC-01",
+        "source_module": "sdk-source-record",
+        "title": "sdk-source-record — Provenance-First Source Assertion SDK (NEW)",
+        "description": "NEW PLATFORM SDK. The provenance kernel every data-ingesting vertical needs: immutable source records, bitemporal assertions, origin classification, a progressive trust ladder and source-rights attestation — with link-over-merge semantics so no source assertion is ever destroyed. TABLES: source_record (capture_id, source_system, source_external_id, raw_evidence JSONB immutable, fingerprint, retrieved_at, trust_state); source_assertion (subject_ref, attribute, value, origin_class, confidence, effective_from/to, retrieved_at, status, evidence_ref, superseded_by); source_rights_attestation (attestor_principal, permitted_uses[], jurisdiction, license_ref, collection_period, evidence_blob_ref, signature); id_crosswalk (external system + id preserved forever, UNIQUE per tenant). ENUMS: origin_class (USER_PROVIDED, FIRST_PARTY_DIRECT, TENANT_FIRST_PARTY_CRM, USER_AUTHORIZED_CONTACT_STORE, PUBLIC_RECORD, LICENSED_THIRD_PARTY, PARTNER_PROVIDED, UNKNOWN_QUARANTINED); trust_state (P0_CAPTURED, P1_NORMALIZED, P2_CANDIDATE, P3_LINKED, P4_DIRECT); assertion_status (SURVIVES, ASSERTION, SUPERSEDED, PRIMARY). REUSE TARGETS: CRM, healthcare MDM/EMPI, insurance, field service, logistics — any vertical ingesting third-party or public-record data. COMPOSES: sdk-audit (every state change), sdk-evidence (raw blobs), sdk-vault (PII envelope encryption), sdk-tenant (scoping), sdk-parsing (normalization). CONSTRAINT: zero vertical-specific code."
+      },
+      {
+        "temp_id": "PC-02",
+        "source_module": "sdk-import",
+        "title": "sdk-import — Governed Import Runs, Mapping Templates & Rollback SDK (NEW)",
+        "description": "NEW PLATFORM SDK. Closes the gap above sdk-ingest, which is a write primitive (3 endpoints) with no mapping, preview, dry-run, exception or rollback layer. Delivers the full governed-import lifecycle: source adapters, schema preview with delimiter/encoding/header detection and sensitive-data flagging, AI-assisted column mapping that PROPOSES with confidence and reasoning but never auto-applies, versioned reusable mapping templates (certified + custom), value crosswalks, a deterministic transform plan, dry-run impact with zero writes, a downloadable exception file, atomic idempotent commit keyed on run_id + file_fingerprint, a configurable rollback window that closes on the first downstream governed action, and complete run lineage correlating every created entity back to its run. TABLES: import_run, mapping_template, import_exception, import_lineage. COMPOSES: sdk-ingest (idempotent batch write), sdk-source-record (every landed row), sdk-ai-gateway (mapping suggestions with redaction), sdk-media (source file), sdk-audit. REUSE TARGETS: every vertical that onboards customer data."
+      },
+      {
+        "temp_id": "PC-03",
+        "source_module": "sdk-sla",
+        "title": "sdk-sla — Business-Clock SLA & Escalation Ladder SDK (NEW)",
+        "description": "NEW PLATFORM SDK and the single most reusable primitive in this batch. sdk-approval offers per-step SLA inside an approval only; there is no standalone business-hours response clock on the platform, so every vertical hand-rolls one. Delivers: named IANA business calendars (never fixed UTC offsets) with working windows, holiday lists, weekend rules and a late-coverage extension; recipient-local contact windows; SLA policies with qualifying predicates and pause conditions; clocks that start from the ORIGINAL source timestamp and survive merge, reassignment and backup takeover; configurable escalation ladders (offset -> audience -> severity -> action -> remediation hint) evaluated by an IDEMPOTENT tick so a duplicated tick never double-alerts; breach records with mandatory reason codes, recovery actions and a systemic flag; and attainment reporting with median, P95 and cause-plus-recovery per miss. TABLES: business_calendar, sla_policy, sla_clock, ladder_rung, breach_record. COMPOSES: sdk-notification (rung audiences), sdk-assignment (auto-reassign rung), sdk-incident (systemic breach), sdk-coverage (late-coverage and on-call), sdk-audit. REUSE TARGETS: support, field service, logistics, healthcare, sales — anything with a response promise."
+      },
+      {
+        "temp_id": "PC-04",
+        "source_module": "sdk-coverage",
+        "title": "sdk-coverage — Workforce Coverage, Availability & Capacity SDK (NEW)",
+        "description": "NEW PLATFORM SDK. sdk-assignment ships ONE endpoint (assign-by-task) and assumes eligibility is already known — 'who can act right now' is the missing universal primitive. Delivers: work schedules with per-persona IANA timezones; time-off (PTO, meeting blocks, outages); tenant- and region-scoped holiday calendars; live presence sourced from manual toggle, calendar sync or system signal; capacity policies (max concurrent by priority band, daily caps) with computed current load; on-call rosters with escalation tiers and manager-on-duty; and backup designation with acceptance windows. THE CORE ENDPOINT is GET /api/coverage/eligible, which returns only personas genuinely able to act right now with their load and capacity headroom — consumed by sdk-assignment step 4 and by sdk-sla for late-coverage rules. Plus a gap detector that alerts BEFORE an uncovered window begins. TABLES: work_schedule, time_off, holiday_calendar, presence, capacity_policy, on_call_roster, backup_designation. COMPOSES: sdk-persona, sdk-tenant, sdk-notification. REUSE TARGETS: every vertical with human operators on a rota."
+      },
+      {
+        "temp_id": "PC-05",
+        "source_module": "sdk-data-credits",
+        "title": "sdk-data-credits — Vendor-Abstracted Capability Broker & Credit Ledger SDK (NEW)",
+        "description": "NEW PLATFORM SDK. Note packages/sdk-capability is CLI scaffolding (cli.ts, scaffold.ts, validator.ts) — not a runtime broker — so this is genuinely net-new. Tenants request OUTCOMES (validate.phone, validate.email, find.contact-points, find.profiles); provider choice, credentials, routing, health and true cost never cross the tenant boundary. Delivers: an outcome-named capability catalog with credit pricing; provider bindings with priority, health and fallback chains held behind SecretRefs; a credit account with balance and reserved; the reserve -> execute -> settle lifecycle where NO_MATCH, TECHNICAL_FAILURE and CACHE_HIT all settle to ZERO; a result cache with TTL and a reuse counter that never double-charges; role-based budget policies (request-only with approval, daily cap, bulk-approval threshold, full authority); and an append-only exportable ledger showing reservation, actual charge and refund. TABLES: capability, provider_binding, credit_account, reservation, capability_request, result_cache, budget_policy, credit_ledger. COMPOSES: sdk-secrets/sdk-vault (provider credentials), sdk-policy (eligibility verdict), sdk-approval (budget gate), sdk-meter (usage emission), sdk-billing (showback), sdk-audit. REUSE TARGETS: every vertical purchasing third-party data or AI capability."
+      },
+      {
+        "temp_id": "PC-06",
+        "source_module": "sdk-assignment-enhancement",
+        "title": "sdk-assignment Enhancement — Six-Step Routing Decision Engine",
+        "description": "ENHANCEMENT to an existing SDK that today exposes only POST /api/assignment/assign-by-task. SCOPE NOTE: fair-share round-robin rotation and the rotation cursor are ALREADY covered by EP-335 (P14 · E5) — this epic explicitly EXCLUDES them and consumes that work. Adds a configurable six-step decision pipeline returning a full DECISION TRACE so an operator can always answer 'why did this go to this person': (1) Eligibility — identity, source, permission, contact-time and required-data predicates, with invalid or ambiguous routing to a review outcome rather than a forced assignment; (2) Priority band resolution; (3) Specialty match — segment, geography, language, partner, account owner, product or technical need, conflict rules; (4) Availability — delegated to sdk-coverage GET /api/coverage/eligible; (5) Assignment — primary + backup + manager with acceptance and response clocks started via sdk-sla, and the ORIGINAL owner and source timestamp preserved; (6) Fallback — unaccepted, unavailable or at-risk moves to backup then fair-share round-robin WITHOUT resetting the source timestamp. Plus a rotation service with a persisted cursor and skew audit, and a simulation service that replays historical subjects through a candidate configuration with zero side effects. BACKWARD COMPATIBLE: assign-by-task keeps working unchanged."
+      },
+      {
+        "temp_id": "PC-07",
+        "source_module": "sdk-crm-enhancement",
+        "title": "sdk-crm Enhancement — Subject-Generic NEXT-Action, Save-Gate & Pipeline Governance",
+        "description": "ENHANCEMENT. SCOPE NOTE: the deal-scoped NEXT-action enforcement, stage-transition guard and pipeline/deal enrichment are ALREADY covered by EP-334 (P14 · E4) — this epic EXCLUDES them and builds strictly on top. The DELTA is generalisation and governance depth. sdk-crm already ships deals/:deal_id/next-action, /next-action/complete, /save-gate and /stage-guard — generalise them from deals to ANY subject_ref (lead, contact, deal, ticket) and complete the governance contract. Adds: a next_action requiring action_type, owner_persona_id, exact due datetime, purpose and intended_outcome, with the save-gate returning a STRUCTURED field-level refusal a UI can render inline rather than a generic error; a date_push_log so a due date cannot be moved repeatedly without a new customer commitment or a manager reason, with the push count exposed; a configurable close_reason taxonomy carrying the subject's own wording, the offer or contract version, the competing option and a learning note; and stage_aging computed over business days with no meaningful activity. Enforced SERVER-SIDE so no client can bypass it. BACKWARD COMPATIBLE: existing deal-scoped endpoints are unchanged. REUSE: 'no record advances without an owned, dated, purposeful next commitment' is a governance primitive every operational vertical wants."
+      },
+      {
+        "temp_id": "PC-08",
+        "source_module": "sdk-conversation-enhancement",
+        "title": "sdk-conversation Enhancement — Omnichannel Threading & Compose Guardrails",
+        "description": "ENHANCEMENT to the existing v1.0.0 SDK (sessionService + messageService). Extends to a unified omnichannel thread: thread (subject_ref, channel_set, purpose, related_object_ref, sender_identity_ref, current_eligibility_snapshot) and message (channel EMAIL|SMS|VOICE|VOICEMAIL|SOCIAL_DM|WEB_CHAT|IN_PERSON|INTERNAL_NOTE, direction, external_message_id, delivery_state, read_state, body_ref, actor), with reply-detection linkage binding an inbound reply to its originating outbound message and correct chronological ordering when providers deliver events out of order. Adds composeGuardrailService returning allow|review|deny per channel with an ORDERED human-readable reason list, delegating decision inputs to a caller-supplied resolver so the SDK stays vertical-neutral. Internal notes are structurally distinguishable from customer-visible messages so they can never be sent by accident."
+      },
+      {
+        "temp_id": "PC-09",
+        "source_module": "sdk-parsing-projection-enhancement",
+        "title": "sdk-parsing & sdk-projection Enhancement — Contact Extraction & Explainable Survivorship",
+        "description": "TWO ENHANCEMENTS to existing v1.0.0 SDKs. (A) sdk-parsing (parseOrchestrator + schemaResolver + backends): register extraction schemas and backends for smart-paste contact blocks, email signatures with multi-handle and organization candidates, business-card OCR, vCard single and multi, mobile selected contacts (Apple CNContact / Android), browser-selection text, and voice-note transcripts with entity reference detection. Every backend returns PROPOSALS with per-field confidence and an evidence span pointing back into the raw input — never a committed value — and the local deterministic parser always runs before any opt-in LLM adjunct. (B) sdk-projection (subjectViewService + inboxEnqueue, already publishConfig): add survivorship rules (per attribute, ordered by origin_class weight, confidence, recency and verification state), an EXPLAINED display projection returning the surviving value plus every losing assertion and a concrete reason each lost, and deterministic replay so retracting a link or superseding an assertion rebuilds projections from the event log rather than patching them. Together these are the mechanism behind 'link, do not overwrite'."
+      },
+      {
+        "temp_id": "PC-10",
+        "source_module": "sdk-notification-rebac-scoring-enhancement",
+        "title": "sdk-notification, sdk-rebac & sdk-lead-scoring Enhancements",
+        "description": "THREE targeted additive enhancements. (A) sdk-notification: per-purpose channel decision inputs, a frequency_cap (max automated sends per channel per day) and a configurable no_answer_dedup_window so a retry never produces a duplicate burst — existing quiet-hours, sms-consent STOP/HELP, delivery-receipt and provider endpoints reused unchanged. (B) sdk-rebac: bitemporal contextual-role relationships carrying role_label, trust_state (CONFIRMED|CANDIDATE|DOCUMENTED), valid_from, valid_to and evidence_refs[], so multiple roles can coexist for the same subject-object pair with independent validity (e.g. a public-record ownership candidate alongside a field-confirmed occupancy and decision authority); PUT /api/relationships/:relationship_id/scope extended to CLOSE a relationship with valid_to rather than deleting it. (C) sdk-lead-scoring: register B2B firmographic and intent feature families (company size, segment, domain, tech signals, page and pricing intent, form completeness, source quality, response recency) alongside the shipped geo/field-service-tuned set, reusing the existing models, weights, score and next-best-action endpoints unchanged."
+      },
+      {
+        "temp_id": "PC-11",
+        "source_module": "sdk-connectors-enhancement",
+        "title": "sdk-connectors Enhancement — Lead-Form & Web-Chat Source Adapters",
+        "description": "ENHANCEMENT adding source adapters. SCOPE NOTE: the dead-letter queue, retry and reconciliation work is ALREADY covered by EP-340 (P15 · E5) — this epic EXCLUDES it and consumes that machinery for adapter failure handling. The DELTA is the adapter set itself. Lead-form adapters: Meta/Instagram/Facebook (lead form webhook, source lead id, form and version, campaign/ad/creative, DM and comment context, permission fields), LinkedIn Lead Gen (campaign and form ids, company and profile, message context), TikTok, Google/YouTube (lead form or landing event, click and UTM, form proof, identity validation), and website chat (page/referrer/session, form version, submitted permissions, transcript, bot handoff) — each capturing its full required field set including permission evidence, with signature verification and per-adapter idempotency."
+      },
+      {
+        "temp_id": "PC-12",
+        "source_module": "sdk-platform-release-engineering",
+        "title": "Platform Release Engineering — Publishing, Catalog Registration & Consumption Contract",
+        "description": "CROSS-CUTTING. Makes the new and enhanced SDKs consumable by every vertical rather than workspace-only. Delivers: publishConfig.registry added to the two new packages (sdk-source-record, sdk-import) and to the workspace-only packages verticals depend on (sdk-crm, sdk-assignment, sdk-identity-resolver, sdk-lead-scoring, sdk-ingest, sdk-audit, sdk-conversation, sdk-parsing, sdk-evidence, sdk-sla, sdk-coverage, sdk-data-credits); publication of @projexlight/* to the private Verdaccio registry (localhost:4873 dev, npm.projexcloud.com prod); route registration in the api-gateway pattern with a single ordered runMigrations([...]) boot call per SDK; regeneration of mcp-server/data/sdk-catalog.json and sdk-catalog-index.json so projexlight_get_sdk_api resolves every new endpoint and reuse_when keywords route future verticals to these SDKs instead of rebuilding; and the written CONSUMPTION CONTRACT documenting which SDK owns which table, which domain events it emits, and what an application may and may not extend locally. ACCEPTANCE: a vertical installs every dependency as a versioned package with zero vendored SDK source."
+      }
+    ]
+  },
+  "features": {
+    "features": [
+      {
+        "temp_id": "PCF-01-1",
+        "epic_temp_id": "PC-01",
+        "source_feature_file": "sr-schema",
+        "title": "Source record, assertion, attestation and crosswalk schema",
+        "description": "Ordered idempotent Postgres migrations (CREATE ... IF NOT EXISTS, ALTER TABLE ... ADD COLUMN IF NOT EXISTS) for source_record, source_assertion, source_rights_attestation and id_crosswalk, plus the four Postgres ENUM types (origin_class, trust_state, assertion_status, evidence_kind). Indexes on (tenant_id, trust_state), (subject_ref, attribute), (tenant_id, origin_class), and a UNIQUE constraint on (tenant_id, external_system, external_id) for crosswalks. A trigger enforces that raw_evidence and origin_class are immutable after insert. Migrations run at Fastify boot via the SDK's runMigrations export — never on module import and never inside data-access code."
+      },
+      {
+        "temp_id": "PCF-01-2",
+        "epic_temp_id": "PC-01",
+        "source_feature_file": "sr-trust-ladder",
+        "title": "Trust ladder service — capture, normalize and promote",
+        "description": "sourceRecordService: create with fingerprint dedupe; normalize P0->P1 delegating extraction to sdk-parsing; promote P1->P2->P3->P4 with per-transition evidence requirements, where promotion to P4 REQUIRES a first-party evidence reference and is rejected with a typed 422 naming the missing evidence otherwise. Unknown or absent origin_class routes the record to quarantine rather than defaulting. Every transition appends exactly one entry to the sdk-audit chain with actor, purpose, decision and causation."
+      },
+      {
+        "temp_id": "PCF-01-3",
+        "epic_temp_id": "PC-01",
+        "source_feature_file": "sr-assertions",
+        "title": "Bitemporal assertion and supersede service",
+        "description": "assertionService: write an assertion with origin class, confidence and bitemporal effective_from/effective_to plus retrieved_at; supersede an assertion by marking status SUPERSEDED and setting superseded_by, NEVER by deleting or updating the prior row; query by subject_ref and attribute returning all coexisting assertions in survivorship order. Conflicting source values coexist by design — the display value is resolved by sdk-projection, not by this SDK."
+      },
+      {
+        "temp_id": "PCF-01-4",
+        "epic_temp_id": "PC-01",
+        "source_feature_file": "sr-attestation",
+        "title": "Source-rights attestation and permitted-use enforcement",
+        "description": "attestationService: sign an attestation with the caller's platform principal over the source fingerprint, mapping version and permitted-use set, recording jurisdiction, licence reference and collection period. REJECTS an attestation whose evidence blob is missing when origin_class is LICENSED_THIRD_PARTY or PARTNER_PROVIDED. Exposes a permitted-use check so downstream consumers can refuse a purpose the source rights do not cover — the mechanism that keeps a licensed record out of an incompatible campaign."
+      },
+      {
+        "temp_id": "PCF-01-5",
+        "epic_temp_id": "PC-01",
+        "source_feature_file": "sr-api",
+        "title": "sdk-source-record HTTP surface and API definitions",
+        "description": "Fastify routes: POST /api/source-records (201), GET /api/source-records, GET /api/source-records/:id, POST /api/source-records/:id/normalize, POST /api/source-records/:id/promote, GET /api/source-assertions, POST /api/source-assertions/:id/supersede, POST /api/source-rights/attestations (201), GET /api/source-rights/attestations/:id, POST /api/source-records/:id/crosswalks (201). All tenant-JWT protected. API definitions authored FIRST under tests/api_definitions/source-record/ with complete payload supersets, root-level fieldEnums for every enum-backed field, statusTransitions documenting P0->P1->P2->P3->P4, captureResponse for every created id and complete ordered dependsOn chains."
+      },
+      {
+        "temp_id": "PCF-02-1",
+        "epic_temp_id": "PC-02",
+        "source_feature_file": "im-schema",
+        "title": "Import run, template, exception and lineage schema",
+        "description": "Migrations for import_run (with UNIQUE(tenant_id, file_fingerprint, source_kind) providing commit idempotency and a rollback_deadline defaulting to committed_at + 24h), mapping_template (versioned and immutable once used by a committed run, certified|custom, field_map, transforms, value_crosswalks, crosswalk_strategy, use_count), import_exception (row_number, raw_row, reason_code, detail) and import_lineage (run_id, entity_kind, entity_id, action, correlation_id). ENUM import_run_status (draft, previewing, mapping, dry_run, committing, complete, quarantined, rolled_back)."
+      },
+      {
+        "temp_id": "PCF-02-2",
+        "epic_temp_id": "PC-02",
+        "source_feature_file": "im-preview-mapping",
+        "title": "Schema preview and AI-assisted mapping assistant",
+        "description": "previewService: delimiter, encoding, header-row and data-type detection with confidence; sensitive-data flagging for phone, email and residential address so they can be tokenized at trusted ingress; source-ID detection so external ids are retained as crosswalks and never replaced. mappingAssistantService: propose a canonical target per source column WITH a confidence and a human-readable reason, but NEVER auto-apply — the importer confirms every field. A structured address maps to a place entity plus a relationship assertion, never onto the person record. Composes sdk-ai-gateway with redaction and budget for the suggestion pass."
+      },
+      {
+        "temp_id": "PCF-02-3",
+        "epic_temp_id": "PC-02",
+        "source_feature_file": "im-transform-dryrun",
+        "title": "Deterministic transform plan and zero-write dry run",
+        "description": "transformService: a reviewable deterministic plan (E.164 normalization preserving the raw value as evidence, name splitting with uncertain suffixes left for review, region and country standardization, labeled handle-type parsing, address-candidate resolution, and source-lifecycle-to-pipeline mapping DEFAULT OFF). dryRunService: returns new / exact-link / review-case / related-entity / invalid counts plus the governance-check verdicts WITHOUT a single write — verified by a transaction-log assertion in test, not merely by convention."
+      },
+      {
+        "temp_id": "PCF-02-4",
+        "epic_temp_id": "PC-02",
+        "source_feature_file": "im-commit-rollback",
+        "title": "Atomic idempotent commit, exception file and rollback",
+        "description": "commitService: acquire the run lock, verify the attestation is signed, write every row through sdk-ingest keyed on run_id + row fingerprint, land each row as a source_record, apply the chosen identity strategy per match band, create related entities and relationship assertions, apply consent and suppression imports WITHOUT ever fabricating a receipt from a blank or generic field, write lineage for every created entity and emit correlated events. rollbackService: reverse every lineage row, permitted only while the rollback deadline has not passed AND no downstream governed action has touched an affected entity — otherwise a typed 409 naming the blocking action. Interrupting a commit and retrying produces exactly the same entity set."
+      },
+      {
+        "temp_id": "PCF-02-5",
+        "epic_temp_id": "PC-02",
+        "source_feature_file": "im-api",
+        "title": "sdk-import HTTP surface and API definitions",
+        "description": "Fastify routes: POST /api/imports/runs, GET /api/imports/runs, GET /api/imports/runs/:id, POST /api/imports/runs/:id/preview, POST /api/imports/runs/:id/mapping-suggestions, PUT /api/imports/runs/:id/mapping, POST /api/imports/runs/:id/transform-plan, POST /api/imports/runs/:id/dry-run, GET /api/imports/runs/:id/exceptions, POST /api/imports/runs/:id/commit, POST /api/imports/runs/:id/rollback, GET and POST /api/imports/mapping-templates, POST /api/imports/mapping-templates/:id/version. API definitions authored first with dependsOn chains that create a run before previewing and preview before mapping, and a {{dynamic:}} file fingerprint so the suite is re-runnable without unique-key collisions."
+      },
+      {
+        "temp_id": "PCF-03-1",
+        "epic_temp_id": "PC-03",
+        "source_feature_file": "sla-calendar",
+        "title": "Business calendar and business-minute arithmetic",
+        "description": "business_calendar with a NAMED IANA timezone (never a fixed UTC offset), working windows, a late-coverage extension, weekend rules and a holiday date list. calendarService implements business-minute arithmetic across working windows, holidays, weekends and the late-coverage extension — the function that makes a signal arriving one minute before close due thirty minutes later inside the extension rather than deferring to the next business day. Property-based tests prove correctness across DST transitions, holiday boundaries and year ends."
+      },
+      {
+        "temp_id": "PCF-03-2",
+        "epic_temp_id": "PC-03",
+        "source_feature_file": "sla-clock",
+        "title": "SLA policy and clock lifecycle",
+        "description": "sla_policy (subject kind, qualifying predicate, duration, calendar ref, pause conditions) and sla_clock (subject_ref, source_timestamp — the ORIGINAL signal time — started_at, due_at, state, satisfied_at, satisfied_by_evidence_ref, paused_intervals). clockService starts a clock preserving the source timestamp across merge, reassignment and backup takeover; pauses and resumes; and satisfies ONLY with evidence meeting the policy's satisfaction contract, rejecting anything weaker with a typed error naming what is missing."
+      },
+      {
+        "temp_id": "PCF-03-3",
+        "epic_temp_id": "PC-03",
+        "source_feature_file": "sla-ladder",
+        "title": "Configurable escalation ladder and idempotent tick",
+        "description": "ladder_rung (offset_minutes, audience, severity, action, remediation_hint) and an idempotent tick evaluator keyed on clock_id + rung so a duplicated or replayed tick fires each rung EXACTLY ONCE. Rung actions compose sdk-notification for the audience, sdk-assignment for auto-reassign, sdk-coverage for the on-call audience and sdk-incident when a breach is systemic. Ladder configuration is data, not code, so a vertical defines its own offsets and audiences without a platform change."
+      },
+      {
+        "temp_id": "PCF-03-4",
+        "epic_temp_id": "PC-03",
+        "source_feature_file": "sla-breach-attainment",
+        "title": "Breach recording and attainment reporting",
+        "description": "breach_record with a MANDATORY reason code, the recovery action taken, the recovering persona and a systemic flag that opens an incident. Attainment reporting exposes percentage attainment, median and P95, and a breakdown by source, owner, day and hour with cause and recovery for every miss — so a target can be governed rather than merely displayed."
+      },
+      {
+        "temp_id": "PCF-03-5",
+        "epic_temp_id": "PC-03",
+        "source_feature_file": "sla-api",
+        "title": "sdk-sla HTTP surface and API definitions",
+        "description": "Fastify routes: POST /api/sla/calendars, POST /api/sla/policies, POST /api/sla/clocks, GET /api/sla/clocks/:id, POST /api/sla/clocks/:id/satisfy, POST /api/sla/clocks/:id/pause, POST /api/sla/clocks/:id/breach, POST /api/sla/tick, GET /api/sla/at-risk, GET /api/sla/attainment. API definitions authored first with fieldEnums for clock state, severity and reason code, and statusTransitions for running -> at_risk -> breached -> satisfied."
+      },
+      {
+        "temp_id": "PCF-04-1",
+        "epic_temp_id": "PC-04",
+        "source_feature_file": "cov-schema",
+        "title": "Schedule, time-off, holiday and presence schema",
+        "description": "Migrations for work_schedule (persona, weekly windows, IANA timezone), time_off (kind PTO|MEETING|OUTAGE|HOLIDAY, window, reason), holiday_calendar (tenant and region scoped), presence (status AVAILABLE|MEETING|OFFLINE|PTO|ON_CALL with source MANUAL|CALENDAR|SYSTEM) and backup_designation (primary, backup, scope, acceptance window)."
+      },
+      {
+        "temp_id": "PCF-04-2",
+        "epic_temp_id": "PC-04",
+        "source_feature_file": "cov-eligibility",
+        "title": "Eligibility engine — who can act right now",
+        "description": "eligibilityService, the SDK's core primitive: compute schedule MINUS time-off MINUS holiday, intersect with live presence and capacity headroom, and return only personas genuinely able to act at this instant with their current load. Table-driven tests prove that a persona on PTO, inside a meeting block, outside their schedule, or at capacity is NEVER returned, across every combination. Consumed by sdk-assignment step 4 and sdk-sla late-coverage rules."
+      },
+      {
+        "temp_id": "PCF-04-3",
+        "epic_temp_id": "PC-04",
+        "source_feature_file": "cov-capacity-oncall",
+        "title": "Capacity policy, current load and on-call roster",
+        "description": "capacity_policy (max concurrent per priority band, daily cap) with computed current_load, and on_call_roster with escalation tiers and manager-on-duty resolution. Supports freezing new assignment to an over-loaded persona at a configurable threshold, and resolving the correct escalation audience at any moment."
+      },
+      {
+        "temp_id": "PCF-04-4",
+        "epic_temp_id": "PC-04",
+        "source_feature_file": "cov-gaps-api",
+        "title": "Coverage gap detection and sdk-coverage HTTP surface",
+        "description": "gapService detects uncovered windows BEFORE they begin and emits an alert through sdk-notification, so a coverage hole is prevented rather than discovered. Fastify routes: POST /api/coverage/schedules, GET /api/coverage/schedules, POST /api/coverage/time-off, POST /api/coverage/holiday-calendars, PUT /api/coverage/presence, GET /api/coverage/eligible, GET /api/coverage/gaps, POST /api/coverage/on-call, GET /api/coverage/on-call/current, POST /api/coverage/capacity-policies, POST /api/coverage/backup-designations. API definitions resolve persona foreign keys from their sdk-persona producer via cache references, never literals."
+      },
+      {
+        "temp_id": "PCF-05-1",
+        "epic_temp_id": "PC-05",
+        "source_feature_file": "dc-catalog-providers",
+        "title": "Capability catalog and hidden provider bindings",
+        "description": "capability (outcome-named key, tenant-visible outcome label and description, credit price, category) and provider_binding (provider key, secret_ref into sdk-secrets, priority, health state, fallback chain) — where provider_binding is structurally unreachable from any tenant-scoped response. brokerService resolves a requested OUTCOME to a provider chain by priority and live health and falls back on failure, entirely invisibly."
+      },
+      {
+        "temp_id": "PCF-05-2",
+        "epic_temp_id": "PC-05",
+        "source_feature_file": "dc-reservation",
+        "title": "Reservation lifecycle — reserve, execute, settle, refund",
+        "description": "reservationService implements estimate -> reserve -> execute -> settle, where the settle outcome MATCHED charges the quoted credits and NO_MATCH, TECHNICAL_FAILURE and CACHE_HIT all settle to ZERO and release the reserved credits. Settle is idempotent on retry. The append-only credit_ledger records reservation, actual charge and refund per request and is exportable."
+      },
+      {
+        "temp_id": "PCF-05-3",
+        "epic_temp_id": "PC-05",
+        "source_feature_file": "dc-cache-budget",
+        "title": "Result cache and role-based budget policy",
+        "description": "result_cache keyed on capability plus subject fingerprint with a TTL and a reuse counter — a hit inside TTL serves the cached result, increments reuse_count and charges nothing. budget_policy per role with modes REQUEST_ONLY (requires an sdk-approval decision before execute), DAILY_CAP and FULL, plus a bulk-approval threshold. Execute is blocked until the approval is granted when the requester's role requires it."
+      },
+      {
+        "temp_id": "PCF-05-4",
+        "epic_temp_id": "PC-05",
+        "source_feature_file": "dc-api",
+        "title": "sdk-data-credits HTTP surface and API definitions",
+        "description": "Fastify routes: GET /api/capabilities (outcome and price only), POST /api/capability-requests, GET /api/capability-requests, GET /api/capability-requests/:id, POST /api/capability-requests/:id/approve, POST /api/capability-requests/:id/execute, GET /api/credits/balance, POST /api/credits/reservations, POST /api/credits/reservations/:id/settle, GET /api/credits/ledger, PUT /api/credits/budgets. A contract test asserts no provider name, credential, routing detail or true cost appears in any tenant-scoped response body."
+      },
+      {
+        "temp_id": "PCF-06-1",
+        "epic_temp_id": "PC-06",
+        "source_feature_file": "as-decision-pipeline",
+        "title": "Six-step decision pipeline with decision trace",
+        "description": "A configurable routing pipeline evaluating eligibility, priority, specialty, availability, assignment and fallback in order, returning a DECISION TRACE explaining each step in plain language. Invalid or ambiguous subjects route to a review outcome rather than being force-assigned. Rule configuration is versioned data so a vertical changes routing without a platform deploy."
+      },
+      {
+        "temp_id": "PCF-06-2",
+        "epic_temp_id": "PC-06",
+        "source_feature_file": "as-assignment-lifecycle",
+        "title": "Primary, backup and manager assignment lifecycle",
+        "description": "Assignment of primary + backup + manager with acceptance and response clocks started through sdk-sla and the ORIGINAL owner and source timestamp preserved. Accept, decline (reason required) and reassign (reason required) — where reassignment and fallback NEVER mutate the source timestamp, proven by test."
+      },
+      {
+        "temp_id": "PCF-06-3",
+        "epic_temp_id": "PC-06",
+        "source_feature_file": "as-rotation-simulation",
+        "title": "Zero-side-effect routing simulation",
+        "description": "simulationService replays historical subjects through a candidate routing configuration producing a comparison report with ZERO assignments, notifications or SLA clocks created - enforced by injecting a no-op sink and asserted in test. SCOPE NOTE: fair-share rotation and the rotation cursor are delivered by EP-335 (P14 E5); this feature consumes that rotation rather than reimplementing it, and adds only the skew-audit read model needed to evaluate a simulation result."
+      },
+      {
+        "temp_id": "PCF-06-4",
+        "epic_temp_id": "PC-06",
+        "source_feature_file": "as-api",
+        "title": "sdk-assignment enhancement HTTP surface",
+        "description": "New Fastify routes alongside the unchanged assign-by-task: POST /api/assignment/routes, POST /api/assignment/route, POST /api/assignments/:id/accept, POST /api/assignments/:id/decline, POST /api/assignments/:id/reassign, POST /api/assignment/simulate. API definitions authored first; a regression test proves the pre-existing assign-by-task contract is unchanged."
+      },
+      {
+        "temp_id": "PCF-07-1",
+        "epic_temp_id": "PC-07",
+        "source_feature_file": "crm-next-action",
+        "title": "Subject-generic NEXT-action and structured save-gate",
+        "description": "Generalise next_action and save-gate from deals to any subject_ref. A next_action requires action_type, owner_persona_id, exact due datetime, purpose and intended_outcome; the save-gate returns a STRUCTURED field-level refusal listing each missing element so a UI renders it inline. Enforced server-side and unbypassable by any client."
+      },
+      {
+        "temp_id": "PCF-07-2",
+        "epic_temp_id": "PC-07",
+        "source_feature_file": "crm-date-push",
+        "title": "Overdue queue and date-push governance",
+        "description": "An overdue next-action queue with configurable escalation offsets, and a date_push_log so a due date cannot be moved repeatedly without a new customer commitment or a manager reason — with the push count exposed so repeated-push patterns surface to a manager rather than hiding in history."
+      },
+      {
+        "temp_id": "PCF-07-3",
+        "epic_temp_id": "PC-07",
+        "source_feature_file": "crm-close-aging",
+        "title": "Close-reason taxonomy and stage aging",
+        "description": "A configurable close_reason taxonomy capturing the code, the subject's own wording, the offer or contract version discussed, the competing option when known, a learning note and an allowed reactivation rule. Plus stage_aging computed over business days with no meaningful activity, exposed through a pipeline aging endpoint."
+      },
+      {
+        "temp_id": "PCF-07-4",
+        "epic_temp_id": "PC-07",
+        "source_feature_file": "crm-api",
+        "title": "sdk-crm enhancement HTTP surface",
+        "description": "New Fastify routes: POST and GET /api/crm/subjects/:subject_ref/next-action, GET /api/crm/subjects/:subject_ref/save-gate, GET /api/crm/next-actions/overdue, POST /api/crm/next-actions/:id/reschedule, POST /api/crm/close-reasons, GET /api/crm/pipeline/aging. Existing deal-scoped endpoints remain byte-compatible, proven by regression test."
+      },
+      {
+        "temp_id": "PCF-08-1",
+        "epic_temp_id": "PC-08",
+        "source_feature_file": "conv-threading",
+        "title": "Omnichannel thread and message model",
+        "description": "thread and message schema spanning EMAIL, SMS, VOICE, VOICEMAIL, SOCIAL_DM, WEB_CHAT, IN_PERSON and INTERNAL_NOTE, scoped by purpose, related object and sender identity. Correct chronological rendering when providers deliver events out of order, with internal notes structurally distinct from customer-visible messages so they can never be sent by accident."
+      },
+      {
+        "temp_id": "PCF-08-2",
+        "epic_temp_id": "PC-08",
+        "source_feature_file": "conv-reply-linkage",
+        "title": "Reply detection and outbound linkage",
+        "description": "Bind an inbound reply to its originating outbound message across channels using provider message ids, thread headers and heuristics, emitting a domain event consumers can subscribe to in order to pause automation and create an owner task."
+      },
+      {
+        "temp_id": "PCF-08-3",
+        "epic_temp_id": "PC-08",
+        "source_feature_file": "conv-guardrails-api",
+        "title": "Compose guardrails and sdk-conversation HTTP surface",
+        "description": "composeGuardrailService returns allow|review|deny per channel with an ORDERED human-readable reason list, delegating decision inputs to a caller-supplied resolver so the SDK stays vertical-neutral. Fastify routes: POST /api/conversations/threads, POST /api/conversations/messages, GET /api/conversations/inbox, GET /api/conversations/threads/:id, POST /api/conversations/compose-guardrail."
+      },
+      {
+        "temp_id": "PCF-09-1",
+        "epic_temp_id": "PC-09",
+        "source_feature_file": "parse-contact-schemas",
+        "title": "Contact extraction schemas and backends",
+        "description": "Register extraction schemas and backends in the existing parseOrchestrator for smart-paste blocks, email signatures, business-card OCR, vCard, mobile selected contacts, browser selection text and voice-note transcripts. Every backend returns proposals with per-field confidence and an evidence span; the local deterministic parser always runs before any opt-in LLM adjunct; extraction never fabricates a field absent from the input. Routes: POST /api/parsing/contact/extract, POST /api/parsing/contact/extract-batch, GET /api/parsing/contact/schemas."
+      },
+      {
+        "temp_id": "PCF-09-2",
+        "epic_temp_id": "PC-09",
+        "source_feature_file": "proj-survivorship",
+        "title": "Survivorship rules and explained projection",
+        "description": "survivorshipRuleService (per attribute, ordered by origin_class weight, confidence, recency and verification state, tenant-configurable with a platform default) and explainedProjectionService returning the SURVIVING value per attribute plus every losing assertion with a concrete reason it lost. Routes: PUT and GET /api/projection/survivorship-rules, GET /api/projection/subject/:subject_ref/explained."
+      },
+      {
+        "temp_id": "PCF-09-3",
+        "epic_temp_id": "PC-09",
+        "source_feature_file": "proj-replay",
+        "title": "Deterministic projection replay",
+        "description": "replayService rebuilds a subject's projection from the assertion event log rather than patching it, triggered when an identity link is retracted or an assertion is superseded. Replaying a subject twice yields byte-identical projections. Route: POST /api/projection/replay."
+      },
+      {
+        "temp_id": "PCF-10-1",
+        "epic_temp_id": "PC-10",
+        "source_feature_file": "notif-caps",
+        "title": "Per-purpose channel decision, frequency caps and dedup window",
+        "description": "SCOPE NOTE: inbound handling, delivery feedback and email-send routing are ALREADY covered by EP-334 (P14 E4) - this feature EXCLUDES them. The DELTA is throttling: add per-purpose channel decision inputs, a frequency_cap (max automated sends per channel per day, tenant-configurable) and a configurable no_answer_dedup_window so a retry inside the window never produces a duplicate burst. Additive only; a regression suite proves every existing notification endpoint is unaffected."
+      },
+      {
+        "temp_id": "PCF-10-2",
+        "epic_temp_id": "PC-10",
+        "source_feature_file": "rebac-bitemporal",
+        "title": "Bitemporal contextual-role relationships",
+        "description": "Extend relationships with role_label, trust_state (CONFIRMED|CANDIDATE|DOCUMENTED), valid_from, valid_to and evidence_refs[], so multiple roles coexist for the same subject-object pair with independent validity. PUT /api/relationships/:relationship_id/scope extended to CLOSE a relationship with a valid_to rather than deleting it, keeping it visible in provenance."
+      },
+      {
+        "temp_id": "PCF-10-3",
+        "epic_temp_id": "PC-10",
+        "source_feature_file": "scoring-b2b",
+        "title": "B2B firmographic and intent feature families",
+        "description": "Register B2B firmographic and intent feature families (company size, segment, domain, technology signals, page and pricing intent, form completeness, source quality, response recency) alongside the shipped geo/field-service-tuned set, reusing the existing models, weights, score and next-best-action endpoints without modification."
+      },
+      {
+        "temp_id": "PCF-11-2",
+        "epic_temp_id": "PC-11",
+        "source_feature_file": "conn-social-adapters",
+        "title": "Meta, LinkedIn, TikTok and Google lead-form adapters",
+        "description": "Adapters capturing each platform's full required field set including permission evidence: Meta/Instagram/Facebook (lead form webhook, source lead id, form and version, campaign/ad/creative, DM and comment context), LinkedIn Lead Gen (campaign and form ids, company and profile, message context), TikTok, and Google/YouTube (lead form or landing event, click and UTM, form proof, identity validation). Each with signature verification and per-adapter idempotency keyed on platform + source event id."
+      },
+      {
+        "temp_id": "PCF-11-3",
+        "epic_temp_id": "PC-11",
+        "source_feature_file": "conn-web-chat",
+        "title": "Website and chat adapter",
+        "description": "Website and chat adapter capturing demo, pricing and contact events with page, referrer and session context, form version, submitted permissions, conversation transcript and bot-to-human handoff state — with the raw event archived even when the resulting record is rejected downstream."
+      },
+      {
+        "temp_id": "PCF-12-1",
+        "epic_temp_id": "PC-12",
+        "source_feature_file": "rel-publish",
+        "title": "Registry publishing and package configuration",
+        "description": "Add publishConfig.registry to the new packages (sdk-source-record, sdk-import, sdk-sla, sdk-coverage, sdk-data-credits) and to the workspace-only packages verticals depend on (sdk-crm, sdk-assignment, sdk-identity-resolver, sdk-lead-scoring, sdk-ingest, sdk-audit, sdk-conversation, sdk-parsing, sdk-evidence). Publish @projexlight/* to the private Verdaccio registry — localhost:4873 in dev, npm.projexcloud.com in production — with semver discipline and a changeset per release."
+      },
+      {
+        "temp_id": "PCF-12-2",
+        "epic_temp_id": "PC-12",
+        "source_feature_file": "rel-gateway-migrations",
+        "title": "Gateway route registration and boot migrations",
+        "description": "Register each new SDK's Fastify routes in the api-gateway pattern with a single ordered idempotent runMigrations([...]) boot call per SDK, so a fresh environment self-provisions its schema on first start and re-running on every boot is safe."
+      },
+      {
+        "temp_id": "PCF-12-3",
+        "epic_temp_id": "PC-12",
+        "source_feature_file": "rel-catalog",
+        "title": "SDK catalog regeneration and discovery keywords",
+        "description": "Regenerate mcp-server/data/sdk-catalog.json and sdk-catalog-index.json so projexlight_get_sdk_api resolves every new endpoint with its payload shape, fieldEnums and dependsOn, and so reuse_when keywords route a future vertical to these SDKs instead of rebuilding them. Update sdk_count and api_count."
+      },
+      {
+        "temp_id": "PCF-12-4",
+        "epic_temp_id": "PC-12",
+        "source_feature_file": "rel-contract-neutrality",
+        "title": "Consumption contract and vertical-neutrality gate",
+        "description": "Publish the written consumption contract documenting which SDK owns which table, which domain events it emits, and what an application may and may not extend locally. Plus an automated NEUTRALITY GATE in CI: a grep-based test asserting no vertical name, stage name, role name, purpose label or business rule appears anywhere in the new or enhanced packages — every vertical-specific value must arrive as configuration."
+      }
+    ]
+  },
+  "scenarios": {
+    "scenarios": [
+      {
+        "temp_id": "PCS-01",
+        "feature_temp_id": "PCF-01-2",
+        "title": "Promotion to P4 without first-party evidence is rejected",
+        "description": "Given a source record at trust state P3_LINKED with only a licensed third-party assertion, When a promote request to P4_DIRECT is submitted without an evidence reference, Then the request is rejected with a typed 422 naming the missing first-party evidence, And the record remains at P3_LINKED, And no audit entry claiming promotion is appended."
+      },
+      {
+        "temp_id": "PCS-02",
+        "feature_temp_id": "PCF-01-3",
+        "title": "Superseding an assertion never destroys the prior row",
+        "description": "Given two conflicting assertions exist for the same subject and attribute from different origin classes, When the newer assertion supersedes the older, Then the older row is retained with status SUPERSEDED and a superseded_by reference, And both assertions remain queryable with their original origin class, confidence and effective dates, And no UPDATE or DELETE touched the original value."
+      },
+      {
+        "temp_id": "PCS-03",
+        "feature_temp_id": "PCF-01-4",
+        "title": "Licensed third-party origin requires an evidence blob to attest",
+        "description": "Given an attestation is submitted with origin_class LICENSED_THIRD_PARTY, When the evidence blob reference is absent, Then the attestation is rejected naming the missing evidence, And when the same attestation is resubmitted with a valid evidence reference it is accepted and signed with the caller's platform principal over the source fingerprint and permitted-use set."
+      },
+      {
+        "temp_id": "PCS-04",
+        "feature_temp_id": "PCF-02-3",
+        "title": "A dry run performs zero writes",
+        "description": "Given an import run with a completed mapping and a signed attestation, When a dry run is executed, Then impact counts for new, exact-link, review-case, related-entity and invalid rows are returned, And a transaction-log assertion confirms zero rows were written to any table, And zero outbound notifications were dispatched."
+      },
+      {
+        "temp_id": "PCS-05",
+        "feature_temp_id": "PCF-02-4",
+        "title": "An interrupted commit retried produces no duplicates",
+        "description": "Given an import run commit is interrupted mid-batch, When the commit is retried with the identical run id and file fingerprint, Then the final entity set is identical to a single uninterrupted commit, And no duplicate entity exists, And every created entity has exactly one lineage row referencing the run."
+      },
+      {
+        "temp_id": "PCS-06",
+        "feature_temp_id": "PCF-02-4",
+        "title": "Rollback after a downstream governed action is refused",
+        "description": "Given a committed import run inside its rollback window, When a downstream governed action occurs against an entity the run created, And a rollback is then requested, Then the rollback is refused with a typed 409 naming the blocking action, And the created entities remain intact."
+      },
+      {
+        "temp_id": "PCS-07",
+        "feature_temp_id": "PCF-03-1",
+        "title": "Business-minute arithmetic is correct across a DST transition",
+        "description": "Given a business calendar with a named IANA timezone and working windows spanning a DST transition date, When an SLA clock is started immediately before the transition, Then the due time is computed in business minutes across the shift without gaining or losing an hour, And the same computation is stable when replayed after the transition."
+      },
+      {
+        "temp_id": "PCS-08",
+        "feature_temp_id": "PCF-03-2",
+        "title": "A clock start time survives merge, reassignment and backup takeover",
+        "description": "Given an SLA clock started from a subject's original source timestamp, When the subject is merged with another record, And the assignment is transferred to a backup owner, Then the clock's source timestamp, started_at and due_at are unchanged, And the escalation ladder continues on the original schedule rather than restarting."
+      },
+      {
+        "temp_id": "PCS-09",
+        "feature_temp_id": "PCF-03-3",
+        "title": "A duplicated ladder tick fires each rung exactly once",
+        "description": "Given an SLA clock whose ladder has rungs due for evaluation, When the tick endpoint is invoked twice concurrently with the same evaluation window, Then each rung fires exactly once, And exactly one notification is dispatched per rung audience, And the second tick reports the rungs as already fired rather than re-firing them."
+      },
+      {
+        "temp_id": "PCS-10",
+        "feature_temp_id": "PCF-04-2",
+        "title": "Eligibility never returns an unavailable or at-capacity persona",
+        "description": "Given personas variously on PTO, inside a meeting block, outside their working schedule, at capacity, and fully available, When eligibility is queried for the current instant, Then only the available persona with capacity headroom is returned, And each returned persona carries its current load and remaining headroom."
+      },
+      {
+        "temp_id": "PCS-11",
+        "feature_temp_id": "PCF-04-4",
+        "title": "A coverage gap is detected before the window begins",
+        "description": "Given a working window with no rostered persona available, When the gap detector runs ahead of that window, Then a coverage gap is reported before the window opens, And a notification is dispatched to the responsible role, And the gap is not merely recorded retrospectively after the window has passed."
+      },
+      {
+        "temp_id": "PCS-12",
+        "feature_temp_id": "PCF-05-2",
+        "title": "A no-match settles the reservation to zero credits",
+        "description": "Given a capability request with a reserved credit estimate, When the broker executes and every provider in the fallback chain returns no match, Then the reservation settles with outcome NO_MATCH and zero credits charged, And the reserved credits are released back to the account balance, And the ledger records the reservation and the zero settlement."
+      },
+      {
+        "temp_id": "PCS-13",
+        "feature_temp_id": "PCF-05-3",
+        "title": "A cache hit inside TTL charges nothing and increments reuse",
+        "description": "Given a capability result cached for a subject fingerprint within its TTL, When the same capability is requested again for that subject, Then the cached result is returned, And the reuse counter is incremented, And zero credits are charged, And no provider was invoked."
+      },
+      {
+        "temp_id": "PCS-14",
+        "feature_temp_id": "PCF-05-4",
+        "title": "No provider identity or cost appears in a tenant response",
+        "description": "Given capability requests executed through a multi-provider fallback chain, When any tenant-scoped endpoint is called, Then no response body contains a provider name, credential, routing detail or true vendor cost, And only the capability outcome, credit price, reservation, actual charge, result and refund are visible."
+      },
+      {
+        "temp_id": "PCS-15",
+        "feature_temp_id": "PCF-06-2",
+        "title": "Reassignment preserves the original source timestamp",
+        "description": "Given a subject assigned to a primary owner at its source timestamp, When the primary declines with a reason and the subject falls back to the backup, And the manager subsequently reassigns it again, Then the source timestamp is unchanged through every transfer, And each transfer records its reason and the prior owner in the assignment history."
+      },
+      {
+        "temp_id": "PCS-16",
+        "feature_temp_id": "PCF-06-3",
+        "title": "Routing simulation produces zero side effects",
+        "description": "Given a candidate routing configuration and a window of historical subjects, When a simulation is executed, Then a comparison report of per-owner volume, priority mix and would-be breaches is returned, And zero assignments were created, And zero notifications were dispatched, And zero SLA clocks were started."
+      },
+      {
+        "temp_id": "PCS-17",
+        "feature_temp_id": "PCF-07-1",
+        "title": "The save-gate returns a structured field-level refusal",
+        "description": "Given a non-terminal subject with no open next action, When a save is attempted without an action type, owner, exact due datetime, purpose and intended outcome, Then the save is refused, And the response names each missing field individually so a client can render it inline, And the refusal is enforced server-side even when the client-side check is bypassed."
+      },
+      {
+        "temp_id": "PCS-18",
+        "feature_temp_id": "PCF-08-1",
+        "title": "Out-of-order provider events render a correct chronological thread",
+        "description": "Given messages on email, SMS and voice arriving from their providers out of chronological order, When the unified thread is read, Then messages render in true chronological order by their occurrence time rather than their arrival time, And internal notes are distinguishable from customer-visible messages, And each message shows its delivery and read state."
+      },
+      {
+        "temp_id": "PCS-19",
+        "feature_temp_id": "PCF-09-2",
+        "title": "The explained projection names a reason for every superseded assertion",
+        "description": "Given a subject with competing assertions from a tenant CRM, a public record and a licensed third party, When the explained projection is read, Then the surviving value per attribute is returned, And every losing assertion is listed with a concrete reason it lost rather than a bare status, And the losing assertions remain fully queryable."
+      },
+      {
+        "temp_id": "PCS-20",
+        "feature_temp_id": "PCF-09-3",
+        "title": "Replay is deterministic and idempotent",
+        "description": "Given a subject whose identity link is retracted, When the projection is replayed, And the projection is replayed a second time, Then both replays produce byte-identical projection state, And the state reflects the pre-link assertions, And the audit chain verifies unbroken across the retraction and both replays."
+      },
+      {
+        "temp_id": "PCS-21",
+        "feature_temp_id": "PCF-10-2",
+        "title": "Multiple contextual roles coexist for the same pair with independent validity",
+        "description": "Given a subject and an object, When an ownership role is asserted as CANDIDATE from a public record, And an occupancy role and a decision-authority role are asserted as CONFIRMED from a direct interaction, Then all three relationships coexist with independent trust states and validity windows, And closing one sets its valid_to without deleting it or affecting the others."
+      },
+      {
+        "temp_id": "PCS-23",
+        "feature_temp_id": "PCF-12-4",
+        "title": "The neutrality gate fails a build containing vertical-specific code",
+        "description": "Given the new and enhanced SDK packages, When the CI neutrality gate runs, Then it reports zero occurrences of any vertical name, stage name, role name, purpose label or business rule in package source, And introducing such a literal into any package source causes the build to fail with the offending file and line named."
+      }
+    ]
+  }
+}

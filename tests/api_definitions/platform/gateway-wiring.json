@@ -1,0 +1,114 @@
+{
+  "name": "Gateway route registration and boot migrations (P16 EP-387)",
+  "endpoint": "internal://platform/api-gateway.bootWiring",
+  "sdk": "platform",
+  "sourceFile": "services/api-gateway/src/app.ts",
+  "method": "INTERNAL_FUNCTION",
+  "requiresAuth": false,
+  "expectedStatus": 200,
+  "taskId": "c8ce42b7-86b2-4293-ada0-e33d15b127ff",
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "featureId": "42b0e27d-5414-497d-a1b3-226676b8f524",
+  "epicId": "42f1aac8-aba4-44cf-90a9-aadc0ac57bd3",
+  "priority": 101,
+  "testability": "manual",
+  "skipReason": "Boot wiring, not a runtime surface — there is no route that reports it. Verified by tests/platform/gatewayWiring.test.ts (36 assertions over app.ts, the gateway package.json, the migration runner and every migration file) plus a live re-run of all eight P16 migrations against a populated Postgres.",
+  "coversCriterion": [
+    "c8ce42b7-86b2-4293-ada0-e33d15b127ff#AC1",
+    "c8ce42b7-86b2-4293-ada0-e33d15b127ff#AC2",
+    "c8ce42b7-86b2-4293-ada0-e33d15b127ff#AC3",
+    "c8ce42b7-86b2-4293-ada0-e33d15b127ff#AC4"
+  ],
+  "description": "Registers each new SDK's Fastify routes and its migrations directory in the gateway's single ordered runMigrations([...]) boot call. Proves all four criteria. The reason this needs an executable guard at all is stated in CLAUDE.md: a missing app.register(...) or a missing runMigrations entry COMPILES, deploys and passes a health check, then 404s or runs against an unmigrated schema — there is no type error and no startup warning, so the wiring has to be asserted against the file that performs it. AC3: for each P16 SDK the test checks three things that must all hold — the package is a gateway dependency (or the import cannot resolve), it is imported as `server as <alias>`, and that alias actually appears in an app.register call; it also asserts NO alias is imported and then forgotten, and that none is registered twice (a duplicate registers every route again and double-runs any onRequest hook). AC1: every package shipping migrations appears in the boot list, and runMigrations is called exactly once. AC2: the runner is forward-only — it keys applied state on UNIQUE (sdk, filename), rejects an edited migration with a sha256 mismatch rather than silently diverging environments, and applies each file in its own BEGIN/ROLLBACK transaction so a failure cannot leave half a schema; on top of that every P16 migration is asserted to use IF NOT EXISTS rather than a bare CREATE, and all eight were re-run against a populated database to confirm it. AC4: ordering is asserted where it actually matters — sdk-lineage precedes sdk-parsing because parsing.extracted_field carries an FK to lineage.node, so the reverse order fails on a fresh database. QA edge cases: migration filenames must be uniquely and monotonically numbered per SDK, since the runner sorts by filename and two files sharing a prefix make the apply order ambiguous between machines; IF NOT EXISTS matters most on a restored snapshot, where a file may be replayed against an existing schema.",
+  "testCases": [
+    {
+      "name": "Every P16 SDK with a server export is imported and registered",
+      "payload": {
+        "scenario": "route_registration",
+        "sdks": ["sdk-conversation", "sdk-parsing", "sdk-projection", "sdk-notification", "sdk-rebac", "sdk-connectors"],
+        "expected_gateway_dependency": true,
+        "expected_imported_as_server_alias": true,
+        "expected_app_register_present": true
+      },
+      "expectedStatus": 200,
+      "expectedResponse": { "success": true }
+    },
+    {
+      "name": "No server alias is imported and then forgotten, and none registered twice",
+      "payload": {
+        "scenario": "no_orphan_or_duplicate_registration",
+        "expected_orphaned": [],
+        "expected_duplicate_registrations": 0
+      },
+      "expectedStatus": 200,
+      "expectedResponse": { "success": true }
+    },
+    {
+      "name": "Every package shipping migrations is in the single boot list",
+      "payload": {
+        "scenario": "migrations_registered",
+        "expected_missing": [],
+        "expected_runMigrations_call_count": 1
+      },
+      "expectedStatus": 200,
+      "expectedResponse": { "success": true }
+    },
+    {
+      "name": "All eight P16 migrations re-run cleanly against a populated database",
+      "payload": {
+        "scenario": "idempotent_replay",
+        "migrations": [
+          "sdk-conversation/002_omnichannel_thread.sql",
+          "sdk-conversation/003_reply_linkage.sql",
+          "sdk-projection/002_survivorship.sql",
+          "sdk-projection/003_replay.sql",
+          "sdk-notification/008_frequency_cap.sql",
+          "sdk-rebac/002_contextual_roles.sql",
+          "sdk-connectors/003_lead_form_events.sql",
+          "sdk-connectors/004_website_chat_platform.sql"
+        ],
+        "expected_all_rerun_ok": true
+      },
+      "expectedStatus": 200,
+      "expectedResponse": { "success": true }
+    },
+    {
+      "name": "Boot order is dependency-safe where FKs cross SDKs",
+      "payload": {
+        "scenario": "boot_order",
+        "expected_before": "sdk-lineage",
+        "expected_after": "sdk-parsing",
+        "reason": "parsing.extracted_field carries an FK to lineage.node"
+      },
+      "expectedStatus": 200,
+      "expectedResponse": { "success": true }
+    }
+  ],
+  "expectedResponse": { "success": true },
+  "errorCases": [
+    {
+      "name": "An edited migration is refused at boot rather than silently diverging",
+      "status": null,
+      "code": "MIGRATION_SHA256_MISMATCH",
+      "message": "[migrator] <sdk>/<file> has changed after being applied (sha256 mismatch). Forward-only — write a new migration.",
+      "when": "an already-applied migration file is edited; without the hash check the edit would apply on fresh environments and not on existing ones, leaving two schemas that disagree with no signal",
+      "payload": { "scenario": "edited_migration" }
+    },
+    {
+      "name": "A registered SDK missing from the gateway dependencies fails to import",
+      "status": null,
+      "code": "MISSING_GATEWAY_DEPENDENCY",
+      "message": "Cannot find module '@projexlight/<sdk>'",
+      "when": "app.ts imports an SDK that is not a workspace:* dependency of the gateway package.json — per CLAUDE.md both the dependency AND the register line are required, and the build does not warn about the missing pair",
+      "payload": { "scenario": "missing_dependency" }
+    },
+    {
+      "name": "A migration failure rolls back rather than leaving half a schema",
+      "status": null,
+      "code": "MIGRATION_APPLY_FAILED",
+      "message": "ROLLBACK issued for the failing file",
+      "when": "any statement in a migration file errors; each file runs inside its own transaction, so the schema is left exactly as it was before that file started",
+      "payload": { "scenario": "failed_migration" }
+    }
+  ]
+}

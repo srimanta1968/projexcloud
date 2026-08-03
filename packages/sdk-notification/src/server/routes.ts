@@ -1,6 +1,23 @@
 import { FastifyInstance, FastifyRequest } from 'fastify';
-import { requireAuth } from '@projexlight/sdk-identity';
+import { requireAuthOrApiKeyForDomain } from '@projexlight/sdk-api-keys';
+
+/**
+ * Every route in this SDK accepts EITHER a six-layer JWT or a tenant-scoped
+ * `pk_live_`/`pk_test_` API key. Machine callers (vertical apps calling the
+ * platform server-to-server) previously had no way to authenticate here, and the
+ * only workaround was to put a human's password in a service's environment.
+ *
+ * Key holders must carry the scope derived from the route: `notification.<resource>.read`
+ * for GET, `notification.<resource>.write` otherwise, where <resource> is the path
+ * segment after `notification` (so POST /api/notification/... maps predictably). JWT
+ * callers are unaffected — scopes apply only to keys.
+ *
+ * Named `requireAuth` so the route definitions below read unchanged; it is the
+ * combined guard, not sdk-identity's JWT-only one.
+ */
+const requireAuth = requireAuthOrApiKeyForDomain('notification');
 import { checkProviderConfigured } from '@projexlight/sdk-config';
+import { setFrequencyPolicy, listFrequencyPolicies, getSendUsage } from '../services/frequencyCap';
 import {
   createTemplateHandler,
   sendHandler,
@@ -59,6 +76,8 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
     const body = req.body as Partial<{
       tenant_id: string; channel: NotificationChannel; destination: string; body: string;
       subject: string; subject_persona_id: string; respect_quiet_hours: boolean; metadata: Record<string, unknown>;
+      // P16 EP-383 — all optional; omitting them preserves the pre-existing behaviour.
+      purpose: string; respect_frequency_cap: boolean; dedup_key: string; auto_dedup: boolean;
     }>;
     if (!body.tenant_id || !body.channel || !body.destination || !body.body) {
       return reply.code(400).send({ error: 'ValidationError', details: ['tenant_id, channel, destination and body are required'] });
@@ -70,6 +89,8 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
       tenant_id: body.tenant_id, channel: body.channel, destination: body.destination, body: body.body,
       subject: body.subject, subject_persona_id: body.subject_persona_id,
       respect_quiet_hours: body.respect_quiet_hours, metadata: body.metadata,
+      purpose: body.purpose, respect_frequency_cap: body.respect_frequency_cap,
+      dedup_key: body.dedup_key, auto_dedup: body.auto_dedup,
     });
     return reply.code(200).send({ data: { dispatch: result } });
   });
@@ -212,6 +233,54 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
         status: req.query.status, limit: req.query.limit ? Number(req.query.limit) : undefined,
       });
       return reply.code(200).send({ data: { receipts } });
+    },
+  );
+
+  /* ------------------------------------------------------------------------
+   * Frequency caps + no-answer dedup window (P16 EP-383). NEW routes only —
+   * every endpoint above is untouched, which is what keeps this additive.
+   * ---------------------------------------------------------------------- */
+
+  app.put('/api/notifications/frequency-policy', { preHandler: requireAuth }, async (req, reply) => {
+    const body = (req.body ?? {}) as Partial<{
+      tenant_id: string; channel: string; purpose: string;
+      max_per_day: number | null; dedup_window_seconds: number; updated_by: string;
+    }>;
+    const details: string[] = [];
+    if (!body.tenant_id) details.push('tenant_id is required');
+    // null is meaningful (uncapped) and must not be conflated with a missing field.
+    if (body.max_per_day !== undefined && body.max_per_day !== null && (!Number.isInteger(body.max_per_day) || body.max_per_day < 0)) {
+      details.push('max_per_day must be a non-negative integer, or null for uncapped');
+    }
+    if (body.dedup_window_seconds !== undefined
+        && (!Number.isInteger(body.dedup_window_seconds) || body.dedup_window_seconds < 0 || body.dedup_window_seconds > 604800)) {
+      details.push('dedup_window_seconds must be an integer between 0 and 604800 (7 days)');
+    }
+    if (details.length) return reply.code(400).send({ error: 'ValidationError', code: 'VALIDATION_ERROR', details });
+
+    const policy = await setFrequencyPolicy({
+      tenant_id: body.tenant_id!,
+      channel: body.channel,
+      purpose: body.purpose,
+      max_per_day: body.max_per_day,
+      dedup_window_seconds: body.dedup_window_seconds,
+      updated_by: body.updated_by,
+    });
+    return reply.code(200).send({ data: { policy } });
+  });
+
+  app.get<{ Querystring: { tenant_id?: string; channel?: string; purpose?: string } }>(
+    '/api/notifications/frequency-policy', { preHandler: requireAuth }, async (req, reply) => {
+      if (!req.query.tenant_id) {
+        return reply.code(400).send({ error: 'ValidationError', code: 'VALIDATION_ERROR', details: ['tenant_id query param required'] });
+      }
+      const policies = await listFrequencyPolicies(req.query.tenant_id);
+      // When a channel is named, also return the RESOLVED policy and current usage — the
+      // question a caller actually has is "may I send now", not "what rows exist".
+      const usage = req.query.channel
+        ? await getSendUsage({ tenant_id: req.query.tenant_id, channel: req.query.channel, purpose: req.query.purpose })
+        : undefined;
+      return reply.code(200).send({ data: { policies, ...(usage ? { usage } : {}) } });
     },
   );
 }

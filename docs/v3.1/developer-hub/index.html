@@ -89,12 +89,15 @@
 <header class="cover">
   <div class="eyebrow">ProjexCloud · Developer Hub</div>
   <h1>Build your app on ProjexCloud</h1>
-  <p class="sub">ProjexCloud is a library of <b>75 production-grade SDKs (538 APIs)</b> — identity, CRM, scheduling, outreach, billing, agents, and more — that you compose into an app instead of building from scratch. <b>Call them directly from your own project</b>, or describe your idea in <b>ProjexLight</b>, our AI app builder, and it plans the work, discovers which SDKs fit, and generates the code that calls them. This hub is the step-by-step path from idea to a running app — either way.</p>
+  <p class="sub">ProjexCloud is a library of <b>85 production-grade SDKs (680 APIs)</b> — identity, CRM, scheduling, outreach, billing, agents, and more — that you compose into an app instead of building from scratch. <b>Call them directly from your own project</b>, or describe your idea in <b>ProjexLight</b>, our AI app builder, and it plans the work, discovers which SDKs fit, and generates the code that calls them. This hub is the step-by-step path from idea to a running app — either way.</p>
   <div class="cta">
     <a class="btn" href="#build">Build step-by-step ↓</a>
     <a class="btn ghost" href="../api_docs/sdk-catalog.json" download>Download SDK catalog ↓</a>
     <a class="btn ghost" href="../api_docs/index.html">API Reference ↗</a>
+    <a class="btn ghost" href="authentication.html">Authentication &amp; Identity ↗</a>
+    <a class="btn ghost" href="configuration-and-governance.html">Configuration, Roles &amp; Policy ↗</a>
     <a class="btn ghost" href="#agents">Agent Cookbook ↗</a>
+    <a class="btn ghost" href="./api-keys-and-project-setup.html">Get an API key ↗</a>
     <a class="btn ghost" href="./why-sdks.html">Why pre-built SDKs? ↗</a>
   </div>
 </header>
@@ -134,7 +137,7 @@
 
 <!-- CATALOG -->
 <section id="catalog">
-  <h2>2 · The SDK Catalog — 75 SDKs across 9 domains</h2>
+  <h2>2 · The SDK Catalog — 85 SDKs across 9 domains</h2>
   <p>Every SDK is a self-contained capability with a REST surface. Browse the full endpoint reference (payloads, auth, errors, enums) in the <a href="../api_docs/index.html">API Reference</a>.</p>
   <table>
     <thead><tr><th>Domain</th><th class="num">SDKs</th><th class="num">APIs</th><th>Examples of what you get</th></tr></thead>
@@ -184,12 +187,13 @@
 
   <div class="step"><div class="n">A1</div><div>
     <h3>Get access — API key + base URL</h3>
-    <p>Sign in to ProjexCloud at <b>cloud.projexlight.com</b>, open <b>Workspace → Settings → API keys</b>, and create a key. You now have the two things every call needs: the <b>base URL</b> (<code>https://cloud.projexlight.com</code>) and a <b>tenant credential</b>. Authenticate (tenant login → JWT) and pass it as <code>Authorization: Bearer &lt;token&gt;</code> on every request. No account for ProjexLight is required.</p>
+    <p>Sign in to ProjexCloud at <b>cloud.projexlight.com</b>, open <b>Tenant Admin → API keys</b>, create an <b>application</b> (one per backend, job or environment) and issue a key under it. You now have the two things every call needs: the <b>base URL</b> (<code>https://cloud.projexlight.com</code>) and a <b>machine credential</b>. Pass the key as <code>Authorization: Bearer pk_live_…</code> on every request, or exchange it once for a short-lived token at <code>POST /api/auth/token</code> and send that instead — both work on every tenant route. No account for ProjexLight is required.</p>
   </div></div>
 
   <div class="step"><div class="n">A2</div><div>
     <h3>Download the SDK catalog</h3>
-    <p><a href="../api_docs/sdk-catalog.json" download><b>Download <code>sdk-catalog.json</code> ↓</b></a> — the machine-readable catalog: every SDK, its group, and each endpoint (method, path, auth, payload shape, field enums, dependencies) for all 538 APIs. Browse the same content human-style in the <a href="../api_docs/index.html">API reference</a>. Drop the catalog straight into your repo — it's the exact catalog ProjexLight bundles, just consumed directly.</p>
+    <p><a href="../api_docs/sdk-catalog.json" download><b>Download <code>sdk-catalog.json</code> ↓</b></a> — the machine-readable catalog: every SDK, its group, and each endpoint (method, path, auth, payload shape, field enums, dependencies) for all 680 APIs. Browse the same content human-style in the <a href="../api_docs/index.html">API reference</a>. Drop the catalog straight into your repo — it's the exact catalog ProjexLight bundles, just consumed directly.</p>
+    <p>The same bundle also ships <a href="../api_docs/openapi.json" download><code>openapi.json</code></a> (OpenAPI 3.1, 608 tenant-callable operations — point any client generator at it), <a href="../api_docs/sdk-catalog-index.json" download><code>sdk-catalog-index.json</code></a> (the compact map an AI builder loads first), and <a href="../api_docs/AGENTS.md" download><code>AGENTS.md</code></a> — the agent-facing brief carrying the authentication flows and the rules that stop an agent rebuilding identity. Start with <a href="authentication.html">Authentication &amp; Identity</a> if you are wiring signup, login or API keys.</p>
   </div></div>
 
   <div class="step"><div class="n">A3</div><div>
@@ -199,7 +203,7 @@
  data model, check whether an SDK already covers it — if so, call the gateway
  at https://cloud.projexlight.com/api/… with the tenant JWT instead of building it.
  Only generate custom code for capabilities no SDK provides."</pre>
-    <p class="muted">The model discovers all 538 APIs from the catalog and reuses them — the same reuse rule ProjexLight ships, applied inside your own tool. (Optional: serve the catalog over a local MCP so it's a tool call, not just pasted context.)</p>
+    <p class="muted">The model discovers all 680 APIs from the catalog and reuses them — the same reuse rule ProjexLight ships, applied inside your own tool. (Optional: serve the catalog over a local MCP so it's a tool call, not just pasted context.)</p>
   </div></div>
 
   <div class="step"><div class="n">A4</div><div>
@@ -401,8 +405,9 @@ const result = await agent.execute(plan);   // each step → capability token + 
 <section id="docs">
   <h2>10 · Explore all the docs</h2>
   <div class="grid c3">
-    <a class="card" href="../api_docs/index.html"><div class="label">Reference</div><div class="title">API Reference ↗</div><div class="body">All 538 endpoints by SDK — payloads, auth, error responses, enums, status transitions.</div></a>
+    <a class="card" href="../api_docs/index.html"><div class="label">Reference</div><div class="title">API Reference ↗</div><div class="body">All 680 endpoints by SDK — payloads, auth, error responses, enums, status transitions.</div></a>
     <a class="card" href="../api_docs/test-plan.html"><div class="label">Reference</div><div class="title">API Test Plan ↗</div><div class="body">Dependency-ordered test waves — what to test first.</div></a>
+    <a class="card" href="./api-keys-and-project-setup.html"><div class="label">Build</div><div class="title">API Keys &amp; Project Setup ↗</div><div class="body">Issue a tenant-scoped API key, choose its scopes, and point your app at ProjexCloud — local or cloud.</div></a>
     <a class="card" href="./agent-cookbook.html"><div class="label">Build</div><div class="title">Agent Cookbook ↗</div><div class="body">7 agent types with runnable sample code.</div></a>
     <a class="card" href="./why-sdks.html"><div class="label">Decide</div><div class="title">Why pre-built SDKs? ↗</div><div class="body">With vs without ProjexCloud — the benefits and the decision matrix.</div></a>
     <a class="card" href="../AgenticIntegration-v3.1.html"><div class="label">Understand</div><div class="title">Agentic Integration ↗</div><div class="body">The agent substrate, MCP bridge, connectors, and how agents reach external systems.</div></a>

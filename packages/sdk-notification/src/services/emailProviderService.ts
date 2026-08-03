@@ -4,6 +4,7 @@ import { appendAuditEntry } from '@projexlight/sdk-audit';
 import { setConfig, revokeConfig } from '@projexlight/sdk-config';
 import { buildSmtpTransport, sendViaSmtp, type SmtpConfig } from './smtpEmailAdapter';
 import type { SendArgs, SendResult } from './providerAdapters';
+import { gatePlatformEmail } from './emailDeliverability';
 
 /**
  * Mirror an email-provider binding into the unified config plane (EP-341) so
@@ -400,6 +401,14 @@ async function sendViaConfig(p: ResolvedEmailProvider, args: SendArgs): Promise<
  * callers can degrade gracefully (e.g. log the link in dev).
  */
 export async function sendPlatformEmail(args: Omit<SendArgs, 'channel'>): Promise<SendResult | null> {
+  // EMAIL_VALIDATION_MODE gate (default 'off' → unchanged). In 'soft' this ALWAYS
+  // suppresses the real send (observation-only rollout, zero reputation risk); in
+  // 'strict' it suppresses only addresses that fail the deliverability assessment.
+  // Returning null mirrors the "no provider configured" path — callers already
+  // degrade gracefully (the verification-email hook is fire-and-forget).
+  const gate = await gatePlatformEmail(args.destination, 'platform-email');
+  if (gate.decision === 'suppress') return null;
+
   const sendArgs: SendArgs = { channel: 'email', ...args };
   const sgKey = process.env.SENDGRID_API_KEY;
   if (sgKey) {

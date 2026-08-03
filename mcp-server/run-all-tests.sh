@@ -25,6 +25,13 @@
 #                       (e.g., development, staging, production, qa, regression)
 #                       URLs are read from environments.<name>.baseUrl and apiUrl
 #
+# Force-run:
+#   --include-manual  - Run endpoints even if their definition is testability:
+#                       manual/skip (aliases: --all-including-manual, --force-all).
+#                       Plumbed to both MCPs (env PROJEX_INCLUDE_MANUAL + payload
+#                       include_manual). Use to verify whether "manual" endpoints
+#                       actually fail on a real 3rd-party dependency vs a config gap.
+#
 # Test-user credentials (written into tests/config/test-config.json before run):
 #   --login-email <email>     Override testCredentials.default.email. Useful
 #                             when a test flow actually sends mail (password
@@ -108,6 +115,23 @@ CONFIG_FILE="${TESTS_DIR}/config/test-config.json"
 # Track if config was created during this run (for failure hints)
 CONFIG_CREATED_THIS_RUN=false
 
+# Reporting UI scenario outcomes back to ProjexLight (deferred feature-file backlog).
+# OFF by default: a plain local run writes results to disk and reports nothing, which is
+# the existing contract. Opt in when you are working the shared "[UI FEATURE FILES]" task,
+# so green scenarios are promoted, the backlog shrinks and the task closes on its own:
+#   PROJEXLIGHT_DEFERRED_TASK_ID=<task-uuid> ./run-all-tests.sh ui tests/features/x.feature
+#   PROJEXLIGHT_REPORT_UI_RESULTS=true      ./run-all-tests.sh ui   # report without a task
+# Feature/scenario ids are read from the file's own @feature_id:/@scenario_id: tags, so
+# nothing else has to be passed.
+PROJEXLIGHT_DEFERRED_TASK_ID="${PROJEXLIGHT_DEFERRED_TASK_ID:-}"
+if [ -n "$PROJEXLIGHT_DEFERRED_TASK_ID" ]; then
+    UI_REPORT_JSON="\"deferredTaskId\": \"${PROJEXLIGHT_DEFERRED_TASK_ID}\", \"reportResults\": true,"
+elif [ "${PROJEXLIGHT_REPORT_UI_RESULTS:-false}" = "true" ]; then
+    UI_REPORT_JSON="\"reportResults\": true,"
+else
+    UI_REPORT_JSON=""
+fi
+
 # Create test-config.json if it doesn't exist
 ensure_test_config() {
     local config_dir="${TESTS_DIR}/config"
@@ -133,10 +157,18 @@ ensure_test_config() {
         cat > "$CONFIG_FILE" << 'TESTCONFIGEOF'
 {
   "version": "1.0.0",
+  "variables": {
+    "_comment": "GLOBAL variables — apply to EVERY environment. Referenced in api_definitions as {{var:name}} (payload/headers/path/query) and resolved at runtime AFTER cache/dependency lookup. Put values that are the SAME across all environments here (e.g. api_version, fixed header values, well-known sentinel IDs).",
+    "_example_api_version": "v2"
+  },
   "environments": {
     "development": {
       "baseUrl": "http://localhost:3000",
-      "apiUrl": "http://localhost:5000"
+      "apiUrl": "http://localhost:5000",
+      "variables": {
+        "_comment": "PER-ENVIRONMENT variables — override/extend the global ones for THIS environment (env wins on name clash). Put values that DIFFER per environment here (e.g. seeded tenant_id/person_id/persona_id UUIDs from this env's database).",
+        "_example_tenant_id": "REPLACE_WITH_DEV_TENANT_UUID"
+      }
     }
   },
   "activeEnvironment": "development",
@@ -835,7 +867,7 @@ run_ui_tests() {
 
     print_header "Running UI Tests"
 
-    mkdir -p "$RESULTS_DIR/ui"
+    mkdir -p "$RESULTS_DIR/test-mcp/ui"
 
     # Get container workspace path (multi-project aware)
     local container_workspace=$(get_container_workspace)
@@ -905,6 +937,7 @@ run_ui_tests() {
                 -d "{
                     \"feature_content\": $feature_content,
                     \"projectPath\": \"$unix_project_path\",
+                    ${UI_REPORT_JSON}
                     \"featureFile\": \"${container_workspace}/tests/features/$feature_name\",
                     \"options\": {
                         \"base_url\": \"${UI_BASE_URL}\",
@@ -916,7 +949,7 @@ run_ui_tests() {
                 }" 2>&1)
 
             # Save response to log
-            echo "$response" | tee "$RESULTS_DIR/ui/${feature_name%.feature}.log"
+            echo "$response" | tee "$RESULTS_DIR/test-mcp/ui/${feature_name%.feature}.log"
 
             # Check for host_not_accessible status
             if echo "$response" | grep -q '"status"[[:space:]]*:[[:space:]]*"host_not_accessible"'; then
@@ -964,6 +997,7 @@ run_ui_tests() {
                     -d "{
                         \"feature_content\": $feature_content,
                         \"projectPath\": \"$unix_project_path\",
+                        ${UI_REPORT_JSON}
                         \"featureFile\": \"${container_workspace}/tests/features/$feature_name\",
                         \"options\": {
                             \"base_url\": \"${UI_BASE_URL}\",
@@ -975,7 +1009,7 @@ run_ui_tests() {
                     }" 2>&1) || true
 
                 # Save response to log
-                echo "$response" | tee "$RESULTS_DIR/ui/${feature_name%.feature}.log"
+                echo "$response" | tee "$RESULTS_DIR/test-mcp/ui/${feature_name%.feature}.log"
 
                 # Check for host_not_accessible status (stop immediately on first occurrence)
                 if echo "$response" | grep -q '"status"[[:space:]]*:[[:space:]]*"host_not_accessible"'; then
@@ -1008,7 +1042,7 @@ run_ui_tests() {
     fi
     docker cp "${TEST_MCP_CONTAINER}:${container_results}/." "$RESULTS_DIR/" 2>/dev/null || true
 
-    print_success "UI test results saved to: $RESULTS_DIR/ui/"
+    print_success "UI test results saved to: $RESULTS_DIR/test-mcp/ui/"
 }
 
 run_api_tests() {
@@ -1017,7 +1051,7 @@ run_api_tests() {
 
     print_header "Running API Functional Tests"
 
-    mkdir -p "$RESULTS_DIR/api"
+    mkdir -p "$RESULTS_DIR/test-mcp/api"
 
     local test_mcp_port="${MCP_TEST_PORT:-8000}"
     local mcp_config_file="$SCRIPT_DIR/mcp-config.json"
@@ -1102,16 +1136,6 @@ run_api_tests() {
     echo "  API Base URL: ${api_base_url:-from test-config.json}"
     echo "  Environment: ${ENV_OVERRIDE:-${TEST_ENVIRONMENT:-development}}"
 
-    # Fallback auth: if no PROJEXLIGHT_API_KEY was resolved (env / .env / Dev MCP
-    # container), use the sessionToken from the project's .projexlight/config.json
-    # (CLI export) so the MCP path can authenticate. PROJEXLIGHT_API_KEY still
-    # takes precedence when present (it routes to the tenant/Bearer path).
-    local session_token="${PROJEXLIGHT_SESSION_TOKEN:-}"
-    if [ -z "$session_token" ] && [ -f "$PROJECT_ROOT/.projexlight/config.json" ]; then
-        session_token=$(jq -r '.sessionToken // empty' "$PROJECT_ROOT/.projexlight/config.json" 2>/dev/null)
-        [ -n "$session_token" ] && echo "  [OK] Using sessionToken from .projexlight/config.json"
-    fi
-
     # Call Test MCP with database mode
     curl -sf -X POST "http://localhost:${test_mcp_port}/run-api-test-by-feature" \
         -H "Content-Type: application/json" \
@@ -1121,20 +1145,17 @@ run_api_tests() {
             \"sprint_id\": \"$sprint_id\",
             \"projexlight_api_url\": \"$api_url\",
             \"projexlight_api_key\": \"$api_key\",
-            \"session_token\": \"$session_token\",
             \"project_id\": \"$project_id\",
             \"api_base_url\": \"$api_base_url\",
             \"environment\": \"${ENV_OVERRIDE:-${TEST_ENVIRONMENT:-development}}\",
             \"generate_report\": true,
+            \"include_manual\": ${INCLUDE_MANUAL:-false},
             \"save_results\": ${SAVE_RESULTS:-false}
-        }" 2>&1 | tee "$RESULTS_DIR/api/test_run.log"
+        }" 2>&1 | tee "$RESULTS_DIR/test-mcp/api/test_run.log"
 
     # Copy results from container. The Test MCP writes under /results/test-mcp
-    # (RESULTS_BASE_DIR), so the interactive report lands in
-    # test-results/test-mcp/api/report.html — which already surfaces on the host
-    # via the /results mount for the owner project. The docker cp below is a
-    # belt-and-braces relocation (needed for additional projects) and never fails
-    # the run.
+    # (RESULTS_BASE_DIR); the interactive report lands in test-results/test-mcp/api/report.html
+    # and surfaces on the host via the /results mount. This cp is belt-and-braces.
     local container_workspace=$(get_container_workspace)
     local container_results="/results/test-mcp"
     if [ "$container_workspace" != "/workspace" ]; then
@@ -1143,8 +1164,7 @@ run_api_tests() {
     mkdir -p "$RESULTS_DIR/test-mcp"
     # Copy the whole api/ folder — one timestamped report_<ts>.html per run (history).
     docker cp "${TEST_MCP_CONTAINER}:${container_results}/api" "$RESULTS_DIR/test-mcp/" 2>/dev/null || true
-    # keep the legacy flat json for any tooling that still reads it
-    docker cp "${TEST_MCP_CONTAINER}:${container_results}/api_test_results.json" "$RESULTS_DIR/api/" 2>/dev/null || true
+    docker cp "${TEST_MCP_CONTAINER}:${container_results}/api_test_results.json" "$RESULTS_DIR/test-mcp/api/" 2>/dev/null || true
 
     print_success "API test report(s): $RESULTS_DIR/test-mcp/api/ (one report_<timestamp>.html per run)"
 }
@@ -1157,8 +1177,8 @@ run_all_tests() {
     run_api_tests "" "all"
 
     print_header "Test Summary"
-    echo "  UI Results: $RESULTS_DIR/ui/"
-    echo "  API Results: $RESULTS_DIR/api/"
+    echo "  UI Results: $RESULTS_DIR/test-mcp/ui/"
+    echo "  API Results: $RESULTS_DIR/test-mcp/api/"
 }
 
 run_unified_tests() {
@@ -1167,7 +1187,7 @@ run_unified_tests() {
 
     print_header "Running Unified Tests (UI + API)"
 
-    mkdir -p "$RESULTS_DIR/unified"
+    mkdir -p "$RESULTS_DIR/test-mcp/unified"
 
     echo "  Mode: $TEST_MODE"
     echo "  Run UI Tests: $run_ui"
@@ -1212,7 +1232,7 @@ run_unified_tests() {
                 \"environment\": \"${ENV_OVERRIDE:-${TEST_ENVIRONMENT:-development}}\",
                 \"generate_report\": true,
                 \"save_results\": ${SAVE_RESULTS:-false}
-            }" 2>&1 | tee "$RESULTS_DIR/unified/test_run.log"
+            }" 2>&1 | tee "$RESULTS_DIR/test-mcp/unified/test_run.log"
     else
         # Local mode - load from files
         echo "  Loading tests from local files..."
@@ -1231,7 +1251,7 @@ run_unified_tests() {
                 \"api_base_url\": \"${API_BASE_URL}\",
                 \"projectPath\": \"$unix_project_path\",
                 \"generate_report\": true
-            }" 2>&1 | tee "$RESULTS_DIR/unified/test_run.log"
+            }" 2>&1 | tee "$RESULTS_DIR/test-mcp/unified/test_run.log"
     fi
 
     # Copy results from container
@@ -1239,9 +1259,9 @@ run_unified_tests() {
     if [ "$container_workspace" != "/workspace" ]; then
         container_results="${container_workspace}/test-results"
     fi
-    docker cp "${TEST_MCP_CONTAINER}:${container_results}/unified_test_report.html" "$RESULTS_DIR/unified/" 2>/dev/null || true
+    docker cp "${TEST_MCP_CONTAINER}:${container_results}/unified_test_report.html" "$RESULTS_DIR/test-mcp/unified/" 2>/dev/null || true
 
-    print_success "Unified test results saved to: $RESULTS_DIR/unified/"
+    print_success "Unified test results saved to: $RESULTS_DIR/test-mcp/unified/"
 }
 
 
@@ -1411,6 +1431,11 @@ while [[ $# -gt 0 ]]; do
             RUN_API_TESTS="true"
             shift
             ;;
+        --include-manual|--all-including-manual|--force-all)
+            # Force-run endpoints even if their definition is testability: manual/skip.
+            INCLUDE_MANUAL="true"
+            shift
+            ;;
         *)
             FEATURE_OR_CATEGORY="$1"
             shift
@@ -1423,6 +1448,11 @@ export TEST_MODE
 export RUN_UI_TESTS
 export RUN_API_TESTS
 export ENV_OVERRIDE
+# Plumb the force-run flag to both MCPs: env var (Dev MCP api_tester reads
+# PROJEX_INCLUDE_MANUAL) + JSON field include_manual in the Test MCP payloads.
+INCLUDE_MANUAL="${INCLUDE_MANUAL:-false}"
+export INCLUDE_MANUAL
+export PROJEX_INCLUDE_MANUAL="$INCLUDE_MANUAL"
 
 # Self-heal the shared MCP if its owner project was deleted (one-shot, never loops).
 MCP_SERVER_URL="${MCP_SERVER_URL:-http://localhost:8766}"
@@ -1516,14 +1546,14 @@ elif [ $TEST_EXIT_CODE -eq 0 ]; then
     print_success "Test execution complete!"
 else
     # Check test output for blocked host indicators
-    if [ -f "$RESULTS_DIR/ui/"*.log ] 2>/dev/null; then
-        if grep -q -i "blocked request\|host.docker.internal.*not allowed\|allowedHosts" "$RESULTS_DIR/ui/"*.log 2>/dev/null; then
+    if [ -f "$RESULTS_DIR/test-mcp/ui/"*.log ] 2>/dev/null; then
+        if grep -q -i "blocked request\|host.docker.internal.*not allowed\|allowedHosts" "$RESULTS_DIR/test-mcp/ui/"*.log 2>/dev/null; then
             show_host_accessibility_guide
             print_error "Tests failed: Client framework appears to be blocking Docker requests"
             exit $HOST_NOT_ACCESSIBLE_EXIT_CODE
         fi
         # Check for invalid navigation step in logs
-        if grep -q -i "INVALID NAVIGATION STEP\|Missing URL path" "$RESULTS_DIR/ui/"*.log 2>/dev/null; then
+        if grep -q -i "INVALID NAVIGATION STEP\|Missing URL path" "$RESULTS_DIR/test-mcp/ui/"*.log 2>/dev/null; then
             print_error "Tests failed: Feature file has invalid navigation step (missing URL path)"
             exit $INVALID_NAVIGATION_EXIT_CODE
         fi

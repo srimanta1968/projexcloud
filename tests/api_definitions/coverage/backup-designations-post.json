@@ -1,0 +1,92 @@
+{
+  "sdk": "sdk-coverage",
+  "sourceFile": "packages/sdk-coverage/src/server/routes.ts",
+  "requiresAuth": true,
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "epicId": "75f3f5a3-faa8-4b82-badf-4feda46c00e7",
+  "featureId": "5f6dc00d-cb8f-4a54-9a19-9b1e0f0b2f5a",
+  "taskId": "422472b0-117e-4cb0-9f90-0c6962439155",
+  "testability": "auto",
+  "name": "POST /api/coverage/backup-designations - Name a backup",
+  "endpoint": "/api/coverage/backup-designations",
+  "method": "POST",
+  "expectedStatus": 201,
+  "priority": 20,
+  "description": "Who catches the work when the primary does not accept in time. acceptance_window_minutes is how long the primary has before it falls to the backup; zero would mean the backup is notified simultaneously, which is a different arrangement and should be said explicitly rather than arrived at through an empty field. A persona cannot back themselves up - the whole purpose of a backup is that it is somebody else, so a row saying otherwise is a silent single point of failure and the database refuses it. NOTE ON THE PAYLOAD: primary_persona_id comes from the persona producer, while backup_persona_id is a seeded id from test-config. That is deliberate on both counts - the handler REFUSES a persona backing themselves up (422), and the dependency graph is one node per METHOD+ENDPOINT so it cannot express a SECOND persona from the same producer [MUST-51]; coverage.persona_id is a loose reference with no foreign key into sdk-persona, so a seeded id is a truthful stand-in rather than a fabricated FK.",
+  "dependsOn": [
+    "POST /api/auth/signup-tenant",
+    "POST /api/personas"
+  ],
+  "fieldEnums": {},
+  "testCases": [
+    {
+      "name": "A backup with a five-minute acceptance window",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "payload": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "primary_persona_id": "{{cache:personas.create.response.data.persona.persona_id}}",
+        "backup_persona_id": "{{var:coverage_backup_persona_id}}",
+        "scope": "primary-queue",
+        "acceptance_window_minutes": 5
+      },
+      "expectedStatus": 201,
+      "expectedResponse": {
+        "data": {
+          "designation": {
+            "designation_id": "string"
+          }
+        }
+      }
+    }
+  ],
+  "errorCases": [
+    {
+      "name": "A persona cannot back themselves up",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "payload": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "primary_persona_id": "{{cache:personas.create.response.data.persona.persona_id}}",
+        "backup_persona_id": "{{cache:personas.create.response.data.persona.persona_id}}"
+      },
+      "expectedStatus": 422
+    },
+    {
+      "name": "A negative acceptance window is refused",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "payload": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "primary_persona_id": "{{cache:personas.create.response.data.persona.persona_id}}",
+        "backup_persona_id": "{{cache:personas.create.response.data.persona.persona_id}}",
+        "acceptance_window_minutes": -1
+      },
+      "expectedStatus": 422
+    },
+    {
+      "name": "A persona cannot be their own backup",
+      "status": 422,
+      "code": "VALIDATION_ERROR",
+      "message": "a persona cannot be their own backup",
+      "when": "primary_persona_id and backup_persona_id are the same",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "payload": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "primary_persona_id": "{{cache:personas.create.response.data.persona.persona_id}}",
+        "backup_persona_id": "{{cache:personas.create.response.data.persona.persona_id}}",
+        "scope": "self-backup-check",
+        "acceptance_window_minutes": 5
+      },
+      "expectedStatus": 422
+    }
+  ],
+  "captureResponse": {
+    "coverage.backup-designations.create.designation_id": "data.designation.designation_id"
+  }
+}

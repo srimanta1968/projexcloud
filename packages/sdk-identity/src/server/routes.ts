@@ -26,6 +26,7 @@ import {
   socialCallbackHandler,
 } from './handlers/federationController';
 import { requireAuth } from '../middleware/authMiddleware';
+import { listMySubscriptionsHandler } from './handlers/subscriptionController';
 import { scimBearerAuth } from '../middleware/scimAuthMiddleware';
 
 /**
@@ -74,6 +75,17 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
 
   app.get('/.well-known/jwks.json', async (req, reply) => {
     try { await jwksHandler(req, reply); }
+    catch (err) { req.log.error(err); if (!reply.sent) reply.code(500).send({ error: 'InternalError' }); }
+  });
+
+  /**
+   * The provider list behind a single login. A person may hold memberships in many tenants —
+   * that is what makes one credential work across several providers' apps — but nothing
+   * previously let them SEE that list, so a client had no way to learn the tenant_id it needs
+   * to ask for a scoped token. Guarded, and the subject comes from the token.
+   */
+  app.get('/api/memberships', { preHandler: requireAuth }, async (req, reply) => {
+    try { await listMySubscriptionsHandler(req, reply); }
     catch (err) { req.log.error(err); if (!reply.sent) reply.code(500).send({ error: 'InternalError' }); }
   });
 
