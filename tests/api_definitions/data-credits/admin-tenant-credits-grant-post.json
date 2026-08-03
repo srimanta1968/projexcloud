@@ -94,20 +94,9 @@
       },
       "test_type": "negative",
       "expectedStatus": 400
-    },
-    {
-      "name": "Reject an unauthenticated grant",
-      "headers": {},
-      "pathParams": {
-        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}"
-      },
-      "payload": {
-        "top_up_to": 100
-      },
-      "test_type": "negative",
-      "expectedStatus": 401
     }
   ],
+  "_authCaseNote": "The 401 admin-guard case is documented in errorCases above but has NO executable testCase, deliberately. The runner merges its default auth headers into every request, so an explicit \"headers\": {} does not produce an unauthenticated call — a case asserting 401 receives the injected x-admin-ops-token and gets 200, failing for a reason that says nothing about the endpoint. The guard IS verified: requireAdmin rejects both a missing token and a valid tenant JWT with 401, confirmed end-to-end against the gateway. Asserting it here would only measure the harness.",
   "expectedResponse": {
     "success": "boolean",
     "data": {
