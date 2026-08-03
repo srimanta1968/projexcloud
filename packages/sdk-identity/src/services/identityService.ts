@@ -39,6 +39,35 @@ export class PersonExistsError extends Error {
   constructor(message: string) { super(message); this.name = 'PersonExistsError'; }
 }
 
+/**
+ * A person-level alias (email, phone, ...) is already registered to someone else.
+ *
+ * identity.alias is UNIQUE (kind, value_hash), so this is a CLIENT error — the
+ * caller supplied an identifier that is not theirs to claim. It exists as its own
+ * error, separate from PersonExistsError, so the response can NAME the colliding
+ * field: 'that phone is taken' and 'that email is taken' need different fixes from
+ * the caller, and a single UserExists answer for both is not actionable.
+ *
+ * Before this existed the phone alias had no pre-check and no handler branch, so a
+ * duplicate surfaced as the raw 23505 and the handler's catch-all turned it into a
+ * 500. That misread a client error as a server fault AND, because the insert sat
+ * inside the signup transaction, rolled the whole signup back — taking down the
+ * root producer of the test suite and cascading into hundreds of unrelated
+ * 'blocked' results.
+ */
+export class AliasExistsError extends Error {
+  constructor(public readonly field: string) {
+    super(`That ${field} is already registered to another identity`);
+    this.name = 'AliasExistsError';
+  }
+}
+
+/** Postgres raises 23505 on identity.alias's UNIQUE (kind, value_hash). */
+export function isAliasUniqueViolation(err: unknown): boolean {
+  const e = err as { code?: string; constraint?: string } | null;
+  return e?.code === '23505' && e?.constraint === 'alias_kind_value_hash_key';
+}
+
 export class InvalidCredentialsError extends Error {
   constructor() { super('Invalid email or password'); this.name = 'InvalidCredentialsError'; }
 }
@@ -122,11 +151,20 @@ export async function registerPerson(input: RegisterPersonInput): Promise<Regist
     // the email alias. value_envelope holds the raw value (vault wrapping is a
     // cross-cutting follow-up, consistent with the current email alias convention).
     if (input.phone) {
-      await dataService.query(
-        `INSERT INTO identity.alias (person_id, kind, value_envelope, value_hash, verified_at)
-         VALUES ($1, 'phone', $2, $3, NULL)`,
-        [personRow.person_id, Buffer.from(input.phone, 'utf-8'), hashAliasValue('phone', input.phone)],
-      );
+      // Same contract as signupTenant: a phone already held by another identity is
+      // a 409 naming the field, never a 500. (Note registerPerson is NOT wrapped in
+      // a transaction, so the person/alias/credential above survive — the caller is
+      // told precisely which field to change.)
+      try {
+        await dataService.query(
+          `INSERT INTO identity.alias (person_id, kind, value_envelope, value_hash, verified_at)
+           VALUES ($1, 'phone', $2, $3, NULL)`,
+          [personRow.person_id, Buffer.from(input.phone, 'utf-8'), hashAliasValue('phone', input.phone)],
+        );
+      } catch (err) {
+        if (isAliasUniqueViolation(err)) throw new AliasExistsError('phone');
+        throw err;
+      }
     }
 
     return { person: personRow, email_alias: aliasRow, credential: credRow };
@@ -300,12 +338,37 @@ export async function signupTenant(input: SignupTenantInput): Promise<SignupTena
     }
 
     // Optional phone as a person-level alias (mirrors the email alias).
+    //
+    // Pre-checked like the email above rather than left to the UNIQUE constraint:
+    // this INSERT is the LAST statement of the signup transaction, so a raw 23505
+    // here discards the person, org, app, tenant, membership and app_identity that
+    // were all created successfully. Catching it as a typed error lets the handler
+    // answer 409 naming the field instead of a 500 that reads as a server fault.
     if (input.phone) {
-      await q(
-        `INSERT INTO identity.alias (person_id, kind, value_envelope, value_hash, verified_at)
-         VALUES ($1, 'phone', $2, $3, NULL)`,
-        [person_id, Buffer.from(input.phone, 'utf-8'), hashAliasValue('phone', input.phone)],
+      const phoneHash = hashAliasValue('phone', input.phone);
+      const phoneDup = await q<{ person_id: string }>(
+        `SELECT person_id FROM identity.alias WHERE kind = 'phone' AND value_hash = $1`,
+        [phoneHash],
       );
+      // Someone else already holds it. The person REUSING their own identity keeps
+      // their existing phone alias — re-registering it would collide with itself.
+      if (phoneDup.rows.length > 0 && phoneDup.rows[0].person_id !== person_id) {
+        throw new AliasExistsError('phone');
+      }
+      if (phoneDup.rows.length === 0) {
+        try {
+          await q(
+            `INSERT INTO identity.alias (person_id, kind, value_envelope, value_hash, verified_at)
+             VALUES ($1, 'phone', $2, $3, NULL)`,
+            [person_id, Buffer.from(input.phone, 'utf-8'), phoneHash],
+          );
+        } catch (err) {
+          // The pre-check above is TOCTOU-racy under concurrent signups; the
+          // constraint is the real arbiter, so translate rather than leak a 500.
+          if (isAliasUniqueViolation(err)) throw new AliasExistsError('phone');
+          throw err;
+        }
+      }
     }
 
     return {

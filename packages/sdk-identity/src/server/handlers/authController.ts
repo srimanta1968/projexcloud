@@ -9,6 +9,7 @@ import {
   getEmailVerificationStatus,
   getPersonIdByEmail,
   PersonExistsError,
+  AliasExistsError,
   InvalidCredentialsError,
 } from '../../services/identityService';
 import {
@@ -59,6 +60,12 @@ export async function registerHandler(req: FastifyRequest, reply: FastifyReply):
   } catch (err) {
     if (err instanceof PersonExistsError) {
       reply.code(409).send({ error: 'UserExists', details: [err.message] });
+      return;
+    }
+    // A duplicate person-level alias is a CLIENT error naming a specific field,
+    // not a server fault. `field` tells the caller exactly what to change.
+    if (err instanceof AliasExistsError) {
+      reply.code(409).send({ error: 'AliasExists', code: 'ALIAS_ALREADY_REGISTERED', field: err.field, details: [err.message] });
       return;
     }
     req.log.error(err);
@@ -115,6 +122,12 @@ export async function signupTenantHandler(req: FastifyRequest, reply: FastifyRep
   } catch (err) {
     if (err instanceof PersonExistsError) {
       reply.code(409).send({ error: 'UserExists', details: [err.message] });
+      return;
+    }
+    // A duplicate person-level alias is a CLIENT error naming a specific field,
+    // not a server fault. `field` tells the caller exactly what to change.
+    if (err instanceof AliasExistsError) {
+      reply.code(409).send({ error: 'AliasExists', code: 'ALIAS_ALREADY_REGISTERED', field: err.field, details: [err.message] });
       return;
     }
     req.log.error(err);

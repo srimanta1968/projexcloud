@@ -54,6 +54,12 @@
       "when": "registerPerson raises PersonExistsError because the email alias is already taken"
     },
     {
+      "status": 409,
+      "code": "ALIAS_ALREADY_REGISTERED",
+      "message": "That phone is already registered to another identity",
+      "when": "an optional person-level alias (phone) is already held by a DIFFERENT identity. identity.alias is UNIQUE (kind, value_hash), so this is a client error, not a server fault: the response carries `field` naming which value to change. Previously the phone insert had no pre-check and the raw 23505 surfaced as a 500 - and because it was the last statement of the signup transaction it also rolled back the person, org, app, tenant and membership, taking down the suite's root producer (TK-4139)."
+    },
+    {
       "status": 500,
       "code": "InternalError",
       "message": "InternalError",

@@ -113,6 +113,38 @@ async function publishRevoke(key: ApiKeyRecord): Promise<void> {
 }
 
 /**
+ * app_id used for credentials that belong to no application. api_keys.key carries
+ * a NULLABLE application_id on purpose — sdk-command robot credentials have none —
+ * and persona.app_identity.app_id is NOT NULL, so those keys need a stable
+ * sentinel rather than a null. Must match 002_machine_personas.sql.
+ */
+const MACHINE_APP_ID = '__machine__';
+
+/**
+ * Derived, not random: the same (tenant, app) always yields the same machine
+ * person, so repeated key issues converge on ONE machine identity per tenant+app
+ * instead of accumulating a person per key. Mirrors persona.machine_person_id()
+ * in 002_machine_personas.sql — the two MUST agree or the backfill and the
+ * runtime path would build separate chains.
+ */
+function machinePersonId(tenant_id: string, app_id: string): string {
+  const hex = crypto
+    .createHash('md5')
+    .update(`projexcloud:machine-person:${tenant_id}:${app_id}`)
+    .digest('hex');
+  return [hex.slice(0, 8), hex.slice(8, 12), hex.slice(12, 16), hex.slice(16, 20), hex.slice(20)].join('-');
+}
+
+/** Slug of the owning application, or null when the key has none. */
+async function appSlug(application_id: string): Promise<string | null> {
+  const row = await dataService.one<{ slug: string }>(
+    `SELECT slug FROM api_keys.application WHERE application_id = $1`,
+    [application_id],
+  );
+  return row?.slug ?? null;
+}
+
+/**
  * Issues a new API key. Returns the plaintext value exactly once.
  * Caller MUST surface it to the user immediately and never log it.
  *
@@ -136,9 +168,59 @@ export async function issueKey(input: IssueApiKeyInput): Promise<IssueApiKeyResu
   }
 
   const { plaintext, prefix } = generatePlaintext(environment);
-  const synthetic_persona_id = crypto.randomUUID();
 
-  const rows = await dataService.rows<ApiKeyRecord>(
+  // The synthetic persona and the key are created in ONE transaction (TK-4138).
+  //
+  // This used to be `crypto.randomUUID()` written straight into the key with no
+  // persona row behind it. P2 declares API_KEY }o--|| PERSONA and persona is the L4
+  // authorization anchor, so a key with no persona cannot participate in ReBAC and
+  // every POST /api/role-assignments for it failed 23503 on the FK that
+  // persona.role_assignment does enforce. Because api_keys.key had no FK of its own
+  // the bad write never failed at insert time — 673 keys drifted before anyone saw it.
+  //
+  // Same transaction, not two statements: a key that exists without its persona is
+  // exactly the state we are eliminating, so it must not be reachable even for the
+  // width of a failed second call.
+  const applicationSlug = input.application_id ? await appSlug(input.application_id) : null;
+
+  const rows = await dataService.tx(async (q) => {
+    const person_id = machinePersonId(input.tenant_id, applicationSlug ?? MACHINE_APP_ID);
+    const app_id = applicationSlug ?? MACHINE_APP_ID;
+
+    // L1-L3 are shared per (tenant, app) and created on first use; ON CONFLICT makes
+    // concurrent first-issues converge rather than one of them failing.
+    await q(
+      `INSERT INTO identity.person (person_id, home_region, status, mdm_method)
+       VALUES ($1, 'us-east-1', 'active', 'registry')
+       ON CONFLICT (person_id) DO NOTHING`,
+      [person_id],
+    );
+    const ai = await q<{ app_identity_id: string }>(
+      `INSERT INTO persona.app_identity (person_id, app_id, status)
+       VALUES ($1, $2, 'active')
+       ON CONFLICT (person_id, app_id) DO UPDATE SET app_id = EXCLUDED.app_id
+       RETURNING app_identity_id`,
+      [person_id, app_id],
+    );
+    const mem = await q<{ membership_id: string }>(
+      `INSERT INTO persona.membership (app_identity_id, tenant_id, status)
+       VALUES ($1, $2, 'active')
+       ON CONFLICT (app_identity_id, tenant_id) DO UPDATE SET tenant_id = EXCLUDED.tenant_id
+       RETURNING membership_id`,
+      [ai.rows[0].app_identity_id, input.tenant_id],
+    );
+
+    // L4 is per KEY, so audit and ReBAC can tell one credential from another
+    // (P3: "Multiple personas allowed per membership").
+    const persona = await q<{ persona_id: string }>(
+      `INSERT INTO persona.persona (membership_id, kind, status)
+       VALUES ($1, 'machine', 'active')
+       RETURNING persona_id`,
+      [mem.rows[0].membership_id],
+    );
+    const synthetic_persona_id = persona.rows[0].persona_id;
+
+    const inserted = await q<ApiKeyRecord>(
     `INSERT INTO api_keys.key (
         tenant_id, prefix, key_hash, key_lookup, hash_alg, synthetic_persona_id,
         scopes, rate_limit_rpm, expires_at, application_id, name, environment,
@@ -159,7 +241,9 @@ export async function issueKey(input: IssueApiKeyInput): Promise<IssueApiKeyResu
       environment,
       input.created_by_persona_id ?? null,
     ],
-  );
+    );
+    return inserted.rows;
+  });
   const key = rows[0];
   await emitEvent({
     event_type: 'api-key.issued.v1',

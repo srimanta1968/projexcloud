@@ -404,8 +404,8 @@ async function verifyKeyOwnership(execution: ExecutionRecord): Promise<{ ok: tru
       }
       return { ok: true };
     case 'shred-persona-key': {
-      const persona = await dataService.one<{ persona_id: string; person_id: string }>(
-        `SELECT p.persona_id, ai.person_id
+      const persona = await dataService.one<{ persona_id: string; person_id: string; kind: string }>(
+        `SELECT p.persona_id, p.kind, ai.person_id
            FROM persona.persona p
            JOIN persona.membership m ON p.membership_id = m.membership_id
            JOIN persona.app_identity ai ON m.app_identity_id = ai.app_identity_id
@@ -414,6 +414,20 @@ async function verifyKeyOwnership(execution: ExecutionRecord): Promise<{ ok: tru
         [execution.shred_target_key_id],
       );
       if (!persona) return { ok: false, reason: 'no persona references this key' };
+      // MACHINE PERSONAS ARE OUT OF DSAR SCOPE — decided here, deliberately (TK-4138).
+      //
+      // P3 defines the DSAR workflow and establishes persona-kind as a filter
+      // dimension, but grants NO exemption by kind, so a machine persona would
+      // otherwise fall in scope like any other. It must not: a machine persona is the
+      // authorization anchor for an API key (P2: API_KEY }o--|| PERSONA), it is not a
+      // natural person, and it holds no personal data — its identity.person row is a
+      // DERIVED uuid over (tenant, app), never a human. Shredding one would revoke
+      // live machine-to-machine auth for a whole tenant in response to an unrelated
+      // person's erasure request. The refusal is explicit rather than incidental so
+      // that giving machine personas a persona_key_ref later cannot silently open it.
+      if (persona.kind === 'machine') {
+        return { ok: false, reason: 'machine personas are out of DSAR scope: they anchor API-key authorization and hold no personal data' };
+      }
       if (persona.person_id !== request.person_id) {
         return { ok: false, reason: `persona belongs to ${persona.person_id}, not ${request.person_id}` };
       }
