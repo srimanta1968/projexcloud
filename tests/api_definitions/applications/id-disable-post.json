@@ -12,10 +12,15 @@
   "taskId": "bcf23c76-2e69-48c2-af3f-84acc9e636d2",
   "featureId": "888ec9d8-5cbb-4d77-9082-fd78b08334ad",
   "priority": 26,
-  "description": "Switches an application off and revokes every key it owns in the SAME transaction, so there is no window - and on a failure no permanent state - where an application an operator believes is off still has live credentials calling the platform. The response names the revoked key ids so the operator sees what just stopped rather than discovering it when an integration starts failing. This is the switch to reach for when a credential has leaked. Answers 200; a second call answers 404 because the application is no longer active.",
+  "description": "Switches an application off and revokes every key it owns in the SAME transaction, so there is no window - and on a failure no permanent state - where an application an operator believes is off still has live credentials calling the platform. The response names the revoked key ids so the operator sees what just stopped rather than discovering it when an integration starts failing. This is the switch to reach for when a credential has leaked. Answers 200; a second call answers 404 because the application is no longer active. TEST ORDERING: this is a TERMINAL transition on the shared application, so every endpoint that needs that application still active - issuing keys under it, the client_credentials exchange, and the key rotate/revoke pair - is listed in dependsOn to force this test to run last. Without that, disable ran first and POST /api/api-keys answered 409 'That application is disabled'. For the same reason rotate is ordered before revoke: rotateKey refuses a revoked key, whereas revokeKey accepts an active OR a rotating one.",
   "dependsOn": [
     "POST /api/auth/signup-tenant",
-    "POST /api/applications"
+    "POST /api/applications",
+    "POST /api/applications/:application_id/keys",
+    "POST /api/api-keys",
+    "POST /api/auth/token",
+    "POST /api/api-keys/:key_id/rotate",
+    "POST /api/api-keys/:key_id/revoke"
   ],
   "fieldEnums": {
     "status": [
