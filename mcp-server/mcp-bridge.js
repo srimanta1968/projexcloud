@@ -241,6 +241,10 @@ const TOOLS = [
           description: 'Array of endpoints implemented by this task. Use when apiDefinitions is not available.',
           items: { type: 'object', additionalProperties: true }
         },
+        hasHttpSurface: {
+          type: 'boolean',
+          description: 'Set FALSE when this task genuinely ships NO HTTP route - a migration, a queue consumer, an event handler, a CI gate, or a pure module. The api_definition requirement is then waived and your evidence is expected in the form MUST-67 already recognises: a unit test for pure logic, a .feature for a screen, a migration for schema. DO NOT invent an internal:// placeholder endpoint to get past the gate - a fabricated endpoint enters the SDK catalog and the test runner dispatches it as a real call, so it fails forever. IGNORED for api_endpoint/api_integration: those type names assert a route ships, so if yours opens none, change the task type instead. Omit when the task does expose routes.'
+        },
         projectPath: {
           type: 'string',
           description: 'Unix-style path to project root for multi-project setups. Auto-detected if not provided.'

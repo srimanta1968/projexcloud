@@ -45,6 +45,20 @@ async function loadApps(): Promise<AppRow[]> {
   }
 }
 
+/**
+ * NO LIST ENDPOINT EXISTS YET.
+ *
+ * sdk-tenant declares only app.post('/api/role-templates') — there is no GET handler
+ * anywhere in the codebase, so this call returns 404 "Route GET:/api/role-templates not
+ * found" (confirmed against prod). The catch below then swallows it into an empty array,
+ * which renders as "no role templates yet" — a page that has never worked looking
+ * identical to a tenant who has no data. That is the exact failure lib/gateway.ts was
+ * written to prevent, and it was reintroduced here by writing the screen against an
+ * endpoint that was assumed rather than verified.
+ *
+ * Left calling the real path deliberately: the moment a GET handler ships, this works.
+ * Until then the page reports the gap instead of pretending to be empty.
+ */
 async function loadRoles(appId: string): Promise<RoleTemplate[]> {
   try {
     const res = await gateway.get<{ role_templates?: RoleTemplate[] }>(
@@ -52,7 +66,9 @@ async function loadRoles(appId: string): Promise<RoleTemplate[]> {
     );
     return res?.role_templates ?? [];
   } catch {
-    return [];
+    // Rethrow shape is not available here, so signal "unavailable" rather than "empty"
+    // by returning null; the page distinguishes the two below.
+    return null as unknown as RoleTemplate[];
   }
 }
 
@@ -114,7 +130,13 @@ export default async function RolesPage({
         </form>
       )}
 
-      {byName.size === 0 ? (
+      {roles === null ? (
+        <p role="alert" className="text-sm text-red-700 border border-red-300 rounded p-3">
+          Role templates cannot be listed: the platform has no <code>GET /api/role-templates</code>
+          endpoint yet (sdk-tenant provides only POST). This screen is waiting on that handler —
+          it is not that your tenant has no roles.
+        </p>
+      ) : byName.size === 0 ? (
         <p className="text-sm text-gray-500">
           No role templates for this app yet. Platform defaults appear here once the app ships them.
         </p>
