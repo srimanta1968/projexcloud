@@ -12,7 +12,7 @@
   "taskId": "bcf23c76-2e69-48c2-af3f-84acc9e636d2",
   "featureId": "888ec9d8-5cbb-4d77-9082-fd78b08334ad",
   "priority": 27,
-  "description": "Issues a key without naming the application in the path; application_id may still travel in the body. The tenant comes from the caller claims - it used to be read from the payload with no ownership check at all, which let any signed-in user mint and manage credentials against any tenant on the platform. A payload tenant_id that disagrees with the credential is now a 403 rather than being silently ignored, because ignoring it hides a misconfigured caller until it writes somewhere it should not. Plaintext is returned exactly once.",
+  "description": "Issues a key without naming the application in the path; application_id may still travel in the body. The tenant comes from the caller claims - it used to be read from the payload with no ownership check at all, which let any signed-in user mint and manage credentials against any tenant on the platform. A payload tenant_id that disagrees with the credential is now a 403 rather than being silently ignored, because ignoring it hides a misconfigured caller until it writes somewhere it should not. Plaintext is returned exactly once. Every key is bound to a MACHINE-KIND PERSONA created in the SAME transaction as the key (TK-4138): synthetic_persona_id in the response resolves to a real persona.persona row, and api_keys.key.synthetic_persona_id now carries an FK to it, so a key referencing a missing persona is unrepresentable rather than failing much later as a 23503 during a role grant. One machine person/app_identity/membership is shared per (tenant, application) and ONE persona is minted per key, so audit and ReBAC can tell one credential from another. Rotation deliberately REUSES the predecessor's persona - a rotated key is the same machine identity with new material.",
   "dependsOn": [
     "POST /api/auth/signup-tenant",
     "POST /api/applications"
@@ -80,5 +80,22 @@
       },
       "expectedStatus": 400
     }
-  ]
+  ],
+  "expectedResponse": {
+    "data": {
+      "key": {
+        "key_id": "string",
+        "tenant_id": "string",
+        "prefix": "string",
+        "synthetic_persona_id": "string",
+        "status": "string"
+      },
+      "plaintext": "string"
+    }
+  },
+  "captureResponse": {
+    "api-keys.create.response.data.key.key_id": "data.key.key_id",
+    "api-keys.create.response.data.key.synthetic_persona_id": "data.key.synthetic_persona_id",
+    "api-keys.create.response.data.plaintext": "data.plaintext"
+  }
 }
