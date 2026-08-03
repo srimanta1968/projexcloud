@@ -2,7 +2,7 @@
   "endpoint": "/api/config",
   "method": "POST",
   "expectedStatus": 201,
-  "description": "Upserts a config value in the multi-scope config plane (EP-341) on the (scope, scope_id, key) unique key. A non-secret value goes inline in `value`; a secret keeps only its sdk-secrets envelope pointer in `secret_ref` (value XOR secret_ref). Tenant JWT required; a tenant may only write its OWN tenant/app/app_user rows (403 otherwise) and platform scope requires a platform operator. Edge cases: scope must be platform|tenant|app|app_user and key is required (400); providing both value and secret_ref is 400.",
+  "description": "Upserts a config value in the multi-scope config plane (EP-341) on the (scope, scope_id, key) unique key. A non-secret value goes inline in `value`; a secret keeps only its sdk-secrets envelope pointer in `secret_ref` (value XOR secret_ref). Tenant JWT required; a tenant may only write its OWN tenant/app/app_user rows (403 otherwise) and platform scope requires a platform operator. Edge cases: scope must be platform|tenant|app|app_user and key is required (400); providing both value and secret_ref is 400. This definition is also the PRODUCER for the revoke and rotate tests: two further test cases upsert qa.config.revoke.smoke (a plain value) and qa.config.rotate.smoke (a secret_ref), so those endpoints operate on their OWN rows and never touch qa.config.smoke that the read tests assert on. They live here as extra test cases rather than as separate definitions because the runner's dependency graph is ONE node per (method, endpoint), so a second POST /api/config definition could not be named unambiguously in dependsOn; the upsert is idempotent and resets status to active, which is what makes revoke and rotate re-runnable.",
   "dependsOn": [
     "POST /api/auth/signup-tenant"
   ],
@@ -32,6 +32,34 @@
           "provider": "anthropic",
           "model": "claude-opus-4-8"
         }
+      },
+      "expectedStatus": 201
+    },
+    {
+      "name": "Provision the revoke test's own target row",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "payload": {
+        "scope": "tenant",
+        "scope_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "key": "qa.config.revoke.smoke",
+        "value": {
+          "seed": true
+        }
+      },
+      "expectedStatus": 201
+    },
+    {
+      "name": "Provision the rotate test's own secret row",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "payload": {
+        "scope": "tenant",
+        "scope_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "key": "qa.config.rotate.smoke",
+        "secret_ref": "vault:seed-original"
       },
       "expectedStatus": 201
     }

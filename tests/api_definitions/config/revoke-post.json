@@ -2,12 +2,12 @@
   "endpoint": "/api/config/revoke",
   "method": "POST",
   "expectedStatus": 200,
-  "description": "Soft-deletes a config value (status='revoked') so resolution stops without losing the audit row. Operates on its OWN seeded key so it never revokes the read tests' value. Tenant JWT required + scope-ownership guard. Edge cases: scope + key required (400); unknown row 404; cross-tenant/platform without operator 403.",
+  "description": "Soft-deletes a config value (status='revoked') so resolution stops without losing the audit row. Operates on its OWN key, qa.config.revoke.smoke, which POST /api/config creates in this same run (declared in dependsOn), so it never revokes the read tests' value and needs no SQL seed. Tenant JWT required + scope-ownership guard. Edge cases: scope + key required (400); unknown row 404; cross-tenant/platform without operator 403.",
   "dependsOn": [
-    "POST /api/auth/signup-tenant"
+    "POST /api/auth/signup-tenant",
+    "POST /api/config"
   ],
-  "testability": "semi-auto",
-  "setupScript": "config_revoke_rotate_seed.sql",
+  "testability": "auto",
   "fieldEnums": {
     "scope": [
       "platform",

@@ -44,15 +44,19 @@
   ],
   "expectedResponse": {
     "data": {
-      "key_id": "string",
+      "key": {
+        "key_id": "string",
+        "prefix": "string",
+        "status": "string"
+      },
       "plaintext": "string"
     }
   },
   "captureResponse": {
-    "keys.create.response.data.key_id": "data.key_id",
+    "keys.create.response.data.key_id": "data.key.key_id",
     "keys.create.response.data.plaintext": "data.plaintext"
   },
-  "description": "Issues a new API key for a tenant and returns {key_id, plaintext}. The plaintext is returned exactly once and is never recoverable afterwards (only the hash is stored), so the caller MUST capture it from this response. Scopes may be supplied either as scopes[] or as a single scope string, which is normalised into a one-element array. Gated by the gateway default-deny authGate, so a valid tenant JWT is required. Edge cases: tenant_id is read from the body, not the JWT, so a caller may mint a key for another tenant - verify tenant scoping deliberately; an absent tenant_id and an empty effective scope set (no scopes[], no scope, or scopes:[]) produce the same single 400; scope strings are not validated against an allowlist in this route, so an unknown scope reaches issueKey; the endpoint is not idempotent - repeating the identical request mints an additional distinct key rather than returning the existing one; a non-UUID tenant_id or an unsatisfied tenant foreign key surfaces as a 500 with the raw driver message rather than a 400 or 404. AUTH FIX: these routes call tenantOf(req), which 400s with \"This credential carries no tenant context\" when the JWT has no tenant_id claim. The definition authenticated with the REGISTER token, and /api/auth/register creates only an identity.person — no tenant, no membership — so its six-layer JWT legitimately carries no tenant_id. signup-tenant creates org+app+tenant+membership and mints a tenant-scoped token, which is the credential identity this route actually accepts (MUST-52).",
+  "description": "Issues a new API key for a tenant and returns {key:{...}, plaintext}. The plaintext is returned exactly once and is never recoverable afterwards (only the hash is stored), so the caller MUST capture it from this response. Scopes may be supplied either as scopes[] or as a single scope string, which is normalised into a one-element array. Gated by the gateway default-deny authGate, so a valid tenant JWT is required. DEPRECATED ALIAS: /api/keys/* is retained only for older integrations and delegates, behind a deprecation preHandler, to exactly the same tenant-scoped handlers as the canonical /api/api-keys/* - the inline gateway implementation that once backed this path was deleted. Edge cases: tenant_id is taken from the JWT via tenantOf(), and a body tenant_id naming a DIFFERENT tenant is rejected by tenantMismatch() rather than honoured, so this route can no longer mint a key for another tenant; an empty effective scope set (no scopes[], no scope, or scopes:[]) produce the same single 400; scope strings are not validated against an allowlist in this route, so an unknown scope reaches issueKey; the endpoint is not idempotent - repeating the identical request mints an additional distinct key rather than returning the existing one; a non-UUID tenant_id or an unsatisfied tenant foreign key surfaces as a 500 with the raw driver message rather than a 400 or 404. AUTH FIX: these routes call tenantOf(req), which 400s with \"This credential carries no tenant context\" when the JWT has no tenant_id claim. The definition authenticated with the REGISTER token, and /api/auth/register creates only an identity.person — no tenant, no membership — so its six-layer JWT legitimately carries no tenant_id. signup-tenant creates org+app+tenant+membership and mints a tenant-scoped token, which is the credential identity this route actually accepts (MUST-52).",
   "errorCases": [
     {
       "status": 401,
