@@ -19,7 +19,7 @@ Four principals, each with its own credential: PLATFORM OPERATOR (ADMIN_OPS_TOKE
 - Credential-management routes (/api/applications, /api/api-keys) require a HUMAN JWT and reject an API key by design: a key that can mint another key cannot be contained.
 - Do NOT build your own users/roles/sessions tables. identity + persona + tenant + rebac + policy already own that; a parallel table breaks tenant isolation and the audit chain.
 - A human JWT carries NO scopes. Authority is resolved from the persona and its grants at request time, so a revoked role takes effect immediately rather than at token expiry.
-- THE SAME IS TRUE OF A MACHINE TOKEN, and this is the step everyone misses: exchanging a pk_ key via POST /api/auth/token returns a token carrying scopes (e.g. ['crm']) and actor {kind: service} — and it will STILL 403. The scopes on the token are not the authority; the credential is bound to a SYNTHETIC PERSONA that starts with NO grants. You must grant it: POST /api/personas/{persona_id}/roles. A valid key plus a successful token exchange plus 403 on every call is not a broken key — it is an ungranted persona.
+- THE SAME IS TRUE OF A MACHINE TOKEN, and this is the step everyone misses: exchanging a pk_ key via POST /api/auth/token returns a token carrying scopes (e.g. ['crm']) and actor {kind: service} — and it will STILL 403. The scopes on the token are not the authority; the credential is bound to a SYNTHETIC PERSONA (persona.kind = 'machine', created in the same transaction as the key) that starts with NO grants. You must grant it: POST /api/role-assignments {persona_id, role_template_id}. A valid key plus a successful token exchange plus 403 on every call is not a broken key — it is an ungranted persona.
 - Everything downstream keys on persona_id (L4), not on person_id and not on a user_id.
 
 ### A tenant signs up (bootstrap — no credential needed)
@@ -38,9 +38,35 @@ POST /api/applications                        (human JWT) -> application_id
 POST /api/applications/{application_id}/keys  (human JWT) -> pk_live_/pk_test_
 POST /api/auth/token                          (public, client_credentials) -> short-lived token
 rotate: POST /api/api-keys/{key_id}/rotate | revoke: POST /api/api-keys/{key_id}/revoke
-POST /api/personas/{persona_id}/roles   <- REQUIRED. The key's synthetic persona has no grants until you add them, so every call 403s no matter how valid the key is.
+POST /api/role-assignments {persona_id, role_template_id}  <- REQUIRED. The key's synthetic persona has no grants until you add them, so every call 403s no matter how valid the key is.
+   persona_id       = the key's synthetic_persona_id, returned by the key-issue call above
+   role_template_id = a tenant.role_template row. NOTE its app_id is an app_id, NOT the application_id you just created — see "app_id is not application_id" below.
 environment (live|test) is a property of the APPLICATION, not the key, so a test app can never mint a credential that reaches production data.
 ```
+
+### app_id is not application_id
+
+These are two different identifiers with confusingly similar names, and swapping them is the single most common wasted hour on this platform. Passing an `application_id` where an `app_id` belongs is refused by `role_template_app_id_fkey`, whose message names neither concept.
+
+```
+app_id          TEXT   e.g. 'leadflow-dev-af4bd2'   the tenant's APP.
+                       tenant.app(app_id) is the PK. tenant.tenant.app_id and
+                       tenant.role_template.app_id both REFERENCE it, and
+                       persona.app_identity.app_id carries the same text value.
+                       Appears in: POST /api/auth/login {app_id}, POST /api/app-identities,
+                       and every role_template you create.
+
+application_id  UUID   the API-KEY CLIENT REGISTRATION — one per thing that calls
+                       the platform (a backend, a job, a staging copy).
+                       api_keys.application(application_id) is the PK; its `slug`
+                       is the client_id used by the client_credentials grant.
+                       Appears in: POST /api/applications -> application_id,
+                       POST /api/applications/{application_id}/keys, and
+                       POST /api/api-keys {application_id}.
+```
+
+Rule of thumb: **app_id answers "which of your products is this?", application_id answers "which of your machines is calling?"** A tenant has few app_ids and may have many application_ids per app.
+
 
 ### An end user signs up inside a tenant's app
 
@@ -105,8 +131,10 @@ Mint ONE KEY PER CONSUMER (web backend, mobile BFF, each CI pipeline) so revocat
 ### Roles, relationships and policy
 
 ```
-RBAC  tenant.role_template keyed (tenant_id, app_id, name); tenant_id NULL = a platform default for the app, tenant_id set = that tenant's override of the same role name. parent_role_template_id gives inheritance.
-POST /api/personas/{persona_id}/roles         -> grant beyond the starting template
+RBAC  tenant.role_template keyed (tenant_id, app_id, name); tenant_id NULL = a platform default for the app, tenant_id set = that tenant's override of the same role name. parent_role_template_id gives inheritance. app_id here is TEXT REFERENCES tenant.app(app_id) — not an application_id.
+POST /api/role-assignments {persona_id, role_template_id}  -> grant beyond the starting template
+GET  /api/personas/{persona_id}/roles         -> LIST what a persona holds (read-only; there is no POST on this path)
+POST /api/role-assignments/{assignment_id}/revoke          -> withdraw a grant
 ReBAC (sdk-rebac)  'may THIS persona act on THAT record' — owner/delegate/account team relationships, with trust state and evidence. Use when authority comes from a relationship rather than from a role.
 ABAC (sdk-policy)  'do the attributes permit it right now' — region, consent, time, record state. Use when the decision does not depend on identity.
 They compose RBAC -> ReBAC -> ABAC.

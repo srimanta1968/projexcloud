@@ -9,7 +9,7 @@
       "Credential-management routes (/api/applications, /api/api-keys) require a HUMAN JWT and reject an API key by design: a key that can mint another key cannot be contained.",
       "Do NOT build your own users/roles/sessions tables. identity + persona + tenant + rebac + policy already own that; a parallel table breaks tenant isolation and the audit chain.",
       "A human JWT carries NO scopes. Authority is resolved from the persona and its grants at request time, so a revoked role takes effect immediately rather than at token expiry.",
-      "THE SAME IS TRUE OF A MACHINE TOKEN, and this is the step everyone misses: exchanging a pk_ key via POST /api/auth/token returns a token carrying scopes (e.g. ['crm']) and actor {kind: service} — and it will STILL 403. The scopes on the token are not the authority; the credential is bound to a SYNTHETIC PERSONA that starts with NO grants. You must grant it: POST /api/personas/{persona_id}/roles. A valid key plus a successful token exchange plus 403 on every call is not a broken key — it is an ungranted persona.",
+      "THE SAME IS TRUE OF A MACHINE TOKEN, and this is the step everyone misses: exchanging a pk_ key via POST /api/auth/token returns a token carrying scopes (e.g. ['crm']) and actor {kind: service} — and it will STILL 403. The scopes on the token are not the authority; the credential is bound to a SYNTHETIC PERSONA that starts with NO grants. You must grant it: POST /api/role-assignments {persona_id, role_template_id}. A valid key plus a successful token exchange plus 403 on every call is not a broken key — it is an ungranted persona.",
       "Everything downstream keys on persona_id (L4), not on person_id and not on a user_id."
     ],
     "flows": {
@@ -24,7 +24,7 @@
         "POST /api/applications/{application_id}/keys  (human JWT) -> pk_live_/pk_test_",
         "POST /api/auth/token                          (public, client_credentials) -> short-lived token",
         "rotate: POST /api/api-keys/{key_id}/rotate | revoke: POST /api/api-keys/{key_id}/revoke",
-        "POST /api/personas/{persona_id}/roles   <- REQUIRED. The key's synthetic persona has no grants until you add them, so every call 403s no matter how valid the key is.",
+        "POST /api/role-assignments {persona_id, role_template_id}   <- REQUIRED. The key's synthetic persona has no grants until you add them, so every call 403s no matter how valid the key is.",
         "environment (live|test) is a property of the APPLICATION, not the key, so a test app can never mint a credential that reaches production data."
       ],
       "app_end_user_signup": [
@@ -74,7 +74,7 @@
       ],
       "roles_and_access": [
         "RBAC  tenant.role_template keyed (tenant_id, app_id, name); tenant_id NULL = a platform default for the app, tenant_id set = that tenant's override of the same role name. parent_role_template_id gives inheritance.",
-        "POST /api/personas/{persona_id}/roles         -> grant beyond the starting template",
+        "POST /api/role-assignments {persona_id, role_template_id}  -> grant beyond the starting template. GET /api/personas/{persona_id}/roles LISTS a persona's grants (read-only; there is no POST on that path). app_id on a role_template is TEXT REFERENCES tenant.app(app_id) - NOT an application_id",
         "ReBAC (sdk-rebac)  'may THIS persona act on THAT record' — owner/delegate/account team relationships, with trust state and evidence. Use when authority comes from a relationship rather than from a role.",
         "ABAC (sdk-policy)  'do the attributes permit it right now' — region, consent, time, record state. Use when the decision does not depend on identity.",
         "They compose RBAC -> ReBAC -> ABAC."
