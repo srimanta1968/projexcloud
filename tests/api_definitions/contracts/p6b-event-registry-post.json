@@ -16,5 +16,31 @@
         "success": true
       }
     }
+  ],
+  "errorCases": [
+    {
+      "status": 500,
+      "code": "UNREGISTERED_EVENT_TYPE",
+      "message": "Unregistered event_type: <name>. Platform code must add it to EVENT_TYPE_REGISTRY; a tenant application registers its own types with POST /api/events/types using the convention <domain>.<entity>.<verb>.v<N>",
+      "when": "assertRegisteredEventType() (packages/contracts/src/events.ts:647-655) throws because the name is not a key of EVENT_TYPE_REGISTRY. This is the OC-2 guard every platform producer calls before emitting, and it is the failure mode a missed P6B registry entry actually produces — at the producer's call site, not here. The status is whatever the calling route maps an unhandled throw to; most SDK routes catch and return 500."
+    },
+    {
+      "status": 400,
+      "code": "EVENT_TYPE_NAME_INVALID",
+      "message": "event_type '<name>' does not follow the naming convention <domain>.<entity>.<verb>.v<N> (lowercase, e.g. capture.lead.created.v1). The .v<N> suffix is required so a later payload change can be a new version rather than a redefinition of rows already written.",
+      "when": "validateEventTypeName() (events.ts:625-633) rejects a P6B key added without the mandatory .v<N> suffix, with uppercase, or with a separator other than '-'/'_' inside a segment. Returned as a 400 by POST /api/events/types when an application registers a type; for a name added to the constant it fails the CI lint instead."
+    },
+    {
+      "status": 400,
+      "code": "EVENT_TYPE_REQUIRED",
+      "message": "event_type is required",
+      "when": "validateEventTypeName() is handed a non-string or an all-whitespace name — the empty-key case of a registry entry authored with a missing constant"
+    },
+    {
+      "status": 500,
+      "code": "TYPE_CHECK_FAILED",
+      "message": "(pnpm -w build fails; no runtime response)",
+      "when": "a P6B cross-SDK type (RagCorpus/Hit/Retrieval, ParseJob/Stage/ExtractedField, ConversationSession/Turn/Handoff, RecommendationModel/Suggestion/Feedback, RollupSpec/QueryResult/IcebergTableRef, LineageNode/Edge/Chain, the six G9 ontology types, Snowflake Install/Binding/SyncRun/Query) is added inconsistently with its consumers. Enforcement for this contracts-only task is compile-time, so the failure is a build error rather than an HTTP status — this row exists so QA does not go looking for a runtime one."
+    }
   ]
 }

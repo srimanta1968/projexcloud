@@ -18,5 +18,19 @@
     "status": "string"
   },
   "description": "Liveness probe for sdk-mcp-bridge; returns 200 with { sdk: \"sdk-mcp-bridge\", status: \"ok\" }. It is a constant-response handler with no database, no body parsing and no branches, so it cannot fail with a 4xx/5xx. The path ends in /health, so the api-gateway default-deny authGate treats it as public - no Authorization header is required and sending an invalid one does not cause a 401. There are therefore no error cases.",
-  "errorCases": []
+  "errorCases": [
+    {
+      "status": 404,
+      "code": "Not Found",
+      "message": "Route GET:/api/mcp/health not found",
+      "when": "sdk-mcp-bridge is not mounted — registerRoutes only runs if the package is a workspace:* dep of services/api-gateway AND app.register(...) names it in app.ts. Omitting either still builds, so the probe 404s from Fastify's default not-found handler rather than answering — the one regression this endpoint is worth asserting against."
+    },
+    {
+      "status": 404,
+      "code": "Not Found",
+      "message": "Route POST:/api/mcp/health not found",
+      "when": "any method other than GET/HEAD — registered with app.get and Fastify matches method+path, so a wrong verb is a route miss, not a 405"
+    }
+  ],
+  "_noHandlerErrorsNote": "The handler is `async () => ({ sdk: 'sdk-mcp-bridge', status: 'ok' })` — no params, no body, no database, no branch, no throw — so it has no error path of its own and every observable failure is a routing one. No 401 is possible either: isHealth() in the gateway authGate matches any path ending in /health, so a missing or invalid Authorization header changes nothing."
 }

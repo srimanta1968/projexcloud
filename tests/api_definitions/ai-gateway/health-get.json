@@ -18,5 +18,19 @@
       }
     }
   ],
-  "errorCases": []
+  "errorCases": [
+    {
+      "status": 404,
+      "code": "Not Found",
+      "message": "Route GET:/api/ai-gateway/health not found",
+      "when": "sdk-ai-gateway is not mounted — its registerRoutes is only reached if the package is a workspace:* dep of services/api-gateway AND app.register(...) names it in app.ts. Forgetting either still builds cleanly, so the probe 404s from Fastify's default not-found handler instead of answering. This is the ONE failure this endpoint exists to catch, and the reason it is worth an assertion at all."
+    },
+    {
+      "status": 404,
+      "code": "Not Found",
+      "message": "Route POST:/api/ai-gateway/health not found",
+      "when": "any method other than GET/HEAD — the route is registered with app.get, and Fastify matches on method+path, so a wrong verb is a route miss rather than a 405"
+    }
+  ],
+  "_noHandlerErrorsNote": "The handler itself has NO error branch: it is `async () => ({ sdk: 'sdk-ai-gateway', status: 'ok' })` — no body parsing, no params, no database, no provider or credential read, no throw. Every error a caller can observe on this path therefore comes from routing, which is what the two cases above document. In particular there is no 401: isHealth() in the gateway authGate matches any path ending in /health, so the probe answers identically with no Authorization header, an expired token or a garbage one — a 401 here means the allowlist regressed."
 }

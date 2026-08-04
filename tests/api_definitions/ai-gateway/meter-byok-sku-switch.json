@@ -46,5 +46,31 @@
   "expectedResponse": {
     "success": true
   },
-  "errorCases": []
+  "errorCases": [
+    {
+      "status": 200,
+      "code": "AUDIT_EMIT_SWALLOWED",
+      "message": "[ai-gateway] audit emit failed for completion <completion_id> <reason> (console.error only)",
+      "when": "appendAuditEntry() throws inside emitCompletionEvent — audit pool AI_GATEWAY_AUDIT_POOL unreachable, the pool_index unknown, or the append rejected. The whole body is wrapped in try/catch (completionService.ts:301-333) and only console.errors, so the completion STILL returns 200 with its output while the billing event is lost. This is the revenue-leak case: no HTTP status ever reflects it, so QA must assert the audit.entry row exists rather than trusting the 2xx."
+    },
+    {
+      "status": 200,
+      "code": "UNREGISTERED_EVENT_TYPE",
+      "message": "Unregistered event_type: ai-gateway.complete.v1",
+      "when": "the event name is absent from EVENT_TYPE_REGISTRY in @projexlight/contracts (OC-2 rejects it before any write). Because the emit is swallowed, a renamed or unregistered type degrades to exactly the case above — a clean 200 with no ledger entry — rather than surfacing anywhere the caller can see."
+    },
+    {
+      "status": 503,
+      "code": "ProviderNotAvailable",
+      "message": "[ai-gateway] provider <provider_id> not available",
+      "when": "complete() throws at completionService.ts:349-351 because the resolved provider row is missing or status='disabled'. completeHandler maps any message containing 'not available' or 'no route matches' to 503 (completionController.ts:42-45). Thrown BEFORE emitCompletionEvent is reached, so NO event is emitted at all and the meter sees neither SKU — distinct from the swallowed case, where the completion succeeded and only the event was lost."
+    },
+    {
+      "status": 500,
+      "code": "KillSwitchEngaged",
+      "message": "Completion failed",
+      "when": "ensureKillSwitchClear() -> assertKillSwitchDisengaged() throws KillSwitchError('[ai-gateway] kill-switch engaged for agent <agent_id> (flag <flag_id>)') at the top of complete() (FR-AGW-7 / G-9), before any provider cost is incurred. The message matches neither 503 substring, so completeHandler falls through to a generic 500 whose body says only 'Completion failed' — the real reason is in the log and in the halt audit event killSwitch.ts writes before throwing, not in the response. Also short-circuits ahead of the emit, so no SKU is emitted for the halted call."
+    }
+  ],
+  "_swallowNote": "The three non-200 rows are the caller-visible statuses of the enclosing POST /api/ai-gateway/complete route, which is where these throws surface — this INTERNAL_FUNCTION has no HTTP surface and, by the try/catch above, no failure of its own that anything can observe synchronously. That asymmetry is the point of the file: the SKU-switch effect is verified in the audit payload (credential_source) and the persisted ai_gateway.completion.billed_cost, never in a response body."
 }

@@ -7,7 +7,7 @@
   "name": "POST /admin/tenants/:tenant_id/credits/grant — sdk-data-credits",
   "endpoint": "/admin/tenants/:tenant_id/credits/grant",
   "method": "POST",
-  "description": "Operator grant that funds a tenant's data_credits.credit_account and writes the matching GRANT row to the append-only credit_ledger, in one transaction with the account row held FOR UPDATE. Admin-ops-token gated: sdk-data-credits deliberately exposes NO tenant-facing top-up (only balance, reservations, settle, ledger, budgets), because a tenant able to fund itself is a revenue hole and would mint GRANT entries indistinguishable from ones an operator authorised. Exactly one of credits (additive) or top_up_to (raise the balance TO this figure, adding only the shortfall) must be supplied; naming both, or neither, is a 400. This definition uses top_up_to so it is re-runnable: once the account is at or above the figure the grant moves nothing and writes no ledger entry, so a suite re-run does not walk the balance upward and invalidate assertions that spend from it. Replaces tests/setup_scripts/data_credits_account.sql, a producer-less SQL seed attached via a setupScript mechanism the Test MCP never executes.",
+  "description": "Operator grant that funds a tenant's data_credits.credit_account and writes the matching GRANT row to the append-only credit_ledger, in one transaction with the account row held FOR UPDATE. Admin-ops-token gated: sdk-data-credits deliberately exposes NO tenant-facing top-up (only balance, reservations, settle, ledger, budgets), because a tenant able to fund itself is a revenue hole and would mint GRANT entries indistinguishable from ones an operator authorised. Exactly one of credits (additive) or top_up_to (raise the balance TO this figure, adding only the shortfall) must be supplied; naming both, or neither, is a 400. This definition uses top_up_to so it is re-runnable: once the account is at or above the figure the grant moves nothing and writes no ledger entry, so a suite re-run does not walk the balance upward and invalidate assertions that spend from it. Replaces tests/setup_scripts/data_credits_account.sql, a producer-less SQL seed attached via a setupScript mechanism the Test MCP never executes. The optional `reason` body field is FREE TEXT, not an enum: it lands verbatim in credit_ledger.reason, a plain nullable TEXT column with no CHECK and no vocabulary anywhere in 001_init_data_credits.sql, so no fieldEnums can honestly be declared for it. These cases omit it deliberately and exercise the handler's default instead — app.ts passes `b.reason ?? 'operator grant via admin-ops-token'`, which is what a real operator call without a stated reason writes into the export.",
   "errorCases": [
     {
       "status": 401,
@@ -52,8 +52,7 @@
         "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}"
       },
       "payload": {
-        "top_up_to": 100,
-        "reason": "api-test fixture grant"
+        "top_up_to": 100
       },
       "expectedStatus": 200
     },
@@ -65,9 +64,7 @@
       "pathParams": {
         "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}"
       },
-      "payload": {
-        "reason": "no figure named"
-      },
+      "payload": {},
       "test_type": "negative",
       "expectedStatus": 400
     },

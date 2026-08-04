@@ -26,5 +26,25 @@
     }
   ],
   "description": "Per-asset command delivery stream. This is a WebSocket-only route ({ websocket: true }): an edge agent for a robot subscribes here and receives dispatched commands in real time as JSON frames from the command broker. On connect the server immediately pushes a { kind: \"hello\", asset_id, emitted_at } frame, and the broker subscription is torn down by the socket close handler. The path prefix /api/commands/stream/ is deliberately exempt from the api-gateway default-deny authGate (WS auth belongs in the Sec-WebSocket-Protocol token, tracked as follow-up hardening), so no Authorization header is checked and any asset_id may be subscribed. The handler has no validation branches and never sends an HTTP error status: it does not verify the asset exists, so subscribing to an unknown asset_id simply yields a stream that never emits, and a send on an already-closed socket is swallowed. Edge cases are transport-level rather than status-code-level - a plain non-upgrade HTTP GET is rejected by the @fastify/websocket plugin before this handler runs, and an abandoned socket is cleaned up only on close.",
-  "errorCases": []
+  "errorCases": [
+    {
+      "status": 404,
+      "code": "",
+      "message": "(empty body)",
+      "when": "a plain HTTP GET with no Upgrade: websocket / Sec-WebSocket-Key headers. @fastify/websocket v10 registers this route with `{ websocket: true }`, which REPLACES the HTTP handler with `reply.code(404).send()` (index.js:163-168) — so a non-upgrade request gets a bodyless 404 that looks exactly like a route that does not exist. This is the trap for anyone probing the endpoint with curl and concluding the stream is unmounted."
+    },
+    {
+      "status": 404,
+      "code": "Not Found",
+      "message": "Route POST:/api/commands/stream/:asset_id not found",
+      "when": "any method other than GET — @fastify/websocket throws at BOOT for a non-GET websocket route ('websocket handler can only be declared in GET method'), so only GET is ever registered and every other verb is a plain Fastify route miss"
+    },
+    {
+      "status": 101,
+      "code": "SILENT_EMPTY_STREAM",
+      "message": "(upgrade succeeds, only the hello frame ever arrives)",
+      "when": "the asset_id names an asset that does not exist, belongs to another tenant, or has no dispatcher. The handler never validates it — it passes the raw path segment straight to broker.subscribe(assetId) — so the socket opens, the { kind: 'hello', asset_id, emitted_at } frame is pushed, and nothing follows. A typo'd asset_id is indistinguishable from a correct one with no traffic, which is why this is listed as an error case despite the 101."
+    }
+  ],
+  "_noStatusErrorsNote": "Beyond the two 404s the handler emits NO HTTP status at all: once the socket is hijacked there is no reply to code(). A send on an already-closed socket is swallowed by the try/catch at app.ts:1059-1063 and cleanup runs from the 'close' handler, so a dropped client is not an error either. The path prefix /api/commands/stream/ is on the gateway authGate's WS_PREFIX allowlist, so no Authorization header is checked and NO 401/403 is reachable — WS auth via Sec-WebSocket-Protocol is tracked as follow-up hardening; today any caller may subscribe to any asset_id."
 }

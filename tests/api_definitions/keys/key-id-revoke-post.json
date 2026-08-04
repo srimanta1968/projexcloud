@@ -35,9 +35,6 @@
       "pathParams": {
         "key_id": "{{cache:keys.create.response.data.key_id}}"
       },
-      "payload": {
-        "reason": "compromised-credential-rotation"
-      },
       "expectedStatus": 200,
       "headers": {
         "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
@@ -55,7 +52,7 @@
   "captureResponse": {
     "keys.revoke.response.data.key.status": "data.key.status"
   },
-  "description": "Revokes the API key named by the key_id path param and answers 200 with the updated key row. DEPRECATED ALIAS: /api/keys/:key_id/revoke is retained for older integrations and delegates, behind a deprecation preHandler, to the same tenant-scoped revokeKeyHandler as the canonical /api/api-keys/:key_id/revoke - the inline gateway implementation that once returned a bare {success:true} and demanded a `reason` was deleted. Edge cases: the revocation is now TENANT-SCOPED - revokeKey matches on (key_id, tenant_id) taken from the JWT, so another tenant's key is invisible and answers 404 rather than being revoked; `reason` in the body is accepted but ignored, and is neither required nor persisted; revocation is NOT idempotent in its response - a second revoke of the same key finds no ACTIVE row and returns the same 404 as a key that never existed, so the two cases are indistinguishable; a credential with no tenant_id claim (for example the /api/auth/register token, which creates only an identity.person with no tenant or membership) is refused by tenantOf() with a 400 before the key is ever looked up (MUST-52); a non-UUID key_id fails the uuid cast inside revokeKey and surfaces as a 500.",
+  "description": "Revokes the API key named by the key_id path param and answers 200 with the updated key row. DEPRECATED ALIAS: /api/keys/:key_id/revoke is retained for older integrations and delegates, behind a deprecation preHandler, to the same tenant-scoped revokeKeyHandler as the canonical /api/api-keys/:key_id/revoke - the inline gateway implementation that once returned a bare {success:true} and demanded a `reason` was deleted. Edge cases: the revocation is now TENANT-SCOPED - revokeKey matches on (key_id, tenant_id) taken from the JWT, so another tenant's key is invisible and answers 404 rather than being revoked; the request body is IGNORED ENTIRELY - revokeKey takes only (key_id, tenant_id), nothing in packages/sdk-api-keys reads a `reason`, and there is no revocation-reason column or enum anywhere in the api_keys schema, so the field was dropped from the payload rather than documented with invented values; revocation is NOT idempotent in its response - a second revoke of the same key finds no ACTIVE row and returns the same 404 as a key that never existed, so the two cases are indistinguishable; a credential with no tenant_id claim (for example the /api/auth/register token, which creates only an identity.person with no tenant or membership) is refused by tenantOf() with a 400 before the key is ever looked up (MUST-52); a non-UUID key_id fails the uuid cast inside revokeKey and surfaces as a 500.",
   "errorCases": [
     {
       "status": 401,

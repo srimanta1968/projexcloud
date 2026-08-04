@@ -21,5 +21,19 @@
     "status": "string"
   },
   "description": "Liveness probe for the sdk-meter surface. Returns 200 with the static object {sdk: 'sdk-meter', mode: 'emit-only', status: 'ok'}; the handler takes no arguments, reads no request state and touches neither Postgres nor Kafka, so it confirms the meter routes are mounted rather than that its dependencies are healthy. Edge cases: the path ends in /health, so the gateway's default-deny authGate treats it as public - it answers identically with no Authorization header, an expired token or a garbage token and never returns 401; it accepts no query parameters and no body, so there is no validation, tenant-scoping, pagination or state precondition to exercise, and the handler has no client-error branch at all.",
-  "errorCases": []
+  "errorCases": [
+    {
+      "status": 404,
+      "code": "Not Found",
+      "message": "Route GET:/api/meter/health not found",
+      "when": "sdk-meter is not mounted — registerRoutes only runs if the package is a workspace:* dep of services/api-gateway AND app.register(...) names it in app.ts. This route is the SDK's entire HTTP surface (metering is otherwise middleware, not routes), so a missed registration is invisible everywhere else and shows up only as this 404 from Fastify's default not-found handler."
+    },
+    {
+      "status": 404,
+      "code": "Not Found",
+      "message": "Route POST:/api/meter/health not found",
+      "when": "any method other than GET/HEAD — registered with app.get and Fastify matches method+path, so a wrong verb is a route miss, not a 405"
+    }
+  ],
+  "_noHandlerErrorsNote": "The handler is `async () => ({ sdk: 'sdk-meter', mode: 'emit-only', status: 'ok' })` — no arguments read, no Postgres, no Kafka, no branch — so there is no 4xx/5xx it can produce itself, and no 401 either: isHealth() in the gateway authGate matches any path ending in /health, so the probe answers the same with no token, an expired token or a garbage one."
 }
