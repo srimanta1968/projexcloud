@@ -284,7 +284,7 @@ AUTH_PLAYBOOK = {
         "pk_ key via POST /api/auth/token returns a token carrying scopes (e.g. ['crm']) and "
         "actor {kind: service} — and it will STILL 403. The scopes on the token are not the "
         "authority; the credential is bound to a SYNTHETIC PERSONA that starts with NO grants. "
-        "You must grant it: POST /api/personas/{persona_id}/roles. A valid key plus a successful "
+        "You must grant it: POST /api/role-assignments {persona_id, role_template_id}. A valid key plus a successful "
         "token exchange plus 403 on every call is not a broken key — it is an ungranted persona.",
         "Everything downstream keys on persona_id (L4), not on person_id and not on a user_id.",
     ],
@@ -301,10 +301,19 @@ AUTH_PLAYBOOK = {
             "POST /api/applications/{application_id}/keys  (human JWT) -> pk_live_/pk_test_",
             "POST /api/auth/token                          (public, client_credentials) -> short-lived token",
             "rotate: POST /api/api-keys/{key_id}/rotate | revoke: POST /api/api-keys/{key_id}/revoke",
-            "POST /api/personas/{persona_id}/roles   <- REQUIRED. The key's synthetic persona has no "
-            "grants until you add them, so every call 403s no matter how valid the key is.",
+            "POST /api/role-assignments {persona_id, role_template_id}   <- REQUIRED. The key's synthetic persona has no "
+            "grants until you add them, so every call 403s no matter how valid the key is. "
+            "persona_id is the key's synthetic_persona_id from the issue call; role_template_id "
+            "names a tenant.role_template, whose app_id is an app_id and NOT the application_id above.",
             "environment (live|test) is a property of the APPLICATION, not the key, so a test "
             "app can never mint a credential that reaches production data.",
+            "app_id IS NOT application_id. app_id is TEXT (e.g. 'leadflow-dev-af4bd2'), the PK of "
+            "tenant.app; tenant.tenant.app_id and tenant.role_template.app_id both REFERENCE it, and "
+            "persona.app_identity.app_id carries the same value. application_id is a UUID, the PK of "
+            "api_keys.application - the API-KEY CLIENT REGISTRATION, whose slug is the client_id for "
+            "client_credentials. Passing an application_id where an app_id belongs is refused by "
+            "role_template_app_id_fkey, whose message names neither concept. app_id answers 'which of "
+            "your products is this?'; application_id answers 'which of your machines is calling?'.",
         ],
         "app_end_user_signup": [
             "POST /api/auth/register                       -> identity.person (+ alias, credential)",
@@ -375,7 +384,9 @@ AUTH_PLAYBOOK = {
             "RBAC  tenant.role_template keyed (tenant_id, app_id, name); tenant_id NULL = a "
             "platform default for the app, tenant_id set = that tenant's override of the same "
             "role name. parent_role_template_id gives inheritance.",
-            "POST /api/personas/{persona_id}/roles         -> grant beyond the starting template",
+            "POST /api/role-assignments {persona_id, role_template_id}  -> grant beyond the starting template",
+            "GET  /api/personas/{persona_id}/roles         -> LIST what a persona holds (read-only; there is no POST on this path)",
+            "POST /api/role-assignments/{assignment_id}/revoke          -> withdraw a grant",
             "ReBAC (sdk-rebac)  'may THIS persona act on THAT record' — owner/delegate/account "
             "team relationships, with trust state and evidence. Use when authority comes from a "
             "relationship rather than from a role.",
@@ -392,6 +403,68 @@ AUTH_PLAYBOOK = {
         "span apps."
     ),
     "guide": "docs/v3.1/developer-hub/authentication.html",
+}
+
+
+# ── Audit events ────────────────────────────────────────────────────────────────
+#
+# WHY THIS IS IN THE AGENT GUIDE AT ALL. Until 2026-08-03 the event vocabulary was a
+# compile-time constant with no write path, so a consuming app's first
+# POST /api/audit/append returned 400 forever — and since the emit path is
+# non-throwing by design, nothing surfaced it. LeadFlow shipped 32 event names, none
+# of which could ever be appended, and found out only by going to look at why the
+# ledger was empty. An agent building a vertical will make the same two mistakes
+# (skip registration, omit the .v<N> suffix) unless it is told here, before it writes
+# the code, rather than by a 400 it will interpret as a transient failure.
+AUDIT_EVENTS_PLAYBOOK = {
+    "model": (
+        "Every audited action carries an event_type, and the vocabulary is CLOSED: a type in "
+        "neither the platform baseline nor your tenant's own registered types is rejected before "
+        "any write (OC-2). That constraint is deliberate — it is what stops lead.routed, "
+        "lead.route and routing.applied all existing within one release, after which nothing can "
+        "answer 'how often was a lead routed'. Your vertical's business events are NOT platform "
+        "events: register your own rather than borrowing a vault.*/tenant.*/audit.* name, which "
+        "would file your event under a name that already means something else."
+    ),
+    "critical": [
+        "THE NAME MUST BE <domain>.<entity>.<verb>.v<N> — lowercase, '-' or '_' inside a segment, "
+        "at least two segments before the version. All 294 platform types follow it and "
+        "registration rejects anything that does not.",
+        "THE .v<N> SUFFIX IS NOT DECORATION. It is what lets a payload shape change later as a NEW "
+        "version instead of a silent redefinition of rows already written under the old shape. "
+        "'capture.created' is rejected; 'capture.lead.created.v1' is accepted.",
+        "REGISTER BEFORE YOU APPEND. POST /api/events/types with a tenant JWT, once per type, "
+        "typically from a boot-time provisioner. It is additive: a repeat returns 200 with the "
+        "STORED metadata and created:false, so re-running it on every deploy is safe and correct.",
+        "A 2xx FROM YOUR OWN WRITE PATH IS NOT PROOF THE EVENT LANDED. emitEvent catches and logs "
+        "rather than propagating, so an audit outage never blocks the caller — which also means a "
+        "PERMANENT rejection looks exactly like a transient blip. Verify against audit.entry.",
+        "AN EMPTY CHAIN VERIFIES CLEAN. POST /api/audit/verify returning ok proves nothing if "
+        "nothing was ever appended; check entries_checked, not just ok.",
+        "retention_class IS LOAD-BEARING. When an append omits it, the REGISTERED type's class "
+        "applies. Declaring 'operational' on something regulated shreds it at 90 days instead of "
+        "seven years — quietly, and years later.",
+        "YOU CANNOT SHADOW A PLATFORM TYPE, and should not try: resolution reads the baseline "
+        "first, and registering a baseline name is rejected 400. Nor can you see another tenant's "
+        "types, or they yours.",
+    ],
+    "flows": {
+        "register_and_emit": [
+            "POST /api/events/types  (tenant JWT)  -> 201 first time, 200 on a repeat",
+            "  { event_type: 'capture.lead.created.v1',",
+            "    retention_class: 'regulated',        // transient | operational | regulated",
+            "    conflict_policy: 'event-sourcing',   // crdt | lww | merge | event-sourcing | human-review",
+            "    schema_state: 'active',              // optional, default active",
+            "    compaction_policy: 'none',           // optional, default none",
+            "    schema_version: 1 }                  // optional, default 1",
+            "POST /api/audit/append  {pool_index, event_type, payload, actor_kind, tenant_id}  -> 201",
+            "  tenant_id defaults to your JWT's tenant claim; omit retention_class to inherit the type's.",
+            "POST /api/audit/verify  {pool_index}  -> assert entries_checked > 0, not just ok",
+            "GET  /api/events/types            -> platform baseline + your own (platform_count/tenant_count)",
+            "GET  /api/events/types/{type}     -> one type, with source: 'platform' | 'tenant'",
+        ],
+    },
+    "guide": "docs/v3.1/developer-hub/audit-events.html",
 }
 
 
@@ -575,6 +648,26 @@ def main():
         L.append("### One tenant, many apps")
         L.append("")
         L.append(pb["multi_app_caveat"])
+        L.append("")
+
+        ae = AUDIT_EVENTS_PLAYBOOK
+        L.append("## Audit events — emitting your own")
+        L.append("")
+        L.append(ae["model"])
+        L.append("")
+        L.append("### Rules that will cost you if you get them wrong")
+        L.append("")
+        for c in ae["critical"]:
+            L.append(f"- {c}")
+        L.append("")
+        L.append("### Registering a type, then appending against it")
+        L.append("")
+        L.append("```")
+        for st in ae["flows"]["register_and_emit"]:
+            L.append(st)
+        L.append("```")
+        L.append("")
+        L.append(f"Human guide: `{ae['guide']}`")
         L.append("")
         L.append("## Files in this bundle")
         L.append("")

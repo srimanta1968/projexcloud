@@ -24,8 +24,9 @@
         "POST /api/applications/{application_id}/keys  (human JWT) -> pk_live_/pk_test_",
         "POST /api/auth/token                          (public, client_credentials) -> short-lived token",
         "rotate: POST /api/api-keys/{key_id}/rotate | revoke: POST /api/api-keys/{key_id}/revoke",
-        "POST /api/role-assignments {persona_id, role_template_id}   <- REQUIRED. The key's synthetic persona has no grants until you add them, so every call 403s no matter how valid the key is.",
-        "environment (live|test) is a property of the APPLICATION, not the key, so a test app can never mint a credential that reaches production data."
+        "POST /api/role-assignments {persona_id, role_template_id}   <- REQUIRED. The key's synthetic persona has no grants until you add them, so every call 403s no matter how valid the key is. persona_id is the key's synthetic_persona_id from the issue call; role_template_id names a tenant.role_template, whose app_id is an app_id and NOT the application_id above.",
+        "environment (live|test) is a property of the APPLICATION, not the key, so a test app can never mint a credential that reaches production data.",
+        "app_id IS NOT application_id. app_id is TEXT (e.g. 'leadflow-dev-af4bd2'), the PK of tenant.app; tenant.tenant.app_id and tenant.role_template.app_id both REFERENCE it, and persona.app_identity.app_id carries the same value. application_id is a UUID, the PK of api_keys.application - the API-KEY CLIENT REGISTRATION, whose slug is the client_id for client_credentials. Passing an application_id where an app_id belongs is refused by role_template_app_id_fkey, whose message names neither concept. app_id answers 'which of your products is this?'; application_id answers 'which of your machines is calling?'."
       ],
       "app_end_user_signup": [
         "POST /api/auth/register                       -> identity.person (+ alias, credential)",
@@ -74,7 +75,9 @@
       ],
       "roles_and_access": [
         "RBAC  tenant.role_template keyed (tenant_id, app_id, name); tenant_id NULL = a platform default for the app, tenant_id set = that tenant's override of the same role name. parent_role_template_id gives inheritance.",
-        "POST /api/role-assignments {persona_id, role_template_id}  -> grant beyond the starting template. GET /api/personas/{persona_id}/roles LISTS a persona's grants (read-only; there is no POST on that path). app_id on a role_template is TEXT REFERENCES tenant.app(app_id) - NOT an application_id",
+        "POST /api/role-assignments {persona_id, role_template_id}  -> grant beyond the starting template",
+        "GET  /api/personas/{persona_id}/roles         -> LIST what a persona holds (read-only; there is no POST on this path)",
+        "POST /api/role-assignments/{assignment_id}/revoke          -> withdraw a grant",
         "ReBAC (sdk-rebac)  'may THIS persona act on THAT record' — owner/delegate/account team relationships, with trust state and evidence. Use when authority comes from a relationship rather than from a role.",
         "ABAC (sdk-policy)  'do the attributes permit it right now' — region, consent, time, record state. Use when the decision does not depend on identity.",
         "They compose RBAC -> ReBAC -> ABAC."
