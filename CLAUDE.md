@@ -60,6 +60,24 @@ set + profiles (`--profile selfhosted --profile discovery`) are always applied.
   `services/api-gateway/src/app.ts`. The build won't error if you forget — the
   route just silently won't exist. Add the dep + the register line.
 
+## Audit events
+
+- Every event name follows `<domain>.<entity>.<verb>.v<N>` — lowercase, `-`/`_`
+  inside a segment, and the **`.v<N>` suffix is mandatory**. It is what lets a
+  payload shape change later as a new version instead of silently redefining
+  rows already written under the old shape. Enforced by
+  `EVENT_TYPE_NAME_PATTERN` in `packages/contracts/src/events.ts`.
+- Platform code declares its types in the `EVENT_TYPE_REGISTRY` constant there.
+  A **consuming application** registers its own at runtime with
+  `POST /api/events/types` (tenant-scoped, additive) — it must not add to the
+  constant or reuse a platform name. Resolution is baseline-first then tenant,
+  so a tenant type can never shadow a platform one. See
+  `docs/CONSUMPTION-CONTRACT.md` §2.1.
+- OC-2 still holds: a type in neither place is rejected before any write. But
+  note `emitEvent` **swallows** failures by design, so a rejected append looks
+  like a transient blip and an empty chain verifies clean — check `audit.entry`
+  rather than trusting a 2xx.
+
 ## Auth
 
 - Gateway auth is a **default-deny gate** (`services/api-gateway/src/plugins/authGate.ts`,

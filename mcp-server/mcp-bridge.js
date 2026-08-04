@@ -1175,13 +1175,17 @@ const TOOLS = [
   },
   {
     name: 'projexlight_get_task',
-    description: 'Get a task by its ID with full details.',
+    description: 'Get a task by UUID OR short ID with full details. The short ID is accepted in any form a person is likely to type: TK-4141, tk-4141, or just 4141 (the TK- prefix is added for you). Short IDs are unique per TENANT, not per project: the sequence runs across every project a tenant owns rather than restarting in each, so no project filter is needed to resolve one. They are NOT unique across tenants (TK-1 exists in 11 of them). projectPath picks the CREDENTIAL and the credential picks the TENANT — it does NOT narrow the search to one project, so sibling projects under one tenant resolve a short ID identically; read project_id on the result if you care which project it came from. Across tenants projectPath is decisive.',
     inputSchema: {
       type: 'object',
       properties: {
         taskId: {
           type: 'string',
-          description: 'UUID of the task to retrieve'
+          description: 'Task UUID, or short ID in any form: TK-4141, tk-4141, or just 4141'
+        },
+        projectPath: {
+          type: 'string',
+          description: 'Project root path. Selects the credential, and therefore the TENANT the short ID resolves within.'
         }
       },
       required: ['taskId']
@@ -1402,6 +1406,69 @@ const TOOLS = [
       },
       required: ['featureId']
     }
+  },
+  {
+    name: 'projexlight_get_defect_context',
+    description: 'FIX THIS DEFECT (call this FIRST). Fetches a defect by UUID or short ID (e.g. DEF-123) and returns everything needed to fix it in ONE payload, so no follow-up lookups are needed: the defect itself; its originating task (description, acceptance_criteria, technical_requirements); the feature and scenario for the intended behaviour and BDD steps; the api_library rows for the endpoints involved, including route_file_path so you can open the right file; the raw failure material (failure log, expected vs actual result, per-environment test results) rather than a summary; what was already tried (defect history and comments); and any known defect patterns for this project. Read the warnings array — it reports anything that could not be resolved, such as a missing originating task.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        defectId: { type: 'string', description: 'Defect UUID or short ID such as DEF-123' },
+        projectPath: { type: 'string', description: 'Project root path' }
+      },
+      required: ['defectId']
+    }
+  },
+  {
+    name: 'projexlight_resolve_defect_for_qa',
+    description: 'CLOSE A DEFECT FOR QA (call after the fix is implemented). Records what changed (files, commit, notes) and moves the defect to status=resolved, meaning fixed and awaiting QA. It CANNOT mark a defect verified or closed: the fixer does not get to declare its own fix tested, so that transition belongs to QA alone. Passing any status other than resolved is rejected.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        defectId: { type: 'string', description: 'Defect UUID or short ID such as DEF-123' },
+        filesChanged: {
+          type: 'array',
+          description: 'Paths of the files changed by the fix',
+          items: { type: 'string' }
+        },
+        commit: { type: 'string', description: 'Commit SHA of the fix, if committed' },
+        notes: { type: 'string', description: 'What was changed and why' },
+        resolutionType: { type: 'string', description: 'Optional resolution type; defaults to fixed' },
+        projectPath: { type: 'string', description: 'Project root path' }
+      },
+      required: ['defectId']
+    }
+  },
+  {
+    name: 'projexlight_delete_api_library_entries',
+    description: 'DELETE api_library ROWS AND EVICT THEIR TEST-CACHE ENTRIES IN ONE OPERATION. Use this instead of deleting rows by hand: a hand-deleted row leaves .mcp-cache/api_test_cache.json still holding a tested_apis entry for that METHOD:endpoint, so the classifier never sees the definition as changed and the endpoint is never re-registered — it disappears from the catalog permanently and no re-run brings it back. projectId is REQUIRED and is never inferred, because a delete that guesses its project would remove another tenant catalog entry. Start with dryRun=true to see exactly what matches. The deleted rows are backed up under .mcp-cache/deleted_api_library/ before anything is removed. A row whose api_definition file still exists is REFUSED unless force=true, because that combination means the definition should be re-registered rather than deleted.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        projectId: { type: 'string', description: 'REQUIRED. Explicit project UUID to delete from. Never inferred.' },
+        apis: {
+          type: 'array',
+          description: 'Rows to delete, matched pairwise on method + endpoint',
+          items: {
+            type: 'object',
+            properties: {
+              method: { type: 'string', description: 'HTTP method, e.g. GET' },
+              endpoint: { type: 'string', description: 'Endpoint path, e.g. /api/keys/:key_id/rotate' }
+            },
+            required: ['method', 'endpoint']
+          }
+        },
+        ids: {
+          type: 'array',
+          description: 'api_library row ids to delete',
+          items: { type: 'string' }
+        },
+        dryRun: { type: 'boolean', description: 'List what would be deleted and write nothing. Run this first.' },
+        force: { type: 'boolean', description: 'Allow deleting a row whose api_definition file still exists. Off by default on purpose.' },
+        projectPath: { type: 'string', description: 'Project root path (locates .mcp-cache and tests/api_definitions)' }
+      },
+      required: ['projectId']
+    }
   }
 ];
 
@@ -1409,6 +1476,11 @@ const TOOLS = [
 // These paths match the Docker MCP server routes (without /mcp/ prefix)
 // The Docker server handles forwarding to the backend API if needed
 const TOOL_ENDPOINTS = {
+  // API Library Delete - removes the row AND its .mcp-cache entry together
+  'projexlight_delete_api_library_entries': { method: 'POST', path: '/api/api-library/delete' },
+  // Defect Fix Tools - fetch a defect with full context, then close it for QA
+  'projexlight_get_defect_context': { method: 'POST', path: '/api/defect/context' },
+  'projexlight_resolve_defect_for_qa': { method: 'POST', path: '/api/defect/resolve' },
   'projexlight_init_session': { method: 'POST', path: '/api/instruction/init' },
   'projexlight_get_instruction': { method: 'POST', path: '/api/instruction/get' },
   'projexlight_get_sdk_api': { method: 'POST', path: '/api/sdk/api' },

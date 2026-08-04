@@ -597,12 +597,59 @@ export interface AiGatewayTenantCredentialRevokedPayload {
 
 export type RegisteredEventType = keyof typeof EVENT_TYPE_REGISTRY;
 
+/* ============================================================
+ * Event type NAMING CONVENTION.
+ *
+ * `<domain>.<entity>.<verb>.v<N>` — segments are lowercase alphanumeric with
+ * `-` or `_` inside a segment, at least two segments before the version, and a
+ * mandatory `.v<N>` suffix. Verified against every one of the 294 baseline
+ * entries above; all 294 match.
+ *
+ * THE VERSION SUFFIX IS THE POINT. It is what lets a payload shape change
+ * without breaking historical queries: `capture.created.v2` is a new type
+ * alongside `capture.created.v1` rather than a silent redefinition of rows
+ * already written under the old shape. An audit ledger whose types can be
+ * redefined in place cannot answer a question about the past.
+ *
+ * This lived only as an unwritten habit until 2026-08-03, when LeadFlow
+ * integration measured 0 of its 32 event names carrying the suffix — because
+ * nothing told them. Exported so registration can reject a bad name where the
+ * author can still fix it, rather than at append time in production.
+ * ============================================================ */
+export const EVENT_TYPE_NAME_PATTERN = /^[a-z0-9]+(?:[_-][a-z0-9]+)*(?:\.[a-z0-9]+(?:[_-][a-z0-9]+)*)+\.v[1-9][0-9]*$/;
+
+/** Human-readable form of EVENT_TYPE_NAME_PATTERN, for error messages. */
+export const EVENT_TYPE_NAME_CONVENTION = '<domain>.<entity>.<verb>.v<N> (lowercase, e.g. capture.lead.created.v1)';
+
+/** Returns null when the name is well-formed, or the reason it is not. */
+export function validateEventTypeName(event_type: string): string | null {
+  if (typeof event_type !== 'string' || event_type.trim() === '') return 'event_type is required';
+  if (!EVENT_TYPE_NAME_PATTERN.test(event_type)) {
+    return `event_type '${event_type}' does not follow the naming convention ${EVENT_TYPE_NAME_CONVENTION}. ` +
+      'The .v<N> suffix is required so a later payload change can be a new version rather than a redefinition ' +
+      'of rows already written.';
+  }
+  return null;
+}
+
 /**
- * Throws if `event_type` is not in the registry. Producers must call this
- * before emitting any event (OC-2 enforcement at the contract layer).
+ * Throws if `event_type` is not in the PLATFORM BASELINE registry. Platform
+ * producers must call this before emitting any event (OC-2 enforcement at the
+ * contract layer).
+ *
+ * NOTE FOR CONSUMING APPLICATIONS: this constant is the platform's own
+ * vocabulary and is deliberately closed. A tenant application extends it at
+ * runtime via `POST /api/events/types` instead — see
+ * `resolveEventType`/`assertResolvableEventType` in @projexlight/sdk-audit,
+ * which checks this baseline first and the caller's tenant-registered types
+ * second. OC-2 is unchanged: a type in neither place is still rejected.
  */
 export function assertRegisteredEventType(event_type: string): asserts event_type is RegisteredEventType {
   if (!(event_type in EVENT_TYPE_REGISTRY)) {
-    throw new Error(`Unregistered event_type: ${event_type}. Add it to EVENT_TYPE_REGISTRY first.`);
+    throw new Error(
+      `Unregistered event_type: ${event_type}. Platform code must add it to EVENT_TYPE_REGISTRY; ` +
+        `a tenant application registers its own types with POST /api/events/types using the convention ` +
+        `${EVENT_TYPE_NAME_CONVENTION}.`,
+    );
   }
 }

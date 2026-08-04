@@ -1,5 +1,5 @@
 import { dataService } from '@projexlight/db-runtime';
-import { assertRegisteredEventType } from '@projexlight/contracts';
+import { resolveEventType } from '@projexlight/sdk-audit';
 import type {
   EndpointRecord,
   RegisterEndpointInput,
@@ -24,7 +24,14 @@ export class WebhookUrlRejectedError extends Error {
 export class UnregisteredEventTypeError extends Error {
   readonly code = 'UnregisteredEventType';
   constructor(t: string) {
-    super(`event_type '${t}' is not in EVENT_TYPE_REGISTRY (OC-2 mirror)`);
+    // The old text ("is not in EVENT_TYPE_REGISTRY (OC-2 mirror)") named a
+    // compile-time constant a tenant-app author cannot reach and offered no
+    // alternative — the same failure of address TK-4144 fixed on the append
+    // path. Say what the caller can actually do about it.
+    super(
+      `event_type '${t}' is not registered for this endpoint's tenant. ` +
+        'Register it with POST /api/events/types, then subscribe.',
+    );
   }
 }
 
@@ -72,17 +79,27 @@ export async function getEndpoint(endpoint_id: string): Promise<EndpointRecord |
 }
 
 export async function subscribe(input: SubscribeInput): Promise<SubscriptionRecord> {
-  // OC-2 producer-side mirror: refuse subscriptions to event types that
-  // aren't in the canonical registry. Prevents typos that would silently
-  // drop deliveries.
-  try {
-    assertRegisteredEventType(input.event_type);
-  } catch {
-    throw new UnregisteredEventTypeError(input.event_type);
-  }
-
+  // The endpoint is fetched FIRST because its tenant_id is what the event type
+  // is resolved against — the subscription belongs to the endpoint, and the
+  // endpoint belongs to exactly one tenant. This reorders error PRECEDENCE: a
+  // bad endpoint_id now reports EndpointNotFound ahead of an unregistered
+  // event_type, where the two used to be checked the other way round.
   const endpoint = await getEndpoint(input.endpoint_id);
   if (!endpoint) throw new EndpointNotFoundError(input.endpoint_id);
+
+  // OC-2 producer-side mirror: refuse subscriptions to event types that are in
+  // neither the platform baseline nor THIS TENANT's own registrations. The
+  // guard's purpose is unchanged — a typo here would silently drop every
+  // delivery, and nothing downstream would ever say so; an empty deliveries
+  // list is indistinguishable from "nothing has happened yet".
+  //
+  // It resolves baseline-then-tenant (TK-4145) rather than baseline-only.
+  // Before that, a vertical could register an event type, append it to the
+  // ledger successfully, and still be refused a webhook subscription to it —
+  // the vocabulary was open for audit and closed for delivery.
+  if (!(await resolveEventType(input.event_type, endpoint.tenant_id))) {
+    throw new UnregisteredEventTypeError(input.event_type);
+  }
 
   const rows = await dataService.rows<SubscriptionRecord>(
     `INSERT INTO webhook.subscription (endpoint_id, event_type, filter_predicate, active)

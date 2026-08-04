@@ -18,6 +18,8 @@ export default defineConfig({
       '@projexlight/sdk-taxonomy': r('packages/sdk-taxonomy/src/index.ts'),
       '@projexlight/sdk-identity': r('packages/sdk-identity/src/index.ts'),
       '@projexlight/sdk-lineage': r('packages/sdk-lineage/src/index.ts'),
+      '@projexlight/sdk-webhook': r('packages/sdk-webhook/src/index.ts'),
+      '@projexlight/sdk-vault': r('packages/sdk-vault/src/index.ts'),
     },
   },
   test: {

@@ -10,6 +10,14 @@ enumerate real errors; do not guess.
 - [ ] `GET /api/ai-gateway/health` — tests/api_definitions/ai-gateway/health-get.json → missing: errorCases[] (MUST-43)
 - [ ] `INTERNAL_FUNCTION internal://sdk-ai-gateway/completionService.emitCompletionEvent` — tests/api_definitions/ai-gateway/meter-byok-sku-switch.json → missing: errorCases[] (MUST-43)
 - [ ] `EVENT_CONTRACT events://ai_gateway.tenant_credential` — tests/api_definitions/ai-gateway/tenant-credential-events-contract.json → missing: errorCases[] (MUST-43)
+- [ ] `POST /api/api-keys` — tests/api_definitions/api-keys/create-post.json → missing: negative testCase for 2 errorCase(s) (MUST-64): None/?, None/?
+- [ ] `POST /api/api-keys/:key_id/revoke` — tests/api_definitions/api-keys/id-revoke-post.json → missing: negative testCase for 1 errorCase(s) (MUST-64): None/?
+- [ ] `POST /api/api-keys/:key_id/rotate` — tests/api_definitions/api-keys/id-rotate-post.json → missing: negative testCase for 1 errorCase(s) (MUST-64): None/?
+- [ ] `GET /api/api-keys` — tests/api_definitions/api-keys/list-get.json → missing: negative testCase for 1 errorCase(s) (MUST-64): None/?
+- [ ] `POST /api/applications` — tests/api_definitions/applications/create-post.json → missing: negative testCase for 2 errorCase(s) (MUST-64): None/?, None/?
+- [ ] `POST /api/applications/:application_id/disable` — tests/api_definitions/applications/id-disable-post.json → missing: negative testCase for 1 errorCase(s) (MUST-64): None/?
+- [ ] `GET /api/applications/:application_id` — tests/api_definitions/applications/id-get.json → missing: negative testCase for 1 errorCase(s) (MUST-64): None/?
+- [ ] `POST /api/applications/:application_id/keys` — tests/api_definitions/applications/id-keys-post.json → missing: negative testCase for 2 errorCase(s) (MUST-64): None/?, None/?
 - [ ] `POST /api/assignments` — tests/api_definitions/assignment/assignments-post.json → missing: negative testCase for 2 errorCase(s) (MUST-64): 400/VALIDATION_ERROR, 401/Unauthorized
 - [ ] `POST /api/assignments/:record_id/accept` — tests/api_definitions/assignment/assignments-record_id-accept-post.json → missing: negative testCase for 3 errorCase(s) (MUST-64): 409/INVALID_ASSIGNMENT_TRANSITION, 404/ASSIGNMENT_NOT_FOUND, 401/Unauthorized
 - [ ] `POST /api/assignments/:record_id/decline` — tests/api_definitions/assignment/assignments-record_id-decline-post.json → missing: negative testCase for 3 errorCase(s) (MUST-64): 400/REASON_REQUIRED, 409/NO_BACKUP_DESIGNATED, 401/Unauthorized
@@ -22,13 +30,23 @@ enumerate real errors; do not guess.
 - [ ] `GET /api/assignment/routes` — tests/api_definitions/assignment/routes-get.json → missing: negative testCase for 1 errorCase(s) (MUST-64): 401/Unauthorized
 - [ ] `POST /api/assignment/routes` — tests/api_definitions/assignment/routes-post.json → missing: negative testCase for 3 errorCase(s) (MUST-64): 400/VALIDATION_ERROR, 404/ROUTING_RULE_SET_NOT_FOUND, 401/Unauthorized
 - [ ] `POST /api/assignment/simulate` — tests/api_definitions/assignment/simulate-post.json → missing: negative testCase for 3 errorCase(s) (MUST-64): 400/VALIDATION_ERROR, 400/VALIDATION_ERROR, 401/Unauthorized
+- [ ] `POST /api/auth/register` — tests/api_definitions/auth/register-post.json → missing: negative testCase for 3 errorCase(s) (MUST-64): 400/ValidationError, 409/UserExists, 409/ALIAS_ALREADY_REGISTERED
+- [ ] `POST /api/auth/signup-tenant` — tests/api_definitions/auth/signup-tenant-post.json → missing: negative testCase for 3 errorCase(s) (MUST-64): 400/ValidationError, 409/UserExists, 409/ALIAS_ALREADY_REGISTERED
+- [ ] `POST /api/auth/token` — tests/api_definitions/auth/token-post.json → missing: negative testCase for 4 errorCase(s) (MUST-64): None/?, None/?, None/?, None/?
 - [ ] `GET /api/commands/stream/:asset_id` — tests/api_definitions/commands/stream-asset-id-get.json → missing: errorCases[] (MUST-43)
+- [ ] `POST /api/config` — tests/api_definitions/config/index-post.json → missing: negative testCase for 4 errorCase(s) (MUST-64): 400/ValidationError, 400/ValidationError, 403/Forbidden, 401/Unauthorized
+- [ ] `POST /api/config/revoke` — tests/api_definitions/config/revoke-post.json → missing: negative testCase for 3 errorCase(s) (MUST-64): 400/ValidationError, 404/NotFound, 401/Unauthorized
+- [ ] `POST /api/config/rotate` — tests/api_definitions/config/rotate-post.json → missing: negative testCase for 3 errorCase(s) (MUST-64): 400/ValidationError, 404/NotFound, 401/Unauthorized
+- [ ] `INTERNAL_FUNCTION internal://contracts/event-type-registry/p6a` — tests/api_definitions/contracts/p6a-event-registry-post.json → missing: errorCases[] (MUST-43)
+- [ ] `INTERNAL_FUNCTION internal://contracts/event-type-registry/p6b` — tests/api_definitions/contracts/p6b-event-registry-post.json → missing: errorCases[] (MUST-43)
 - [ ] `POST /api/coverage/backup-designations` — tests/api_definitions/coverage/backup-designations-post.json → missing: negative testCase for 3 errorCase(s) (MUST-64): None/?, None/?, 422/VALIDATION_ERROR
 - [ ] `POST /api/coverage/capacity-policies` — tests/api_definitions/coverage/capacity-policies-post.json → missing: negative testCase for 2 errorCase(s) (MUST-64): None/?, None/?
 - [ ] `POST /api/coverage/holiday-calendars` — tests/api_definitions/coverage/holiday-calendars-post.json → missing: negative testCase for 2 errorCase(s) (MUST-64): None/?, None/?
 - [ ] `POST /api/coverage/on-call` — tests/api_definitions/coverage/on-call-post.json → missing: negative testCase for 2 errorCase(s) (MUST-64): None/?, None/?
 - [ ] `POST /api/coverage/schedules` — tests/api_definitions/coverage/schedules-post.json → missing: negative testCase for 3 errorCase(s) (MUST-64): None/?, None/?, None/?
 - [ ] `POST /api/coverage/time-off` — tests/api_definitions/coverage/time-off-post.json → missing: negative testCase for 2 errorCase(s) (MUST-64): None/?, None/?
+- [ ] `POST /api/crm/next-actions/:id/reschedule` — tests/api_definitions/crm/next-actions-id-reschedule-post.json → missing: negative testCase for 2 errorCase(s) (MUST-64): 400/RESCHEDULE_INVALID_DUE_DATE, 409/RESCHEDULE_DUE_DATE_UNCHANGED
+- [ ] `POST /admin/tenants/:tenant_id/credits/grant` — tests/api_definitions/data-credits/admin-tenant-credits-grant-post.json → missing: negative testCase for 1 errorCase(s) (MUST-64): 401/Unauthorized
 - [ ] `GET /api/capabilities/estimate` — tests/api_definitions/data-credits/capabilities-estimate-get.json → missing: negative testCase for 3 errorCase(s) (MUST-64): 400/VALIDATION_ERROR, 404/CAPABILITY_NOT_FOUND, 401/Unauthorized
 - [ ] `GET /api/capabilities` — tests/api_definitions/data-credits/capabilities-get.json → missing: negative testCase for 1 errorCase(s) (MUST-64): 401/Unauthorized
 - [ ] `GET /api/capability-requests` — tests/api_definitions/data-credits/capability-requests-get.json → missing: negative testCase for 1 errorCase(s) (MUST-64): 401/Unauthorized
@@ -42,6 +60,8 @@ enumerate real errors; do not guess.
 - [ ] `GET /api/credits/ledger` — tests/api_definitions/data-credits/credits-ledger-get.json → missing: negative testCase for 1 errorCase(s) (MUST-64): 401/Unauthorized
 - [ ] `POST /api/credits/reservations` — tests/api_definitions/data-credits/credits-reservations-post.json → missing: negative testCase for 3 errorCase(s) (MUST-64): 400/VALIDATION_ERROR, 402/INSUFFICIENT_CREDITS, 401/Unauthorized
 - [ ] `POST /api/credits/reservations/:reservation_id/settle` — tests/api_definitions/data-credits/credits-reservations-reservation_id-settle-post.json → missing: negative testCase for 4 errorCase(s) (MUST-64): 400/VALIDATION_ERROR, 404/RESERVATION_NOT_FOUND, 409/SETTLEMENT_CONFLICT, 401/Unauthorized
+- [ ] `GET /api/memberships` — tests/api_definitions/identity/memberships-get.json → missing: negative testCase for 2 errorCase(s) (MUST-64): 401/Unauthorized, 401/Unauthorized
+- [ ] `GET /api/auth/verification-status` — tests/api_definitions/identity/verification-status-get.json → missing: negative testCase for 1 errorCase(s) (MUST-64): 400/ValidationError
 - [ ] `GET /api/imports/mapping-templates` — tests/api_definitions/imports/mapping-templates-get.json → missing: negative testCase for 2 errorCase(s) (MUST-64): 400/VALIDATION_ERROR, 401/Unauthorized
 - [ ] `POST /api/imports/mapping-templates` — tests/api_definitions/imports/mapping-templates-post.json → missing: negative testCase for 3 errorCase(s) (MUST-64): 400/VALIDATION_ERROR, 409/DUPLICATE_TEMPLATE_VERSION, 401/Unauthorized
 - [ ] `POST /api/imports/mapping-templates/:template_id/version` — tests/api_definitions/imports/mapping-templates-template_id-version-post.json → missing: negative testCase for 3 errorCase(s) (MUST-64): 400/VALIDATION_ERROR, 404/MAPPING_TEMPLATE_NOT_FOUND, 401/Unauthorized
@@ -56,8 +76,16 @@ enumerate real errors; do not guess.
 - [ ] `POST /api/imports/runs/:run_id/preview` — tests/api_definitions/imports/runs-run_id-preview-post.json → missing: negative testCase for 4 errorCase(s) (MUST-64): 400/VALIDATION_ERROR, 404/IMPORT_RUN_NOT_FOUND, 409/INVALID_RUN_TRANSITION, 401/Unauthorized
 - [ ] `POST /api/imports/runs/:run_id/rollback` — tests/api_definitions/imports/runs-run_id-rollback-post.json → missing: negative testCase for 6 errorCase(s) (MUST-64): 400/VALIDATION_ERROR, 404/IMPORT_RUN_NOT_FOUND, 409/INVALID_RUN_TRANSITION, 409/ROLLBACK_WINDOW_CLOSED
 - [ ] `POST /api/imports/runs/:run_id/transform-plan` — tests/api_definitions/imports/runs-run_id-transform-plan-post.json → missing: negative testCase for 3 errorCase(s) (MUST-64): 400/VALIDATION_ERROR, 404/IMPORT_RUN_NOT_FOUND, 401/Unauthorized
+- [ ] `POST /api/keys` — tests/api_definitions/keys/index-post.json → missing: negative testCase for 3 errorCase(s) (MUST-64): 401/Unauthorized, 401/Unauthorized, 400/ValidationError
+- [ ] `POST /api/keys/:key_id/revoke` — tests/api_definitions/keys/key-id-revoke-post.json → missing: negative testCase for 4 errorCase(s) (MUST-64): 401/Unauthorized, 401/Unauthorized, 400/ValidationError, 404/NotFound
 - [ ] `GET /api/mcp/health` — tests/api_definitions/mcp/health-get.json → missing: errorCases[] (MUST-43)
+- [ ] `POST /api/memberships` — tests/api_definitions/memberships/create-post.json → missing: negative testCase for 3 errorCase(s) (MUST-64): 401/Unauthorized, 401/Unauthorized, 400/ValidationError
 - [ ] `GET /api/meter/health` — tests/api_definitions/meter/health-get.json → missing: errorCases[] (MUST-43)
+- [ ] `GET /api/relationships/roles` — tests/api_definitions/rebac/relationship-roles-get.json → missing: negative testCase for 2 errorCase(s) (MUST-64): 400/VALIDATION_ERROR, 401/Unauthorized
+- [ ] `POST /api/relationships/roles` — tests/api_definitions/rebac/relationship-roles-post.json → missing: negative testCase for 5 errorCase(s) (MUST-64): 400/EVIDENCE_REQUIRED, 400/VALIDATION_ERROR, 400/VALIDATION_ERROR, 409/ROLE_ALREADY_LIVE
+- [ ] `GET /api/role-templates` — tests/api_definitions/role-templates/index-get.json → missing: negative testCase for 2 errorCase(s) (MUST-64): 401/Unauthorized, 400/ValidationError
+- [ ] `GET /api/secrets` — tests/api_definitions/secrets/ref-get.json → missing: negative testCase for 4 errorCase(s) (MUST-64): 401/Unauthorized, 401/Unauthorized, 400/ValidationError, 404/NotFound
+- [ ] `POST /api/secrets/rotate` — tests/api_definitions/secrets/rotate-post.json → missing: negative testCase for 4 errorCase(s) (MUST-64): 401/Unauthorized, 401/Unauthorized, 400/ValidationError, 404/NotFound
 - [ ] `GET /api/sla/at-risk` — tests/api_definitions/sla/at-risk-get.json → missing: negative testCase for 2 errorCase(s) (MUST-64): 400/VALIDATION_ERROR, 401/Unauthorized
 - [ ] `GET /api/sla/attainment` — tests/api_definitions/sla/attainment-get.json → missing: negative testCase for 3 errorCase(s) (MUST-64): 400/VALIDATION_ERROR, 400/VALIDATION_ERROR, 401/Unauthorized
 - [ ] `GET /api/sla/breach-reasons` — tests/api_definitions/sla/breach-reasons-get.json → missing: negative testCase for 2 errorCase(s) (MUST-64): 400/VALIDATION_ERROR, 401/Unauthorized

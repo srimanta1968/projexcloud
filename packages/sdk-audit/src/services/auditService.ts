@@ -1,6 +1,6 @@
 import crypto from 'crypto';
 import { dataService } from '@projexlight/db-runtime';
-import { assertRegisteredEventType } from '@projexlight/contracts';
+import { assertResolvableEventType } from './eventTypeRegistry';
 
 export type ActorKind = 'human' | 'service' | 'agent';
 export type RetentionClass = 'transient' | 'operational' | 'regulated';
@@ -119,12 +119,19 @@ function chainLockKey(pool_index: string): string {
  * it is released by COMMIT or ROLLBACK with nothing to leak.
  */
 export async function appendAuditEntry(input: AppendInput): Promise<LedgerEntry> {
-  // FR-AUD-5 / AC-16: producer-side EventTypeRegistry enforcement.
-  // Throws UnregisteredEventTypeError before any write hits the chain.
-  assertRegisteredEventType(input.event_type);
+  // FR-AUD-5 / AC-16: producer-side EventTypeRegistry enforcement (OC-2).
+  // Throws before any write hits the chain. Resolution is platform-baseline
+  // first, then this tenant's own registered types (TK-4144) — so a consuming
+  // app can extend the vocabulary without a platform deploy, while a type in
+  // neither place is still rejected exactly as before.
+  const meta = await assertResolvableEventType(input.event_type, input.tenant_id ?? null);
 
   const occurred_at = input.occurred_at ?? new Date();
-  const retention_class: RetentionClass = input.retention_class ?? 'operational';
+  // The registry's declared retention is the DEFAULT, not just a fallback of
+  // last resort: `regulated` on a type means the same thing whether the type is
+  // a platform one or a tenant's, and silently storing it as `operational`
+  // would shred the entry years early.
+  const retention_class: RetentionClass = input.retention_class ?? meta.retention_class;
   const actor_kind: ActorKind = input.actor_kind ?? 'service';
   const expires_at = computeExpiresAt(retention_class, occurred_at);
 

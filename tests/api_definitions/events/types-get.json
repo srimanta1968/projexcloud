@@ -3,7 +3,7 @@
   "endpoint": "/api/events/types",
   "sdk": "sdk-event",
   "method": "GET",
-  "description": "Lists every event type in the compile-time EVENT_TYPE_REGISTRY together with its metadata and a count, for runtime discovery and validation by producers and consumers. Edge cases: the registry is static compile-time data with no DB access, so the response is identical on every call and never empty in a correctly built image; the route takes no parameters, no pagination and no tenant scoping - the registry is global, not per-tenant; the handler declares no requireAuth of its own, so its 401 comes from the gateway default-deny auth gate (the path is not on the public allowlist).",
+  "description": "Lists every event type the caller may emit - the compile-time EVENT_TYPE_REGISTRY platform baseline plus the types this tenant has registered itself - with metadata, a total count and separate platform_count/tenant_count. Edge cases: the baseline half is static compile-time data, so it is identical on every call and never empty in a correctly built image, while the tenant half is a DB read scoped to the JWT's tenant_id claim and is empty for a tenant that has registered nothing; a token with no tenant_id claim gets the baseline only, never another tenant's types; the route takes no parameters and no pagination; the handler declares no requireAuth of its own, so its 401 comes from the gateway default-deny auth gate (the path is not on the public allowlist).",
   "errorCases": [
     {
       "status": 401,
@@ -39,7 +39,9 @@
   "expectedResponse": {
     "data": {
       "count": "number",
-      "types": "array"
+      "types": "array",
+      "platform_count": "number",
+      "tenant_count": "number"
     }
   }
 }

@@ -21,7 +21,11 @@ export async function appendHandler(req: FastifyRequest, reply: FastifyReply): P
       payload: validation.value.payload,
       actor_kind: validation.value.actor_kind ?? 'human',
       actor_id: req.auth?.sub ?? 'unknown',
-      tenant_id: validation.value.tenant_id ?? null,
+      // Falls back to the caller's own tenant claim (TK-4144). Without this a
+      // body that omits tenant_id resolves against the platform baseline only,
+      // so an app's own registered event type would be rejected even though it
+      // registered it correctly.
+      tenant_id: validation.value.tenant_id ?? req.auth?.tenant_id ?? null,
       org_id: validation.value.org_id ?? null,
       app_id: validation.value.app_id ?? null,
       bu_id: validation.value.bu_id ?? null,

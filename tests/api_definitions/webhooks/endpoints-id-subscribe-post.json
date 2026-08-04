@@ -53,7 +53,7 @@
   "captureResponse": {
     "webhooks.subscribe.response.data.subscription.subscription_id": "data.subscription.subscription_id"
   },
-  "description": "Subscribes a registered endpoint to one event_type, with an optional filter_predicate. The endpoint_id is taken from the PATH and overwrites any endpoint_id present in the body. Edge cases: :endpoint_id must be a UUID and event_type must be non-empty; the event_type must already exist in the event-type registry — an unknown one returns 400 UnregisteredEventType, a distinct code from the plain ValidationError; an endpoint_id that is a valid UUID but matches no endpoint returns 404 EndpointNotFound; filter_predicate is accepted only if it is an object and is otherwise silently dropped rather than rejected; there is no duplicate-subscription guard on the route, so re-subscribing the same (endpoint, event_type) depends on the DB constraint.",
+  "description": "Subscribes a registered endpoint to one event_type, with an optional filter_predicate. The endpoint_id is taken from the PATH and overwrites any endpoint_id present in the body. The event_type is resolved BASELINE-FIRST THEN TENANT-SCOPED (TK-4145): the platform EVENT_TYPE_REGISTRY is checked first, then the types registered by the OWNING ENDPOINT's tenant via POST /api/events/types — so a vertical can subscribe to its own registered events, while another tenant's types remain unresolvable here. Edge cases: :endpoint_id must be a UUID and event_type must be non-empty; a type in neither the baseline nor that tenant's registrations returns 400 UnregisteredEventType, a distinct code from the plain ValidationError, and the message names POST /api/events/types rather than a constant the caller cannot reach; ERROR PRECEDENCE — the endpoint is looked up BEFORE the event type is resolved (its tenant is what the type resolves against), so a bad endpoint_id plus an unknown event_type returns 404 EndpointNotFound, not 400; filter_predicate is accepted only if it is an object and is otherwise silently dropped rather than rejected; re-subscribing the same (endpoint, event_type) is an upsert (ON CONFLICT DO UPDATE) that reactivates the row and replaces the filter, so it is idempotent rather than a duplicate-key error.",
   "errorCases": [
     {
       "status": 401,
@@ -76,14 +76,14 @@
     {
       "status": 400,
       "code": "UnregisteredEventType",
-      "message": "Event type <event_type> is not registered",
-      "when": "the event_type has no entry in the event-type registry"
+      "message": "event_type '<event_type>' is not registered for this endpoint's tenant. Register it with POST /api/events/types, then subscribe.",
+      "when": "the event_type is in neither the platform EVENT_TYPE_REGISTRY baseline nor the owning endpoint tenant's registered types (audit.tenant_event_type)"
     },
     {
       "status": 404,
       "code": "EndpointNotFound",
       "message": "Endpoint <endpoint_id> not found",
-      "when": ":endpoint_id is a valid UUID but no webhook endpoint row matches"
+      "when": ":endpoint_id is a valid UUID but no webhook endpoint row matches. Takes PRECEDENCE over UnregisteredEventType — the endpoint is resolved first because its tenant is the scope the event type is resolved against."
     },
     {
       "status": 500,

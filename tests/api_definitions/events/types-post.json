@@ -1,0 +1,188 @@
+{
+  "name": "POST /api/events/types - Register a tenant-scoped event type",
+  "endpoint": "/api/events/types",
+  "sdk": "sdk-event",
+  "sourceFile": "services/api-gateway/src/routes/events.ts",
+  "method": "POST",
+  "requiresAuth": true,
+  "expectedStatus": 201,
+  "testability": "auto",
+  "taskId": "9ea54212-1a15-466b-a74f-f1b063e94f86",
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "featureId": "53ca7289-e33f-476e-839e-db898f3884d9",
+  "epicId": "42f1aac8-aba4-44cf-90a9-aadc0ac57bd3",
+  "coversCriterion": [
+    "53ca7289-e33f-476e-839e-db898f3884d9#AC1",
+    "53ca7289-e33f-476e-839e-db898f3884d9#AC3",
+    "53ca7289-e33f-476e-839e-db898f3884d9#AC4"
+  ],
+  "description": "Registers ONE event type for the caller's own tenant, extending the compile-time EVENT_TYPE_REGISTRY baseline so a consuming application can emit its own audit events without a platform release. The tenant comes from the verified JWT claim and is never read from the body, so a user of tenant A cannot define vocabulary inside tenant B. Resolution at append time is baseline-first, then this tenant's rows, so a registration can never shadow or redefine a platform type. Edge cases: registering an event_type that already exists for this tenant is ADDITIVE, returning 200 with the STORED metadata and created:false rather than overwriting it (a boot-time provisioner re-running on every deploy is the expected caller); an event_type that collides with a platform baseline name is rejected 400 rather than accepted as a shadow; a name that does not match <domain>.<entity>.<verb>.v<N> is rejected 400 at REGISTRATION, where the author can still fix it, rather than at append time in production; schema_state defaults to 'active', compaction_policy to 'none' and schema_version to 1 when omitted; a token carrying no tenant_id claim is rejected 400 because the row has nowhere to land. IDEMPOTENCY (MUST-47): the primary key is (tenant_id, event_type) and tenant_id comes from a tenant created fresh by the signup-tenant dependency on every run, so the fixed event_type below cannot collide across runs. NOTE ON fieldEnums (MUST-39): event_type is deliberately absent from fieldEnums because it is NOT enum-backed - it is pattern-validated against EVENT_TYPE_NAME_PATTERN (<domain>.<entity>.<verb>.v<N>) and any conforming name is valid, so publishing a finite list would tell QA something false about what the field accepts. The four metadata fields below ARE enum-backed (Postgres CHECK-in-list) and are enumerated.",
+  "dependsOn": [
+    "POST /api/auth/signup-tenant"
+  ],
+  "fieldEnums": {
+    "retention_class": [
+      "transient",
+      "operational",
+      "regulated"
+    ],
+    "conflict_policy": [
+      "crdt",
+      "lww",
+      "merge",
+      "event-sourcing",
+      "human-review"
+    ],
+    "schema_state": [
+      "active",
+      "deprecated",
+      "retired"
+    ],
+    "compaction_policy": [
+      "none",
+      "lww",
+      "count"
+    ]
+  },
+  "testCases": [
+    {
+      "name": "Register a tenant event type",
+      "payload": {
+        "event_type": "capture.lead.created.v1",
+        "retention_class": "regulated",
+        "conflict_policy": "event-sourcing",
+        "schema_state": "active",
+        "compaction_policy": "none",
+        "schema_version": 1
+      },
+      "expectedStatus": 201,
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      }
+    },
+    {
+      "name": "400 - name missing the mandatory .v<N> version suffix",
+      "testType": "negative",
+      "coversErrorCase": "400 ValidationError",
+      "payload": {
+        "event_type": "capture.created",
+        "retention_class": "operational",
+        "conflict_policy": "lww",
+        "schema_state": "active",
+        "compaction_policy": "none",
+        "schema_version": 1
+      },
+      "expectedStatus": 400,
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      }
+    },
+    {
+      "name": "400 - cannot redefine a platform baseline type",
+      "testType": "negative",
+      "coversErrorCase": "400 ValidationError",
+      "payload": {
+        "event_type": "tenant.created.v1",
+        "retention_class": "transient",
+        "conflict_policy": "lww",
+        "schema_state": "active",
+        "compaction_policy": "none",
+        "schema_version": 1
+      },
+      "expectedStatus": 400,
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      }
+    },
+    {
+      "name": "400 - retention_class outside the allowed set",
+      "testType": "negative",
+      "coversErrorCase": "400 ValidationError",
+      "payload": {
+        "event_type": "capture.lead.scored.v1",
+        "retention_class": "forever",
+        "conflict_policy": "lww",
+        "schema_state": "active",
+        "compaction_policy": "none",
+        "schema_version": 1
+      },
+      "expectedStatus": 400,
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      }
+    },
+    {
+      "name": "401 - missing bearer token",
+      "testType": "negative",
+      "coversErrorCase": "401 Unauthorized",
+      "payload": {
+        "event_type": "capture.lead.rejected.v1",
+        "retention_class": "operational",
+        "conflict_policy": "lww",
+        "schema_state": "active",
+        "compaction_policy": "none",
+        "schema_version": 1
+      },
+      "expectedStatus": 401
+    }
+  ],
+  "captureResponse": {
+    "events.types.response.data.event_type": "data.event_type"
+  },
+  "expectedResponse": {
+    "data": {
+      "event_type": "string",
+      "retention_class": "string",
+      "conflict_policy": "string",
+      "schema_state": "string",
+      "compaction_policy": "string",
+      "schema_version": "number",
+      "created": "boolean",
+      "source": "string"
+    }
+  },
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "Authorization header absent or not in the form \"Bearer <jwt>\" — enforced by the gateway default-deny auth gate, not by the route itself"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "JWT signature invalid, malformed, or past its exp claim — enforced by the gateway default-deny auth gate"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "details[]: a tenant-scoped token is required to register an event type",
+      "when": "the verified claims carry no tenant_id, so the registration has no scope to land in"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "details[]: event_type '<name>' does not follow the naming convention <domain>.<entity>.<verb>.v<N>",
+      "when": "the name fails EVENT_TYPE_NAME_PATTERN — no version suffix, uppercase, spaces, or a single segment"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "details[]: event_type '<name>' is a platform baseline type and cannot be redefined by a tenant",
+      "when": "the requested name already exists in the compile-time EVENT_TYPE_REGISTRY"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "details[]: retention_class / conflict_policy / schema_state / compaction_policy must be one of the allowed values, schema_version must be an integer >= 1, tenant_id is required",
+      "when": "registerTenantEventType validation fails; every problem is reported together so a caller fixing one at a time does not deploy twice"
+    },
+    {
+      "status": 500,
+      "code": "InternalError",
+      "message": "InternalError",
+      "when": "the insert or read-back throws for any other reason (DB unreachable, etc.) — logged and returned only if the reply has not already been sent"
+    }
+  ]
+}

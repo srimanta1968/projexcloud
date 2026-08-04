@@ -67,7 +67,7 @@
     "audit.append.response.data.entry_id": "data.entry_id",
     "audit.append.response.data.entry_hash": "data.entry_hash"
   },
-  "description": "Appends a hash-chained immutable entry to a per-pool audit chain, updating audit.chain_head in the same transaction; returns 201 with the new entry id/seq/hashes. actor_id comes from the JWT subject (defaults \"unknown\"); actor_kind defaults \"human\". Edge cases: missing pool_index/event_type/payload, actor_kind outside [human,service,agent], retention_class outside [transient,operational,regulated], and an event_type not in the canonical EVENT_TYPE_REGISTRY (rejected 400 before any write).",
+  "description": "Appends a hash-chained immutable entry to a per-pool audit chain, updating audit.chain_head in the same transaction; returns 201 with the new entry id/seq/hashes. actor_id comes from the JWT subject (defaults \"unknown\"); actor_kind defaults \"human\". Edge cases: missing pool_index/event_type/payload, actor_kind outside [human,service,agent], retention_class outside [transient,operational,regulated], and an event_type in neither the platform EVENT_TYPE_REGISTRY baseline nor this tenant's own registered types (rejected 400 before any write). Event type resolution is baseline-first then tenant-scoped, so a consuming app may append its own types once it has registered them via POST /api/events/types; tenant_id falls back to the caller's JWT claim when the body omits it, and when retention_class is omitted the RESOLVED type's declared retention applies rather than a flat 'operational' default.",
   "errorCases": [
     {
       "status": 401,
@@ -90,8 +90,8 @@
     {
       "status": 400,
       "code": "UnregisteredEventType",
-      "message": "Unregistered event_type: <type>. Add it to EVENT_TYPE_REGISTRY first.",
-      "when": "appendAuditEntry throws for an event_type not in EVENT_TYPE_REGISTRY"
+      "message": "Unregistered event_type: <type>. Register it for this tenant with POST /api/events/types before appending. Names must follow <domain>.<entity>.<verb>.v<N>.",
+      "when": "appendAuditEntry throws for an event_type in neither the platform EVENT_TYPE_REGISTRY baseline nor this tenant's registered types (audit.tenant_event_type)"
     },
     {
       "status": 500,

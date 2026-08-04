@@ -39,8 +39,9 @@ always.
 
 ## 2. Domain events
 
-Events are the supported way to react to something an SDK did. Every one is registered in
-`packages/contracts/src/events.ts`; emitting an unregistered type throws.
+Events are the supported way to react to something an SDK did. Every platform one is
+registered in `packages/contracts/src/events.ts`; emitting a type that is in neither that
+baseline nor your tenant's own registered types throws.
 
 | SDK | Events |
 |---|---|
@@ -57,6 +58,46 @@ Two properties worth knowing before you depend on one:
 - **`v1` is a contract.** Fields are added, never removed or retyped. A breaking change
   ships as `v2` alongside.
 
+### 2.1 Registering your own event types
+
+Your vertical's business events are **not** platform events, and must not be filed under a
+platform name — a row that exists, is queryable and means something else is worse than no
+row at all. Register your own instead:
+
+```
+POST /api/events/types            (tenant JWT)
+{ "event_type": "capture.lead.created.v1",
+  "retention_class": "regulated",          // transient | operational | regulated
+  "conflict_policy": "event-sourcing",     // crdt | lww | merge | event-sourcing | human-review
+  "schema_state": "active",                // optional, default active
+  "compaction_policy": "none",             // optional, default none
+  "schema_version": 1 }                    // optional, default 1
+```
+
+- **The name must be `<domain>.<entity>.<verb>.v<N>`** — lowercase, `-`/`_` allowed inside a
+  segment, at least two segments before the version. All 294 baseline entries follow it and
+  registration rejects anything that does not.
+- **The `.v<N>` suffix is the point, not decoration.** It is what lets a payload shape change
+  later without breaking historical queries: `capture.lead.created.v2` ships *alongside* v1
+  rather than silently redefining rows already written under the old shape. A ledger whose
+  types can be redefined in place cannot answer a question about the past.
+- **Scope is your tenant.** Resolution reads the platform baseline first and your rows
+  second, so you can never shadow a platform type — and no other tenant sees yours.
+- **Registration is additive.** Re-registering an existing type returns `200` with the
+  **stored** metadata and `created: false`; it does not overwrite. Call it from a boot-time
+  provisioner and let it run on every deploy.
+- **`retention_class` is load-bearing.** When an append omits it, the registered type's class
+  applies — declaring `operational` on something regulated shreds it at 90 days instead of
+  seven years, quietly and years later.
+
+Until 2026-08-03 there was no write path at all: the registry was a compile-time constant,
+so a vertical's first `POST /api/audit/append` returned `400 UnregisteredEventType` forever.
+Because the emit path is non-throwing by design, that permanent rejection was
+indistinguishable from a transient one — apps reported every governed action as recorded
+while their chain stayed empty, and an empty chain *verifies clean*. If you are checking
+whether your events are landing, query `audit.entry`; do not infer it from a 2xx or from a
+green verification.
+
 ---
 
 ## 3. What an application MAY extend locally
@@ -70,6 +111,8 @@ Two properties worth knowing before you depend on one:
   `sdk-taxonomy`, scoring weights. All are tenant-first with a platform default.
 - **Consent, policy and eligibility.** The platform records what you decided and when; it
   never decides for you.
+- **Its own audit event types**, per §2.1 — tenant-scoped, additive, and named to the
+  convention.
 
 ## 4. What an application MAY NOT do
 
@@ -78,6 +121,9 @@ Two properties worth knowing before you depend on one:
   new injection point — raise it rather than forking, because a fork stops receiving fixes
   the same day it is made.
 - Depend on an unregistered event type, or on field order in a JSONB column.
+- Redefine a platform event type, or reuse a platform name (`vault.*`, `tenant.*`,
+  `audit.*`) for a vertical's own business event. Registration rejects the first; the second
+  files your event under a name that already means something else.
 - Put vertical vocabulary into an SDK. See the gate below.
 
 ---

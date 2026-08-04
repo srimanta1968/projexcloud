@@ -1,5 +1,4 @@
 import { appendAuditEntry, type ActorKind, type LedgerEntry, type RetentionClass } from './auditService';
-import { EVENT_TYPE_REGISTRY } from '@projexlight/contracts';
 
 /**
  * Convenience emit helper for service-layer code in other SDKs (policy,
@@ -28,11 +27,6 @@ export interface EmitEventInput {
   subject_id?: string | null;
   /** Override the registry's default retention. Most callers should not set this. */
   retention_class?: RetentionClass;
-}
-
-function defaultRetentionFromRegistry(event_type: string): RetentionClass {
-  const meta = EVENT_TYPE_REGISTRY[event_type];
-  return (meta?.retention_class as RetentionClass | undefined) ?? 'operational';
 }
 
 /**
@@ -74,7 +68,11 @@ export async function emitEvent(input: EmitEventInput): Promise<LedgerEntry | nu
       bu_id: input.bu_id ?? null,
       subject_kind: input.subject_kind ?? null,
       subject_id: input.subject_id ?? null,
-      retention_class: input.retention_class ?? defaultRetentionFromRegistry(input.event_type),
+      // Left undefined so appendAuditEntry applies the RESOLVED type's
+      // retention. Looking it up here would consult the platform baseline only
+      // and silently downgrade a tenant-registered `regulated` type to
+      // `operational` (TK-4144).
+      retention_class: input.retention_class,
     });
   } catch (err) {
     // Audit emit is best-effort by design — never propagate. Real telemetry
