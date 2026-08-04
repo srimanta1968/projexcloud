@@ -2,7 +2,7 @@
   "name": "POST /admin/meter/pricing-catalogs \u2014 api-gateway",
   "endpoint": "/admin/meter/pricing-catalogs",
   "method": "POST",
-  "description": "Creates a new version of a pricing catalog, stamping created_by from operator_id, and returns 200 { success: true, data: <created version> }. QA edge cases: catalog_id, version and operator_id are all required and validated with a falsy check — which means version: 0 is rejected as missing even though it is a valid-looking integer, and empty strings are likewise rejected; version is not type-checked, so a string version is passed straight to the DB; re-creating an existing (catalog_id, version) pair violates the uniqueness constraint and surfaces as a 500 with the raw driver message rather than a 409 — there is no conflict branch in this handler; nothing verifies operator_id corresponds to a real operator, it is recorded as free text.",
+  "description": "Creates a new version of a pricing catalog, stamping created_by from operator_id, and returns 200 { success: true, data: <created version> }. QA edge cases: catalog_id, version and operator_id are all required and validated with a falsy check — which means version: 0 is rejected as missing even though it is a valid-looking integer, and empty strings are likewise rejected; version is not type-checked, so a string version is passed straight to the DB; re-creating an existing (catalog_id, version) pair violates the uniqueness constraint and surfaces as a 500 with the raw driver message rather than a 409 — there is no conflict branch in this handler; nothing verifies operator_id corresponds to a real operator, it is recorded as free text. NAMESPACE WARNING: the catalog_id this returns is a BILLING RATE CARD row in meter.pricing_catalog, and it is the only kind of catalog_id POST /api/billing/invoices/generate accepts. It is a different entity from the lakehouse catalog_id returned by POST /admin/federation/iceberg-catalogs (federation.iceberg_catalog), which shares the field name but is never valid for billing and yields 404 CatalogNotFound. Consume this one via the cache key meter-pricing-catalogs.create.response.data.catalog_id only. A catalog is created in `draft`; generation ignores draft catalogs, so PATCH .../status to active first, and PUT a rate for every sku that appears in the invoice usage[] or the line has no price to apply.",
   "errorCases": [
     {
       "status": 401,
@@ -29,9 +29,6 @@
   "sourceFile": "services/api-gateway/src/app.ts",
   "_generated": true,
   "testability": "auto",
-  "dependsOn": [
-    "POST /api/auth/signup-tenant"
-  ],
   "captureResponse": {
     "meter-pricing-catalogs.create.response.data.catalog_id": "data.catalog_id",
     "meter-pricing-catalogs.create.response.data.version": "data.version"
