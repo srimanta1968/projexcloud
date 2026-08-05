@@ -47,7 +47,57 @@
           "evaluated": "number",
           "capacity_evaluated": "boolean"
         }
+      },
+      "coversCriterion": "a959792c-5b80-4a99-bc6e-8a7e95fba748#AC3",
+      "expectedArrayItemFields": {
+        "eligible": [
+          "persona_id",
+          "current_load",
+          "total_load",
+          "remaining_headroom",
+          "min_remaining_headroom"
+        ]
       }
+    },
+    {
+      "name": "Ineligible personas come back with their reasons when asked for",
+      "testType": "negative",
+      "coversCriterion": "a959792c-5b80-4a99-bc6e-8a7e95fba748#AC3",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "queryParams": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "include_ineligible": "true",
+        "limit": "50"
+      },
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "data": {
+          "ineligible": "array"
+        }
+      }
+    },
+    {
+      "name": "Reject an eligibility query with no tenant",
+      "testType": "negative",
+      "coversCriterion": "a959792c-5b80-4a99-bc6e-8a7e95fba748#AC3",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "queryParams": {
+        "include_ineligible": "true"
+      },
+      "expectedStatus": 400
+    },
+    {
+      "name": "Reject an unauthenticated eligibility read",
+      "testType": "negative",
+      "coversCriterion": "a959792c-5b80-4a99-bc6e-8a7e95fba748#AC3",
+      "queryParams": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}"
+      },
+      "expectedStatus": 401
     }
   ],
   "errorCases": [
@@ -68,5 +118,8 @@
       },
       "expectedStatus": 403
     }
+  ],
+  "coversCriterion": [
+    "a959792c-5b80-4a99-bc6e-8a7e95fba748#AC3"
   ]
 }
