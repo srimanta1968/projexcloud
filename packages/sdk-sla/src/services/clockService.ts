@@ -694,3 +694,128 @@ async function emitClockEvent(
     },
   });
 }
+
+/* ------------------------------------ the sdk-assignment projection seam */
+
+/**
+ * The shape sdk-assignment's simulation asks for. Declared structurally rather than
+ * imported, so sdk-sla keeps depending on nothing that consumes it — the same rule
+ * makeSlaOnCallResolver follows in the opposite direction.
+ */
+export interface AssignmentSlaProjectionQuery {
+  tenant_id: string;
+  subject_ref: string;
+  at: Date;
+  actual_persona_id: string | null;
+  candidate_persona_id: string | null;
+  candidate_outcome: string;
+}
+
+export interface AssignmentSlaProjectionVerdict {
+  actual_breached: boolean;
+  candidate_breached: boolean | null;
+  reason: string;
+}
+
+/**
+ * Projects the SLA outcome of a routing candidate, from clock arithmetic rather than
+ * from a guess.
+ *
+ * WHAT IS HONESTLY DERIVABLE, and what is not. The actual side is history: the clock
+ * for this subject either breached or it did not, and that is recorded. The candidate
+ * side is a counterfactual, and most of it is genuinely unknowable — how fast a
+ * DIFFERENT person would have answered is behaviour nobody recorded, and inventing a
+ * handling time would produce exactly the plausible number the consumer was told not to
+ * trust. So this projects only the part the calendar and the policy actually decide:
+ *
+ *   1. A candidate that leaves the subject with NO OWNER (REVIEW, UNROUTABLE, or a
+ *      persona-less FALLBACK) while a clock is running is a breach the rules cause
+ *      directly. Nobody is going to answer it, and the due time arrives regardless.
+ *   2. A candidate that hands the subject to somebody at an instant already PAST the
+ *      clock's due time has breached before the assignee could act. That is arithmetic
+ *      over the policy's own calendar, not a prediction about the person.
+ *   3. Anything else — an owned subject assigned with business minutes still on the
+ *      clock — is UNPROJECTABLE, and says so. It is where the human's judgement lives,
+ *      and the report refuses to fill it in.
+ *
+ * Every early return is a reason string, because "unprojectable" with no cause is the
+ * same dead end as no projection at all.
+ *
+ * STRICTLY READ-ONLY. No clock is started, advanced, paused or written; the simulation
+ * counts sink calls while this runs, so a regression that wrote one would show up as a
+ * non-zero side_effects.clocks rather than as silence.
+ */
+export function makeAssignmentSlaProjector(): (
+  q: AssignmentSlaProjectionQuery,
+) => Promise<AssignmentSlaProjectionVerdict | null> {
+  return async ({ tenant_id, subject_ref, at, candidate_persona_id, candidate_outcome }) => {
+    const clocks = await listClocks({ tenant_id, subject_ref, limit: 1 });
+    const clock = clocks[0];
+    // No clock means this subject carried no promise. Not a breach either way, and not
+    // a silent zero: it is excluded and counted under its own reason.
+    if (!clock) return null;
+
+    let policy: SlaPolicy;
+    try {
+      policy = await getPolicy(tenant_id, clock.policy_id);
+    } catch {
+      return { actual_breached: false, candidate_breached: null, reason: 'policy_unresolvable' };
+    }
+
+    let calendar: BusinessCalendar;
+    try {
+      calendar = await getCalendar(tenant_id, policy.calendar_id);
+    } catch {
+      return { actual_breached: false, candidate_breached: null, reason: 'calendar_unresolvable' };
+    }
+
+    // History, not inference.
+    const actual_breached = clock.breached_at !== null;
+
+    // (1) The rules leave it with nobody.
+    const owned = candidate_persona_id !== null;
+    if (!owned) {
+      const terminal = clock.satisfied_at !== null || clock.cancelled_at !== null;
+      if (terminal) {
+        return {
+          actual_breached,
+          candidate_breached: null,
+          reason: `unowned_but_clock_${clock.satisfied_at ? 'satisfied' : 'cancelled'}`,
+        };
+      }
+      return {
+        actual_breached,
+        candidate_breached: true,
+        reason: `unowned_under_candidate:${candidate_outcome}`,
+      };
+    }
+
+    // (2) Assigned after the promise had already expired, measured on the policy's own
+    //     calendar rather than on wall time.
+    const dueMs = new Date(clock.due_at).getTime();
+    const atMs = at.getTime();
+    if (Number.isNaN(dueMs)) {
+      return { actual_breached, candidate_breached: null, reason: 'due_at_unparseable' };
+    }
+    if (atMs > dueMs) {
+      const overdueBusinessMinutes = businessMinutesBetween(calendar, dueMs, atMs);
+      // Past due on the WALL clock but with no business minutes elapsed (a weekend, a
+      // holiday) has not consumed any of the promise, so it is not yet a breach.
+      if (overdueBusinessMinutes > 0) {
+        return {
+          actual_breached,
+          candidate_breached: true,
+          reason: `assigned_${Math.round(overdueBusinessMinutes)}_business_minutes_past_due`,
+        };
+      }
+    }
+
+    // (3) Owned, in time, and the rest is the assignee's behaviour — which no routing
+    //     replay knows and this refuses to invent.
+    return {
+      actual_breached,
+      candidate_breached: null,
+      reason: 'owned_and_within_due_time_outcome_depends_on_handling',
+    };
+  };
+}

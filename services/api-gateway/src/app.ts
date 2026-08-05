@@ -337,6 +337,7 @@ import {
   migrationsDir as assignmentMigrations,
   server as assignmentServer,
   setAvailabilityResolver as setAssignmentAvailabilityResolver,
+  setSlaProjector as setAssignmentSlaProjector,
 } from '@projexlight/sdk-assignment';
 // P14/P15 InboundCRM SDK batch — routes + migrations were built but not yet
 // wired into the gateway boot; mount them here so their schemas land in the
@@ -363,6 +364,7 @@ import {
   migrationsDir as slaMigrations,
   server as slaServer,
   setOnCallResolver as setSlaOnCallResolver,
+  makeAssignmentSlaProjector,
 } from '@projexlight/sdk-sla';
 // P16 · EP-377 — workforce coverage: schedules, time off, presence, capacity,
 // on-call. Migrations are wired as soon as they exist so the schema self-creates
@@ -4104,6 +4106,20 @@ const start = async (): Promise<void> => {
       defaultBand: 'default',
     }));
     setAssignmentAvailabilityResolver(makeAssignmentAvailabilityResolver());
+
+    /*
+     * sdk-assignment simulation -> sdk-sla clock arithmetic.
+     *
+     * A routing simulation reports where work LANDS; a manager rebalancing a queue is
+     * asking whether it BREACHES less, and those are different questions. This answers
+     * the second one from the policy's own calendar rather than from a plausible
+     * number, and reports every subject it cannot decide as unprojectable instead of
+     * folding it into "no breach" -- which would make every candidate look like an
+     * improvement. Read-only by contract; the simulation counts sink calls while it
+     * runs, so a projector that ever wrote a clock would surface as a non-zero
+     * side_effects.clocks rather than as silence.
+     */
+    setAssignmentSlaProjector(makeAssignmentSlaProjector());
 
     // API-key verification cache invalidation. sdk-api-keys has published every
     // revoke to `api-key:revoked` since it shipped, and nothing subscribed — so

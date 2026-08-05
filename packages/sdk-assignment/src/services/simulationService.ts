@@ -60,6 +60,71 @@ export function getSimulationSinks(): SimulationSinks | null {
   return sinks;
 }
 
+/* ------------------------------------------------------ the SLA seam */
+
+/** One replayed subject, as the projector needs to see it. */
+export interface SlaProjectionQuery {
+  tenant_id: string;
+  subject_ref: string;
+  /** When the decision was originally made — the instant the replay is anchored to. */
+  at: Date;
+  actual_persona_id: string | null;
+  candidate_persona_id: string | null;
+  candidate_outcome: RoutingOutcome;
+}
+
+/**
+ * What a projector may answer per subject.
+ *
+ * `null` means UNPROJECTABLE and is a first-class answer, not a failure: a subject with
+ * no clock, no resolvable policy or no resolvable calendar cannot be reasoned about, and
+ * the one thing that must never happen is folding it into "did not breach". A projection
+ * that quietly counts unknowns as successes reads as an improvement no matter what the
+ * candidate does, which is worse than having no projection at all.
+ */
+export interface SlaProjectionVerdict {
+  actual_breached: boolean;
+  candidate_breached: boolean | null;
+  /** Machine-readable why, carried through to the report for the null cases. */
+  reason: string;
+}
+
+export type SlaProjector = (q: SlaProjectionQuery) => Promise<SlaProjectionVerdict | null>;
+
+let slaProjector: SlaProjector | null = null;
+
+/**
+ * Wire sdk-sla's clock arithmetic (makeAssignmentSlaProjector).
+ *
+ * NO DEFAULT, for the same reason the availability resolver has none. Unwired, the
+ * report carries no sla_projection at all rather than a zeroed one — an absent section
+ * makes a consumer ask, whereas `breaches_after: 0` makes them conclude.
+ */
+export function setSlaProjector(fn: SlaProjector | null): void {
+  slaProjector = fn;
+}
+
+export function hasSlaProjector(): boolean {
+  return slaProjector !== null;
+}
+
+export interface SlaProjection {
+  /** Subjects the projector could reason about end to end. */
+  projected: number;
+  /**
+   * Subjects it could NOT, with the reason counts. These are excluded from both
+   * breach totals — never silently counted as clean.
+   */
+  unprojectable: number;
+  unprojectable_reasons: Record<string, number>;
+  /** Breaches that ACTUALLY happened, over the projected subset only. */
+  breaches_before: number;
+  /** Breaches the candidate rules would produce, over the same subset. */
+  breaches_after: number;
+  /** breaches_after - breaches_before. Negative is an improvement. */
+  delta: number;
+}
+
 export interface PersonaComparison {
   persona_id: string;
   /**
@@ -120,6 +185,11 @@ export interface SimulationReport {
     candidate_outcome: RoutingOutcome;
   }>;
   skew: SkewAudit;
+  /**
+   * Present ONLY when an SLA projector is wired. Absent means "not projected" and must
+   * not be read as "no change" — see setSlaProjector.
+   */
+  sla_projection?: SlaProjection;
   /** Proof, in the report itself, that nothing happened. */
   side_effects: { assignments: number; notifications: number; clocks: number; decisions_written: number };
 }
@@ -181,6 +251,12 @@ export async function simulate(input: SimulateInput): Promise<SimulationReport> 
     per.set(persona, entry);
   };
 
+  let projected = 0;
+  let unprojectable = 0;
+  let breaches_before = 0;
+  let breaches_after = 0;
+  const unprojectableReasons: Record<string, number> = {};
+
   const outcome_shift = {
     ASSIGNED: { actual: 0, candidate: 0 },
     FALLBACK: { actual: 0, candidate: 0 },
@@ -215,6 +291,40 @@ export async function simulate(input: SimulateInput): Promise<SimulationReport> 
 
       bump(replay.chosen_persona_id, 'candidate');
       outcome_shift[replay.outcome].candidate += 1;
+
+      if (slaProjector) {
+        /*
+         * READ-ONLY, and it has to stay that way: this runs inside the swapped-sink
+         * window, so a projector that started a clock would be counted in
+         * side_effects.clocks and the report would show its own violation rather than
+         * hiding it. A projector that THROWS is treated as unprojectable for that one
+         * subject rather than failing the whole simulation — one unreadable calendar
+         * should not cost a reviewer the other 199 subjects.
+         */
+        let verdict: SlaProjectionVerdict | null = null;
+        try {
+          verdict = await slaProjector({
+            tenant_id: input.tenant_id,
+            subject_ref: past.subject_ref,
+            at: new Date(past.created_at),
+            actual_persona_id: past.chosen_persona_id,
+            candidate_persona_id: replay.chosen_persona_id,
+            candidate_outcome: replay.outcome,
+          });
+        } catch (err) {
+          verdict = null;
+          bumpReason(unprojectableReasons, `projector_error: ${(err as Error).message}`);
+        }
+        if (!verdict || verdict.candidate_breached === null) {
+          unprojectable += 1;
+          if (verdict) bumpReason(unprojectableReasons, verdict.reason);
+          else if (!unprojectableReasons.projector_error) bumpReason(unprojectableReasons, 'no_clock_or_policy');
+        } else {
+          projected += 1;
+          if (verdict.actual_breached) breaches_before += 1;
+          if (verdict.candidate_breached) breaches_after += 1;
+        }
+      }
       if (replay.chosen_persona_id !== past.chosen_persona_id || replay.outcome !== past.outcome) {
         changed.push({
           subject_ref: past.subject_ref,
@@ -241,6 +351,20 @@ export async function simulate(input: SimulateInput): Promise<SimulationReport> 
     outcome_shift,
     changed,
     skew: auditSkew(per_persona, input.candidate_persona_ids, skew_tolerance),
+    // Omitted entirely when unwired — see setSlaProjector for why an absent section
+    // beats a zeroed one.
+    ...(slaProjector
+      ? {
+          sla_projection: {
+            projected,
+            unprojectable,
+            unprojectable_reasons: unprojectableReasons,
+            breaches_before,
+            breaches_after,
+            delta: breaches_after - breaches_before,
+          } satisfies SlaProjection,
+        }
+      : {}),
     side_effects: {
       ...counted,
       /*
@@ -383,6 +507,10 @@ export function auditSkew(
 /* -------------------------------------------------------------- helpers */
 
 const round = (n: number): number => Math.round(n * 100) / 100;
+
+const bumpReason = (into: Record<string, number>, reason: string): void => {
+  into[reason] = (into[reason] ?? 0) + 1;
+};
 
 async function countDecisions(tenant_id: string): Promise<number> {
   const row = await dataService.one<{ n: string }>(
