@@ -1052,18 +1052,18 @@ app.post<{
 app.register(async (instance) => {
   instance.get<{
     Params: { asset_id: string };
-  }>('/api/commands/stream/:asset_id', { websocket: true }, (connection, req) => {
+  }>('/api/commands/stream/:asset_id', { websocket: true }, (socket, req) => {
     const assetId = req.params.asset_id;
     const broker = getCommandBroker();
     const unsubscribe = broker.subscribe(assetId, (event) => {
       try {
-        connection.socket.send(JSON.stringify(event));
+        socket.send(JSON.stringify(event));
       } catch {
         // Socket closed mid-send; cleanup happens via close handler.
       }
     });
-    connection.socket.on('close', () => unsubscribe());
-    connection.socket.send(
+    socket.on('close', () => unsubscribe());
+    socket.send(
       JSON.stringify({ kind: 'hello', asset_id: assetId, emitted_at: new Date().toISOString() }),
     );
   });
@@ -1072,18 +1072,18 @@ app.register(async (instance) => {
 app.register(async (instance) => {
   instance.get<{
     Params: { persona_id: string };
-  }>('/api/dispatch/ws/:persona_id', { websocket: true }, (connection, req) => {
+  }>('/api/dispatch/ws/:persona_id', { websocket: true }, (socket, req) => {
     const personaId = req.params.persona_id;
     const broker = getDispatchBroker();
     const unsubscribe = broker.subscribe(personaId, (event) => {
       try {
-        connection.socket.send(JSON.stringify(event));
+        socket.send(JSON.stringify(event));
       } catch {
         // Socket closed mid-send; cleanup happens via close handler.
       }
     });
-    connection.socket.on('close', () => unsubscribe());
-    connection.socket.send(
+    socket.on('close', () => unsubscribe());
+    socket.send(
       JSON.stringify({ kind: 'hello', persona_id: personaId, emitted_at: new Date().toISOString() }),
     );
   });
