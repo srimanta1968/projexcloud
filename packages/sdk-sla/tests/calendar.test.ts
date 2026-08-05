@@ -84,6 +84,40 @@ describe('timezone primitives', () => {
     expect(localParts(ms, 'America/New_York').weekday).toBe(7);
     expect(localParts(ms, 'UTC').weekday).toBe(1);
   });
+
+  /*
+   * America/Chicago, by NAME, because the acceptance criterion names it.
+   *
+   * Every US-zone case above uses America/New_York, and the two share DST rule dates
+   * to the minute — so the arithmetic here was always equivalent and never actually
+   * WRONG. That is precisely why it is worth pinning: "equivalent by argument" is a
+   * claim about today's tzdata, and the criterion asks for evidence. If Chicago ever
+   * diverges (a zone split, a state opting out, a tzdata correction), this fails and
+   * New_York keeps passing, which is the whole point of naming the zone the promise
+   * was written against.
+   */
+  it('handles the spring-forward gap in America/Chicago, the zone the criterion names', () => {
+    // 2026-03-08: US clocks jump 02:00 -> 03:00 local. 02:30 does not exist in Chicago.
+    const ms = at('2026-03-08', '02:30', 'America/Chicago');
+    expect(Number.isFinite(ms)).toBe(true);
+    // It must resolve INSIDE the transition, not silently a day out.
+    expect(new Date(ms).toISOString().slice(0, 10)).toBe('2026-03-08');
+
+    // And the offset really did move: 12:00 local is CST (-6) before the switch and
+    // CDT (-5) after it, so the same wall-clock time is an hour apart in UTC.
+    const before = at('2026-03-07', '12:00', 'America/Chicago');
+    const after = at('2026-03-09', '12:00', 'America/Chicago');
+    expect(new Date(before).toISOString()).toBe('2026-03-07T18:00:00.000Z');
+    expect(new Date(after).toISOString()).toBe('2026-03-09T17:00:00.000Z');
+  });
+
+  it('computes the Chicago local weekday from the local date, not the host zone', () => {
+    // 23:00 Sunday in Chicago is already Monday in UTC — one hour deeper into the
+    // next UTC day than the New_York case above, which is the zone difference.
+    const ms = at('2026-03-08', '23:00', 'America/Chicago');
+    expect(localParts(ms, 'America/Chicago').weekday).toBe(7);
+    expect(localParts(ms, 'UTC').weekday).toBe(1);
+  });
 });
 
 describe('windowsOnDate', () => {
