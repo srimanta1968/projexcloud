@@ -2,6 +2,7 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { randomUUID, createHmac } from 'crypto';
 import { initPool, dataService, closeAllPools } from '@projexlight/db-runtime';
 import {
+  verifyAdapterSignature,
   metaAdapter, linkedInAdapter, tiktokAdapter, googleAdapter,
   getLeadFormAdapter, listLeadFormAdapters,
 } from '../src/adapters/leadFormAdapters';
@@ -201,24 +202,24 @@ describe('signature verification rejects unsigned or wrongly-signed payloads (AC
   const body = JSON.stringify({ hello: 'world' });
 
   it('accepts a correct signature and rejects a wrong or missing one', () => {
-    expect(metaAdapter.verifySignature(body, `sha256=${sign(body)}`, SECRET)).toBe(true);
-    expect(metaAdapter.verifySignature(body, `sha256=${sign('tampered')}`, SECRET)).toBe(false);
-    expect(metaAdapter.verifySignature(body, undefined, SECRET)).toBe(false);
+    expect(verifyAdapterSignature(metaAdapter, body, `sha256=${sign(body)}`, SECRET)).toBe(true);
+    expect(verifyAdapterSignature(metaAdapter, body, `sha256=${sign('tampered')}`, SECRET)).toBe(false);
+    expect(verifyAdapterSignature(metaAdapter, body, undefined, SECRET)).toBe(false);
     // Meta always prefixes sha256=; a bare hex header is not a Meta delivery.
-    expect(metaAdapter.verifySignature(body, sign(body), SECRET)).toBe(false);
+    expect(verifyAdapterSignature(metaAdapter, body, sign(body), SECRET)).toBe(false);
   });
 
   it('rejects a signature computed with a different secret', () => {
     const foreign = createHmac('sha256', 'someone-elses-secret').update(body).digest('hex');
-    expect(linkedInAdapter.verifySignature(body, foreign, SECRET)).toBe(false);
-    expect(tiktokAdapter.verifySignature(body, foreign, SECRET)).toBe(false);
-    expect(googleAdapter.verifySignature(body, foreign, SECRET)).toBe(false);
+    expect(verifyAdapterSignature(linkedInAdapter, body, foreign, SECRET)).toBe(false);
+    expect(verifyAdapterSignature(tiktokAdapter, body, foreign, SECRET)).toBe(false);
+    expect(verifyAdapterSignature(googleAdapter, body, foreign, SECRET)).toBe(false);
   });
 
   it('a signature of a different length is rejected without throwing', () => {
     // timingSafeEqual throws on length mismatch unless guarded.
-    expect(() => linkedInAdapter.verifySignature(body, 'short', SECRET)).not.toThrow();
-    expect(linkedInAdapter.verifySignature(body, 'short', SECRET)).toBe(false);
+    expect(() => verifyAdapterSignature(linkedInAdapter, body, 'short', SECRET)).not.toThrow();
+    expect(verifyAdapterSignature(linkedInAdapter, body, 'short', SECRET)).toBe(false);
   });
 
   maybe('an unsigned delivery stores NOTHING', async () => {
@@ -326,7 +327,7 @@ describe('raw payload is archived even on downstream rejection (AC4)', () => {
     );
     // The point of storing bytes: months later, the archive can still prove the provider
     // really sent this. Re-serialising from jsonb would fail this check.
-    expect(metaAdapter.verifySignature(row!.raw_body, `sha256=${sign(row!.raw_body)}`, SECRET)).toBe(true);
+    expect(verifyAdapterSignature(metaAdapter, row!.raw_body, `sha256=${sign(row!.raw_body)}`, SECRET)).toBe(true);
   });
 
   maybe('a rejected delivery can be re-processed once the payload is fixable', async () => {

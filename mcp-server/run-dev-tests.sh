@@ -101,14 +101,24 @@ if ds:
     tot = sum(t.get("datasetsTotal", 0) for t in ds)
     ok  = sum(t.get("datasetsPassed", 0) for t in ds)
     print("  Datasets  : %s/%s passed across %s definitions" % (ok, tot, len(ds)))
-    for t in ds:
-        bad = [x for x in t["datasets"] if x.get("status") != "passed"]
-        if bad:
+    # Separate FAILED from SKIPPED. A skipped dataset was never executed (manual,
+    # unsynthesizable signature, unmet prerequisite) and is not a defect; listing
+    # the two together made healthy endpoints read as broken.
+    failed = [(t, [x for x in t["datasets"] if x.get("status") == "failed"]) for t in ds]
+    failed = [(t, b) for t, b in failed if b]
+    skipped_n = sum(1 for t in ds for x in t["datasets"] if x.get("status") == "skipped")
+    if failed:
+        print("  FAILED datasets:")
+        for t, bad in failed:
             print("    %s %s" % (t.get("method"), t.get("endpoint")))
             for b in bad:
                 print("       [%s] %s | expected %s got %s%s"
                       % (b.get("index"), (b.get("name") or "")[:52], b.get("expectedStatus"),
                          b.get("actualStatus"), "  <-- PRODUCER" if b.get("isProducer") else ""))
+    else:
+        print("  FAILED datasets: none")
+    if skipped_n:
+        print("  SKIPPED datasets: %s (never executed — manual / unsynthesizable / unmet prerequisite)" % skipped_n)
 ' 2>/dev/null || echo "(python unavailable — use --raw)"
 }
 

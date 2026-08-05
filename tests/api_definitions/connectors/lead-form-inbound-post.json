@@ -1,5 +1,5 @@
 {
-  "name": "POST /api/connectors/lead-forms/:tenant_id/:platform — signed paid-social lead delivery",
+  "name": "POST /api/connectors/lead-forms/:tenant_id/:platform \u2014 signed paid-social lead delivery",
   "endpoint": "/api/connectors/lead-forms/:tenant_id/:platform",
   "sdk": "sdk-connectors",
   "sourceFile": "packages/sdk-connectors/src/server/routes.ts",
@@ -11,83 +11,169 @@
   "featureId": "0204ef48-4a2a-4316-a58b-8f1a05cb16ca",
   "epicId": "84ab818d-aeb2-47b4-ba3c-fb4b0b5662c4",
   "priority": 90,
-  "testability": "manual",
-  "skipReason": "Provider-signed webhook: every request must carry a valid HMAC over the EXACT request bytes, computed with a per-tenant secret the regression runner does not hold, and the runner re-serialises JSON bodies (which changes key order and whitespace and therefore invalidates any signature). Exercised end-to-end against real Postgres by packages/sdk-connectors/tests/leadForms.integration.test.ts — 21 cases covering all four adapters, signature acceptance/rejection, concurrent replay and archive-on-rejection.",
+  "testability": "auto",
   "coversCriterion": [
     "552a31f9-7fc7-4353-9f96-41823a26464a#AC1",
     "552a31f9-7fc7-4353-9f96-41823a26464a#AC2",
     "552a31f9-7fc7-4353-9f96-41823a26464a#AC3",
     "552a31f9-7fc7-4353-9f96-41823a26464a#AC4"
   ],
-  "description": "Receives a completed lead form from Meta/Instagram/Facebook, LinkedIn Lead Gen, TikTok or Google/YouTube. requiresAuth is FALSE by design and correctly so (MUST-52's signed-webhook exemption): the caller is a platform, not a tenant session, and the provider HMAC is the trust boundary. Proves all four criteria. The ORDER of the four steps is the whole design: verify signature, then reserve-and-archive in one INSERT, then normalise. AC2: an unsigned or wrongly-signed delivery is rejected 401 and stores NOTHING — it is not a rejected lead, it is not a lead at all, and archiving it would let anyone fill the tenant's table with material to triage; comparison is constant-time, since a plain === on an HMAC leaks the first wrong byte through timing. AC3: idempotency is the UNIQUE index on (tenant_id, platform, source_event_id) plus ON CONFLICT DO NOTHING — the insert IS the replay check, which is correct even when the provider delivers to several workers at once, where a read-then-write check would let two of them each create a lead from one form submission. AC4: the raw payload is written BEFORE normalisation is allowed an opinion, so a rejected mapping keeps the evidence and the row can be re-processed later; the lead form is the only record the person filled it in and the platform will not re-send it. AC1: each adapter extracts its own full field set — Meta (form + version, campaign/ad/creative, DM thread and comment id, permission fields), LinkedIn (campaign/form ids, member and company URNs, message thread), TikTok (ttclid, advertiser, page), Google (gclid, UTM, form proof) — and permission evidence is a REQUIRED field whose absence fails normalisation, because a lead form is a consent artefact and a lead with no recorded consent has no lawful basis for contact. QA edge cases: the payload is archived twice on purpose — raw_body as the exact signed BYTES (an HMAC is over bytes, so only this can re-verify the signature months later) and raw_payload as jsonb for querying, because jsonb reorders keys and could never round-trip a signature; Google additionally requires a form proof distinct from the transport signature, since the transport proves the request came from Google while the form proof proves the lead came from THIS advertiser's form — accepting one as the other would allow cross-account lead injection; a Google lead with neither email nor phone is refused as uncontactable; 202 is returned for everything past the trust boundary INCLUDING a rejected normalisation and a replay, because a 4xx there makes the provider retry forever against a payload already held; an unknown platform is 404.",
+  "description": "Receives a completed lead form from Meta/Instagram/Facebook, LinkedIn Lead Gen, TikTok or Google/YouTube. requiresAuth is FALSE by design and correctly so (MUST-52's signed-webhook exemption): the caller is a platform, not a tenant session, and the provider HMAC is the trust boundary. Proves all four criteria. The ORDER of the four steps is the whole design: verify signature, then reserve-and-archive in one INSERT, then normalise. AC2: an unsigned or wrongly-signed delivery is rejected 401 and stores NOTHING \u2014 it is not a rejected lead, it is not a lead at all, and archiving it would let anyone fill the tenant's table with material to triage; comparison is constant-time, since a plain === on an HMAC leaks the first wrong byte through timing. AC3: idempotency is the UNIQUE index on (tenant_id, platform, source_event_id) plus ON CONFLICT DO NOTHING \u2014 the insert IS the replay check, which is correct even when the provider delivers to several workers at once, where a read-then-write check would let two of them each create a lead from one form submission. AC4: the raw payload is written BEFORE normalisation is allowed an opinion, so a rejected mapping keeps the evidence and the row can be re-processed later; the lead form is the only record the person filled it in and the platform will not re-send it. AC1: each adapter extracts its own full field set \u2014 Meta (form + version, campaign/ad/creative, DM thread and comment id, permission fields), LinkedIn (campaign/form ids, member and company URNs, message thread), TikTok (ttclid, advertiser, page), Google (gclid, UTM, form proof) \u2014 and permission evidence is a REQUIRED field whose absence fails normalisation, because a lead form is a consent artefact and a lead with no recorded consent has no lawful basis for contact. QA edge cases: the payload is archived twice on purpose \u2014 raw_body as the exact signed BYTES (an HMAC is over bytes, so only this can re-verify the signature months later) and raw_payload as jsonb for querying, because jsonb reorders keys and could never round-trip a signature; Google additionally requires a form proof distinct from the transport signature, since the transport proves the request came from Google while the form proof proves the lead came from THIS advertiser's form \u2014 accepting one as the other would allow cross-account lead injection; a Google lead with neither email nor phone is refused as uncontactable; 202 is returned for everything past the trust boundary INCLUDING a rejected normalisation and a replay, because a 4xx there makes the provider retry forever against a payload already held; an unknown platform is 404.",
   "testCases": [
     {
       "name": "Meta lead form with valid signature is accepted and archived",
-      "headers": { "x-hub-signature-256": "sha256=<hmac of the exact request bytes>" },
-      "pathParams": { "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}", "platform": "meta" },
+      "headers": {
+        "x-hub-signature-256": "sha256=<hmac of the exact request bytes>"
+      },
+      "pathParams": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "platform": "meta"
+      },
       "payload": {
-        "entry": [{
-          "id": "page-1",
-          "changes": [{
-            "value": {
-              "leadgen_id": "lead-1", "form_id": "form-9", "form_version": "v2",
-              "campaign_id": "camp-1", "ad_id": "ad-2", "creative_id": "cr-3",
-              "created_time": "2026-08-01T09:00:00Z", "platform": "instagram",
-              "thread_id": "dm-77", "comment_id": "cm-88",
-              "consent": { "consent_ref": "consent-abc", "granted": true },
-              "permission_fields": ["marketing_opt_in"],
-              "field_data": [{ "name": "email", "values": ["jane@acme.test"] }]
-            }
-          }]
-        }]
+        "entry": [
+          {
+            "id": "page-1",
+            "changes": [
+              {
+                "value": {
+                  "leadgen_id": "lead-1",
+                  "form_id": "form-9",
+                  "form_version": "v2",
+                  "campaign_id": "camp-1",
+                  "ad_id": "ad-2",
+                  "creative_id": "cr-3",
+                  "created_time": "2026-08-01T09:00:00Z",
+                  "platform": "instagram",
+                  "thread_id": "dm-77",
+                  "comment_id": "cm-88",
+                  "consent": {
+                    "consent_ref": "consent-abc",
+                    "granted": true
+                  },
+                  "permission_fields": [
+                    "marketing_opt_in"
+                  ],
+                  "field_data": [
+                    {
+                      "name": "email",
+                      "values": [
+                        "jane@acme.test"
+                      ]
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        ]
       },
       "expectedStatus": 202,
       "testability": "manual"
     },
     {
       "name": "A replayed delivery returns duplicate and creates nothing new",
-      "headers": { "x-hub-signature-256": "sha256=<same hmac>" },
-      "pathParams": { "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}", "platform": "meta" },
-      "payload": { "scenario": "identical repeat of the previous delivery" },
+      "headers": {
+        "x-hub-signature-256": "sha256=<same hmac>"
+      },
+      "pathParams": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "platform": "meta"
+      },
+      "payload": {
+        "scenario": "identical repeat of the previous delivery"
+      },
       "expectedStatus": 202,
       "testability": "manual"
     },
     {
       "name": "LinkedIn lead captures company and member profile",
-      "headers": { "x-li-signature": "<hmac of the exact request bytes>" },
-      "pathParams": { "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}", "platform": "linkedin" },
+      "headers": {
+        "x-li-signature": "<hmac of the exact request bytes>"
+      },
+      "pathParams": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "platform": "linkedin"
+      },
       "payload": {
-        "leadId": "li-1", "formId": "f-1", "campaignId": "c-1", "creativeId": "cr-1",
+        "leadId": "li-1",
+        "formId": "f-1",
+        "campaignId": "c-1",
+        "creativeId": "cr-1",
         "submittedAt": "2026-08-01T09:00:00Z",
-        "memberUrn": "urn:li:person:123", "companyUrn": "urn:li:org:456", "companyName": "Acme Ltd",
-        "consentResponses": [{ "consentId": "li-consent-1", "accepted": true }],
-        "formResponse": [{ "questionId": "email", "answers": ["jane@acme.test"] }]
+        "memberUrn": "urn:li:person:123",
+        "companyUrn": "urn:li:org:456",
+        "companyName": "Acme Ltd",
+        "consentResponses": [
+          {
+            "consentId": "li-consent-1",
+            "accepted": true
+          }
+        ],
+        "formResponse": [
+          {
+            "questionId": "email",
+            "answers": [
+              "jane@acme.test"
+            ]
+          }
+        ]
       },
       "expectedStatus": 202,
       "testability": "manual"
     },
     {
       "name": "Google lead with form proof, gclid and UTM",
-      "headers": { "x-goog-signature": "<hmac of the exact request bytes>" },
-      "pathParams": { "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}", "platform": "google" },
+      "headers": {
+        "x-goog-signature": "<hmac of the exact request bytes>"
+      },
+      "pathParams": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "platform": "google"
+      },
       "payload": {
-        "lead_id": "g-1", "form_id": "gf-1", "campaign_id": "gc-1", "gcl_id": "gclid-1",
-        "google_key": "form-proof-abc", "lead_submission_time": "2026-08-01T09:00:00Z",
-        "utm_source": "google", "utm_medium": "cpc", "utm_campaign": "brand",
-        "consent_fields": ["lead_consent"],
-        "user_column_data": [{ "column_id": "EMAIL", "string_value": "jane@acme.test" }]
+        "lead_id": "g-1",
+        "form_id": "gf-1",
+        "campaign_id": "gc-1",
+        "gcl_id": "gclid-1",
+        "google_key": "form-proof-abc",
+        "lead_submission_time": "2026-08-01T09:00:00Z",
+        "utm_source": "google",
+        "utm_medium": "cpc",
+        "utm_campaign": "brand",
+        "consent_fields": [
+          "lead_consent"
+        ],
+        "user_column_data": [
+          {
+            "column_id": "EMAIL",
+            "string_value": "jane@acme.test"
+          }
+        ]
       },
       "expectedStatus": 202,
       "testability": "manual"
     },
     {
       "name": "A normalisation rejection is still archived and re-processable",
-      "headers": { "x-tt-signature": "<hmac of the exact request bytes>" },
-      "pathParams": { "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}", "platform": "tiktok" },
+      "headers": {
+        "x-tt-signature": "<hmac of the exact request bytes>"
+      },
+      "pathParams": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "platform": "tiktok"
+      },
       "payload": {
-        "lead_id": "tt-bad", "page_id": "p-1",
-        "field_data": [{ "name": "phone", "values": ["+15550100"] }],
-        "scenario": "no permission evidence — rejected downstream, raw retained"
+        "lead_id": "tt-bad",
+        "page_id": "p-1",
+        "field_data": [
+          {
+            "name": "phone",
+            "values": [
+              "+15550100"
+            ]
+          }
+        ],
+        "scenario": "no permission evidence \u2014 rejected downstream, raw retained"
       },
       "expectedStatus": 202,
       "testability": "manual"
@@ -99,11 +185,28 @@
       "status": 401,
       "code": "INVALID_SIGNATURE",
       "message": "invalid or missing x-hub-signature-256 signature",
-      "when": "the signature header is absent, malformed, computed over different bytes, or computed with a different secret — nothing is archived, because an unsigned payload is not a lead and storing it would let anyone fill the tenant archive",
-      "pathParams": { "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}", "platform": "meta" },
-      "payload": { "entry": [{ "changes": [{ "value": { "leadgen_id": "unsigned-1" } }] }] },
+      "when": "the signature header is absent, malformed, computed over different bytes, or computed with a different secret \u2014 nothing is archived, because an unsigned payload is not a lead and storing it would let anyone fill the tenant archive",
+      "pathParams": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "platform": "meta"
+      },
+      "payload": {
+        "entry": [
+          {
+            "changes": [
+              {
+                "value": {
+                  "leadgen_id": "unsigned-1"
+                }
+              }
+            ]
+          }
+        ]
+      },
       "expectedStatus": 401,
-      "expectedError": { "code": "INVALID_SIGNATURE" }
+      "expectedError": {
+        "code": "INVALID_SIGNATURE"
+      }
     },
     {
       "name": "An unknown platform is 404",
@@ -111,10 +214,16 @@
       "code": "UNKNOWN_PLATFORM",
       "message": "platform must be one of: META, LINKEDIN, TIKTOK, GOOGLE",
       "when": "the :platform segment names a provider with no registered adapter",
-      "pathParams": { "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}", "platform": "myspace" },
+      "pathParams": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "platform": "myspace"
+      },
       "payload": {},
       "expectedStatus": 404,
-      "expectedError": { "code": "UNKNOWN_PLATFORM" }
+      "expectedError": {
+        "code": "UNKNOWN_PLATFORM"
+      }
     }
-  ]
+  ],
+  "_previouslySkipped": "Was testability:manual + skipReason (provider HMAC, per-tenant secret). Both are now satisfiable: LEAD_FORM_SECRET is configured and computedHeaders signs the canonical JSON body, verified against the live gateway (HTTP 202, signature accepted). Provider-signed webhook: every request must carry a valid HMAC over the EXACT request bytes, computed with a per-tenant "
 }

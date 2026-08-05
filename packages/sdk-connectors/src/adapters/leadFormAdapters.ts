@@ -67,7 +67,25 @@ export interface LeadFormAdapter {
   platform: LeadPlatform;
   /** Header the provider signs with. */
   signatureHeader: string;
-  verifySignature(rawBody: string, header: string | undefined, secret: string): boolean;
+  /**
+   * Literal the provider puts in front of the hex digest, or '' for a bare digest.
+   *
+   * Required rather than optional so that adding an adapter forces an answer. This
+   * used to live inside each verifySignature body, where it was invisible from the
+   * interface: four adapters compared bare hex, Meta expected 'sha256=', and the
+   * only way to learn that prefixes existed at all was to read Meta's code. Getting
+   * it wrong in either direction is silent — a missing prefix rejects every genuine
+   * delivery, an unexpected one accepts a digest the provider never framed that way.
+   */
+  signaturePrefix: string;
+  /**
+   * Only for a provider whose scheme is not "HMAC-SHA256 hex, optionally prefixed".
+   * Left undefined, the shared verifier is used, which is what every current
+   * provider needs. Kept as an escape hatch because these are external contracts we
+   * do not control — a provider that switches to, say, a timestamped signing string
+   * must be able to express that without reshaping the interface.
+   */
+  verifySignature?(rawBody: string, header: string | undefined, secret: string): boolean;
   /** The provider's own delivery id, or null when the payload has none. */
   extractSourceEventId(payload: unknown): string | null;
   normalize(payload: unknown): NormalizeResult;
@@ -91,6 +109,41 @@ function safeEqual(a: string, b: string): boolean {
 
 function hmacHex(body: string, secret: string): string {
   return createHmac('sha256', secret).update(body, 'utf8').digest('hex');
+}
+
+/**
+ * The signature check every current provider needs: HMAC-SHA256 hex over the exact
+ * request bytes, compared in constant time, behind an optional literal prefix.
+ *
+ * A header that does not carry the expected prefix is rejected before comparison
+ * rather than being tried as a bare digest. It is not merely a mismatch: a delivery
+ * framed differently from what the provider sends is not that provider's delivery,
+ * and quietly accepting it would let a caller choose its own framing.
+ */
+export function verifyHmacSignature(
+  rawBody: string,
+  header: string | undefined,
+  secret: string,
+  prefix: string,
+): boolean {
+  if (!header) return false;
+  if (prefix) {
+    if (!header.startsWith(prefix)) return false;
+    return safeEqual(header.slice(prefix.length), hmacHex(rawBody, secret));
+  }
+  return safeEqual(header, hmacHex(rawBody, secret));
+}
+
+/** The verifier for an adapter: its own, when it declares one, else the shared check. */
+export function verifyAdapterSignature(
+  adapter: LeadFormAdapter,
+  rawBody: string,
+  header: string | undefined,
+  secret: string,
+): boolean {
+  return adapter.verifySignature
+    ? adapter.verifySignature(rawBody, header, secret)
+    : verifyHmacSignature(rawBody, header, secret, adapter.signaturePrefix);
 }
 
 function asRecord(v: unknown): Record<string, unknown> {
@@ -146,12 +199,9 @@ function requirePermission(
 export const metaAdapter: LeadFormAdapter = {
   platform: 'META',
   signatureHeader: 'x-hub-signature-256',
-  verifySignature(rawBody, header, secret) {
-    // Meta prefixes with 'sha256='. A payload whose header lacks the prefix is not simply
-    // a mismatch — it is not a Meta delivery at all.
-    if (!header || !header.startsWith('sha256=')) return false;
-    return safeEqual(header.slice('sha256='.length), hmacHex(rawBody, secret));
-  },
+  // Meta frames the digest as 'sha256=<hex>'. A delivery without that prefix is not
+  // simply a mismatch — it is not a Meta delivery at all.
+  signaturePrefix: 'sha256=',
   extractSourceEventId(payload) {
     const p = asRecord(payload);
     const entry = Array.isArray(p.entry) ? asRecord(p.entry[0]) : {};
@@ -221,10 +271,7 @@ export const metaAdapter: LeadFormAdapter = {
 export const linkedInAdapter: LeadFormAdapter = {
   platform: 'LINKEDIN',
   signatureHeader: 'x-li-signature',
-  verifySignature(rawBody, header, secret) {
-    if (!header) return false;
-    return safeEqual(header, hmacHex(rawBody, secret));
-  },
+  signaturePrefix: '',
   extractSourceEventId(payload) {
     const p = asRecord(payload);
     return str(p.leadId) ?? str(p.id);
@@ -287,10 +334,7 @@ export const linkedInAdapter: LeadFormAdapter = {
 export const tiktokAdapter: LeadFormAdapter = {
   platform: 'TIKTOK',
   signatureHeader: 'x-tt-signature',
-  verifySignature(rawBody, header, secret) {
-    if (!header) return false;
-    return safeEqual(header, hmacHex(rawBody, secret));
-  },
+  signaturePrefix: '',
   extractSourceEventId(payload) {
     const p = asRecord(payload);
     return str(p.lead_id) ?? str(p.event_id);
@@ -344,10 +388,7 @@ export const tiktokAdapter: LeadFormAdapter = {
 export const googleAdapter: LeadFormAdapter = {
   platform: 'GOOGLE',
   signatureHeader: 'x-goog-signature',
-  verifySignature(rawBody, header, secret) {
-    if (!header) return false;
-    return safeEqual(header, hmacHex(rawBody, secret));
-  },
+  signaturePrefix: '',
   extractSourceEventId(payload) {
     const p = asRecord(payload);
     return str(p.lead_id) ?? str(p.gcl_id);
@@ -449,10 +490,7 @@ export const WEB_EVENT_KINDS: WebEventKind[] = ['demo_request', 'pricing_enquiry
 export const websiteAdapter: LeadFormAdapter = {
   platform: 'WEBSITE',
   signatureHeader: 'x-projex-signature',
-  verifySignature(rawBody, header, secret) {
-    if (!header) return false;
-    return safeEqual(header, hmacHex(rawBody, secret));
-  },
+  signaturePrefix: '',
   extractSourceEventId(payload) {
     const p = asRecord(payload);
     return str(p.event_id) ?? str(p.submission_id) ?? str(p.session_id);

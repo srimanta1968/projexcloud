@@ -18,7 +18,8 @@
         "geo_winner_address_id": "",
         "ADMIN_OPS_TOKEN": "dev-admin-token-please-change",
         "scim_bearer_token": "test-scim-bearer-token",
-        "data_credits_capability_key": "validate.phone-smoke"
+        "data_credits_capability_key": "validate.phone-smoke",
+        "lead_form_secret": "local-dev-lead-form-secret"
       },
       "portals": {
         "workspace": {
@@ -38,7 +39,7 @@
     "staging": {
       "baseUrl": "https://cloud.projexlight.com",
       "apiUrl": "https://cloud.projexlight.com",
-      "description": "ProjexCloud EC2 deployment (cloud.projexlight.com) — staging/QA target",
+      "description": "ProjexCloud EC2 deployment (cloud.projexlight.com) \u2014 staging/QA target",
       "variables": {
         "SMOKE_API_TOKEN": "",
         "smoke_widget_id": "",
@@ -89,7 +90,7 @@
           "authRealm": "projexlight"
         }
       },
-      "_status": "NEEDS INPUT: set ADMIN_OPS_TOKEN for production; NEEDS INPUT: set scim_bearer_token for production; NEEDS INPUT: set data_credits_capability_key for production — it names a row in data_credits.capability seeded by tests/setup_scripts/data_credits_catalog.sql, which is a QA fixture and is deliberately NOT applied to a real production stack, so there is no correct value to inherit here"
+      "_status": "NEEDS INPUT: set ADMIN_OPS_TOKEN for production; NEEDS INPUT: set scim_bearer_token for production; NEEDS INPUT: set data_credits_capability_key for production \u2014 it names a row in data_credits.capability seeded by tests/setup_scripts/data_credits_catalog.sql, which is a QA fixture and is deliberately NOT applied to a real production stack, so there is no correct value to inherit here"
     }
   },
   "activeEnvironment": "development",
@@ -380,6 +381,48 @@
         "platformAdmin"
       ],
       "_status": "Field ids verified against packages/design-system login form (id=login-email / id=login-password), shared by workspace, tenantAdmin and console."
+    }
+  },
+  "computedHeaders": {
+    "x-hub-signature-256": {
+      "algorithm": "hmac-sha256",
+      "secret": "{{var:lead_form_secret}}",
+      "over": "raw_body",
+      "encoding": "hex",
+      "prefix": "sha256=",
+      "match": "/api/connectors/lead-forms"
+    },
+    "x-li-signature": {
+      "algorithm": "hmac-sha256",
+      "secret": "{{var:lead_form_secret}}",
+      "over": "raw_body",
+      "encoding": "hex",
+      "prefix": "",
+      "match": "/api/connectors/lead-forms"
+    },
+    "x-tt-signature": {
+      "algorithm": "hmac-sha256",
+      "secret": "{{var:lead_form_secret}}",
+      "over": "raw_body",
+      "encoding": "hex",
+      "prefix": "",
+      "match": "/api/connectors/lead-forms"
+    },
+    "x-goog-signature": {
+      "algorithm": "hmac-sha256",
+      "secret": "{{var:lead_form_secret}}",
+      "over": "raw_body",
+      "encoding": "hex",
+      "prefix": "",
+      "match": "/api/connectors/lead-forms"
+    },
+    "x-projex-signature": {
+      "algorithm": "hmac-sha256",
+      "secret": "{{var:lead_form_secret}}",
+      "over": "raw_body",
+      "encoding": "hex",
+      "prefix": "",
+      "match": "/api/connectors/lead-forms"
     }
   }
 }

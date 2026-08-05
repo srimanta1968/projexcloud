@@ -11,7 +11,7 @@
   "endpoint": "/api/assignment/simulate",
   "method": "POST",
   "expectedStatus": 200,
-  "description": "Replays recorded decisions through a candidate rule VERSION and reports what would have changed: per-persona actual versus candidate, the outcome mix, the subjects whose destination moves, and a skew audit naming both over-allocation and starvation. SIDE EFFECT FREE, and it proves it rather than claiming it - the response carries a side_effects block that must be all zeros (assignments, notifications, clocks, and decisions written, counted from the table before and after). Returns 200, not 201, because nothing was created. QA edge cases: the candidate is evaluated BY VERSION and is never activated - activating a rule set to try it out is the experiment changing production; the EP-335 rotation cursor is read but never advanced; history is replayed as the rules SAW it (the trace records the fields each rule read), so a candidate rule reading a field the history never carried comes out AMBIGUOUS and goes to review rather than being silently defaulted.",
+  "description": "Replays recorded decisions through a candidate rule VERSION and reports what would have changed: per-persona actual versus candidate, the outcome mix, the subjects whose destination moves, and a skew audit naming both over-allocation and starvation. SIDE EFFECT FREE, and it proves it rather than claiming it - the response carries a side_effects block that must be all zeros (assignments, notifications, clocks, and decisions written, counted from the table before and after). Returns 200, not 201, because nothing was created. QA edge cases: the candidate is evaluated BY VERSION and is never activated - activating a rule set to try it out is the experiment changing production; the EP-335 rotation cursor is read but never advanced; history is replayed as the rules SAW it (the trace records the fields each rule read), so a candidate rule reading a field the history never carried comes out AMBIGUOUS and goes to review rather than being silently defaulted. The response also carries a simulation_id: the run is recorded immutably so a routing proposal can cite it and a reviewer can re-open the identical numbers months later via GET /api/assignment/simulations/:simulation_id. Recording the run is not the side effect the guarantee is about - decisions_written still counts assignment.routing_decision only, so an all-zero side_effects block still means nothing was routed.",
   "dependsOn": [
     "POST /api/auth/signup-tenant",
     "POST /api/personas",
@@ -41,7 +41,8 @@
           "subjects_replayed": "number",
           "per_persona": "array",
           "skew": "object",
-          "side_effects": "object"
+          "side_effects": "object",
+          "simulation_id": "string"
         }
       }
     }
@@ -101,5 +102,8 @@
         ]
       }
     }
-  ]
+  ],
+  "captureResponse": {
+    "assignment.simulate.simulation_id": "data.simulation_id"
+  }
 }

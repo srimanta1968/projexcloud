@@ -30,7 +30,9 @@ import {
   accept, AssignmentNotFound, decline, getAssignment, getHistory, InvalidTransition,
   NoBackupDesignated, offer, reassign, ReasonRequired, sweepExpiredOffers,
 } from '../services/lifecycleService';
-import { readRotationState, simulate } from '../services/simulationService';
+import {
+  getSimulationRun, listSimulationRuns, readRotationState, simulate,
+} from '../services/simulationService';
 
 const STRATEGIES: AssignStrategy[] = ['default', 'round_robin', 'fair_share'];
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -401,5 +403,60 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
     // 200 on a POST because nothing was created — and the report carries the proof
     // (side_effects all zero), so a caller can verify the claim rather than trust it.
     reply.code(200).send({ data: report });
+  }));
+
+  /**
+   * Re-open a cited run.
+   *
+   * A simulation_id nobody can resolve is not evidence, and this is the half that makes
+   * it one: a routing change gets proposed on a simulation, approved weeks later and
+   * questioned months after that.
+   */
+  app.get('/api/assignment/simulations/:simulation_id', { preHandler: requireAuth },
+    wrap(async (req, reply) => {
+      const tenant_id = tenantOf(req, reply);
+      if (!tenant_id) return;
+      const { simulation_id } = req.params as { simulation_id: string };
+      if (!UUID_RE.test(simulation_id)) {
+        fail(reply, 400, 'VALIDATION_ERROR', 'simulation_id must be a UUID'); return;
+      }
+      const run = await getSimulationRun(tenant_id, simulation_id);
+      /*
+       * 404, not 403, when the run belongs to somebody else — the query is already
+       * tenant-scoped, so a foreign id and a never-issued one are indistinguishable
+       * here BY DESIGN. Answering "forbidden" would confirm that a simulation with
+       * that id exists somewhere, which is itself the leak.
+       */
+      if (!run) {
+        fail(reply, 404, 'SIMULATION_NOT_FOUND', 'no simulation run with that id for this tenant');
+        return;
+      }
+      reply.code(200).send({ data: run });
+    }),
+  );
+
+  /** The list a reviewer opens before they know which run they want. */
+  app.get('/api/assignment/simulations', { preHandler: requireAuth }, wrap(async (req, reply) => {
+    const tenant_id = tenantOf(req, reply);
+    if (!tenant_id) return;
+    const q = (req.query ?? {}) as Record<string, unknown>;
+
+    let candidate_version: number | undefined;
+    if (q.candidate_version !== undefined && q.candidate_version !== '') {
+      candidate_version = Number(q.candidate_version);
+      if (!Number.isInteger(candidate_version)) {
+        fail(reply, 400, 'VALIDATION_ERROR', 'candidate_version must be an integer'); return;
+      }
+    }
+
+    const runs = await listSimulationRuns({
+      tenant_id,
+      rule_set_name: typeof q.rule_set_name === 'string' && q.rule_set_name ? q.rule_set_name : undefined,
+      candidate_version,
+      limit: q.limit !== undefined ? Number(q.limit) : undefined,
+    });
+    // An empty array, not a 404: a tenant that has run no simulations is a valid state,
+    // not a missing resource.
+    reply.code(200).send({ data: { runs } });
   }));
 }

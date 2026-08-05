@@ -1,6 +1,7 @@
 import { dataService } from '@projexlight/db-runtime';
 import {
   getLeadFormAdapter,
+  verifyAdapterSignature,
   type LeadPlatform,
   type NormalizedLead,
 } from '../adapters/leadFormAdapters';
@@ -65,7 +66,8 @@ export async function ingestLeadForm(input: IngestLeadFormInput): Promise<Ingest
       archived: false,
     };
   }
-  const verified = adapter.verifySignature(
+  const verified = verifyAdapterSignature(
+    adapter,
     input.raw_body,
     input.signature_header,
     input.signing_secret,

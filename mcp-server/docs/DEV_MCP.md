@@ -18,6 +18,7 @@ This guide consolidates everything you need to run, configure, and troubleshoot 
 - [Multi-project support](#multi-project-support)
 - [Logs and observability](#logs-and-observability)
 - [Debugging scenarios](#debugging-scenarios)
+- [Custom headers and variable resolution](#custom-headers-and-variable-resolution)
 - [Cheat sheet](#cheat-sheet)
 
 ---
@@ -629,6 +630,121 @@ curl -X POST http://localhost:8766/api/test/stop
 # Increase timeout for long test runs:
 API_TEST_MAX_WAIT=7200 git push    # 2 hours
 ```
+
+---
+
+## Custom headers and variable resolution
+
+Three programs build a request from the same api definition — the **Dev MCP**
+(from `tests/api_definitions/` on disk), the **Test MCP** (from `api_library`),
+and the **ProjexLight backend** (the UI's quick / chain / workflow / dataset /
+manual modes). They must agree, so header assembly is specified here rather than
+invented per executor. A header configured in one place but honoured in another
+is the worst outcome available: a green local run reads as proof.
+
+### Header layers, in order
+
+A later layer overwrites an earlier one for the same header name.
+
+| # | layer | where it lives | use it for |
+|---|---|---|---|
+| 1 | `defaultHeaders` | test-config, global | `Accept`, `x-api-version` |
+| 2 | `environments[env].headers` | test-config, per env | env-specific keys |
+| 3 | `providers[].headers` | test-config, matched on path/host | third-party integration |
+| 4 | `testCredentials.<role>.headers` | test-config, when the definition sets `requiresRole` | `x-admin-ops-token` |
+| 5 | `headers` | the api definition | endpoint-specific |
+| 6 | `testCases[].headers` | the executing dataset | a negative case overriding the happy path |
+| 7 | `computedHeaders` | test-config | request signatures — runs last, over the final body |
+
+### Worked example — a role-scoped header
+
+An endpoint behind an admin capability. Do **not** hand-write the token into the
+definition; declare the role and let the runner fetch it:
+
+```jsonc
+// tests/config/test-config.json
+"testCredentials": {
+  "admin": { "email": "qa.admin@example.test", "password": "…" }
+}
+```
+
+```jsonc
+// tests/api_definitions/<area>/<endpoint>.json
+{ "requiresRole": ["admin"] }        // and NO Authorization header — see below
+```
+
+The runner logs in once per declared role and injects that identity.
+
+### The mistake this prevents
+
+**A definition-supplied `Authorization` beats the role token.** If you declare
+`requiresRole` *and* set `Authorization` on the dataset, the header wins, the
+role token is never sent, and the endpoint answers **403** — which reads as a
+permissions bug in the API. It is not; it is the definition overriding its own
+role. Declare one or the other, never both.
+
+### Testing the unauthenticated path
+
+A dataset must be able to send **no** `Authorization`. Use `"noAuth": true`, or
+`"Authorization": null`. A dataset expecting `401` that supplies no
+`Authorization` of its own is treated as `noAuth` automatically — handing it a
+valid token would make its assertion impossible to satisfy.
+
+### Signed webhooks
+
+```jsonc
+"computedHeaders": {
+  "x-hub-signature-256": {
+    "algorithm": "hmac-sha256",
+    "secret": "{{var:meta_webhook_secret}}",
+    "over": "raw_body",
+    "prefix": "sha256=",
+    "encoding": "hex"
+  }
+}
+```
+
+Computed **after** the body is final, over the exact bytes sent. Anything that
+edits the body afterwards invalidates the signature.
+
+### Where values come from
+
+`{{var:name}}` resolves most-specific-first: dataset → api →
+`environments[<activeEnvironment>].variables` → global `variables`.
+
+**Secrets belong to an environment, never to global.** A global applies to every
+environment, so a dev secret placed there reaches staging and production.
+
+`{{cache:producer.path}}` is the only correct form for a foreign key — it comes
+from a producer that actually created the record. An unresolved placeholder is
+reported as blocked and never replaced with a generated value: substituting a
+random UUID turns a wiring error into a confusing 404 several endpoints away.
+
+### Negative datasets are never repaired
+
+An executor must not normalise, correct or substitute input for a dataset whose
+`expectedStatus` is 400 or above. Each of these was a real bug in which the
+harness deleted the thing under test and then blamed the endpoint:
+
+| repair | what it destroyed |
+|---|---|
+| credential substitution on login | "reject a wrong password" received the **correct** password → 200 |
+| path params read from `testCases[0]` | "reject a non-UUID id" received a **valid** id → 200 |
+| query params read from `testCases[0]` | negative filters were never sent |
+| `from`/`to` reordering | "reject a window whose end precedes its start" was **reordered into a valid range** → 200 |
+
+If a negative dataset fails, check what was actually sent before concluding the
+API is wrong. `run-dev-tests.sh --datasets all` reports each dataset's request.
+
+### Verifying
+
+```bash
+./run-dev-tests.sh --datasets all          # every dataset, not just the producer
+./run-dev-tests.sh --status                # summary, failures separated from skips
+```
+
+The run log names the layer that supplied each header, so a surprising identity
+can be traced to the layer that set it rather than guessed at.
 
 ---
 

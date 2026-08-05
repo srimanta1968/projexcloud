@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { randomUUID, createHmac } from 'crypto';
 import { initPool, dataService, closeAllPools } from '@projexlight/db-runtime';
-import { websiteAdapter, getLeadFormAdapter, LEAD_PLATFORMS } from '../src/adapters/leadFormAdapters';
+import { websiteAdapter, getLeadFormAdapter, verifyAdapterSignature, LEAD_PLATFORMS } from '../src/adapters/leadFormAdapters';
 
 const PG = {
   host: process.env.TEST_PGHOST || 'localhost',
@@ -92,10 +92,10 @@ describe('the website/chat adapter shares the social contract', () => {
 
   it('verifies signatures exactly as the social adapters do', () => {
     const body = JSON.stringify({ a: 1 });
-    expect(websiteAdapter.verifySignature(body, sign(body), SECRET)).toBe(true);
-    expect(websiteAdapter.verifySignature(body, sign('other'), SECRET)).toBe(false);
-    expect(websiteAdapter.verifySignature(body, undefined, SECRET)).toBe(false);
-    expect(() => websiteAdapter.verifySignature(body, 'short', SECRET)).not.toThrow();
+    expect(verifyAdapterSignature(websiteAdapter, body, sign(body), SECRET)).toBe(true);
+    expect(verifyAdapterSignature(websiteAdapter, body, sign('other'), SECRET)).toBe(false);
+    expect(verifyAdapterSignature(websiteAdapter, body, undefined, SECRET)).toBe(false);
+    expect(() => verifyAdapterSignature(websiteAdapter, body, 'short', SECRET)).not.toThrow();
   });
 });
 
@@ -258,7 +258,7 @@ describe('idempotency and archiving match the social contract (AC3, AC4)', () =>
     expect(row!.outcome).toBe('rejected');
     // Byte-exact, so the signature remains re-verifiable for audit.
     expect(row!.raw_body).toBe(raw);
-    expect(websiteAdapter.verifySignature(row!.raw_body, sign(row!.raw_body), SECRET)).toBe(true);
+    expect(verifyAdapterSignature(websiteAdapter, row!.raw_body, sign(row!.raw_body), SECRET)).toBe(true);
   });
 
   maybe('the archived permission block survives verbatim through the round trip', async () => {

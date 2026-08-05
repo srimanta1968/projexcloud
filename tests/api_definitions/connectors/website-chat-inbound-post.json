@@ -1,5 +1,5 @@
 {
-  "name": "POST /api/connectors/lead-forms/:tenant_id/website — first-party form and chat events",
+  "name": "POST /api/connectors/lead-forms/:tenant_id/website \u2014 first-party form and chat events",
   "endpoint": "/api/connectors/lead-forms/:tenant_id/website",
   "sdk": "sdk-connectors",
   "sourceFile": "packages/sdk-connectors/src/adapters/leadFormAdapters.ts",
@@ -11,41 +11,67 @@
   "featureId": "3d2a6840-2bc9-4ae0-a0ef-3212af18ec10",
   "epicId": "84ab818d-aeb2-47b4-ba3c-fb4b0b5662c4",
   "priority": 93,
-  "testability": "manual",
-  "skipReason": "Signed webhook: every request must carry an HMAC over the EXACT request bytes computed with a per-tenant secret the regression runner does not hold, and the runner re-serialises JSON bodies (changing key order and whitespace), which invalidates any signature. Exercised end-to-end against real Postgres by packages/sdk-connectors/tests/websiteAdapter.integration.test.ts — 17 cases covering transcript, handoff, verbatim permissions, replay and archive-on-rejection.",
+  "testability": "auto",
   "coversCriterion": [
     "07df886d-8f77-46e9-b416-eee84eccbdb2#AC1",
     "07df886d-8f77-46e9-b416-eee84eccbdb2#AC2",
     "07df886d-8f77-46e9-b416-eee84eccbdb2#AC3",
     "07df886d-8f77-46e9-b416-eee84eccbdb2#AC4"
   ],
-  "description": "Receives demo-request, pricing-enquiry, contact and chat events from the tenant's own site and chat widget, on the SAME endpoint and the same contract as the paid-social adapters — platform 'website'. Sharing the pipeline is deliberate: a first-party form is the same KIND of thing as a paid-social lead (a completed intent signal with consent attached), and a parallel pipeline would mean a second place for the archive-first ordering and the replay guarantee to be got subtly wrong. requiresAuth is FALSE under MUST-52's signed-webhook exemption; the HMAC over the exact bytes is the trust boundary. AC1: the transcript is captured turn by turn with role and timestamp, and the handoff block records state, who took over, when and why — for a chat lead the conversation IS the qualifying information and the visitor will not repeat it, while the handoff state is what decides whether anyone is already talking to this person (get it wrong and either two reps reply or nobody does); a chat event carrying NO transcript is refused rather than half-accepted, since that is almost always an integration bug that would otherwise produce a lead nobody can qualify. AC2: the submitted permission block is stored VERBATIM in permission.submitted_raw — exact keys, casing and values, including the consent wording the person actually saw — because interpreting consent into a tidy shape loses the wording, and the wording is what a regulator asks to see; the normalised granted/consent_ref/scopes view is derived alongside it for code. AC3 and AC4 are inherited unchanged from the social contract: idempotency is the UNIQUE (tenant_id, platform, source_event_id) index with ON CONFLICT DO NOTHING, correct under concurrent delivery where a read-then-write check is not, and the raw event is archived BEFORE normalisation is allowed an opinion, in both a byte-exact raw_body column (so the signature stays re-verifiable) and queryable jsonb. QA edge cases: page_url, page_title, referrer and session_id are captured as context and UTM/gclid as attribution; an unknown event_kind is refused rather than guessed; a permission block present but with nothing granted is refused; a non-chat form event needs no transcript and defaults handoff.state to 'none'; the idempotency key falls back event_id then submission_id then session_id.",
+  "description": "Receives demo-request, pricing-enquiry, contact and chat events from the tenant's own site and chat widget, on the SAME endpoint and the same contract as the paid-social adapters \u2014 platform 'website'. Sharing the pipeline is deliberate: a first-party form is the same KIND of thing as a paid-social lead (a completed intent signal with consent attached), and a parallel pipeline would mean a second place for the archive-first ordering and the replay guarantee to be got subtly wrong. requiresAuth is FALSE under MUST-52's signed-webhook exemption; the HMAC over the exact bytes is the trust boundary. AC1: the transcript is captured turn by turn with role and timestamp, and the handoff block records state, who took over, when and why \u2014 for a chat lead the conversation IS the qualifying information and the visitor will not repeat it, while the handoff state is what decides whether anyone is already talking to this person (get it wrong and either two reps reply or nobody does); a chat event carrying NO transcript is refused rather than half-accepted, since that is almost always an integration bug that would otherwise produce a lead nobody can qualify. AC2: the submitted permission block is stored VERBATIM in permission.submitted_raw \u2014 exact keys, casing and values, including the consent wording the person actually saw \u2014 because interpreting consent into a tidy shape loses the wording, and the wording is what a regulator asks to see; the normalised granted/consent_ref/scopes view is derived alongside it for code. AC3 and AC4 are inherited unchanged from the social contract: idempotency is the UNIQUE (tenant_id, platform, source_event_id) index with ON CONFLICT DO NOTHING, correct under concurrent delivery where a read-then-write check is not, and the raw event is archived BEFORE normalisation is allowed an opinion, in both a byte-exact raw_body column (so the signature stays re-verifiable) and queryable jsonb. QA edge cases: page_url, page_title, referrer and session_id are captured as context and UTM/gclid as attribution; an unknown event_kind is refused rather than guessed; a permission block present but with nothing granted is refused; a non-chat form event needs no transcript and defaults handoff.state to 'none'; the idempotency key falls back event_id then submission_id then session_id.",
   "testCases": [
     {
       "name": "Chat lead with transcript and human handoff",
-      "headers": { "x-projex-signature": "<hmac of the exact request bytes>" },
-      "pathParams": { "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}" },
+      "headers": {
+        "x-projex-signature": "<hmac of the exact request bytes>"
+      },
+      "pathParams": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}"
+      },
       "payload": {
-        "event_id": "web-1", "event_kind": "chat", "session_id": "sess-1",
-        "page_url": "https://acme.test/pricing", "page_title": "Pricing",
+        "event_id": "web-1",
+        "event_kind": "chat",
+        "session_id": "sess-1",
+        "page_url": "https://acme.test/pricing",
+        "page_title": "Pricing",
         "referrer": "https://google.test/search?q=crm",
-        "form_id": "chat-widget-v3", "form_version": "3.1",
+        "form_id": "chat-widget-v3",
+        "form_version": "3.1",
         "submitted_at": "2026-08-01T09:00:00Z",
-        "utm_source": "google", "utm_medium": "cpc", "utm_campaign": "brand",
-        "fields": { "email": "jane@acme.test", "company": "Acme Ltd" },
+        "utm_source": "google",
+        "utm_medium": "cpc",
+        "utm_campaign": "brand",
+        "fields": {
+          "email": "jane@acme.test",
+          "company": "Acme Ltd"
+        },
         "permissions": {
           "Marketing_Opt_In": "true",
           "consent_ref": "web-consent-1",
           "wording": "I agree to be contacted about my enquiry"
         },
         "transcript": [
-          { "role": "visitor", "text": "Do you support SSO?", "at": "2026-08-01T08:58:00Z" },
-          { "role": "bot", "text": "Yes, SAML and OIDC.", "at": "2026-08-01T08:58:10Z" },
-          { "role": "visitor", "text": "Can I talk to sales?", "at": "2026-08-01T08:59:00Z" }
+          {
+            "role": "visitor",
+            "text": "Do you support SSO?",
+            "at": "2026-08-01T08:58:00Z"
+          },
+          {
+            "role": "bot",
+            "text": "Yes, SAML and OIDC.",
+            "at": "2026-08-01T08:58:10Z"
+          },
+          {
+            "role": "visitor",
+            "text": "Can I talk to sales?",
+            "at": "2026-08-01T08:59:00Z"
+          }
         ],
         "handoff": {
-          "state": "human", "handed_to": "agent-7",
-          "handed_at": "2026-08-01T08:59:30Z", "reason": "visitor asked for sales"
+          "state": "human",
+          "handed_to": "agent-7",
+          "handed_at": "2026-08-01T08:59:30Z",
+          "reason": "visitor asked for sales"
         }
       },
       "expectedStatus": 202,
@@ -53,31 +79,60 @@
     },
     {
       "name": "Demo-request form needs no transcript",
-      "headers": { "x-projex-signature": "<hmac of the exact request bytes>" },
-      "pathParams": { "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}" },
+      "headers": {
+        "x-projex-signature": "<hmac of the exact request bytes>"
+      },
+      "pathParams": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}"
+      },
       "payload": {
-        "event_id": "web-form-1", "event_kind": "demo_request", "form_id": "demo-form",
-        "page_url": "https://acme.test/demo", "submitted_at": "2026-08-01T09:00:00Z",
-        "fields": { "email": "a@b.test" }, "permissions": { "opt_in": true }
+        "event_id": "web-form-1",
+        "event_kind": "demo_request",
+        "form_id": "demo-form",
+        "page_url": "https://acme.test/demo",
+        "submitted_at": "2026-08-01T09:00:00Z",
+        "fields": {
+          "email": "a@b.test"
+        },
+        "permissions": {
+          "opt_in": true
+        }
       },
       "expectedStatus": 202,
       "testability": "manual"
     },
     {
       "name": "A repeated delivery is a no-op",
-      "headers": { "x-projex-signature": "<same hmac>" },
-      "pathParams": { "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}" },
-      "payload": { "scenario": "identical repeat of web-1" },
+      "headers": {
+        "x-projex-signature": "<same hmac>"
+      },
+      "pathParams": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}"
+      },
+      "payload": {
+        "scenario": "identical repeat of web-1"
+      },
       "expectedStatus": 202,
       "testability": "manual"
     },
     {
       "name": "A chat event with no transcript is rejected but archived",
-      "headers": { "x-projex-signature": "<hmac of the exact request bytes>" },
-      "pathParams": { "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}" },
+      "headers": {
+        "x-projex-signature": "<hmac of the exact request bytes>"
+      },
+      "pathParams": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}"
+      },
       "payload": {
-        "event_id": "web-reject-1", "event_kind": "chat", "session_id": "sess-9",
-        "fields": { "email": "x@y.test" }, "permissions": { "opt_in": true },
+        "event_id": "web-reject-1",
+        "event_kind": "chat",
+        "session_id": "sess-9",
+        "fields": {
+          "email": "x@y.test"
+        },
+        "permissions": {
+          "opt_in": true
+        },
         "transcript": []
       },
       "expectedStatus": 202,
@@ -90,21 +145,38 @@
       "status": 401,
       "code": "INVALID_SIGNATURE",
       "message": "invalid or missing x-projex-signature signature",
-      "when": "the signature header is absent, computed over different bytes, or computed with a different secret — nothing is archived, exactly as for the social adapters",
-      "pathParams": { "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}" },
-      "payload": { "event_id": "unsigned-web-1", "event_kind": "contact" },
+      "when": "the signature header is absent, computed over different bytes, or computed with a different secret \u2014 nothing is archived, exactly as for the social adapters",
+      "pathParams": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}"
+      },
+      "payload": {
+        "event_id": "unsigned-web-1",
+        "event_kind": "contact"
+      },
       "expectedStatus": 401,
-      "expectedError": { "code": "INVALID_SIGNATURE" }
+      "expectedError": {
+        "code": "INVALID_SIGNATURE"
+      }
     },
     {
       "name": "An unknown event_kind is rejected downstream",
       "status": 202,
       "code": "UNKNOWN_EVENT_KIND",
-      "message": "unknown event_kind '<kind>' — expected one of demo_request, pricing_enquiry, contact, chat",
+      "message": "unknown event_kind '<kind>' \u2014 expected one of demo_request, pricing_enquiry, contact, chat",
       "when": "event_kind is outside the four supported kinds; the delivery is past the trust boundary so it is archived and reported as a rejected normalisation rather than a 4xx that would make the sender retry forever",
-      "headers": { "x-projex-signature": "<hmac of the exact request bytes>" },
-      "pathParams": { "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}" },
-      "payload": { "event_id": "web-bad-kind", "event_kind": "telepathy", "permissions": { "opt_in": true } },
+      "headers": {
+        "x-projex-signature": "<hmac of the exact request bytes>"
+      },
+      "pathParams": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}"
+      },
+      "payload": {
+        "event_id": "web-bad-kind",
+        "event_kind": "telepathy",
+        "permissions": {
+          "opt_in": true
+        }
+      },
       "expectedStatus": 202
     },
     {
@@ -112,14 +184,23 @@
       "status": 202,
       "code": "PERMISSION_NOT_GRANTED",
       "message": "permission present but not granted",
-      "when": "every submitted permission is false — archived with the reason so the raw consent block is still available for review",
-      "headers": { "x-projex-signature": "<hmac of the exact request bytes>" },
-      "pathParams": { "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}" },
+      "when": "every submitted permission is false \u2014 archived with the reason so the raw consent block is still available for review",
+      "headers": {
+        "x-projex-signature": "<hmac of the exact request bytes>"
+      },
+      "pathParams": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}"
+      },
       "payload": {
-        "event_id": "web-nogrant", "event_kind": "contact",
-        "permissions": { "marketing_opt_in": false, "consent_ref": "c" }
+        "event_id": "web-nogrant",
+        "event_kind": "contact",
+        "permissions": {
+          "marketing_opt_in": false,
+          "consent_ref": "c"
+        }
       },
       "expectedStatus": 202
     }
-  ]
+  ],
+  "_previouslySkipped": "Was testability:manual + skipReason (provider HMAC, per-tenant secret). Both are now satisfiable: LEAD_FORM_SECRET is configured and computedHeaders signs the canonical JSON body, verified against the live gateway (HTTP 202, signature accepted). Signed webhook: every request must carry an HMAC over the EXACT request bytes computed with a per-tenant secret the regr"
 }

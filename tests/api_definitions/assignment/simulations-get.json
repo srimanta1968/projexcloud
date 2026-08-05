@@ -1,0 +1,67 @@
+{
+  "sdk": "sdk-assignment",
+  "sourceFile": "packages/sdk-assignment/src/server/routes.ts",
+  "requiresAuth": true,
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "epicId": "9b2cd904-e273-4e36-9523-e21520971508",
+  "featureId": "49c3d6db-cbc3-4e31-bc21-b52f04006f0d",
+  "taskId": "7d7ab65f-3854-4931-9daa-f139cb47c208",
+  "priority": 16,
+  "testability": "auto",
+  "name": "GET /api/assignment/simulations - List recorded simulation runs",
+  "endpoint": "/api/assignment/simulations",
+  "method": "GET",
+  "expectedStatus": 200,
+  "description": "The list a reviewer opens before they know which simulation_id they want: this tenant's recorded runs, newest first, each row a summary (simulation_id, candidate_version, rule_set_name, subjects_replayed, created_at) rather than the whole report - a full report per row would make the common case, browsing, pay for the rare case, reading one. Filters narrow to a rule set by name and to one candidate_version, which is how the question is actually asked: show me every simulation of the version we shipped. QA edge cases: results are tenant-scoped, so another tenant's runs never appear regardless of filter; a tenant with no runs gets 200 and an empty array, not 404, because no simulations is a valid state and not a missing resource; limit is clamped to a 1-500 range so a caller cannot ask for the whole table; rule_set_name and candidate_version are independent and combine; an unknown rule_set_name yields an empty array rather than an error, because a name that matched nothing is an answer.",
+  "dependsOn": [
+    "POST /api/auth/signup-tenant",
+    "POST /api/personas",
+    "POST /api/coverage/schedules",
+    "POST /api/assignment/routes",
+    "POST /api/assignment/route",
+    "POST /api/assignment/simulate"
+  ],
+  "fieldEnums": {
+    "limit": [
+      "1",
+      "50",
+      "500"
+    ]
+  },
+  "testCases": [
+    {
+      "name": "The tenant's runs come back newest first",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "queryParams": {
+        "rule_set_name": "{{cache:assignment.routes.publish.name}}",
+        "candidate_version": "{{cache:assignment.routes.publish.version}}",
+        "limit": 50
+      },
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "data": {
+          "runs": "array"
+        }
+      }
+    }
+  ],
+  "errorCases": [
+    {
+      "name": "Unauthenticated is refused by the default-deny gate",
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "missing or invalid tenant token",
+      "when": "no valid tenant Bearer token or scoped API key on the request",
+      "expectedStatus": 401
+    },
+    {
+      "status": 400,
+      "code": "VALIDATION_ERROR",
+      "message": "candidate_version must be an integer",
+      "when": "candidate_version is supplied but is not parseable as an integer",
+      "reproducible": false
+    }
+  ]
+}

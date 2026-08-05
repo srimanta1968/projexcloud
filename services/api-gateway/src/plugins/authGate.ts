@@ -106,10 +106,31 @@ const SCIM_PREFIX = '/scim/';
  *  Scoped to the /ack leaf only; other /api/commands/* routes stay tenant-JWT gated. */
 const COMMAND_ACK = /^\/api\/commands\/[^/]+\/ack$/;
 
+/**
+ * Provider lead-form deliveries: /api/connectors/lead-forms/:tenant_id/:platform.
+ *
+ * Meta, LinkedIn, TikTok, Google and the website widget POST here and none of them
+ * carries a tenant JWT — the delivery is authenticated by an HMAC over the request
+ * bytes, verified in the handler, which answers 401 InvalidSignature before storing
+ * anything. Without this the default-deny gate rejects every provider with "Missing
+ * bearer token" and the whole ingestion path is unreachable; the sibling webhooks
+ * (/api/connectors/inbound/, slack events, deliverability, notifications, voice) are
+ * all already allowlisted, and this one was simply missed.
+ *
+ * A regex, NOT a prefix, and the platform segment is enumerated: the same base path
+ * also serves GET /:tenant_id (list this tenant's lead events) and
+ * POST /:tenant_id/events/:event_id/reprocess, both of which are tenant-authenticated
+ * reads/writes. A '/api/connectors/lead-forms/' prefix would make the whole archive
+ * public, which is a far worse bug than the one being fixed.
+ */
+const LEAD_FORM_WEBHOOK =
+  /^\/api\/connectors\/lead-forms\/[^/]+\/(?:meta|linkedin|tiktok|google|website)$/i;
+
 export function isPublic(pathname: string): boolean {
   if (PUBLIC_EXACT.has(pathname)) return true;
   if (isHealth(pathname)) return true;
   if (OAUTH_CALLBACK.test(pathname)) return true;
+  if (LEAD_FORM_WEBHOOK.test(pathname)) return true;
   for (const p of PUBLIC_PREFIX) if (pathname.startsWith(p)) return true;
   return false;
 }

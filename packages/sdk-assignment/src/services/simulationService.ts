@@ -20,6 +20,27 @@ import { route, type RoutingOutcome } from './routingService';
  * cursor, and the cursor is deliberately READ rather than advanced — advancing it
  * would be exactly the side effect this file exists to avoid, and would also skew the
  * real rotation for everybody the moment somebody ran a simulation.
+ *
+ * THE RUN IS RECORDED, and that is not a contradiction. `assignment.simulation_run`
+ * gets one immutable row per call so a proposal can cite the evidence it was approved
+ * on. The zero-side-effect guarantee is about ROUTING — nothing is assigned, notified,
+ * clocked, or written to routing_decision — and side_effects still proves precisely
+ * that, by counting routing_decision rows before and after. Recording that a question
+ * was asked does not answer it.
+ *
+ * WHAT THIS DOES NOT PROJECT: SLA OUTCOMES.
+ *
+ * The report compares WHERE work lands — counts per persona, the outcome mix, and the
+ * skew audit. It says nothing about whether a candidate rule set would breach fewer
+ * SLAs, and there is deliberately no breaches_before/breaches_after field to fill in.
+ * Consumers building a "this reduces breaches" case must NOT infer it from these
+ * numbers: a rule set that distributes perfectly evenly can breach more, because a
+ * breach is a function of the clock, the calendar and the policy attached to each
+ * subject — none of which this replay reads. Doing it honestly means replaying
+ * sdk-sla's clock arithmetic per subject against the candidate assignee, which is a
+ * separate feature and not something a caller can approximate from per_persona.
+ *
+ * Until that exists: report distribution, and say distribution.
  */
 
 export interface SimulationSinks {
@@ -41,8 +62,22 @@ export function getSimulationSinks(): SimulationSinks | null {
 
 export interface PersonaComparison {
   persona_id: string;
+  /**
+   * COUNTS, not shares. The number of replayed subjects this persona was actually
+   * given, under the rules that were in force at the time.
+   *
+   * Spelled out because the denominator is not obvious and every consumer has to pick
+   * one: these do NOT sum to subjects_replayed. A subject that went to REVIEW,
+   * UNROUTABLE, or to a FALLBACK with no persona has no owner to attribute, so it is
+   * counted in outcome_shift and in NOBODY's per_persona entry. Divide by
+   * subjects_replayed and you are computing "share of all subjects"; divide by the sum
+   * of actual[] and you are computing "share of subjects that found an owner". Both are
+   * legitimate questions and they give different numbers.
+   */
   actual: number;
+  /** Same count, under the candidate rules. Same denominator caveat as `actual`. */
   candidate: number;
+  /** candidate - actual. Positive means the candidate sends this persona MORE work. */
   delta: number;
 }
 
@@ -62,6 +97,14 @@ export interface SkewAudit {
 }
 
 export interface SimulationReport {
+  /**
+   * The RUN, not the rules. Persisted to assignment.simulation_run and immutable, so a
+   * routing proposal can cite this id and a reviewer can re-open the exact numbers
+   * months later. candidate_version identifies the RULES — two runs of the same version
+   * over different windows or candidate pools are different evidence with the same
+   * version number, which is why citing the version alone was never enough.
+   */
+  simulation_id: string;
   candidate_version: number;
   subjects_replayed: number;
   /** Per persona: what actually happened vs what the candidate would have done. */
@@ -189,20 +232,113 @@ export async function simulate(input: SimulateInput): Promise<SimulationReport> 
   const decisionsAfter = await countDecisions(input.tenant_id);
   const per_persona = [...per.values()].map((p) => ({ ...p, delta: p.candidate - p.actual }))
     .sort((a, b) => b.candidate - a.candidate);
+  const skew_tolerance = input.skew_tolerance ?? 0.5;
 
-  return {
+  const body = {
     candidate_version: input.candidate_version,
     subjects_replayed: history.length,
     per_persona,
     outcome_shift,
     changed,
-    skew: auditSkew(per_persona, input.candidate_persona_ids, input.skew_tolerance ?? 0.5),
+    skew: auditSkew(per_persona, input.candidate_persona_ids, skew_tolerance),
     side_effects: {
       ...counted,
-      // Counted from the table, not assumed: the dry_run flag could regress.
+      /*
+       * Counted from the table, not assumed: the dry_run flag could regress. Note the
+       * count is over assignment.routing_decision ONLY — recording the run itself in
+       * simulation_run below is not a routing effect and must not show up here, or the
+       * number stops meaning "nothing was routed" and starts meaning nothing at all.
+       */
       decisions_written: decisionsAfter - decisionsBefore,
     },
   };
+
+  const simulation_id = await recordRun(input, body, skew_tolerance);
+  return { simulation_id, ...body };
+}
+
+/**
+ * Persist the run and return its id.
+ *
+ * The inputs are stored ALONGSIDE the report rather than folded into it: the report is
+ * the answer and these are the question, and an answer whose question was discarded can
+ * be believed but never checked. `report` holds the body verbatim, denormalised on
+ * purpose — re-deriving it later would replay against history and rules that have since
+ * moved, which is the exact failure this table exists to prevent.
+ */
+async function recordRun(
+  input: SimulateInput,
+  body: Omit<SimulationReport, 'simulation_id'>,
+  skew_tolerance: number,
+): Promise<string> {
+  const row = await dataService.one<{ simulation_id: string }>(
+    `INSERT INTO assignment.simulation_run
+       (tenant_id, candidate_version, rule_set_name, window_from, window_to,
+        candidate_persona_ids, skew_tolerance, subjects_replayed, report)
+     VALUES ($1, $2, $3, $4, $5, $6::uuid[], $7, $8, $9::jsonb)
+     RETURNING simulation_id`,
+    [
+      input.tenant_id,
+      input.candidate_version,
+      input.rule_set_name ?? null,
+      input.from ?? null,
+      input.to ?? null,
+      input.candidate_persona_ids,
+      skew_tolerance,
+      body.subjects_replayed,
+      JSON.stringify(body),
+    ],
+  );
+  if (!row) {
+    // The report is worthless as evidence if nobody can reach it again, so a failed
+    // record fails the call rather than handing back an un-citable body.
+    throw new Error('simulate: the run could not be recorded, so the report has no citable id');
+  }
+  return row.simulation_id;
+}
+
+/** Re-open a recorded run by the id a proposal cited. */
+export async function getSimulationRun(
+  tenant_id: string, simulation_id: string,
+): Promise<(SimulationReport & { created_at: Date }) | null> {
+  const row = await dataService.one<{
+    simulation_id: string; report: Omit<SimulationReport, 'simulation_id'>; created_at: Date;
+  }>(
+    `SELECT simulation_id, report, created_at
+       FROM assignment.simulation_run
+      WHERE tenant_id = $1 AND simulation_id = $2`,
+    [tenant_id, simulation_id],
+  );
+  if (!row) return null;
+  return { simulation_id: row.simulation_id, ...row.report, created_at: row.created_at };
+}
+
+export interface SimulationRunSummary {
+  simulation_id: string;
+  candidate_version: number;
+  rule_set_name: string | null;
+  subjects_replayed: number;
+  created_at: Date;
+}
+
+/** The list a reviewer opens: this tenant's runs, newest first. */
+export async function listSimulationRuns(filter: {
+  tenant_id: string;
+  rule_set_name?: string;
+  candidate_version?: number;
+  limit?: number;
+}): Promise<SimulationRunSummary[]> {
+  const limit = Math.min(Math.max(filter.limit ?? 50, 1), 500);
+  return dataService.rows<SimulationRunSummary>(
+    `SELECT simulation_id, candidate_version, rule_set_name, subjects_replayed, created_at
+       FROM assignment.simulation_run
+      WHERE tenant_id = $1
+        AND ($2::text IS NULL OR rule_set_name = $2)
+        AND ($3::int IS NULL OR candidate_version = $3)
+      ORDER BY created_at DESC
+      LIMIT ${limit}`,
+    [filter.tenant_id, filter.rule_set_name ?? null, filter.candidate_version ?? null],
+  );
 }
 
 /**

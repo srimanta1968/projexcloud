@@ -1,0 +1,109 @@
+{
+  "sdk": "sdk-assignment",
+  "sourceFile": "packages/sdk-assignment/src/server/routes.ts",
+  "requiresAuth": true,
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "epicId": "9b2cd904-e273-4e36-9523-e21520971508",
+  "featureId": "49c3d6db-cbc3-4e31-bc21-b52f04006f0d",
+  "taskId": "7d7ab65f-3854-4931-9daa-f139cb47c208",
+  "priority": 16,
+  "testability": "auto",
+  "name": "GET /api/assignment/simulations/:simulation_id - Re-open a cited simulation",
+  "endpoint": "/api/assignment/simulations/:simulation_id",
+  "method": "GET",
+  "expectedStatus": 200,
+  "description": "Resolves the simulation_id a routing proposal cited back to the IDENTICAL report the simulate call returned. This is the half that makes a simulation evidence rather than a screenshot: a routing change is proposed on the strength of a simulation, approved weeks later and questioned months after that, and candidate_version identifies the RULES, never the RUN - two simulations of the same version over different windows or candidate pools are different evidence carrying the same version number. The stored row is immutable, so the numbers a reviewer re-opens are the numbers the decision was made on. QA edge cases: the run is tenant-scoped, so a simulation_id belonging to another tenant is 404 and NOT another tenant's evidence - absence and forbidden are deliberately indistinguishable here, because confirming an id exists elsewhere leaks that a simulation happened; a well-formed but never-issued id is 404; a malformed id is refused as a validation error before it reaches the database; the returned body carries created_at alongside the report so a reviewer can see WHEN the question was asked, and its side_effects block still reads all zeros because recording a run is not a routing effect.",
+  "dependsOn": [
+    "POST /api/auth/signup-tenant",
+    "POST /api/personas",
+    "POST /api/coverage/schedules",
+    "POST /api/assignment/routes",
+    "POST /api/assignment/route",
+    "POST /api/assignment/simulate"
+  ],
+  "fieldEnums": {
+    "outcome": [
+      "ASSIGNED",
+      "FALLBACK",
+      "REVIEW",
+      "UNROUTABLE"
+    ]
+  },
+  "testCases": [
+    {
+      "name": "A cited simulation resolves to the report it produced",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "pathParams": {
+        "simulation_id": "{{cache:assignment.simulate.simulation_id}}"
+      },
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "data": {
+          "simulation_id": "string",
+          "candidate_version": "number",
+          "subjects_replayed": "number",
+          "per_persona": "array",
+          "outcome_shift": "object",
+          "skew": "object",
+          "side_effects": "object"
+        }
+      }
+    }
+  ],
+  "errorCases": [
+    {
+      "name": "A well-formed id that was never issued is not found",
+      "status": 404,
+      "code": "SIMULATION_NOT_FOUND",
+      "message": "no simulation run with that id for this tenant",
+      "when": "the simulation_id is well-formed but names no run this tenant owns",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "pathParams": {
+        "simulation_id": "{{dynamic:uuid}}"
+      },
+      "expectedStatus": 404,
+      "expectedError": {
+        "code": "SIMULATION_NOT_FOUND"
+      }
+    },
+    {
+      "name": "A malformed id is refused before it reaches the database",
+      "status": 400,
+      "code": "VALIDATION_ERROR",
+      "message": "simulation_id must be a UUID",
+      "when": "the path segment is not a well-formed UUID",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "pathParams": {
+        "simulation_id": "{{static:not-a-uuid}}"
+      },
+      "expectedStatus": 400,
+      "expectedError": {
+        "code": "VALIDATION_ERROR"
+      }
+    },
+    {
+      "status": 404,
+      "code": "SIMULATION_NOT_FOUND",
+      "message": "no simulation run with that id for this tenant",
+      "when": "the run exists but belongs to another tenant - reported as absent rather than forbidden, because confirming it exists elsewhere leaks that a simulation happened",
+      "reproducible": false
+    },
+    {
+      "name": "Unauthenticated is refused by the default-deny gate",
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "missing or invalid tenant token",
+      "when": "no valid tenant Bearer token or scoped API key on the request",
+      "pathParams": {
+        "simulation_id": "{{cache:assignment.simulate.simulation_id}}"
+      },
+      "expectedStatus": 401
+    }
+  ]
+}
