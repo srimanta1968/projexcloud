@@ -128,7 +128,135 @@
           "created": "boolean",
           "incident_opened": "boolean"
         }
+      },
+      "coversCriterion": "2a7ecc1a-e751-487f-9f30-4127fc277a7b#AC2"
+    },
+    {
+      "name": "Refuse a breach with no reason code — the criterion, as a refusal",
+      "testType": "negative",
+      "coversCriterion": "2a7ecc1a-e751-487f-9f30-4127fc277a7b#AC2",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "pathParams": {
+        "clock_id": "{{cache:sla.clock.create.response.data.clock.clock_id}}"
+      },
+      "payload": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "reason_detail": "roster gap overnight, nobody on call for this queue",
+        "source_ref": "web_form",
+        "is_systemic": false,
+        "recorded_by": "persona:manager",
+        "metadata": {
+          "reviewed": true
+        },
+        "actor_id": "qa-runner"
+      },
+      "expectedStatus": 422,
+      "expectedError": {
+        "code": "BREACH_REASON_REQUIRED"
       }
+    },
+    {
+      "name": "Refuse a breach whose reason code is whitespace only",
+      "testType": "negative",
+      "coversCriterion": "2a7ecc1a-e751-487f-9f30-4127fc277a7b#AC2",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "pathParams": {
+        "clock_id": "{{cache:sla.clock.create.response.data.clock.clock_id}}"
+      },
+      "payload": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "reason_code": "{{static:   }}",
+        "reason_detail": "roster gap overnight, nobody on call for this queue",
+        "source_ref": "web_form",
+        "is_systemic": false,
+        "recorded_by": "persona:manager",
+        "metadata": {
+          "reviewed": true
+        },
+        "actor_id": "qa-runner"
+      },
+      "expectedStatus": 422,
+      "expectedError": {
+        "code": "BREACH_REASON_REQUIRED"
+      }
+    },
+    {
+      "name": "Reject a breach against a clock this tenant does not have",
+      "testType": "negative",
+      "coversCriterion": "2a7ecc1a-e751-487f-9f30-4127fc277a7b#AC2",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "pathParams": {
+        "clock_id": "{{var:absent_uuid}}"
+      },
+      "payload": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "reason_code": "no_capacity",
+        "reason_detail": "roster gap overnight, nobody on call for this queue",
+        "source_ref": "web_form",
+        "is_systemic": false,
+        "recorded_by": "persona:manager",
+        "metadata": {
+          "reviewed": true
+        },
+        "actor_id": "qa-runner"
+      },
+      "expectedStatus": 404,
+      "expectedError": {
+        "code": "SLA_CLOCK_NOT_FOUND"
+      }
+    },
+    {
+      "name": "Reject a breach with no tenant",
+      "testType": "negative",
+      "coversCriterion": "2a7ecc1a-e751-487f-9f30-4127fc277a7b#AC2",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "pathParams": {
+        "clock_id": "{{cache:sla.clock.create.response.data.clock.clock_id}}"
+      },
+      "payload": {
+        "reason_code": "no_capacity",
+        "reason_detail": "roster gap overnight, nobody on call for this queue",
+        "source_ref": "web_form",
+        "is_systemic": false,
+        "recorded_by": "persona:manager",
+        "metadata": {
+          "reviewed": true
+        },
+        "actor_id": "qa-runner"
+      },
+      "expectedStatus": 400,
+      "expectedError": {
+        "code": "VALIDATION_ERROR"
+      }
+    },
+    {
+      "name": "Reject an unauthenticated breach",
+      "testType": "negative",
+      "coversCriterion": "2a7ecc1a-e751-487f-9f30-4127fc277a7b#AC2",
+      "pathParams": {
+        "clock_id": "{{cache:sla.clock.create.response.data.clock.clock_id}}"
+      },
+      "payload": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "reason_code": "no_capacity",
+        "reason_detail": "roster gap overnight, nobody on call for this queue",
+        "source_ref": "web_form",
+        "is_systemic": false,
+        "recorded_by": "persona:manager",
+        "metadata": {
+          "reviewed": true
+        },
+        "actor_id": "qa-runner"
+      },
+      "expectedStatus": 401
     }
   ],
   "captureResponse": {
@@ -165,5 +293,8 @@
       "message": "missing or invalid token",
       "when": "no valid tenant Bearer token on the request"
     }
+  ],
+  "coversCriterion": [
+    "2a7ecc1a-e751-487f-9f30-4127fc277a7b#AC2"
   ]
 }
