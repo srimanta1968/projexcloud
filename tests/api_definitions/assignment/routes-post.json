@@ -13,11 +13,13 @@
   "expectedStatus": 201,
   "description": "Routing rules are DATA, not code: publishing a version is this call, and switching which one is in force is the same call with activate_version. A routing rule changes when the business changes, which is weekly; a deploy is not weekly, so rules that live in code get hard-coded into one vertical and the platform stops being one. A published version is FROZEN - it can never be edited, only superseded - because every decision names the version that produced it, and an editable version would explain last month's decision with this month's rules, which is worse than no explanation because it is a confident wrong one. QA edge cases: sending activate_version switches the active version and returns 200 (nothing was created); sending rules publishes a NEW version and returns 201, with the version number allocated server-side (never supplied by the caller); exactly one version per named set is active at a time, so activating one deactivates the previous automatically; activating a version that does not exist is 404; rolling back is simply activating an earlier version number.",
   "dependsOn": [
-    "POST /api/auth/signup-tenant"
+    "POST /api/auth/signup-tenant",
+    "POST /api/personas"
   ],
   "captureResponse": {
     "assignment.routes.publish.version": "data.version",
-    "assignment.routes.publish.rule_set_id": "data.rule_set_id"
+    "assignment.routes.publish.rule_set_id": "data.rule_set_id",
+    "assignment.routes.publish.name": "data.name"
   },
   "fieldEnums": {
     "activate": [
@@ -64,7 +66,11 @@
           "assignment": {
             "pick": "most_headroom"
           },
+          "availability": {
+            "ignore_presence": true
+          },
           "fallback": {
+            "persona_id": "{{cache:personas.create.response.data.persona.persona_id}}",
             "to_review": true
           }
         },

@@ -7,6 +7,9 @@ import {
   type LocalParts,
   type WorkingWindow,
 } from './timezone';
+// Value import, and safe: presenceService only imports TYPES back from here, which
+// are erased, so there is no runtime cycle.
+import { CoverageValidationError } from './presenceService';
 
 /**
  * sdk-coverage eligibility engine (P16 · EP-377 · PCF-04-2).
@@ -534,12 +537,138 @@ export async function isEligible(input: {
   };
 }
 
+/* ------------------------------------- the sdk-assignment availability seam */
+
+/**
+ * The shape sdk-assignment's step 4 asks for. Declared structurally rather than
+ * imported: sdk-coverage must not depend on what is being scheduled (the same rule
+ * that keeps setLoadProvider and makeSlaOnCallResolver hooks instead of imports),
+ * and the neutrality test enforces it.
+ */
+export interface AssignmentAvailabilityQuery {
+  tenant_id: string;
+  persona_ids: string[];
+  at: Date;
+  band?: string;
+  ignore_presence?: boolean;
+}
+
+export interface AssignmentAvailabilityAnswer {
+  eligible: Array<{ persona_id: string; min_remaining_headroom: number | null }>;
+  ineligible: Array<{ persona_id: string; reasons: Array<{ code: string; detail: string }> }>;
+}
+
+/**
+ * An AvailabilityResolver for sdk-assignment's routing pipeline.
+ *
+ * sdk-assignment ships NO default on purpose: unwired, its availability step sends
+ * every subject to REVIEW rather than assuming everybody is free. This is the
+ * resolver that turns that step on.
+ *
+ * ONE thing here is not a pass-through. findEligible only knows about personas that
+ * HAVE a work_schedule row, so a candidate with no schedule at all comes back in
+ * neither list — and a router receiving neither an eligibility nor a reason would
+ * report "nobody can act right now" with an empty `excluded`, which is precisely the
+ * unexplained skip both packages are built to prevent. Anybody asked about and not
+ * accounted for is therefore returned as ineligible with NO_SCHEDULE, the same
+ * synthesis isEligible() already does for the single-persona case.
+ */
+export function makeAssignmentAvailabilityResolver(): (
+  q: AssignmentAvailabilityQuery,
+) => Promise<AssignmentAvailabilityAnswer> {
+  return async ({ tenant_id, persona_ids, at, band, ignore_presence }) => {
+    if (persona_ids.length === 0) return { eligible: [], ineligible: [] };
+
+    const result = await findEligible({
+      tenant_id,
+      at,
+      persona_ids,
+      band,
+      ignore_presence,
+      include_ineligible: true,
+    });
+
+    const eligible = result.eligible.map((e) => ({
+      persona_id: e.persona_id,
+      min_remaining_headroom: e.min_remaining_headroom,
+    }));
+    const ineligible = result.ineligible.map((i) => ({
+      persona_id: i.persona_id,
+      reasons: i.reasons.map((r) => ({ code: String(r.code), detail: r.detail })),
+    }));
+
+    const accounted = new Set([
+      ...eligible.map((e) => e.persona_id),
+      ...ineligible.map((i) => i.persona_id),
+    ]);
+    for (const persona_id of persona_ids) {
+      if (accounted.has(persona_id)) continue;
+      ineligible.push({
+        persona_id,
+        reasons: [{ code: 'NO_SCHEDULE', detail: 'no active schedule exists for this persona' }],
+      });
+    }
+
+    return { eligible, ineligible };
+  };
+}
+
 /* ------------------------------------------------------ schedule writes */
+
+/** A window in the flat array form the HTTP surface accepts. */
+export interface WeekdayWindow extends WorkingWindow {
+  /** 1 = Monday .. 7 = Sunday. 0 is accepted and read as Sunday. */
+  weekday: number;
+}
+
+/**
+ * Normalise weekly windows to the ISO-weekday map the evaluator reads.
+ *
+ * THE BUG THIS EXISTS TO CLOSE. POST /api/coverage/schedules requires an ARRAY of
+ * {weekday, start, end} and rejects anything else, but isWithinWindowsAt() looks up
+ * `weeklyWindows[String(local.weekday)]` — a MAP keyed by ISO weekday. Stored
+ * verbatim, an array lookup at key "2" returns the third element: a window OBJECT,
+ * not an array of them, so windowsCover's Array.isArray guard rejected it and the
+ * persona came back OUTSIDE_SCHEDULE. Every schedule ever written through the API
+ * was unmatchable, at every hour of every day, and it read as a routing outcome
+ * rather than as a shape error because the pipeline reports OUTSIDE_SCHEDULE for
+ * both. The route's `as never` cast is what let the two shapes drift apart.
+ *
+ * Both forms are accepted here rather than only the map, because the array is the
+ * documented request body and the map is the persisted form — the boundary is the
+ * one place that can know both.
+ *
+ * WEEKDAY 0. The evaluator is ISO (1..7, Monday first); the HTTP surface documents
+ * 0-6, where 0 is Sunday in every convention that starts at zero. 0 is therefore
+ * read as 7 rather than dropped. An out-of-range weekday throws instead of being
+ * silently discarded — a window nobody can ever match is exactly the failure this
+ * function exists to stop.
+ */
+export function normaliseWeeklyWindows(
+  input: Record<string, WorkingWindow[]> | WeekdayWindow[] | null | undefined,
+): Record<string, WorkingWindow[]> {
+  if (!input) return {};
+  if (!Array.isArray(input)) return input;
+
+  const out: Record<string, WorkingWindow[]> = {};
+  for (const w of input) {
+    const raw = Number(w?.weekday);
+    if (!Number.isInteger(raw) || raw < 0 || raw > 7) {
+      throw new CoverageValidationError(
+        `weekly_windows: weekday '${String(w?.weekday)}' is out of range — use 1=Monday..7=Sunday (0 is read as Sunday)`,
+      );
+    }
+    const key = String(raw === 0 ? 7 : raw);
+    (out[key] ??= []).push({ start: w.start, end: w.end });
+  }
+  return out;
+}
 
 export interface UpsertScheduleInput {
   tenant_id: string;
   persona_id: string;
-  weekly_windows: Record<string, WorkingWindow[]>;
+  /** Either the persisted ISO-weekday map or the flat array the API accepts. */
+  weekly_windows: Record<string, WorkingWindow[]> | WeekdayWindow[];
   iana_timezone: string;
   holiday_region?: string | null;
   effective_from?: string | null;
@@ -572,7 +701,8 @@ export async function upsertSchedule(input: UpsertScheduleInput): Promise<WorkSc
        VALUES ($1, $2, $3::jsonb, $4, $5, $6::date, $7::date, $8::jsonb)
        RETURNING ${SCHEDULE_COLS}`,
       [
-        input.tenant_id, input.persona_id, JSON.stringify(input.weekly_windows ?? {}),
+        input.tenant_id, input.persona_id,
+        JSON.stringify(normaliseWeeklyWindows(input.weekly_windows)),
         input.iana_timezone, input.holiday_region ?? null,
         input.effective_from ?? null, input.effective_to ?? null,
         JSON.stringify(input.metadata ?? {}),

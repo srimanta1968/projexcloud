@@ -1,6 +1,11 @@
 import { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { requireAuth } from '@projexlight/sdk-identity';
-import { findEligible, upsertSchedule, listSchedules } from '../services/eligibilityService';
+import {
+  findEligible,
+  upsertSchedule,
+  listSchedules,
+  type WeekdayWindow,
+} from '../services/eligibilityService';
 // UnknownTimezone covers both an unresolvable zone and a fixed UTC offset: the
 // zone validator refuses an offset because it cannot express DST, and both
 // arrive here as the same class.
@@ -121,7 +126,10 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
       tenant_id,
       persona_id: b.persona_id,
       iana_timezone: String(b.iana_timezone ?? ''),
-      weekly_windows: b.weekly_windows as never,
+      // Typed, not cast. `as never` here is what let the array the route demands
+      // drift from the ISO-weekday map the evaluator reads; upsertSchedule now
+      // accepts both and normalises, and the type says so.
+      weekly_windows: b.weekly_windows as WeekdayWindow[],
       holiday_region: typeof b.holiday_region === 'string' ? b.holiday_region : undefined,
     });
     reply.code(201).send({ data: { schedule } });

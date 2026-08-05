@@ -14,6 +14,7 @@
   "description": "Replays recorded decisions through a candidate rule VERSION and reports what would have changed: per-persona actual versus candidate, the outcome mix, the subjects whose destination moves, and a skew audit naming both over-allocation and starvation. SIDE EFFECT FREE, and it proves it rather than claiming it - the response carries a side_effects block that must be all zeros (assignments, notifications, clocks, and decisions written, counted from the table before and after). Returns 200, not 201, because nothing was created. QA edge cases: the candidate is evaluated BY VERSION and is never activated - activating a rule set to try it out is the experiment changing production; the EP-335 rotation cursor is read but never advanced; history is replayed as the rules SAW it (the trace records the fields each rule read), so a candidate rule reading a field the history never carried comes out AMBIGUOUS and goes to review rather than being silently defaulted.",
   "dependsOn": [
     "POST /api/auth/signup-tenant",
+    "POST /api/personas",
     "POST /api/assignment/routes",
     "POST /api/assignment/route"
   ],
@@ -26,7 +27,7 @@
       "payload": {
         "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
         "candidate_version": "{{cache:assignment.routes.publish.version}}",
-        "rule_set_name": "default",
+        "rule_set_name": "{{cache:assignment.routes.publish.name}}",
         "candidate_persona_ids": [
           "{{cache:personas.create.response.data.persona.persona_id}}"
         ],

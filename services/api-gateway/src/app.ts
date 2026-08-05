@@ -333,7 +333,11 @@ import {
   optimizeRoute,
   getDispatchBroker,
 } from '@projexlight/sdk-dispatch';
-import { migrationsDir as assignmentMigrations, server as assignmentServer } from '@projexlight/sdk-assignment';
+import {
+  migrationsDir as assignmentMigrations,
+  server as assignmentServer,
+  setAvailabilityResolver as setAssignmentAvailabilityResolver,
+} from '@projexlight/sdk-assignment';
 // P14/P15 InboundCRM SDK batch — routes + migrations were built but not yet
 // wired into the gateway boot; mount them here so their schemas land in the
 // live DB and their HTTP surfaces are reachable.
@@ -367,6 +371,9 @@ import {
   migrationsDir as coverageMigrations,
   server as coverageServer,
   makeSlaOnCallResolver,
+  makeAssignmentAvailabilityResolver,
+  makeQueryLoadProvider,
+  useLoadProvider,
 } from '@projexlight/sdk-coverage';
 // P16 · EP-378 — vendor-abstracted capability broker & credit ledger. Tenants buy
 // OUTCOMES; the provider chain, its credentials and the true vendor cost never cross
@@ -4063,6 +4070,40 @@ const start = async (): Promise<void> => {
     // when nobody is on call -- the gap is the thing the roster exists to
     // surface, so hiding it behind a stand-in audience would defeat both SDKs.
     setSlaOnCallResolver(makeSlaOnCallResolver());
+
+    /* ============================================================
+     * sdk-assignment routing <-> sdk-coverage availability.
+     *
+     * Both halves of this composition existed and NEITHER was ever called, so
+     * routing was dead in a way nothing reported: step 4 of the pipeline hits
+     * `if (!availabilityResolver)` and returns REVIEW with a null persona for
+     * EVERY subject, whatever the rules say. No route ever produces an
+     * ASSIGNED, so /api/assignment/simulate replays a history of REVIEWs into
+     * more REVIEWs and its per_persona/changed arrays are structurally always
+     * empty -- a green run that proves nothing.
+     *
+     * ORDER MATTERS. The load provider must be wired BEFORE the availability
+     * resolver can be asked anything, because a persona carrying a capacity
+     * policy with no way to measure load is excluded as CAPACITY_UNKNOWN
+     * (fail-closed, by design). Wiring availability alone would trade one
+     * silent no-assignment for another.
+     * ============================================================ */
+    useLoadProvider(makeQueryLoadProvider({
+      table: 'assignment.assignment_record',
+      tenantColumn: 'tenant_id',
+      personaColumn: 'primary_persona_id',
+      // OFFERED work counts: somebody holding an un-answered offer is not free to
+      // take another. It stops counting at DECLINED/REASSIGNED/COMPLETED/CANCELLED,
+      // which is exactly when it stops occupying them.
+      openPredicate: "state IN ('OFFERED', 'ACCEPTED')",
+      // assignment_record does not carry the priority band -- the band lives on the
+      // routing_decision it points at, and this builder reads a single table. So all
+      // open work is measured under one band. `daily_cap` (which sums across bands)
+      // stays exact; per-band `max_concurrent_by_band` limits see the total rather
+      // than that band's share, which is the conservative direction.
+      defaultBand: 'default',
+    }));
+    setAssignmentAvailabilityResolver(makeAssignmentAvailabilityResolver());
 
     // API-key verification cache invalidation. sdk-api-keys has published every
     // revoke to `api-key:revoked` since it shipped, and nothing subscribed — so

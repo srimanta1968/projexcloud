@@ -12,25 +12,25 @@
   "method": "POST",
   "expectedStatus": 201,
   "priority": 10,
-  "description": "Upserts the recurring working windows for one persona in ONE named IANA timezone. The timezone is validated at write time rather than at the first sweep - an unresolvable zone accepted here would surface as a persona mysteriously never eligible, hours later and far from the cause. weekly_windows is an array of {weekday 0-6, start HH:MM, end HH:MM} in the persona local wall time, which is the only representation that survives a DST change without being silently wrong for an hour twice a year. One ACTIVE schedule per persona; re-posting replaces it.",
+  "description": "Upserts the recurring working windows for one persona in ONE named IANA timezone. The timezone is validated at write time rather than at the first sweep - an unresolvable zone accepted here would surface as a persona mysteriously never eligible, hours later and far from the cause. weekly_windows is an array of {weekday 0-6, start HH:MM, end HH:MM} in the persona local wall time, which is the only representation that survives a DST change without being silently wrong for an hour twice a year. One ACTIVE schedule per persona; re-posting replaces it. The happy-path window deliberately covers every ISO weekday end to end: this schedule is the producer every downstream availability consumer chains onto (sdk-assignment step 4, sdk-sla late coverage), and a narrow one would make those tests pass or fail on the clock the suite happened to run at rather than on the code. weekday is ISO (1=Monday..7=Sunday); 0 is accepted and read as Sunday, and anything outside 0-7 is refused at write time rather than stored as a window nobody can ever match.",
   "dependsOn": [
     "POST /api/auth/signup-tenant",
     "POST /api/personas"
   ],
   "fieldEnums": {
     "weekday": [
-      "0",
       "1",
       "2",
       "3",
       "4",
       "5",
-      "6"
+      "6",
+      "7"
     ]
   },
   "testCases": [
     {
-      "name": "A weekday schedule in the persona own timezone",
+      "name": "An always-on schedule in the persona own timezone",
       "headers": {
         "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
       },
@@ -41,13 +41,38 @@
         "weekly_windows": [
           {
             "weekday": 1,
-            "start": "09:00",
-            "end": "17:00"
+            "start": "00:00",
+            "end": "23:59"
           },
           {
             "weekday": 2,
-            "start": "09:00",
-            "end": "17:00"
+            "start": "00:00",
+            "end": "23:59"
+          },
+          {
+            "weekday": 3,
+            "start": "00:00",
+            "end": "23:59"
+          },
+          {
+            "weekday": 4,
+            "start": "00:00",
+            "end": "23:59"
+          },
+          {
+            "weekday": 5,
+            "start": "00:00",
+            "end": "23:59"
+          },
+          {
+            "weekday": 6,
+            "start": "00:00",
+            "end": "23:59"
+          },
+          {
+            "weekday": 7,
+            "start": "00:00",
+            "end": "23:59"
           }
         ]
       },
