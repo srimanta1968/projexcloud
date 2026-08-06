@@ -24,6 +24,22 @@ fabricated `internal://` endpoint, but a real endpoint filed against the wrong S
 | `463036e2-dd87-4e2f-aa71-281bd26af91f` | TK-3919 | sdk-assignment | 14 (`/api/assignment/*`, `/api/assignments/*`) |
 | `f353b8be-4d0e-46cb-baf9-0b01aca019f5` | TK-3920 | sdk-crm | 7 (`/api/crm/*`) |
 | `0a40d552-088e-454d-b1ec-082f02ceaf08` | TK-3921 | sdk-conversation | 5 (`/api/conversations/*`) |
+| `2fcd6b69-1a9a-4aff-9005-12fb195c9315` | TK-3922 | sdk-connectors | 3 (`/api/connectors/dlq/*`, `/api/connectors/tenants/:tid/dlq/reconcile`) |
+
+**29 endpoints in total.** TK-3922's three were sent knowingly, after the first 26 were
+already suspected: `complete_task` REFUSES a `service_layer` task without API evidence, and
+the only alternative it offers is `has_http_surface=false`, which would have been a false
+statement — the task genuinely implements the behaviour behind three real routes. Given a
+choice between a permanent lie in the task record and three more rows on an already-planned
+cleanup list, the rows were the lesser harm. Clean all 29 together.
+
+Two things noticed while doing that, both worth fixing separately:
+- The gate's hint says `has_http_surface=false` (snake_case) while the MCP tool parameter is
+  `hasHttpSurface` (camelCase). Passing the documented camelCase form did NOT satisfy the
+  gate, so one of the two names is wrong.
+- There is no way to record "this task implemented behaviour behind a route another task
+  registered". `generatedApis` assumes the task that reports an endpoint is the one that
+  created it, which is why the entries carry a `note` field saying the route pre-existed.
 
 Projects: **LeadFlow** `894bc4c8-4cfb-407d-9e86-234b69490275` · **ProjexCloud**
 `cf30e9b7-0b94-4b48-8571-ee41e1241131`.
