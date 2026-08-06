@@ -124,6 +124,47 @@ Record that outcome so the next person does not re-investigate.
   `reproducible: false` would be wrong, since both are request-caused.
 - **~55 further uncovered errorCases** remain across ~20 older `crm` definitions (contacts,
   deals, activities, funnel-stages, pipeline). Same mechanical treatment applies.
-- `ProjexCloud/.projexlight/scripts/server-config.json` was left repointed at **production**
-  (`cloud.projexlight.com:443`) under a `_TEMPORARY` key, with a backup at
-  `/tmp/server-config.backup.json`. Restore it before any test run, or the run goes to prod.
+- ~~`ProjexCloud/.projexlight/scripts/server-config.json` was left repointed at **production**~~
+  **RESOLVED 2026-08-06** — restored to `http://host.docker.internal:4000` and the
+  `_TEMPORARY` key removed. No action needed.
+
+---
+
+## VERIFIED 2026-08-06 — the suspicion in Step 1 is TRUE
+
+Tracked as **TK-4157**. Do not re-investigate; read that task for the full record.
+
+`delete_api_library_entries` with `dryRun: true` DID complete this time — the 30s timeout
+above was transient. Probing three endpoints against LeadFlow `894bc4c8` matched two:
+
+| endpoint | row | `task_id` | = |
+|---|---|---|---|
+| `POST /api/assignments` | `142c402c` | `463036e2` | TK-3919 |
+| `GET /api/crm/pipeline/aging` | `0086cca1` | `f353b8be` | TK-3920 |
+
+The `task_id`s match the tasks named above, so this is the predicted misroute, not a
+coincidence. `definitionsStillOnDisk: []`, so the force guard will not block deletion.
+
+**Two findings that change the plan in Step 2.**
+
+1. **The rows are not thin.** Step 2.3 assumed `generatedApis` produced rows with no
+   testCases. They carry full `test_data_sets` (3 and 4 datasets, all `origin: "definition"`),
+   so something registered them definition-driven and the Test MCP has been executing them.
+
+2. **They are being executed against ProjexCloud's SUT.** `POST /api/assignments` shows
+   `last_test_status: "passed"`, `lastStatusCode: 201`, and a `lastResponse` carrying
+   `tenant_id: 8e6c1e65-…` — the **production ProjexCloud tenant**, from a dev-MCP run made
+   that evening. So the contamination is **ongoing, not historical**: TK-4141 is routing
+   live results into the wrong project's catalog.
+
+**Therefore: do not delete first.** The rows are currently green, so deleting them removes
+working coverage before the ProjexCloud-side rows exist. Revised order — (a) sweep all 29
+with `dryRun` for the true matched set; (b) confirm each is registered in ProjexCloud
+`cf30e9b7` with equivalent `test_data_sets`; (c) only then delete from `894bc4c8`;
+(d) re-run both projects and confirm neither dispatches a foreign path.
+
+**Contamination runs both ways.** A test-MCP database-mode run against prod dispatched
+LeadFlow-shaped paths that exist in neither ProjexCloud repo nor SUT — the prod gateway
+logged `Route GET:/coach/scorecard/:callId not found`, plus `/sdr/qualify`, `/propose`,
+`/:id/intelligence`, `/recording-eligibility`. Confirmed those also 404 against the local
+ProjexCloud gateway and have no on-disk ProjexCloud definition.

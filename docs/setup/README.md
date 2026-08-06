@@ -18,12 +18,19 @@ scale-out workers.
 | Redis | Recommended | on (`REDIS_ENABLED`) | Falls back to in-memory route cache |
 | Kafka | Optional | on (`KAFKA_ENABLED`) | Falls back to in-process event emitter |
 | ClickHouse | Optional | off (`CLICKHOUSE_ENABLED`) | Trace/telemetry use Postgres mirror |
-| OpenSearch | Optional | off | `sdk-search` uses Postgres fallback |
+| OpenSearch | **Yes in production** | off | Below `NODE_ENV=production` an in-process synthetic client is used. **At** production, `sdk-search` refuses and every search endpoint returns 500 — there is no Postgres fallback. See [required-settings-matrix.md](./required-settings-matrix.md) |
+
+> **`NODE_ENV=production` changes behaviour.** Several SDKs fall back to synthetic
+> implementations and hardcoded dev key material below that threshold and refuse at it, so a
+> passing local test run does not prove a working deployment. Work through
+> [required-settings-matrix.md](./required-settings-matrix.md) before declaring an install
+> healthy.
 
 ## Documents
 
 | Doc | Audience | Use it to… |
 |-----|----------|-----------|
+| [required-settings-matrix.md](./required-settings-matrix.md) | DevOps, on-prem licensees | Every secret, synthetic flag and third-party service — which you generate, which you must supply, and what breaks if absent. **Read before any deployed install** |
 | [dev-environment.md](./dev-environment.md) | Developers | Run the full stack locally on Windows/macOS/Linux |
 | [sdk-api-access.md](./sdk-api-access.md) | Developers integrating **another project** | Issue a tenant-scoped API key, pick its scopes, and point your app at ProjexCloud (local or cloud) |
 | [production-overview.md](./production-overview.md) | DevOps | Understand the prod architecture, env, migrations, seeding, scaling & security — **read first** |
