@@ -35,8 +35,12 @@ cleanup list, the rows were the lesser harm. Clean all 29 together.
 
 Two things noticed while doing that, both worth fixing separately:
 - The gate's hint says `has_http_surface=false` (snake_case) while the MCP tool parameter is
-  `hasHttpSurface` (camelCase). Passing the documented camelCase form did NOT satisfy the
-  gate, so one of the two names is wrong.
+  `hasHttpSurface` (camelCase). Passing the camelCase form did NOT satisfy the gate on a
+  `service_layer` task — but the SAME camelCase form WAS accepted on a `testing` task
+  (TK-3923) minutes later. So this is not confirmed as a naming bug: it may equally be that
+  the waiver is simply not consulted for API task types, which would make the hint
+  misleading rather than the parameter wrong. Worth ten minutes with the handler before
+  anyone "fixes" a name.
 - There is no way to record "this task implemented behaviour behind a route another task
   registered". `generatedApis` assumes the task that reports an endpoint is the one that
   created it, which is why the entries carry a `note` field saying the route pre-existed.
