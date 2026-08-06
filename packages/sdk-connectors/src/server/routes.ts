@@ -192,8 +192,23 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
       });
 
       if (result.outcome === 'rejected' && !result.archived) {
-        // Nothing was stored — this failed at the trust boundary, so it is a 401 rather
-        // than a 422: the caller is not who they claim to be.
+        // Nothing was stored. WHICH boundary it failed at decides the answer — these
+        // used to collapse into one 401 'InvalidSignature', so a provider whose
+        // signature verified perfectly was told its signature was invalid, and any
+        // alert on INVALID_SIGNATURE fired on honest-but-malformed payloads too.
+        if (result.rejected_at === 'config') {
+          // Ours, not theirs: no secret is configured for this tenant/platform. A 4xx
+          // would have the provider "fix" a request that was already correct.
+          req.log.error({ tenant_id: req.params.tenant_id, platform }, 'lead-form secret not configured');
+          return reply.code(500).send({ error: 'InternalError', code: 'SIGNING_SECRET_NOT_CONFIGURED', details: [result.reason ?? 'no signing secret configured'] });
+        }
+        if (result.rejected_at === 'payload') {
+          // The caller IS who they claim to be — the signature verified — but the body
+          // cannot be processed. 422, so the provider looks at its payload rather than
+          // at its credentials.
+          return reply.code(422).send({ error: 'UnprocessablePayload', code: 'UNPROCESSABLE_PAYLOAD', details: [result.reason ?? 'payload could not be processed'] });
+        }
+        // The genuine trust-boundary failure: the caller is not who they claim to be.
         return reply.code(401).send({ error: 'InvalidSignature', code: 'INVALID_SIGNATURE', details: [result.reason ?? 'signature verification failed'] });
       }
       // 202 for everything past the boundary, including a rejected normalisation and a

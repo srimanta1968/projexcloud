@@ -37,6 +37,21 @@ export interface IngestResult {
   reason?: string;
   /** True whenever the raw payload is safely stored — including on rejection. */
   archived: boolean;
+  /**
+   * WHERE an unarchived rejection happened, so the route can answer with the right
+   * status instead of calling everything a signature failure.
+   *
+   *   'signature'  the caller is not who they claim to be           -> 401
+   *   'payload'    the signature VERIFIED, the body is unusable     -> 422
+   *   'config'     no secret configured for this tenant/platform    -> 500
+   *
+   * These were indistinguishable, so a verified provider sending a body with no
+   * event id was told 'InvalidSignature'. That sends an integrator hunting through
+   * their HMAC and secret rotation for a fault that is in neither, and it makes any
+   * alert on INVALID_SIGNATURE untrustworthy — the one signal that should mean
+   * "someone is forging deliveries" also fires on a malformed but honest payload.
+   */
+  rejected_at?: 'signature' | 'payload' | 'config';
 }
 
 export interface IngestLeadFormInput {
@@ -63,7 +78,7 @@ export async function ingestLeadForm(input: IngestLeadFormInput): Promise<Ingest
     return {
       outcome: 'rejected', event_id: null, platform, source_event_id: null,
       reason: 'no signing secret configured for this tenant/platform',
-      archived: false,
+      archived: false, rejected_at: 'config',
     };
   }
   const verified = verifyAdapterSignature(
@@ -76,6 +91,7 @@ export async function ingestLeadForm(input: IngestLeadFormInput): Promise<Ingest
     return {
       outcome: 'rejected', event_id: null, platform, source_event_id: null,
       reason: `invalid or missing ${adapter.signatureHeader} signature`,
+      rejected_at: 'signature',
       // Deliberately NOT archived: an unsigned payload is not a lead, and storing it
       // would let anyone fill the tenant's archive with material to triage.
       archived: false,
@@ -89,7 +105,7 @@ export async function ingestLeadForm(input: IngestLeadFormInput): Promise<Ingest
     } catch {
       return {
         outcome: 'rejected', event_id: null, platform, source_event_id: null,
-        reason: 'signed body is not valid JSON', archived: false,
+        reason: 'signed body is not valid JSON', archived: false, rejected_at: 'payload',
       };
     }
   }
@@ -99,7 +115,7 @@ export async function ingestLeadForm(input: IngestLeadFormInput): Promise<Ingest
     return {
       outcome: 'rejected', event_id: null, platform, source_event_id: null,
       reason: 'payload carries no provider event id, so the delivery cannot be de-duplicated',
-      archived: false,
+      archived: false, rejected_at: 'payload',
     };
   }
 

@@ -80,10 +80,47 @@
         "platform": "meta"
       },
       "payload": {
-        "scenario": "identical repeat of the previous delivery"
+        "entry": [
+          {
+            "id": "page-1",
+            "changes": [
+              {
+                "value": {
+                  "leadgen_id": "lead-1",
+                  "form_id": "form-9",
+                  "form_version": "v2",
+                  "campaign_id": "camp-1",
+                  "ad_id": "ad-2",
+                  "creative_id": "cr-3",
+                  "created_time": "2026-08-01T09:00:00Z",
+                  "platform": "instagram",
+                  "thread_id": "dm-77",
+                  "comment_id": "cm-88",
+                  "consent": {
+                    "consent_ref": "consent-abc",
+                    "granted": true
+                  },
+                  "permission_fields": [
+                    "marketing_opt_in"
+                  ],
+                  "field_data": [
+                    {
+                      "name": "email",
+                      "values": [
+                        "jane@acme.test"
+                      ]
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        ]
       },
       "expectedStatus": 202,
-      "testability": "manual"
+      "testability": "manual",
+      "_replayOf": "Meta lead form with valid signature is accepted and archived",
+      "_note": "Byte-identical repeat of the previous dataset, which is what makes the (tenant, platform, source_event_id) reservation collide and return outcome=duplicate. Keep these payloads in sync."
     },
     {
       "name": "LinkedIn lead captures company and member profile",
@@ -225,5 +262,11 @@
       }
     }
   ],
-  "_previouslySkipped": "Was testability:manual + skipReason (provider HMAC, per-tenant secret). Both are now satisfiable: LEAD_FORM_SECRET is configured and computedHeaders signs the canonical JSON body, verified against the live gateway (HTTP 202, signature accepted). Provider-signed webhook: every request must carry a valid HMAC over the EXACT request bytes, computed with a per-tenant "
+  "_previouslySkipped": "Was testability:manual + skipReason (provider HMAC, per-tenant secret). Both are now satisfiable: LEAD_FORM_SECRET is configured and computedHeaders signs the canonical JSON body, verified against the live gateway (HTTP 202, signature accepted). Provider-signed webhook: every request must carry a valid HMAC over the EXACT request bytes, computed with a per-tenant ",
+  "dependsOn": [
+    "POST /api/auth/signup-tenant"
+  ],
+  "captureResponse": {
+    "connectors.leadform.response.data.event_id": "data.event_id"
+  }
 }

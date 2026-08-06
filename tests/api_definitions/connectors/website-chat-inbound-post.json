@@ -110,10 +110,55 @@
         "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}"
       },
       "payload": {
-        "scenario": "identical repeat of web-1"
+        "event_id": "web-1",
+        "event_kind": "chat",
+        "session_id": "sess-1",
+        "page_url": "https://acme.test/pricing",
+        "page_title": "Pricing",
+        "referrer": "https://google.test/search?q=crm",
+        "form_id": "chat-widget-v3",
+        "form_version": "3.1",
+        "submitted_at": "2026-08-01T09:00:00Z",
+        "utm_source": "google",
+        "utm_medium": "cpc",
+        "utm_campaign": "brand",
+        "fields": {
+          "email": "jane@acme.test",
+          "company": "Acme Ltd"
+        },
+        "permissions": {
+          "Marketing_Opt_In": "true",
+          "consent_ref": "web-consent-1",
+          "wording": "I agree to be contacted about my enquiry"
+        },
+        "transcript": [
+          {
+            "role": "visitor",
+            "text": "Do you support SSO?",
+            "at": "2026-08-01T08:58:00Z"
+          },
+          {
+            "role": "bot",
+            "text": "Yes, SAML and OIDC.",
+            "at": "2026-08-01T08:58:10Z"
+          },
+          {
+            "role": "visitor",
+            "text": "Can I talk to sales?",
+            "at": "2026-08-01T08:59:00Z"
+          }
+        ],
+        "handoff": {
+          "state": "human",
+          "handed_to": "agent-7",
+          "handed_at": "2026-08-01T08:59:30Z",
+          "reason": "visitor asked for sales"
+        }
       },
       "expectedStatus": 202,
-      "testability": "manual"
+      "testability": "manual",
+      "_replayOf": "Chat lead with transcript and human handoff",
+      "_note": "Byte-identical repeat of the previous dataset, which is what makes the (tenant, platform, source_event_id) reservation collide and return outcome=duplicate. Keep these payloads in sync."
     },
     {
       "name": "A chat event with no transcript is rejected but archived",
@@ -202,5 +247,8 @@
       "expectedStatus": 202
     }
   ],
-  "_previouslySkipped": "Was testability:manual + skipReason (provider HMAC, per-tenant secret). Both are now satisfiable: LEAD_FORM_SECRET is configured and computedHeaders signs the canonical JSON body, verified against the live gateway (HTTP 202, signature accepted). Signed webhook: every request must carry an HMAC over the EXACT request bytes computed with a per-tenant secret the regr"
+  "_previouslySkipped": "Was testability:manual + skipReason (provider HMAC, per-tenant secret). Both are now satisfiable: LEAD_FORM_SECRET is configured and computedHeaders signs the canonical JSON body, verified against the live gateway (HTTP 202, signature accepted). Signed webhook: every request must carry an HMAC over the EXACT request bytes computed with a per-tenant secret the regr",
+  "dependsOn": [
+    "POST /api/auth/signup-tenant"
+  ]
 }
