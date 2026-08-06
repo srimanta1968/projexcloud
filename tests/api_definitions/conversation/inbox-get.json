@@ -17,7 +17,9 @@
     "POST /api/conversations/threads",
     "POST /api/conversations/messages"
   ],
-  "coversCriterion": ["e5a557ae-1ca4-4476-850b-0107e9b23db1#AC4"],
+  "coversCriterion": [
+    "e5a557ae-1ca4-4476-850b-0107e9b23db1#AC4"
+  ],
   "description": "The agent inbox: threads for a tenant, most recently active first, with three independent filters that AND together — unread=true (at least one unread INBOUND message), awaiting_reply=true (we spoke last and are waiting on them) and channel=<CHANNEL>. Proves AC4. Reads the trigger-maintained rollup columns (unread_count, status, channel_set) rather than joining messages, which is why those columns exist; channel_set is GIN-indexed. The channel filter is 'has this thread EVER carried that channel' (channel_set @> ARRAY[channel]), not 'the latest message was that channel' — the latter would make a conversation vanish from the SMS view the moment somebody replied by email, which is the opposite of what an omnichannel inbox is for. QA edge cases: only the literal string 'true' enables a flag, so ?unread=false correctly means 'do not filter' rather than silently becoming unread-only (any-truthy parsing is the bug this guards against); closed threads are excluded unless include_closed=true; an unknown channel value is a 400 rather than a silently empty list, since an empty 200 is indistinguishable from 'no matches'; limit is clamped to 1..200 and offset floored at 0, so absurd paging cannot be used to pull the whole table; the response echoes the filters it actually applied so a caller can tell an empty inbox from a mis-parsed query. requiresAuth applies to this GET exactly as to the POSTs (MUST-52) — tenant_id is a query param but the Bearer is what scopes the read.",
   "testCases": [
     {
@@ -74,6 +76,48 @@
         "channel": "SMS"
       },
       "expectedStatus": 200
+    },
+    {
+      "name": "400 - tenant_id query param is required",
+      "testType": "negative",
+      "coversErrorCase": "400|VALIDATION_ERROR|tenant-id",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "queryParams": {},
+      "expectedStatus": 400,
+      "expectedError": {
+        "code": "VALIDATION_ERROR"
+      }
+    },
+    {
+      "name": "400 - a channel filter outside the eight is refused, not answered empty",
+      "testType": "negative",
+      "coversErrorCase": "400|VALIDATION_ERROR|unknown-channel",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "queryParams": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "channel": "{{static:TELEPATHY}}"
+      },
+      "expectedStatus": 400,
+      "expectedError": {
+        "code": "VALIDATION_ERROR"
+      }
+    },
+    {
+      "name": "401 - no tenant bearer token",
+      "testType": "negative",
+      "coversErrorCase": "401|Unauthorized",
+      "headers": {},
+      "queryParams": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}"
+      },
+      "expectedStatus": 401,
+      "expectedError": {
+        "code": "Unauthorized"
+      }
     }
   ],
   "errorCases": [
@@ -88,7 +132,9 @@
       },
       "queryParams": {},
       "expectedStatus": 400,
-      "expectedError": { "code": "VALIDATION_ERROR" }
+      "expectedError": {
+        "code": "VALIDATION_ERROR"
+      }
     },
     {
       "name": "An unknown channel is a 400, not a silently empty inbox",
@@ -104,7 +150,9 @@
         "channel": "TELEPATHY"
       },
       "expectedStatus": 400,
-      "expectedError": { "code": "VALIDATION_ERROR" }
+      "expectedError": {
+        "code": "VALIDATION_ERROR"
+      }
     },
     {
       "name": "Unauthenticated is refused by the default-deny gate",

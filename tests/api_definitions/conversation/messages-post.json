@@ -12,7 +12,10 @@
   "epicId": "54b75cbb-e257-4e64-a356-3817f73256e2",
   "priority": 31,
   "testability": "auto",
-  "dependsOn": ["POST /api/auth/signup-tenant", "POST /api/conversations/threads"],
+  "dependsOn": [
+    "POST /api/auth/signup-tenant",
+    "POST /api/conversations/threads"
+  ],
   "coversCriterion": [],
   "description": "Records one message onto an existing thread. Collection-root create, so 201 with { data: { message } }. body_ref is a vault/blob REFERENCE, never the body text: message content is customer data and a text column here would put it in every backup, replica and query plan that touches the table. occurred_at is when the provider says it HAPPENED and is the sort key; received_at is stamped server-side and is a diagnostic only, so a message delivered late still renders in the right place. Writes carrying external_message_id are idempotent on (tenant_id, channel, external_message_id) — a retried provider webhook returns the row it already wrote instead of double-posting into the thread. INTERNAL_NOTE (or direction INTERNAL) is routed internally to addInternalNote, which hard-codes the undispatchable shape; the ordinary path is refused for notes because it accepts a caller-supplied delivery_state and that is exactly the field a note must never set. QA edge cases: 401 without a tenant Bearer; 400 for a missing tenant_id/thread_id/channel/body_ref/actor, an unknown channel, a direction other than INBOUND/OUTBOUND on a customer-facing channel, a blank body_ref, an unparseable occurred_at, or delivery_state 'NOT_APPLICABLE' on a customer-facing channel (that state is reserved for internal notes and the conv_message_dispatchable_state CHECK rejects it at the database too); 404 when thread_id names no thread. An inbound message defaults to delivery_state RECEIVED and read_state UNREAD, an outbound one to PENDING and READ, and the rollup trigger then updates the thread's channel_set, unread_count, last_message_at and status.",
   "captureResponse": {
@@ -51,6 +54,96 @@
         "actor": "persona:{{dynamic:uuid}}"
       },
       "expectedStatus": 201
+    },
+    {
+      "name": "400 - NOT_APPLICABLE is reserved for internal notes",
+      "testType": "negative",
+      "coversErrorCase": "400|VALIDATION_ERROR|reserved-state",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "payload": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "thread_id": "{{cache:conversations.threads.response.data.thread.thread_id}}",
+        "channel": "SMS",
+        "direction": "OUTBOUND",
+        "body_ref": "vault:blob/outbound-sms-1",
+        "body_preview": "Following up on your renewal",
+        "actor": "persona:{{dynamic:uuid}}",
+        "occurred_at": "{{dynamic:pastdatetime}}",
+        "provider_message_key": "carrier-{{dynamic:uuid}}",
+        "delivery_state": "NOT_APPLICABLE"
+      },
+      "expectedStatus": 400,
+      "expectedError": {
+        "code": "VALIDATION_ERROR"
+      }
+    },
+    {
+      "name": "400 - a channel outside the eight is refused",
+      "testType": "negative",
+      "coversErrorCase": "400|VALIDATION_ERROR|unknown-channel",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "payload": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "thread_id": "{{cache:conversations.threads.response.data.thread.thread_id}}",
+        "channel": "{{static:CARRIER_PIGEON}}",
+        "direction": "OUTBOUND",
+        "body_ref": "vault:blob/outbound-sms-1",
+        "body_preview": "Following up on your renewal",
+        "actor": "persona:{{dynamic:uuid}}",
+        "occurred_at": "{{dynamic:pastdatetime}}",
+        "provider_message_key": "carrier-{{dynamic:uuid}}"
+      },
+      "expectedStatus": 400,
+      "expectedError": {
+        "code": "VALIDATION_ERROR"
+      }
+    },
+    {
+      "name": "400 - a message with no body_ref is refused",
+      "testType": "negative",
+      "coversErrorCase": "400|VALIDATION_ERROR|body-ref",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "payload": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "thread_id": "{{cache:conversations.threads.response.data.thread.thread_id}}",
+        "channel": "SMS",
+        "direction": "OUTBOUND",
+        "body_preview": "Following up on your renewal",
+        "actor": "persona:{{dynamic:uuid}}",
+        "occurred_at": "{{dynamic:pastdatetime}}",
+        "provider_message_key": "carrier-{{dynamic:uuid}}"
+      },
+      "expectedStatus": 400,
+      "expectedError": {
+        "code": "VALIDATION_ERROR"
+      }
+    },
+    {
+      "name": "401 - no tenant bearer token",
+      "testType": "negative",
+      "coversErrorCase": "401|Unauthorized",
+      "headers": {},
+      "payload": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "thread_id": "{{cache:conversations.threads.response.data.thread.thread_id}}",
+        "channel": "SMS",
+        "direction": "OUTBOUND",
+        "body_ref": "vault:blob/outbound-sms-1",
+        "body_preview": "Following up on your renewal",
+        "actor": "persona:{{dynamic:uuid}}",
+        "occurred_at": "{{dynamic:pastdatetime}}",
+        "provider_message_key": "carrier-{{dynamic:uuid}}"
+      },
+      "expectedStatus": 401,
+      "expectedError": {
+        "code": "Unauthorized"
+      }
     }
   ],
   "errorCases": [
@@ -73,7 +166,9 @@
         "delivery_state": "NOT_APPLICABLE"
       },
       "expectedStatus": 400,
-      "expectedError": { "code": "VALIDATION_ERROR" }
+      "expectedError": {
+        "code": "VALIDATION_ERROR"
+      }
     },
     {
       "name": "An unknown channel is refused",
@@ -93,7 +188,9 @@
         "actor": "persona:test"
       },
       "expectedStatus": 400,
-      "expectedError": { "code": "VALIDATION_ERROR" }
+      "expectedError": {
+        "code": "VALIDATION_ERROR"
+      }
     },
     {
       "name": "A message with no body reference is refused",
@@ -112,7 +209,9 @@
         "actor": "persona:test"
       },
       "expectedStatus": 400,
-      "expectedError": { "code": "VALIDATION_ERROR" }
+      "expectedError": {
+        "code": "VALIDATION_ERROR"
+      }
     },
     {
       "name": "Unauthenticated is refused by the default-deny gate",

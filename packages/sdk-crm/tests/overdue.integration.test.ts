@@ -8,7 +8,7 @@ import { randomUUID } from 'crypto';
 import { closeAllPools, dataService, initPool } from '@projexlight/db-runtime';
 import { setSubjectNextAction } from '../src/services/subjectNextActionService';
 import {
-  getOverduePolicy, getPushLog, getSubjectPushSummary, levelFor, listOverdue,
+  DueDateUnchanged, getOverduePolicy, getPushLog, getSubjectPushSummary, levelFor, listOverdue,
   ManagerReasonRequired, NextActionNotFound, ReasonRequired, reschedule,
   upsertOverduePolicy,
 } from '../src/services/overdueService';
@@ -201,10 +201,14 @@ suite('overdue queue and push governance', () => {
       commit('lead:push-5', new Date(Date.now() - 3600_000)));
     const same = await dataService.one<{ due_at: Date }>(
       `SELECT due_at FROM crm.next_action WHERE next_action_id = $1`, [action.next_action_id]);
+    // A reason IS supplied here, so this is NOT the missing-reason path — that one is
+    // asserted separately above with a blank reason. What this asserts is the no-op: a
+    // push that moves the date nowhere is not a push, and logging it would inflate the
+    // count that managers read as a slipping pattern.
     await expect(reschedule({
       tenant_id: TENANT, next_action_id: action.next_action_id,
       new_due_at: new Date(same!.due_at), reason: 'no change',
-    })).rejects.toBeInstanceOf(ReasonRequired);
+    })).rejects.toBeInstanceOf(DueDateUnchanged);
 
     await expect(reschedule({
       tenant_id: TENANT, next_action_id: randomUUID(),
