@@ -14,6 +14,7 @@
   "testability": "auto",
   "description": "Resume a paused clock, appending the closed interval to paused_intervals with its reason so elapsed business minutes stay honest about what was parked and why. Only a paused clock can resume; anything else is 409 INVALID_CLOCK_TRANSITION. Returns 200 with the updated clock. Required: tenant_id.",
   "dependsOn": [
+    "POST /api/sla/clocks",
     "POST /api/auth/signup-tenant",
     "POST /api/sla/clocks/:clock_id/pause"
   ],
@@ -29,7 +30,7 @@
   "statusTransitions": {
     "entity": "sla.sla_clock",
     "field": "state",
-    "note": "at_risk is a DERIVED view over running/paused clocks approaching due_at (GET /api/sla/at-risk), not a stored state — the column can only hold the five values in fieldEnums.state.",
+    "note": "at_risk is a DERIVED view over running/paused clocks approaching due_at (GET /api/sla/at-risk), not a stored state \u2014 the column can only hold the five values in fieldEnums.state.",
     "flow": [
       "running",
       "paused",
@@ -67,7 +68,7 @@
         "from": "breached",
         "to": "satisfied",
         "via": "POST /api/sla/clocks/:clock_id/satisfy",
-        "note": "a missed promise can still be kept, late — satisfied_at then sits after due_at so attainment still counts it as a miss"
+        "note": "a missed promise can still be kept, late \u2014 satisfied_at then sits after due_at so attainment still counts it as a miss"
       },
       {
         "from": "running",

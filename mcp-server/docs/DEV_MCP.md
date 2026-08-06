@@ -656,6 +656,10 @@ A later layer overwrites an earlier one for the same header name.
 | 6 | `testCases[].headers` | the executing dataset | a negative case overriding the happy path |
 | 7 | `computedHeaders` | test-config | request signatures — runs last, over the final body |
 
+A `null`/`""` value in a later layer **removes** the header instead of setting an
+empty one. `providers[]` may also carry an `auth` block, which replaces the
+environment's scheme for requests it matches.
+
 ### Worked example — a role-scoped header
 
 An endpoint behind an admin capability. Do **not** hand-write the token into the
@@ -690,6 +694,57 @@ A dataset must be able to send **no** `Authorization`. Use `"noAuth": true`, or
 `Authorization` of its own is treated as `noAuth` automatically — handing it a
 valid token would make its assertion impossible to satisfy.
 
+`403` is **not** inferred. A 403 case is normally authenticated-but-not-permitted,
+so it needs a credential; sending none gets `401` and the test fails for the
+wrong reason. A 403 case that really is anonymous says so with `"noAuth": true`.
+
+A dataset that expects `401` but declares its own `Authorization` is testing a
+**bad** token, not the absence of one — its header is left exactly as written.
+
+All four executors are held to this by `parity/header-parity-fixture.json`,
+which every executor runs against its own resolver
+(`dist/parity/check_parity.py` for both MCPs, `npm run parity:headers` for the
+ProjexLight backend). The harness offers a token before applying the rule — a
+harness that never offers one turns every "sends no Authorization" case into a
+pass that proves nothing.
+
+### Removing a header a broader layer set
+
+A `null` or `""` value is a **removal**, not an empty value to send:
+
+```jsonc
+// testCases[]
+{ "name": "400 - rejects a request with no api key",
+  "expectedStatus": 400,
+  "headers": { "x-api-key": null } }
+```
+
+It is the only way a narrow layer can un-set what a broad one configured — "reject
+when `x-api-key` is absent" is untestable if layer 1 always re-adds it. Removal is
+per header: everything else the project configures still goes out, so a negative
+case does not lose `Content-Type` and 415 for the wrong reason.
+
+### A second system with its own credential
+
+A customer's legacy API or a third-party integration authenticates differently
+from the application under test. Give it `providers[].auth`:
+
+```jsonc
+"providers": [
+  { "match": "/api/legacy",
+    "headers": { "x-legacy-client": "projexcloud" },
+    "auth": { "type": "api_key", "header": "X-Legacy-Key", "value": "{{var:legacy_key}}" } },
+  { "match": "/api/partner", "auth": { "type": "none" } }
+]
+```
+
+A matching provider's auth **replaces** the environment's scheme for that request
+rather than layering on top of it. The environment credential belongs to the app
+under test; sending it to a third party hands out the tenant's token on every
+call. `"type": "none"` states that this host gets nothing — which is not the same
+as omitting the block, and omitting it means "use the environment's credential
+here".
+
 ### Signed webhooks
 
 ```jsonc
@@ -706,6 +761,35 @@ valid token would make its assertion impossible to satisfy.
 
 Computed **after** the body is final, over the exact bytes sent. Anything that
 edits the body afterwards invalidates the signature.
+
+### Enterprise signatures — signing the request, not the payload
+
+`over: "raw_body"` covers GitHub- and Meta-style webhooks. Most enterprise schemes
+(SigV4, Azure SharedKey, WSSE) sign a **canonical string** built from the method,
+path, a timestamp and a hash of the body, and require companion headers that the
+signature itself covers:
+
+```jsonc
+"computedHeaders": {
+  "x-legacy-signature": {
+    "algorithm": "hmac-sha256",
+    "secret": "{{var:legacy_secret}}",
+    "over": "canonical",
+    "template": "{method}\n{path}\n{timestamp}\n{bodyHash}",
+    "emit": { "x-legacy-timestamp": "{timestamp}" },
+    "timestampFormat": "epoch_s",
+    "bodyHashAlgorithm": "sha256",
+    "encoding": "hex",
+    "match": "/api/legacy"
+  }
+}
+```
+
+Tokens: `{method} {path} {query} {body} {bodyHash} {timestamp} {nonce}
+{header:Name}`, plus `{{var:...}}`. `emit` headers are set **before** signing, so
+`{header:x-legacy-timestamp}` reads back the value that was actually sent. An
+unknown token is left verbatim — `{acount}` is a visible typo, whereas a silently
+empty field is a 401 with no explanation on the wire.
 
 ### Where values come from
 
@@ -747,6 +831,25 @@ The run log names the layer that supplied each header, so a surprising identity
 can be traced to the layer that set it rather than guessed at.
 
 ---
+
+## Known issues
+
+### `projexlight_review_api_definitions` ignores `projectPath`
+
+Reported from a LeadFlow session: the tool was called with ProjexCloud's path and
+reviewed **LeadFlow** instead — root `/projects/additional1`, 9 files rather than the
+~30 expected. It reviews whichever project the container treats as current, silently,
+and reports success either way.
+
+This is the same class as the recorded `start_api_tests` `projectPath` bug, inverted:
+there the argument was ignored in favour of the owner project, here in favour of the
+additional mount. Both fail the same way — a clean report about a project you did not
+ask about, which is worse than an error because nothing looks wrong.
+
+**Until it is fixed:** confirm the root in the tool's own output before trusting a
+review, and check the file count matches the project you aimed at. A review whose root
+is not your project has validated nothing, and definition edits it "passed" remain
+unverified.
 
 ## Cheat sheet
 

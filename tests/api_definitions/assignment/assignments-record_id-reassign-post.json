@@ -39,6 +39,65 @@
           "source_timestamp": "string"
         }
       }
+    },
+    {
+      "name": "400 - a reassignment with no to_persona_id is refused",
+      "testType": "negative",
+      "coversErrorCase": "400|VALIDATION_ERROR",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "pathParams": {
+        "record_id": "{{cache:assignment.assignments.create.record_id}}"
+      },
+      "payload": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "reason": "territory rebalance",
+        "actor": "{{static:qa-manager}}"
+      },
+      "expectedStatus": 400,
+      "expectedError": {
+        "code": "VALIDATION_ERROR"
+      }
+    },
+    {
+      "name": "400 - a reassignment with no reason is refused",
+      "testType": "negative",
+      "coversErrorCase": "400|REASON_REQUIRED",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "pathParams": {
+        "record_id": "{{cache:assignment.assignments.create.record_id}}"
+      },
+      "payload": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "to_persona_id": "{{var:coverage_backup_persona_id}}",
+        "actor": "{{static:qa-manager}}"
+      },
+      "expectedStatus": 400,
+      "expectedError": {
+        "code": "REASON_REQUIRED"
+      }
+    },
+    {
+      "name": "401 - no tenant bearer token",
+      "testType": "negative",
+      "coversErrorCase": "401|Unauthorized",
+      "headers": {},
+      "pathParams": {
+        "record_id": "{{cache:assignment.assignments.create.record_id}}"
+      },
+      "payload": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "to_persona_id": "{{var:coverage_backup_persona_id}}",
+        "reason": "territory rebalance",
+        "actor": "{{static:qa-manager}}"
+      },
+      "expectedStatus": 401,
+      "expectedError": {
+        "code": "Unauthorized"
+      }
     }
   ],
   "errorCases": [

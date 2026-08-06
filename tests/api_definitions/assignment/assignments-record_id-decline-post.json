@@ -37,6 +37,43 @@
           "primary_persona_id": "string"
         }
       }
+    },
+    {
+      "name": "400 - a decline with no reason is refused",
+      "testType": "negative",
+      "coversErrorCase": "400|REASON_REQUIRED",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "pathParams": {
+        "record_id": "{{cache:assignment.assignments.create.record_id}}"
+      },
+      "payload": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "actor": "{{static:qa}}"
+      },
+      "expectedStatus": 400,
+      "expectedError": {
+        "code": "REASON_REQUIRED"
+      }
+    },
+    {
+      "name": "401 - no tenant bearer token",
+      "testType": "negative",
+      "coversErrorCase": "401|Unauthorized",
+      "headers": {},
+      "pathParams": {
+        "record_id": "{{cache:assignment.assignments.create.record_id}}"
+      },
+      "payload": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "reason": "outside my service area",
+        "actor": "{{static:qa}}"
+      },
+      "expectedStatus": 401,
+      "expectedError": {
+        "code": "Unauthorized"
+      }
     }
   ],
   "errorCases": [

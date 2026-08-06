@@ -13,6 +13,7 @@
   "expectedStatus": 200,
   "description": "Marks the current primary as having accepted, which stops the acceptance window. IDEMPOTENT: accepting twice returns the ORIGINAL acceptance time rather than erroring, because a retrying client is ordinary and failing the retry would leave an acceptance that happened looking like one that did not. QA edge cases: accepting an assignment that is already COMPLETED or CANCELLED is 409; the source timestamp is untouched, as it is by every other transition.",
   "dependsOn": [
+    "POST /api/personas",
     "POST /api/auth/signup-tenant",
     "POST /api/assignments"
   ],
@@ -39,6 +40,44 @@
           "record_id": "string",
           "state": "string"
         }
+      }
+    },
+    {
+      "name": "404 - the id names no assignment this tenant owns",
+      "testType": "negative",
+      "coversErrorCase": "404|ASSIGNMENT_NOT_FOUND",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "pathParams": {
+        "record_id": "{{dynamic:uuid}}"
+      },
+      "payload": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "persona_id": "{{cache:personas.create.response.data.persona.persona_id}}",
+        "actor": "{{static:qa}}"
+      },
+      "expectedStatus": 404,
+      "expectedError": {
+        "code": "ASSIGNMENT_NOT_FOUND"
+      }
+    },
+    {
+      "name": "401 - no tenant bearer token",
+      "testType": "negative",
+      "coversErrorCase": "401|Unauthorized",
+      "headers": {},
+      "pathParams": {
+        "record_id": "{{cache:assignment.assignments.create.record_id}}"
+      },
+      "payload": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "persona_id": "{{cache:personas.create.response.data.persona.persona_id}}",
+        "actor": "{{static:qa}}"
+      },
+      "expectedStatus": 401,
+      "expectedError": {
+        "code": "Unauthorized"
       }
     }
   ],

@@ -18,6 +18,77 @@ const https = require('https');
 const readline = require('readline');
 const fs = require('fs');
 const path = require('path');
+const { execFileSync } = require('child_process');
+
+// Git delta computed HERE, on the host, and sent to the MCP.
+//
+// The MCP runs in a container with the worktree bind-mounted, and git through that mount
+// is pathological: `git diff --name-status HEAD` measured >200s on ProjexCloud versus
+// 0.179s natively. So pre_commit_regression_check could never complete on its own and the
+// MUST-32 gate silently never ran. This bridge is a plain node process on the host, where
+// those commands are instant — so it answers instead of asking.
+const GIT_MAX_DIFF_BYTES = 8 * 1024 * 1024;   // keep the POST body sane
+
+// CROSS-PLATFORM (macOS / Linux / Windows). Three things this gets right, each of
+// which silently corrupts or breaks the result if done the obvious way:
+//
+//  1. execFileSync WITH AN ARGUMENT ARRAY, not execSync with a command string. A string
+//     goes through a shell — cmd.exe on Windows, /bin/sh elsewhere — which quote and
+//     escape differently. An array bypasses the shell entirely, so one code path works
+//     on all three.
+//  2. /\r?\n/ to split, not '\n'. git on Windows can emit CRLF, which leaves a trailing
+//     \r on every parsed path and makes each one fail to match server-side.
+//  3. core.quotePath=false. By default git C-quotes any path containing a non-ASCII
+//     byte ("caf\303\251.ts"), which then matches nothing — common on macOS, where
+//     filenames are routinely non-ASCII.
+//
+// Paths in the OUTPUT are always forward-slash: git reports repo-relative POSIX paths on
+// every platform, which is exactly what the MCP expects, so no separator translation is
+// needed here (and doing any would break it).
+function gitOut(args, cwd) {
+  return execFileSync('git', ['-c', 'core.quotePath=false', ...args], {
+    cwd, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024,
+    timeout: 30000, stdio: ['ignore', 'pipe', 'ignore'],
+    windowsHide: true,
+  });
+}
+
+function collectGitDelta() {
+  // __dirname is <project>/mcp-server; the repo root is its parent. NATIVE path — this is
+  // a spawn cwd, so it must keep the platform's own separators (C:\... on Windows).
+  // getProjectPath()'s unix-ified form is for the MCP over HTTP, never for spawning.
+  const cwd = path.dirname(__dirname);
+  try {
+    const changedFiles = [];
+    for (const line of gitOut(['status', '--porcelain=v1', '-uno'], cwd).split(/\r?\n/)) {
+      if (!line.trim()) continue;
+      const code = line.slice(0, 2);
+      let p = line.slice(3).trim();
+      if (p.includes('->')) p = p.split('->').pop().trim();   // rename: keep the new name
+      if (!p) continue;
+      const status = code.includes('D') ? 'deleted'
+                   : code.includes('A') ? 'added'
+                   : code.includes('M') ? 'modified' : 'changed';
+      changedFiles.push({ path: p, status });
+    }
+    if (changedFiles.length === 0) return { changedFiles: [], gitDiff: '' };
+
+    // unified=3: the server's symbol extractor reads the +/- lines and its
+    // dangling-reference snippets need the surrounding context. One call, all files.
+    let gitDiff = gitOut(['diff', 'HEAD', '--unified=3'], cwd);
+    if (gitDiff.length > GIT_MAX_DIFF_BYTES) {
+      if (DEBUG) console.error(`[MCP Bridge] gitDiff ${gitDiff.length}B exceeds cap; sending file list only`);
+      gitDiff = '';
+    }
+    return { changedFiles, gitDiff };
+  } catch (e) {
+    // git missing from PATH, not a repo, or timed out. Non-fatal: the server falls back
+    // to its own git and, if that also fails, says so explicitly instead of passing.
+    if (DEBUG) console.error(`[MCP Bridge] collectGitDelta failed: ${e.message}`);
+    return null;
+  }
+}
+
 
 // Configuration
 // MCP_SERVER_URL points to the LOCAL Docker MCP server (not the backend API)
@@ -1617,6 +1688,20 @@ function makeHttpRequest(method, path, body = null) {
 
     // Add authentication credentials and project context to request body
     let requestBody = body || {};
+
+    // The pre-commit gate needs git, which is unusable inside the container (see
+    // collectGitDelta). Compute it here and pass it in, so the check actually runs.
+    if (method !== 'GET' && path.includes('/pre-commit-regression-check')
+        && !requestBody.changedFiles) {
+      const delta = collectGitDelta();
+      if (delta) {
+        requestBody = { ...requestBody, changedFiles: delta.changedFiles, gitDiff: delta.gitDiff };
+        if (DEBUG) {
+          console.error(`[MCP Bridge] host git delta: ${delta.changedFiles.length} file(s), `
+                        + `${delta.gitDiff.length}B diff`);
+        }
+      }
+    }
     if (isAuthenticatedEndpoint && method !== 'GET') {
       // Auto-detect project path if not provided in the request
       const projectPath = requestBody.projectPath || getProjectPath();

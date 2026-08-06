@@ -2909,10 +2909,10 @@
     ]
   },
   "coverage/backup-designations-post.json": {
-    "hash": "9a9f9244a66b61d3c9c17888d1667187f27f3b46af8b13e1bab7d330b92b4f39",
+    "hash": "8c2cdc7e41ad4d1569988aa749add336185d8354b644c8bed2262c48c7db6fa8",
     "status": "findings",
     "findingsCount": 1,
-    "verifiedAt": "2026-08-04T07:22:46",
+    "verifiedAt": "2026-08-06T17:38:28",
     "route": [
       "POST",
       "/coverage/backup-designations"
@@ -2936,13 +2936,25 @@
     ]
   },
   "coverage/eligible-get.json": {
-    "hash": "426776655ed36f3dd79ed9979c75f60bccc4ac1961dbd7c185701ca2af1ce434",
-    "status": "clean",
-    "findingsCount": 0,
-    "verifiedAt": "2026-08-04T07:22:46",
+    "hash": "dc95876ae883dfa59fb31127dd4e2cd2e293986aeeadadcdf8d4e361240df8cd",
+    "status": "findings",
+    "findingsCount": 2,
+    "verifiedAt": "2026-08-06T17:38:28",
     "route": [
       "GET",
       "/coverage/eligible"
+    ],
+    "findings": [
+      {
+        "rule": "MUST-36",
+        "severity": "high",
+        "message": "FK field 'testCases[2].queryParams.tenant_id' (queryParams) uses '00000000-0000-4000-8000-0000000000ff' \u2014 must use {cache:<resource>.create.response.data.id} from its producer, never static/dynamic-uuid/literal UUID. Add the producer to dependsOn. It references 'tenant.tenant' \u2014 create + make-usable that resource first."
+      },
+      {
+        "rule": "MUST-44",
+        "severity": "high",
+        "message": "Build the COMPLETE prerequisite chain in dependsOn (the list of APIs QA must call first). FKs to trace: tenant_id -> tenant.tenant. For EACH: add the CREATE endpoint, any PUBLISH/ACTIVATE/APPROVE endpoint that makes the row usable, and any SUB-RESOURCE it needs (e.g. rates), in order; set each FK value to {cache:...} from its producer. Do NOT mark manual \u2014 build the chain (a NOT NULL FK to a non-seeded row is the #1 cause of 500s)."
+      }
     ]
   },
   "coverage/gaps-get.json": {
@@ -2959,7 +2971,7 @@
     "hash": "382f32ac2ac4b974fa25c6285af8d61b420ffa0888b6dabd1521a6f7f2edef32",
     "status": "findings",
     "findingsCount": 1,
-    "verifiedAt": "2026-08-04T07:22:46",
+    "verifiedAt": "2026-08-06T17:38:28",
     "route": [
       "POST",
       "/coverage/holiday-calendars"
@@ -2983,20 +2995,27 @@
     ]
   },
   "coverage/on-call-post.json": {
-    "hash": "e5d98a5cef55f758f86888cc55543bdd96ca2e4f5a1a85c2144fee56111beb53",
-    "status": "clean",
-    "findingsCount": 0,
-    "verifiedAt": "2026-08-04T07:22:46",
+    "hash": "dfcb599aec88ab31db80148d53e7bff85156df021b1686bd3b30a090606ad224",
+    "status": "findings",
+    "findingsCount": 1,
+    "verifiedAt": "2026-08-06T17:38:28",
     "route": [
       "POST",
       "/coverage/on-call"
+    ],
+    "findings": [
+      {
+        "rule": "MUST-72",
+        "severity": "medium",
+        "message": "2 datasets declare expectedStatus 201 and none is marked `capturesResponse: true` \u2014 the producer is chosen by position, so the cached value may come from a variant."
+      }
     ]
   },
   "coverage/presence-put.json": {
-    "hash": "da93289477ea44a28ed67e6772e3366581abf0f2c6ee5c8ff16973b422715958",
+    "hash": "1575eda11abfd09f6b6fd9c2accac5e5db828c3497df60e2f77904aad2448798",
     "status": "clean",
     "findingsCount": 0,
-    "verifiedAt": "2026-08-04T07:22:46",
+    "verifiedAt": "2026-08-06T17:38:28",
     "route": [
       "PUT",
       "/coverage/presence"
@@ -3013,20 +3032,20 @@
     ]
   },
   "coverage/schedules-post.json": {
-    "hash": "5e10e85f31f606d4684a972c0a10446e33f1c4d30994a257d41f32647ebba2a0",
+    "hash": "b85c5f58fecd9a3a0123b676693cbbcf02f545e8a8431640a9df678837c062ea",
     "status": "clean",
     "findingsCount": 0,
-    "verifiedAt": "2026-08-04T07:22:46",
+    "verifiedAt": "2026-08-06T17:38:28",
     "route": [
       "POST",
       "/coverage/schedules"
     ]
   },
   "coverage/time-off-post.json": {
-    "hash": "55d9c5878709ab9082d9a1cb778d9f5e201dce74854a0e367d0b7fefd165ad6d",
+    "hash": "797d4309c7b65a6a962e971f6725f6ffadc27da07c4618c1ac3cabb8aabc2ffe",
     "status": "findings",
-    "findingsCount": 3,
-    "verifiedAt": "2026-08-04T07:22:46",
+    "findingsCount": 4,
+    "verifiedAt": "2026-08-06T17:38:28",
     "route": [
       "POST",
       "/coverage/time-off"
@@ -3041,6 +3060,11 @@
         "rule": "MUST-47",
         "severity": "medium",
         "message": "testCases[1].payload.kind = 'MEETING' is a fixed literal in a likely-UNIQUE column of a create \u2014 re-runs may 500 'duplicate key'. If the migration marks this UNIQUE/PK, use {{dynamic:...}} (e.g. 'MEETING-{{dynamic:slug}}')."
+      },
+      {
+        "rule": "MUST-72",
+        "severity": "medium",
+        "message": "2 datasets declare expectedStatus 201 and none is marked `capturesResponse: true` \u2014 the producer is chosen by position, so the cached value may come from a variant."
       },
       {
         "rule": "MUST-39",
@@ -6260,7 +6284,7 @@
     "hash": "1383dc6836abf1f0f0dfad7c761a496227e164467f15d67e037f8de7d27f472d",
     "status": "findings",
     "findingsCount": 1,
-    "verifiedAt": "2026-08-04T07:22:48",
+    "verifiedAt": "2026-08-06T18:14:23",
     "route": [
       "POST",
       "/offers/:p/check-reference"
@@ -6307,7 +6331,7 @@
     "hash": "9c525f5cb77bad8ce60eba2a0da1d7e3dfc0b9ee34995ee270d4ae925543a811",
     "status": "findings",
     "findingsCount": 1,
-    "verifiedAt": "2026-08-04T07:22:48",
+    "verifiedAt": "2026-08-06T18:14:23",
     "route": [
       "POST",
       "/offers/:p/versions/:p/activate"
@@ -6334,7 +6358,7 @@
     "hash": "ed0b5749a858eb37803a5fa01194d21a6b74bdc36295b6f66da78af11b4ca75c",
     "status": "findings",
     "findingsCount": 1,
-    "verifiedAt": "2026-08-04T07:22:48",
+    "verifiedAt": "2026-08-06T18:14:23",
     "route": [
       "POST",
       "/offers/:p/versions/:p/features"
@@ -6351,7 +6375,7 @@
     "hash": "82ea06b6530eff6408d8bfc4fe46589085e8a4b86f302a469e526897b6740dae",
     "status": "findings",
     "findingsCount": 1,
-    "verifiedAt": "2026-08-04T07:22:48",
+    "verifiedAt": "2026-08-06T18:14:23",
     "route": [
       "POST",
       "/offers/:p/versions/:p/publish-decision"
@@ -9496,6 +9520,86 @@
         "severity": "medium",
         "message": "testCases[0].payload.namespace = 'admin' is a fixed literal in a likely-UNIQUE column of a create \u2014 re-runs may 500 'duplicate key'. If the migration marks this UNIQUE/PK, use {{dynamic:...}} (e.g. 'admin-{{dynamic:slug}}')."
       }
+    ]
+  },
+  "coverage/backup-designations-get.json": {
+    "hash": "ab478c7452e63ba28910d454afa9b35afee1708dcb0f2e88171261d5d26b9632",
+    "status": "clean",
+    "findingsCount": 0,
+    "verifiedAt": "2026-08-06T17:38:28",
+    "route": [
+      "GET",
+      "/coverage/backup-designations"
+    ]
+  },
+  "coverage/capacity-policies-get.json": {
+    "hash": "c8ca619f32e574c028ce9a30d36efb35012955c82c506e823c5dc42e4986d9df",
+    "status": "clean",
+    "findingsCount": 0,
+    "verifiedAt": "2026-08-06T17:38:28",
+    "route": [
+      "GET",
+      "/coverage/capacity-policies"
+    ]
+  },
+  "coverage/holiday-calendars-get.json": {
+    "hash": "a2a098e7c3e7758f938d463b8799d4c9effcef746251978d579dbe5ad1cd5cb7",
+    "status": "clean",
+    "findingsCount": 0,
+    "verifiedAt": "2026-08-06T17:38:28",
+    "route": [
+      "GET",
+      "/coverage/holiday-calendars"
+    ]
+  },
+  "coverage/on-call-get.json": {
+    "hash": "c39f43e9aa15ab41c951fcb4ebd6c65e93040afbb90121db4bef344f356408f4",
+    "status": "clean",
+    "findingsCount": 0,
+    "verifiedAt": "2026-08-06T17:38:28",
+    "route": [
+      "GET",
+      "/coverage/on-call"
+    ]
+  },
+  "coverage/time-off-get.json": {
+    "hash": "5be38311dea491aed234df9dd2f2bc027b580a9225cecda33ef3089d817d6209",
+    "status": "clean",
+    "findingsCount": 0,
+    "verifiedAt": "2026-08-06T17:38:28",
+    "route": [
+      "GET",
+      "/coverage/time-off"
+    ]
+  },
+  "offers/offer_id-get.json": {
+    "hash": "b007305e176b4272dc7966054495951a88889ea52d2c893376982bb8b786b548",
+    "status": "clean",
+    "findingsCount": 0,
+    "verifiedAt": "2026-08-06T18:14:23",
+    "route": [
+      "GET",
+      "/offers/:p"
+    ]
+  },
+  "offers/offer_id-versions-get.json": {
+    "hash": "282c07ee0b6693a5eb639790ea1c469690710678c0103b2f1683ffdd328c75ba",
+    "status": "clean",
+    "findingsCount": 0,
+    "verifiedAt": "2026-08-06T18:14:23",
+    "route": [
+      "GET",
+      "/offers/:p/versions"
+    ]
+  },
+  "offers/offer_id-versions-version_id-get.json": {
+    "hash": "50e953a3fdd96c701e5d26dea184a8c44083e8e05437b5d094ce12be7207710d",
+    "status": "clean",
+    "findingsCount": 0,
+    "verifiedAt": "2026-08-06T18:14:23",
+    "route": [
+      "GET",
+      "/offers/:p/versions/:p"
     ]
   }
 }

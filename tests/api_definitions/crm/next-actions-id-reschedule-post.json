@@ -148,6 +148,50 @@
         "code": "Unauthorized",
         "messageContains": "Invalid or expired token"
       }
+    },
+    {
+      "name": "400 - a due date that cannot be parsed is a bad request",
+      "testType": "negative",
+      "coversErrorCase": "400|RESCHEDULE_INVALID_DUE_DATE",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "pathParams": {
+        "id": "{{cache:crm.subject-next-action.response.data.next_action.next_action_id}}"
+      },
+      "payload": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "new_due_at": "{{static:not-a-date}}",
+        "reason": "Buyer moved the budget review to next week",
+        "pushed_by": "{{cache:personas.create.response.data.persona.persona_id}}",
+        "approved_by": "{{cache:personas.create.response.data.persona.persona_id}}"
+      },
+      "expectedStatus": 400,
+      "expectedError": {
+        "code": "RESCHEDULE_INVALID_DUE_DATE"
+      }
+    },
+    {
+      "name": "409 - re-sending the current due date is not a push",
+      "testType": "negative",
+      "coversErrorCase": "409|RESCHEDULE_DUE_DATE_UNCHANGED",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "pathParams": {
+        "id": "{{cache:crm.subject-next-action.response.data.next_action.next_action_id}}"
+      },
+      "payload": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "new_due_at": "2027-03-15T10:00:00.000Z",
+        "reason": "re-sending the date it already has",
+        "pushed_by": "{{cache:personas.create.response.data.persona.persona_id}}",
+        "approved_by": "{{cache:personas.create.response.data.persona.persona_id}}"
+      },
+      "expectedStatus": 409,
+      "expectedError": {
+        "code": "RESCHEDULE_DUE_DATE_UNCHANGED"
+      }
     }
   ],
   "errorCases": [

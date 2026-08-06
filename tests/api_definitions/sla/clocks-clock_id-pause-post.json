@@ -12,8 +12,9 @@
   "epicId": "39365400-aca0-4a86-9791-5771d19998f4",
   "priority": 64,
   "testability": "auto",
-  "description": "Pause the clock so time spent waiting on somebody else does not burn the responder's promise. The reason MUST appear in the policy's pause_conditions, otherwise 422 PAUSE_REASON_NOT_ALLOWED naming what is allowed — an unconstrained pause button is how a breach becomes invisible, and each listed condition also carries a max_minutes cap. Pausing does not move due_at: the deadline is the promise that was made, and paused time explains a miss rather than excusing it, while elapsed business minutes exclude the parked interval. Only a running clock can pause; anything else is 409. Returns 200. Required: tenant_id, reason.",
+  "description": "Pause the clock so time spent waiting on somebody else does not burn the responder's promise. The reason MUST appear in the policy's pause_conditions, otherwise 422 PAUSE_REASON_NOT_ALLOWED naming what is allowed \u2014 an unconstrained pause button is how a breach becomes invisible, and each listed condition also carries a max_minutes cap. Pausing does not move due_at: the deadline is the promise that was made, and paused time explains a miss rather than excusing it, while elapsed business minutes exclude the parked interval. Only a running clock can pause; anything else is 409. Returns 200. Required: tenant_id, reason.",
   "dependsOn": [
+    "POST /api/sla/clocks",
     "POST /api/auth/signup-tenant",
     "POST /api/sla/clocks/:clock_id/reassign"
   ],
@@ -32,7 +33,7 @@
   "statusTransitions": {
     "entity": "sla.sla_clock",
     "field": "state",
-    "note": "at_risk is a DERIVED view over running/paused clocks approaching due_at (GET /api/sla/at-risk), not a stored state — the column can only hold the five values in fieldEnums.state.",
+    "note": "at_risk is a DERIVED view over running/paused clocks approaching due_at (GET /api/sla/at-risk), not a stored state \u2014 the column can only hold the five values in fieldEnums.state.",
     "flow": [
       "running",
       "paused",
@@ -70,7 +71,7 @@
         "from": "breached",
         "to": "satisfied",
         "via": "POST /api/sla/clocks/:clock_id/satisfy",
-        "note": "a missed promise can still be kept, late — satisfied_at then sits after due_at so attainment still counts it as a miss"
+        "note": "a missed promise can still be kept, late \u2014 satisfied_at then sits after due_at so attainment still counts it as a miss"
       },
       {
         "from": "running",

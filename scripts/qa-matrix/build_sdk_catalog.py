@@ -427,9 +427,17 @@ AUDIT_EVENTS_PLAYBOOK = {
         "would file your event under a name that already means something else."
     ),
     "critical": [
+        # {baseline_count} is substituted from the parsed registry at render time. It was
+        # hardcoded at 294 against an actual 227 — a number nobody could act on and that
+        # was wrong besides, which is the whole reason the names are now published as data.
         "THE NAME MUST BE <domain>.<entity>.<verb>.v<N> — lowercase, '-' or '_' inside a segment, "
-        "at least two segments before the version. All 294 platform types follow it and "
-        "registration rejects anything that does not.",
+        "at least two segments before the version. All {baseline_count} platform types follow it "
+        "and registration rejects anything that does not.",
+        "CHECK YOUR NAMES AGAINST `event-types.json` BEFORE YOU WRITE THEM. It carries every "
+        "platform baseline name and the domains the platform owns. A name that collides is "
+        "rejected 400 at registration; a name inside a platform-owned domain that does not "
+        "collide YET becomes a collision the next time the platform adds a type, because the "
+        "baseline is additive-only. Diff your vocabulary against it in CI, not at boot.",
         "THE .v<N> SUFFIX IS NOT DECORATION. It is what lets a payload shape change later as a NEW "
         "version instead of a silent redefinition of rows already written under the old shape. "
         "'capture.created' is rejected; 'capture.lead.created.v1' is accepted.",
@@ -468,12 +476,113 @@ AUDIT_EVENTS_PLAYBOOK = {
 }
 
 
+# ── The platform event-type baseline, published as DATA ──────────────────────
+#
+# AGENTS.md has always told a vertical it "cannot shadow a platform type", and has
+# never shipped the list of names that would let it comply. The prohibition was
+# enforceable only at runtime, by a 400 from a boot-time provisioner, in a log line.
+#
+# LeadFlow named 48 audit events against that advice and hit the baseline twice —
+# `handoff.accepted.v1` and `import.run.committed.v1`. The 400 is the SAFE outcome.
+# The dangerous one is silent: append resolves baseline-first and does NOT reject a
+# baseline name, so a vertical's events land under the platform's type with the
+# PLATFORM's retention_class (auditService.ts appendAuditEntry). Where the two
+# classes differ, `regulated` records are stored as `operational` and shredded at 90
+# days instead of seven years — with a 201 every time and nothing to grep for.
+#
+# A count is not a contract. Publishing the names turns "did you happen to pick one
+# of 227" into a diff any CI job can run before the code ships.
+EVENT_TYPES_SRC = os.path.join(ROOT, "packages", "contracts", "src", "events.ts")
+
+
+def load_event_type_baseline():
+    """Parse EVENT_TYPE_REGISTRY out of the contracts package.
+
+    Parsed rather than imported because this is a Python build step and the registry
+    is a TypeScript compile-time constant; a `tsc` shell-out would put a build
+    toolchain between the docs and a literal object. The parse is deliberately
+    strict — a shape change here must FAIL the build rather than quietly publish a
+    short list, because a short list reads exactly like a complete one to the agent
+    consuming it, and it would hand back the false confidence this file exists to
+    remove.
+    """
+    import re
+
+    src = io_read(EVENT_TYPES_SRC)
+    m = re.search(r"export const EVENT_TYPE_REGISTRY[^{]*\{(.*?)\n\};", src, re.S)
+    if not m:
+        raise SystemExit(
+            f"ERROR: EVENT_TYPE_REGISTRY not found in {EVENT_TYPES_SRC}.\n"
+            "  The catalog publishes the baseline vocabulary from it; if the constant moved\n"
+            "  or changed shape, fix this parser rather than shipping a bundle without it."
+        )
+    body = m.group(1)
+
+    types = []
+    for line in body.splitlines():
+        entry = re.match(
+            r"\s*'(?P<name>[a-z0-9_.]+\.v\d+)':\s*\{(?P<meta>.*)\},?\s*$", line
+        )
+        if not entry:
+            continue
+        meta = dict(re.findall(r"(\w+):\s*'([^']*)'", entry.group("meta")))
+        types.append({
+            "event_type": entry.group("name"),
+            "retention_class": meta.get("retention_class"),
+            "conflict_policy": meta.get("conflict_policy"),
+            "schema_state": meta.get("schema_state"),
+        })
+
+    if len(types) < 200:
+        raise SystemExit(
+            f"ERROR: parsed only {len(types)} baseline event types from {EVENT_TYPES_SRC}.\n"
+            "  That is far below the known size, so the parser has drifted from the source.\n"
+            "  A partial list is worse than none: a vertical would diff against it, see no\n"
+            "  collision, and ship the collision anyway."
+        )
+
+    # The domain (first segment) is what a vertical actually has to steer around. An
+    # exact-name diff only catches today's collisions; the platform registry is
+    # additive-only, so any name a vertical puts inside a platform-owned domain is a
+    # future collision waiting for the next baseline addition. LeadFlow has 16 such
+    # names against 2 live collisions — the warn list is 8x the error list, which is
+    # the number that argues for app-scoped domains.
+    domains = {}
+    for t in types:
+        d = t["event_type"].split(".")[0]
+        domains[d] = domains.get(d, 0) + 1
+
+    return {
+        "version": VERSION,
+        "note": (
+            "The PLATFORM BASELINE audit vocabulary, published so a consuming application can "
+            "check a name BEFORE it ships rather than discovering the clash as a 400 from its "
+            "boot-time provisioner. Registering any name below is rejected 400; APPENDING one "
+            "is accepted and silently adopts the platform's retention_class, which is the "
+            "failure worth preventing. Do not copy these into your own vocabulary — register "
+            "your own names under a domain the platform does not own."
+        ),
+        "registration_endpoint": "POST /api/events/types",
+        "name_convention": "<domain>.<entity>.<verb>.v<N>",
+        "count": len(types),
+        "reserved_domains": sorted(domains),
+        "reserved_domain_counts": dict(sorted(domains.items(), key=lambda kv: (-kv[1], kv[0]))),
+        "types": sorted(types, key=lambda t: t["event_type"]),
+    }
+
+
+def io_read(path):
+    with open(path, encoding="utf-8") as f:
+        return f.read()
+
+
 def is_admin_endpoint(endpoint):
     return endpoint.startswith("/admin/") or endpoint.startswith("/api/admin/")
 
 
 def main():
     apis = json.load(open(SRC, encoding="utf-8"))
+    baseline = load_event_type_baseline()
 
     # sdk -> (method, endpoint) -> [records(cases)]
     by_sdk = defaultdict(lambda: defaultdict(list))
@@ -658,7 +767,7 @@ def main():
         L.append("### Rules that will cost you if you get them wrong")
         L.append("")
         for c in ae["critical"]:
-            L.append(f"- {c}")
+            L.append(f"- {c.format(baseline_count=baseline['count'])}")
         L.append("")
         L.append("### Registering a type, then appending against it")
         L.append("")
@@ -677,6 +786,9 @@ def main():
         L.append("| `sdk-catalog-index.json` | Capability discovery — which SDK covers X. Load this first. |")
         L.append("| `sdk-catalog.json` | Full per-endpoint spec, once you have a match. |")
         L.append("| `openapi.json` | OpenAPI 3.1 — point a client generator at it. |")
+        L.append(f"| `event-types.json` | The {baseline['count']} platform audit event names and the "
+                 f"{len(baseline['reserved_domains'])} domains the platform owns. Diff your own "
+                 "vocabulary against it before you ship. |")
         L.append("")
         L.append(f"Human guide: `{pb['guide']}`")
         L.append("")
@@ -698,6 +810,8 @@ def main():
             "- `sdk-catalog-index.json` — compact capability map (start here to find an SDK)",
             "- `sdk-catalog.json` — full endpoint specs",
             "- `openapi.json` — OpenAPI 3.1 for client generation",
+            f"- `event-types.json` — the {baseline['count']} platform audit event names; check "
+            "yours against it before registering",
             "",
         ])
 
@@ -728,7 +842,8 @@ def main():
                 f.write(text)
         md_written.append((basename, len(text.encode("utf-8"))))
 
-    for obj, basename in ((catalog, "sdk-catalog.json"), (index, "sdk-catalog-index.json")):
+    for obj, basename in ((catalog, "sdk-catalog.json"), (index, "sdk-catalog-index.json"),
+                          (baseline, "event-types.json")):
         # Index is minified (LLM reads it into context — every token counts); the full
         # catalog stays pretty-printed (also browsed/diffed by humans).
         blob = (json.dumps(obj, ensure_ascii=False, separators=(",", ":"))

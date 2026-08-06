@@ -16,17 +16,28 @@
     "POST /api/auth/signup-tenant"
   ],
   "fieldEnums": {
-    "strategy": ["default", "round_robin", "fair_share"]
+    "strategy": [
+      "default",
+      "round_robin",
+      "fair_share"
+    ]
   },
   "testCases": [
     {
       "name": "Round-robin assign among three eligible, skilled personas",
-      "headers": { "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}" },
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
       "payload": {
         "task_id": "{{dynamic:uuid}}",
         "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
-        "location": { "lat": 40.7128, "lng": -74.006 },
-        "required_skills": ["plumbing"],
+        "location": {
+          "lat": 40.7128,
+          "lng": -74.006
+        },
+        "required_skills": [
+          "plumbing"
+        ],
         "strategy": "round_robin",
         "pool_key": "default",
         "candidate_persona_ids": [
@@ -38,9 +49,129 @@
       "expectedStatus": 201,
       "expectedResponse": {
         "data": {
-          "assignment": { "assignment_id": "string", "task_id": "string", "persona_id": "string", "status": "string" },
+          "assignment": {
+            "assignment_id": "string",
+            "task_id": "string",
+            "persona_id": "string",
+            "status": "string"
+          },
           "reason": "string"
         }
+      }
+    },
+    {
+      "name": "400 - a request with no task_id is refused",
+      "testType": "negative",
+      "coversErrorCase": "400|ValidationError|task-id",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "payload": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "location": {
+          "lat": 40.7128,
+          "lng": -74.006
+        },
+        "required_skills": [
+          "plumbing"
+        ],
+        "strategy": "round_robin",
+        "pool_key": "default",
+        "candidate_persona_ids": [
+          "a1111111-1111-4111-8111-111111111111",
+          "a2222222-2222-4222-8222-222222222222",
+          "a3333333-3333-4333-8333-333333333333"
+        ]
+      },
+      "expectedStatus": 400,
+      "expectedError": {
+        "code": "ValidationError"
+      }
+    },
+    {
+      "name": "400 - no location, so no distance can be scored",
+      "testType": "negative",
+      "coversErrorCase": "400|ValidationError|location",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "payload": {
+        "task_id": "{{dynamic:uuid}}",
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "required_skills": [
+          "plumbing"
+        ],
+        "strategy": "round_robin",
+        "pool_key": "default",
+        "candidate_persona_ids": [
+          "a1111111-1111-4111-8111-111111111111",
+          "a2222222-2222-4222-8222-222222222222",
+          "a3333333-3333-4333-8333-333333333333"
+        ]
+      },
+      "expectedStatus": 400,
+      "expectedError": {
+        "code": "ValidationError"
+      }
+    },
+    {
+      "name": "400 - a strategy outside the three is refused, not defaulted",
+      "testType": "negative",
+      "coversErrorCase": "400|ValidationError|strategy",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "payload": {
+        "task_id": "{{dynamic:uuid}}",
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "location": {
+          "lat": 40.7128,
+          "lng": -74.006
+        },
+        "required_skills": [
+          "plumbing"
+        ],
+        "strategy": "{{static:teleportation}}",
+        "pool_key": "default",
+        "candidate_persona_ids": [
+          "a1111111-1111-4111-8111-111111111111",
+          "a2222222-2222-4222-8222-222222222222",
+          "a3333333-3333-4333-8333-333333333333"
+        ]
+      },
+      "expectedStatus": 400,
+      "expectedError": {
+        "code": "ValidationError"
+      }
+    },
+    {
+      "name": "409 - no candidate passes the skill gate, so nothing is force-assigned",
+      "testType": "negative",
+      "coversErrorCase": "409|NoEligiblePersona",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "payload": {
+        "task_id": "{{dynamic:uuid}}",
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "location": {
+          "lat": 40.7128,
+          "lng": -74.006
+        },
+        "required_skills": [
+          "{{static:underwater-basket-weaving}}"
+        ],
+        "strategy": "round_robin",
+        "pool_key": "default",
+        "candidate_persona_ids": [
+          "a1111111-1111-4111-8111-111111111111",
+          "a2222222-2222-4222-8222-222222222222",
+          "a3333333-3333-4333-8333-333333333333"
+        ]
+      },
+      "expectedStatus": 409,
+      "expectedError": {
+        "code": "NoEligiblePersona"
       }
     }
   ],
@@ -49,9 +180,29 @@
     "assignment.assign-by-task.create.response.data.assignment.persona_id": "data.assignment.persona_id"
   },
   "errorCases": [
-    { "status": 400, "code": "ValidationError", "message": "task_id and tenant_id are required", "when": "task_id or tenant_id missing from body" },
-    { "status": 400, "code": "ValidationError", "message": "location {lat,lng} is required", "when": "location missing or lat/lng not numbers" },
-    { "status": 400, "code": "ValidationError", "message": "invalid strategy", "when": "strategy is not one of default|round_robin|fair_share" },
-    { "status": 409, "code": "NoEligiblePersona", "message": "no eligible persona for task", "when": "no candidate passes the skill/availability/capacity gates or all raced to capacity" }
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "task_id and tenant_id are required",
+      "when": "task_id or tenant_id missing from body"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "location {lat,lng} is required",
+      "when": "location missing or lat/lng not numbers"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "invalid strategy",
+      "when": "strategy is not one of default|round_robin|fair_share"
+    },
+    {
+      "status": 409,
+      "code": "NoEligiblePersona",
+      "message": "no eligible persona for task",
+      "when": "no candidate passes the skill/availability/capacity gates or all raced to capacity"
+    }
   ]
 }

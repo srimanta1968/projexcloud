@@ -13,6 +13,7 @@
   "expectedStatus": 201,
   "description": "Opens the assignment: a primary, an optional backup, an optional manager, an acceptance window, and the SOURCE TIMESTAMP - when the WORLD produced the subject. That timestamp is required and never defaulted to now, because every SLA measures from it and quietly substituting \"now\" would restate a six-hour-old subject as fresh. It is then frozen for the life of the assignment: a decline, a reassignment, a fallback and a manager takeover all move OWNERSHIP, never the clock. QA edge cases: acceptance and response SLA clocks are started through sdk-sla FROM the source timestamp, and a clock that cannot be started leaves a null ref rather than losing the assignment; a backup equal to the primary is refused by the database; acceptance_window_minutes defaults to 5 and may be 0, which means the backup is notified at the same time. NOTE ON THE PERSONA FIELDS: primary comes from the sdk-persona producer, while the backup and the manager resolve from seeded ids. A backup or manager equal to the primary is refused (a backup that is the primary is not a backup), and the dependency graph is ONE node per METHOD+ENDPOINT so it cannot express a second and third persona from the same producer [MUST-51]; these columns are loose references with no foreign key into sdk-persona, so a seeded id is truthful rather than a fabricated FK.",
   "dependsOn": [
+    "POST /api/assignment/route",
     "POST /api/auth/signup-tenant",
     "POST /api/personas"
   ],
@@ -46,6 +47,55 @@
           "state": "string",
           "source_timestamp": "string"
         }
+      }
+    },
+    {
+      "name": "400 - source_timestamp is required, it is the clock the record keeps",
+      "testType": "negative",
+      "coversErrorCase": "400|VALIDATION_ERROR",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "payload": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "subject_ref": "subject-{{dynamic:slug}}",
+        "primary_persona_id": "{{cache:personas.create.response.data.persona.persona_id}}",
+        "backup_persona_id": "{{var:coverage_backup_persona_id}}",
+        "manager_persona_id": "{{var:assignment_manager_persona_id}}",
+        "acceptance_window_minutes": 5,
+        "routing_decision_id": "{{cache:assignment.route.decision_id}}",
+        "actor": "{{static:qa}}",
+        "metadata": {
+          "source": "api-test"
+        }
+      },
+      "expectedStatus": 400,
+      "expectedError": {
+        "code": "VALIDATION_ERROR"
+      }
+    },
+    {
+      "name": "401 - no tenant bearer token",
+      "testType": "negative",
+      "coversErrorCase": "401|Unauthorized",
+      "headers": {},
+      "payload": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "subject_ref": "subject-{{dynamic:slug}}",
+        "source_timestamp": "{{dynamic:pastdatetime}}",
+        "primary_persona_id": "{{cache:personas.create.response.data.persona.persona_id}}",
+        "backup_persona_id": "{{var:coverage_backup_persona_id}}",
+        "manager_persona_id": "{{var:assignment_manager_persona_id}}",
+        "acceptance_window_minutes": 5,
+        "routing_decision_id": "{{cache:assignment.route.decision_id}}",
+        "actor": "{{static:qa}}",
+        "metadata": {
+          "source": "api-test"
+        }
+      },
+      "expectedStatus": 401,
+      "expectedError": {
+        "code": "Unauthorized"
       }
     }
   ],

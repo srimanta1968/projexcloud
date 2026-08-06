@@ -45,6 +45,38 @@
           "runs": "array"
         }
       }
+    },
+    {
+      "name": "400 - a candidate_version that is not an integer is refused",
+      "testType": "negative",
+      "coversErrorCase": "400|VALIDATION_ERROR",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "queryParams": {
+        "rule_set_name": "{{cache:assignment.routes.publish.name}}",
+        "candidate_version": "{{static:not-an-integer}}",
+        "limit": 50
+      },
+      "expectedStatus": 400,
+      "expectedError": {
+        "code": "VALIDATION_ERROR"
+      }
+    },
+    {
+      "name": "401 - no tenant bearer token",
+      "testType": "negative",
+      "coversErrorCase": "401|Unauthorized",
+      "headers": {},
+      "queryParams": {
+        "rule_set_name": "{{cache:assignment.routes.publish.name}}",
+        "candidate_version": "{{cache:assignment.routes.publish.version}}",
+        "limit": 50
+      },
+      "expectedStatus": 401,
+      "expectedError": {
+        "code": "Unauthorized"
+      }
     }
   ],
   "errorCases": [

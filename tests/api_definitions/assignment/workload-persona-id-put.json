@@ -8,6 +8,7 @@
   "description": "Upserts a persona's workload profile (capacity/day, skills, availability window) through the existing setWorkload service (FR-ASN-3) — the HTTP producer surface so tests and dispatchers provision assignment candidates via the API instead of a SQL seed. Idempotent on persona_id (ON CONFLICT DO UPDATE; capacity/skills COALESCE to prior value when omitted). open_tasks is dispatcher-owned and is NOT settable here. Edge cases: persona_id must be a UUID (non-UUID -> 400 ValidationError before the ::uuid cast); a valid tenant JWT is required (api-gateway default-deny authGate). NOTE: assignment.workload has no tenant column, so this is effectively a global/ops surface.",
   "expectedStatus": 200,
   "dependsOn": [
+    "POST /api/personas",
     "POST /api/auth/signup-tenant"
   ],
   "captureResponse": {
@@ -17,7 +18,7 @@
     {
       "name": "Upsert a persona workload profile",
       "pathParams": {
-        "persona_id": "{{dynamic:uuid}}"
+        "persona_id": "{{cache:personas.create.response.data.persona.persona_id}}"
       },
       "headers": {
         "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
@@ -32,6 +33,52 @@
         "available_to": "{{dynamic:futuredatetime+30d}}"
       },
       "expectedStatus": 200
+    },
+    {
+      "name": "400 - a persona_id that is not a UUID is refused before the ::uuid cast",
+      "testType": "negative",
+      "coversErrorCase": "400|ValidationError",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "pathParams": {
+        "persona_id": "{{static:not-a-uuid}}"
+      },
+      "payload": {
+        "capacity_per_day": 8,
+        "skills": [
+          "plumbing",
+          "hvac"
+        ],
+        "available_from": "2026-01-01T00:00:00Z",
+        "available_to": "{{dynamic:futuredatetime+30d}}"
+      },
+      "expectedStatus": 400,
+      "expectedError": {
+        "code": "ValidationError"
+      }
+    },
+    {
+      "name": "401 - no tenant bearer token",
+      "testType": "negative",
+      "coversErrorCase": "401|Unauthorized",
+      "headers": {},
+      "pathParams": {
+        "persona_id": "{{cache:personas.create.response.data.persona.persona_id}}"
+      },
+      "payload": {
+        "capacity_per_day": 8,
+        "skills": [
+          "plumbing",
+          "hvac"
+        ],
+        "available_from": "2026-01-01T00:00:00Z",
+        "available_to": "{{dynamic:futuredatetime+30d}}"
+      },
+      "expectedStatus": 401,
+      "expectedError": {
+        "code": "Unauthorized"
+      }
     }
   ],
   "expectedResponse": {

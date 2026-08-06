@@ -50,6 +50,49 @@
           "side_effects": "object"
         }
       }
+    },
+    {
+      "name": "404 - a well-formed id naming no run this tenant owns",
+      "testType": "negative",
+      "coversErrorCase": "404|SIMULATION_NOT_FOUND|never-issued",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "pathParams": {
+        "simulation_id": "{{dynamic:uuid}}"
+      },
+      "expectedStatus": 404,
+      "expectedError": {
+        "code": "SIMULATION_NOT_FOUND"
+      }
+    },
+    {
+      "name": "400 - a simulation_id that is not a UUID is refused before the query",
+      "testType": "negative",
+      "coversErrorCase": "400|VALIDATION_ERROR",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "pathParams": {
+        "simulation_id": "{{static:not-a-uuid}}"
+      },
+      "expectedStatus": 400,
+      "expectedError": {
+        "code": "VALIDATION_ERROR"
+      }
+    },
+    {
+      "name": "401 - no tenant bearer token",
+      "testType": "negative",
+      "coversErrorCase": "401|Unauthorized",
+      "headers": {},
+      "pathParams": {
+        "simulation_id": "{{cache:assignment.simulate.simulation_id}}"
+      },
+      "expectedStatus": 401,
+      "expectedError": {
+        "code": "Unauthorized"
+      }
     }
   ],
   "errorCases": [

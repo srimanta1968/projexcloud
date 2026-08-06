@@ -1,0 +1,614 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>PRD · Header Contract &amp; Tenant Request Authentication v0.1</title>
+<style>
+  :root {
+    --bg: #0b0f17; --panel: #121826; --panel-2: #1a2234; --line: #243049;
+    --text: #e6ecf5; --muted: #8a98b3; --accent: #c9a86a; --accent-2: #6aa9ff;
+    --teal: #2dd4bf; --green: #5dd39e; --red: #ff6b6b; --yellow: #f5c451; --purple: #b88dff;
+    --code-bg: #0f1422;
+  }
+  * { box-sizing: border-box; }
+  html, body { background: var(--bg); color: var(--text); font-family: ui-sans-serif, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", sans-serif; margin: 0; padding: 0; line-height: 1.55; }
+  .page { max-width: 1260px; margin: 0 auto; padding: 56px 32px 96px; }
+  header.cover { border-bottom: 1px solid var(--line); padding-bottom: 36px; margin-bottom: 40px; }
+  header.cover .eyebrow { color: var(--accent); letter-spacing: 0.18em; text-transform: uppercase; font-size: 12px; font-weight: 700; }
+  header.cover h1 { font-size: 40px; line-height: 1.15; margin: 12px 0 8px; letter-spacing: -0.02em; }
+  header.cover .sub { color: var(--muted); font-size: 17px; max-width: 940px; }
+  header.cover .meta { display: flex; gap: 22px; flex-wrap: wrap; margin-top: 22px; color: var(--muted); font-size: 13px; }
+  header.cover .meta b { color: var(--text); font-weight: 600; }
+  header.cover .changelog { margin-top: 22px; background: var(--panel-2); border-left: 3px solid var(--accent-2); border-radius: 0 10px 10px 0; padding: 14px 18px; font-size: 13.5px; color: #d6deef; }
+  header.cover .changelog b { color: var(--accent-2); }
+  h2 { font-size: 25px; letter-spacing: -0.01em; margin: 54px 0 16px; padding-bottom: 8px; border-bottom: 1px solid var(--line); }
+  h3 { font-size: 17px; margin: 26px 0 9px; color: var(--text); }
+  h4 { font-size: 12.5px; margin: 18px 0 8px; color: var(--accent); text-transform: uppercase; letter-spacing: 0.12em; }
+  p { color: #c8d1e3; }
+  small, .muted { color: var(--muted); }
+  .grid { display: grid; gap: 16px; }
+  .grid.cols-2 { grid-template-columns: repeat(2, minmax(0,1fr)); }
+  .grid.cols-3 { grid-template-columns: repeat(3, minmax(0,1fr)); }
+  .grid.cols-4 { grid-template-columns: repeat(4, minmax(0,1fr)); }
+  @media (max-width: 900px) { .grid.cols-2, .grid.cols-3, .grid.cols-4 { grid-template-columns: 1fr; } header.cover h1 { font-size: 29px; } .page { padding: 32px 18px 64px; } }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 16px 16px 14px; }
+  .card .label { color: var(--accent); font-size: 11px; text-transform: uppercase; letter-spacing: 0.14em; font-weight: 700; }
+  .card .title { font-weight: 600; margin: 6px 0 6px; font-size: 15px; }
+  .card .body { color: var(--muted); font-size: 13.5px; }
+  .pill { display: inline-block; padding: 3px 10px; border-radius: 999px; font-size: 11px; border: 1px solid var(--line); color: var(--muted); margin-right: 6px; }
+  .pill.purple { color: var(--purple); border-color: rgba(184,141,255,0.4); }
+  .pill.green { color: var(--green); border-color: rgba(93,211,158,0.4); }
+  .pill.blue { color: var(--accent-2); border-color: rgba(106,169,255,0.4); }
+  .pill.red { color: var(--red); border-color: rgba(255,107,107,0.4); }
+  table { width: 100%; border-collapse: collapse; margin-top: 12px; font-size: 13.5px; }
+  .table-wrap { overflow-x: auto; }
+  th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { color: var(--muted); font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; }
+  pre, code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+  pre { background: var(--code-bg); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; overflow-x: auto; font-size: 12.5px; line-height: 1.5; color: #c9d1d9; }
+  code { background: var(--code-bg); padding: 1px 6px; border-radius: 4px; font-size: 12.5px; }
+  nav.toc { position: sticky; top: 0; background: rgba(11,15,23,0.92); backdrop-filter: blur(10px); border-bottom: 1px solid var(--line); padding: 10px 32px; z-index: 10; }
+  nav.toc .row { max-width: 1260px; margin: 0 auto; display: flex; flex-wrap: wrap; gap: 10px 14px; font-size: 12px; }
+  nav.toc a { color: var(--muted); text-decoration: none; border-bottom: 1px solid transparent; }
+  nav.toc a:hover { color: var(--accent); border-color: var(--accent); }
+  .callout { border-left: 3px solid var(--accent); background: var(--panel-2); padding: 13px 18px; border-radius: 0 10px 10px 0; margin: 18px 0; color: #d6deef; font-size: 14px; }
+  .callout.green { border-color: var(--green); }
+  .callout.red { border-color: var(--red); }
+  .callout.purple { border-color: var(--purple); }
+  .callout.blue { border-color: var(--accent-2); }
+  ul.tight li, ol.tight li { margin: 4px 0; color: #c8d1e3; font-size: 14px; }
+  .fix { background: var(--panel); border: 1px solid var(--line); border-left: 3px solid var(--accent-2); border-radius: 0 10px 10px 0; padding: 13px 17px; margin: 13px 0; }
+  .fix.p0 { border-left-color: var(--red); }
+  .fix.p1 { border-left-color: var(--yellow); }
+  .fix.p2 { border-left-color: var(--purple); }
+  .fix .hd { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+  .fix .fid { color: var(--accent-2); font-weight: 700; font-size: 12.5px; letter-spacing: 0.06em; }
+  .fix .ftitle { font-weight: 600; font-size: 14.5px; }
+  .fix .meta { color: var(--muted); font-size: 12px; margin-top: 2px; }
+  .fix p { font-size: 13.5px; margin: 8px 0 0; }
+  .fix .accept { color: var(--green); font-size: 12.5px; margin-top: 8px; }
+  .tag { font-size: 10px; padding: 2px 8px; border-radius: 4px; font-weight: 700; letter-spacing: 0.08em; white-space: nowrap; }
+  .tag.p0 { background: rgba(255,107,107,0.16); color: var(--red); }
+  .tag.p1 { background: rgba(245,196,81,0.16); color: var(--yellow); }
+  .tag.p2 { background: rgba(184,141,255,0.16); color: var(--purple); }
+  .tag.done { background: rgba(93,211,158,0.16); color: var(--green); }
+  .layers { display: grid; gap: 6px; margin-top: 14px; }
+  .layers .lyr { display: grid; grid-template-columns: 34px 1fr 1fr; gap: 12px; align-items: center; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 9px 12px; font-size: 13px; }
+  .layers .lyr .n { color: var(--accent); font-weight: 700; text-align: center; }
+  .layers .lyr .w { color: var(--muted); font-size: 12.5px; }
+  @media (max-width: 700px) { .layers .lyr { grid-template-columns: 28px 1fr; } .layers .lyr .w { grid-column: 2; } }
+  .yes { color: var(--green); font-weight: 600; }
+  .no { color: var(--red); font-weight: 600; }
+  .part { color: var(--yellow); font-weight: 600; }
+  footer { margin-top: 64px; padding-top: 22px; border-top: 1px solid var(--line); color: var(--muted); font-size: 12.5px; }
+</style>
+</head>
+<body>
+
+<nav class="toc"><div class="row">
+  <a href="#summary">Summary</a>
+  <a href="#built">What exists today</a>
+  <a href="#fixnow">Fix now</a>
+  <a href="#legacy">Legacy customer auth</a>
+  <a href="#llm">LLM auto-configuration</a>
+  <a href="#security">Security enhancements</a>
+  <a href="#guardrails">Guardrails</a>
+  <a href="#rollout">Rollout</a>
+  <a href="#open">Open decisions</a>
+  <a href="#appendix">Appendix</a>
+</div></nav>
+
+<div class="page">
+
+<header class="cover">
+  <div class="eyebrow">Product Requirements · ProjexCloud v3.1</div>
+  <h1>Header Contract &amp; Tenant Request Authentication</h1>
+  <p class="sub">
+    One header-resolution contract shared by four request builders, the fixes required to make it
+    trustworthy across the Dev MCP, the Test MCP and the ProjexLight UI, and the case for — and
+    against — letting a tenant require its own custom header as a security layer on ProjexCloud SDK APIs.
+  </p>
+  <div class="meta">
+    <span><b>Status</b> Draft v0.1</span>
+    <span><b>Date</b> 2026-08-06</span>
+    <span><b>Owner</b> Platform / QA Automation</span>
+    <span><b>Related</b> Analyze.md (A–G), MUST-70, MUST-38, MUST-62, EP-386</span>
+  </div>
+  <div class="changelog">
+    <b>Why this document exists.</b> Four programs build an HTTP request from the same API definition.
+    A header configured in one place and honoured in another is the worst outcome available: a green
+    local run reads as proof. The contract now has an executable conformance fixture — this PRD covers
+    what it does <i>not</i> yet cover, and what the same configuration surface should become for
+    customers whose APIs authenticate differently from ours.
+  </div>
+</header>
+
+<h2 id="summary">1. Summary</h2>
+
+<div class="grid cols-3">
+  <div class="card">
+    <div class="label">Shipped (uncommitted)</div>
+    <div class="title">7-layer header contract</div>
+    <div class="body">Implemented in all four executors, with a 10-case parity fixture that is byte-identical in three repos and green in every executor.</div>
+  </div>
+  <div class="card">
+    <div class="label">Immediate risk</div>
+    <div class="title">12 fixes, 3 of them P0</div>
+    <div class="body">Multi-suite cycle runs ship no contract at all; the MCP fixes exist only in source; path params resolve differently in the UI and the MCPs.</div>
+  </div>
+  <div class="card">
+    <div class="label">Product opportunity</div>
+    <div class="title">One schema, two consumers</div>
+    <div class="body">The same contract that configures test requests can configure tenant runtime auth — so what QA tests is literally what the gateway enforces.</div>
+  </div>
+</div>
+
+<div class="callout">
+  <b>Headline judgement on the security question.</b> A tenant-defined required header is a
+  <i>valid</i> control only when the header is injected from a different trust domain than the API key
+  (a tenant's proxy, WAF or backend). Shipped inside a browser or mobile client it protects nothing —
+  both secrets leak together — and positioning it as "your data is safe if your key leaks" would be
+  false in the most common leak scenario. The strong version of the same idea is HMAC request signing,
+  for which the schema (<code>computedHeaders</code>) already exists on the test side and needs only a
+  verifying counterpart in the gateway. Details in §6.
+</div>
+
+<h2 id="built">2. What exists today</h2>
+
+<h3>2.1 The four request builders</h3>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Executor</th><th>Source of truth</th><th>Resolves layers</th><th>Where</th></tr></thead>
+  <tbody>
+    <tr><td>Dev MCP (Python)</td><td><code>tests/api_definitions/</code> on disk</td><td class="yes">1–7</td><td><code>projex_dev_mcp/src/services/api_tester.py</code></td></tr>
+    <tr><td>Test MCP (Python)</td><td><code>api_library</code>, local or in a cloud container</td><td class="yes">1–7</td><td><code>projex_test_mcp/src/api_testing/api_test_runner.py</code></td></tr>
+    <tr><td>UI test modes (quick / chain / workflow / dataset)</td><td><code>api_library</code> via the environment object</td><td class="yes">1–7</td><td><code>client/.../api-testing/core/headerResolution.ts</code></td></tr>
+    <tr><td>API Library "Test" button (server)</td><td><code>api_library</code> + environment row</td><td class="yes">1–7</td><td><code>server/src/platform/testing/headerContractResolver.ts</code></td></tr>
+    <tr><td>API Library panel (client-side send)</td><td>API Library environment object</td><td class="part">2, 5, 6 only</td><td><code>client/.../api-library/EnvironmentTestPanel.tsx</code> — see FIX-06</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h3>2.2 The layers</h3>
+<div class="layers">
+  <div class="lyr"><div class="n">1</div><div><code>defaultHeaders</code></div><div class="w">every request in the project</div></div>
+  <div class="lyr"><div class="n">2</div><div><code>environments[env].headers</code></div><div class="w">per environment</div></div>
+  <div class="lyr"><div class="n">3</div><div><code>providers[].headers</code></div><div class="w">requests whose path matches</div></div>
+  <div class="lyr"><div class="n">4</div><div><code>testCredentials[role].headers</code></div><div class="w">the role the definition declares</div></div>
+  <div class="lyr"><div class="n">5</div><div><code>headers</code> on the definition</div><div class="w">endpoint-specific</div></div>
+  <div class="lyr"><div class="n">6</div><div><code>testCases[].headers</code></div><div class="w">this dataset — always wins, so a negative case can send a wrong value</div></div>
+  <div class="lyr"><div class="n">7</div><div><code>computedHeaders</code></div><div class="w">derived from the finalised body (HMAC), computed last</div></div>
+</div>
+<p>
+  Authentication is offered <i>between</i> layer 6 and layer 7 and never overwrites an
+  <code>Authorization</code> an earlier layer set. A dataset opts out entirely via
+  <code>"noAuth": true</code>, <code>"Authorization": null</code>, or by expecting <code>401</code>
+  while declaring no credential of its own. <code>403</code> is deliberately <b>not</b> inferred: a 403
+  case is normally authenticated-but-not-permitted, so stripping its credential produces a 401 and the
+  test fails for the wrong reason.
+</p>
+
+<h3>2.3 Storage and transport</h3>
+<ul class="tight">
+  <li><b>Local / repo:</b> <code>tests/config/test-config.json</code> — authored by the developer or the coding LLM.</li>
+  <li><b>ProjexLight:</b> <code>test_environment_configs.custom_env_vars.headerContract</code>, one reserved key in an otherwise free-form bag.</li>
+  <li><b>Cloud container:</b> one env var, <code>PROJEXLIGHT_HEADER_CONTRACT</code>, in exactly the <code>test-config.json</code> shape. One variable rather than flattened <code>API_HEADER_*</code> vars, because flattening loses header-name casing and the computed layer signs the name verbatim.</li>
+</ul>
+
+<h3>2.4 Conformance</h3>
+<p>
+  <code>header-parity-fixture.json</code> — 10 cases, byte-identical in all three repos — is run against
+  each executor's own resolver. Every harness offers a token before applying the executor's opt-out rule;
+  a harness that never offers one turns each "sends no Authorization" case into a pass that proves nothing,
+  which is precisely how a real divergence survived its first review.
+</p>
+<pre>parity cases: 10, failures: 0                                     [dev mcp]
+parity cases: 10, failures: 0  [local (config)]                   [test mcp]
+parity cases: 10, failures: 0  [cloud (PROJEXLIGHT_HEADER_CONTRACT)]
+parity cases: 10, failures: 0  [projexlight executor]</pre>
+
+<h2 id="fixnow">3. Fix now</h2>
+<p>
+  Twelve items. P0 means the contract is not actually in force for some runs, so a green report is not
+  evidence. Each names the file that has to change and what "done" looks like.
+</p>
+
+<div class="fix p0">
+  <div class="hd"><span class="tag p0">P0</span> <span class="fid">FIX-01</span>
+    <span class="ftitle">Multi-suite cycle runs ship no header contract at all</span></div>
+  <div class="meta">server/src/services/testing/SecureTestCycleExecutionService.ts (~line 303)</div>
+  <p>
+    The single-suite path builds container env with <code>buildHeaderContractEnv()</code> +
+    <code>plainCustomEnvVars()</code> (<code>test-suite-management.ts:1264</code>,
+    <code>test-cycle-management.ts:200</code>). This service builds its own <code>env</code> map and emits
+    neither — no <code>PROJEXLIGHT_HEADER_CONTRACT</code>, no <code>custom_env_vars</code>, no
+    <code>API_HEADER_*</code>. The same suite therefore sends different headers depending on how it was
+    launched, and the multi-suite path is the one used for full regression.
+  </p>
+  <div class="accept">Done when: a cycle run and a suite run of the same suite produce identical resolved headers, asserted by an integration test that reads the container env.</div>
+</div>
+
+<div class="fix p0">
+  <div class="hd"><span class="tag p0">P0</span> <span class="fid">FIX-02</span>
+    <span class="ftitle">The MCP auth fixes exist only in source</span></div>
+  <div class="meta">projex_test_mcp (Nuitka image), projex_dev_mcp/dist</div>
+  <p>
+    Both MCPs run as compiled images in the cloud; editing <code>.py</code> changes nothing until
+    <code>scripts/build_full.sh --push</code> republishes <code>projexlight/projex-test-mcp</code> and the
+    dev MCP dist is rebuilt. Until then, cloud runs still inject a bootstrap token into every
+    <code>noAuth</code> / 401 dataset that does not carry a literal <code>"headers": {}</code>.
+  </p>
+  <div class="accept">Done when: both images carry <code>dataset_suppresses_auth</code>, and <code>check_parity.py</code> run <i>inside</i> each image reports 10/0.</div>
+</div>
+
+<div class="fix p0">
+  <div class="hd"><span class="tag p0">P0</span> <span class="fid">FIX-03</span>
+    <span class="ftitle">Path parameters resolve in the UI and not in either MCP</span></div>
+  <div class="meta">api_test_runner.py <code>_substitute_path_params</code> (~3045); api_tester.py (~3415); PathParameterEditor.tsx</div>
+  <p>
+    The UI extracts and replaces three spellings — <code>:param</code>, <code>{param}</code> and
+    <code>{{param}}</code>. Both MCPs match <code>:param</code> only, and the Test MCP's substitution
+    returns early when the URL contains no <code>:</code>. MUST-22 explicitly tells authors to keep
+    <code>:id / {id} / &lt;id&gt;</code> literal, so an OpenAPI-style definition passes in the UI and goes
+    out of both MCPs carrying a literal <code>{userId}</code> — a 404 that reads as a broken endpoint.
+    Multiple path params are otherwise fully supported everywhere.
+  </p>
+  <div class="accept">Done when: all three spellings resolve in all four executors, with fixture cases for a two- and three-param URL.</div>
+</div>
+
+<div class="fix p1">
+  <div class="hd"><span class="tag p1">P1</span> <span class="fid">FIX-04</span>
+    <span class="ftitle">Test MCP wipes every header on a negative dataset; the others drop only the credential</span></div>
+  <div class="meta">api_test_runner.py, the <code>_is_negative_test</code> branch (~2221)</div>
+  <p>
+    <code>"headers": {}</code> plus a 4xx expectation sets <code>headers = {}</code> — dropping
+    <code>x-api-version</code>, <code>Accept-Language</code> and the environment's api-key along with the
+    token. The other three executors keep configuration layers and remove only <code>Authorization</code>.
+    Wiping content-negotiation headers on a negative case produces 415/400s that mask the assertion under
+    test. This is a behaviour decision, not an obvious bug — it is called out rather than changed.
+  </p>
+  <div class="accept">Done when: the decision is recorded, all four executors agree, and a fixture case pins it.</div>
+</div>
+
+<div class="fix p1">
+  <div class="hd"><span class="tag p1">P1</span> <span class="fid">FIX-05</span>
+    <span class="ftitle">Nothing can author the contract from the UI</span></div>
+  <div class="meta">client/src/modules/tenant — no writer for <code>custom_env_vars.headerContract</code></div>
+  <p>
+    <code>headerContract</code> is read by the resolver and written by no screen. Today a tenant or QA
+    engineer must hand-write JSON into a database column. Needs an Environments editor covering
+    <code>defaultHeaders</code>, <code>providers[]</code>, <code>testCredentials</code>,
+    <code>computedHeaders</code> and per-environment <code>variables</code>, with secret masking and a
+    live "resolved headers for this endpoint, and the layer each came from" preview.
+  </p>
+  <div class="accept">Done when: every layer is editable in the portal and the preview matches what the server resolver sends.</div>
+</div>
+
+<div class="fix p1">
+  <div class="hd"><span class="tag p1">P1</span> <span class="fid">FIX-06</span>
+    <span class="ftitle">The API Library panel silently applies three of seven layers</span></div>
+  <div class="meta">api-library/types.ts <code>Environment</code> has no <code>custom_env_vars</code></div>
+  <p>
+    The API Library environment object never loads the column the contract lives in, so its client-side
+    send applies layers 2, 5 and 6 while the api-testing module applies all seven from the same data.
+    The same endpoint gives two answers depending on which screen you opened, and only "Test via server"
+    is complete. Fix by including <code>custom_env_vars</code> in the environments payload and routing the
+    panel through the shared <code>headerResolution.ts</code>.
+  </p>
+  <div class="accept">Done when: both UI surfaces resolve identically, or the panel's client-side send is removed in favour of the server path.</div>
+</div>
+
+<div class="fix p1">
+  <div class="hd"><span class="tag p1">P1</span> <span class="fid">FIX-07</span>
+    <span class="ftitle">MUST-70 is instructed but never enforced</span></div>
+  <div class="meta">projexlight_review_api_definitions — enforces MUST-38 only</div>
+  <p>
+    The reviewer rejects <code>{{static:}}</code> in headers and nothing else header-related. A custom
+    header pasted into thirty definitions, a secret literal in a header map, or
+    <code>requiresRole</code> declared alongside an explicit <code>Authorization</code> all pass review.
+    The last one is the documented cause of 403s that read as API permission bugs.
+  </p>
+  <div class="accept">Done when: the reviewer flags (a) a header repeated across ≥3 definitions, (b) a secret-shaped literal in any header map, (c) requiresRole + Authorization on one definition.</div>
+</div>
+
+<div class="fix p1">
+  <div class="hd"><span class="tag p1">P1</span> <span class="fid">FIX-08</span>
+    <span class="ftitle">Auto-configuration scaffolds variables but never header layers</span></div>
+  <div class="meta">projex_dev_mcp/src/core/server.py ~229–450 (the <code>{{var:}}</code> auto-populator)</div>
+  <p>
+    The populator already walks every definition and writes typed placeholder slots into global vs
+    per-environment <code>variables</code>. It writes no <code>defaultHeaders</code>,
+    <code>providers[]</code>, <code>testCredentials[].headers</code> or <code>computedHeaders</code> — so
+    the LLM must hand-author every layer from MUST-70 with nothing to catch it when it does not. The same
+    pass can detect a header repeated across N definitions and scaffold it up a layer, values left as
+    <code>{{var:}}</code> slots for a human to fill.
+  </p>
+  <div class="accept">Done when: a project whose definitions share <code>x-api-key</code> gets a scaffolded <code>defaultHeaders</code>/<code>providers[]</code> entry plus the matching secret slot, and the definitions are rewritten to drop the duplicate.</div>
+</div>
+
+<div class="fix p1">
+  <div class="hd"><span class="tag p1">P1</span> <span class="fid">FIX-11</span>
+    <span class="ftitle">Authentication scheme is environment-wide, so one run cannot authenticate to two systems</span></div>
+  <div class="meta">apiLibraryRoutes.ts test-api (bearer / api_key / basic / oauth2); providers[] carry static headers only</div>
+  <p>
+    A single test run that touches ProjexCloud <i>and</i> a customer's legacy system needs two different
+    schemes at once. <code>providers[]</code> can match the legacy path but can only attach static
+    headers, and the environment's <code>apiAuthType</code> applies to everything. See §4.
+  </p>
+  <div class="accept">Done when: <code>providers[].auth</code> exists and a request matching a provider uses that provider's scheme instead of the environment default.</div>
+</div>
+
+<div class="fix p1">
+  <div class="hd"><span class="tag p1">P1</span> <span class="fid">FIX-12</span>
+    <span class="ftitle">Computed headers can only sign the raw body</span></div>
+  <div class="meta">headerContractResolver.ts <code>applyComputedHeaders</code>; the Python equivalents</div>
+  <p>
+    <code>over: 'raw_body'</code> with HMAC-SHA1/256/512 covers GitHub- and Meta-style webhooks and
+    nothing else. Most enterprise schemes sign a <i>canonical string</i> — method, path, date,
+    content-hash — and require companion <code>Date</code>, <code>X-Timestamp</code> or <code>X-Nonce</code>
+    headers to exist before signing. Without this the connector tests for those customers cannot be
+    expressed at all. See §4.
+  </p>
+  <div class="accept">Done when: <code>over: 'canonical'</code> with a template, plus auto-emitted timestamp/nonce headers, resolves identically in all four executors with fixture coverage.</div>
+</div>
+
+<div class="fix p2">
+  <div class="hd"><span class="tag p2">P2</span> <span class="fid">FIX-09</span>
+    <span class="ftitle">Verify the <code>noAuth</code> round trip end to end</span></div>
+  <div class="meta">api_orchestration_builder.py (carried as of this change) → api_library → UI dataset editor</div>
+  <p>
+    The flag is now mapped into <code>test_data_sets</code>, but the append-datasets merge path and the
+    UI's dataset editor have not been verified to preserve or expose it. A flag an author can set and no
+    screen can see is a flag that silently stops being set.
+  </p>
+  <div class="accept">Done when: a definition with <code>noAuth</code> survives publish → api_library → UI edit → re-save, and the dataset editor exposes it as a checkbox.</div>
+</div>
+
+<div class="fix p2">
+  <div class="hd"><span class="tag p2">P2</span> <span class="fid">FIX-10</span>
+    <span class="ftitle">The parity fixture covers headers only</span></div>
+  <div class="meta">parity/header-parity-fixture.json — 10 cases, all header-shaped</div>
+  <p>
+    Path params (FIX-03), query params, and the auth schemes themselves (bearer / api_key / basic) are
+    resolved by the same four executors with no conformance coverage. Every divergence found so far was
+    in exactly this class.
+  </p>
+  <div class="accept">Done when: the fixture is renamed to a request-contract fixture and covers path params, query params and each auth scheme.</div>
+</div>
+
+<div class="fix p2">
+  <div class="hd"><span class="tag p2">P2</span> <span class="fid">FIX-13</span>
+    <span class="ftitle">Audit secret masking across reports and logs</span></div>
+  <div class="meta">run logs, interactive report, env panel preview</div>
+  <p>
+    The server test route logs header <i>names and layers</i> only, deliberately. The MCP run logs, the
+    generated HTML report and any future resolved-header preview need the same treatment —
+    <code>testCredentials</code> holds role tokens and <code>computedHeaders</code> holds signing secrets.
+  </p>
+  <div class="accept">Done when: a grep of a full run's artefacts finds no configured secret value.</div>
+</div>
+
+<h2 id="legacy">4. Supporting a customer's existing auth framework</h2>
+
+<p>
+  The integration ask — "a customer needs different keys and values to call their legacy systems, and to
+  build and test those APIs on ProjexCloud" — is mostly satisfied by the layer model already. What is
+  missing is that <b>a layer can carry headers but not a scheme</b>.
+</p>
+
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Customer scheme</th><th>Expressible today?</th><th>What is needed</th></tr></thead>
+  <tbody>
+    <tr><td>Static API key / tenant header</td><td class="yes">Yes</td><td><code>providers[].headers</code> + <code>{{var:}}</code></td></tr>
+    <tr><td>Bearer / OAuth2 client_credentials</td><td class="part">Environment-wide only</td><td>FIX-11 — per-provider auth</td></tr>
+    <tr><td>Basic auth to a legacy endpoint while the rest is Bearer</td><td class="no">No</td><td>FIX-11</td></tr>
+    <tr><td>HMAC over raw body (GitHub, Meta)</td><td class="yes">Yes</td><td><code>computedHeaders</code></td></tr>
+    <tr><td>HMAC over a canonical string (SigV4, Azure SharedKey, WSSE)</td><td class="no">No</td><td>FIX-12 — <code>over: 'canonical'</code> + timestamp/nonce</td></tr>
+    <tr><td>Session-cookie login, then cookie on every call</td><td class="part">Via a producer + <code>{{cache:}}</code></td><td>Document the pattern; consider a <code>cookieJar</code> option</td></tr>
+    <tr><td>mTLS to the legacy host</td><td class="no">No</td><td>Client-cert material per provider; container mount + UI upload</td></tr>
+    <tr><td>Per-environment secrets that must not cross environments</td><td class="yes">Yes</td><td><code>environments[env].variables</code>, enforced by MUST-46</td></tr>
+  </tbody>
+</table>
+</div>
+
+<div class="callout blue">
+  <b>The design principle worth keeping.</b> A customer integration is described by <i>where</i> a rule
+  applies (<code>providers[].match</code>) and <i>what</i> it contributes (headers, scheme, signature).
+  Adding <code>auth</code> and a canonical signer to the provider block covers the long tail without a
+  second configuration system — and it keeps every executor able to reproduce the request.
+</div>
+
+<h2 id="llm">5. LLM auto-configuration of test-config</h2>
+
+<p>
+  <b>Yes — the LLM generates the configuration; the platform instructs rather than emits it.</b> That
+  distinction matters for what to build next.
+</p>
+
+<div class="grid cols-2">
+  <div class="card">
+    <div class="label">Instructed (deterministic delivery)</div>
+    <div class="title">Rules the agent receives every task</div>
+    <div class="body">
+      MUST-70 (layer model, secrets in environment variables, never requiresRole + Authorization,
+      signatures are <code>computedHeaders</code>), MUST-38 (no <code>{{static:}}</code> in headers),
+      MUST-35/46 (shared values as <code>{{var:}}</code>, secrets never global), plus the worked examples
+      in the DEV_MCP.md reference section. The agent then authors the JSON.
+    </div>
+  </div>
+  <div class="card">
+    <div class="label">Generated (deterministic code)</div>
+    <div class="title">Only the <code>{{var:}}</code> slots</div>
+    <div class="body">
+      The auto-populator scans definitions, skips producible names (those must become
+      <code>{{cache:}}</code>), and writes typed placeholder entries split into global vs per-environment
+      <code>variables</code> with a <code>_variable_meta</code> guidance block. Header layers are not
+      scaffolded and MUST-70 has no reviewer check — FIX-07 and FIX-08.
+    </div>
+  </div>
+</div>
+
+<p>
+  The gap this leaves is predictable: instruction-only compliance degrades silently. The agent authors
+  headers correctly when the rule is fresh in context and pastes them per-definition when it is not, and
+  nothing fails. Closing it means the same two mechanisms that already work for variables — scaffold and
+  review — applied to headers.
+</p>
+
+<h2 id="security">6. Tenant custom headers as a security layer</h2>
+
+<h3>6.1 The proposal</h3>
+<p>
+  A tenant configures, in the tenant portal, an additional header its ProjexCloud SDK APIs must carry —
+  so that an exposed API key alone cannot reach the tenant's data.
+</p>
+
+<h3>6.2 Honest assessment</h3>
+<p>
+  A required custom header is a second static shared secret travelling over the same channel as the
+  first. Its value depends entirely on where it is injected.
+</p>
+
+<div class="grid cols-2">
+  <div class="card">
+    <div class="label">Where it is real</div>
+    <div class="title">Different trust domains</div>
+    <div class="body">
+      The tenant's edge injects it — WAF, reverse proxy, their own backend — while the API key lives in
+      the app. A key stolen from the app is then useless from anywhere else. This is the Authenticated
+      Origin Pull pattern and it genuinely shrinks blast radius. It also decouples rotation: the header
+      can be rotated without reissuing keys across integrations, and rejections make a clean pre-business-logic
+      audit signal.
+    </div>
+  </div>
+  <div class="card">
+    <div class="label">Where it is not</div>
+    <div class="title">Same package as the key</div>
+    <div class="body">
+      In a browser app it is visible in the network tab and forces a CORS preflight; in a mobile binary
+      it is extractable. Both secrets leak together, so the control does not address the threat it is
+      pitched against. And it offers no replay protection at all — a static header is copyable along with
+      the request it sits in.
+    </div>
+  </div>
+</div>
+
+<div class="callout red">
+  <b>The failure mode to avoid is not technical.</b> A control that reads as protection while providing
+  none is worse than no control, because teams skip the ones that work. If this ships, its documentation
+  must state the injection requirement as a condition, not a recommendation.
+</div>
+
+<h3>6.3 What actually addresses an exposed key</h3>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>#</th><th>Control</th><th>Defeats</th><th>Reuses</th></tr></thead>
+  <tbody>
+    <tr><td>1</td><td><b>HMAC request signing</b> over method + path + body + timestamp + nonce, verified at the gateway</td><td>Replay, tampering, key-at-rest exposure (the secret is never transmitted)</td><td><code>computedHeaders</code> schema + FIX-12's canonical signer</td></tr>
+    <tr><td>2</td><td><b>Short-lived tokens</b> — minutes, not forever</td><td>Long-tail value of any leaked credential</td><td>EP-386 <code>client_credentials</code> per app</td></tr>
+    <tr><td>3</td><td><b>Per-app scoped keys + per-key rate limits + rejection alerting</b></td><td>Blast radius; a rejection spike <i>is</i> the leak detector</td><td>Tenant app credentials</td></tr>
+    <tr><td>4</td><td><b>IP / origin allowlist per credential</b></td><td>Use of a stolen key from anywhere else</td><td>Gateway authGate</td></tr>
+    <tr><td>5</td><td><b>mTLS</b> for high-value server-to-server</td><td>Everything above, at higher operational cost</td><td>—</td></tr>
+    <tr><td>6</td><td><b>Required custom header</b>, edge-injected</td><td>Use of a stolen key outside the tenant's network path</td><td>This PRD's configuration surface</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h3>6.4 Recommendation</h3>
+<ul class="tight">
+  <li><b>Ship the header configuration as an integration feature</b> — per-tenant, per-environment, per-provider header maps with encrypted values. It is needed for legacy connectivity regardless and carries low risk.</li>
+  <li><b>Put the security story on signing</b>, not on the static header. Same configuration surface, same test contract, and it survives the leak the header does not.</li>
+  <li><b>Use one schema for both</b> the tenant's runtime configuration and the QA test configuration. Then the parity fixture is covering production behaviour, and "we tested it" and "the gateway enforces it" become the same statement.</li>
+</ul>
+
+<h2 id="guardrails">7. Guardrails — non-negotiable if this ships</h2>
+<div class="grid cols-2">
+  <div class="card">
+    <div class="label">Critical</div>
+    <div class="title">Reserved-name denylist</div>
+    <div class="body">A tenant-supplied header map must never set or override <code>Authorization</code>, <code>X-Tenant-Id</code>, <code>X-App-Id</code>, cookies, or <code>X-Forwarded-*</code>. Without this, a header-config feature becomes a tenant-identity spoofing surface — strictly worse than not shipping it.</div>
+  </div>
+  <div class="card">
+    <div class="label">Critical</div>
+    <div class="title">Per-tenant scope on every write</div>
+    <div class="body">Configuration and rotation endpoints must verify the credential belongs to the calling tenant. The cross-tenant rotate hole found in the app-credentials work is the same bug class waiting to recur here.</div>
+  </div>
+  <div class="card">
+    <div class="label">Required</div>
+    <div class="title">Secrets handled as secrets</div>
+    <div class="body">Envelope encryption at rest, masked in logs, reports and previews, scoped per environment, never in a global block (MUST-46). Constant-time comparison on verification.</div>
+  </div>
+  <div class="card">
+    <div class="label">Required</div>
+    <div class="title">Per-app enforcement mode + audit</div>
+    <div class="body"><code>off | report | enforce</code>, mirroring <code>AUTH_GATE_MODE</code>, so a tenant can roll out without locking themselves out. Emit an audit event on every rejection — that event is the leak signal.</div>
+  </div>
+</div>
+
+<h2 id="rollout">8. Rollout</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Phase</th><th>Contents</th><th>Exit criterion</th></tr></thead>
+  <tbody>
+    <tr><td><b>0 — Trust the harness</b></td><td>FIX-01, FIX-02, FIX-03</td><td>Every executor, in its shipped form, resolves the fixture identically</td></tr>
+    <tr><td><b>1 — Make it authorable</b></td><td>FIX-05, FIX-06, FIX-04</td><td>A QA engineer configures all seven layers in the portal and both UI surfaces agree with the server</td></tr>
+    <tr><td><b>2 — Make it self-maintaining</b></td><td>FIX-07, FIX-08, FIX-09, FIX-10, FIX-13</td><td>A pasted header or a leaked secret literal fails review; the populator scaffolds layers</td></tr>
+    <tr><td><b>3 — Legacy reach</b></td><td>FIX-11, FIX-12</td><td>A customer's canonical-string-signed legacy API is testable from all four executors</td></tr>
+    <tr><td><b>4 — Runtime enforcement</b></td><td>Gateway signature verification; optional edge-injected required header with §7 guardrails</td><td>The gateway verifies what the test contract describes, from the same schema</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2 id="open">9. Open decisions</h2>
+<ol class="tight">
+  <li><b>FIX-04:</b> should a negative dataset's <code>"headers": {}</code> drop every header or only the credential? Four executors currently disagree; the fixture cannot pin it until this is decided.</li>
+  <li><b>Schema unification:</b> does the tenant runtime configuration adopt the <code>test-config.json</code> shape, or does the test side adopt a new runtime shape? Sharing one is the point; which direction is a migration question.</li>
+  <li><b>Enforcement default:</b> should a newly configured required header default to <code>report</code> for a fixed window before <code>enforce</code>?</li>
+  <li><b>Where the LLM's authority ends:</b> may the auto-populator rewrite existing definitions to remove a header it has just promoted to a layer, or only propose the change?</li>
+</ol>
+
+<h2 id="appendix">10. Appendix</h2>
+
+<h4>Running conformance</h4>
+<pre># Dev MCP
+python dist/parity/check_parity.py
+
+# Test MCP — local config and the cloud transport
+python dist/parity/check_parity.py
+python dist/parity/check_parity.py --via-env
+
+# ProjexLight backend
+npm run parity:headers          # from ai-appgen/server</pre>
+
+<h4>Running the three executors against one definition</h4>
+<pre># 1. Dev MCP  — reads tests/api_definitions/ on disk
+./run-dev-tests.sh --datasets all
+
+# 2. Test MCP — reads api_library (publish the definition first)
+run-all-tests.sh api --env staging
+
+# 3. UI       — API Library -> Environments; "Test via server" is the only
+#               client path that reads the full stored contract, so signed
+#               webhooks must be tested there</pre>
+
+<h4>Key files</h4>
+<ul class="tight">
+  <li><code>projex_dev_mcp/src/services/api_tester.py</code> — <code>dataset_suppresses_auth</code>, <code>_config_header_layers</code>, <code>_apply_computed_headers</code></li>
+  <li><code>projex_test_mcp/src/api_testing/api_test_runner.py</code> — same three, plus the container transport</li>
+  <li><code>server/src/platform/testing/headerContractResolver.ts</code> — the ProjexLight executor</li>
+  <li><code>server/src/platform/testing/headerContractEnv.ts</code> — <code>buildHeaderContract</code>, <code>PROJEXLIGHT_HEADER_CONTRACT</code></li>
+  <li><code>client/src/modules/tenant/components/api-testing/core/headerResolution.ts</code> — the UI executor</li>
+  <li><code>parity/header-parity-fixture.json</code> — byte-identical in all three repos</li>
+  <li><code>mcp-server/docs/DEV_MCP.md</code> § "Custom headers and variable resolution" — the authored contract</li>
+</ul>
+
+<footer>
+  ProjexCloud v3.1 · PRD draft v0.1 · Header Contract &amp; Tenant Request Authentication ·
+  Companion to <code>Analyze.md</code> items A–G. Fix list current as of 2026-08-06.
+</footer>
+
+</div>
+</body>
+</html>

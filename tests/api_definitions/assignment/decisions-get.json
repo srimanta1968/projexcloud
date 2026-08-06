@@ -41,6 +41,36 @@
           "steps": "array"
         }
       }
+    },
+    {
+      "name": "404 - the id names no decision this tenant owns",
+      "testType": "negative",
+      "coversErrorCase": "404|ROUTING_DECISION_NOT_FOUND",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "queryParams": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "decision_id": "{{dynamic:uuid}}"
+      },
+      "expectedStatus": 404,
+      "expectedError": {
+        "code": "ROUTING_DECISION_NOT_FOUND"
+      }
+    },
+    {
+      "name": "401 - no tenant bearer token",
+      "testType": "negative",
+      "coversErrorCase": "401|Unauthorized",
+      "headers": {},
+      "queryParams": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "decision_id": "{{cache:assignment.route.decision_id}}"
+      },
+      "expectedStatus": 401,
+      "expectedError": {
+        "code": "Unauthorized"
+      }
     }
   ],
   "errorCases": [

@@ -85,6 +85,96 @@
           "is_active": "boolean"
         }
       }
+    },
+    {
+      "name": "400 - neither a rule body nor a version to activate",
+      "testType": "negative",
+      "coversErrorCase": "400|VALIDATION_ERROR",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "payload": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "activate": true,
+        "published_by": "{{static:qa}}"
+      },
+      "expectedStatus": 400,
+      "expectedError": {
+        "code": "VALIDATION_ERROR"
+      }
+    },
+    {
+      "name": "404 - activating a version that was never published",
+      "testType": "negative",
+      "coversErrorCase": "404|ROUTING_RULE_SET_NOT_FOUND",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "payload": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "name": "default-{{dynamic:slug}}",
+        "activate": true,
+        "published_by": "{{static:qa}}",
+        "activate_version": 99999
+      },
+      "expectedStatus": 404,
+      "expectedError": {
+        "code": "ROUTING_RULE_SET_NOT_FOUND"
+      }
+    },
+    {
+      "name": "401 - no tenant bearer token",
+      "testType": "negative",
+      "coversErrorCase": "401|Unauthorized",
+      "headers": {},
+      "payload": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "name": "default-{{dynamic:slug}}",
+        "rules": {
+          "eligibility": [
+            {
+              "field": "region",
+              "op": "present",
+              "because": "a subject with no region cannot be routed"
+            }
+          ],
+          "priority_bands": [
+            {
+              "band": "urgent",
+              "when": [
+                {
+                  "field": "severity",
+                  "op": "gte",
+                  "value": 8
+                }
+              ]
+            },
+            {
+              "band": "standard",
+              "when": []
+            }
+          ],
+          "specialty": {
+            "field": "required_specialty"
+          },
+          "assignment": {
+            "pick": "most_headroom"
+          },
+          "availability": {
+            "ignore_presence": true
+          },
+          "fallback": {
+            "persona_id": "{{cache:personas.create.response.data.persona.persona_id}}",
+            "to_review": true
+          }
+        },
+        "activate": true,
+        "published_by": "{{static:qa}}"
+      },
+      "expectedStatus": 401,
+      "expectedError": {
+        "code": "Unauthorized"
+      }
     }
   ],
   "errorCases": [

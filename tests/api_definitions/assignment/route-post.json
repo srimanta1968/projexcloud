@@ -63,6 +63,79 @@
           "rule_set_version": "number"
         }
       }
+    },
+    {
+      "name": "400 - a route call with no subject_ref is refused",
+      "testType": "negative",
+      "coversErrorCase": "400|VALIDATION_ERROR|subject-ref",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "payload": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "subject": {
+          "region": "TX",
+          "severity": 9
+        },
+        "candidate_persona_ids": [
+          "{{cache:personas.create.response.data.persona.persona_id}}"
+        ],
+        "persona_specialties": {},
+        "rule_set_name": "{{cache:assignment.routes.publish.name}}",
+        "dry_run": false
+      },
+      "expectedStatus": 400,
+      "expectedError": {
+        "code": "VALIDATION_ERROR"
+      }
+    },
+    {
+      "name": "400 - an empty candidate pool is refused, not routed to nobody",
+      "testType": "negative",
+      "coversErrorCase": "400|VALIDATION_ERROR|no-candidates",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "payload": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "subject_ref": "subject-{{dynamic:slug}}",
+        "subject": {
+          "region": "TX",
+          "severity": 9
+        },
+        "candidate_persona_ids": [],
+        "persona_specialties": {},
+        "rule_set_name": "{{cache:assignment.routes.publish.name}}",
+        "dry_run": false
+      },
+      "expectedStatus": 400,
+      "expectedError": {
+        "code": "VALIDATION_ERROR"
+      }
+    },
+    {
+      "name": "401 - no tenant bearer token",
+      "testType": "negative",
+      "coversErrorCase": "401|Unauthorized",
+      "headers": {},
+      "payload": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "subject_ref": "subject-{{dynamic:slug}}",
+        "subject": {
+          "region": "TX",
+          "severity": 9
+        },
+        "candidate_persona_ids": [
+          "{{cache:personas.create.response.data.persona.persona_id}}"
+        ],
+        "persona_specialties": {},
+        "rule_set_name": "{{cache:assignment.routes.publish.name}}",
+        "dry_run": false
+      },
+      "expectedStatus": 401,
+      "expectedError": {
+        "code": "Unauthorized"
+      }
     }
   ],
   "errorCases": [

@@ -39,14 +39,15 @@
     "staging": {
       "baseUrl": "https://cloud.projexlight.com",
       "apiUrl": "https://cloud.projexlight.com",
-      "description": "ProjexCloud EC2 deployment (cloud.projexlight.com) \u2014 staging/QA target",
+      "description": "ProjexCloud EC2 deployment (cloud.projexlight.com) — staging/QA target",
       "variables": {
         "SMOKE_API_TOKEN": "",
         "smoke_widget_id": "",
         "geo_winner_address_id": "",
         "ADMIN_OPS_TOKEN": "f12009e1b54c717c8ffc7fbd359ca896b6f5f9d5ed36adf330fc551612871968",
         "scim_bearer_token": "<CHANGE_ME>",
-        "data_credits_capability_key": "validate.phone-smoke"
+        "data_credits_capability_key": "validate.phone-smoke",
+        "lead_form_secret": ""
       },
       "portals": {
         "workspace": {
@@ -74,7 +75,8 @@
         "geo_winner_address_id": "",
         "ADMIN_OPS_TOKEN": "<CHANGE_ME>",
         "scim_bearer_token": "<CHANGE_ME>",
-        "data_credits_capability_key": "<CHANGE_ME>"
+        "data_credits_capability_key": "<CHANGE_ME>",
+        "lead_form_secret": ""
       },
       "portals": {
         "workspace": {
@@ -90,7 +92,7 @@
           "authRealm": "projexlight"
         }
       },
-      "_status": "NEEDS INPUT: set ADMIN_OPS_TOKEN for production; NEEDS INPUT: set scim_bearer_token for production; NEEDS INPUT: set data_credits_capability_key for production \u2014 it names a row in data_credits.capability seeded by tests/setup_scripts/data_credits_catalog.sql, which is a QA fixture and is deliberately NOT applied to a real production stack, so there is no correct value to inherit here"
+      "_status": "NEEDS INPUT: set ADMIN_OPS_TOKEN for production; NEEDS INPUT: set scim_bearer_token for production; NEEDS INPUT: set data_credits_capability_key for production — it names a row in data_credits.capability seeded by tests/setup_scripts/data_credits_catalog.sql, which is a QA fixture and is deliberately NOT applied to a real production stack, so there is no correct value to inherit here"
     }
   },
   "activeEnvironment": "development",
@@ -364,6 +366,13 @@
       "referenced_by_count": 1,
       "needs_llm_review": true,
       "scope_hint": "env"
+    },
+    "lead_form_secret": {
+      "type": "string",
+      "scope": "environment",
+      "sensitive": true,
+      "reason": "HMAC secret for all 5 connector webhook signatures in computedHeaders (x-hub-signature-256, x-li-signature, x-tt-signature, x-goog-signature, x-projex-signature).",
+      "action": "SET PER ENVIRONMENT. It is referenced ONLY from computedHeaders, never from an api_definition, so it was invisible to the incremental import and staging/production did not even list the name. Unset, the signature is skipped and the connector endpoints reject the request - which reads as a broken endpoint."
     }
   },
   "authRealms": {
