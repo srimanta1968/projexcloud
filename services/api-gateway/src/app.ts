@@ -8,6 +8,7 @@ import { closeKafka, initKafka, publishMessage } from '@projexlight/kafka-runtim
 import { randomUUID } from 'crypto';
 import { closeClickHouse, initClickHouse, insert as chInsert } from '@projexlight/clickhouse-runtime';
 import { runMigrations } from '@projexlight/migration-runner';
+import { runSettingsPreflight } from './boot/settingsPreflight';
 import {
   migrationsDir as vaultMigrations,
   server as vaultServer,
@@ -1170,6 +1171,14 @@ const start = async (): Promise<void> => {
         console.warn('[api-gateway] Kafka unavailable, keeping in-process emitter:', (err as Error).message);
       }
     }
+
+    // Settings preflight BEFORE the migrations. A missing production secret is going to
+    // stop the SDK that needs it either way; reporting it here costs one line at boot
+    // instead of a 500 on whichever request first touches that SDK — and the API suite
+    // demonstrably cannot be relied on to find these, since a cascade of skips upstream
+    // hides them entirely. Placed ahead of runMigrations so a misconfigured install fails
+    // in seconds rather than after a full migration pass.
+    runSettingsPreflight();
 
     // Auto-apply each SDK's migrations on startup in dependency order.
     // P1: foundations · P2: identity & access · P3: canonical + privacy + HDK.
