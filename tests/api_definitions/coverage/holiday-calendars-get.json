@@ -1,0 +1,68 @@
+{
+  "sdk": "sdk-coverage",
+  "sourceFile": "packages/sdk-coverage/src/server/routes.ts",
+  "requiresAuth": true,
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "epicId": "75f3f5a3-faa8-4b82-badf-4feda46c00e7",
+  "featureId": "5f6dc00d-cb8f-4a54-9a19-9b1e0f0b2f5a",
+  "taskId": "422472b0-117e-4cb0-9f90-0c6962439155",
+  "testability": "auto",
+  "name": "GET /api/coverage/holiday-calendars - List holiday calendars",
+  "endpoint": "/api/coverage/holiday-calendars",
+  "method": "GET",
+  "expectedStatus": 200,
+  "priority": 12,
+  "description": "Every holiday calendar the tenant maintains, returned as data.calendars. Takes no filter of any kind - the handler passes only the resolved tenant to listHolidayCalendars - so a region query parameter is accepted by the router and ignored rather than narrowing the result. Regions are per-tenant strings, not an ISO set, because a tenant's holiday regions follow its operating calendar and not a country code. The tenant comes from the verified claim: a disagreeing tenant_id in the query is 403 and no tenant at all is 400.",
+  "dependsOn": [
+    "POST /api/auth/signup-tenant",
+    "POST /api/coverage/holiday-calendars"
+  ],
+  "testCases": [
+    {
+      "name": "List every holiday calendar in the tenant",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "queryParams": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}"
+      },
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "data": {
+          "calendars": "array"
+        }
+      }
+    }
+  ],
+  "errorCases": [
+    {
+      "name": "Unauthenticated",
+      "queryParams": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}"
+      },
+      "expectedStatus": 401,
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "No Authorization: Bearer header - requireAuth preHandler, and the gateway default-deny authGate ahead of it"
+    },
+    {
+      "status": 403,
+      "code": "Forbidden",
+      "message": "tenant_id does not match the authenticated tenant",
+      "when": "The query names a tenant_id different from the credential's tenant claim"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "tenant_id is required",
+      "when": "The credential carries no tenant_id claim and none is supplied in the query"
+    },
+    {
+      "status": 500,
+      "code": "InternalError",
+      "message": "InternalError",
+      "when": "listHolidayCalendars throws a non-domain error - a database failure"
+    }
+  ]
+}

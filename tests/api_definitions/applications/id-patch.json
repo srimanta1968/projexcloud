@@ -1,0 +1,74 @@
+{
+  "sdk": "sdk-api-keys",
+  "sourceFile": "packages/sdk-api-keys/src/server/handlers/apiKeyController.ts",
+  "requiresAuth": true,
+  "testability": "auto",
+  "name": "PATCH /api/applications/:application_id - Update an application",
+  "endpoint": "/api/applications/:application_id",
+  "method": "PATCH",
+  "expectedStatus": 200,
+  "priority": 22,
+  "description": "Updates an application's mutable metadata and returns 200 with data.application. ONLY name and description can be changed - every other field, including slug and status, is ignored rather than rejected, so a caller sending {slug:'new'} gets a 200 and no change. Use POST /api/applications/:application_id/disable to change status; slug is immutable because it is the client_id half of the client_credentials grant and rewriting it would silently break every integration holding a key. Both fields are optional and read only when they are strings, so a PATCH with an empty body is a valid no-op that returns the unchanged record. The tenant is taken from the verified claim via tenantOf(); an application_id belonging to another tenant is 404, not 403, so the route never confirms another tenant's applications exist. Unlike createApplicationHandler this route does NOT call tenantMismatch(), so a body tenant_id is simply ignored rather than refused.",
+  "dependsOn": [
+    "POST /api/auth/signup-tenant",
+    "POST /api/applications"
+  ],
+  "testCases": [
+    {
+      "name": "Rename the application just created",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "pathParams": {
+        "application_id": "{{cache:applications.create.response.data.application.application_id}}"
+      },
+      "payload": {
+        "name": "renamed-integration-{{dynamic:slug}}",
+        "description": "Updated by the api_definition regression suite"
+      },
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "data": {
+          "application": {
+            "application_id": "string",
+            "name": "string"
+          }
+        }
+      }
+    }
+  ],
+  "errorCases": [
+    {
+      "name": "Unauthenticated",
+      "pathParams": {
+        "application_id": "{{cache:applications.create.response.data.application.application_id}}"
+      },
+      "payload": {
+        "name": "should-not-apply"
+      },
+      "expectedStatus": 401,
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "No Authorization: Bearer header - the gateway default-deny authGate"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "This credential carries no tenant context",
+      "when": "tenantOf() cannot resolve a tenant - the JWT carries no tenant_id claim, e.g. a bare /api/auth/register token"
+    },
+    {
+      "status": 404,
+      "code": "NotFound",
+      "message": "No such application",
+      "when": "No application matches (application_id, tenant_id) - including one owned by a DIFFERENT tenant, which answers 404 rather than 403"
+    },
+    {
+      "status": 500,
+      "code": "InternalError",
+      "message": "InternalError",
+      "when": "updateApplication throws - a non-UUID application_id that fails the Postgres uuid cast, or any database error"
+    }
+  ]
+}

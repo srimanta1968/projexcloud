@@ -1,0 +1,76 @@
+{
+  "sdk": "sdk-scheduling",
+  "sourceFile": "packages/sdk-scheduling/src/server/routes.ts",
+  "requiresAuth": true,
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "epicId": "4df864ec-e460-4cc9-a58a-92baadec5269",
+  "featureId": "c705caee-690d-465f-8ae4-c84521bacb7d",
+  "taskId": "41c92779-7aec-4747-b111-ada104733228",
+  "testability": "auto",
+  "name": "GET /api/scheduling/availability-rules - List a host's availability rules",
+  "endpoint": "/api/scheduling/availability-rules",
+  "method": "GET",
+  "expectedStatus": 200,
+  "priority": 12,
+  "description": "The recurring availability rules for ONE host, returned as data.rules. BOTH tenant_id AND host_persona_id are required query parameters - listAvailabilityRules takes the pair, so this route cannot list rules across hosts and omitting either is the same single 400. Returns the rules as authored (weekday plus start/end local times), NOT bookable slots: GET /api/scheduling/availability is the route that intersects these rules with existing appointments, meeting-type duration and time-off to produce concrete slots. Reading rules and computing slots client-side duplicates that logic and misses the exclusions. An unknown host_persona_id is 200 with an empty array rather than 404, because the handler never checks the persona exists.",
+  "dependsOn": [
+    "POST /api/auth/signup-tenant",
+    "POST /api/personas",
+    "POST /api/scheduling/availability-rules"
+  ],
+  "fieldEnums": {
+    "weekday": [
+      "0",
+      "1",
+      "2",
+      "3",
+      "4",
+      "5",
+      "6"
+    ]
+  },
+  "testCases": [
+    {
+      "name": "List the availability rules for the host just configured",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "queryParams": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "host_persona_id": "{{cache:personas.create.response.data.persona.persona_id}}"
+      },
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "data": {
+          "rules": "array"
+        }
+      }
+    }
+  ],
+  "errorCases": [
+    {
+      "name": "Unauthenticated",
+      "queryParams": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "host_persona_id": "{{cache:personas.create.response.data.persona.persona_id}}"
+      },
+      "expectedStatus": 401,
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "No Authorization: Bearer header - requireAuth preHandler, and the gateway default-deny authGate ahead of it"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "tenant_id and host_persona_id query params required",
+      "when": "Either query parameter is absent - both are required together and produce this same single message"
+    },
+    {
+      "status": 500,
+      "code": "InternalError",
+      "message": "Fastify default error payload from the uncaught service throw",
+      "when": "listAvailabilityRules throws - a non-UUID tenant_id or host_persona_id that fails the Postgres uuid cast, or any database error"
+    }
+  ]
+}

@@ -1,0 +1,69 @@
+{
+  "sdk": "sdk-offer-catalog",
+  "sourceFile": "packages/sdk-offer-catalog/src/server/routes.ts",
+  "requiresAuth": true,
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "epicId": "9a0f06fa-f1a9-4292-8bc5-715ec836bbc8",
+  "featureId": "50face32-51ba-4a44-8641-d2d1ee5d96c9",
+  "taskId": "1a62f247-b638-412d-a317-e9da3dbd6dc4",
+  "testability": "auto",
+  "name": "GET /api/offers/:offer_id/versions - List an offer's versions",
+  "endpoint": "/api/offers/:offer_id/versions",
+  "method": "GET",
+  "expectedStatus": 200,
+  "priority": 12,
+  "description": "Every version of one offer, returned as data.versions. tenant_id is a REQUIRED QUERY PARAMETER - listOfferVersions scopes by (tenant_id, offer_id) - so omitting it is 400. Unlike GET /api/offers/:offer_id this route does NOT 404 on an unknown offer_id: an offer that does not exist and an offer with no versions yet both answer 200 with an empty array, because the handler never checks the parent exists. A caller that needs to distinguish those two must read the offer first. The list is the full version history including superseded ones, not just the live version - exactly one version is live at a time and activate atomically demotes the prior one, so read status rather than assuming order.",
+  "dependsOn": [
+    "POST /api/auth/signup-tenant",
+    "POST /api/offers",
+    "POST /api/offers/:offer_id/versions"
+  ],
+  "testCases": [
+    {
+      "name": "List the versions of the offer just created",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "pathParams": {
+        "offer_id": "{{cache:offers.create.response.data.offer.offer_id}}"
+      },
+      "queryParams": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}"
+      },
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "data": {
+          "versions": "array"
+        }
+      }
+    }
+  ],
+  "errorCases": [
+    {
+      "name": "Unauthenticated",
+      "pathParams": {
+        "offer_id": "{{cache:offers.create.response.data.offer.offer_id}}"
+      },
+      "queryParams": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}"
+      },
+      "expectedStatus": 401,
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "No Authorization: Bearer header - requireAuth preHandler, and the gateway default-deny authGate ahead of it"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "tenant_id query param required",
+      "when": "The tenant_id query parameter is absent - this route reads the tenant from the query, never from the JWT claim"
+    },
+    {
+      "status": 500,
+      "code": "InternalError",
+      "message": "Fastify default error payload from the uncaught service throw",
+      "when": "listOfferVersions throws - a non-UUID offer_id that fails the Postgres uuid cast, or any database error. Note there is NO 404 path: an unknown offer_id returns 200 with an empty array"
+    }
+  ]
+}

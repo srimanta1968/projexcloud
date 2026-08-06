@@ -1,0 +1,62 @@
+{
+  "name": "POST /mcp/v1/call — registry-mcp stateless tool call",
+  "endpoint": "/mcp/v1/call",
+  "sdk": "registry-mcp",
+  "sourceFile": "services/registry-mcp/src/app.ts",
+  "method": "POST",
+  "requiresAuth": true,
+  "expectedStatus": 200,
+  "testability": "manual",
+  "priority": 40,
+  "description": "Stateless tool-call surface for the local MCP proxy (FR-MCP-L4) and the cloud-builder /api/build/* routes. Returns the same ToolResult shape the SSE transport would produce, so a caller can treat both transports identically. Takes {name, arguments}; name is required and arguments defaults to {}. Dispatch forks on the tool name: a name in WRITE_TOOL_NAMES goes to dispatchWriteTool with the resolved TenantContext, everything else to the read-only dispatchTool, which is why a write tool called without a tenant-bearing credential fails inside the dispatcher rather than at the door. NOTE THE STATUS SEMANTICS: a tool that fails answers 200 with a ToolResult carrying isError:true, NOT a 4xx - the HTTP status describes the transport, the body describes the tool, and a caller that only checks the status will read every tool failure as success. Authn is Bearer OR x-projex-api-key via extractTenantContext, and a per-tenant rate limiter answers 429 before dispatch.\n\nWHY testability IS manual: this route is served by the STANDALONE registry-mcp service, not by the api-gateway. It is a separate compose service on its own origin and port, and the api-gateway does not mount or proxy it - `grep registry-mcp services/api-gateway/src/app.ts` returns nothing. The api test suite drives one base URL (the gateway, :4000 locally), so dispatching this path there is a guaranteed 404 against Fastify's not-found handler and would assert nothing about registry-mcp. It also does not run in the local compose stack. To exercise it, point a client at the registry-mcp service directly with a valid tenant credential. This is a DIFFERENT-ORIGIN limitation, not a missing-payload or uncaptured-path-param one - it is not the case MUST-49 forbids marking manual.",
+  "fieldEnums": {
+    "isError": [
+      "true",
+      "false"
+    ]
+  },
+  "testCases": [
+    {
+      "name": "Call a read-only catalog tool",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "payload": {
+        "name": "list_sdks",
+        "arguments": {}
+      },
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "content": "array",
+        "isError": "boolean"
+      }
+    }
+  ],
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "<AuthError message>",
+      "when": "extractTenantContext rejects the credential — no Bearer and no x-projex-api-key, an unverifiable token, or an api key the resolver cannot resolve. The thrown AuthError supplies its own statusCode, so the exact status follows that error rather than being fixed here"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "name is required",
+      "when": "The body is absent, not an object, or carries no name — checked after authn and rate limiting, so an unauthenticated caller sees 401 rather than this"
+    },
+    {
+      "status": 429,
+      "code": "RateLimited",
+      "message": "rate limited",
+      "when": "The per-tenant limiter refuses the call, keyed on tenant_id and falling back to sub when the credential carries no tenant"
+    },
+    {
+      "status": 404,
+      "code": "Not Found",
+      "message": "Route POST:/mcp/v1/call not found",
+      "when": "The request reached the api-gateway rather than the registry-mcp service — the gateway does not mount this route, which is exactly why this definition is testability:manual"
+    }
+  ],
+  "_originNote": "Served by services/registry-mcp (its own compose service and port), NOT the api-gateway the suite targets. An unhandled tool dispatch failure surfaces as 200 with isError:true in the ToolResult body, so status alone never distinguishes a tool error from success."
+}

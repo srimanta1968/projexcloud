@@ -1,0 +1,60 @@
+{
+  "sdk": "sdk-sequence",
+  "sourceFile": "packages/sdk-sequence/src/server/routes.ts",
+  "requiresAuth": true,
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "taskId": "6c0db85c-cb84-4cac-8b51-24f0c8a259e5",
+  "testability": "auto",
+  "name": "GET /api/sequences - List sequences",
+  "endpoint": "/api/sequences",
+  "method": "GET",
+  "expectedStatus": 200,
+  "priority": 12,
+  "description": "Every sequence defined for a tenant, returned as data.sequences. tenant_id is a REQUIRED QUERY PARAMETER, not a claim: listSequences takes it directly, so omitting it is 400 rather than defaulting to the caller's tenant. Takes no other filter - status and channel query parameters are ignored rather than narrowing the result. Returns the sequence definitions themselves, not enrolments or step state; a caller tracking a contact through a sequence wants the enrolment routes instead. An empty tenant answers 200 with an empty array rather than 404, because 'this tenant has defined no sequences' is an answer.",
+  "dependsOn": [
+    "POST /api/auth/signup-tenant",
+    "POST /api/sequences"
+  ],
+  "testCases": [
+    {
+      "name": "List every sequence in the tenant",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "queryParams": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}"
+      },
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "data": {
+          "sequences": "array"
+        }
+      }
+    }
+  ],
+  "errorCases": [
+    {
+      "name": "Unauthenticated",
+      "queryParams": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}"
+      },
+      "expectedStatus": 401,
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "No Authorization: Bearer header - requireAuth preHandler, and the gateway default-deny authGate ahead of it"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "tenant_id query param required",
+      "when": "The tenant_id query parameter is absent - this route reads the tenant from the query, never from the JWT claim"
+    },
+    {
+      "status": 500,
+      "code": "InternalError",
+      "message": "Fastify default error payload from the uncaught service throw",
+      "when": "listSequences throws - a non-UUID tenant_id that fails the Postgres uuid cast, or any database error"
+    }
+  ]
+}

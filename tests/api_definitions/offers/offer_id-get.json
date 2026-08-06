@@ -1,0 +1,78 @@
+{
+  "sdk": "sdk-offer-catalog",
+  "sourceFile": "packages/sdk-offer-catalog/src/server/routes.ts",
+  "requiresAuth": true,
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "epicId": "9a0f06fa-f1a9-4292-8bc5-715ec836bbc8",
+  "featureId": "50face32-51ba-4a44-8641-d2d1ee5d96c9",
+  "taskId": "1a62f247-b638-412d-a317-e9da3dbd6dc4",
+  "testability": "auto",
+  "name": "GET /api/offers/:offer_id - Fetch one offer",
+  "endpoint": "/api/offers/:offer_id",
+  "method": "GET",
+  "expectedStatus": 200,
+  "priority": 12,
+  "description": "Fetches a single offer by id and returns 200 with data.offer. tenant_id is a REQUIRED QUERY PARAMETER, not a claim: getOffer scopes by (tenant_id, offer_id), so omitting it is 400 rather than defaulting to the caller's tenant. That also means the 404 is tenant-scoped - an offer_id that exists under a different tenant answers 404 NotFound, not 403, so this route never confirms the existence of another tenant's offer. Returns the offer envelope only; it does not include versions or the current live version - use GET /api/offers/:offer_id/versions and GET /api/offers/:offer_id/current for those.",
+  "dependsOn": [
+    "POST /api/auth/signup-tenant",
+    "POST /api/offers"
+  ],
+  "testCases": [
+    {
+      "name": "Fetch the offer just created",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "pathParams": {
+        "offer_id": "{{cache:offers.create.response.data.offer.offer_id}}"
+      },
+      "queryParams": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}"
+      },
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "data": {
+          "offer": {
+            "offer_id": "string",
+            "name": "string",
+            "slug": "string"
+          }
+        }
+      }
+    }
+  ],
+  "errorCases": [
+    {
+      "name": "Unauthenticated",
+      "pathParams": {
+        "offer_id": "{{cache:offers.create.response.data.offer.offer_id}}"
+      },
+      "queryParams": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}"
+      },
+      "expectedStatus": 401,
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "No Authorization: Bearer header - requireAuth preHandler, and the gateway default-deny authGate ahead of it"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "tenant_id query param required",
+      "when": "The tenant_id query parameter is absent - this route reads the tenant from the query, never from the JWT claim"
+    },
+    {
+      "status": 404,
+      "code": "NotFound",
+      "message": "NotFound",
+      "when": "No offer matches (tenant_id, offer_id) - including an offer that exists under a DIFFERENT tenant, which answers 404 rather than 403 so the route never confirms another tenant's data"
+    },
+    {
+      "status": 500,
+      "code": "InternalError",
+      "message": "Fastify default error payload from the uncaught service throw",
+      "when": "getOffer throws - a non-UUID offer_id that fails the Postgres uuid cast, or any database error"
+    }
+  ]
+}

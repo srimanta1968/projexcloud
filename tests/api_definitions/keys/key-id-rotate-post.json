@@ -1,0 +1,70 @@
+{
+  "sdk": "sdk-api-keys",
+  "sourceFile": "packages/sdk-api-keys/src/server/handlers/apiKeyController.ts",
+  "requiresAuth": true,
+  "testability": "auto",
+  "name": "POST /api/keys/:key_id/rotate - Rotate an API key (deprecated alias)",
+  "endpoint": "/api/keys/:key_id/rotate",
+  "method": "POST",
+  "expectedStatus": 201,
+  "priority": 23,
+  "description": "Rotates an API key: mints replacement material and returns 201 with the new record and its one-time plaintext. DEPRECATED ALIAS - /api/keys/* is retained for older integrations behind a deprecate preHandler and delegates to exactly the same rotateKeyHandler as the canonical /api/api-keys/:key_id/rotate. New callers should use the canonical path. Answers 201 rather than 200 because rotation CREATES new key material rather than editing the existing row; the plaintext is returned exactly once and is unrecoverable afterwards, so it must be captured from this response. Rotation is not idempotent - each call mints another key. A key_id that is already revoked, or that belongs to another tenant, is 404 'No rotatable key with that id' rather than 403, so the route never confirms another tenant's keys exist.",
+  "dependsOn": [
+    "POST /api/auth/signup-tenant",
+    "POST /api/keys"
+  ],
+  "testCases": [
+    {
+      "name": "Rotate the key just issued",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "pathParams": {
+        "key_id": "{{cache:keys.create.response.data.key_id}}"
+      },
+      "payload": {},
+      "expectedStatus": 201,
+      "expectedResponse": {
+        "data": {
+          "key": {
+            "key_id": "string",
+            "prefix": "string"
+          },
+          "plaintext": "string"
+        }
+      }
+    }
+  ],
+  "errorCases": [
+    {
+      "name": "Unauthenticated",
+      "pathParams": {
+        "key_id": "{{cache:keys.create.response.data.key_id}}"
+      },
+      "payload": {},
+      "expectedStatus": 401,
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "No Authorization: Bearer header - the gateway default-deny authGate"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "This credential carries no tenant context",
+      "when": "tenantOf() cannot resolve a tenant - the JWT carries no tenant_id claim"
+    },
+    {
+      "status": 404,
+      "code": "NotFound",
+      "message": "No rotatable key with that id",
+      "when": "No active key matches (key_id, tenant_id) - the key never existed, is already revoked or expired, or belongs to a DIFFERENT tenant"
+    },
+    {
+      "status": 500,
+      "code": "InternalError",
+      "message": "InternalError",
+      "when": "rotateKey throws - a non-UUID key_id that fails the Postgres uuid cast, key-material generation failure, or any database error"
+    }
+  ]
+}

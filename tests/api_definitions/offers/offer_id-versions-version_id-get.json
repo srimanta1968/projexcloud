@@ -1,0 +1,80 @@
+{
+  "sdk": "sdk-offer-catalog",
+  "sourceFile": "packages/sdk-offer-catalog/src/server/routes.ts",
+  "requiresAuth": true,
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "epicId": "9a0f06fa-f1a9-4292-8bc5-715ec836bbc8",
+  "featureId": "50face32-51ba-4a44-8641-d2d1ee5d96c9",
+  "taskId": "1a62f247-b638-412d-a317-e9da3dbd6dc4",
+  "testability": "auto",
+  "name": "GET /api/offers/:offer_id/versions/:version_id - Fetch one offer version",
+  "endpoint": "/api/offers/:offer_id/versions/:version_id",
+  "method": "GET",
+  "expectedStatus": 200,
+  "priority": 13,
+  "description": "Fetches one offer version by id and returns 200 with data.version. tenant_id is a REQUIRED QUERY PARAMETER, so omitting it is 400. NOTE the resolution asymmetry: getOfferVersion is called with (tenant_id, version_id) ONLY - offer_id is in the path for URL shape but is NOT used to scope the lookup, so a version_id belonging to a different offer under the same tenant resolves 200 through a mismatched offer_id in the path. Do not treat this route as a check that the version belongs to the offer. A version_id under a different TENANT is correctly 404, and 404 is used rather than 403 so the route never confirms another tenant's data. Route ordering matters here: this pattern is registered AFTER /versions/:version_id/features, so 'features' is matched by that route rather than being read as a version_id.",
+  "dependsOn": [
+    "POST /api/auth/signup-tenant",
+    "POST /api/offers",
+    "POST /api/offers/:offer_id/versions"
+  ],
+  "testCases": [
+    {
+      "name": "Fetch the version just created",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "pathParams": {
+        "offer_id": "{{cache:offers.create.response.data.offer.offer_id}}",
+        "version_id": "{{cache:offers.version.create.response.data.version.offer_version_id}}"
+      },
+      "queryParams": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}"
+      },
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "data": {
+          "version": {
+            "offer_version_id": "string",
+            "version": "string"
+          }
+        }
+      }
+    }
+  ],
+  "errorCases": [
+    {
+      "name": "Unauthenticated",
+      "pathParams": {
+        "offer_id": "{{cache:offers.create.response.data.offer.offer_id}}",
+        "version_id": "{{cache:offers.version.create.response.data.version.offer_version_id}}"
+      },
+      "queryParams": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}"
+      },
+      "expectedStatus": 401,
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "No Authorization: Bearer header - requireAuth preHandler, and the gateway default-deny authGate ahead of it"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "tenant_id query param required",
+      "when": "The tenant_id query parameter is absent - this route reads the tenant from the query, never from the JWT claim"
+    },
+    {
+      "status": 404,
+      "code": "NotFound",
+      "message": "NotFound",
+      "when": "No version matches (tenant_id, version_id) - including a version under a DIFFERENT tenant. A version under a different OFFER in the same tenant does NOT 404, because offer_id does not scope the lookup"
+    },
+    {
+      "status": 500,
+      "code": "InternalError",
+      "message": "Fastify default error payload from the uncaught service throw",
+      "when": "getOfferVersion throws - a non-UUID version_id that fails the Postgres uuid cast, or any database error"
+    }
+  ]
+}

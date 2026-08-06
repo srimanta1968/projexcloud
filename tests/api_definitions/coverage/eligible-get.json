@@ -79,16 +79,18 @@
       }
     },
     {
-      "name": "Reject an eligibility query with no tenant",
+      "name": "Refuse an eligibility query naming a different tenant than the credential",
       "testType": "negative",
       "coversCriterion": "a959792c-5b80-4a99-bc6e-8a7e95fba748#AC3",
       "headers": {
         "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
       },
       "queryParams": {
-        "include_ineligible": "true"
+        "include_ineligible": "true",
+        "tenant_id": "00000000-0000-4000-8000-0000000000ff"
       },
-      "expectedStatus": 400
+      "expectedStatus": 403,
+      "_note": "Was \"no tenant -> 400\", which a tenant-scoped bearer makes unreachable: tenantOf() reads the claim when the query omits tenant_id. Retargeted at the mismatch branch of the same guard, which is reachable and is the one that matters \u2014 a caller must not read another tenant's roster."
     },
     {
       "name": "Reject an unauthenticated eligibility read",

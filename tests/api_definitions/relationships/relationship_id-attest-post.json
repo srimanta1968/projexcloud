@@ -1,0 +1,88 @@
+{
+  "sdk": "sdk-rebac",
+  "sourceFile": "packages/sdk-rebac/src/server/handlers/rebacController.ts",
+  "requiresAuth": true,
+  "testability": "auto",
+  "name": "POST /api/relationships/:relationship_id/attest - Attest a contextual role",
+  "endpoint": "/api/relationships/:relationship_id/attest",
+  "method": "POST",
+  "expectedStatus": 200,
+  "priority": 22,
+  "description": "Records the trust state of a relationship's contextual role and returns 200 with data.role. trust_state is required and must be one of CONFIRMED, CANDIDATE or DOCUMENTED. THE EVIDENCE RULE IS THE POINT: CONFIRMED and DOCUMENTED both mean 'somebody checked', so attestContextualRole refuses either without at least one non-empty evidence_ref - a claim that a check happened must say what was checked. CANDIDATE is the only state that may carry no evidence, because it asserts nothing was verified. The two 400s are distinguishable by code: VALIDATION_ERROR for a trust_state outside the enum (rejected in the controller before any service call), EVIDENCE_REQUIRED for a valid state missing its evidence (raised by the service). Re-attesting MERGES evidence_refs with what is already stored rather than replacing them, deduplicated, so promoting a CANDIDATE to CONFIRMED can supply only the new reference. An unknown relationship_id is 404 RELATIONSHIP_NOT_FOUND.",
+  "dependsOn": [
+    "POST /api/auth/signup-tenant",
+    "POST /api/relationships"
+  ],
+  "fieldEnums": {
+    "trust_state": [
+      "CONFIRMED",
+      "CANDIDATE",
+      "DOCUMENTED"
+    ]
+  },
+  "testCases": [
+    {
+      "name": "Attest the relationship as CONFIRMED with an evidence ref",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "pathParams": {
+        "relationship_id": "{{cache:relationships.create.response.data.relationship.relationship_id}}"
+      },
+      "payload": {
+        "trust_state": "CONFIRMED",
+        "evidence_refs": [
+          "evidence://qa/attestation-{{dynamic:slug}}"
+        ]
+      },
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "data": {
+          "role": {
+            "trust_state": "string"
+          }
+        }
+      }
+    }
+  ],
+  "errorCases": [
+    {
+      "name": "Unauthenticated",
+      "pathParams": {
+        "relationship_id": "{{cache:relationships.create.response.data.relationship.relationship_id}}"
+      },
+      "payload": {
+        "trust_state": "CANDIDATE"
+      },
+      "expectedStatus": 401,
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "No Authorization: Bearer header - requireAuth preHandler, and the gateway default-deny authGate ahead of it"
+    },
+    {
+      "status": 400,
+      "code": "VALIDATION_ERROR",
+      "message": "trust_state must be one of CONFIRMED, CANDIDATE, DOCUMENTED",
+      "when": "trust_state is absent or outside the enum - rejected in the controller before attestContextualRole is called"
+    },
+    {
+      "status": 400,
+      "code": "EVIDENCE_REQUIRED",
+      "message": "[sdk-rebac] trust_state '<state>' requires at least one evidence_ref",
+      "when": "trust_state is CONFIRMED or DOCUMENTED and evidence_refs is absent, empty, or contains only blank strings - both states assert a check was made, so they must name what was checked"
+    },
+    {
+      "status": 404,
+      "code": "RELATIONSHIP_NOT_FOUND",
+      "message": "NotFound",
+      "when": "No relationship matches relationship_id"
+    },
+    {
+      "status": 500,
+      "code": "InternalError",
+      "message": "InternalError",
+      "when": "attestContextualRole throws anything other than the evidence error - a non-UUID relationship_id that fails the Postgres uuid cast, or any database error"
+    }
+  ]
+}
