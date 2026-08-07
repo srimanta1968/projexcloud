@@ -74,6 +74,15 @@ set".**
 | `ALLOW_SYNTHETIC_AI_PROVIDERS` | Model calls are stubbed; no real inference. |
 | `ALLOW_SYNTHETIC_STORM` | Weather/storm data is fabricated. |
 | `ALLOW_SYNTHETIC_LEAK_DETECTOR` | Sovereign egress leak detection is not enforced. |
+| `ALLOW_SYNTHETIC_S3_SIGNER` | Presigned upload URLs do not point at real storage — uploads **appear to succeed and go nowhere**. |
+| `ALLOW_SYNTHETIC_PAYMENT_PROVIDERS` | Payments are simulated. Nothing is charged, captured or settled. |
+| `ALLOW_SYNTHETIC_NOTIFICATION_PROVIDERS` | Email and SMS are swallowed. Recipients are never contacted. |
+
+That is the complete set — eight flags, confirmed by sweeping `ALLOW_*` across every SDK.
+Three of them (`S3_SIGNER`, `PAYMENT_PROVIDERS`, `NOTIFICATION_PROVIDERS`) were missed by an
+earlier pass that searched only for `NODE_ENV === 'production'` guards, because they are
+structured differently. If you are auditing this yourself, grep the flag names, not the
+guard shape.
 
 If you set one, record why and when it will be removed. A synthetic flag left on in
 production is indistinguishable, from the outside, from a working feature.

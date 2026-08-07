@@ -87,6 +87,21 @@ const SYNTHETIC_FLAGS: (SettingSpec & { consequence: string })[] = [
     purpose: 'sovereign egress leak detection',
     consequence: 'egress leak detection is not enforced',
   },
+  {
+    key: 'ALLOW_SYNTHETIC_S3_SIGNER', sdk: 'sdk-media', kind: 'synthetic-flag',
+    purpose: 'object storage presigning',
+    consequence: 'presigned upload URLs do not point at real storage — uploads APPEAR to succeed and go nowhere',
+  },
+  {
+    key: 'ALLOW_SYNTHETIC_PAYMENT_PROVIDERS', sdk: 'sdk-payment', kind: 'synthetic-flag',
+    purpose: 'payment processing',
+    consequence: 'payments are simulated — nothing is charged, captured or settled',
+  },
+  {
+    key: 'ALLOW_SYNTHETIC_NOTIFICATION_PROVIDERS', sdk: 'sdk-notification', kind: 'synthetic-flag',
+    purpose: 'notification delivery',
+    consequence: 'email and SMS are swallowed — recipients are never contacted',
+  },
 ];
 
 /**
