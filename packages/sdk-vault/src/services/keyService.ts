@@ -105,6 +105,103 @@ export async function issueKey(input: IssueKeyInput, operator: OperatorContext):
   }
 }
 
+/** kms_ref of the canonical platform root, created by migration 004. */
+const PLATFORM_ROOT_KMS_REF = 'platform-root-v1';
+
+/**
+ * Returns the tenant's active tenant-tier key, creating it if it does not exist.
+ *
+ * WHY THIS LIVES IN VAULT, and why it is create-on-demand rather than a hook on
+ * tenant creation:
+ *
+ *  - The row is vault's, under vault's tier hierarchy and its parent-tier trigger.
+ *    Having identity create it would push vault's domain rules into the foundation
+ *    identity SDK.
+ *  - A `tenant.created` event hook cannot carry the guarantee: emitEvent SWALLOWS
+ *    failures by design, so a dropped provisioning would turn a universal
+ *    VaultKeyMissing into an intermittent one — strictly harder to diagnose.
+ *  - Existing tenants need a backfill regardless (migration 004). Calling the same
+ *    function lazily covers new tenants too, so ONE mechanism serves both instead of
+ *    two that must agree.
+ *  - It cannot miss a tenant-creation path. signup-tenant is one way a tenant comes
+ *    into existence; admin creation and SCIM provisioning are others, and any future
+ *    path is covered without being told about this.
+ *
+ * CONCURRENCY is handled by the database, not a lock: migration 004 adds a unique
+ * partial index on (scope_id) WHERE tier='tenant' AND state='active', so two racing
+ * first-uploads cannot both win — the loser's insert conflicts and it re-reads the
+ * winner's row.
+ *
+ * Creation is AUDITED. A vault that mints key material with no operation row is not
+ * auditable, so this goes through the same logOperation path as an explicit issue.
+ */
+export async function ensureTenantKey(
+  tenant_id: string,
+  region: string,
+  operator: OperatorContext = { kind: 'service', id: 'sdk-vault.ensureTenantKey' },
+): Promise<KeyRecord> {
+  const existing = await dataService.one<KeyRecord>(
+    `SELECT key_id, tier, scope_id, parent_key_id, kms_ref, state, algorithm,
+            issued_at, rotated_at, shredded_at, tenant_id, region
+       FROM vault.key
+      WHERE tier = 'tenant' AND scope_id = $1 AND state = 'active'
+      LIMIT 1`,
+    [tenant_id],
+  );
+  if (existing) return existing;
+
+  // The parent must be a strictly higher tier (key_check_parent_tier) and a
+  // non-root key cannot be parentless (key_nonroot_parent). Migration 004 creates
+  // this root; recreate it here so a tenant provisioned before that migration on a
+  // fresh install still resolves a parent rather than failing the constraint.
+  const root = await dataService.one<{ key_id: string }>(
+    `INSERT INTO vault.key (tier, kms_ref, region, state, algorithm)
+     SELECT 'root', $1, $2, 'active', 'AES-256-GCM'
+      WHERE NOT EXISTS (SELECT 1 FROM vault.key WHERE tier = 'root' AND kms_ref = $1)
+     RETURNING key_id`,
+    [PLATFORM_ROOT_KMS_REF, region],
+  );
+  const rootId = root?.key_id ?? (
+    await dataService.one<{ key_id: string }>(
+      `SELECT key_id FROM vault.key WHERE tier = 'root' AND kms_ref = $1
+        ORDER BY issued_at LIMIT 1`,
+      [PLATFORM_ROOT_KMS_REF],
+    )
+  )?.key_id;
+  if (!rootId) {
+    throw new Error('[sdk-vault] no platform root key available to parent the tenant key');
+  }
+
+  const inserted = await dataService.one<KeyRecord>(
+    `INSERT INTO vault.key (tier, scope_id, parent_key_id, kms_ref, region, state, algorithm, tenant_id)
+     VALUES ('tenant', $1, $2, $3, $4, 'active', 'AES-256-GCM', $1::uuid)
+     ON CONFLICT DO NOTHING
+     RETURNING key_id, tier, scope_id, parent_key_id, kms_ref, state, algorithm,
+               issued_at, rotated_at, shredded_at, tenant_id, region`,
+    [tenant_id, rootId, `platform-tenant-${tenant_id}`, region],
+  );
+
+  if (inserted) {
+    await logOperation(inserted.key_id, 'issue', operator, 'auto-provisioned on first use');
+    return inserted;
+  }
+
+  // ON CONFLICT fired: a concurrent caller won the unique index. Its row is the
+  // one every envelope will be written under, so return that rather than retrying.
+  const winner = await dataService.one<KeyRecord>(
+    `SELECT key_id, tier, scope_id, parent_key_id, kms_ref, state, algorithm,
+            issued_at, rotated_at, shredded_at, tenant_id, region
+       FROM vault.key
+      WHERE tier = 'tenant' AND scope_id = $1 AND state = 'active'
+      LIMIT 1`,
+    [tenant_id],
+  );
+  if (!winner) {
+    throw new Error(`[sdk-vault] could not provision or read a tenant key for ${tenant_id}`);
+  }
+  return winner;
+}
+
 /**
  * Rotates a key: sets state=rotated and rotated_at=now(). The new key material
  * comes from KMS via the caller's rotation flow; this layer only updates the

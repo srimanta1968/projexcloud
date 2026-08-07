@@ -1,6 +1,7 @@
 import crypto from 'crypto';
 import { dataService } from '@projexlight/db-runtime';
 import { emitEvent } from '@projexlight/sdk-audit';
+import { ensureTenantKey } from '@projexlight/sdk-vault';
 import type {
   BlobRecord,
   IssuePlaybackUrlResult,
@@ -121,15 +122,24 @@ async function resolveVaultKeyRef(tenant_id: string, encounter_id?: string): Pro
     );
     if (enc) return enc.key_id;
   }
-  const tenantKey = await dataService.one<{ key_id: string }>(
-    `SELECT key_id FROM vault.key
-      WHERE tier = 'tenant' AND scope_id = $1 AND state = 'active'
-      LIMIT 1`,
+  // Create-on-demand rather than "provision via sdk-vault first". Tenant creation
+  // never issued this key — the only thing that ever did was a QA fixture, which
+  // does not run on a deployed stack, so in production EVERY tenant hit
+  // 400 VaultKeyMissing here. Six endpoints downstream of the blob id then reported
+  // as SKIPPED rather than failed, which is why a whole-suite run showed no failure
+  // for any of the seven.
+  //
+  // sdk-vault owns the write (its schema, its tier hierarchy, its audit row); this
+  // only asks for it. Idempotent and race-safe via the unique partial index added in
+  // vault migration 004.
+  const tenant = await dataService.one<{ region: string }>(
+    `SELECT region FROM tenant.tenant WHERE tenant_id = $1::uuid`,
     [tenant_id],
   );
-  if (!tenantKey) {
-    throw new Error(`No active vault tenant key for tenant ${tenant_id}; provision via sdk-vault first`);
+  if (!tenant) {
+    throw new Error(`No such tenant ${tenant_id}; cannot resolve a vault key`);
   }
+  const tenantKey = await ensureTenantKey(tenant_id, tenant.region);
   return tenantKey.key_id;
 }
 
