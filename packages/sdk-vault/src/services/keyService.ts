@@ -173,8 +173,12 @@ export async function ensureTenantKey(
   }
 
   const inserted = await dataService.one<KeyRecord>(
+    // BOTH uses of $1 are cast explicitly. scope_id is TEXT and tenant_id is UUID, and
+    // without the casts Postgres tries to deduce one type for the parameter and fails
+    // with "inconsistent types deduced for parameter $1" — which surfaced as a bare
+    // 500 InternalError on the first upload after this shipped.
     `INSERT INTO vault.key (tier, scope_id, parent_key_id, kms_ref, region, state, algorithm, tenant_id)
-     VALUES ('tenant', $1, $2, $3, $4, 'active', 'AES-256-GCM', $1::uuid)
+     VALUES ('tenant', $1::text, $2, $3, $4, 'active', 'AES-256-GCM', $1::uuid)
      ON CONFLICT DO NOTHING
      RETURNING key_id, tier, scope_id, parent_key_id, kms_ref, state, algorithm,
                issued_at, rotated_at, shredded_at, tenant_id, region`,
