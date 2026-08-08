@@ -475,6 +475,7 @@ import { config } from './config';
 import { eventRegistryRoutes } from './routes/events';
 import { obligationEnforcementPlugin } from './plugins/obligationEnforcement';
 import { registerAuthGate } from './plugins/authGate';
+import { installTraceContextHook } from './plugins/traceContextHook';
 
 /**
  * api-gateway — the prototype service binary that hosts every SDK's server
@@ -534,6 +535,18 @@ app.addContentTypeParser(
     }
   },
 );
+
+// Trace context. Installed BEFORE the auth gate so a request that the gate
+// REJECTS still carries a trace id — a 401 or a 500 is exactly the response
+// somebody needs to correlate, and the id is useless if it only appears on
+// success.
+//
+// This hook already existed and was never installed. The cost of that: a caller
+// receiving `{"error":"InternalError"}` had nothing to look the failure up by,
+// so 182 bare InternalError sends and 110 console.error lines across the SDKs
+// were unreachable in practice — the detail was written to the log and there
+// was no key to find it with. Diagnosing a 500 meant guessing.
+installTraceContextHook(app);
 
 // Default-deny auth gate. Registered on the root instance BEFORE any route or
 // SDK router so its onRequest hook is inherited everywhere. Flips the gateway
