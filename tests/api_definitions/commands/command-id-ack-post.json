@@ -14,18 +14,25 @@
     "POST /api/auth/signup-tenant",
     "POST /api/assets",
     "POST /api/assets/:asset_id/credentials",
-    "POST /api/commands"
+    "POST /api/commands",
+    "POST /api/admin/commands/dispatch-now"
   ],
   "testability": "auto",
   "statusTransitions": {
     "entity": "command.command",
     "field": "status",
     "flow": [
+      "approved",
       "dispatched",
       "acked",
       "failed"
     ],
     "transitions": [
+      {
+        "from": "approved",
+        "to": "dispatched",
+        "via": "POST /api/admin/commands/dispatch-now"
+      },
       {
         "from": "dispatched",
         "to": "acked",

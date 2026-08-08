@@ -6,7 +6,7 @@ import { initPool } from '@projexlight/db-runtime';
 import { closeRedis, initRedis } from '@projexlight/redis-runtime';
 import { closeKafka, initKafka, publishMessage } from '@projexlight/kafka-runtime';
 import { randomUUID } from 'crypto';
-import { closeClickHouse, initClickHouse, insert as chInsert } from '@projexlight/clickhouse-runtime';
+import { closeClickHouse, initClickHouse, insert as chInsert, pingClickHouse, describeError } from '@projexlight/clickhouse-runtime';
 import { runMigrations } from '@projexlight/migration-runner';
 import { runSettingsPreflight } from './boot/settingsPreflight';
 import {
@@ -74,6 +74,7 @@ import {
   applyCommandApprovalDecision,
   setCommandHooks,
   startCommandDispatcher,
+  dispatchApprovedCommands,
   getCommandBroker,
   issueRobotCredential,
   getCommand,
@@ -1056,6 +1057,19 @@ app.post<{
   if (!config.clickhouse.enabled) {
     return reply.code(409).send({ success: false, error: 'ClickHouse not enabled' });
   }
+  // CLICKHOUSE_ENABLED asserts INTENT, not availability. Guarding on the flag alone
+  // meant a stopped ClickHouse container took the happy path and surfaced as a bare
+  // 500 — with an EMPTY error string, so the response said only that something
+  // failed. A dependency that is configured but not reachable is a 503 the caller
+  // can retry, not a 500 that reads as a bug in this handler.
+  const health = await pingClickHouse();
+  if (!health.ok) {
+    return reply.code(503).send({
+      success: false,
+      error: `ClickHouse is enabled but not reachable: ${health.reason}`,
+      code: 'CLICKHOUSE_UNAVAILABLE',
+    });
+  }
   const body = req.body ?? {};
   const to = body.to ? new Date(body.to) : new Date();
   const from = body.from
@@ -1065,8 +1079,35 @@ app.post<{
     const data = await runSensorRollup({ from: from.toISOString(), to: to.toISOString() });
     return { success: true, data };
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    return reply.code(500).send({ success: false, error: msg });
+    // describeError, not err.message — see its own comment. err.message is routinely
+    // '' and this endpoint is where that was observed in the wild.
+    return reply.code(500).send({ success: false, error: describeError(err) });
+  }
+});
+
+// P12 · E1 — operator-triggered command dispatch. Header-auth gated
+// (ADMIN_OPS_TOKEN), mirrors /admin/storm/ingest-now and the rollup backfill:
+// run one pass of a background worker NOW rather than waiting for its cadence.
+//
+// Why this exists at all. `dispatched` was reachable ONLY by the periodic
+// dispatcher (COMMAND_DISPATCH_INTERVAL_MS, default 2s). No route produced it,
+// so nothing could drive a command to that state on purpose — an operator who
+// needed a queued command to go out now had to wait for the tick, and any caller
+// wanting to observe the dispatched state could only race it. POST
+// /api/commands/:command_id/ack requires status='dispatched', so its test
+// alternated pass and fail depending on whether a tick happened to land between
+// creating the command and acking it. A state no request can reach is a gap in
+// the API, not a flaky test.
+//
+// Idempotent by construction: dispatchApprovedCommands only moves rows in
+// 'approved', so a second call dispatches nothing and returns 0.
+app.post('/api/admin/commands/dispatch-now', async (req, reply) => {
+  if (!(await checkAdminToken(req, reply))) return;
+  try {
+    const dispatched = await dispatchApprovedCommands();
+    return { success: true, data: { dispatched } };
+  } catch (err) {
+    return reply.code(500).send({ success: false, error: describeError(err) });
   }
 });
 
