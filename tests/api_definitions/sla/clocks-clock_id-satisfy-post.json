@@ -12,7 +12,7 @@
   "epicId": "39365400-aca0-4a86-9791-5771d19998f4",
   "priority": 36,
   "testability": "auto",
-  "description": "Close the promise \u2014 but only on the evidence the policy asked for. Every unmet requirement of the satisfaction_contract is collected before refusing, so one 422 SATISFACTION_EVIDENCE_INSUFFICIENT carries a `missing` array naming ALL of them rather than making the caller discover them one rejection at a time. A refused satisfy leaves the clock exactly as it was: no half-closed promise. An evidence kind outside accepted_kinds is refused by name. Without this contract \"satisfied\" would mean whatever the closing service felt like asserting and the attainment number would stop measuring anything. A BREACHED clock can still be satisfied, and that is the common case rather than an edge one: the deadline passes and somebody answers anyway. Refusing it would leave the clock breached forever with no satisfied_at, so nothing could record when the late response happened and a report could not tell a miss that was eventually answered from one that was abandoned. Nothing is laundered by allowing it \u2014 satisfied_at is after due_at so attainment still counts the clock as a miss, the breach record and its cause are immutable rows of their own, and the event carries within_target: false. A satisfied or cancelled clock cannot be satisfied again (409). Returns 200 with the closed clock. Required: tenant_id plus whatever the policy contract demands.",
+  "description": "Close the promise — but only on the evidence the policy asked for. Every unmet requirement of the satisfaction_contract is collected before refusing, so one 422 SATISFACTION_EVIDENCE_INSUFFICIENT carries a `missing` array naming ALL of them rather than making the caller discover them one rejection at a time. A refused satisfy leaves the clock exactly as it was: no half-closed promise. An evidence kind outside accepted_kinds is refused by name. Without this contract \"satisfied\" would mean whatever the closing service felt like asserting and the attainment number would stop measuring anything. A BREACHED clock can still be satisfied, and that is the common case rather than an edge one: the deadline passes and somebody answers anyway. Refusing it would leave the clock breached forever with no satisfied_at, so nothing could record when the late response happened and a report could not tell a miss that was eventually answered from one that was abandoned. Nothing is laundered by allowing it — satisfied_at is after due_at so attainment still counts the clock as a miss, the breach record and its cause are immutable rows of their own, and the event carries within_target: false. A satisfied or cancelled clock cannot be satisfied again (409). Returns 200 with the closed clock. Required: tenant_id plus whatever the policy contract demands.",
   "dependsOn": [
     "POST /api/sla/clocks",
     "POST /api/auth/signup-tenant",
@@ -34,7 +34,7 @@
   "statusTransitions": {
     "entity": "sla.sla_clock",
     "field": "state",
-    "note": "at_risk is a DERIVED view over running/paused clocks approaching due_at (GET /api/sla/at-risk), not a stored state \u2014 the column can only hold the five values in fieldEnums.state.",
+    "note": "at_risk is a DERIVED view over running/paused clocks approaching due_at (GET /api/sla/at-risk), not a stored state — the column can only hold the five values in fieldEnums.state.",
     "flow": [
       "running",
       "paused",
@@ -72,7 +72,7 @@
         "from": "breached",
         "to": "satisfied",
         "via": "POST /api/sla/clocks/:clock_id/satisfy",
-        "note": "a missed promise can still be kept, late \u2014 satisfied_at then sits after due_at so attainment still counts it as a miss"
+        "note": "a missed promise can still be kept, late — satisfied_at then sits after due_at so attainment still counts it as a miss"
       },
       {
         "from": "running",
@@ -92,6 +92,31 @@
     ]
   },
   "testCases": [
+    {
+      "name": "Refuse an evidence kind outside the policy's accepted list",
+      "testType": "negative",
+      "coversCriterion": "2a7ecc1a-e751-487f-9f30-4127fc277a7b#AC1",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "pathParams": {
+        "clock_id": "{{cache:sla.clock.create.response.data.clock.clock_id}}"
+      },
+      "payload": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "evidence_ref": "message:{{dynamic:uuid}}",
+        "evidence_kind": "{{static:carrier_pigeon}}",
+        "evidence_count": 1,
+        "satisfied_by": "persona:backup",
+        "actor_id": "qa-runner"
+      },
+      "expectedStatus": 422,
+      "expectedError": {
+        "code": "SATISFACTION_EVIDENCE_INSUFFICIENT"
+      },
+      "_blocked": "UNREACHABLE with the current dependency model, and deliberately left failing rather than papered over. satisfyClock() checks SATISFIABLE_STATES and throws InvalidClockTransition (409) BEFORE it evaluates evidence kinds (422). Every dataset here shares one clock_id, and the producer dataset satisfies that clock first, so this case can only ever reach the state check. Proving the 422 needs a second, still-open clock — which MUST-51 cannot express, because its dependency graph is one node per METHOD+ENDPOINT and POST /api/sla/clocks is already that node. Changing expectedStatus to 409 would make it green while testing the already-satisfied path that dataset [2] already covers, i.e. asserting nothing. The evidence-kind rule is covered by the sdk-sla unit tests instead.",
+      "description": "MUST RUN BEFORE the successful satisfy: all datasets share one clock ({{cache:sla.clock.create.response.data.clock.clock_id}}), and once it is satisfied the route answers 409 TRANSITION_CONFLICT before it ever validates the evidence kind — so this 422 case can only be observed while the clock is still open. The 409 case that follows the satisfy depends on the same ordering from the other side."
+    },
     {
       "name": "Satisfy with an accepted evidence kind, a reference and a named actor",
       "headers": {
@@ -120,30 +145,6 @@
         }
       },
       "coversCriterion": "2a7ecc1a-e751-487f-9f30-4127fc277a7b#AC1"
-    },
-    {
-      "name": "Refuse an evidence kind outside the policy's accepted list",
-      "testType": "negative",
-      "coversCriterion": "2a7ecc1a-e751-487f-9f30-4127fc277a7b#AC1",
-      "headers": {
-        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
-      },
-      "pathParams": {
-        "clock_id": "{{cache:sla.clock.create.response.data.clock.clock_id}}"
-      },
-      "payload": {
-        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
-        "evidence_ref": "message:{{dynamic:uuid}}",
-        "evidence_kind": "{{static:carrier_pigeon}}",
-        "evidence_count": 1,
-        "satisfied_by": "persona:backup",
-        "actor_id": "qa-runner"
-      },
-      "expectedStatus": 422,
-      "expectedError": {
-        "code": "SATISFACTION_EVIDENCE_INSUFFICIENT"
-      },
-      "_blocked": "UNREACHABLE with the current dependency model, and deliberately left failing rather than papered over. satisfyClock() checks SATISFIABLE_STATES and throws InvalidClockTransition (409) BEFORE it evaluates evidence kinds (422). Every dataset here shares one clock_id, and the producer dataset satisfies that clock first, so this case can only ever reach the state check. Proving the 422 needs a second, still-open clock \u2014 which MUST-51 cannot express, because its dependency graph is one node per METHOD+ENDPOINT and POST /api/sla/clocks is already that node. Changing expectedStatus to 409 would make it green while testing the already-satisfied path that dataset [2] already covers, i.e. asserting nothing. The evidence-kind rule is covered by the sdk-sla unit tests instead."
     },
     {
       "name": "Satisfying an already-satisfied clock is a transition conflict",
@@ -213,7 +214,7 @@
       "status": 422,
       "code": "SATISFACTION_EVIDENCE_INSUFFICIENT",
       "message": "clock <id> cannot be satisfied: an evidence reference is required by this policy",
-      "when": "the offered evidence does not meet the policy satisfaction contract \u2014 the body names every unmet requirement"
+      "when": "the offered evidence does not meet the policy satisfaction contract — the body names every unmet requirement"
     },
     {
       "status": 409,
