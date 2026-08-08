@@ -15,13 +15,13 @@
     "POST /api/auth/register"
   ],
   "queryParams": {
-    "email": "{{cache:auth.register.request.email}}"
+    "email": "{{cache:auth.register.response.data.email}}"
   },
   "testCases": [
     {
       "name": "Freshly-registered address exists but is not yet verified",
       "queryParams": {
-        "email": "{{cache:auth.register.request.email}}"
+        "email": "{{cache:auth.register.response.data.email}}"
       },
       "expectedStatus": 200,
       "testType": "positive"
@@ -43,8 +43,14 @@
   },
   "description": "Reports whether an email address is known to the system and whether it has completed email verification. Public and additive by design: it never gates register, signup or login — the UI calls it to decide whether to prompt the user to request a fresh verification email. An unknown address is NOT an error; it returns 200 with exists=false so the endpoint cannot be used to distinguish 'no account' from 'server error'. verified is derived from whether the stored person row has a non-null verified_at.",
   "fieldEnums": {
-    "exists": [true, false],
-    "verified": [true, false]
+    "exists": [
+      true,
+      false
+    ],
+    "verified": [
+      true,
+      false
+    ]
   },
   "errorCases": [
     {
