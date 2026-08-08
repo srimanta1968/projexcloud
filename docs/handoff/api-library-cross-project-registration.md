@@ -168,3 +168,64 @@ LeadFlow-shaped paths that exist in neither ProjexCloud repo nor SUT — the pro
 logged `Route GET:/coach/scorecard/:callId not found`, plus `/sdr/qualify`, `/propose`,
 `/:id/intelligence`, `/recording-eligibility`. Confirmed those also 404 against the local
 ProjexCloud gateway and have no on-disk ProjexCloud definition.
+
+---
+
+## OUTCOME — SETTLED 2026-08-08. Do not re-investigate.
+
+The revised order above was followed exactly. All four steps are done.
+
+**(a) Full sweep.** Dry-ran all 73 HTTP endpoints from ProjexCloud's `assignment`, `crm`,
+`conversation` and `connectors` definition trees against LeadFlow `894bc4c8`. **9 rows
+matched, not 29.** The rest either never landed or were removed by the earlier hand-deletes
+this document records. The 9 carry `task_id` values `463036e2` (TK-3919, sdk-assignment),
+`f353b8be` (TK-3920, sdk-crm) and `2fcd6b69` (TK-3922, sdk-connectors) — the exact tasks
+predicted, so this is the predicted misroute and not a coincidence.
+
+| method | endpoint |
+|---|---|
+| POST | `/api/connectors/dlq/replay` |
+| POST | `/api/assignment/route` |
+| POST | `/api/assignment/routes` |
+| POST | `/api/assignment/simulate` |
+| POST | `/api/crm/next-actions/:id/reschedule` |
+| POST | `/api/crm/subjects/:subject_ref/next-action` |
+| GET | `/api/assignment/routes` |
+| GET | `/api/crm/subjects/:subject_ref/next-action` |
+| GET | `/api/crm/subjects/:subject_ref/save-gate` |
+
+**(b) ProjexCloud side confirmed FIRST.** The same 9 were dry-run against ProjexCloud
+`cf30e9b7`, which **refused** them: *"Refusing to delete rows whose api_definition files
+still exist"*, naming all 9 files (`tests/api_definitions/assignment/routes-post.json`,
+`crm/subjects-subject_ref-save-gate-get.json`, …). That refusal is the proof step (b)
+wanted — every one is registered in ProjexCloud **and** backed by a definition on disk.
+Nothing was lost by removing the LeadFlow copies.
+
+**(c) Deleted from LeadFlow** via `projexlight_delete_api_library_entries`, never by hand.
+`deletedCount: 9`. Backup written before the delete to
+`LeadFlow/.mcp-cache/deleted_api_library/api_library_deleted_20260808T202703Z.json`
+(106 KB, full row bodies) — restorable if this judgement is ever disputed.
+
+**`cacheEntriesEvicted` was `[]`, and that is correct, not a bug.** LeadFlow's
+`.mcp-cache/api_test_cache.json` holds 51 `tested_apis` entries and **none** is
+upstream-shaped — verified after the delete: none of the 9 keys present, no
+`/api/crm|assignment|conversations|connectors` key at all. This matches what this document
+observed at the time of writing. There was simply nothing to evict. Note this leaves
+TK-4142's cache-eviction criterion demonstrated only in the negative.
+
+**(d) Still open — the reverse direction.** LeadFlow-shaped paths in ProjexCloud's catalog
+(`/coach/scorecard/:callId`, `/sdr/qualify`, `/propose`, `/:id/intelligence`,
+`/recording-eligibility`) are **not** cleaned by this pass. They belong to LeadFlow and are
+handed to the LeadFlow agent — see `TO-LEADFLOW-api-library-cleanup.md`. They are not
+deleted from here, because deciding another project's catalog is not this project's call.
+
+### Corrections to earlier text in this document
+
+- **"29 endpoints"** — the true figure in LeadFlow's catalog at sweep time was **9**.
+- **`server-config.json` left pointing at production** — already corrected; it is back to
+  `http://host.docker.internal:4000` with the `_TEMPORARY` key removed.
+- **`delete_api_library_entries` times out at 30s** — no longer true. Every call in this
+  pass returned promptly, including a 73-endpoint sweep. The timeout was transient.
+- **`review_api_definitions` ignores `projectPath`** — fixed under TK-4141. An explicit
+  host path now outranks the bridge-injected `projectId`. `mcp-server/docs/DEV_MCP.md`
+  still lists it under "Known issues" and needs that entry retired.
