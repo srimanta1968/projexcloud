@@ -53,9 +53,6 @@ enumerate real errors; do not guess.
 - [ ] `GET /api/credits/ledger` — tests/api_definitions/data-credits/credits-ledger-get.json → missing: negative testCase for 1 errorCase(s) (MUST-64): 401/Unauthorized
 - [ ] `POST /api/credits/reservations` — tests/api_definitions/data-credits/credits-reservations-post.json → missing: negative testCase for 3 errorCase(s) (MUST-64): 400/VALIDATION_ERROR, 402/INSUFFICIENT_CREDITS, 401/Unauthorized
 - [ ] `POST /api/credits/reservations/:reservation_id/settle` — tests/api_definitions/data-credits/credits-reservations-reservation_id-settle-post.json → missing: negative testCase for 4 errorCase(s) (MUST-64): 400/VALIDATION_ERROR, 404/RESERVATION_NOT_FOUND, 409/SETTLEMENT_CONFLICT, 401/Unauthorized
-- [ ] `POST /api/hdk-image/edits` — tests/api_definitions/hdk/hdk-image-edits-post.json → missing: negative testCase for 3 errorCase(s) (MUST-64): 401/Unauthorized, 401/Unauthorized, 400/ValidationError
-- [ ] `POST /api/hdk-scanner/captures` — tests/api_definitions/hdk/hdk-scanner-captures-post.json → missing: negative testCase for 3 errorCase(s) (MUST-64): 401/Unauthorized, 401/Unauthorized, 400/ValidationError
-- [ ] `POST /api/hdk-video/edits` — tests/api_definitions/hdk/hdk-video-edits-post.json → missing: negative testCase for 3 errorCase(s) (MUST-64): 401/Unauthorized, 401/Unauthorized, 400/ValidationError
 - [ ] `GET /api/memberships` — tests/api_definitions/identity/memberships-get.json → missing: negative testCase for 2 errorCase(s) (MUST-64): 401/Unauthorized, 401/Unauthorized
 - [ ] `GET /api/auth/verification-status` — tests/api_definitions/identity/verification-status-get.json → missing: negative testCase for 1 errorCase(s) (MUST-64): 400/ValidationError
 - [ ] `GET /api/imports/mapping-templates` — tests/api_definitions/imports/mapping-templates-get.json → missing: negative testCase for 2 errorCase(s) (MUST-64): 400/VALIDATION_ERROR, 401/Unauthorized
