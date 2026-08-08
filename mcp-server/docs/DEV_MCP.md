@@ -834,22 +834,34 @@ can be traced to the layer that set it rather than guessed at.
 
 ## Known issues
 
-### `projexlight_review_api_definitions` ignores `projectPath`
+### ~~`projexlight_review_api_definitions` ignores `projectPath`~~ — FIXED 2026-08-08
 
-Reported from a LeadFlow session: the tool was called with ProjexCloud's path and
-reviewed **LeadFlow** instead — root `/projects/additional1`, 9 files rather than the
-~30 expected. It reviews whichever project the container treats as current, silently,
-and reports success either way.
+Was: called with one project's path from another project's session, it reviewed
+whichever project the container treated as current and reported success either way —
+a clean report about a project you did not ask about, which is worse than an error
+because nothing looks wrong.
 
-This is the same class as the recorded `start_api_tests` `projectPath` bug, inverted:
-there the argument was ignored in favour of the owner project, here in favour of the
-additional mount. Both fail the same way — a clean report about a project you did not
-ask about, which is worse than an error because nothing looks wrong.
+**Root cause** (TK-4141): `projectId` was checked *first*, and the MCP bridge injects
+its own `PROJECT_ID` on every single call — so `projectId` was always present and
+`projectPath` could never decide anything. It was decorative on every endpoint that
+resolved this way.
 
-**Until it is fixed:** confirm the root in the tool's own output before trusting a
-review, and check the file count matches the project you aimed at. A review whose root
-is not your project has validated nothing, and definition edits it "passed" remain
-unverified.
+**Fixed:** an explicit **host** path now outranks the bridge-injected `projectId`. A
+bare container mount slot (`/workspace`, `/projects/additionalN`) still defers to
+`projectId`, because the same slot names a different project in a different container
+and the git hook sends a bare `/workspace`.
+
+**Verified 2026-08-08** from a ProjexCloud-rooted session: `projectPath` set to
+LeadFlow resolved `[project=LeadFlow root=/projects/additional1]` and listed LeadFlow's
+own resources (`intake`, `leads`, `sla`, `capture`, …); ProjexCloud's path resolved
+`root=/workspace`, `resolvedBy=projectPath`. Both directions work from one container.
+
+A missing scope is also no longer a silent pass: a subdir that does not exist under the
+resolved root now raises 409 and prints the resource list actually present there, so a
+wrong root announces itself with the one fact that identifies it.
+
+**Still true and worth checking:** confirm the `root` in the tool's own output. It is
+now reported on every response (`scope.root`, `scope.projectName`, `scope.resolvedBy`).
 
 ## Cheat sheet
 

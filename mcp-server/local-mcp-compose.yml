@@ -1,0 +1,133 @@
+#
+# ProjexLight MCP — LOCAL SOURCE BUILD (no Nuitka)
+# =============================================================================
+# The single compose file for running BOTH MCPs from Python source, for local
+# development and debugging. Replaces the four files this consolidates:
+#   projex_dev_mcp/local-dev-mcp-compose.yml   projex_dev_mcp/docker-compose.local.yml
+#   projex_test_mcp/local-test-mcp-compose.yml projex_test_mcp/docker-compose.local.yml
+#
+# The PUBLISHED counterpart is dist/dev-mcp-compose.yml + dist/test-mcp-compose.yml,
+# which run the Nuitka binary images from Docker Hub. Those stay separate so
+# setup-all.sh / setup-dev-mcp.sh / setup-test-mcp.sh each keep their own entry
+# point. This file is NOT shipped — it never goes into dist/.
+#
+# USAGE — copy into the project's mcp-server/ directory, then from there:
+#   docker compose -f local-mcp-compose.yml up -d --build              # both
+#   docker compose -f local-mcp-compose.yml up -d --build dev-mcp-server
+#   docker compose -f local-mcp-compose.yml down
+#
+# Container names deliberately MATCH the published ones, so a local build is a
+# drop-in replacement for the Hub images. Bringing this up REPLACES the running
+# dev/test MCP containers.
+#
+# REGISTRY SAFETY: PROJEX_REGISTRY_DIR_HOST defaults to a throwaway
+# ./registered_projects directory, NOT ~/.projexlight. Point it at the real
+# registry only when you intend to test against live data:
+#   PROJEX_REGISTRY_DIR_HOST=C:/Users/<you>/.projexlight docker compose -f ... up -d
+#
+
+services:
+  dev-mcp-server:
+    build:
+      context: ${DEV_MCP_SOURCE_PATH:-../../projex_mcp/projex_dev_mcp}
+      dockerfile: Dockerfile
+    image: projexlight-dev-mcp-local:latest
+    container_name: projexlight-dev-mcp
+    # Defaults to root to match Docker Desktop behaviour (and git-hook installs).
+    # On native Linux set MCP_RUN_AS="$(id -u):$(id -g)" so files the container
+    # writes into your project are not root-owned.
+    user: "${MCP_RUN_AS:-root}"
+    security_opt:
+      - no-new-privileges:true
+    ports:
+      - "${MCP_DEV_PORT:-8766}:8766"
+    volumes:
+      - ../:/workspace
+      # Slot count MUST match MAX_ADDITIONAL_PROJECTS in
+      # projex_dev_mcp/src/core/project_context.py and the dist/ compose files.
+      - ${ADDITIONAL_PROJECT_1:-/dev/null}:/projects/additional1
+      - ${ADDITIONAL_PROJECT_2:-/dev/null}:/projects/additional2
+      - ${ADDITIONAL_PROJECT_3:-/dev/null}:/projects/additional3
+      - ${ADDITIONAL_PROJECT_4:-/dev/null}:/projects/additional4
+      - ${ADDITIONAL_PROJECT_5:-/dev/null}:/projects/additional5
+      - ${ADDITIONAL_PROJECT_6:-/dev/null}:/projects/additional6
+      - ${ADDITIONAL_PROJECT_7:-/dev/null}:/projects/additional7
+      - ${ADDITIONAL_PROJECT_8:-/dev/null}:/projects/additional8
+      - ${ADDITIONAL_PROJECT_9:-/dev/null}:/projects/additional9
+      - ${ADDITIONAL_PROJECT_10:-/dev/null}:/projects/additional10
+      - ./feedback:/feedback
+      - ./mcp-config.json:/app/mcp-config.json:ro
+      - ${PROJEX_REGISTRY_DIR_HOST:-./registered_projects}:/registry
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    env_file:
+      - .env
+    environment:
+      - WORKSPACE_PATH=/workspace
+      - FEEDBACK_PATH=/feedback
+      - PROJEX_REGISTRY_DIR=/registry
+      - MCP_SERVER_PORT=8766
+      - MCP_SERVER_HOST=0.0.0.0
+      - MCP_CONFIG_FILE=/app/mcp-config.json
+      - MCP_TYPE=dev
+      - PROJECT_PATH_MAPPINGS=${PROJECT_PATH_MAPPINGS:-}
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8766/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  test-mcp-server:
+    build:
+      context: ${TEST_MCP_SOURCE_PATH:-../../projex_mcp/projex_test_mcp}
+      dockerfile: Dockerfile
+    image: projexlight-test-mcp-local:latest
+    container_name: projexlight-test-mcp
+    user: "${MCP_RUN_AS:-root}"
+    security_opt:
+      - no-new-privileges:true
+    ports:
+      - "${MCP_TEST_PORT:-8000}:8000"
+    volumes:
+      - ${PROJECT_PATH:-../}:/workspace
+      - ${ADDITIONAL_PROJECT_1:-/dev/null}:/projects/additional1
+      - ${ADDITIONAL_PROJECT_2:-/dev/null}:/projects/additional2
+      - ${ADDITIONAL_PROJECT_3:-/dev/null}:/projects/additional3
+      - ${ADDITIONAL_PROJECT_4:-/dev/null}:/projects/additional4
+      - ${ADDITIONAL_PROJECT_5:-/dev/null}:/projects/additional5
+      - ${ADDITIONAL_PROJECT_6:-/dev/null}:/projects/additional6
+      - ${ADDITIONAL_PROJECT_7:-/dev/null}:/projects/additional7
+      - ${ADDITIONAL_PROJECT_8:-/dev/null}:/projects/additional8
+      - ${ADDITIONAL_PROJECT_9:-/dev/null}:/projects/additional9
+      - ${ADDITIONAL_PROJECT_10:-/dev/null}:/projects/additional10
+      - ./feedback:/feedback
+      - ${RESULTS_PATH:-../test-results}:/results
+      - ./mcp-config.json:/app/mcp-config.json:ro
+      # SAME shared registry file as the Dev MCP — one source of truth.
+      - ${PROJEX_REGISTRY_DIR_HOST:-./registered_projects}:/registry
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    env_file:
+      - .env
+    environment:
+      - WORKSPACE_PATH=/workspace
+      - FEEDBACK_PATH=/feedback
+      - PROJEX_REGISTRY_DIR=/registry
+      - MCP_SERVER_PORT=8000
+      - MCP_SERVER_HOST=0.0.0.0
+      - MCP_CONFIG_FILE=/app/mcp-config.json
+      - MCP_TYPE=test
+      - PROJECT_PATH_MAPPINGS=${PROJECT_PATH_MAPPINGS:-}
+      - HEADLESS=${HEADLESS:-true}
+      - HOST=0.0.0.0
+      - PORT=8000
+      - PYTHONPATH=/app
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s

@@ -23,7 +23,7 @@ const { execFileSync } = require('child_process');
 // Git delta computed HERE, on the host, and sent to the MCP.
 //
 // The MCP runs in a container with the worktree bind-mounted, and git through that mount
-// is pathological: `git diff --name-status HEAD` measured >200s on ProjexCloud versus
+// is pathological: `git diff --name-status HEAD` measured >200s on a large repo versus
 // 0.179s natively. So pre_commit_regression_check could never complete on its own and the
 // MUST-32 gate silently never ran. This bridge is a plain node process on the host, where
 // those commands are instant — so it answers instead of asking.
@@ -215,7 +215,7 @@ const TOOLS = [
   },
   {
     name: 'projexlight_get_sdk_api',
-    description: 'ProjexCloud SDK reuse: fetch the full spec (method, path, requiresAuth, payload_shape, fieldEnums, dependsOn) for ONE endpoint from the bundled SDK catalog. Call this only when about to integrate a specific endpoint you found in mcp-server/data/sdk-catalog-index.json — avoids loading the whole catalog.',
+    description: 'SDK reuse: fetch the full spec (method, path, requiresAuth, payload_shape, fieldEnums, dependsOn) for ONE endpoint from THIS project\'s bundled SDK catalog, when it ships one. Call it only when about to integrate a specific endpoint you already found in mcp-server/data/sdk-catalog-index.json — it avoids loading the whole catalog. A project without that file has no catalog and does not use this tool.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -1664,7 +1664,27 @@ function makeHttpRequest(method, path, body = null) {
       return;
     }
 
+    // PROJECT CONTEXT — attached to EVERY request, whatever the endpoint or method.
+    //
+    // PROJECT_ID comes from this project's own .mcp.json ("env": {"PROJECT_ID": ...}) and
+    // is the authoritative identity: the MCP looks it up in the shared registry
+    // (~/.projexlight/registered_projects.json) and derives the container mount from it,
+    // so the id alone is enough and cannot be confused between projects. projectPath is
+    // sent alongside as a fallback for installs predating the registry.
+    //
+    // There is no endpoint for which this is wrong: every tool the bridge exposes acts on
+    // one project's files, tasks or tests.
+    const ctxProjectPath = (body && body.projectPath) || getProjectPath();
+    const ctxProjectId = (body && body.projectId) || PROJECT_ID;
+
     const url = new URL(path, MCP_SERVER_URL);
+    // GET carries no body, so context travels as query parameters — otherwise
+    // status/read endpoints (get_api_test_status, get_context, ...) stay projectless and
+    // answer for whichever project the container happens to default to.
+    if (method === 'GET') {
+      if (ctxProjectId && !url.searchParams.has('projectId')) url.searchParams.set('projectId', ctxProjectId);
+      if (ctxProjectPath && !url.searchParams.has('projectPath')) url.searchParams.set('projectPath', ctxProjectPath);
+    }
     const isHttps = url.protocol === 'https:';
     const lib = isHttps ? https : http;
 
@@ -1702,19 +1722,16 @@ function makeHttpRequest(method, path, body = null) {
         }
       }
     }
-    if (isAuthenticatedEndpoint && method !== 'GET') {
-      // Auto-detect project path if not provided in the request
-      const projectPath = requestBody.projectPath || getProjectPath();
-
+    if (method !== 'GET') {
       requestBody = {
         ...requestBody,
-        sessionToken: SESSION_TOKEN,
-        projectId: PROJECT_ID,
-        projectPath: projectPath  // For multi-project credential routing
+        projectId: ctxProjectId,
+        projectPath: ctxProjectPath,
+        ...(isAuthenticatedEndpoint ? { sessionToken: SESSION_TOKEN } : {})
       };
 
       if (DEBUG) {
-        console.error(`[MCP Bridge] Request includes projectPath: ${projectPath}`);
+        console.error(`[MCP Bridge] Request context: projectId=${ctxProjectId} projectPath=${ctxProjectPath}`);
       }
     }
 
