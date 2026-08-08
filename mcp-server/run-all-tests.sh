@@ -551,12 +551,57 @@ get_unix_project_path() {
     echo "$path"
 }
 
+# Resolve the canonical project registry the MCP containers themselves read.
+# PROJEX_REGISTRY_DIR_HOST is set Windows-style (C:/Users/me/.projexlight) by the
+# compose files, so normalise it to the /c/... form this shell can open.
+get_registry_file() {
+    local dir="${PROJEX_REGISTRY_DIR_HOST:-$HOME/.projexlight}"
+    dir="${dir//\\//}"
+    if [[ "$dir" =~ ^([A-Za-z]):(.*)$ ]]; then
+        dir="/${BASH_REMATCH[1],,}${BASH_REMATCH[2]}"
+    fi
+    echo "$dir/registered_projects.json"
+}
+
 # Get container workspace path for this project
 # Returns /workspace for owner project, /projects/additionalN for others
 get_container_workspace() {
     local unix_path=$(get_unix_project_path)
 
-    # Check registered projects to find the container path
+    # PRIMARY: ~/.projexlight/registered_projects.json — the SAME file the Dev and
+    # Test MCP containers read, keyed by projectPath with the containerPath the
+    # ownership election actually assigned.
+    #
+    # This lookup used to consult only $SCRIPT_DIR/registered_projects/*.env, a
+    # directory that setup-all.sh does not create in either project here — so every
+    # call fell through to the `/workspace` default below. For the OWNER project
+    # that is accidentally right; for every guest it is silently wrong, and the
+    # Test MCP was handed featureFile=/workspace/tests/features/X.feature, i.e. the
+    # OWNER's tree, for a run the caller made from a different repo.
+    local registry
+    registry=$(get_registry_file)
+    if [ -f "$registry" ] && command -v jq >/dev/null 2>&1; then
+        # The path is handed over in the ENVIRONMENT, not via `jq --arg`: Git Bash /
+        # MSYS rewrites any argv token that looks like a POSIX path, so
+        # `--arg p /c/Users/...` reaches jq as `C:/Users/...` and never matches a
+        # registry entry. Env values are not converted. `norm` then folds the two
+        # spellings and the case, so a registry written either way still matches.
+        local mapped
+        mapped=$(PROJEX_LOOKUP_PATH="$unix_path" jq -r '
+            def norm: (. // "") | ascii_downcase | gsub("\\\\"; "/")
+                      | sub("^(?<d>[a-z]):"; "/\(.d)") | sub("/+$"; "");
+            (env.PROJEX_LOOKUP_PATH | norm) as $p
+            | to_entries
+            | map(select((.value.projectPath | norm) == $p
+                      or (.value.workspacePath | norm) == $p))
+            | .[0].value.containerPath // empty' "$registry" 2>/dev/null)
+        if [ -n "$mapped" ]; then
+            echo "$mapped"
+            return
+        fi
+    fi
+
+    # FALLBACK: per-slot .env files, when a host has them but no registry.
     local registered_dir="$SCRIPT_DIR/registered_projects"
     if [ -d "$registered_dir" ]; then
         # Check if this is the owner project
@@ -581,7 +626,12 @@ get_container_workspace() {
         done
     fi
 
-    # Default to /workspace if not found
+    # Unregistered project. /workspace is the OWNER's mount, so returning it here
+    # points the Test MCP at another repo's tree; say so on stderr rather than let
+    # the run quietly read the wrong files.
+    echo "  [WARN] $unix_path is not in $(get_registry_file) — falling back to /workspace," >&2
+    echo "         which is the OWNER project's mount. Register this project (mcp-server/setup-all.sh)" >&2
+    echo "         if the run reads or writes the wrong repo." >&2
     echo "/workspace"
 }
 

@@ -33,6 +33,13 @@ function resolveInboundTraceId(req: FastifyRequest): string {
   const traceparent = req.headers['traceparent'];
   const parsed = parseTraceparent(typeof traceparent === 'string' ? traceparent : undefined);
   if (parsed) return parsed;
+  // Third source: `x-correlation-id`, the name consuming applications actually
+  // send. LeadFlow's gateway client already generates and sends one, and it was
+  // being dropped — the caller held an id, the server minted a different id, and
+  // nothing joined them, which defeats the point of either having one. Accepting
+  // the header the caller already sends beats asking every caller to rename it.
+  const correlation = req.headers['x-correlation-id'];
+  if (typeof correlation === 'string' && correlation.length > 0) return correlation;
   return crypto.randomUUID();
 }
 
