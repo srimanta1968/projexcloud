@@ -343,6 +343,15 @@ const TOOLS = [
     }
   },
   {
+    name: 'projexlight_get_ui_feature_rules',
+    description: 'Refresh the STRICT UI/BDD feature-file authoring contract (mandatory tags @feature_id/@scenario_id/@scenario_type:UI/@ui_test/@portal/@login, the portals + authRealms model, relative-path navigation, and the rule that a quoted string is a SELECTOR KEY copied from the component rather than a label you invent). ALWAYS call this before creating or editing any file under tests/features/ (MUST-55) — especially if your context was compacted. The UI counterpart of projexlight_get_api_definition_rules.',
+    inputSchema: {
+      type: 'object',
+      properties: {},
+      required: []
+    }
+  },
+  {
     name: 'projexlight_review_api_definitions',
     description: 'API-DEFINITION REVIEW AGENT (incremental). (1) Verifies each NEW/CHANGED api_definition against the actual route/handler code and the authoring rules (FK->cache, no static headers, captureResponse, dependsOn, testability, fieldEnums). (2) COVERAGE: reports missingDefinitions — every endpoint in the CODE that has NO api_definition (catches endpoints the LLM forgot to write, or wrote some and missed others — critical for multi-agent runs). Unchanged files are skipped (content-hash cached). Run after creating/editing api_definitions; write the missing definitions, fix all findings, and re-run until findingsCount=0 and missingDefinitions is empty before committing.',
     inputSchema: {
@@ -1560,6 +1569,7 @@ const TOOL_ENDPOINTS = {
   'projexlight_complete_task': { method: 'POST', path: '/api/instruction/complete' },
   'projexlight_get_rules': { method: 'GET', path: '/api/instruction/rules' },
   'projexlight_get_api_definition_rules': { method: 'GET', path: '/api/rules/api-definition' },
+  'projexlight_get_ui_feature_rules': { method: 'GET', path: '/api/rules/ui-feature' },
   'projexlight_review_api_definitions': { method: 'POST', path: '/api/instruction/review-api-definitions' },
   'projexlight_review_ui_features': { method: 'POST', path: '/api/instruction/review-ui-features' },
   'projexlight_review_task_delta': { method: 'POST', path: '/api/instruction/review-task-delta' },
