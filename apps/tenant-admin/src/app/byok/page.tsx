@@ -59,6 +59,42 @@ async function bindCmkAction(formData: FormData): Promise<void> {
   revalidatePath('/byok');
 }
 
+async function rotateAction(formData: FormData): Promise<void> {
+  'use server';
+  // ROTATION IS THE ROUTINE OPERATION, and it was the one this screen could not do.
+  //
+  // Bind and Revoke were here from the start; rotate was not, although
+  // /admin/byok/bindings/:id/rotate has always existed and vault.cmk_rotation was
+  // accumulating rows. So an operator could set a key up and could destroy access in
+  // an emergency, but the thing you actually do on a schedule — roll the tenant key
+  // under the same customer CMK — had no path outside curl.
+  //
+  // It is deliberately NOT in the danger zone: rotating keeps data readable (the new
+  // tenant key is wrapped by the same CMK, and the old one is superseded rather than
+  // shredded). Presenting it beside Revoke in red would teach operators to hesitate
+  // over the safe operation and habituate them to the destructive one.
+  const binding_id = String(formData.get('binding_id') ?? '');
+  const previous_tenant_key_id = String(formData.get('previous_tenant_key_id') ?? '');
+  const new_tenant_key_id = String(formData.get('new_tenant_key_id') ?? '').trim();
+  if (!binding_id || !new_tenant_key_id) return;
+  await fetch(
+    `${process.env.NEXT_PUBLIC_GATEWAY_URL}/admin/byok/bindings/${encodeURIComponent(binding_id)}/rotate`,
+    {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'x-admin-ops-token': process.env.ADMIN_OPS_TOKEN ?? '',
+      },
+      body: JSON.stringify({
+        previous_tenant_key_id,
+        new_tenant_key_id,
+        operator_id: 'tenant-admin-ui',
+      }),
+    },
+  );
+  revalidatePath('/byok');
+}
+
 async function revokeAction(formData: FormData): Promise<void> {
   'use server';
   const binding_id = String(formData.get('binding_id') ?? '');
@@ -115,6 +151,27 @@ export default async function ByokPage(): Promise<JSX.Element> {
             <dt className="text-muted-foreground">Revoke SLA</dt><dd className="m-0">{binding.sla_revoke_propagation_seconds}s</dd>
             <dt className="text-muted-foreground">SIEM endpoint</dt><dd className="m-0">{binding.siem_forwarder_endpoint ?? <em>not configured</em>}</dd>
           </dl>
+
+          {binding.grant_status === 'active' && (
+            <form action={rotateAction} className="mt-4 rounded-md border border-border p-3">
+              <input type="hidden" name="binding_id" value={binding.binding_id} />
+              <input type="hidden" name="previous_tenant_key_id" value={binding.tenant_key_id} />
+              <p className="mb-2 text-sm text-muted-foreground">
+                <strong className="text-foreground">Rotate the tenant key.</strong> Routine
+                maintenance — the new key is wrapped by the same customer CMK, so data stays
+                readable throughout and the previous key is superseded, not destroyed.
+              </p>
+              <div className="flex gap-2">
+                <Input
+                  name="new_tenant_key_id"
+                  placeholder="new tenant key id"
+                  required
+                  className="flex-1"
+                />
+                <Button type="submit">Rotate CMK</Button>
+              </div>
+            </form>
+          )}
 
           {binding.grant_status === 'active' && (
             <form action={revokeAction} className="mt-4 rounded-md border border-destructive/40 bg-destructive/5 p-3">
