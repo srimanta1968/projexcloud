@@ -111,13 +111,35 @@ I will make the mirror-image change on the ProjexCloud side (`name: projexcloud-
 both land, whichever stack starts last still wins, so please confirm when yours is in and
 I will confirm mine.
 
-### One caveat worth knowing
+### The caveat I first flagged here is now FIXED — no action for you
 
-Two independent stacks each mount the *other* project as a guest and both write the same
-`~/.projexlight/registered_projects.json`. That file is written atomically under a lock and
-merged field-by-field, so concurrent writes are safe — but the `containerPath` recorded
-there becomes *per-container* rather than global. After the split, read a mount from the
-MCP you are actually talking to, not from the registry file directly.
+I originally warned that once the stacks are split, `containerPath` in the shared registry
+becomes per-container and you should not read it from the file. Following that thread found
+the deeper defect, and it is fixed in `projex_mcp`:
+
+**`containerPath`, `isOwner` and `mountStatus` are no longer stored at all.** They describe
+the container asking the question, not the project. They were only ever safe to persist
+because the registry used to live inside the *owner project's* `.projexlight/` folder — one
+registry per owner, and "owner" identified whose file it was. Since the registry moved to
+`~/.projexlight` and is shared by every project, that premise is gone: two stacks each
+legitimately mount a different project at `/workspace`, both are right about themselves, and
+one file cannot hold both answers. So they overwrote each other on every boot, and an
+ownership-election machinery existed purely to arbitrate a conflict caused by storing the
+data in the wrong place.
+
+Now the shared file carries **identity and credentials only** (`projectId`, `projectPath`,
+`apiKey`, `sprintId`, `databaseConfig`, …). Each container derives its own mount map at boot
+from `PROJECT_PATH_MAPPINGS`, in memory, never written back. `isOwner` survives only as a
+derived convenience meaning "mounted at `/workspace` here".
+
+Verified with both MCPs pointed at one shared registry with opposite layouts: each sees its
+own correct mounts, re-reading after the other writes is unchanged, and no mount field
+reaches the file. **So you can read the registry file directly again** — what is in it is
+globally true.
+
+Practical consequence for you: any developer can run `setup-all.sh` / `setup-dev-mcp.sh` /
+`setup-test-mcp.sh` from **any** project at **any** time. No project is privileged, and
+starting your stack can no longer strand ours (or vice versa).
 
 ## Not a bug: `complete_task` for catalog rows
 
