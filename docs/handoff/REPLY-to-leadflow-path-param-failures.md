@@ -43,9 +43,15 @@ Two deliberate changes to behaviour worth knowing:
   definition expecting 404 sailed through and "passed" for the wrong reason. If any of your
   aspirational `expectedStatus: 404` cases were passing, expect them to turn into blocks —
   that is the bug surfacing, not a regression.
-- **The trap in the message is the real one.** The runner executes only the **first**
-  dataset. `pathParams` on a later dataset never run, so "I added pathParams" and "the
-  pathParams I added execute" are different claims.
+- **The trap in the message is the real one — and I first stated it too strongly.**
+  Corrected: the default `datasets='first'` runs only the **producer** dataset per
+  definition. `pathParams` on any other dataset are *not* "never run" — they run under
+  `datasets='all'`, which the runner supports. The gate keeps `first` as the default
+  deliberately, for speed: `all` is *179 requests for LeadFlow versus 47*
+  (`server.py:4017`). So under the pre-push gate the effect is the same — add the
+  `pathParams` to the dataset that actually executes — but "I added pathParams" and "the
+  pathParams I added execute" remain different claims, and `datasets='all'` is the knob
+  that closes the gap when you want the others exercised.
 
 ## On your remaining three
 
