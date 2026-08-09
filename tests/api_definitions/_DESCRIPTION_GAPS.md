@@ -23,6 +23,7 @@ enumerate real errors; do not guess.
 - [ ] `POST /api/auth/register` — tests/api_definitions/auth/register-post.json → missing: negative testCase for 3 errorCase(s) (MUST-64): 400/ValidationError, 409/UserExists, 409/ALIAS_ALREADY_REGISTERED
 - [ ] `POST /api/auth/signup-tenant` — tests/api_definitions/auth/signup-tenant-post.json → missing: negative testCase for 3 errorCase(s) (MUST-64): 400/ValidationError, 409/UserExists, 409/ALIAS_ALREADY_REGISTERED
 - [ ] `POST /api/auth/token` — tests/api_definitions/auth/token-post.json → missing: negative testCase for 4 errorCase(s) (MUST-64): None/?, None/?, None/?, None/?
+- [ ] `POST /api/commands/:command_id/ack` — tests/api_definitions/commands/command-id-ack-post.json → missing: negative testCase for 8 errorCase(s) (MUST-64): 401/Unauthorized, 401/Unauthorized, 400/ok (boolean) is required, 401/missing credential
 - [ ] `GET /api/commands/stream/:asset_id` — tests/api_definitions/commands/stream-asset-id-get.json → missing: negative testCase for 3 errorCase(s) (MUST-64): 404/?, 404/Not Found, 101/SILENT_EMPTY_STREAM
 - [ ] `POST /api/config` — tests/api_definitions/config/index-post.json → missing: negative testCase for 4 errorCase(s) (MUST-64): 400/ValidationError, 400/ValidationError, 403/Forbidden, 401/Unauthorized
 - [ ] `POST /api/config/revoke` — tests/api_definitions/config/revoke-post.json → missing: negative testCase for 3 errorCase(s) (MUST-64): 400/ValidationError, 404/NotFound, 401/Unauthorized
