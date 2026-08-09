@@ -19,6 +19,7 @@ import {
   getByokBinding,
   getByokBindingForTenant,
   listByokBindings,
+  listKeysForOperator as listVaultKeysForOperator,
   registerSyntheticProvidersForDev,
   registerRealKmsProvidersFromEnv,
   installByokInvalidator,
@@ -2024,6 +2025,27 @@ const start = async (): Promise<void> => {
         return reply.code(500).send({ success: false, error: (e as Error).message });
       }
     });
+
+    // Operator key list. The tenant route (/api/vault/keys) filters to the caller's own
+    // tenant in SQL and therefore cannot see root/app/pool at all — those carry
+    // tenant_id NULL because they wrap every tenant. This is the other audience: same
+    // table, admin-gated, and reached by calling a DIFFERENT service function rather
+    // than by passing a flag that widens the tenant one, so there is no code path where
+    // a tenant request can be talked into the operator query.
+    app.get<{ Querystring: { tier?: string; tenant_id?: string; limit?: string } }>(
+      '/admin/vault/keys',
+      async (req, reply) => {
+        const err = await requireAdmin(req as unknown as { headers: Record<string, unknown> });
+        if (err) return reply.code(401).send({ success: false, error: err });
+        const { tier, tenant_id, limit } = req.query ?? {};
+        const data = await listVaultKeysForOperator({
+          tier,
+          tenant_id,
+          limit: limit ? Number(limit) : undefined,
+        });
+        return { success: true, data };
+      },
+    );
 
     // Operator list across ALL tenants — the platform console's view. The per-tenant
     // GET below answers "does THIS tenant have a binding"; this answers "which tenants

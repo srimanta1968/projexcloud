@@ -1,0 +1,59 @@
+{
+  "name": "GET /admin/byok/bindings — operator roster of every CMK binding",
+  "endpoint": "/admin/byok/bindings",
+  "sdk": "sdk-vault",
+  "sourceFile": "services/api-gateway/src/app.ts",
+  "method": "GET",
+  "requiresAuth": false,
+  "expectedStatus": 200,
+  "priority": 45,
+  "dependsOn": [],
+  "testability": "auto",
+  "captureResponse": {
+    "admin.byok-bindings.list.response.data.0.binding_id": "data.0.binding_id"
+  },
+  "testCases": [
+    {
+      "name": "Operator lists every CMK binding",
+      "capturesResponse": true,
+      "headers": {
+        "x-admin-ops-token": "{{env:ADMIN_OPS_TOKEN}}"
+      },
+      "expectedStatus": 200
+    },
+    {
+      "name": "Narrow the roster to bindings in one grant state",
+      "headers": {
+        "x-admin-ops-token": "{{env:ADMIN_OPS_TOKEN}}"
+      },
+      "queryParams": {
+        "grant_status": "active"
+      },
+      "expectedStatus": 200
+    },
+    {
+      "name": "Reject a request with no admin ops token",
+      "testType": "negative",
+      "coversErrorCase": "401|admin token required",
+      "headers": {},
+      "expectedStatus": 401
+    }
+  ],
+  "description": "Lists EVERY BYOK/CMEK binding across all tenants, newest first, optionally filtered by grant_status, limit capped at 500 (default 200). This is the platform console's view and the counterpart to GET /admin/byok/bindings/tenant/:tenant_id, which answers only 'does THIS tenant have a binding'. The operator question is the other one — which tenants have brought their own key, and is any of them degraded or mid-revoke — and grant_status is the field to read first: 'revoking' means a customer's revoke is in flight and 'degraded' means their CMK stopped answering, and both are incidents rather than resting states. Deliberately unscoped and therefore deliberately admin-gated with ADMIN_OPS_TOKEN: it is a roster of every customer's key arrangement, so there is no tenant-facing route into it. Returns binding metadata including customer_kms_key_arn, which is an ARN identifying the customer's key, never key material. Edge cases: an environment with no bindings returns an empty array with 200, not 404; an unknown grant_status value returns an empty array rather than an error, since the column is constrained and a typo should not look like a server fault; a revoked binding remains listed with revoked_at set, because the roster is also the record of who has revoked.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "admin token required",
+      "message": "admin token required",
+      "when": "The x-admin-ops-token header is absent, empty, or does not match ADMIN_OPS_TOKEN",
+      "reproducible": true
+    },
+    {
+      "status": 500,
+      "code": "InternalError",
+      "message": "InternalError",
+      "when": "The vault.byok_binding query fails — database unavailable or the pool is exhausted",
+      "reproducible": false
+    }
+  ]
+}

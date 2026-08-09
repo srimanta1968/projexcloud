@@ -1,0 +1,84 @@
+{
+  "name": "GET /api/vault/keys/:key_id — read one key within the tenant — sdk-vault",
+  "endpoint": "/api/vault/keys/:key_id",
+  "sdk": "sdk-vault",
+  "sourceFile": "packages/sdk-vault/src/server/routes.ts",
+  "method": "GET",
+  "requiresAuth": true,
+  "expectedStatus": 200,
+  "dependsOn": [
+    "POST /api/auth/signup-tenant",
+    "POST /api/vault/keys"
+  ],
+  "testability": "auto",
+  "captureResponse": {
+    "vault.keys.get.response.data.key_id": "data.key_id",
+    "vault.keys.get.response.data.state": "data.state"
+  },
+  "testCases": [
+    {
+      "name": "Read a key the calling tenant owns",
+      "capturesResponse": true,
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "pathParams": {
+        "key_id": "{{cache:vault.keys.create.response.data.key_id}}"
+      },
+      "expectedStatus": 200
+    },
+    {
+      "name": "A key id that does not exist is not found",
+      "testType": "negative",
+      "coversErrorCase": "404|Key not found",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "pathParams": {
+        "key_id": "{{dynamic:uuid}}"
+      },
+      "expectedStatus": 404
+    },
+    {
+      "name": "Reject an unauthenticated read",
+      "testType": "negative",
+      "coversErrorCase": "401|Unauthorized",
+      "headers": {},
+      "pathParams": {
+        "key_id": "{{cache:vault.keys.create.response.data.key_id}}"
+      },
+      "expectedStatus": 401
+    }
+  ],
+  "description": "Reads ONE vault key, and only if it belongs to the calling tenant. Returns the same metadata-only projection as the list route — no key material exists in vault.key to return. The tenant predicate is part of the SQL (getKeyForTenant), so the ownership check cannot be skipped by a caller that forgets it. A key belonging to ANOTHER tenant answers 404, never 403: a 403 would confirm that the id EXISTS somewhere, which is precisely the fact a caller enumerating ids is trying to learn, so absence and denial are made indistinguishable from outside. Edge cases: a non-existent id and another tenant's id are deliberately the same 404 with the same body; a key at root/app/pool tier is also 404 to a tenant token because those rows carry tenant_id NULL; a shredded key still reads back, showing state 'shredded' with shredded_at set and kms_ref NULL, because the row is the audit trail of the erasure and must remain readable; a malformed (non-UUID) key_id is a 500 from the uuid cast rather than a 400, which is worth tightening but is recorded here as the current behaviour.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "No Authorization header, or not in Bearer form — rejected by the gateway default-deny authGate before requireAuth",
+      "reproducible": true
+    },
+    {
+      "status": 403,
+      "code": "no tenant scope",
+      "message": "This token carries no tenant, so no key scope can be derived",
+      "when": "The JWT verifies but carries no tenant_id claim",
+      "reproducible": false
+    },
+    {
+      "status": 404,
+      "code": "Key not found",
+      "message": "Key not found",
+      "when": "No key with that id within the calling tenant — covers both a genuinely unknown id and a key owned by another tenant, deliberately indistinguishable",
+      "reproducible": true
+    },
+    {
+      "status": 500,
+      "code": "InternalError",
+      "message": "InternalError",
+      "when": "key_id is not a valid UUID so the ::uuid cast raises 22P02, or the database is unavailable",
+      "reproducible": false
+    }
+  ]
+}

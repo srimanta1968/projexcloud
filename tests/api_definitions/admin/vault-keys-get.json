@@ -1,0 +1,56 @@
+{
+  "name": "GET /admin/vault/keys — operator view of every key tier",
+  "endpoint": "/admin/vault/keys",
+  "sdk": "sdk-vault",
+  "sourceFile": "services/api-gateway/src/app.ts",
+  "method": "GET",
+  "requiresAuth": false,
+  "expectedStatus": 200,
+  "priority": 45,
+  "dependsOn": [],
+  "testability": "auto",
+  "captureResponse": {
+    "admin.vault-keys.list.response.data.0.key_id": "data.0.key_id"
+  },
+  "testCases": [
+    {
+      "name": "Operator lists root-tier keys",
+      "capturesResponse": true,
+      "headers": {
+        "x-admin-ops-token": "{{env:ADMIN_OPS_TOKEN}}"
+      },
+      "queryParams": {
+        "tier": "root",
+        "limit": "50"
+      },
+      "expectedStatus": 200
+    },
+    {
+      "name": "Reject a request with no admin ops token",
+      "testType": "negative",
+      "coversErrorCase": "401|admin token required",
+      "headers": {},
+      "queryParams": {
+        "tier": "root"
+      },
+      "expectedStatus": 401
+    }
+  ],
+  "description": "Lists vault keys at ANY tier, including the tenant-less ones — root, app and pool carry tenant_id NULL because they wrap every tenant, so they belong to the operator rather than to any single customer and are invisible to the tenant-scoped GET /api/vault/keys. Optional tier and tenant_id narrowing, limit capped at 500 (default 200). Returns metadata only: key_id, tier, scope_id, parent_key_id, kms_ref, state, algorithm, issued_at, rotated_at, shredded_at, tenant_id, region. vault.key holds no key material, so nothing secret is returned; kms_ref is a handle. This route and the tenant route read the SAME table through DIFFERENT service functions (listKeysForOperator vs listKeysForTenant) rather than one function taking a widen-the-scope flag — a flag is something a caller can pass wrongly, whereas a separate function means no tenant request has a code path into the operator query. Gated by ADMIN_OPS_TOKEN. Edge cases: a tier with no keys returns an empty array with 200, not 404; an unrecognised tier value returns an empty array because the column is CHECK-constrained and a typo should not read as a server fault; a shredded key still appears, with state 'shredded', shredded_at set and kms_ref NULL, because the row is the record of the erasure.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "admin token required",
+      "message": "admin token required",
+      "when": "The x-admin-ops-token header is absent, empty, or does not match ADMIN_OPS_TOKEN",
+      "reproducible": true
+    },
+    {
+      "status": 500,
+      "code": "InternalError",
+      "message": "InternalError",
+      "when": "The vault.key query fails — database unavailable, or tenant_id is supplied in a form the ::uuid cast rejects",
+      "reproducible": false
+    }
+  ]
+}
