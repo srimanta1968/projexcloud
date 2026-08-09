@@ -18,6 +18,7 @@ import {
   revokeCmk,
   getByokBinding,
   getByokBindingForTenant,
+  listByokBindings,
   registerSyntheticProvidersForDev,
   registerRealKmsProvidersFromEnv,
   installByokInvalidator,
@@ -2023,6 +2024,25 @@ const start = async (): Promise<void> => {
         return reply.code(500).send({ success: false, error: (e as Error).message });
       }
     });
+
+    // Operator list across ALL tenants — the platform console's view. The per-tenant
+    // GET below answers "does THIS tenant have a binding"; this answers "which tenants
+    // have brought their own key, and is any of them degraded or mid-revoke", which is
+    // the question an operator actually opens the console with. Admin-gated for the
+    // obvious reason: it is a roster of every customer's key arrangement.
+    app.get<{ Querystring: { grant_status?: string; limit?: string } }>(
+      '/admin/byok/bindings',
+      async (req, reply) => {
+        const err = await requireAdmin(req as unknown as { headers: Record<string, unknown> });
+        if (err) return reply.code(401).send({ success: false, error: err });
+        const { grant_status, limit } = req.query ?? {};
+        const data = await listByokBindings({
+          grant_status,
+          limit: limit ? Number(limit) : undefined,
+        });
+        return { success: true, data };
+      },
+    );
 
     app.get<{ Params: { tenant_id: string } }>(
       '/admin/byok/bindings/tenant/:tenant_id',

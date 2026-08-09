@@ -21,6 +21,7 @@ export {
   _resetByokCache,
   getBinding as getByokBinding,
   getBindingForTenant as getByokBindingForTenant,
+  listBindings as listByokBindings,
   recordCmkUse,
   setByokEmitter,
   setSiemForwarder,

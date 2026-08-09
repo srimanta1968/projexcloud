@@ -262,6 +262,93 @@ export async function shredKey(key_id: string, operator: OperatorContext, reason
  * scheduler. Returns keys with state='active' whose issued_at is older than
  * `max_age_days`.
  */
+/** Columns safe to return over the API. */
+const KEY_PUBLIC_COLS = `key_id, tier, scope_id, parent_key_id, kms_ref, state, algorithm,
+              issued_at, rotated_at, shredded_at, tenant_id, region`;
+
+/**
+ * Keys VISIBLE TO ONE TENANT, newest first.
+ *
+ * THE TENANT FILTER IS NOT OPTIONAL AND IS APPLIED IN SQL, not by the caller.
+ *
+ * Every read path into vault.key is a potential cross-tenant key inventory: the rows
+ * carry no key material, but tier + scope_id + kms_ref together describe the shape of
+ * another customer's key hierarchy, and `parent_key_id` walks upward through it. So
+ * the boundary is enforced here, where it cannot be forgotten by a new caller, rather
+ * than in a handler that a future route might not copy.
+ *
+ * Tiers ABOVE tenant (root, app, pool) carry tenant_id = NULL — they wrap every
+ * tenant, so they belong to the operator, not to any one customer. `tenant_id = $1`
+ * excludes them by construction; an operator view must go through an admin-gated
+ * route rather than relaxing this filter.
+ *
+ * `tier` narrows within the tenant (person/device/encounter) and can never widen the
+ * result set beyond it.
+ */
+export async function listKeysForTenant(
+  tenant_id: string,
+  opts: { tier?: string; scope_id?: string; limit?: number } = {},
+): Promise<KeyRecord[]> {
+  const limit = Math.min(Math.max(opts.limit ?? 200, 1), 500);
+  const params: unknown[] = [tenant_id];
+  let sql = `SELECT ${KEY_PUBLIC_COLS} FROM vault.key WHERE tenant_id = $1::uuid`;
+  if (opts.tier) {
+    params.push(opts.tier);
+    sql += ` AND tier = $${params.length}`;
+  }
+  if (opts.scope_id) {
+    params.push(opts.scope_id);
+    sql += ` AND scope_id = $${params.length}`;
+  }
+  params.push(limit);
+  sql += ` ORDER BY issued_at DESC LIMIT $${params.length}`;
+  return dataService.rows<KeyRecord>(sql, params);
+}
+
+/**
+ * One key, but ONLY if it belongs to the calling tenant.
+ *
+ * Returns null rather than throwing a forbidden, and the route turns that into a 404.
+ * A 403 would confirm that the key EXISTS in some other tenant, which is exactly the
+ * fact a caller probing ids is trying to learn — so absence and denial must be
+ * indistinguishable from outside.
+ */
+export async function getKeyForTenant(key_id: string, tenant_id: string): Promise<KeyRecord | null> {
+  const rows = await dataService.rows<KeyRecord>(
+    `SELECT ${KEY_PUBLIC_COLS} FROM vault.key
+      WHERE key_id = $1::uuid AND tenant_id = $2::uuid LIMIT 1`,
+    [key_id, tenant_id],
+  );
+  return rows[0] ?? null;
+}
+
+/**
+ * Operator view: keys at any tier, including the tenant-less ones (root/app/pool).
+ *
+ * NOT reachable from a tenant JWT. The only caller is an ADMIN_OPS_TOKEN route, and
+ * that is the whole distinction between this and listKeysForTenant — same table, two
+ * audiences, and the audience is decided by which function the route calls rather
+ * than by a boolean that someone can pass wrongly.
+ */
+export async function listKeysForOperator(
+  opts: { tier?: string; tenant_id?: string; limit?: number } = {},
+): Promise<KeyRecord[]> {
+  const limit = Math.min(Math.max(opts.limit ?? 200, 1), 500);
+  const params: unknown[] = [];
+  let sql = `SELECT ${KEY_PUBLIC_COLS} FROM vault.key WHERE 1=1`;
+  if (opts.tier) {
+    params.push(opts.tier);
+    sql += ` AND tier = $${params.length}`;
+  }
+  if (opts.tenant_id) {
+    params.push(opts.tenant_id);
+    sql += ` AND tenant_id = $${params.length}::uuid`;
+  }
+  params.push(limit);
+  sql += ` ORDER BY issued_at DESC LIMIT $${params.length}`;
+  return dataService.rows<KeyRecord>(sql, params);
+}
+
 export async function listKeysDueForRotation(max_age_days: number): Promise<KeyRecord[]> {
   try {
     return await dataService.rows<KeyRecord>(

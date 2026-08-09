@@ -372,6 +372,39 @@ export async function getBindingForTenant(tenantId: string): Promise<ByokBinding
   return rowToBinding(rows[0]);
 }
 
+/**
+ * Every binding, newest first — the OPERATOR view for the platform console.
+ *
+ * Deliberately unscoped, and therefore deliberately admin-only: it is the one place
+ * that answers "which tenants have brought their own key, and is any of them
+ * degraded or mid-revoke". Callers must be behind requireAdmin (ADMIN_OPS_TOKEN);
+ * there is no tenant-facing route into this function, because a tenant asking about
+ * other tenants' key arrangements is the question this must never answer.
+ *
+ * `grant_status` is the column worth surfacing first: a binding sitting in 'revoking'
+ * or 'degraded' means a customer's revoke is in flight or their CMK stopped
+ * answering, and both are incidents rather than states.
+ */
+export async function listBindings(opts: { grant_status?: string; limit?: number } = {}): Promise<ByokBindingRef[]> {
+  const pool = getPool();
+  const limit = Math.min(Math.max(opts.limit ?? 200, 1), 500);
+  const params: unknown[] = [];
+  let sql = `SELECT binding_id, tenant_id::text AS tenant_id, provider,
+                    customer_kms_key_arn, tenant_key_id, grant_status,
+                    bound_at, revoked_at, sla_revoke_propagation_seconds,
+                    siem_forwarder_endpoint
+               FROM vault.byok_binding
+              WHERE 1=1`;
+  if (opts.grant_status) {
+    params.push(opts.grant_status);
+    sql += ` AND grant_status = $${params.length}`;
+  }
+  params.push(limit);
+  sql += ` ORDER BY bound_at DESC LIMIT $${params.length}`;
+  const { rows } = await pool.query(sql, params);
+  return rows.map(rowToBinding);
+}
+
 export interface RecordCmkUseInput {
   binding_id: string;
   operation: CmkOperation;
