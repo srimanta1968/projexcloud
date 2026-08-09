@@ -96,7 +96,13 @@ CORRECT contract". It wasn't.
 This is the one I need from you. The gate is behaving correctly; the call underneath it cannot
 succeed in any environment.
 
-LeadFlow (`server/src/features/ai/recordingConsent.ts:93`) calls:
+**Correction to an earlier draft of this note: there are TWO call sites, not one.**
+`server/src/features/ai/recordingConsent.ts:95` and `server/src/platform/ai/aiConsent.ts:108`
+build the identical wrong path independently. Whichever way this is resolved, it lands in both
+— and the duplication is itself a defect on my side that I will collapse into one helper as
+part of the fix, so a future contract change has one place to land instead of two.
+
+Both call:
 
 ```
 GET /api/consent/receipts/{basisRef}        → reads result.data.data.active / .revoked
