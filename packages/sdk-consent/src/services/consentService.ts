@@ -242,6 +242,77 @@ export async function checkConsent(input: CheckConsentInput): Promise<CheckConse
  * absent) as a JSONL-friendly array. Composes with sdk-audit signed PDF export
  * for regulator self-service.
  */
+export interface ReceiptStateResult {
+  receipt_id: string;
+  person_id: string;
+  purpose_id: string;
+  processor: string;
+  jurisdiction: string;
+  app_id: string;
+  granted_at: string;
+  expires_at: string | null;
+  revoked_at: string | null;
+  /** True only when not revoked AND not past expiry — the question a caller actually has. */
+  active: boolean;
+  revoked: boolean;
+  expired: boolean;
+}
+
+/**
+ * The state of ONE receipt, by id — "is the basis I recorded still valid?".
+ *
+ * WHY THIS EXISTS ALONGSIDE checkConsent, which answers a DIFFERENT question.
+ *
+ * checkConsent asks a POLICY question: is there any active receipt for
+ * (person, purpose, processor, jurisdiction) right now. That is the right question on
+ * the hot path, before you touch PII.
+ *
+ * This asks an AUDIT question: the specific consent under which a thing was already
+ * captured — a call recording, an export — is it still good. Those come apart exactly
+ * when it matters. If the original basis is revoked and a NEW consent is later granted
+ * for the same purpose, checkConsent answers yes, because a valid receipt exists. But
+ * the recording in hand was made under the revoked one, and continuing to process it on
+ * the strength of a different, later consent is precisely the substitution an auditor
+ * would object to.
+ *
+ * So a caller holding an opaque basis_ref should read THE RECEIPT, not re-ask the
+ * policy question. The four-tuple is returned too, so a caller that also wants the
+ * policy answer can call checkConsent without having stored anything extra.
+ *
+ * TENANT SCOPING is applied in SQL and is not optional. A receipt names a person, a
+ * purpose and a processor; being able to read one by guessing an id would leak who
+ * consented to what. A receipt outside the caller's tenant is reported as absent
+ * rather than forbidden, so probing an id cannot confirm it exists elsewhere.
+ */
+export async function getReceiptState(
+  receipt_id: string,
+  tenant_id: string,
+): Promise<ReceiptStateResult | null> {
+  const row = await dataService.one<{
+    receipt_id: string;
+    person_id: string;
+    purpose_id: string;
+    processor: string;
+    jurisdiction: string;
+    app_id: string;
+    granted_at: string;
+    expires_at: string | null;
+    revoked_at: string | null;
+  }>(
+    `SELECT receipt_id::text, person_id::text, purpose_id, processor, jurisdiction, app_id,
+            granted_at, expires_at, revoked_at
+       FROM consent.receipt
+      WHERE receipt_id = $1::uuid
+        AND (source_tenant_id = $2::uuid OR target_tenant_id = $2::uuid)
+      LIMIT 1`,
+    [receipt_id, tenant_id],
+  );
+  if (!row) return null;
+  const revoked = row.revoked_at !== null;
+  const expired = row.expires_at !== null && new Date(row.expires_at).getTime() <= Date.now();
+  return { ...row, revoked, expired, active: !revoked && !expired };
+}
+
 export async function exportReceipts(person_id?: string): Promise<ReceiptRecord[]> {
   if (person_id) {
     return dataService.rows<ReceiptRecord>(

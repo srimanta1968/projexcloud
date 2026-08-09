@@ -315,28 +315,72 @@ import {
   SyntheticKmsProvider,
 } from './providers';
 
+/**
+ * Environments where a synthetic KMS must never stand in for a real one.
+ *
+ * NODE_ENV alone is not enough: a qa or staging deployment often runs with NODE_ENV
+ * unset or set to something bespoke, and those are precisely the environments a
+ * release is signed off against. If qa can be served by a simulated KMS, the sign-off
+ * attests to a guarantee the release does not have.
+ *
+ * Fail-CLOSED on an unrecognised value — an unknown environment name is far more
+ * likely to be a real deployment than somebody's laptop.
+ */
+function isProtectedEnvironment(): boolean {
+  const name = (process.env.APP_ENV || process.env.DEPLOY_ENV || process.env.NODE_ENV || '')
+    .trim()
+    .toLowerCase();
+  return !['development', 'dev', 'local', 'test'].includes(name);
+}
+
 export function registerRealKmsProvidersFromEnv(): string[] {
   const real: string[] = [];
+  // THE SUBSTITUTION IS THE DANGEROUS PART, and it used to be unconditional.
+  //
+  // Each branch below fell back to SyntheticKmsProvider whenever the real provider
+  // was unavailable — silently, with no log line and governed by no flag. So removing
+  // ALLOW_SYNTHETIC_BYOK from production stopped registerSyntheticProvidersForDev()
+  // and changed nothing here: a deployment with no AWS credentials still served BYOK
+  // from a simulation, and "revoke makes tenant data undecryptable" remained unbacked
+  // while appearing to work.
+  //
+  // In a protected environment we now register NOTHING. getProvider() already throws
+  // "KMS provider not registered or unavailable", so BYOK operations fail loudly and
+  // name their cause instead of quietly succeeding against a fake. An outage on a
+  // capability you do not actually have is the honest outcome; a green response is not.
+  const protectedEnv = isProtectedEnvironment();
+  const substitute = (kind: 'aws-kms' | 'gcp-kms' | 'hsm-pkcs11', register: (p: KmsProvider | null) => void): void => {
+    if (protectedEnv) {
+      console.error(
+        `[byok] ${kind} has no real credentials in a protected environment — leaving it ` +
+          `UNREGISTERED. BYOK calls for this provider will fail until it is wired. ` +
+          `A synthetic stand-in is only permitted on a developer machine.`,
+      );
+      return;
+    }
+    register(new SyntheticKmsProvider(kind));
+  };
+
   const aws = new AwsKmsRealProvider();
   if (aws.available()) {
     registerAwsKmsProvider(aws);
     real.push('aws-kms');
   } else {
-    registerAwsKmsProvider(new SyntheticKmsProvider('aws-kms'));
+    substitute('aws-kms', registerAwsKmsProvider);
   }
   const gcp = new GcpKmsRealProvider();
   if (gcp.available()) {
     registerGcpKmsProvider(gcp);
     real.push('gcp-kms');
   } else {
-    registerGcpKmsProvider(new SyntheticKmsProvider('gcp-kms'));
+    substitute('gcp-kms', registerGcpKmsProvider);
   }
   const hsm = new HsmPkcs11RealProvider();
   if (hsm.available()) {
     registerHsmPkcs11Provider(hsm);
     real.push('hsm-pkcs11');
   } else {
-    registerHsmPkcs11Provider(new SyntheticKmsProvider('hsm-pkcs11'));
+    substitute('hsm-pkcs11', registerHsmPkcs11Provider);
   }
   return real;
 }
