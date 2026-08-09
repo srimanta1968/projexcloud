@@ -48,6 +48,7 @@ export {
   GcpKmsRealProvider,
   HsmPkcs11RealProvider,
   registerRealKmsProvidersFromEnv,
+  kmsProviderStatus,
 } from './services/byok/realProviders';
 export {
   installByokInvalidator,

@@ -38,4 +38,10 @@ export const PLATFORM_SETUP_KEYS: { key: string; label: string; description: str
   { key: 'notification.email.credential', label: 'Platform default email provider', description: 'API key / DSN for outbound email.' },
   { key: 'media.s3', label: 'Default S3 media storage', description: 'Bucket, region and endpoint for media.' },
   { key: 'search.provider', label: 'Default search backend', description: 'Search endpoint every tenant inherits.' },
+  {
+    key: 'vault.kms',
+    label: 'Default KMS provider',
+    description:
+      'Which KMS wraps platform-owned keys (root, app, pool). Configuring it here states intent; the provider is only live once its credentials reach the process — see Security → KMS providers for what is actually serving calls.',
+  },
 ];

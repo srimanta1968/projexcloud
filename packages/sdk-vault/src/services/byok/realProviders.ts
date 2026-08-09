@@ -321,16 +321,79 @@ import {
  * NODE_ENV alone is not enough: a qa or staging deployment often runs with NODE_ENV
  * unset or set to something bespoke, and those are precisely the environments a
  * release is signed off against. If qa can be served by a simulated KMS, the sign-off
- * attests to a guarantee the release does not have.
+ * attests to a guarantee the release does not have. So an explicitly NAMED environment
+ * that is not a developer one is protected.
  *
- * Fail-CLOSED on an unrecognised value — an unknown environment name is far more
- * likely to be a real deployment than somebody's laptop.
+ * UNSET is treated as a developer machine, and that is a deliberate compromise rather
+ * than an oversight. Failing closed on "unset" reads better on paper, but this repo's
+ * own .env sets none of these, so it would strip synthetic KMS from every existing
+ * local checkout and break the BYOK suite for anyone who had not yet added a variable
+ * they have never needed. A safety default that breaks the machine it is introduced on
+ * gets reverted rather than adopted.
+ *
+ * The undeclared case is therefore permitted and LOUD — see substitute() — so the fix
+ * is to declare APP_ENV on the deployment, not to discover the substitution later.
  */
 function isProtectedEnvironment(): boolean {
   const name = (process.env.APP_ENV || process.env.DEPLOY_ENV || process.env.NODE_ENV || '')
     .trim()
     .toLowerCase();
+  if (name === '') return false; // undeclared: assume developer machine, warn at use
   return !['development', 'dev', 'local', 'test'].includes(name);
+}
+
+/** True when nothing declares what this environment is. */
+function isUndeclaredEnvironment(): boolean {
+  return (process.env.APP_ENV || process.env.DEPLOY_ENV || process.env.NODE_ENV || '').trim() === '';
+}
+
+export interface KmsProviderStatus {
+  kind: 'aws-kms' | 'gcp-kms' | 'hsm-pkcs11';
+  /** Real credentials detected for this provider in this process. */
+  credentialsPresent: boolean;
+  /** What is actually serving calls: the real client, a synthetic stand-in, or nothing. */
+  mode: 'real' | 'synthetic' | 'unregistered';
+  /** The env vars that would wire it, so the screen can say what to set. */
+  wiredBy: string[];
+}
+
+/**
+ * What is ACTUALLY serving each provider right now.
+ *
+ * Configuration states intent; this states reality, and the two disagree in the case
+ * that matters. A platform config row saying "aws-kms" does not mean AWS credentials
+ * reached the process — and after the protected-environment change above, a deployment
+ * without them registers NOTHING rather than quietly substituting a simulation. An
+ * operator screen that showed only the config row would report a KMS that is configured
+ * and cannot encrypt anything.
+ *
+ * Pure: reads env and the provider registry, mutates neither.
+ */
+export function kmsProviderStatus(): KmsProviderStatus[] {
+  const protectedEnv = isProtectedEnvironment();
+  const probes: { kind: KmsProviderStatus['kind']; available: boolean; wiredBy: string[] }[] = [
+    {
+      kind: 'aws-kms',
+      available: new AwsKmsRealProvider().available(),
+      wiredBy: ['AWS_ACCESS_KEY_ID', 'AWS_PROFILE', 'AWS_ROLE_ARN', 'AWS_REGION'],
+    },
+    {
+      kind: 'gcp-kms',
+      available: new GcpKmsRealProvider().available(),
+      wiredBy: ['GOOGLE_APPLICATION_CREDENTIALS'],
+    },
+    {
+      kind: 'hsm-pkcs11',
+      available: new HsmPkcs11RealProvider().available(),
+      wiredBy: ['HSM_PKCS11_LIB', 'HSM_PKCS11_PIN'],
+    },
+  ];
+  return probes.map((p) => ({
+    kind: p.kind,
+    credentialsPresent: p.available,
+    mode: p.available ? 'real' : protectedEnv ? 'unregistered' : 'synthetic',
+    wiredBy: p.wiredBy,
+  }));
 }
 
 export function registerRealKmsProvidersFromEnv(): string[] {
@@ -357,6 +420,16 @@ export function registerRealKmsProvidersFromEnv(): string[] {
           `A synthetic stand-in is only permitted on a developer machine.`,
       );
       return;
+    }
+    if (isUndeclaredEnvironment()) {
+      // Permitted, but never quiet. If this line is in a deployment's logs, that
+      // deployment is running on a simulated KMS and nothing has said so anywhere else.
+      console.warn(
+        `[byok] ${kind} is being served by a SYNTHETIC provider because no real ` +
+          `credentials were found and this environment declares nothing. If this is a ` +
+          `deployed environment, set APP_ENV=qa|staging|production — a synthetic KMS ` +
+          `cannot deliver "revoke makes tenant data undecryptable".`,
+      );
     }
     register(new SyntheticKmsProvider(kind));
   };

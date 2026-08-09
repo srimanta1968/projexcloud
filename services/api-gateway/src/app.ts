@@ -22,6 +22,7 @@ import {
   listKeysForOperator as listVaultKeysForOperator,
   registerSyntheticProvidersForDev,
   registerRealKmsProvidersFromEnv,
+  kmsProviderStatus,
   installByokInvalidator,
   installAutoSiemForwarder,
   setSiemForwarder,
@@ -2024,6 +2025,20 @@ const start = async (): Promise<void> => {
       } catch (e) {
         return reply.code(500).send({ success: false, error: (e as Error).message });
       }
+    });
+
+    // RUNTIME status of each KMS provider — what is actually serving calls.
+    //
+    // Distinct from the config row that names a provider: config is intent, this is
+    // reality, and they disagree in exactly the case that matters. A platform config
+    // saying "aws-kms" does not mean AWS credentials reached the process, and in a
+    // protected environment a provider without them is now UNREGISTERED rather than
+    // silently synthetic. A screen showing only the config row would report a KMS that
+    // is configured and cannot encrypt anything.
+    app.get('/admin/vault/kms-status', async (req, reply) => {
+      const err = await requireAdmin(req as unknown as { headers: Record<string, unknown> });
+      if (err) return reply.code(401).send({ success: false, error: err });
+      return { success: true, data: kmsProviderStatus() };
     });
 
     // Operator key list. The tenant route (/api/vault/keys) filters to the caller's own
