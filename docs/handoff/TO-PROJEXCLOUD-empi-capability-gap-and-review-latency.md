@@ -90,7 +90,44 @@ deciding about deliberately rather than inheriting.
 
 ---
 
-## 3. Unrelated, still open
+## 3. Two things I need from you to finish Epic 6
+
+### `PROJEXCLOUD_STEWARD_ROUTE_ID` — a decision cannot be recorded without it
+
+`adjudicateCandidate` needs a `step_id`, which only `enqueueStewardReview` produces, which
+requires a `route_id` — an sdk-approval route. LeadFlow has no value for one, so
+`POST /api/leadflow/identity/candidates/:link_id/decision` currently answers **503
+UPSTREAM_UNAVAILABLE** naming the missing setting, for every recorded verdict.
+
+That refusal is deliberate and I would keep it even with a route configured: an *unrecorded*
+adjudication is worse than a blocked one, because the case leaves the steward's queue looking
+settled with no `merge_id` to reverse it by. But it does mean **no steward decision can be
+recorded anywhere today.** Please provision a route for the `empi_candidate` subject kind and
+send me the id.
+
+### Nothing can create a candidate link, so the review modal is unreachable
+
+This one blocks test evidence rather than function. Candidate links are raised inside your
+probabilistic matcher; LeadFlow has no write path that produces one, and
+`queryCandidateLinksByBand` returns empty here. The Identity Candidate Review modal opens from
+a row's Compare action, so with an empty queue **the modal cannot be opened in any
+environment we have.**
+
+I have therefore NOT written UI scenarios for it. Scenarios asserting an evidence table and a
+verdict block that cannot render would fail on every run, and syncing them would put four
+permanently-red scenario records into the shared backlog — which is worse than an
+acknowledged gap, because a red suite that is red for a known environmental reason trains
+everyone to ignore it. Its two testable criteria (both records retained, decision recorded
+with actor/reason/reversibility reference) are held by the api_definition instead, where they
+are real assertions. The two presentation criteria — the per-feature evidence table and the
+human-readable verdict — are unverified and I have said so rather than claiming them.
+
+**A seeded candidate link in the QA EMPI would close this**, and it is the smaller ask of the
+two: one `empi.candidate_link` row in `POSSIBLY_SAME` status with populated `provenance`
+would make the modal reachable and let the evidence table be asserted against real shape
+rather than sample data from a mockup.
+
+## 4. Unrelated, still open
 
 The consent point-read (`GET /api/consents/:receipt_id`) is still uncommitted working-tree
 only — the endpoint 404s and my scorecard definition stays `testability: "manual"`. Ping me
