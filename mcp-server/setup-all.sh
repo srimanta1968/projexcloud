@@ -1944,6 +1944,61 @@ verify_project_registered() {
 # Is the currently-registered owner's project folder still present on disk?
 # Returns 0 (alive / unknown / no-owner) or 1 (owner registered but folder GONE).
 # Used to decide whether THIS project should promote itself to owner.
+# Is THIS project the one the containers already mount at /workspace?
+#
+# is_first_project() answers "do the MCP containers exist", NOT "am I a guest".
+# On the owner's SECOND run of this script the containers do exist, so the flow
+# fell through to the guest branch and re-registered the owner as an additional
+# project: the server handed it the next free slot and overwrote its
+# containerPath "/workspace" with "/projects/additionalN".
+#
+# The damage is not cosmetic. The project then occupies a mount slot it does not
+# need (it is still bind-mounted at /workspace by dev-mcp-compose.yml, so it is
+# mounted TWICE), and per-project state keyed by container root splits in two —
+# which is how /api/test/status ends up with several known keys and answers 409
+# "ambiguous" to an unqualified caller, hanging the pre-push hook.
+#
+# Docker is the authority here, not the registry: whatever source is mounted at
+# /workspace IS the owner, whatever any JSON says. The registry is consulted only
+# as a fallback when the container is not running.
+is_this_project_the_owner() {
+    local mine ws
+    mine="$(get_unix_project_path)"
+    mine="${mine%/}"
+
+    if container_running "$DEV_MCP_CONTAINER"; then
+        ws=$(docker inspect "$DEV_MCP_CONTAINER" \
+            --format='{{range .Mounts}}{{if eq .Destination "/workspace"}}{{.Source}}{{end}}{{end}}' 2>/dev/null || echo "")
+        if [ -n "$ws" ]; then
+            ws="$(to_unix_path "${ws//\\//}")"
+            [ "${ws%/}" = "$mine" ] && return 0
+            return 1
+        fi
+    fi
+
+    # Container down (or no /workspace mount reported): fall back to what this
+    # project was last registered as. grep, not jq — see is_project_registered
+    # for why MSYS path rewriting makes jq unreliable for this comparison.
+    if [ -f "$REGISTRY_FILE" ] && command -v python3 &> /dev/null; then
+        PROJEXLIGHT_MINE="$mine" python3 - "$REGISTRY_FILE" <<'PYEOF' && return 0
+import json, os, sys
+mine = (os.environ.get('PROJEXLIGHT_MINE') or '').rstrip('/').lower()
+try:
+    with open(sys.argv[1], encoding='utf-8') as fh:
+        reg = json.load(fh)
+except Exception:
+    sys.exit(1)
+for cfg in (reg or {}).values():
+    p = str((cfg or {}).get('projectPath') or '').rstrip('/').lower()
+    if p == mine and str((cfg or {}).get('containerPath') or '') == '/workspace':
+        sys.exit(0)
+sys.exit(1)
+PYEOF
+    fi
+
+    return 1
+}
+
 is_owner_folder_alive() {
     command -v jq &> /dev/null || return 0   # can't check → assume alive
     local pj owner_path
@@ -2044,7 +2099,20 @@ run_setup() {
         info "MCP containers are shared with other projects"
         echo ""
 
-        if is_owner_folder_alive; then
+        if is_this_project_the_owner; then
+            # RE-RUN BY THE OWNER. The containers exist, so is_first_project() is
+            # false, but this project is the one mounted at /workspace — it is not a
+            # guest and must not be handed an additional slot. Re-assert the owner
+            # mapping so a second (or tenth) run is idempotent instead of demoting
+            # the owner into /projects/additionalN and stranding a duplicate mount.
+            info "This project is the owner (mounted at /workspace) — re-asserting owner registration"
+            create_local_registration "true"
+            if ! register_project "true"; then
+                error "Owner re-registration failed — NOT marking setup complete."
+                error "Fix the issue above (wrong projectId / expired key) and re-run ./setup-all.sh."
+                exit 1
+            fi
+        elif is_owner_folder_alive; then
             # Normal guest path: register in the owner registry (read-back verified),
             # then re-derive .env from the registry and reload so the guest mounts on
             # THIS run. The server enforces the max-project limit (HTTP 400).
