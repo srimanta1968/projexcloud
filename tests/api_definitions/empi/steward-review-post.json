@@ -43,7 +43,7 @@
   "featureId": "01f9d9f9-989e-4cd7-b6cf-50173e3830bd",
   "epicId": "2e2950d2-3772-4768-bd85-8a8734958c78",
   "expectedStatus": 201,
-  "testability": "auto",
+  "testability": "manual",
   "dependsOn": [
     "POST /api/auth/signup-tenant",
     "POST /api/approvals/routes"
@@ -76,5 +76,6 @@
   "captureResponse": {
     "empi.steward-review.response.data.link.link_id": "data.link.link_id",
     "empi.steward-review.response.data.pending_step_ids.0": "data.pending_step_ids.0"
-  }
+  },
+  "skipReason": "TENANT-ISOLATION LIMIT, not a missing payload or an uncaptured path param. Candidate links are raised only inside the probabilistic matcher (empiService.matchAndLink) — there is no HTTP write path that creates one — so the only reviewable link is a SEEDED fixture. The handler takes tenant_id from the JWT and deliberately NOT from the body (routes.ts: 'a body-supplied tenant would let a caller' cross the boundary), while this suite signs up a FRESH tenant on every run. The two fixtures therefore cannot both be true: empi_seed_candidate_link.sql stamps its link with the fixed tenant e22662dc-7e65-472a-a6da-41d59163714a, which a newly created tenant cannot see, and the older 11111111-1111-1111-1111-111111111111 row carries tenant_id NULL, which the tenant-scoped read excludes by construction — the seed's own comment says an unstamped fixture 'would be invisible to every caller'. Both were verified present in the local database and both are correctly invisible, which is why this returned 404 CandidateLinkNotFound rather than anything fixable in the definition. Making it auto needs either a stable QA tenant credential (none exists in test-config and no definition authenticates as a fixed tenant) or an HTTP route that raises a candidate link for the calling tenant. Covered meanwhile by seeding and calling it as the fixture tenant by hand. NOTE: {{var:link_id}} resolves to the tenant-NULL row, so it points at the one fixture that can never be returned; if a stable-tenant credential is ever added, repoint it at 0e3b1a70-0000-4000-8000-00000000e001 as well."
 }
