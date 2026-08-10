@@ -12,6 +12,7 @@
   "epicId": "39365400-aca0-4a86-9791-5771d19998f4",
   "priority": 32,
   "testability": "manual",
+  "skipReason": "DESTRUCTIVE TO THE SHARED CHAIN. Cancel ends the clock's life, and the create->capture chain in this suite yields exactly one clock_id which the satisfy path needs ALIVE. An automated case here would either consume that clock and break the satisfy definition downstream, or point at a fabricated id and fail as a 404 while proving nothing about cancellation. Covered by packages/sdk-sla/tests/clock.integration.test.ts, which creates a dedicated clock to cancel. This is a SHARED-PRODUCER lifecycle conflict, not a missing payload or an uncaptured path param - it is not the case MUST-49 forbids marking manual.",
   "description": "Cancel a clock with a mandatory reason — the subject withdrew, the request was a duplicate, the promise no longer applies. Any non-terminal clock can be cancelled (running, paused or breached); a satisfied or already-cancelled one returns 409 INVALID_CLOCK_TRANSITION. Returns 200. MANUAL: cancel ends the clock's life, and the create->capture chain in this suite yields exactly one clock_id which the satisfy path needs alive, so an automated case here would either destroy that chain or point at a fabricated id and fail as a 404 while proving nothing. Covered by packages/sdk-sla/tests/clock.integration.test.ts. Required: tenant_id, reason.",
   "dependsOn": [
     "POST /api/auth/signup-tenant",
