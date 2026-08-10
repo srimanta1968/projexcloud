@@ -36,16 +36,37 @@ function tryRequire<T = unknown>(mod: string): T | null {
 }
 
 /**
- * Treat anything that is not EXPLICITLY dev/local/test as protected.
+ * Mirrors sdk-vault's isProtectedEnvironment EXACTLY. Keep them identical: two
+ * different answers to "is this production" is how one layer ends up hardened
+ * and the neighbouring one silently is not.
  *
- * Deliberately not `NODE_ENV === 'production'`: staging, qa and an unset
- * NODE_ENV are all environments where silently falling back to an in-memory
- * KEK would destroy real data. UNSET is the common case for a self-hosted
- * install, so it must not be the permissive one.
+ * Reads APP_ENV || DEPLOY_ENV || NODE_ENV, and treats UNSET as a developer
+ * machine. That is a deliberate compromise, not an oversight, and the reason is
+ * recorded in sdk-vault: this repo's own .env declares none of these, so
+ * failing closed on "unset" breaks every existing local checkout.
+ *
+ * The first version of this function failed closed and did exactly that — the
+ * gateway refused to boot on the developer machine it was added on, because
+ * only services/api-gateway/.env sets NODE_ENV and the root .env does not. A
+ * safety default that breaks the machine it ships on gets reverted rather than
+ * adopted, which protects nothing.
+ *
+ * The undeclared case is therefore permitted and LOUD: an undeclared
+ * environment that lands on the mock gets a prominent warning, so the fix is to
+ * declare APP_ENV on the deployment rather than to discover the in-memory KEK
+ * after a restart has already eaten the secrets.
  */
 export function isProtectedEnvironment(): boolean {
-  const env = (process.env.NODE_ENV || '').trim().toLowerCase();
-  return !['development', 'dev', 'local', 'test'].includes(env);
+  const name = (process.env.APP_ENV || process.env.DEPLOY_ENV || process.env.NODE_ENV || '')
+    .trim()
+    .toLowerCase();
+  if (name === '') return false; // undeclared: assume developer machine, warn at use
+  return !['development', 'dev', 'local', 'test'].includes(name);
+}
+
+/** True when nothing declares what this environment is. */
+export function isUndeclaredEnvironment(): boolean {
+  return (process.env.APP_ENV || process.env.DEPLOY_ENV || process.env.NODE_ENV || '').trim() === '';
 }
 
 /* ============================================================
@@ -525,6 +546,15 @@ export function resolveSecretsKmsProvider(): { provider: KmsProvider; status: Se
 
   // eslint-disable-next-line @typescript-eslint/no-var-requires
   const { MockKmsProvider } = require('./kmsProvider') as typeof import('./kmsProvider');
+  console.warn(
+    '[secrets] falling back to the IN-MEMORY mock KMS. Its KEKs are regenerated per ' +
+    'process, so every secret written now becomes undecryptable after the next restart. ' +
+    (isUndeclaredEnvironment()
+      ? 'This environment declares neither APP_ENV, DEPLOY_ENV nor NODE_ENV, so it is being ' +
+        'treated as a developer machine — declare APP_ENV on any deployment. '
+      : '') +
+    'Set SECRETS_MASTER_KEY (openssl rand -hex 32) to use the durable local provider instead.',
+  );
   return {
     provider: new MockKmsProvider(),
     status: { kind: 'mock-local', selectedBy: 'default', protectedEnvironment: false, candidates },
