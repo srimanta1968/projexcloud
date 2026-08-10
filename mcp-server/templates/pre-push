@@ -856,6 +856,26 @@ while [ $WAIT_TIME -lt $API_TEST_MAX_WAIT ]; do
 
     TEST_STATUS=$(echo "$STATUS_RESPONSE" | jq -r '.status // "unknown"' 2>/dev/null || echo "unknown")
 
+    # AMBIGUITY CAN APPEAR MID-POLL, so re-decide here and not only once up front.
+    #
+    # The probe above is a SNAPSHOT. At that instant this project may be the only
+    # one running, so the unscoped URL answers 200 and is correctly chosen. Then a
+    # second project starts a run -- another repo's push, concurrently -- the
+    # container now holds two, and every later unscoped poll answers 409
+    # {"status":"ambiguous"}. That body is valid JSON, so it passes the checks
+    # above and simply never matches a terminal status: the loop burns its whole
+    # budget while the suite has long since finished and been billed. Seen exactly
+    # that with a LeadFlow push overlapping a ProjexCloud one.
+    #
+    # Switching the URL once, on the first ambiguous reply, costs one poll
+    # interval and is self-correcting whenever the condition changes under us.
+    if [ "$TEST_STATUS" = "ambiguous" ] && [ "${STATUS_URL#*projectPath=}" = "${STATUS_URL}" ]; then
+        STATUS_URL="${MCP_SERVER_URL}/api/test/status?projectPath=$(url_encode_path "${PROJECT_PATH}")"
+        echo -e "
+${YELLOW}⚠️  Another project started a run - scoping the status poll to this project.${NC}"
+        continue
+    fi
+
     # Check for error in response
     ERROR_MSG=$(echo "$STATUS_RESPONSE" | jq -r '.error // empty' 2>/dev/null)
     if [ -n "$ERROR_MSG" ]; then
