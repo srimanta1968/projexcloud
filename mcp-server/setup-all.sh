@@ -710,9 +710,35 @@ update_path_mappings() {
         current_mappings=$(grep "^PROJECT_PATH_MAPPINGS=" "$env_file" 2>/dev/null | cut -d'=' -f2- | tr -d "'" || echo "")
     fi
 
-    # Check if this path is already mapped (avoid duplicates)
+    # Already mapped to the RIGHT container path — nothing to do.
+    if echo "$current_mappings" | grep -q "\"$unix_path\":\"$container_path\""; then
+        log "Path $unix_path already maps to $container_path ($(basename $(dirname "$env_file")))"
+        return 0
+    fi
+
+    # Mapped, but to something ELSE — correct it in place.
+    #
+    # This used to `return 0` on the mere PRESENCE of the path key, whatever it
+    # pointed at, so the mapping could never be repaired. That is what made the
+    # owner's demotion sticky: once a run had recorded ProjexCloud ->
+    # /projects/additional2, the owner branch calling this with "/workspace" logged
+    # "already in PROJECT_PATH_MAPPINGS" and left the wrong value in place.
     if echo "$current_mappings" | grep -q "\"$unix_path\""; then
-        log "Path $unix_path already in PROJECT_PATH_MAPPINGS ($(basename $(dirname "$env_file")))"
+        if command -v jq &> /dev/null; then
+            current_mappings=$(echo "$current_mappings" \
+                | MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*' jq -c --arg p "$unix_path" --arg c "$container_path" '.[$p] = $c' 2>/dev/null) \
+                || current_mappings=""
+        fi
+        if [ -z "$current_mappings" ]; then
+            warn "Could not rewrite PROJECT_PATH_MAPPINGS for $unix_path (jq unavailable/failed)"
+            return 0
+        fi
+        log "Corrected $unix_path -> $container_path in PROJECT_PATH_MAPPINGS ($(basename $(dirname "$env_file")))"
+        if [[ "$OSTYPE" == "darwin"* ]]; then
+            sed -i '' "s|^PROJECT_PATH_MAPPINGS=.*|PROJECT_PATH_MAPPINGS='$current_mappings'|" "$env_file"
+        else
+            sed -i "s|^PROJECT_PATH_MAPPINGS=.*|PROJECT_PATH_MAPPINGS='$current_mappings'|" "$env_file"
+        fi
         return 0
     fi
 
@@ -1669,6 +1695,31 @@ recover_env_from_registry() {
         | tr -d '[:space:]')
     preserved_before=${preserved_before:-0}
 
+    # THE EXISTING ASSIGNMENTS, captured BEFORE Step 1 wipes them.
+    #
+    # A project that is already registered must KEEP the slot it already has --
+    # re-running setup updates its sprint/keys, it does not re-home its files. The
+    # slot cannot be read back from the shared registry, because the server strips
+    # container-scoped fields on write: containerPath is null there for every
+    # project. PROJECT_PATH_MAPPINGS in this .env is the durable record (it is the
+    # file compose actually reads), so it is the authority for "already assigned".
+    #
+    # This is what stops the owner being re-slotted: its existing mapping says
+    # /workspace, so it is not a new project and never enters slot assignment.
+    local existing_map
+    existing_map=$(grep "^PROJECT_PATH_MAPPINGS=" "$env_file" 2>/dev/null | cut -d'=' -f2- | tr -d "'")
+    # Drop anything MSYS path conversion mangled in an earlier run (keys that are
+    # not Unix paths, or values pointing outside the container) so a corrupt entry
+    # cannot be treated as a real assignment.
+    if command -v jq &> /dev/null; then
+        existing_map=$(echo "${existing_map:-{}}" | MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*' jq -c '
+            with_entries(select((.key | startswith("/"))
+                                and ((.value == "/workspace")
+                                     or (.value | test("^/projects/additional([1-9]|10)$")))))
+        ' 2>/dev/null) || existing_map='{}'
+    fi
+    [ -z "$existing_map" ] && existing_map='{}'
+
     local tmp
     tmp=$(mktemp "${TMPDIR:-/tmp}/env_rebuild.XXXXXX")
 
@@ -1724,51 +1775,108 @@ recover_env_from_registry() {
     slots_before=$(jq -r '[ .[] | select((.containerPath // "") | test("^/projects/additional([1-9]|10)$")) ] | length' \
                       "$reg_file" 2>/dev/null || echo 0)
 
+    # WHO IS THE OWNER. The registry has no isOwner flag left to consult -- the
+    # server strips container-scoped fields on write -- so every
+    # `select(.value.isOwner != true)` below matched the owner too and handed it a
+    # /projects/additionalN slot on EVERY run. The project then got mounted twice
+    # (it is already at /workspace via dev-mcp-compose.yml), burned one of ten
+    # slots, and split its per-project state across two container roots.
+    #
+    # Docker is the authority: whatever host dir is mounted at /workspace IS the
+    # owner. This is NOT the "match the caller's own path" bug the Step 4 comment
+    # warns about -- the mount is a property of the CONTAINER, identical no matter
+    # which project runs this script.
+    local owner_path
+    owner_path="$(get_workspace_mount_unix_path)"
+    if [ -n "$owner_path" ]; then
+        log "Owner (mounted at /workspace): $owner_path"
+    else
+        warn "Could not determine the /workspace mount - slot assignment may treat the owner as a guest"
+    fi
+
     rtmp=$(mktemp "${TMPDIR:-/tmp}/registry_slot.XXXXXX")
-    if jq '
+    # MSYS_NO_PATHCONV/ARG_CONV_EXCL: Git Bash rewrites any argument that LOOKS
+    # like a Unix path before handing it to a native .exe, so --arg owner_path
+    # "/c/Users/..." arrived as "C:/Users/..." and never matched the registry's own
+    # "/c/Users/..." value -- the owner pin silently did nothing and the owner was
+    # handed a slot anyway. Same trap the slot-path note above avoids by building
+    # "/projects/additionalN" INSIDE jq from a numeric --arg.
+    if MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*' jq --argjson existing "$existing_map" --arg owner_path "$owner_path" '
         def is_slot: test("^/projects/additional([1-9]|10)$");
         def slot_of: capture("^/projects/additional(?<n>[1-9]|10)$").n | tonumber;
         def norm_path: (. // "") | sub("/+$"; "");
 
-        # Winners: the most recent registration per distinct guest FOLDER.
-        # Re-running setup cannot duplicate a project (the registry is an object
-        # keyed by projectId, so a re-register overwrites in place), but a folder
-        # re-exported under a NEW projectId leaves the old id behind. Both entries
-        # then claim a slot for the same directory — mounting it twice and wasting
-        # one of only three slots, while PROJECT_PATH_MAPPINGS (keyed by path)
-        # silently collapses to whichever was written last.
-        ([ to_entries[] | select(.value.isOwner != true) ]
-         | group_by(.value.projectPath | norm_path)
-         | map(sort_by(.value.registeredAt // "") | last | .key)) as $winners
+        # 1. ALREADY REGISTERED KEEPS ITS SLOT. Seed every entry from the durable
+        #    .env mapping, keyed by folder. A project that was set up before -- the
+        #    owner at /workspace, a guest at /projects/additionalN -- is not new and
+        #    must not be re-homed; re-running setup only refreshes its sprint/keys.
+        reduce (to_entries[]) as $e
+          (. ;
+           ($existing[$e.value.projectPath | norm_path]) as $prev
+           # THE /workspace MOUNT OUTRANKS THE OLD MAPPING, and must be tested FIRST.
+           #
+           # A project can be PROMOTED: it used to be /projects/additional1 and is now
+           # the directory compose bind-mounts at /workspace. Seeding from the stale
+           # .env entry first left it on additional1 while NOTHING claimed /workspace,
+           # so the container had an owner no entry recorded -- and the project sat in
+           # two mounts at once. Its old slot must also come free for the next project,
+           # which happens automatically because $taken is derived AFTER this step.
+           | if ($owner_path != "")
+                and (($e.value.projectPath | norm_path) == ($owner_path | norm_path))
+               then .[$e.key].containerPath = "/workspace"
+             # DEMOTION is the mirror case, and only one project may hold /workspace.
+             # If the stored mapping says /workspace but this project is NOT the
+             # current mount, that record is stale -- inheriting it left the old and
+             # the new owner both claiming /workspace. Drop it so the project is
+             # treated as unplaced and picks up a numbered slot below.
+             # Guarded on knowing who the owner IS: with the container down
+             # ($owner_path empty) the stored value is the only evidence there is,
+             # so it is kept rather than discarded on a guess.
+             elif ($prev == "/workspace") and ($owner_path != "")
+               then .[$e.key].containerPath = ""
+             # Otherwise an already-registered project keeps the slot it already has.
+             elif $prev != null then .[$e.key].containerPath = $prev
+             else . end)
 
-        # Release slots held by superseded duplicates so the capacity comes back.
-        # NOTE: the key is bound to $k first. Writing `$winners | index(.key)`
-        # evaluates .key against the ARRAY, not the entry ("Cannot index array").
-        | reduce ( to_entries[]
-                   | select(.value.isOwner != true)
-                   | .key as $k
-                   | select(($winners | index($k)) == null)
-                   | $k ) as $dup (. ; .[$dup].containerPath = "")
+        # 2. Superseded duplicates: same FOLDER re-exported under a NEW projectId.
+        #    Only the newest id keeps the folder; the stale one releases its slot so
+        #    the capacity comes back.
+        | ([ to_entries[] ]
+           | group_by(.value.projectPath | norm_path)
+           | map(sort_by(.value.registeredAt // .value.lastSeen // "") | last | .key)) as $winners
+        | reduce ( to_entries[] | .key as $k
+                   | select(($winners | index($k)) == null) | $k ) as $dup
+            (. ; .[$dup].containerPath = "")
 
-        # Slots already held keep their assignment so existing mounts stay stable.
+        # 3. Anything still without a usable assignment is a NEW project.
         | [ .[] | (.containerPath // "") | select(is_slot) | slot_of ] as $taken
-        # Winners still lacking a usable slot, oldest registration first so
-        # assignment is deterministic. The whole expression is parenthesised so the
-        # binding does not consume the pipeline: without the parens the reduce below
-        # would receive the array of keys as its input instead of the registry.
         | ([ to_entries[]
-             | select(.value.isOwner != true)
              | select(.key as $k | ($winners | index($k)) != null)
-             | select(((.value.containerPath // "") | is_slot) | not) ]
-           | sort_by(.value.registeredAt // "")
+             | select(((.value.containerPath // "") | is_slot) | not)
+             | select((.value.containerPath // "") != "/workspace") ]
+           | sort_by(.value.registeredAt // .value.lastSeen // "")
            | map(.key)) as $pending
+
+        # 4. Assign the lowest free slot. When all ten are taken, evict the OLDEST
+        #    INACTIVE project and hand its slot over -- an active project is never
+        #    displaced, so a busy fleet fails loudly instead of stealing a live mount.
         | reduce range(0; ($pending | length)) as $i
             ({ reg: ., taken: $taken };
              ([ range(1; 11) ] - .taken | sort | first) as $free
-             | if $free == null then .          # out of slots: leave untouched
-               else .reg[$pending[$i]].containerPath = ("/projects/additional" + ($free | tostring))
-                    | .taken += [$free]
-                    | .
+             | if $free != null then
+                 .reg[$pending[$i]].containerPath = ("/projects/additional" + ($free | tostring))
+                 | .taken += [$free]
+               else
+                 ( [ .reg | to_entries[]
+                     | select(((.value.containerPath // "") | is_slot))
+                     | select((.value.status // "") != "active") ]
+                   | sort_by(.value.lastSeen // "") | first ) as $victim
+                 | if $victim == null then .        # every slot held by an ACTIVE project
+                   else
+                     ($victim.value.containerPath) as $slot
+                     | .reg[$victim.key].containerPath = ""
+                     | .reg[$pending[$i]].containerPath = $slot
+                   end
                end)
         | .reg
     ' "$reg_file" > "$rtmp" 2>/dev/null && [ -s "$rtmp" ] && jq -e . "$rtmp" >/dev/null 2>&1; then
@@ -1793,12 +1901,19 @@ recover_env_from_registry() {
               | (.projectPath // "") | sub("/+$"; "") ] as $served
             | [ to_entries[]
                 | select(.value.isOwner != true)
+                # The OWNER holds /workspace, which is not a numbered slot and does
+                # not need one. Without this it was counted as unplaceable and every
+                # run warned "could not be given a container slot" while nothing was
+                # wrong -- advice to unregister a project to free capacity that was
+                # never short.
+                | select((.value.containerPath // "") != "/workspace")
                 | select(((.value.containerPath // "") | test("^/projects/additional([1-9]|10)$")) | not)
                 | ((.value.projectPath // "") | sub("/+$"; "")) as $p
                 | select(($served | index($p)) == null) ]
             | length' "$reg_file" 2>/dev/null || echo 0)
         if [ "$still_pending" -gt 0 ]; then
-            warn "$still_pending registered project(s) could not be given a container slot (max 3)."
+            warn "$still_pending registered project(s) could not be given a container slot (max 10 + the owner)."
+            warn "Every slot is held by an ACTIVE project, so none was displaced."
             warn "Unregister one at http://localhost:${DEV_MCP_PORT}/projects to free a slot."
         fi
     else
@@ -1832,13 +1947,22 @@ recover_env_from_registry() {
     } >> "$env_file"
 
     # Step 4: re-emit ADDITIONAL_PROJECT_N entries for every non-owner
-    # project whose containerPath is /projects/additionalN. The registry's
-    # isOwner flag is authoritative — we do NOT fall back to a path match
-    # with the caller's own project path (that was the original bug).
+    # project whose containerPath is /projects/additionalN.
+    #
+    # This comment used to call the registry's isOwner flag authoritative. It is
+    # not: the shared registry in ~/.projexlight does not carry it any more, so
+    # `select(.value.isOwner != true)` passed the OWNER through and emitted an
+    # ADDITIONAL_PROJECT_N line for the project already mounted at /workspace.
+    # The owner is excluded by PATH instead -- the /workspace mount, read from
+    # Docker. That is still not the original bug this warned about, which was
+    # matching the CALLER's own path: the mount belongs to the container and is
+    # the same whichever project runs this script.
     local additional_projects
-    additional_projects=$(jq -r '
+    additional_projects=$(MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*' jq -r --arg owner_path "$owner_path" '
+        def norm_path: (. // "") | sub("/+$"; "");
         to_entries[]
         | select(.value.isOwner != true)
+        | select(($owner_path == "") or ((.value.projectPath | norm_path) != ($owner_path | norm_path)))
         | select(.value.containerPath | startswith("/projects/additional"))
         | "\(.value.containerPath | ltrimstr("/projects/additional"))|\(.value.projectPath)"
     ' "$reg_file" 2>/dev/null) || fresh_mappings='{}'
@@ -1961,19 +2085,35 @@ verify_project_registered() {
 # Docker is the authority here, not the registry: whatever source is mounted at
 # /workspace IS the owner, whatever any JSON says. The registry is consulted only
 # as a fallback when the container is not running.
+# Unix path of whatever host directory is bind-mounted at /workspace, or "" when
+# it cannot be determined (container down / no such mount). THE definition of
+# "owner" everywhere in this script.
+#
+# It has to come from Docker rather than the registry because the shared registry
+# in ~/.projexlight no longer carries an isOwner flag — the server strips
+# container-scoped fields on write, so `select(.value.isOwner != true)` matches
+# EVERY entry including the owner's. Several places here still read that flag and
+# called it "authoritative"; they were silently treating the owner as a guest.
+get_workspace_mount_unix_path() {
+    local ws=""
+    if container_running "$DEV_MCP_CONTAINER"; then
+        ws=$(docker inspect "$DEV_MCP_CONTAINER" \
+            --format='{{range .Mounts}}{{if eq .Destination "/workspace"}}{{.Source}}{{end}}{{end}}' 2>/dev/null || echo "")
+    fi
+    [ -z "$ws" ] && { echo ""; return 0; }
+    ws="$(to_unix_path "${ws//\\//}")"
+    echo "${ws%/}"
+}
+
 is_this_project_the_owner() {
     local mine ws
     mine="$(get_unix_project_path)"
     mine="${mine%/}"
 
-    if container_running "$DEV_MCP_CONTAINER"; then
-        ws=$(docker inspect "$DEV_MCP_CONTAINER" \
-            --format='{{range .Mounts}}{{if eq .Destination "/workspace"}}{{.Source}}{{end}}{{end}}' 2>/dev/null || echo "")
-        if [ -n "$ws" ]; then
-            ws="$(to_unix_path "${ws//\\//}")"
-            [ "${ws%/}" = "$mine" ] && return 0
-            return 1
-        fi
+    ws="$(get_workspace_mount_unix_path)"
+    if [ -n "$ws" ]; then
+        [ "$ws" = "$mine" ] && return 0
+        return 1
     fi
 
     # Container down (or no /workspace mount reported): fall back to what this
@@ -2272,7 +2412,14 @@ case "${1:-}" in
         ;;
     --register)
         check_prerequisites
-        register_project
+        # register_project defaults is_owner to "false", so a bare --register from
+        # the OWNER re-registered it as a guest and cost it /workspace — the same
+        # demotion run_setup had. Decide it from the actual /workspace mount.
+        if is_this_project_the_owner; then
+            register_project "true"
+        else
+            register_project "false"
+        fi
         ;;
     --sync-creds|--sync-credentials)
         check_prerequisites

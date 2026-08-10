@@ -271,6 +271,32 @@ sync_credentials_if_needed() {
             rest="${rest//\\//}"
             unix_path="/${drive,,}${rest}"
         fi
+
+        # DO NOT ASSUME GUEST. This block runs when the project has NO registry
+        # entry at all, which is exactly the case after a fresh or repaired
+        # registry -- including for the OWNER. Registering it isOwner:false makes
+        # the server hand the owner an additional slot and overwrite its
+        # containerPath "/workspace" with "/projects/additionalN", so the project
+        # is mounted twice and its per-project state splits across two container
+        # roots. Same demotion setup-all.sh had, fixed there by
+        # is_this_project_the_owner.
+        #
+        # Ask Docker, not the registry: whatever source is mounted at /workspace
+        # IS the owner. If the container is not running we cannot tell, and false
+        # stays the safe default -- a guest wrongly called owner steals /workspace.
+        local is_owner_flag="false" ws_src
+        ws_src=$(docker inspect "$CONTAINER_NAME" \r
+            --format='{{range .Mounts}}{{if eq .Destination "/workspace"}}{{.Source}}{{end}}{{end}}' 2>/dev/null || echo "")
+        if [ -n "$ws_src" ]; then
+            ws_src="${ws_src//\//}"
+            if [[ "$ws_src" =~ ^([A-Za-z]):(.*)$ ]]; then
+                ws_src="/${BASH_REMATCH[1],,}${BASH_REMATCH[2]}"
+            fi
+            if [ "${ws_src%/}" = "${unix_path%/}" ]; then
+                is_owner_flag="true"
+                print_msg "$YELLOW" "[SYNC] This project is mounted at /workspace - registering as OWNER"
+            fi
+        fi
         curl -sf -X POST "http://localhost:${port}/api/projects/register" \
             -H "Content-Type: application/json" \
             -d "{
@@ -286,7 +312,7 @@ sync_credentials_if_needed() {
                 \"expiresAt\": \"$expires_at\",
                 \"sprintId\": \"$sprint_id\",
                 \"databaseConfig\": $db_config,
-                \"isOwner\": false
+                \"isOwner\": $is_owner_flag
             }" > /dev/null 2>&1 || true
         if curl -sf "http://localhost:${port}/api/projects" 2>/dev/null \
              | jq -e --arg pid "$project_id" '.projects[]? | select(.projectId==$pid)' >/dev/null 2>&1; then

@@ -741,7 +741,43 @@ fi
 # 3. Using exec to fully replace the shell process
 WAIT_TIME=0
 UNKNOWN_STATUS_COUNT=0
+url_encode_path() {
+    printf '%s' "$1" | sed -e 's|%|%25|g' -e 's| |%20|g'
+}
+
+# SCOPED TO THIS PROJECT, always. One Dev MCP container serves several projects
+# (/workspace plus the /projects/additionalN slots), and an unscoped status call
+# answers 409 "ambiguous" listing them rather than picking one. The poll then
+# never sees a terminal status, burns its whole budget and reports a timeout -
+# which reads as "the test run hung" when the run had in fact finished.
+# DETECT whether this poll must be scoped; do not assume it.
+#
+# Unscoped is CORRECT on a single-project container, and on the FIRST RUN where
+# this project is not registered yet: naming it then is refused outright --
+# "Cannot resolve a workspace for projectPath ... not registered with this MCP
+# container ... Refusing to fall back to WORKSPACE_PATH" -- which the poll loop
+# does not recognise, so it would retry to timeout. That is the same hang this
+# fix exists to remove, just moved to day one.
+#
+# Scoping is needed only when several projects share the container, which the
+# server reports as 409 ambiguous. NOTE BOTH conditions answer 409, so the
+# unscoped probe is what distinguishes them: 409 unscoped means ambiguity, and
+# the scoped URL is then the right one.
 STATUS_URL="${MCP_SERVER_URL}/api/test/status"
+_probe_code=$(curl -s -o /dev/null -m 15 -w '%{http_code}' "${STATUS_URL}" 2>/dev/null || echo "000")
+if [ "$_probe_code" = "409" ]; then
+    _scoped_url="${MCP_SERVER_URL}/api/test/status?projectPath=$(url_encode_path "${PROJECT_PATH}")"
+    _scoped_code=$(curl -s -o /dev/null -m 15 -w '%{http_code}' "${_scoped_url}" 2>/dev/null || echo "000")
+    if [ "$_scoped_code" != "409" ]; then
+        STATUS_URL="$_scoped_url"
+    else
+        # Both refuse: several projects share the container AND this one is not
+        # registered in it. Say so plainly rather than polling something that
+        # cannot answer.
+        echo -e "${YELLOW}   Status poll cannot be scoped: this project is not registered with the MCP container.${NC}"
+        echo -e "${YELLOW}   Run: cd mcp-server && ./setup-all.sh${NC}"
+    fi
+fi
 
 while [ $WAIT_TIME -lt $API_TEST_MAX_WAIT ]; do
     sleep "$API_TEST_POLL_INTERVAL"
