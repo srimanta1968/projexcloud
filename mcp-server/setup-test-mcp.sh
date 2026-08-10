@@ -75,6 +75,49 @@ ensure_registry_env() {
 
 REGISTRY_FILE="$(get_registry_host_dir)/registered_projects.json"
 
+# WHERE COMPOSE MUST RUN FROM.
+#
+# The compose file reads its variables from the .env in the CURRENT directory,
+# and EVERY project mount comes from that file:
+#     ${PROJECT_PATH:-../}:/workspace
+#     ${ADDITIONAL_PROJECT_1..10:-/dev/null}:/projects/additionalN
+#     PROJECT_PATH_MAPPINGS=${PROJECT_PATH_MAPPINGS:-}
+# Note the DEFAULTS. Run this script from a GUEST checkout and compose from its
+# directory, and the container is recreated with /workspace pointing at the guest
+# and all ten slots blanked to /dev/null -- every other project's files vanish
+# from the container, and the resolver is left with no mappings at all. Nothing
+# warns; the container comes up "healthy".
+#
+# Only the OWNER's mcp-server dir holds the .env that describes the fleet, so
+# compose runs from there. Same intent as the fix setup-all.sh already carries
+# for recover_env_from_registry: "a GUEST running setup-all updates the OWNER's
+# .env - not its own (the previous bug)". Docker is the authority for who the
+# owner is, exactly as in setup-all.sh's is_this_project_the_owner.
+resolve_compose_dir() {
+    local ws=""
+    for _c in "$CONTAINER_NAME" projexlight-dev-mcp projexlight-test-mcp; do
+        ws=$(docker inspect "$_c"             --format='{{range .Mounts}}{{if eq .Destination "/workspace"}}{{.Source}}{{end}}{{end}}' 2>/dev/null || echo "")
+        [ -n "$ws" ] && break
+    done
+    if [ -n "$ws" ]; then
+        ws="${ws//\//}"
+        if [ -d "$ws/mcp-server" ] && [ -f "$ws/mcp-server/$(basename "$COMPOSE_FILE")" ]; then
+            # Resolve both sides before comparing: $SCRIPT_DIR is a Unix path and
+            # the mount source is a Windows one, so a raw string compare would
+            # call the owner a guest and needlessly relocate the run.
+            local a b
+            a=$(cd "$ws/mcp-server" 2>/dev/null && pwd)
+            b=$(cd "$SCRIPT_DIR" 2>/dev/null && pwd)
+            if [ -n "$a" ] && [ "$a" != "$b" ]; then
+                print_msg "$YELLOW" "[INFO] Composing from the OWNER project so other projects keep their mounts:"
+                print_msg "$YELLOW" "       $a"
+                echo "$a"; return
+            fi
+        fi
+    fi
+    echo "$SCRIPT_DIR"
+}
+
 check_prerequisites() {
     if ! command -v docker &> /dev/null; then
         print_msg "$RED" "[ERROR] Docker is not installed"
@@ -529,6 +572,7 @@ start_server() {
     # Start fresh container
     print_msg "$BLUE" "Starting Test MCP Server..."
     print_msg "$CYAN" "[INFO] API URL: ${PROJEXLIGHT_API_URL:-https://api.projexlight.com}"
+    cd "$(resolve_compose_dir)" || exit 1
     $COMPOSE_CMD -f test-mcp-compose.yml up -d
 
     # Wait for health with retries
