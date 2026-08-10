@@ -1,5 +1,5 @@
 {
-  "name": "POST /api/admin/commands/dispatch-now — operator-triggered command dispatch pass",
+  "name": "POST /api/admin/commands/dispatch-now \u2014 operator-triggered command dispatch pass",
   "endpoint": "/api/admin/commands/dispatch-now",
   "sdk": "sdk-command",
   "sourceFile": "services/api-gateway/src/app.ts",
@@ -7,7 +7,12 @@
   "requiresAuth": false,
   "expectedStatus": 200,
   "priority": 45,
-  "dependsOn": [],
+  "dependsOn": [
+    "POST /api/auth/register",
+    "POST /api/auth/signup-tenant",
+    "POST /api/assets",
+    "POST /api/commands"
+  ],
   "testability": "auto",
   "captureResponse": {
     "admin.commands.dispatch.response.data.dispatched": "data.dispatched"
@@ -30,7 +35,7 @@
       "expectedStatus": 401
     }
   ],
-  "description": "Runs ONE pass of the command dispatcher immediately, flipping every command in 'approved' to 'dispatched' and publishing each onto its per-asset delivery channel. Header-auth gated with ADMIN_OPS_TOKEN via checkAdminToken, mirroring /admin/storm/ingest-now and /api/admin/asset/rollup/backfill: it lets an operator force a background worker to run now rather than waiting for its cadence (COMMAND_DISPATCH_INTERVAL_MS, default 2s). Returns data.dispatched — the count of commands moved. Idempotent by construction: dispatchApprovedCommands only matches rows in 'approved', so an immediate second call dispatches nothing and returns 0. This endpoint also makes the 'dispatched' state reachable by request at all; before it existed the state was produced only by the periodic tick, so POST /api/commands/:command_id/ack (which requires status='dispatched') could only race that tick and failed intermittently. Edge cases: a missing or wrong x-admin-ops-token is a 401 and dispatches nothing; with no approved commands the call still succeeds with dispatched=0; the batch is capped by COMMAND_DISPATCH_BATCH (default 50), so a backlog larger than that needs repeated calls.",
+  "description": "Runs ONE pass of the command dispatcher immediately, flipping every command in 'approved' to 'dispatched' and publishing each onto its per-asset delivery channel. Header-auth gated with ADMIN_OPS_TOKEN via checkAdminToken, mirroring /admin/storm/ingest-now and /api/admin/asset/rollup/backfill: it lets an operator force a background worker to run now rather than waiting for its cadence (COMMAND_DISPATCH_INTERVAL_MS, default 2s). Returns data.dispatched \u2014 the count of commands moved. ORDERING: dependsOn names the command-creation chain even though this endpoint takes no input from it. With an empty dependsOn the runner is free to schedule this pass BEFORE any command exists, dispatch nothing, and leave POST /api/commands/:command_id/ack facing a command still in 'approved' \u2014 the exact intermittent 409 this endpoint was added to remove. The dependency is on the STATE the pass needs to find, not on a captured value. Idempotent by construction: dispatchApprovedCommands only matches rows in 'approved', so an immediate second call dispatches nothing and returns 0. This endpoint also makes the 'dispatched' state reachable by request at all; before it existed the state was produced only by the periodic tick, so POST /api/commands/:command_id/ack (which requires status='dispatched') could only race that tick and failed intermittently. Edge cases: a missing or wrong x-admin-ops-token is a 401 and dispatches nothing; with no approved commands the call still succeeds with dispatched=0; the batch is capped by COMMAND_DISPATCH_BATCH (default 50), so a backlog larger than that needs repeated calls.",
   "errorCases": [
     {
       "status": 401,
@@ -43,7 +48,7 @@
       "status": 500,
       "code": "<underlying error message>",
       "message": "Dispatch pass failed",
-      "when": "dispatchApprovedCommands throws — a database error while selecting or updating command.command",
+      "when": "dispatchApprovedCommands throws \u2014 a database error while selecting or updating command.command",
       "reproducible": false
     }
   ]
