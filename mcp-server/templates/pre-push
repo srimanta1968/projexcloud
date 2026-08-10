@@ -750,32 +750,45 @@ url_encode_path() {
 # answers 409 "ambiguous" listing them rather than picking one. The poll then
 # never sees a terminal status, burns its whole budget and reports a timeout -
 # which reads as "the test run hung" when the run had in fact finished.
-# DETECT whether this poll must be scoped; do not assume it.
+# Probe a URL and echo its HTTP status, using the SAME subshell/exec/temp-file
+# dance as the poll loop below. That dance is not decoration: the loop's own
+# comment records that on Windows/Git Bash a bare curl inside a git hook can
+# hang. The first version of this probe called curl directly, so its status came
+# back empty, the 409 test never matched, and the poll stayed unscoped --
+# reproducing the exact hang the probe was added to prevent.
+_probe_status() {
+    local _u="$1" _f _c _pid _w=0
+    _f=$(mktemp)
+    bash -c "exec curl -s -o /dev/null -m 15 -w '%{http_code}' '$_u' </dev/null >'$_f' 2>/dev/null" &
+    _pid=$!
+    while [ $_w -lt 20 ] && kill -0 $_pid 2>/dev/null; do sleep 1; _w=$((_w + 1)); done
+    if kill -0 $_pid 2>/dev/null; then
+        kill $_pid 2>/dev/null; wait $_pid 2>/dev/null; rm -f "$_f"; echo "000"; return
+    fi
+    wait $_pid 2>/dev/null
+    _c=$(cat "$_f" 2>/dev/null); rm -f "$_f"
+    echo "${_c:-000}"
+}
+
+# DECIDE whether this poll must be scoped; do not assume either way.
 #
-# Unscoped is CORRECT on a single-project container, and on the FIRST RUN where
-# this project is not registered yet: naming it then is refused outright --
-# "Cannot resolve a workspace for projectPath ... not registered with this MCP
-# container ... Refusing to fall back to WORKSPACE_PATH" -- which the poll loop
-# does not recognise, so it would retry to timeout. That is the same hang this
-# fix exists to remove, just moved to day one.
-#
-# Scoping is needed only when several projects share the container, which the
-# server reports as 409 ambiguous. NOTE BOTH conditions answer 409, so the
-# unscoped probe is what distinguishes them: 409 unscoped means ambiguity, and
-# the scoped URL is then the right one.
+# Unscoped is CORRECT on a single-project container and on the FIRST RUN, where
+# this project is not registered yet and naming it is refused outright -- "Cannot
+# resolve a workspace for projectPath ... Refusing to fall back to
+# WORKSPACE_PATH". Scoped is CORRECT when several projects share the container,
+# which answers 409 ambiguous to an unqualified caller. BOTH refusals are 409, so
+# the choice is made by trying, not by pattern-matching the code: whichever URL
+# actually answers is the one used, and unscoped is preferred when both do.
 STATUS_URL="${MCP_SERVER_URL}/api/test/status"
-_probe_code=$(curl -s -o /dev/null -m 15 -w '%{http_code}' "${STATUS_URL}" 2>/dev/null || echo "000")
-if [ "$_probe_code" = "409" ]; then
+_unscoped_code=$(_probe_status "${STATUS_URL}")
+if [ "$_unscoped_code" != "200" ]; then
     _scoped_url="${MCP_SERVER_URL}/api/test/status?projectPath=$(url_encode_path "${PROJECT_PATH}")"
-    _scoped_code=$(curl -s -o /dev/null -m 15 -w '%{http_code}' "${_scoped_url}" 2>/dev/null || echo "000")
-    if [ "$_scoped_code" != "409" ]; then
+    _scoped_code=$(_probe_status "${_scoped_url}")
+    if [ "$_scoped_code" = "200" ]; then
         STATUS_URL="$_scoped_url"
     else
-        # Both refuse: several projects share the container AND this one is not
-        # registered in it. Say so plainly rather than polling something that
-        # cannot answer.
-        echo -e "${YELLOW}   Status poll cannot be scoped: this project is not registered with the MCP container.${NC}"
-        echo -e "${YELLOW}   Run: cd mcp-server && ./setup-all.sh${NC}"
+        echo -e "${YELLOW}   Status poll: neither scoped nor unscoped answered (${_unscoped_code}/${_scoped_code}).${NC}"
+        echo -e "${YELLOW}   If this project is not registered with the MCP container, run: cd mcp-server && ./setup-all.sh${NC}"
     fi
 fi
 
