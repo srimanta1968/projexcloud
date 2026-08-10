@@ -29,6 +29,9 @@ const NAV = [
   { href: '/ai/mcp-servers', label: 'AI' },
   { href: '/ai/providers', label: 'AI Providers' },
   { href: '/byok', label: 'BYOK' },
+  // Sits beside BYOK deliberately: BYOK is WHOSE key wraps this tenant, /keys is
+  // the per-subject lifecycle beneath it (rotate, and shred for an erasure request).
+  { href: '/keys', label: 'Keys' },
   { href: '/notifications/providers', label: 'Email' },
   { href: '/config', label: 'Settings' },
   { href: '/help', label: 'Help' },

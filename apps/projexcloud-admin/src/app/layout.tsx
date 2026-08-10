@@ -23,6 +23,8 @@ const NAV = [
   { href: '/active-active', label: 'Active-Active' },
   { href: '/config', label: 'Configuration' },
   { href: '/security/ops-tokens', label: 'Ops Tokens' },
+  { href: '/security/vault-keys', label: 'Vault Keys' },
+  { href: '/security/kms-providers', label: 'KMS' },
   { href: '/notifications', label: 'Email' },
   { href: '/help', label: 'Help' },
 ];

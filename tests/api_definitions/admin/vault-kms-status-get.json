@@ -1,0 +1,43 @@
+{
+  "name": "GET /admin/vault/kms-status — what is actually serving each KMS provider",
+  "endpoint": "/admin/vault/kms-status",
+  "sdk": "sdk-vault",
+  "sourceFile": "services/api-gateway/src/app.ts",
+  "method": "GET",
+  "requiresAuth": false,
+  "expectedStatus": 200,
+  "priority": 45,
+  "dependsOn": [],
+  "testability": "auto",
+  "captureResponse": {
+    "admin.vault-kms-status.response.data.0.kind": "data.0.kind",
+    "admin.vault-kms-status.response.data.0.mode": "data.0.mode"
+  },
+  "testCases": [
+    {
+      "name": "Operator reads live KMS provider status",
+      "capturesResponse": true,
+      "headers": {
+        "x-admin-ops-token": "{{env:ADMIN_OPS_TOKEN}}"
+      },
+      "expectedStatus": 200
+    },
+    {
+      "name": "Reject a request with no admin ops token",
+      "testType": "negative",
+      "coversErrorCase": "401|admin token required",
+      "headers": {},
+      "expectedStatus": 401
+    }
+  ],
+  "description": "Reports, per KMS provider (aws-kms, gcp-kms, hsm-pkcs11), what is ACTUALLY serving calls in this process: credentialsPresent, mode (real | synthetic | unregistered) and wiredBy — the environment variables that would wire it. Always returns all three entries, so a provider is never silently missing from the report. This exists because CONFIGURATION AND RUNTIME DISAGREE, and the disagreement is the thing worth seeing: a vault.kms config row naming a provider states intent, while whether its credentials reached the process is a separate fact. Production ran for weeks configured for BYOK and served by a simulation, because the registry substituted a synthetic provider whenever real credentials were absent — no flag, no log line, and every screen reporting success. mode is derived, not stored: 'real' when the provider's own available() probe passes; otherwise 'unregistered' in a protected environment (anything explicitly named other than development/dev/local/test), where the substitution is now refused so BYOK calls fail loudly; otherwise 'synthetic', which is permitted only on a developer machine and is accompanied by a boot warning when the environment declares nothing at all. Pure and side-effect free — it probes env and the provider registry, and registers nothing. Edge cases: an environment with no credentials at all still returns 200 with three entries rather than an error, because 'nothing is wired' is a legitimate and important answer; the response never contains a credential, only the NAMES of the variables that would supply one.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "admin token required",
+      "message": "admin token required",
+      "when": "The x-admin-ops-token header is absent, empty, or does not match ADMIN_OPS_TOKEN",
+      "reproducible": true
+    }
+  ]
+}
