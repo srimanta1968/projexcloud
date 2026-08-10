@@ -1177,32 +1177,26 @@ fi
 # ============================================================
 # STEP 7: Component duplication scan
 # ============================================================
-echo -e "\n${BLUE}🔍 Scanning for duplicate components in changed files...${NC}"
-
-# Include projectPath for multi-project credential routing
-COMPONENT_SCAN_RESULT=$(curl -s --connect-timeout 3 --max-time 120 -X POST "${MCP_SERVER_URL}/api/components/scan" \
-    -H "Content-Type: application/json" \
-    -d "{
-        \"projectPath\": \"${PROJECT_PATH}\",
-        \"triggered_by\": \"git_push\",
-        \"changed_files\": ${CHANGED_FILES_JSON}
-    }" 2>&1)
-
-if [ $? -eq 0 ] && [ -n "$COMPONENT_SCAN_RESULT" ]; then
-    DUPLICATES_FOUND=$(echo "$COMPONENT_SCAN_RESULT" | jq -r '.summary.duplicateComponentsFound // 0' 2>/dev/null || echo "0")
-
-    echo -e "${GREEN}✓ Component scan completed${NC}"
-
-    if [ "$DUPLICATES_FOUND" -gt 0 ]; then
-        echo -e "  ${YELLOW}⚠️  Similar components found: ${DUPLICATES_FOUND}${NC}"
-        echo -e "  ${YELLOW}   Review details in Leadership Dashboard${NC}"
-    else
-        echo -e "  No duplicate components detected"
-    fi
-else
-    echo -e "${YELLOW}⚠️  Component scan returned no results${NC}"
-fi
-
+# FIRE AND FORGET, same reasoning as the governance audit. This one runs an LLM
+# over the changed files to find near-duplicate components; it feeds the
+# dashboard and never gates the push, yet it was the last thing standing between
+# a finished test run and git exiting -- up to 120s of waiting. It has been
+# synchronous since the initial commit; the 120s cap was only added in July.
+_scan_payload=$(mktemp)
+cat > "$_scan_payload" <<SCANJSON
+{"projectPath": "${PROJECT_PATH}", "triggered_by": "git_push", "changed_files": ${CHANGED_FILES_JSON}}
+SCANJSON
+_scan_dir="${PROJECT_ROOT}/.mcp-cache"; mkdir -p "$_scan_dir" 2>/dev/null || true
+(
+    # NO setsid: it does not exist on Git Bash for Windows, and using it made the
+    # background job die instantly -- the dispatch returned fast while the work
+    # never ran. The subshell plus redirected stdio, </dev/null and disown is
+    # enough to detach here.
+    curl -s --connect-timeout 3 --max-time 120 -X POST "${MCP_SERVER_URL}/api/components/scan"         -H "Content-Type: application/json" -d @"$_scan_payload" > "$_scan_dir/component_scan_last_run.log" 2>&1 </dev/null
+    rm -f "$_scan_payload"
+) >/dev/null 2>&1 </dev/null &
+disown 2>/dev/null || true
+echo -e "  Component scan dispatched; result lands in .mcp-cache/component_scan_last_run.log"
 # ============================================================
 # STEP 9: Summary
 # ============================================================
