@@ -2076,6 +2076,48 @@ const start = async (): Promise<void> => {
       return { success: true, data: kmsProviderStatus() };
     });
 
+    // The SECRETS-layer KMS, which is a different thing from BYOK above and was
+    // invisible until now. BYOK wraps a TENANT key with a CUSTOMER CMK; this
+    // wraps the DEKs behind secret refs, and it is what actually decides whether
+    // a stored secret survives a restart. Reporting it separately matters
+    // because the dangerous state is not "unconfigured" but "quietly on the
+    // in-memory mock", which looks healthy from every other angle.
+    //
+    // Re-resolved per call rather than cached from boot so the page shows what
+    // the environment says NOW; the boot log records what was actually
+    // installed. A disagreement between the two is itself the finding.
+    app.get('/admin/security/secrets-kms-status', async (req, reply) => {
+      const err = await requireAdmin(req as unknown as { headers: Record<string, unknown> });
+      if (err) return reply.code(401).send({ success: false, error: err });
+      try {
+        const { status } = resolveSecretsKmsProvider();
+        return {
+          success: true,
+          data: {
+            ...status,
+            durable: status.kind !== 'mock-local',
+            masterKeyVersion: status.kind === 'local-master'
+              ? Number(process.env.SECRETS_MASTER_KEY_VERSION || '1') : null,
+            warning: status.kind === 'mock-local'
+              ? 'In-memory KEKs: every secret written now becomes undecryptable after the next restart.'
+              : null,
+          },
+        };
+      } catch (e) {
+        // resolve() throws in a protected env with nothing configured. That is
+        // the honest answer, not a 500 — report it as a state the operator can
+        // act on, with the remedy the exception already carries.
+        return reply.code(200).send({
+          success: true,
+          data: {
+            kind: null, selectedBy: 'unresolved', durable: false,
+            protectedEnvironment: true, candidates: [],
+            masterKeyVersion: null, warning: (e as Error).message,
+          },
+        });
+      }
+    });
+
     // Operator key list. The tenant route (/api/vault/keys) filters to the caller's own
     // tenant in SQL and therefore cannot see root/app/pool at all — those carry
     // tenant_id NULL because they wrap every tenant. This is the other audience: same

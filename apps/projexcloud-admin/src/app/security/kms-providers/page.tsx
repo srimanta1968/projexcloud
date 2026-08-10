@@ -31,6 +31,27 @@ interface KmsStatus {
   wiredBy: string[];
 }
 
+/**
+ * The SECRETS-layer KMS — a different thing from the BYOK providers above, and
+ * the one that decides whether a stored secret survives a restart.
+ *
+ * BYOK wraps a TENANT key with a CUSTOMER CMK. This wraps the DEKs behind
+ * secret refs. Until recently nothing installed a provider for it at all, so
+ * every deployment ran an in-memory mock whose KEKs are regenerated per
+ * process: secrets written before a restart became permanently undecryptable
+ * after it, with no error at write time. `durable` is therefore the field that
+ * matters most on this screen — more than which vendor is named.
+ */
+interface SecretsKmsStatus {
+  kind: 'aws-kms' | 'gcp-kms' | 'hsm-pkcs11' | 'local-master' | 'mock-local' | null;
+  selectedBy: 'explicit' | 'auto-detected' | 'default' | 'unresolved';
+  durable: boolean;
+  protectedEnvironment: boolean;
+  masterKeyVersion: number | null;
+  candidates: { kind: string; available: boolean }[];
+  warning: string | null;
+}
+
 interface ConfigRow {
   config_id: string;
   scope: string;
@@ -52,6 +73,19 @@ async function fetchStatus(): Promise<KmsStatus[] | null> {
     });
     if (!res.ok) return null;
     return (await res.json()).data ?? [];
+  } catch {
+    return null;
+  }
+}
+
+async function fetchSecretsKms(): Promise<SecretsKmsStatus | null> {
+  try {
+    const res = await fetch(`${GATEWAY}/admin/security/secrets-kms-status`, {
+      cache: 'no-store',
+      headers: { 'x-admin-ops-token': OPS_TOKEN },
+    });
+    if (!res.ok) return null;
+    return (await res.json()).data ?? null;
   } catch {
     return null;
   }
@@ -90,7 +124,9 @@ function ModeBadge({ mode }: { mode: KmsStatus['mode'] }): JSX.Element {
 }
 
 export default async function KmsProvidersPage(): Promise<JSX.Element> {
-  const [status, config] = await Promise.all([fetchStatus(), fetchKmsConfig()]);
+  const [status, config, secrets] = await Promise.all([
+    fetchStatus(), fetchKmsConfig(), fetchSecretsKms(),
+  ]);
   const synthetic = (status ?? []).filter((s) => s.mode === 'synthetic');
   const unregistered = (status ?? []).filter((s) => s.mode === 'unregistered');
 
@@ -106,6 +142,77 @@ export default async function KmsProvidersPage(): Promise<JSX.Element> {
           </>
         }
       />
+
+      {secrets && !secrets.durable && (
+        <Alert variant="warning">
+          <strong>Secrets are being wrapped by a non-durable key.</strong>{' '}
+          {secrets.warning ??
+            'The active secrets KMS keeps its key-encryption keys in process memory.'}{' '}
+          Anything written now is readable only until the gateway restarts. Set{' '}
+          <code>SECRETS_MASTER_KEY</code> to 32 random bytes (
+          <code>openssl rand -hex 32</code>) for the durable local provider, or supply
+          credentials for AWS, GCP or an HSM.
+        </Alert>
+      )}
+
+      <Card>
+        <h2 className="text-base font-semibold">Secrets KMS</h2>
+        <p className="text-muted-foreground mt-1 text-sm">
+          Wraps the data keys behind secret references. Separate from the BYOK providers
+          below, which wrap tenant keys with a customer&apos;s own CMK. The question this
+          answers is not which vendor is named but whether the wrapping key SURVIVES A
+          RESTART — a key held in memory reads as healthy and loses every secret written
+          under it.
+        </p>
+
+        {secrets === null ? (
+          <p className="text-muted-foreground mt-3 text-sm">
+            Could not read the secrets KMS status.
+          </p>
+        ) : (
+          <dl className="mt-3 grid gap-x-6 gap-y-2 text-sm sm:grid-cols-2">
+            <div>
+              <dt className="text-muted-foreground">Active provider</dt>
+              <dd className="font-medium">
+                {secrets.kind ?? 'none resolved'}{' '}
+                <span
+                  className={`ml-1 rounded px-2 py-0.5 text-xs font-medium ${
+                    secrets.durable
+                      ? 'bg-emerald-500/15 text-emerald-700'
+                      : 'bg-destructive/15 text-destructive'
+                  }`}
+                >
+                  {secrets.durable ? 'durable' : 'NOT durable'}
+                </span>
+              </dd>
+            </div>
+            <div>
+              <dt className="text-muted-foreground">Selected by</dt>
+              <dd className="font-medium">{secrets.selectedBy}</dd>
+            </div>
+            {secrets.masterKeyVersion !== null && (
+              <div>
+                <dt className="text-muted-foreground">Master key version</dt>
+                <dd className="font-medium">
+                  v{secrets.masterKeyVersion}
+                  <span className="text-muted-foreground ml-2 text-xs">
+                    rotate by provisioning SECRETS_MASTER_KEY_V
+                    {secrets.masterKeyVersion + 1}, then bumping
+                    SECRETS_MASTER_KEY_VERSION. Keep the old one configured or every
+                    secret sealed under it stops opening.
+                  </span>
+                </dd>
+              </div>
+            )}
+            <div>
+              <dt className="text-muted-foreground">Environment</dt>
+              <dd className="font-medium">
+                {secrets.protectedEnvironment ? 'protected' : 'development'}
+              </dd>
+            </div>
+          </dl>
+        )}
+      </Card>
 
       {status === null && (
         <Alert variant="warning">
