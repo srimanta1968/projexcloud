@@ -67,7 +67,11 @@ import {
   getRobotUsage,
   report as meterReport,
 } from '@projexlight/sdk-meter';
-import { server as secretsServer } from '@projexlight/sdk-secrets';
+import {
+  server as secretsServer,
+  setProvider as setSecretsKmsProvider,
+  resolveSecretsKmsProvider,
+} from '@projexlight/sdk-secrets';
 import { migrationsDir as tenantMigrations, server as tenantServer, createTenant as tenantCreate, listTenants as tenantList, ensureApp as appEnsure } from '@projexlight/sdk-tenant';
 import { migrationsDir as consentMigrations, server as consentServer, checkConsent } from '@projexlight/sdk-consent';
 import { migrationsDir as assetMigrations, registerAsset as assetRegister, getTwin as assetGetTwin, bootstrapAssetClickHouseSchema, ingestReadings as assetIngestReadings, startSensorRollupJob, runSensorRollup, queryReadings as assetQueryReadings } from '@projexlight/sdk-asset';
@@ -1754,6 +1758,37 @@ const start = async (): Promise<void> => {
     } catch (err) {
       console.warn('[api-gateway] BYOK real KMS adapter wiring failed:', (err as Error).message);
     }
+    // sdk-secrets KMS. Separate from the BYOK adapters above: those wrap TENANT
+    // keys with a CUSTOMER CMK, while this wraps the DEKs behind secret refs.
+    //
+    // Until now nothing ever called setProvider(), so every deployment ran
+    // MockKmsProvider — whose KEKs live in a per-process Map and are
+    // regenerated on miss. That is not merely "synthetic": every secret sealed
+    // before a restart became permanently undecryptable afterwards, silently,
+    // with the failure surfacing much later as apparent corruption.
+    //
+    // resolveSecretsKmsProvider() picks a real backend when its credentials are
+    // present, else the durable local provider when a master key is set, and
+    // REFUSES to fall back to the mock outside development. A boot failure here
+    // is the correct outcome: it is visible and fixable, unlike data that
+    // cannot be decrypted next week.
+    try {
+      const { provider, status } = resolveSecretsKmsProvider();
+      setSecretsKmsProvider(provider);
+      console.log(
+        `[api-gateway] secrets KMS provider: ${status.kind} (${status.selectedBy})`,
+      );
+      if (status.kind === 'mock-local') {
+        console.warn(
+          '[api-gateway] secrets KMS is the IN-MEMORY MOCK — every secret written now becomes ' +
+          'undecryptable after the next restart. Development only.',
+        );
+      }
+    } catch (err) {
+      console.error('[api-gateway] secrets KMS provider selection FAILED:', (err as Error).message);
+      throw err;
+    }
+
     const siemForwarder = installAutoSiemForwarder();
     setSiemForwarder(siemForwarder);
     // P10/E8 — run security detection rules over the audit stream and route

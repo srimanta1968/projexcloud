@@ -1,6 +1,13 @@
 import crypto from 'crypto';
 
-export type KmsProviderKind = 'aws-kms' | 'gcp-kms' | 'hsm-pkcs11' | 'mock-local';
+export type KmsProviderKind =
+  | 'aws-kms'
+  | 'gcp-kms'
+  | 'hsm-pkcs11'
+  /** Durable software KMS: KEK derived from a persisted master key. See realProviders.ts. */
+  | 'local-master'
+  /** Dev/test ONLY — in-memory KEKs, regenerated per process. Never selected in a protected env. */
+  | 'mock-local';
 
 export interface GenerateDataKeyResult {
   plaintext: Buffer;
