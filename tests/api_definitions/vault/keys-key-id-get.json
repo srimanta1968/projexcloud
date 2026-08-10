@@ -1,23 +1,20 @@
 {
-  "name": "GET /api/vault/keys/:key_id — read one key within the tenant — sdk-vault",
+  "name": "GET /api/vault/keys/:key_id \u2014 read one key within the tenant \u2014 sdk-vault",
   "endpoint": "/api/vault/keys/:key_id",
   "sdk": "sdk-vault",
   "sourceFile": "packages/sdk-vault/src/server/routes.ts",
   "method": "GET",
   "requiresAuth": true,
-  "expectedStatus": 200,
+  "expectedStatus": 404,
   "dependsOn": [
     "POST /api/auth/signup-tenant",
     "POST /api/vault/keys"
   ],
   "testability": "auto",
-  "captureResponse": {
-    "vault.keys.get.response.data.key_id": "data.key_id",
-    "vault.keys.get.response.data.state": "data.state"
-  },
+  "captureResponse": {},
   "testCases": [
     {
-      "name": "Read a key the calling tenant owns",
+      "name": "A root-tier key is NOT visible to a tenant token",
       "capturesResponse": true,
       "headers": {
         "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
@@ -25,10 +22,10 @@
       "pathParams": {
         "key_id": "{{cache:vault.keys.create.response.data.key_id}}"
       },
-      "expectedStatus": 200
+      "expectedStatus": 404
     },
     {
-      "name": "A key id that does not exist is not found",
+      "name": "An unknown key id is equally not found",
       "testType": "negative",
       "coversErrorCase": "404|Key not found",
       "headers": {
@@ -50,13 +47,13 @@
       "expectedStatus": 401
     }
   ],
-  "description": "Reads ONE vault key, and only if it belongs to the calling tenant. Returns the same metadata-only projection as the list route — no key material exists in vault.key to return. The tenant predicate is part of the SQL (getKeyForTenant), so the ownership check cannot be skipped by a caller that forgets it. A key belonging to ANOTHER tenant answers 404, never 403: a 403 would confirm that the id EXISTS somewhere, which is precisely the fact a caller enumerating ids is trying to learn, so absence and denial are made indistinguishable from outside. Edge cases: a non-existent id and another tenant's id are deliberately the same 404 with the same body; a key at root/app/pool tier is also 404 to a tenant token because those rows carry tenant_id NULL; a shredded key still reads back, showing state 'shredded' with shredded_at set and kms_ref NULL, because the row is the audit trail of the erasure and must remain readable; a malformed (non-UUID) key_id is a 500 from the uuid cast rather than a 400, which is worth tightening but is recorded here as the current behaviour.",
+  "description": "Reads ONE vault key, and only if it belongs to the calling tenant. Returns metadata only \u2014 vault.key holds no key material. The tenant predicate is part of the SQL (getKeyForTenant), so the ownership check cannot be skipped by a caller that forgets it. A key belonging to another tenant answers 404, never 403: a 403 would confirm the id EXISTS somewhere, which is precisely what a caller enumerating ids wants, so absence and denial are made indistinguishable. WHY THE PRIMARY CASE IS A 404 AND NOT A 200. The only producer for this endpoint, POST /api/vault/keys, creates a ROOT-tier key, and root/app/pool rows carry tenant_id NULL because they wrap every tenant \u2014 so a tenant token deliberately cannot see them, and chaining that id and expecting 200 is unsatisfiable by construction. Reaching a 200 needs a TENANT-tier key, which requires two POSTs to this same endpoint in order (root, then tenant with parent_key_id), and one definition per METHOD+ENDPOINT cannot express that \u2014 the constraint recorded in TK-4137. So the case asserts the isolation instead, which is the property actually worth pinning: a root key is invisible to a tenant, and is indistinguishable from a key that does not exist. Flip the first case to 200 once a tenant-tier key id is reachable from cache. Edge cases: a shredded key still reads back for its owner, showing state 'shredded' with shredded_at set and kms_ref NULL, because the row is the audit trail of the erasure; a non-UUID key_id raises 22P02 from the ::uuid cast and surfaces as 500 rather than 400.",
   "errorCases": [
     {
       "status": 401,
       "code": "Unauthorized",
       "message": "Missing bearer token",
-      "when": "No Authorization header, or not in Bearer form — rejected by the gateway default-deny authGate before requireAuth",
+      "when": "No Authorization header, or not in Bearer form \u2014 rejected by the gateway default-deny authGate before requireAuth",
       "reproducible": true
     },
     {
@@ -70,7 +67,7 @@
       "status": 404,
       "code": "Key not found",
       "message": "Key not found",
-      "when": "No key with that id within the calling tenant — covers both a genuinely unknown id and a key owned by another tenant, deliberately indistinguishable",
+      "when": "No key with that id within the calling tenant \u2014 covers both a genuinely unknown id and a key owned by another tenant, deliberately indistinguishable",
       "reproducible": true
     },
     {

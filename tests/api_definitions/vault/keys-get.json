@@ -1,5 +1,5 @@
 {
-  "name": "GET /api/vault/keys — tenant-scoped key list — sdk-vault",
+  "name": "GET /api/vault/keys \u2014 tenant-scoped key list \u2014 sdk-vault",
   "endpoint": "/api/vault/keys",
   "sdk": "sdk-vault",
   "sourceFile": "packages/sdk-vault/src/server/routes.ts",
@@ -11,9 +11,7 @@
     "POST /api/vault/keys"
   ],
   "testability": "auto",
-  "captureResponse": {
-    "vault.keys.list.response.data.0.key_id": "data.0.key_id"
-  },
+  "captureResponse": {},
   "testCases": [
     {
       "name": "List the calling tenant's keys",
@@ -41,13 +39,13 @@
       "expectedStatus": 401
     }
   ],
-  "description": "Lists the vault keys VISIBLE TO THE CALLING TENANT, newest first, with optional tier and scope_id narrowing and a limit capped at 500 (default 200). Returns metadata only — key_id, tier, scope_id, parent_key_id, kms_ref, state, algorithm, issued_at, rotated_at, shredded_at, tenant_id, region. There is no key material in vault.key at all, so nothing secret is returned; kms_ref is a handle, not a key. The tenant filter is applied IN SQL (listKeysForTenant), not by the handler, because every read into vault.key is a potential cross-tenant key inventory: tier + scope_id + kms_ref describe the shape of another customer's key hierarchy and parent_key_id walks upward through it. Tiers ABOVE tenant — root, app, pool — carry tenant_id NULL because they wrap every tenant, so they are excluded by construction and are NOT visible here even to the tenant that created them; an operator view goes through an ADMIN_OPS_TOKEN route instead. Edge cases: a token carrying no tenant_id is 403 rather than an empty list, because an empty list would read as 'you have no keys' when the truth is 'this token cannot express a key scope'; a fresh tenant legitimately returns an empty array with 200; tier and scope_id can only narrow within the tenant and can never widen beyond it; limit is clamped rather than rejected, so an absurd value degrades instead of failing.",
+  "description": "Lists the vault keys VISIBLE TO THE CALLING TENANT, newest first, with optional tier and scope_id narrowing and a limit capped at 500 (default 200). Returns metadata only \u2014 key_id, tier, scope_id, parent_key_id, kms_ref, state, algorithm, issued_at, rotated_at, shredded_at, tenant_id, region. There is no key material in vault.key at all, so nothing secret is returned; kms_ref is a handle, not a key. The tenant filter is applied IN SQL (listKeysForTenant), not by the handler, because every read into vault.key is a potential cross-tenant key inventory: tier + scope_id + kms_ref describe the shape of another customer's key hierarchy and parent_key_id walks upward through it. Tiers ABOVE tenant \u2014 root, app, pool \u2014 carry tenant_id NULL because they wrap every tenant, so they are excluded by construction and are NOT visible here even to the tenant that created them; an operator view goes through an ADMIN_OPS_TOKEN route instead. The definition captures NOTHING: the only key producer for this project creates a ROOT-tier key (tenant_id NULL), which this tenant-scoped list deliberately excludes, so data.0 would never populate and any consumer binding it would block forever. Edge cases: a token carrying no tenant_id is 403 rather than an empty list, because an empty list would read as 'you have no keys' when the truth is 'this token cannot express a key scope'; a fresh tenant legitimately returns an empty array with 200; tier and scope_id can only narrow within the tenant and can never widen beyond it; limit is clamped rather than rejected, so an absurd value degrades instead of failing.",
   "errorCases": [
     {
       "status": 401,
       "code": "Unauthorized",
       "message": "Missing bearer token",
-      "when": "No Authorization header, or not in Bearer form — rejected by the gateway default-deny authGate before requireAuth",
+      "when": "No Authorization header, or not in Bearer form \u2014 rejected by the gateway default-deny authGate before requireAuth",
       "reproducible": true
     },
     {
@@ -61,14 +59,14 @@
       "status": 403,
       "code": "no tenant scope",
       "message": "This token carries no tenant, so no key scope can be derived",
-      "when": "The JWT verifies but carries no tenant_id claim — a platform-level token cannot list tenant keys and must use the admin route",
+      "when": "The JWT verifies but carries no tenant_id claim \u2014 a platform-level token cannot list tenant keys and must use the admin route",
       "reproducible": false
     },
     {
       "status": 500,
       "code": "InternalError",
       "message": "InternalError",
-      "when": "The vault.key query fails — database unavailable or the pool is exhausted",
+      "when": "The vault.key query fails \u2014 database unavailable or the pool is exhausted",
       "reproducible": false
     }
   ]
