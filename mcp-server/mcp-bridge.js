@@ -73,14 +73,63 @@ function collectGitDelta() {
     }
     if (changedFiles.length === 0) return { changedFiles: [], gitDiff: '' };
 
-    // unified=3: the server's symbol extractor reads the +/- lines and its
-    // dangling-reference snippets need the surrounding context. One call, all files.
-    let gitDiff = gitOut(['diff', 'HEAD', '--unified=3'], cwd);
-    if (gitDiff.length > GIT_MAX_DIFF_BYTES) {
-      if (DEBUG) console.error(`[MCP Bridge] gitDiff ${gitDiff.length}B exceeds cap; sending file list only`);
-      gitDiff = '';
+    // unified=3: the server returns this text to the agent as the evidence it
+    // reviews, so it needs the surrounding context. One call, all files.
+    const rawDiff = gitOut(['diff', 'HEAD', '--unified=3'], cwd);
+
+    // NEVER RETURN AN EMPTY DIFF BECAUSE THE WHOLE ONE WAS TOO BIG.
+    //
+    // This used to be `if (tooBig) gitDiff = ''`, and the warning was behind
+    // `if (DEBUG)`, so it was silent. Measured on ProjexCloud: the diff is
+    // 11.75 MB — one 8.7 MB test-result dump plus a 1 MB scan cache — against
+    // an 8 MB cap. The bridge therefore discarded ALL of it, including the
+    // 0.33 MB of actual source, and the server was left to judge a regression
+    // with no diff to judge from. That is how a route sitting at routes.ts:121
+    // came back reported as deleted.
+    //
+    // Now the diff is split per file and reassembled SMALLEST FIRST until the
+    // budget is spent. Smallest-first is the whole trick: it needs no notion of
+    // what is generated — which would duplicate vocabulary that already lives
+    // in the server, in a file hand-copied into every project and already
+    // drifted — and it maximises the number of files that survive. The losers
+    // are the largest diffs, which on every repo measured are the machine-
+    // written ones. Whatever is dropped is NAMED in diffOmitted.
+    const perFile = [];
+    for (const chunk of rawDiff.split(/^(?=diff --git )/m)) {
+      if (!chunk.startsWith('diff --git ')) continue;
+      const m = /^diff --git a\/.* b\/(.*)$/m.exec(chunk);
+      perFile.push({
+        path: m ? m[1].trim() : null,
+        bytes: chunk.length,
+        text: chunk,
+      });
     }
-    return { changedFiles, gitDiff };
+
+    perFile.sort((a, b) => a.bytes - b.bytes);
+    const kept = [];
+    const diffOmitted = [];
+    let spent = 0;
+    for (const f of perFile) {
+      if (spent + f.bytes > GIT_MAX_DIFF_BYTES) {
+        diffOmitted.push({ path: f.path, bytes: f.bytes, reason: 'host diff budget spent' });
+        continue;
+      }
+      kept.push(f.text);
+      spent += f.bytes;
+    }
+    diffOmitted.sort((a, b) => b.bytes - a.bytes);
+
+    if (diffOmitted.length) {
+      // NOT behind DEBUG. The predecessor's one hint that it had thrown the
+      // evidence away was a debug-only line, so in practice nothing was said
+      // at all. An omission the operator cannot see reads as a clean run.
+      console.error(`[MCP Bridge] diff ${rawDiff.length}B exceeds ${GIT_MAX_DIFF_BYTES}B; `
+                    + `sending ${kept.length}/${perFile.length} file diffs (${spent}B). `
+                    + `Omitted: ${diffOmitted.slice(0, 5).map(d => `${d.path} (${d.bytes}B)`).join(', ')}`
+                    + `${diffOmitted.length > 5 ? ` +${diffOmitted.length - 5} more` : ''}`);
+    }
+
+    return { changedFiles, gitDiff: kept.join(''), diffOmitted };
   } catch (e) {
     // git missing from PATH, not a repo, or timed out. Non-fatal: the server falls back
     // to its own git and, if that also fails, says so explicitly instead of passing.
@@ -452,7 +501,7 @@ const TOOLS = [
   },
   {
     name: 'projexlight_pre_commit_regression_check',
-    description: 'MUST-32 PRE-COMMIT GATE. Call before EVERY git commit. Detects dangling references introduced by the staged changes (renamed/removed exports, routes, columns and api_definitions that other code still points at) and returns a danglingReferences[] where each entry carries an llmAutoAction: AUTO_RESTORE (put the removed thing back), AUTO_MIGRATE (update the callers) or ASK_HUMAN. Auto-apply every llmAutoAction and only pause when humanDecisionRequired is true. NEVER auto-ACKNOWLEDGE — that silently drops a real regression.',
+    description: 'MUST-32 PRE-COMMIT GATE. Call before EVERY git commit. Returns the EVIDENCE for a regression review and deliberately no verdict: `diffs` (the change, unified=3, source files only), `candidateReferences` (symbols genuinely absent from the file after the change that other files still mention), `partitions` (per-package review units — fan out one subagent each on a large diff) and `excluded` (everything not examined, named). There is no recommendation, severity or auto-action to apply: a grep over `-` lines cannot tell a deletion from a reformat, and only a reader of the diff can tell a regression from a rename, a move or a deliberate break. Read the diff and judge. Never write to .regression-ignore yourself; that decision belongs to the human.',
     inputSchema: {
       type: 'object',
       properties: {

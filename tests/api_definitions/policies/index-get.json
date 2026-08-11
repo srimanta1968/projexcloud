@@ -1,0 +1,79 @@
+{
+  "name": "GET /api/policies - List policies in force for a scope",
+  "endpoint": "/api/policies",
+  "sdk": "sdk-policy",
+  "method": "GET",
+  "requiresAuth": true,
+  "expectedStatus": 200,
+  "taskId": "982573d2-36a0-4fb0-a02d-76eb80941df2",
+  "sprintId": "8ef1d09e-dd8e-4daf-8d03-54dcd9f812f8",
+  "featureId": "15044723-73ce-4f33-8443-4c3a970380dd",
+  "epicId": "00996d23-f667-4a82-9285-7728ba357e7b",
+  "priority": 41,
+  "dependsOn": [
+    "POST /api/auth/register",
+    "POST /api/auth/signup-tenant"
+  ],
+  "testCases": [
+    {
+      "name": "List the tenant-wide policies for the calling tenant",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "expectedStatus": 200
+    },
+    {
+      "name": "List for one app - app rules plus the tenant-wide rules it inherits",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "queryParams": {
+        "app_id": "leadflow-web"
+      },
+      "expectedStatus": 200
+    },
+    {
+      "name": "A tenantless credential is refused rather than shown another tenant's rules",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.register.response.data.token}}"
+      },
+      "expectedStatus": 400,
+      "testType": "negative"
+    }
+  ],
+  "expectedResponse": {
+    "data": {
+      "policies": []
+    }
+  },
+  "fieldEnums": {
+    "status": ["draft", "active", "deprecated", "retired"]
+  },
+  "description": "Lists the ACTIVE policy bundles governing a scope, returned under data.policies. The tenant is taken from the caller's JWT and never from the query string - a policy names what a caller may do, so allowing one to be listed by naming somebody else's tenant would hand over their access model; a credential carrying no tenant answers 400 ValidationError. With no app_id the response is the tenant-wide rules only (app_id IS NULL). With ?app_id= it is that app's own rules FOLLOWED BY the tenant-wide rules the app inherits, ordered app-specific first. Edge cases: the ordering is for presentation and for callers that want the narrowest rule - it is NOT first-match-wins, because access rules COMPOSE and silently dropping an inherited tenant-wide rule because a more specific app rule exists would widen access at exactly the moment somebody added a restriction; only status='active' rows are returned, so draft and retired bundles are invisible here; an app_id that matches no policy is not an error and yields just the inherited tenant-wide rules.",
+  "errorCases": [
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "This credential carries no tenant context",
+      "when": "The JWT carries no tenant_id - for example a person-level token minted by a login that named no tenant"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "Authorization header absent or not in Bearer form (requireAuth)"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Invalid or expired token",
+      "when": "Bearer token fails JWT verification (requireAuth)"
+    },
+    {
+      "status": 500,
+      "code": "InternalError",
+      "message": "InternalError",
+      "when": "listPoliciesForScope throws - any database error while reading policy.policy"
+    }
+  ]
+}

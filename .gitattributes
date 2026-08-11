@@ -2,3 +2,33 @@
 # migration-runner is forward-only and hashes file bytes). Prevents Windows
 # autocrlf from flipping them to CRLF and tripping "changed after applied".
 *.sql text eol=lf
+
+# ---------------------------------------------------------------------------
+# GENERATED ARTIFACTS — produced by a tool, never hand-edited.
+#
+# `linguist-generated` collapses them in GitHub diffs, and the Dev MCP's
+# pre-commit regression check reads the same declaration to skip them when
+# extracting removed symbols. That matters: a symbol removed from a generated
+# file is not a regression signal, because if the SOURCE changed the source diff
+# already carries it — and if it did not, the file regenerates anyway.
+#
+# Measured 2026-08-10: a 96-file diff produced ~1,460 search needles and left
+# 79% of them unscanned inside the time budget. The bulk came from these files —
+# three identical copies of a 1.85 MB OpenAPI document, a 4.4 MB test-result
+# dump and a 2.6 MB QA matrix. The check was spending its whole budget on its
+# own output.
+docs/v3.1/api_docs/openapi.json      linguist-generated
+docs/v3.1/api_docs/sdk-catalog*.json linguist-generated
+apps/*/public/docs/api/openapi.json      linguist-generated
+apps/*/public/docs/api/sdk-catalog*.json linguist-generated
+scripts/qa-matrix/qa-apis.json       linguist-generated
+mcp-server/dev-test-result.json      linguist-generated
+mcp-server/*-test-result.json        linguist-generated
+*.tsbuildinfo                        linguist-generated
+
+# Build/ops tooling and generated matrices — not application code, and nothing
+# in packages/ or services/ imports from here. Declared per-project rather than
+# in the MCP's generic exclusion list, because `scripts/` legitimately holds
+# referenced source in other repos and a blanket rule there would hide real
+# regressions for them.
+scripts/**                           linguist-generated
