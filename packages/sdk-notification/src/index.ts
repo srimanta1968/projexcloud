@@ -23,6 +23,23 @@ export {
   setSequenceDestinationResolver,
   setPreSendGuard,
 } from './services/dispatchService';
+// Send-by-reference (P17). The two seams are UNWIRED by default: an unwired
+// platform resolves nobody and honestly reports no_destination.
+export {
+  sendToAudience,
+  setRoleHolderResolver,
+  setPersonaDestinationResolver,
+  AudienceAuthorizationError,
+} from './services/audienceDispatch';
+export type {
+  Audience,
+  Authorization,
+  RecipientResult,
+  SendToAudienceInput,
+  SendToAudienceResult,
+  RoleHolderResolver,
+  PersonaDestinationResolver,
+} from './services/audienceDispatch';
 export {
   classifyKeyword,
   processInboundSms,

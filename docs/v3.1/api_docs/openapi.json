@@ -8169,6 +8169,43 @@
             }
           }
         }
+      },
+      "get": {
+        "tags": [
+          "sdk-consent"
+        ],
+        "summary": "List the registry and see the purpose just registered",
+        "description": "Reads the purpose registry that POST /api/consents/purposes writes into. Optional query filters app_id, category and legal_basis are ANDed; limit (default 100, clamped 1..500) and offset page the result, and total reports the unpaged count so a caller can distinguish a complete taxonomy from a truncated first page. Ordered by (app_id, purpose_id) for a stable page boundary. The registry is a single platform-wide namespace and this reports it as one: consent.purpose.purpose_id is a global TEXT primary key, so two tenants cannot both register the same id and the second already learns of the first through a 409 on register - scoping the read while leaving the write globally unique would hide names the write path reveals on the next collision. Read-only, side-effect-free and safely repeatable. Requires a valid JWT, or a key holding consent.purpose.read (note this is a DIFFERENT scope from consent.check.write).",
+        "operationId": "get_api_consents_purposes",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {}
+            }
+          },
+          "400": {
+            "description": "ValidationError — limit and offset must be numbers"
+          },
+          "401": {
+            "description": "Unauthorized — Missing bearer token"
+          },
+          "403": {
+            "description": "Forbidden — Service token is missing required scope: consent.purpose.read"
+          },
+          "500": {
+            "description": "InternalError — InternalError"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "apiKey": []
+          }
+        ]
       }
     },
     "/api/content/items/{item_id}/archive": {
@@ -47652,6 +47689,574 @@
           },
           "500": {
             "description": "InternalError — InternalError"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "apiKey": []
+          }
+        ]
+      }
+    },
+    "/api/consents/check/bulk": {
+      "post": {
+        "tags": [
+          "sdk-consent"
+        ],
+        "summary": "One granted tuple and one malformed item - the bad item must not fail the batch",
+        "description": "The four-tuple consent check for up to 1000 subjects in ONE request and ONE query - the bulk form of POST /api/consents/check, with identical per-tuple semantics (a DISTINCT ON reproduces the single endpoint's ORDER BY granted_at DESC LIMIT 1 per input row). Results are order-preserving and each carries an explicit index, so a caller that filters before zipping cannot silently misalign subjects with verdicts. Failure is per item, never per batch: a malformed item reports ok=false with error_code VALIDATION_ERROR in its own slot while every other subject still returns a verdict, because a campaign check that fails whole is a campaign that silently does not go out. The same tuple repeated in one batch keeps both slots. Envelope-level 400s are reserved for a request that is meaningless rather than partly wrong. Read-only, side-effect-free and safely repeatable; same scope as the single endpoint (consent.check.write).",
+        "operationId": "post_api_consents_check_bulk",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {}
+            }
+          },
+          "400": {
+            "description": "ValidationError — body must be an object with an items[] array"
+          },
+          "401": {
+            "description": "Unauthorized — Missing bearer token"
+          },
+          "500": {
+            "description": "InternalError — InternalError"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "apiKey": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "items": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "person_id": {
+                          "type": "string"
+                        },
+                        "purpose_id": {
+                          "type": "string"
+                        },
+                        "processor": {
+                          "type": "string"
+                        },
+                        "jurisdiction": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              },
+              "example": {
+                "items": [
+                  {
+                    "person_id": "<id from auth>",
+                    "purpose_id": "<id from consents>",
+                    "processor": "tenant",
+                    "jurisdiction": "US-CA"
+                  },
+                  {
+                    "person_id": "not-a-uuid",
+                    "purpose_id": "<id from consents>",
+                    "processor": "tenant",
+                    "jurisdiction": "US-CA"
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/deliverability/check/bulk": {
+      "post": {
+        "tags": [
+          "sdk-deliverability"
+        ],
+        "summary": "Mixed email and sms recipients in one call, plus one invalid channel",
+        "description": "Pre-send suppression enforcement for up to 1000 recipients in ONE request and ONE query. Distinct from the addresses[] form of POST /api/deliverability/check, which is kept for compatibility but holds tenant and channel fixed across the list and issues a query per address: here every item carries its own channel, so a mixed email+sms audience is a single call. tenant_id may be omitted per item and falls back to the caller's credential. Addresses are never sent to the database in plaintext - each is normalized (email lowercased/trimmed, sms reduced to +digits) and sha256-hashed with the channel as salt, and the query joins on hashes. A row is suppressed when a tenant-scoped or global entry matches the address for that channel (or channel 'all') and has not expired. Results are order-preserving with an explicit index and echo back the address and channel asked about; a malformed item reports ok=false in its own slot rather than failing the batch. The same address may appear more than once and each occurrence keeps its slot. Read-only, side-effect-free and safely repeatable.",
+        "operationId": "post_api_deliverability_check_bulk",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {}
+            }
+          },
+          "400": {
+            "description": "ValidationError — body must be an object with an items[] array"
+          },
+          "401": {
+            "description": "Unauthorized — Missing bearer token"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "apiKey": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "items": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "tenant_id": {
+                          "type": "string"
+                        },
+                        "channel": {
+                          "type": "string"
+                        },
+                        "address": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              },
+              "example": {
+                "items": [
+                  {
+                    "tenant_id": "<id from auth>",
+                    "channel": "email",
+                    "address": "<generated email>"
+                  },
+                  {
+                    "tenant_id": "<id from auth>",
+                    "channel": "sms",
+                    "address": "+15551234567"
+                  },
+                  {
+                    "tenant_id": "<id from auth>",
+                    "channel": "carrier-pigeon",
+                    "address": "someone@example.com"
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/notifications/send-to-audience": {
+      "post": {
+        "tags": [
+          "sdk-notification"
+        ],
+        "summary": "Send to a role audience under a delegated decision",
+        "description": "Sends to an audience named by REFERENCE — a role template or an explicit persona list — never by address, and the response reports per-recipient status keyed by persona_id without ever returning the destination used. This is what lets a consuming app address 'everyone holding this role' when it holds no persona ids and no addresses, without inheriting an erasure surface. `authorization` is a required tagged union: `platform` (the platform decides, against a tenant-registered purpose, and applies the frequency cap), `delegated` (the app already decided; decision_ref and expires_at required), or `exempt` (basis and justification required — an exemption is recorded as a decision, never skipped). Edge cases: a delegated decision whose expires_at has passed is 403 DecisionExpired rather than being honoured, because between deciding and dispatching a consent can be revoked or an address suppressed and every such change runs in the restrictive direction; the platform may only ever NARROW a delegated decision (send -> suppressed/deferred) and never upgrade a denial; `no_destination` is returned per recipient with attempted:false and is NOT a failure and NOT a delivery attempt — retrying it returns the same answer, so a caller's retry ledger must key on `attempted` rather than on the status string; the persona->destination seam is unwired by default, so a platform with no resolver wired reports no_destination for every recipient rather than inventing an address; duplicate persona_ids in an explicit audience are de-duplicated so no caller can cause a double-send; exceeding the recipient ceiling (NOTIFICATION_MAX_AUDIENCE, default 50000) is a 400 naming the ceiling rather than a truncated send.",
+        "operationId": "post_api_notifications_send_to_audience",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {}
+            }
+          },
+          "400": {
+            "description": "ValidationError — authorization is required — a send with no recorded decision is not permitted"
+          },
+          "401": {
+            "description": "Unauthorized — Missing bearer token"
+          },
+          "403": {
+            "description": "DecisionExpired — delegated decision <ref> expired at <ts>; re-decide rather than re-send"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "apiKey": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "tenant_id": {
+                    "type": "string"
+                  },
+                  "audience": {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string"
+                      },
+                      "role_template_id": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "channels": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "body": {
+                    "type": "string"
+                  },
+                  "subject": {
+                    "type": "string"
+                  },
+                  "authorization": {
+                    "type": "object",
+                    "properties": {
+                      "mode": {
+                        "type": "string"
+                      },
+                      "decision_ref": {
+                        "type": "string"
+                      },
+                      "expires_at": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                }
+              },
+              "example": {
+                "tenant_id": "<id from auth>",
+                "audience": {
+                  "kind": "role",
+                  "role_template_id": "{{var:role_template_id}}"
+                },
+                "channels": [
+                  "email"
+                ],
+                "body": "An SLA has breached and needs attention.",
+                "subject": "SLA breach",
+                "authorization": {
+                  "mode": "delegated",
+                  "decision_ref": "decision-smoke-0001",
+                  "expires_at": "2099-01-01T00:00:00Z"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/notifications/send-window/bulk": {
+      "post": {
+        "tags": [
+          "sdk-notification"
+        ],
+        "summary": "Two channels for one tenant, plus one item with an unsupported channel",
+        "description": "The send-window verdict for up to 1000 subjects in one request. The work divides on two different keys and this exploits both: quiet hours are per persona, so one query covers every DISTINCT persona in the batch, while the frequency policy and its usage count are per (tenant, channel, purpose), of which a campaign has one - so a ten-thousand-subject batch issues roughly two queries, not twenty thousand. Evaluating the windows themselves is pure and stays in process. Results are order-preserving with an explicit index; an item with a missing tenant or unsupported channel reports ok=false with error_code VALIDATION_ERROR in its own slot while every other subject still returns a verdict. Each verdict carries the same shape as the single endpoint, including capacity_note - `remaining` is a tenant-wide rolling-24h figure and NOT a per-subject reservation, so a caller must compare it against its own batch size before sending. Nothing is reserved and nothing is sent; the call is read-only and safely repeatable.",
+        "operationId": "post_api_notifications_send_window_bulk",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {}
+            }
+          },
+          "400": {
+            "description": "ValidationError — body must be an object with an items[] array"
+          },
+          "401": {
+            "description": "Unauthorized — Missing bearer token"
+          },
+          "403": {
+            "description": "Forbidden — Service token is missing required scope: notification.send-window.write"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "apiKey": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "items": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "tenant_id": {
+                          "type": "string"
+                        },
+                        "channel": {
+                          "type": "string"
+                        },
+                        "purpose": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              },
+              "example": {
+                "items": [
+                  {
+                    "tenant_id": "<id from auth>",
+                    "channel": "email",
+                    "purpose": "marketing"
+                  },
+                  {
+                    "tenant_id": "<id from auth>",
+                    "channel": "sms",
+                    "purpose": "marketing"
+                  },
+                  {
+                    "tenant_id": "<id from auth>",
+                    "channel": "smoke-signal"
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/notifications/send-window": {
+      "post": {
+        "tags": [
+          "sdk-notification"
+        ],
+        "summary": "Ask whether an email send is open for a tenant and purpose",
+        "description": "Read-only pre-flight: may a send go to this subject on this channel at this moment, and if not, when does the window open. Returns open, reasons (most-blocking first), next_open_at, a quiet_hours block (quiet, reason, and unconfigured so an absent record is distinguishable from an open one) and a frequency block (max_per_day, used_last_24h, remaining, policy_source). channel must be one of email, sms, whatsapp, push, slack. tenant_id falls back to the caller's credential. subject_persona_id is optional and selects whose quiet hours apply; purpose selects the frequency policy, since caps are per purpose so an OTP is not throttled by marketing. An optional ISO-8601 `at` evaluates a future moment for a scheduled campaign - an unparseable value is rejected rather than silently answered for now, because a verdict about the wrong moment is the one failure mode this check must not have. RESERVES NOTHING: it calls getSendUsage, never reserveSend, because a pre-flight that reserved would burn one unit of the daily cap per subject ASKED ABOUT, exhausting the allowance before a message went out and then suppressing the real sends as duplicates. Consequently `remaining` is a tenant-wide rolling-24h figure for the (channel, purpose), not a per-subject reservation - a caller planning a batch must compare it against its own batch size, which the returned capacity_note states. Requires a valid JWT, or a key holding notification.send-window.write.",
+        "operationId": "post_api_notifications_send_window",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {}
+            }
+          },
+          "400": {
+            "description": "VALIDATION_ERROR — tenant_id is required (absent from the request and from the credential)"
+          },
+          "401": {
+            "description": "Unauthorized — Missing bearer token"
+          },
+          "403": {
+            "description": "Forbidden — Service token is missing required scope: notification.send-window.write"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "apiKey": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "tenant_id": {
+                    "type": "string"
+                  },
+                  "channel": {
+                    "type": "string"
+                  },
+                  "purpose": {
+                    "type": "string"
+                  }
+                }
+              },
+              "example": {
+                "tenant_id": "<id from auth>",
+                "channel": "email",
+                "purpose": "marketing"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/policies/evaluate/bulk": {
+      "post": {
+        "tags": [
+          "sdk-policy"
+        ],
+        "summary": "Evaluate one policy for the same subject twice - one bare, one with full context",
+        "description": "Evaluates up to 1000 (policy, subject) pairs in one request. Collapses the cost that made the per-subject form unusable at campaign scale: ONE policy read per DISTINCT policy_id rather than per item, and ONE batched INSERT for all decision rows. Cedar evaluation stays per item, in process, against an already-compiled term, and the consent gate is the same code path the single endpoint uses so the two cannot disagree about a DENY. Results are order-preserving with an explicit index. An item naming a policy that does not exist reports ok=false with error_code POLICY_NOT_FOUND in its own slot - the single endpoint's 404 is right when the request IS one evaluation, but failing ten thousand verdicts because one named a deleted policy is not. IMPORTANT DIFFERENCE FROM THE SINGLE ENDPOINT: the audit fan-out is aggregated - one policy.evaluated-bulk.v1 per (batch, policy) carrying the allow/deny split, rather than one policy.evaluated.v1 per subject, because N hash-chain appends would serialize the whole batch behind the audit writer. Every individual decision is still written to policy.decision; a caller that needs per-subject audit events must use POST /api/policies/evaluate.",
+        "operationId": "post_api_policies_evaluate_bulk",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {}
+            }
+          },
+          "400": {
+            "description": "ValidationError — body must be an object with an items[] array"
+          },
+          "401": {
+            "description": "Unauthorized — Missing bearer token"
+          },
+          "500": {
+            "description": "InternalError — InternalError"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "apiKey": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "items": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "policy_id": {
+                          "type": "string"
+                        },
+                        "subject_id": {
+                          "type": "string"
+                        },
+                        "context": {
+                          "type": "object",
+                          "properties": {
+                            "subject": {
+                              "type": "object",
+                              "properties": {
+                                "persona": {
+                                  "type": "object",
+                                  "properties": {
+                                    "role": {
+                                      "type": "string"
+                                    }
+                                  }
+                                }
+                              }
+                            },
+                            "projection_version": {
+                              "type": "integer"
+                            }
+                          }
+                        },
+                        "resource_class": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              },
+              "example": {
+                "items": [
+                  {
+                    "policy_id": "<id from policies>",
+                    "subject_id": "<id from auth>",
+                    "context": {
+                      "subject": {
+                        "persona": {
+                          "role": "doctor"
+                        }
+                      },
+                      "projection_version": 1
+                    },
+                    "resource_class": "sensitive"
+                  },
+                  {
+                    "policy_id": "<id from policies>",
+                    "subject_id": "<id from auth>"
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/role-templates/{role_template_id}/holders": {
+      "get": {
+        "tags": [
+          "sdk-persona"
+        ],
+        "summary": "List role holders for a tenant",
+        "description": "The reverse of GET /api/personas/:persona_id/roles: returns the personas holding one role template, scoped to one tenant. Holders are the UNION of two sources — an active persona.role_assignment grant and the persona's own primary_role_template_id — because a tenant that provisions people with a starting template and never edits them would otherwise return an empty list for a role many people hold. Each persona appears AT MOST ONCE even when it holds the role both ways, so a caller fanning out a notification cannot double-send; held_via reports 'assignment' in preference to 'primary'. Suspended/terminated memberships and non-active personas are excluded. Edge cases: tenant_id is a REQUIRED query param and its absence is a 400, not an unscoped read — persona.role_assignment carries no tenant column (the tenant is reached by joining persona.membership), so defaulting it would expose every tenant's role holders; an unknown role_template_id returns 200 with holders = [] rather than 404, since a typo'd template is indistinguishable from a role nobody holds; include_primary is off ONLY for the literal string 'false' (any other value leaves it on, so ?include_primary=true behaves as expected); limit is clamped to 1..1000 with a default of 200; a non-UUID role_template_id or tenant_id fails in Postgres as a 500 because the route does not pre-validate UUID shape.",
+        "operationId": "get_api_role_templates_role_template_id_holders",
+        "parameters": [
+          {
+            "name": "role_template_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "role_template_id path parameter"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {}
+            }
+          },
+          "400": {
+            "description": "ValidationError — tenant_id query param required"
+          },
+          "401": {
+            "description": "Unauthorized — Missing bearer token"
+          },
+          "500": {
+            "description": "Internal Server Error — Internal Server Error"
           }
         },
         "security": [

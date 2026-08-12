@@ -25,6 +25,11 @@ import {
 } from '@projexlight/contracts';
 import { setFrequencyPolicy, listFrequencyPolicies, getSendUsage } from '../services/frequencyCap';
 import {
+  sendToAudience,
+  AudienceAuthorizationError,
+  type SendToAudienceInput,
+} from '../services/audienceDispatch';
+import {
   checkSendWindow,
   checkSendWindowBulk,
   type BulkSendWindowQuery,
@@ -60,6 +65,13 @@ import {
 
 const DISPATCH_CHANNELS: NotificationChannel[] = ['email', 'sms', 'whatsapp', 'push', 'slack'];
 
+/**
+ * Recipient ceiling for one audience send. Exceeding it is a 400 naming the
+ * ceiling — never a truncated send, which would report success for people who
+ * were never contacted.
+ */
+const MAX_AUDIENCE = Number(process.env.NOTIFICATION_MAX_AUDIENCE || 50000);
+
 /** Config-resolution context from the caller's JWT (set by requireAuth). */
 function ctxFrom(req: FastifyRequest): { tenant_id?: string | null; app_id?: string | null; app_user_id?: string | null } {
   const a = (req as unknown as { auth?: { sub?: string; tenant_id?: string | null; app_id?: string | null } }).auth ?? {};
@@ -70,6 +82,66 @@ function ctxFrom(req: FastifyRequest): { tenant_id?: string | null; app_id?: str
  * Registers /api/notifications/* routes per P4-Operational-Billing §5.
  */
 export async function registerRoutes(app: FastifyInstance): Promise<void> {
+  /*
+   * Send by REFERENCE (P17). Names an audience, never a destination — and the
+   * response reports status per persona_id, never the address used. See
+   * audienceDispatch.ts for why no address may cross this boundary in either
+   * direction, and for the monotonicity invariant on delegated decisions.
+   *
+   * MAX_AUDIENCE is a 400, never a truncated send. A silently truncated audience
+   * and a silent drop are the same bug: both report success for people who were
+   * never told.
+   */
+  app.post('/api/notifications/send-to-audience', { preHandler: requireAuth }, async (req, reply) => {
+    const b = (req.body ?? {}) as Partial<SendToAudienceInput>;
+    const errors: string[] = [];
+
+    if (!b.tenant_id) errors.push('tenant_id is required');
+    if (!b.body) errors.push('body is required');
+    if (!Array.isArray(b.channels) || b.channels.length === 0) {
+      errors.push('channels must be a non-empty array');
+    } else {
+      const bad = b.channels.filter((c) => !DISPATCH_CHANNELS.includes(c));
+      if (bad.length) errors.push(`channel must be one of ${DISPATCH_CHANNELS.join(', ')}`);
+    }
+
+    const aud = b.audience;
+    if (!aud || typeof aud !== 'object') {
+      errors.push('audience is required');
+    } else if (aud.kind === 'persona') {
+      if (!Array.isArray(aud.persona_ids) || aud.persona_ids.length === 0) {
+        errors.push('audience.persona_ids must be a non-empty array');
+      } else if (aud.persona_ids.length > MAX_AUDIENCE) {
+        errors.push(`audience exceeds the ${MAX_AUDIENCE} recipient ceiling — narrow the audience rather than relying on truncation`);
+      }
+    } else if (aud.kind === 'role') {
+      if (!aud.role_template_id) errors.push('audience.role_template_id is required');
+    } else {
+      errors.push("audience.kind must be 'persona' or 'role'");
+    }
+
+    const auth = b.authorization;
+    if (!auth || typeof auth !== 'object') {
+      errors.push('authorization is required — a send with no recorded decision is not permitted');
+    } else if (!['platform', 'delegated', 'exempt'].includes(auth.mode)) {
+      errors.push("authorization.mode must be 'platform', 'delegated' or 'exempt'");
+    }
+
+    if (errors.length) return reply.code(400).send({ error: 'ValidationError', details: errors });
+
+    try {
+      const result = await sendToAudience(b as SendToAudienceInput);
+      return reply.code(200).send({ data: result });
+    } catch (err) {
+      if (err instanceof AudienceAuthorizationError) {
+        // 403, not 400: the request is well-formed and the caller is authenticated —
+        // what is missing is permission to send, which is a different fix.
+        return reply.code(403).send({ error: 'Forbidden', code: err.code, details: [err.message] });
+      }
+      throw err;
+    }
+  });
+
   app.post('/api/notifications/send', { preHandler: requireAuth }, async (req, reply) => {
     // Provider gate (EP-341): the send channel needs a configured provider; when
     // none is set at tenant/app/platform, return a clear 503 PROVIDER_NOT_CONFIGURED

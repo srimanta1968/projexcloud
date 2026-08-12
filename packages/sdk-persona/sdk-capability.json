@@ -3,53 +3,188 @@
   "version": "1.0.0",
   "schema_version": "1.0",
   "summary": "Persona + app-identity primitives for ProjexCloud's six-layer identity model. A Person can have many app-identities (one per app); each app-identity belongs to memberships (tenant/bu) + carries role_assignments. Persona extensions let domain SDKs attach typed metadata (sales-rep quota, doctor-NPI, tech-skill-tags) without bloating the core row. Every JWT claim shape resolves through here.",
-  "tags": ["persona", "identity", "app-identity", "membership", "foundation"],
+  "tags": [
+    "persona",
+    "identity",
+    "app-identity",
+    "membership",
+    "foundation"
+  ],
   "provides": {
     "endpoints": [
-      { "method": "POST",   "path": "/api/app-identities",                              "description": "Create a new app-identity for a Person." },
-      { "method": "GET",    "path": "/api/app-identities/:app_identity_id",             "description": "Fetch an app-identity + memberships + role_assignments." },
-      { "method": "GET",    "path": "/api/persons/:person_id/app-identities",           "description": "List app-identities for a Person." },
-      { "method": "POST",   "path": "/api/memberships",                                 "description": "Add a membership (app-identity ↔ tenant/bu)." },
-      { "method": "DELETE", "path": "/api/memberships/:membership_id",                  "description": "Remove a membership." },
-      { "method": "POST",   "path": "/api/role-assignments",                            "description": "Assign a role to an app-identity within a scope." },
-      { "method": "DELETE", "path": "/api/role-assignments/:assignment_id",             "description": "Revoke a role assignment." },
-      { "method": "POST",   "path": "/api/persona-extensions/:app_identity_id/:domain", "description": "Attach typed domain metadata (e.g. doctor-NPI)." },
-      { "method": "GET",    "path": "/api/persona-extensions/:app_identity_id/:domain", "description": "Fetch the domain extension blob." },
-      { "method": "POST",   "path": "/api/personas/resolve",                            "description": "Resolve a (person + app + tenant) tuple to the active persona for JWT signing." },
-      { "method": "POST",   "path": "/api/personas/switch",                             "description": "User-initiated persona switch (e.g. multi-tenant operator switching contexts)." },
-      { "method": "GET",    "path": "/api/personas/:persona_id/permissions",            "description": "List effective permissions from role_assignments (ReBAC + ABAC reconciliation)." },
-      { "method": "POST",   "path": "/api/personas/:persona_id/offboard",               "description": "Offboard a persona — cascade rebac removal + audit." }
+      {
+        "method": "POST",
+        "path": "/api/app-identities",
+        "description": "Create a new app-identity for a Person."
+      },
+      {
+        "method": "GET",
+        "path": "/api/app-identities/:app_identity_id",
+        "description": "Fetch an app-identity + memberships + role_assignments."
+      },
+      {
+        "method": "GET",
+        "path": "/api/persons/:person_id/app-identities",
+        "description": "List app-identities for a Person."
+      },
+      {
+        "method": "POST",
+        "path": "/api/memberships",
+        "description": "Add a membership (app-identity ↔ tenant/bu)."
+      },
+      {
+        "method": "DELETE",
+        "path": "/api/memberships/:membership_id",
+        "description": "Remove a membership."
+      },
+      {
+        "method": "POST",
+        "path": "/api/role-assignments",
+        "description": "Assign a role to an app-identity within a scope."
+      },
+      {
+        "method": "DELETE",
+        "path": "/api/role-assignments/:assignment_id",
+        "description": "Revoke a role assignment."
+      },
+      {
+        "method": "POST",
+        "path": "/api/persona-extensions/:app_identity_id/:domain",
+        "description": "Attach typed domain metadata (e.g. doctor-NPI)."
+      },
+      {
+        "method": "GET",
+        "path": "/api/persona-extensions/:app_identity_id/:domain",
+        "description": "Fetch the domain extension blob."
+      },
+      {
+        "method": "POST",
+        "path": "/api/personas/resolve",
+        "description": "Resolve a (person + app + tenant) tuple to the active persona for JWT signing."
+      },
+      {
+        "method": "POST",
+        "path": "/api/personas/switch",
+        "description": "User-initiated persona switch (e.g. multi-tenant operator switching contexts)."
+      },
+      {
+        "method": "GET",
+        "path": "/api/personas/:persona_id/permissions",
+        "description": "List effective permissions from role_assignments (ReBAC + ABAC reconciliation)."
+      },
+      {
+        "method": "POST",
+        "path": "/api/personas/:persona_id/offboard",
+        "description": "Offboard a persona — cascade rebac removal + audit."
+      },
+      {
+        "method": "GET",
+        "path": "/api/role-templates/:role_template_id/holders",
+        "description": "Reverse role lookup: which personas hold this role template, in one tenant. Unions explicit grants with primary_role_template_id and returns each persona at most once, so a fan-out cannot double-send. tenant_id is required."
+      }
     ],
     "events": [
-      { "name": "persona.app_identity.created.v1",   "retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "New app-identity created for a Person." },
-      { "name": "persona.membership.added.v1",       "retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "Membership added (app-identity ↔ tenant/bu)." },
-      { "name": "persona.role.assigned.v1",          "retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "Role assigned to an app-identity within a scope." },
-      { "name": "persona.extension.changed.v1",      "retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "Domain extension blob updated." },
-      { "name": "persona.offboarded.v1",             "retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "Persona offboarded; downstream SDKs cascade-revoke." }
+      {
+        "name": "persona.app_identity.created.v1",
+        "retention_class": "regulated",
+        "conflict_policy": "event-sourcing",
+        "description": "New app-identity created for a Person."
+      },
+      {
+        "name": "persona.membership.added.v1",
+        "retention_class": "regulated",
+        "conflict_policy": "event-sourcing",
+        "description": "Membership added (app-identity ↔ tenant/bu)."
+      },
+      {
+        "name": "persona.role.assigned.v1",
+        "retention_class": "regulated",
+        "conflict_policy": "event-sourcing",
+        "description": "Role assigned to an app-identity within a scope."
+      },
+      {
+        "name": "persona.extension.changed.v1",
+        "retention_class": "regulated",
+        "conflict_policy": "event-sourcing",
+        "description": "Domain extension blob updated."
+      },
+      {
+        "name": "persona.offboarded.v1",
+        "retention_class": "regulated",
+        "conflict_policy": "event-sourcing",
+        "description": "Persona offboarded; downstream SDKs cascade-revoke."
+      }
     ],
     "models": [
-      { "schema": "persona", "table": "app_identity",       "description": "Per-app-identity row: person_id, app_id, created_at." },
-      { "schema": "persona", "table": "membership",         "description": "Per-(app-identity, tenant, bu) row." },
-      { "schema": "persona", "table": "persona",            "description": "Resolved persona view: (app-identity, tenant, bu) pin for JWT signing." },
-      { "schema": "persona", "table": "role_assignment",    "description": "Per-(persona, role, scope) row." },
-      { "schema": "persona", "table": "persona_extension",  "description": "Per-(persona, domain) typed metadata blob." }
+      {
+        "schema": "persona",
+        "table": "app_identity",
+        "description": "Per-app-identity row: person_id, app_id, created_at."
+      },
+      {
+        "schema": "persona",
+        "table": "membership",
+        "description": "Per-(app-identity, tenant, bu) row."
+      },
+      {
+        "schema": "persona",
+        "table": "persona",
+        "description": "Resolved persona view: (app-identity, tenant, bu) pin for JWT signing."
+      },
+      {
+        "schema": "persona",
+        "table": "role_assignment",
+        "description": "Per-(persona, role, scope) row."
+      },
+      {
+        "schema": "persona",
+        "table": "persona_extension",
+        "description": "Per-(persona, domain) typed metadata blob."
+      }
     ],
     "hooks": [
-      { "name": "createAppIdentity",  "description": "Service entry — new app-identity for a Person; first membership often added in the same call." },
-      { "name": "addMembership",      "description": "Add a membership; emits .membership.added.v1." },
-      { "name": "assignRole",         "description": "Assign a role; sdk-rebac picks up the .role.assigned.v1 event to write the underlying tuple." },
-      { "name": "resolvePersona",     "description": "Given (person, app, tenant), return the persona row that signs JWTs for this session." },
-      { "name": "offboardPersona",    "description": "Offboard cascade: emits .offboarded.v1; sdk-rebac + sdk-meter + sdk-data-rights react." }
+      {
+        "name": "createAppIdentity",
+        "description": "Service entry — new app-identity for a Person; first membership often added in the same call."
+      },
+      {
+        "name": "addMembership",
+        "description": "Add a membership; emits .membership.added.v1."
+      },
+      {
+        "name": "assignRole",
+        "description": "Assign a role; sdk-rebac picks up the .role.assigned.v1 event to write the underlying tuple."
+      },
+      {
+        "name": "resolvePersona",
+        "description": "Given (person, app, tenant), return the persona row that signs JWTs for this session."
+      },
+      {
+        "name": "offboardPersona",
+        "description": "Offboard cascade: emits .offboarded.v1; sdk-rebac + sdk-meter + sdk-data-rights react."
+      }
     ],
     "ui_components": []
   },
   "consumes": {
     "events": [
-      { "name": "tenant.created.v1",        "from": "@projexlight/sdk-tenant" },
-      { "name": "tenant.offboarded.v1",     "from": "@projexlight/sdk-tenant-lifecycle" }
+      {
+        "name": "tenant.created.v1",
+        "from": "@projexlight/sdk-tenant"
+      },
+      {
+        "name": "tenant.offboarded.v1",
+        "from": "@projexlight/sdk-tenant-lifecycle"
+      }
     ],
-    "infra": ["postgres", "redis-optional"],
-    "config_keys": ["PERSONA_DEFAULT_ROLE_ON_MEMBERSHIP", "PERSONA_EXTENSION_MAX_SIZE_KB"]
+    "infra": [
+      "postgres",
+      "redis-optional"
+    ],
+    "config_keys": [
+      "PERSONA_DEFAULT_ROLE_ON_MEMBERSHIP",
+      "PERSONA_EXTENSION_MAX_SIZE_KB"
+    ]
   },
   "scenarios": [
     {
@@ -89,16 +224,41 @@
     }
   ],
   "compliance_posture": {
-    "regimes": ["SOC2-CC6.1-access-control", "GDPR-Art-30", "HIPAA-164.308-workforce-security", "ISO-27001-Annex-A-9"],
+    "regimes": [
+      "SOC2-CC6.1-access-control",
+      "GDPR-Art-30",
+      "HIPAA-164.308-workforce-security",
+      "ISO-27001-Annex-A-9"
+    ],
     "notes": "Six-layer JWT claim shape (sub/email/org/app/tenant/bu/parent/root/reseller) resolves through here. Offboard cascade is the SOC2 + HIPAA workforce-security implementation lever. Domain extensions let regulated verticals add typed metadata (NPI/DEA/clearance-level) without bloating the core."
   },
   "pool_placement": "admin",
   "pricing_skus": [
-    { "sku": "persona.app_identity.create",  "mode": "metered", "unit_description": "per app-identity created" },
-    { "sku": "persona.membership.add",       "mode": "metered", "unit_description": "per membership" },
-    { "sku": "persona.role.assign",          "mode": "metered", "unit_description": "per role assignment" },
-    { "sku": "persona.extension.write",      "mode": "metered", "unit_description": "per extension write" },
-    { "sku": "persona.offboard",             "mode": "flat",    "unit_description": "per persona offboarded" }
+    {
+      "sku": "persona.app_identity.create",
+      "mode": "metered",
+      "unit_description": "per app-identity created"
+    },
+    {
+      "sku": "persona.membership.add",
+      "mode": "metered",
+      "unit_description": "per membership"
+    },
+    {
+      "sku": "persona.role.assign",
+      "mode": "metered",
+      "unit_description": "per role assignment"
+    },
+    {
+      "sku": "persona.extension.write",
+      "mode": "metered",
+      "unit_description": "per extension write"
+    },
+    {
+      "sku": "persona.offboard",
+      "mode": "flat",
+      "unit_description": "per persona offboarded"
+    }
   ],
   "links": {
     "readme": "packages/sdk-persona/README.md",

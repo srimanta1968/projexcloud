@@ -142,6 +142,7 @@ import {
   registerSlackOutboundAdapter,
   makeSequenceStepSender,
   setPreSendGuard,
+  setRoleHolderResolver,
   setSmsConsentHandler,
   setDeliveryReputationHook,
   sendPlatformEmail,
@@ -243,7 +244,11 @@ import {
 // Side-effect import: connector-slack runs registerAdapter('slack') at module load.
 import '@projexlight/connector-slack';
 import { migrationsDir as profileMigrations, server as profileServer } from '@projexlight/sdk-profile';
-import { migrationsDir as personaMigrations, server as personaServer } from '@projexlight/sdk-persona';
+import {
+  migrationsDir as personaMigrations,
+  server as personaServer,
+  listRoleHolders,
+} from '@projexlight/sdk-persona';
 import { server as resolverServer, migrationsDir as resolverMigrations } from '@projexlight/sdk-identity-resolver';
 import {
   migrationsDir as dataRightsMigrations,
@@ -4377,6 +4382,19 @@ const start = async (): Promise<void> => {
       } catch { /* fail-open: never block a send on a guard error */ }
       return { blocked: false };
     });
+
+    // Audience resolution for POST /api/notifications/send-to-audience (P17): a role
+    // becomes the personas holding it. A seam rather than a package dependency, so
+    // sdk-notification never learns the persona schema and an app with a different
+    // role model can wire its own.
+    //
+    // The COMPANION seam, setPersonaDestinationResolver, is deliberately NOT wired.
+    // Wiring it is a decision to read identity.alias (PII) on the send path and must
+    // be made explicitly, not inherited from this file. Until it is, an audience send
+    // reports no_destination per recipient — honest, and distinguishable from failure.
+    setRoleHolderResolver(async ({ tenant_id, role_template_id, include_primary }) =>
+      listRoleHolders({ tenant_id, role_template_id, include_primary }),
+    );
 
     // Inbound SMS STOP/START keywords propagate to the sms suppression list (TK-3634/3634).
     setSmsConsentHandler(async ({ tenant_id, from_number, intent }) => {

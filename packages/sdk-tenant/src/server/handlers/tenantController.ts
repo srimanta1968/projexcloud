@@ -21,10 +21,38 @@ import {
   validateSetFiscalCalendar,
 } from '../../validators/tenantValidator';
 
+/**
+ * TWO ID SPACES CALLED "APP", AND THE FK VIOLATION DOES NOT SAY SO.
+ *
+ * tenant.role_template.app_id is a TEXT slug FK'd to tenant.app — the PRODUCT
+ * app, created by POST /api/auth/signup-tenant or POST /admin/apps. It is not the
+ * UUID that POST /api/applications hands back; that id belongs to
+ * api_keys.application, a CREDENTIAL HOLDER, and several of them per product app
+ * is the normal shape (live/test, one key per consumer).
+ *
+ * A caller that reads the UUID as "the application id" and keys role templates on
+ * it gets `role_template_app_id_fkey` and a raw Postgres string, which names
+ * neither space and reads as a platform fault. This has cost a consumer a
+ * debugging session; the constraint name is the one signal that identifies the
+ * confusion, so it is worth spending on a message that resolves it.
+ */
+function foreignKeyDetail(msg: string): string {
+  if (msg.includes('role_template_app_id_fkey')) {
+    return (
+      'app_id must be a tenant.app slug (e.g. "acme-inc-304d62"), as returned by ' +
+      'POST /api/auth/signup-tenant or POST /admin/apps. It is NOT the application_id ' +
+      'UUID returned by POST /api/applications — that id belongs to api_keys.application, ' +
+      'which is a credential holder rather than a product app, and no tenant.app row exists ' +
+      `for it. Original: ${msg}`
+    );
+  }
+  return msg;
+}
+
 function uncaught(req: FastifyRequest, reply: FastifyReply, err: unknown): void {
   const msg = (err as Error).message;
   if (msg.includes('violates foreign key')) {
-    reply.code(400).send({ error: 'ValidationError', details: [msg] });
+    reply.code(400).send({ error: 'ValidationError', details: [foreignKeyDetail(msg)] });
     return;
   }
   if (msg.includes('duplicate key')) {

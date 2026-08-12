@@ -1,0 +1,88 @@
+{
+  "name": "POST /api/notifications/send-to-audience - Send by reference to a role or persona set",
+  "endpoint": "/api/notifications/send-to-audience",
+  "sdk": "sdk-notification",
+  "method": "POST",
+  "requiresAuth": true,
+  "expectedStatus": 200,
+  "priority": 60,
+  "testability": "auto",
+  "sourceFile": "packages/sdk-notification/src/server/routes.ts",
+  "dependsOn": [
+    "POST /api/auth/signup-tenant"
+  ],
+  "testCases": [
+    {
+      "name": "Send to a role audience under a delegated decision",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "payload": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "audience": { "kind": "role", "role_template_id": "{{var:role_template_id}}" },
+        "channels": ["email"],
+        "body": "An SLA has breached and needs attention.",
+        "subject": "SLA breach",
+        "authorization": {
+          "mode": "delegated",
+          "decision_ref": "decision-smoke-0001",
+          "expires_at": "2099-01-01T00:00:00Z"
+        }
+      },
+      "expectedStatus": 200
+    },
+    {
+      "name": "Explicit persona audience, platform-decided",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "payload": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "audience": { "kind": "persona", "persona_ids": ["{{var:persona_id}}"] },
+        "channels": ["email"],
+        "body": "Your weekly digest is ready.",
+        "authorization": { "mode": "platform", "purpose": "project_operations" }
+      },
+      "expectedStatus": 200
+    }
+  ],
+  "description": "Sends to an audience named by REFERENCE — a role template or an explicit persona list — never by address, and the response reports per-recipient status keyed by persona_id without ever returning the destination used. This is what lets a consuming app address 'everyone holding this role' when it holds no persona ids and no addresses, without inheriting an erasure surface. `authorization` is a required tagged union: `platform` (the platform decides, against a tenant-registered purpose, and applies the frequency cap), `delegated` (the app already decided; decision_ref and expires_at required), or `exempt` (basis and justification required — an exemption is recorded as a decision, never skipped). Edge cases: a delegated decision whose expires_at has passed is 403 DecisionExpired rather than being honoured, because between deciding and dispatching a consent can be revoked or an address suppressed and every such change runs in the restrictive direction; the platform may only ever NARROW a delegated decision (send -> suppressed/deferred) and never upgrade a denial; `no_destination` is returned per recipient with attempted:false and is NOT a failure and NOT a delivery attempt — retrying it returns the same answer, so a caller's retry ledger must key on `attempted` rather than on the status string; the persona->destination seam is unwired by default, so a platform with no resolver wired reports no_destination for every recipient rather than inventing an address; duplicate persona_ids in an explicit audience are de-duplicated so no caller can cause a double-send; exceeding the recipient ceiling (NOTIFICATION_MAX_AUDIENCE, default 50000) is a 400 naming the ceiling rather than a truncated send.",
+  "errorCases": [
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "authorization is required — a send with no recorded decision is not permitted",
+      "when": "authorization absent, or mode not one of platform/delegated/exempt; also covers missing tenant_id, body, channels, or audience"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "audience exceeds the 50000 recipient ceiling — narrow the audience rather than relying on truncation",
+      "when": "an explicit persona audience is larger than NOTIFICATION_MAX_AUDIENCE — a 400, never a truncated send"
+    },
+    {
+      "status": 403,
+      "code": "DecisionExpired",
+      "message": "delegated decision <ref> expired at <ts>; re-decide rather than re-send",
+      "when": "authorization.mode is delegated and expires_at is in the past — an expired decision has inherited nothing"
+    },
+    {
+      "status": 403,
+      "code": "PurposeRequired",
+      "message": "platform authorization requires a registered purpose",
+      "when": "authorization.mode is platform with no purpose — never defaulted, because a resolver with an optional purpose cannot be called safely on a path that reaches a customer"
+    },
+    {
+      "status": 403,
+      "code": "ExemptionUnjustified",
+      "message": "exempt authorization requires both basis and justification — an exemption is recorded, not skipped",
+      "when": "authorization.mode is exempt with basis or justification missing"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "Authorization header absent or not in 'Bearer <jwt>' form (requireAuth preHandler)"
+    }
+  ]
+}

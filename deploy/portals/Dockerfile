@@ -46,7 +46,24 @@ RUN --mount=type=cache,id=next-${APP},target=/workspace/apps/${APP}/.next/cache 
 FROM node:20-alpine AS runtime
 ARG APP
 ARG NEXT_PUBLIC_BASE_PATH=""
+# NEXT_PUBLIC_BASE_PATH MUST BE SET AT RUNTIME, NOT ONLY AT BUILD TIME.
+#
+# `output: 'standalone'` copies next.config.js into the image and server.js
+# RE-EVALUATES it at startup. next.config.js reads
+# `basePath: process.env.NEXT_PUBLIC_BASE_PATH || undefined`, so a runtime
+# environment without that variable resolves basePath to undefined even though
+# the build had it — and every <Link> then renders unprefixed.
+#
+# That is not a cosmetic defect: /console/config renders as href="/config",
+# which leaves the portal entirely and lands on the api-gateway, whose
+# default-deny gate answers {"error":"Unauthorized","details":["Missing bearer
+# token"]}. Every nav item in every portal did this, so the whole console looked
+# like an auth failure when it was a routing one.
+#
+# BASE_PATH is kept because other code reads it; it is NOT a substitute — the
+# name next.config.js reads is the one that has to be present.
 ENV APP=${APP} \
+    NEXT_PUBLIC_BASE_PATH=${NEXT_PUBLIC_BASE_PATH} \
     BASE_PATH=${NEXT_PUBLIC_BASE_PATH} \
     NODE_ENV=production \
     NEXT_TELEMETRY_DISABLED=1 \

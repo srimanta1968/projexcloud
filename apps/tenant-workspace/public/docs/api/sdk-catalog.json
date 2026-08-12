@@ -90,7 +90,7 @@
   },
   "api_reference": "https://cloud.projexlight.com/workspace/docs/api/index.html",
   "sdk_count": 77,
-  "api_count": 630,
+  "api_count": 638,
   "groups": [
     {
       "name": "Platform & Multi-Tenancy",
@@ -1978,7 +1978,7 @@
     {
       "name": "Outreach & Communication",
       "sdk_count": 9,
-      "api_count": 121,
+      "api_count": 125,
       "sdks": [
         {
           "sdk": "connector-twilio-voice",
@@ -2351,7 +2351,7 @@
             "dkim",
             "spf"
           ],
-          "api_count": 17,
+          "api_count": 18,
           "docs_url": "https://cloud.projexlight.com/workspace/docs/api/index.html#sdk-sdk-deliverability",
           "apis": [
             {
@@ -2389,6 +2389,28 @@
                   "email",
                   "sms",
                   "all"
+                ]
+              },
+              "dependsOn": [
+                "POST /api/auth/signup-tenant"
+              ]
+            },
+            {
+              "method": "POST",
+              "endpoint": "/api/deliverability/check/bulk",
+              "requiresAuth": true,
+              "summary": "Mixed email and sms recipients in one call, plus one invalid channel",
+              "payload_shape": [
+                "items"
+              ],
+              "fieldEnums": {
+                "channel": [
+                  "email",
+                  "sms",
+                  "all"
+                ],
+                "error_code": [
+                  "VALIDATION_ERROR"
                 ]
               },
               "dependsOn": [
@@ -3121,7 +3143,7 @@
             "no answer retry",
             "do not contact too often"
           ],
-          "api_count": 18,
+          "api_count": 21,
           "docs_url": "https://cloud.projexlight.com/workspace/docs/api/index.html#sdk-sdk-notification",
           "apis": [
             {
@@ -3325,6 +3347,81 @@
               "dependsOn": [
                 "POST /api/auth/signup-tenant",
                 "POST /api/notifications/templates"
+              ]
+            },
+            {
+              "method": "POST",
+              "endpoint": "/api/notifications/send-to-audience",
+              "requiresAuth": true,
+              "summary": "Send to a role audience under a delegated decision",
+              "payload_shape": [
+                "audience",
+                "authorization",
+                "body",
+                "channels",
+                "subject",
+                "tenant_id"
+              ],
+              "fieldEnums": {},
+              "dependsOn": [
+                "POST /api/auth/signup-tenant"
+              ]
+            },
+            {
+              "method": "POST",
+              "endpoint": "/api/notifications/send-window",
+              "requiresAuth": true,
+              "summary": "Ask whether an email send is open for a tenant and purpose",
+              "payload_shape": [
+                "channel",
+                "purpose",
+                "tenant_id"
+              ],
+              "fieldEnums": {
+                "channel": [
+                  "email",
+                  "sms",
+                  "whatsapp",
+                  "push",
+                  "slack"
+                ],
+                "policy_source": [
+                  "tenant",
+                  "platform",
+                  "builtin"
+                ]
+              },
+              "dependsOn": [
+                "POST /api/auth/signup-tenant"
+              ]
+            },
+            {
+              "method": "POST",
+              "endpoint": "/api/notifications/send-window/bulk",
+              "requiresAuth": true,
+              "summary": "Two channels for one tenant, plus one item with an unsupported channel",
+              "payload_shape": [
+                "items"
+              ],
+              "fieldEnums": {
+                "channel": [
+                  "email",
+                  "sms",
+                  "whatsapp",
+                  "push",
+                  "slack"
+                ],
+                "policy_source": [
+                  "tenant",
+                  "platform",
+                  "builtin"
+                ],
+                "error_code": [
+                  "VALIDATION_ERROR"
+                ]
+              },
+              "dependsOn": [
+                "POST /api/auth/signup-tenant"
               ]
             },
             {
@@ -8431,7 +8528,7 @@
     {
       "name": "Governance, Consent & Security",
       "sdk_count": 10,
-      "api_count": 67,
+      "api_count": 70,
       "sdks": [
         {
           "sdk": "sdk-approval",
@@ -9068,7 +9165,7 @@
             "permission",
             "privacy"
           ],
-          "api_count": 8,
+          "api_count": 10,
           "docs_url": "https://cloud.projexlight.com/workspace/docs/api/index.html#sdk-sdk-consent",
           "apis": [
             {
@@ -9173,6 +9270,21 @@
               ]
             },
             {
+              "method": "POST",
+              "endpoint": "/api/consents/check/bulk",
+              "requiresAuth": true,
+              "summary": "One granted tuple and one malformed item - the bad item must not fail the batch",
+              "payload_shape": [
+                "items"
+              ],
+              "fieldEnums": {},
+              "dependsOn": [
+                "POST /api/auth/register",
+                "POST /api/consents/purposes",
+                "POST /api/consents"
+              ]
+            },
+            {
               "method": "GET",
               "endpoint": "/api/consents/export",
               "requiresAuth": true,
@@ -9183,6 +9295,18 @@
                 "POST /api/auth/register",
                 "POST /api/consents/purposes",
                 "POST /api/consents"
+              ]
+            },
+            {
+              "method": "GET",
+              "endpoint": "/api/consents/purposes",
+              "requiresAuth": true,
+              "summary": "List the registry and see the purpose just registered",
+              "payload_shape": [],
+              "fieldEnums": {},
+              "dependsOn": [
+                "POST /api/auth/register",
+                "POST /api/consents/purposes"
               ]
             },
             {
@@ -9502,7 +9626,7 @@
             "conditional access",
             "guardrail"
           ],
-          "api_count": 4,
+          "api_count": 5,
           "docs_url": "https://cloud.projexlight.com/workspace/docs/api/index.html#sdk-sdk-policy",
           "apis": [
             {
@@ -9579,6 +9703,33 @@
                 "resource_class": [
                   "sensitive",
                   "low_risk"
+                ]
+              },
+              "dependsOn": [
+                "POST /api/auth/register",
+                "POST /api/policies"
+              ]
+            },
+            {
+              "method": "POST",
+              "endpoint": "/api/policies/evaluate/bulk",
+              "requiresAuth": true,
+              "summary": "Evaluate one policy for the same subject twice - one bare, one with full context",
+              "payload_shape": [
+                "items"
+              ],
+              "fieldEnums": {
+                "resource_class": [
+                  "sensitive",
+                  "low_risk"
+                ],
+                "decision": [
+                  "ALLOW",
+                  "DENY"
+                ],
+                "error_code": [
+                  "VALIDATION_ERROR",
+                  "POLICY_NOT_FOUND"
                 ]
               },
               "dependsOn": [
@@ -10107,7 +10258,7 @@
     {
       "name": "Identity & Access (AIM)",
       "sdk_count": 5,
-      "api_count": 66,
+      "api_count": 67,
       "sdks": [
         {
           "sdk": "sdk-api-keys",
@@ -10925,7 +11076,7 @@
             "join another tenant",
             "switch tenant"
           ],
-          "api_count": 16,
+          "api_count": 17,
           "docs_url": "https://cloud.projexlight.com/workspace/docs/api/index.html#sdk-sdk-persona",
           "apis": [
             {
@@ -11153,6 +11304,17 @@
               "fieldEnums": {},
               "dependsOn": [
                 "POST /api/auth/register"
+              ]
+            },
+            {
+              "method": "GET",
+              "endpoint": "/api/role-templates/:role_template_id/holders",
+              "requiresAuth": true,
+              "summary": "List role holders for a tenant",
+              "payload_shape": [],
+              "fieldEnums": {},
+              "dependsOn": [
+                "POST /api/auth/signup-tenant"
               ]
             }
           ]

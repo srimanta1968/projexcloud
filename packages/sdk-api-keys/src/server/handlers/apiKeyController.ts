@@ -196,7 +196,31 @@ export async function createApplicationHandler(req: FastifyRequest, reply: Fasti
       created_by_persona_id: req.auth?.primary_persona_id ?? undefined,
       owner_persona_id: req.auth?.primary_persona_id ?? undefined,
     });
-    reply.code(201).send({ data: { application: app } });
+    /*
+     * tenant_app_id IS NOT application.application_id, AND THAT IS THE POINT.
+     *
+     * This route returns a credential holder, whose id is a UUID. The PRODUCT app
+     * — the thing tenant.role_template.app_id and consent purposes key on — is a
+     * TEXT slug on tenant.app, and several credential holders per product app is
+     * the normal shape (live/test, one key per consumer). A caller that reads the
+     * UUID as "the application id" and keys role templates on it gets a raw
+     * role_template_app_id_fkey violation naming neither space; that has already
+     * cost a consumer a debugging session. Returning the slug alongside removes
+     * the ambiguity at the one moment the caller decides what to store.
+     *
+     * The slug comes from the caller's verified app_id claim rather than a lookup,
+     * so it cannot disagree with the app the credential was minted under.
+     */
+    reply.code(201).send({
+      data: {
+        application: app,
+        tenant_app_id: req.auth?.app_id ?? null,
+        _id_spaces: {
+          application_id: 'credential holder (api_keys.application) — for key issuance and rotation',
+          tenant_app_id: 'product app slug (tenant.app) — for role templates and consent purposes',
+        },
+      },
+    });
   } catch (err) {
     if (err instanceof SlugConflictError) {
       reply.code(409).send({ error: 'Conflict', details: [err.message] });

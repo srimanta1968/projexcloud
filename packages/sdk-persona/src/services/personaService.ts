@@ -298,3 +298,99 @@ export async function listRolesForPersona(persona_id: string): Promise<RoleAssig
     [persona_id],
   );
 }
+
+/**
+ * The REVERSE of listRolesForPersona: who holds this role?
+ *
+ * WHY THIS EXISTS. Every read in this SDK was forward-only — you could ask what
+ * roles a persona holds, never who holds a role. That is the wrong direction for
+ * the two things callers actually need: routing a case to a reviewer ("which
+ * personas are data stewards?") and addressing an audience ("tell the sales
+ * managers"). A consuming app that names its audiences by ROLE — which is what
+ * they are — had no way to turn one into people, and no way to synthesise it
+ * either, because it does not hold persona ids in the first place.
+ *
+ * TWO WAYS TO HOLD A ROLE, AND BOTH COUNT. A persona can hold a role through an
+ * explicit persona.role_assignment grant, or through the primary_role_template_id
+ * stamped on it at creation. Reading only the assignment table silently misses
+ * everyone who never had a role added after signup — which, for a tenant that
+ * provisions its people with a starting role template and never touches them
+ * again, is EVERYONE. That would return an empty list for a role dozens of people
+ * hold, and an empty list reads as "nobody to notify" rather than as a bug.
+ *
+ * ONE ROW PER PERSONA. The two sources overlap: a persona whose primary template
+ * is X and who also has an explicit grant of X appears in both. This returns each
+ * persona once — the caller fanning out a notification must not send twice, and
+ * de-duplicating in every caller is the kind of thing one of them forgets.
+ * `held_via` reports 'assignment' in preference to 'primary' so the more specific
+ * provenance is the one shown.
+ *
+ * TENANT_ID IS REQUIRED, NOT OPTIONAL. persona.role_assignment carries no tenant
+ * column; the tenant lives one join away on persona.membership. An unscoped
+ * reverse lookup would therefore return every tenant's role holders to whoever
+ * asked — the same defect that made the EMPI review surface cross-tenant. Making
+ * the parameter mandatory is what stops that being reachable at all, rather than
+ * relying on every caller to remember to filter.
+ *
+ * Suspended and terminated memberships, and non-active personas, are excluded:
+ * "who holds this role" is a question about who can act now.
+ */
+export interface RoleHolder {
+  persona_id: string;
+  membership_id: string;
+  tenant_id: string;
+  kind: string;
+  bu_id: string | null;
+  /** 'assignment' = an explicit grant; 'primary' = the persona's starting role template. */
+  held_via: 'assignment' | 'primary';
+  /** When the explicit grant was made. NULL for 'primary' — that is set at persona creation. */
+  assigned_at: string | null;
+}
+
+export interface ListRoleHoldersInput {
+  role_template_id: string;
+  /** Mandatory — see the tenant-scoping note above. */
+  tenant_id: string;
+  /** Include holders via primary_role_template_id. Default true; false narrows to explicit grants. */
+  include_primary?: boolean;
+  limit?: number;
+}
+
+export async function listRoleHolders(input: ListRoleHoldersInput): Promise<RoleHolder[]> {
+  return dataService.rows<RoleHolder>(
+    `SELECT DISTINCT ON (persona_id)
+            persona_id, membership_id, tenant_id, kind, bu_id, held_via, assigned_at
+       FROM (
+         SELECT p.persona_id, p.membership_id, m.tenant_id, p.kind, p.bu_id,
+                'assignment'::text AS held_via, ra.assigned_at
+           FROM persona.role_assignment ra
+           JOIN persona.persona    p ON p.persona_id    = ra.persona_id
+           JOIN persona.membership m ON m.membership_id = p.membership_id
+          WHERE ra.role_template_id = $1::uuid
+            AND ra.revoked_at IS NULL
+            AND m.tenant_id = $2::uuid
+            AND p.status = 'active'
+            AND m.status = 'active'
+         UNION ALL
+         SELECT p.persona_id, p.membership_id, m.tenant_id, p.kind, p.bu_id,
+                'primary'::text AS held_via, NULL::timestamptz AS assigned_at
+           FROM persona.persona    p
+           JOIN persona.membership m ON m.membership_id = p.membership_id
+          WHERE p.primary_role_template_id = $1::uuid
+            AND $3::boolean IS TRUE
+            AND m.tenant_id = $2::uuid
+            AND p.status = 'active'
+            AND m.status = 'active'
+       ) holders
+      -- 'assignment' sorts before 'primary' alphabetically, which is the preference
+      -- DISTINCT ON needs: the explicit grant wins when a persona holds both.
+      ORDER BY persona_id, held_via, assigned_at
+      LIMIT $4`,
+    [
+      input.role_template_id,
+      input.tenant_id,
+      input.include_primary ?? true,
+      Math.min(Math.max(input.limit ?? 200, 1), 1000),
+    ],
+  );
+}
