@@ -48268,6 +48268,26 @@
           }
         ]
       }
+    },
+    "/api/search/health": {
+      "get": {
+        "tags": [
+          "sdk-search"
+        ],
+        "summary": "Report search backend availability",
+        "description": "Reports whether a search backend is actually wired, so a caller can tell 'search is unavailable here' from 'search ran and matched nothing'. Without it those two are indistinguishable: an unwired deployment 500s every query and a consuming app reasonably renders that as an empty result set, so a shipped feature reports '0 results' for a backend that was never connected — the most misleading answer available, because it looks like a fact about the data. Returns data.search_up (boolean), data.client ('registered' | 'synthetic' | 'fail-loud') and, when unavailable, data.reason. Edge cases: this returns 200 EVEN WHEN search is unavailable, deliberately — it reports a capability state and is not itself failing, so a caller must read data.search_up rather than the status code; answering 503 would make a caller's own health check flap and conflate 'the probe is broken' with 'the thing it probes is down'. It needs no auth (the gateway allowlists any path ending in /health) and discloses nothing tenant-specific, only whether a backend is configured. client='synthetic' means results are fabricated and must not be trusted in production.",
+        "operationId": "get_api_search_health",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {}
+            }
+          }
+        },
+        "security": []
+      }
     }
   }
 }
