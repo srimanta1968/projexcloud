@@ -1,0 +1,104 @@
+{
+  "name": "POST /api/notifications/send-window/bulk - Send-window verdicts for many subjects",
+  "endpoint": "/api/notifications/send-window/bulk",
+  "sdk": "sdk-notification",
+  "sourceFile": "packages/sdk-notification/src/server/routes.ts",
+  "method": "POST",
+  "requiresAuth": true,
+  "expectedStatus": 200,
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "featureId": "194c1735-da09-4428-ab1e-c7890bbd532b",
+  "epicId": "f7f7186e-8f69-4e44-97b8-212928e870f6",
+  "priority": 32,
+  "dependsOn": [
+    "POST /api/auth/signup-tenant"
+  ],
+  "testCases": [
+    {
+      "name": "Two channels for one tenant, plus one item with an unsupported channel",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "payload": {
+        "items": [
+          {
+            "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+            "channel": "email",
+            "purpose": "marketing"
+          },
+          {
+            "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+            "channel": "sms",
+            "purpose": "marketing"
+          },
+          {
+            "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+            "channel": "smoke-signal"
+          }
+        ]
+      },
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "data": {
+          "results": "array",
+          "summary": {
+            "requested": "number",
+            "succeeded": "number",
+            "failed": "number"
+          }
+        }
+      }
+    }
+  ],
+  "expectedResponse": {
+    "data": {
+      "results": "array",
+      "summary": {
+        "requested": "number",
+        "succeeded": "number",
+        "failed": "number"
+      }
+    }
+  },
+  "captureResponse": {
+    "notifications.send-window-bulk.response.data.results.0.send_window.open": "data.results.0.send_window.open"
+  },
+  "fieldEnums": {
+    "channel": ["email", "sms", "whatsapp", "push", "slack"],
+    "policy_source": ["tenant", "platform", "builtin"],
+    "error_code": ["VALIDATION_ERROR"]
+  },
+  "description": "The send-window verdict for up to 1000 subjects in one request. The work divides on two different keys and this exploits both: quiet hours are per persona, so one query covers every DISTINCT persona in the batch, while the frequency policy and its usage count are per (tenant, channel, purpose), of which a campaign has one - so a ten-thousand-subject batch issues roughly two queries, not twenty thousand. Evaluating the windows themselves is pure and stays in process. Results are order-preserving with an explicit index; an item with a missing tenant or unsupported channel reports ok=false with error_code VALIDATION_ERROR in its own slot while every other subject still returns a verdict. Each verdict carries the same shape as the single endpoint, including capacity_note - `remaining` is a tenant-wide rolling-24h figure and NOT a per-subject reservation, so a caller must compare it against its own batch size before sending. Nothing is reserved and nothing is sent; the call is read-only and safely repeatable.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "Authorization header absent or not in Bearer form (requireAuth / gateway default-deny authGate)"
+    },
+    {
+      "status": 403,
+      "code": "Forbidden",
+      "message": "Service token is missing required scope: notification.send-window.write",
+      "when": "An API key or machine token that does not hold notification.send-window.write (or a covering wildcard) is presented"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "body must be an object with an items[] array",
+      "when": "Request body is absent, not a JSON object, or is itself an array"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "items must not be empty",
+      "when": "items is an empty array"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "items exceeds the per-request maximum of 1000; page the batch",
+      "when": "More than 1000 items are supplied"
+    }
+  ]
+}

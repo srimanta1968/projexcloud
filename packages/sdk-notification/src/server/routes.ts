@@ -17,7 +17,20 @@ import { requireAuthOrApiKeyForDomain } from '@projexlight/sdk-api-keys';
  */
 const requireAuth = requireAuthOrApiKeyForDomain('notification');
 import { checkProviderConfigured } from '@projexlight/sdk-config';
+import {
+  bulkItemError,
+  bulkResponse,
+  parseBulkEnvelope,
+  type BulkItemResult,
+} from '@projexlight/contracts';
 import { setFrequencyPolicy, listFrequencyPolicies, getSendUsage } from '../services/frequencyCap';
+import {
+  checkSendWindow,
+  checkSendWindowBulk,
+  type BulkSendWindowQuery,
+  type SendWindowQuery,
+  type SendWindowVerdict,
+} from '../services/sendWindow';
 import {
   createTemplateHandler,
   sendHandler,
@@ -267,6 +280,85 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
       updated_by: body.updated_by,
     });
     return reply.code(200).send({ data: { policy } });
+  });
+
+  /* ------------------------------------------------------------------------
+   * Send-window pre-flight. NEW — this route did not previously exist anywhere
+   * in the platform, though callers were written against it: the verdict was
+   * only obtainable as a side effect of attempting a send. Read-only; see
+   * sendWindow.ts for why a check that reserved capacity would be worse than
+   * no check at all.
+   * ---------------------------------------------------------------------- */
+
+  function parseSendWindowItem(
+    raw: unknown,
+    credentialTenant: string | null,
+  ): { ok: true; value: SendWindowQuery } | { ok: false; errors: string[] } {
+    const b = (raw ?? {}) as Partial<{
+      tenant_id: string; channel: string; subject_persona_id: string; purpose: string; at: string;
+    }>;
+    const errors: string[] = [];
+    const tenant_id = b.tenant_id ?? credentialTenant;
+    if (!tenant_id) errors.push('tenant_id is required (absent from the request and from the credential)');
+    if (!b.channel) errors.push('channel is required');
+    else if (!DISPATCH_CHANNELS.includes(b.channel as NotificationChannel)) {
+      errors.push(`channel must be one of ${DISPATCH_CHANNELS.join(', ')}`);
+    }
+    // An unparseable `at` is rejected rather than silently falling back to now:
+    // a caller planning a 09:00 send that is quietly answered for 03:00 gets a
+    // verdict about the wrong moment, which is the one failure mode a
+    // send-window check must not have.
+    let at: Date | undefined;
+    if (b.at !== undefined) {
+      const parsed = new Date(b.at);
+      if (Number.isNaN(parsed.getTime())) errors.push('at must be an ISO-8601 timestamp');
+      else at = parsed;
+    }
+    if (errors.length) return { ok: false, errors };
+    return {
+      ok: true,
+      value: {
+        tenant_id: tenant_id!,
+        channel: b.channel!,
+        subject_persona_id: b.subject_persona_id,
+        purpose: b.purpose,
+        at,
+      },
+    };
+  }
+
+  app.post('/api/notifications/send-window', { preHandler: requireAuth }, async (req, reply) => {
+    const parsed = parseSendWindowItem(req.body, ctxFrom(req).tenant_id ?? null);
+    if (!parsed.ok) {
+      return reply.code(400).send({ error: 'ValidationError', code: 'VALIDATION_ERROR', details: parsed.errors });
+    }
+    const verdict = await checkSendWindow(parsed.value);
+    return reply.code(200).send({ data: { send_window: verdict } });
+  });
+
+  app.post('/api/notifications/send-window/bulk', { preHandler: requireAuth }, async (req, reply) => {
+    const envelope = parseBulkEnvelope(req.body);
+    if (!envelope.ok) {
+      return reply.code(400).send({ error: envelope.error, details: envelope.details });
+    }
+    const credentialTenant = ctxFrom(req).tenant_id ?? null;
+
+    const queries: BulkSendWindowQuery[] = [];
+    const results: BulkItemResult<{ send_window: SendWindowVerdict }>[] = [];
+    envelope.items.forEach((raw, index) => {
+      const parsed = parseSendWindowItem(raw, credentialTenant);
+      if (!parsed.ok) {
+        results.push(bulkItemError(index, 'VALIDATION_ERROR', parsed.errors.join('; ')));
+        return;
+      }
+      queries.push({ ...parsed.value, index });
+    });
+
+    for (const row of await checkSendWindowBulk(queries)) {
+      results.push({ index: row.index, ok: true, send_window: row.verdict });
+    }
+    results.sort((a, b) => a.index - b.index);
+    return reply.code(200).send({ data: bulkResponse(results) });
   });
 
   app.get<{ Querystring: { tenant_id?: string; channel?: string; purpose?: string } }>(

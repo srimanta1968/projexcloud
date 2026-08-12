@@ -21488,7 +21488,7 @@
     "sourceFile": "packages/sdk-identity-resolver/src/server/routes.ts",
     "fieldOptions": null,
     "serverFieldOptions": null,
-    "description": "Records a steward's approve/reject decision on a candidate link's open approval step and labels the match outcome for calibration. step_id is required and decision must be exactly 'approve' or 'reject' (any other value, including a missing one, is a 400); reason is optional. The deciding persona comes from the JWT, not the body. Edge cases: an unknown link_id throws 'empi: candidate link <id> not found' and surfaces as 500 InternalError rather than 404; a step_id that is already decided, or that does not belong to the link, likewise fails inside the service as a 500; approving feeds a positive calibration label and reject a negative one, so double-adjudicating the same step is not a safe retry.",
+    "description": "Records a steward verdict (approve merges the pair reversibly; reject marks the link rejected and stamps decided_at, feeding review-latency). Needs step_id from steward-review, and the acting persona MUST equal that step's approver or sdk-approval rejects it. 404 when the link is not the caller tenant's.",
     "errorCases": [
       {
         "status": 401,
@@ -21603,7 +21603,7 @@
     "sourceFile": "packages/sdk-identity-resolver/src/server/routes.ts",
     "fieldOptions": null,
     "serverFieldOptions": null,
-    "description": "Queries probabilistic EMPI candidate links, filtered by confidence band (high|medium|low) or an explicit min/max score range, optionally narrowed by status (open|merged|rejected|superseded) and capped by limit. Edge cases: every query param is optional - an unfiltered call returns links across all bands; min/max arrive as strings and are parsed with parseFloat/parseInt, so non-numeric values become NaN and silently widen rather than 400; an unrecognised band or status is passed straight through to the query and simply matches nothing; no matches returns 200 with an empty array, never a 404; any query failure is caught and flattened to a bare 500 InternalError.",
+    "description": "Steward review queue: POSSIBLY_SAME candidate links by confidence band (band=high|medium|low, or explicit min/max) and status. TENANT-SCOPED — results are restricted to the tenant on the calling credential; there is no tenant_id parameter and pre-2026-08 rows with no tenant are excluded.",
     "errorCases": [
       {
         "status": 401,
@@ -21694,7 +21694,7 @@
     "sourceFile": "packages/sdk-identity-resolver/src/server/routes.ts",
     "fieldOptions": null,
     "serverFieldOptions": null,
-    "description": "Performs a direct reversible merge of two person records (steward/ops path, bypassing the approval queue). surviving_person_id and merged_person_id are both required; link_id optionally ties the merge back to the candidate link that motivated it and reason is free text. decided_by is taken from the JWT persona, never the body. Edge cases: either person id missing -> 400; a non-existent person id, or merging a record into itself, is not guarded at the route and fails inside mergeRecords ('empi: merge failed' or an FK error) as a 500 InternalError; the merge is reversible only through the unmerge endpoint; repeating the same merge creates a second merge row, so the endpoint is not idempotent.",
+    "description": "Merges two persons as a reversible, event-sourced merge event; never destructive. Attributed to the calling tenant. NOTE: the merge acts on the global L1 identity.person, so its effect is visible to every tenant sharing that person — attribution is per tenant, the effect is not.",
     "errorCases": [
       {
         "status": 401,
@@ -21799,7 +21799,7 @@
     "sourceFile": "packages/sdk-identity-resolver/src/server/routes.ts",
     "fieldOptions": null,
     "serverFieldOptions": null,
-    "description": "Returns EMPI quality metrics: probability calibration (expected calibration error over the score bins), the count of unresolved candidate links, and the merge reversal rate. Edge cases: the endpoint takes no parameters and is not tenant-filtered - it reports across the whole EMPI store; with no adjudicated links yet the calibration bins are empty and the ECE/rates come back as zeros rather than erroring; any failure inside getEmpiMetrics is caught and flattened to a bare 500 InternalError with no detail.",
+    "description": "EMPI observability for the CALLING TENANT only: unresolved links, merge reversals, confidence distribution, calibration ECE + drift alert, per-band adjudicated outcomes (band_outcomes / high_risk_precision) and review latency (review_latency: median_minutes, p90_minutes over window_days). Null precision/median means nothing adjudicated yet — render 'not measured', not zero.",
     "errorCases": [
       {
         "status": 401,
@@ -21880,7 +21880,7 @@
     "sourceFile": "packages/sdk-identity-resolver/src/server/routes.ts",
     "fieldOptions": null,
     "serverFieldOptions": null,
-    "description": "Queues a candidate link for human steward adjudication by opening an approval step on the given route_id; the steward identity is taken from the JWT (primary_persona_id, falling back to sub), never from the body. tenant_id falls back to the JWT tenant claim when the body omits it. Edge cases: a missing route_id, or no tenant_id in either the body or the token, -> 400; a candidate link that does not exist throws 'empi: candidate link <id> not found' inside the service and surfaces as a 500 InternalError with that message in details, NOT a 404 - this is the single most misleading status on the route; re-queuing an already-queued link opens a second approval step, so the endpoint is not idempotent; a token with no persona claim yields an empty steward_persona_id rather than an error.",
+    "description": "Queues a candidate link for steward review via sdk-approval; returns pending step ids for adjudicate. Requires route_id (an approval route whose step approver is the persona the adjudicating caller will present). tenant_id in the body is IGNORED — the tenant comes from the credential.",
     "errorCases": [
       {
         "status": 401,
@@ -21976,7 +21976,7 @@
     "sourceFile": "packages/sdk-identity-resolver/src/server/routes.ts",
     "fieldOptions": null,
     "serverFieldOptions": null,
-    "description": "Reverses a prior merge by writing a compensating merge record; the reversing persona comes from the JWT and reason (the only body field, optional) is recorded with it. Edge cases: the entire body is optional, so an empty POST is valid; an unknown merge_id throws 'empi: merge <id> not found' and surfaces as a 500 InternalError, NOT a 404; unmerging a merge that has already been reversed is not guarded at the route and produces either a second compensation row or an 'empi: unmerge failed' 500, so this is not a safe retry; reversal counts feed the EMPI reversal-rate metric.",
+    "description": "Reverses a merge with a compensating unmerge event and reopens the originating candidate link (clearing decided_at). 404 MergeNotFound when the id is unknown OR belongs to another tenant — deliberately indistinguishable.",
     "errorCases": [
       {
         "status": 401,
@@ -37928,7 +37928,7 @@
     "sourceFile": "",
     "fieldOptions": null,
     "serverFieldOptions": null,
-    "description": "Creates a versioned policy bundle (name + version + IQL source, with optional obligations) per FR-POL-4 and returns 201. Requires a valid tenant JWT (requireAuth). Edge cases: name, version and iql_source are all mandatory presence checks; obligations, when present, must be an object and each sub-field is type-checked - mask_fields must be an array of strings, row_filter must be an object, audit_level must be one of the allowed levels, and ttl_seconds must be a non-negative number (0 is allowed, -1 is a 400); a syntactically invalid IQL body is a 400 IQLParseError raised by the parser rather than the validator, so it is a distinct failure mode from ValidationError; re-creating the same name+version pair trips the unique constraint and is a 409 Conflict, so the endpoint is not idempotent - bump the version to publish a change.",
+    "description": "Creates a versioned policy bundle (name + version + IQL source, with optional obligations) per FR-POL-4 and returns 201. Requires a valid tenant JWT (requireAuth). Edge cases: name, version and iql_source are all mandatory presence checks; obligations, when present, must be an object and each sub-field is type-checked - mask_fields must be an array of strings, row_filter must be an object, audit_level must be one of the allowed levels, and ttl_seconds must be a non-negative number (0 is allowed, -1 is a 400); a syntactically invalid IQL body is a 400 IQLParseError raised by the parser rather than the validator, so it is a distinct failure mode from ValidationError; re-creating the same name+version pair trips the unique constraint and is a 409 Conflict, so the endpoint is not idempotent - bump the version to publish a change. SCOPING: an optional app_id scopes the rule to ONE app; omit it for a tenant-wide rule that every app of the tenant is evaluated against (the pre-2026-08 behaviour, and what existing rows still are). tenant_id NULL with app_id NULL is a platform default. Uniqueness is enforced by two PARTIAL indexes - (tenant_id, name, version) WHERE app_id IS NULL and (tenant_id, app_id, name, version) WHERE app_id IS NOT NULL - so an app-scoped override may carry the SAME name and version as the tenant-wide rule it narrows; a single four-column UNIQUE would not have worked because Postgres treats NULLs as distinct and would have permitted unlimited duplicate tenant-wide rows.",
     "errorCases": [
       {
         "status": 401,
@@ -66720,6 +66720,1197 @@
       }
     ],
     "fieldEnums": {},
+    "generated": "sync-qa-apis"
+  },
+  {
+    "epicId": "",
+    "featureId": "",
+    "taskId": "",
+    "endpoint": "/admin/byok/bindings",
+    "method": "GET",
+    "requiresAuth": false,
+    "testability": "auto",
+    "skipReason": "",
+    "case": "Operator lists every CMK binding",
+    "payload": null,
+    "pathParams": null,
+    "expectedStatus": 200,
+    "expectedResponse": null,
+    "dependsOn": [],
+    "sdk": "sdk-vault",
+    "file": "tests/api_definitions/admin/byok-bindings-get.json",
+    "sourceFile": "services/api-gateway/src/app.ts",
+    "description": "Lists EVERY BYOK/CMEK binding across all tenants, newest first, optionally filtered by grant_status, limit capped at 500 (default 200). This is the platform console's view and the counterpart to GET /admin/byok/bindings/tenant/:tenant_id, which answers only 'does THIS tenant have a binding'. The operator question is the other one — which tenants have brought their own key, and is any of them degraded or mid-revoke — and grant_status is the field to read first: 'revoking' means a customer's revoke is in flight and 'degraded' means their CMK stopped answering, and both are incidents rather than resting states. Deliberately unscoped and therefore deliberately admin-gated with ADMIN_OPS_TOKEN: it is a roster of every customer's key arrangement, so there is no tenant-facing route into it. Returns binding metadata including customer_kms_key_arn, which is an ARN identifying the customer's key, never key material. Edge cases: an environment with no bindings returns an empty array with 200, not 404; an unknown grant_status value returns an empty array rather than an error, since the column is constrained and a typo should not look like a server fault; a revoked binding remains listed with revoked_at set, because the roster is also the record of who has revoked.",
+    "errorCases": [
+      {
+        "status": 401,
+        "code": "admin token required",
+        "message": "admin token required",
+        "when": "The x-admin-ops-token header is absent, empty, or does not match ADMIN_OPS_TOKEN",
+        "reproducible": true
+      },
+      {
+        "status": 500,
+        "code": "InternalError",
+        "message": "InternalError",
+        "when": "The vault.byok_binding query fails — database unavailable or the pool is exhausted",
+        "reproducible": false
+      }
+    ],
+    "fieldEnums": {
+      "_source": "packages/sdk-vault/src/db/migrations/002_byok.sql:25",
+      "grant_status": [
+        "active",
+        "revoking",
+        "revoked",
+        "degraded"
+      ]
+    },
+    "generated": "sync-qa-apis"
+  },
+  {
+    "epicId": "",
+    "featureId": "",
+    "taskId": "",
+    "endpoint": "/api/admin/commands/dispatch-now",
+    "method": "POST",
+    "requiresAuth": false,
+    "testability": "auto",
+    "skipReason": "",
+    "case": "Operator runs one dispatch pass",
+    "payload": {},
+    "pathParams": null,
+    "expectedStatus": 200,
+    "expectedResponse": null,
+    "dependsOn": [
+      "POST /api/auth/register",
+      "POST /api/auth/signup-tenant",
+      "POST /api/assets",
+      "POST /api/commands"
+    ],
+    "sdk": "sdk-command",
+    "file": "tests/api_definitions/admin/commands-dispatch-now-post.json",
+    "sourceFile": "services/api-gateway/src/app.ts",
+    "description": "Runs ONE pass of the command dispatcher immediately, flipping every command in 'approved' to 'dispatched' and publishing each onto its per-asset delivery channel. Header-auth gated with ADMIN_OPS_TOKEN via checkAdminToken, mirroring /admin/storm/ingest-now and /api/admin/asset/rollup/backfill: it lets an operator force a background worker to run now rather than waiting for its cadence (COMMAND_DISPATCH_INTERVAL_MS, default 2s). Returns data.dispatched — the count of commands moved. ORDERING: dependsOn names the command-creation chain even though this endpoint takes no input from it. With an empty dependsOn the runner is free to schedule this pass BEFORE any command exists, dispatch nothing, and leave POST /api/commands/:command_id/ack facing a command still in 'approved' — the exact intermittent 409 this endpoint was added to remove. The dependency is on the STATE the pass needs to find, not on a captured value. Idempotent by construction: dispatchApprovedCommands only matches rows in 'approved', so an immediate second call dispatches nothing and returns 0. This endpoint also makes the 'dispatched' state reachable by request at all; before it existed the state was produced only by the periodic tick, so POST /api/commands/:command_id/ack (which requires status='dispatched') could only race that tick and failed intermittently. Edge cases: a missing or wrong x-admin-ops-token is a 401 and dispatches nothing; with no approved commands the call still succeeds with dispatched=0; the batch is capped by COMMAND_DISPATCH_BATCH (default 50), so a backlog larger than that needs repeated calls.",
+    "errorCases": [
+      {
+        "status": 401,
+        "code": "admin token required",
+        "message": "admin token required",
+        "when": "The x-admin-ops-token header is absent, empty, or does not match ADMIN_OPS_TOKEN",
+        "reproducible": true
+      },
+      {
+        "status": 500,
+        "code": "<underlying error message>",
+        "message": "Dispatch pass failed",
+        "when": "dispatchApprovedCommands throws — a database error while selecting or updating command.command",
+        "reproducible": false
+      }
+    ],
+    "fieldEnums": {},
+    "generated": "sync-qa-apis"
+  },
+  {
+    "epicId": "",
+    "featureId": "",
+    "taskId": "",
+    "endpoint": "/admin/vault/keys",
+    "method": "GET",
+    "requiresAuth": false,
+    "testability": "auto",
+    "skipReason": "",
+    "case": "Operator lists root-tier keys",
+    "payload": null,
+    "pathParams": null,
+    "expectedStatus": 200,
+    "expectedResponse": null,
+    "dependsOn": [],
+    "sdk": "sdk-vault",
+    "file": "tests/api_definitions/admin/vault-keys-get.json",
+    "sourceFile": "services/api-gateway/src/app.ts",
+    "description": "Lists vault keys at ANY tier, including the tenant-less ones — root, app and pool carry tenant_id NULL because they wrap every tenant, so they belong to the operator rather than to any single customer and are invisible to the tenant-scoped GET /api/vault/keys. Optional tier and tenant_id narrowing, limit capped at 500 (default 200). Returns metadata only: key_id, tier, scope_id, parent_key_id, kms_ref, state, algorithm, issued_at, rotated_at, shredded_at, tenant_id, region. vault.key holds no key material, so nothing secret is returned; kms_ref is a handle. This route and the tenant route read the SAME table through DIFFERENT service functions (listKeysForOperator vs listKeysForTenant) rather than one function taking a widen-the-scope flag — a flag is something a caller can pass wrongly, whereas a separate function means no tenant request has a code path into the operator query. Gated by ADMIN_OPS_TOKEN. Edge cases: a tier with no keys returns an empty array with 200, not 404; an unrecognised tier value returns an empty array because the column is CHECK-constrained and a typo should not read as a server fault; a shredded key still appears, with state 'shredded', shredded_at set and kms_ref NULL, because the row is the record of the erasure.",
+    "errorCases": [
+      {
+        "status": 401,
+        "code": "admin token required",
+        "message": "admin token required",
+        "when": "The x-admin-ops-token header is absent, empty, or does not match ADMIN_OPS_TOKEN",
+        "reproducible": true
+      },
+      {
+        "status": 500,
+        "code": "InternalError",
+        "message": "InternalError",
+        "when": "The vault.key query fails — database unavailable, or tenant_id is supplied in a form the ::uuid cast rejects",
+        "reproducible": false
+      }
+    ],
+    "fieldEnums": {
+      "_source": "packages/sdk-vault/src/db/migrations/001_init_key_hierarchy.sql:13",
+      "tier": [
+        "root",
+        "app",
+        "pool",
+        "tenant",
+        "person",
+        "device",
+        "encounter"
+      ]
+    },
+    "generated": "sync-qa-apis"
+  },
+  {
+    "epicId": "",
+    "featureId": "",
+    "taskId": "",
+    "endpoint": "/admin/vault/kms-status",
+    "method": "GET",
+    "requiresAuth": false,
+    "testability": "auto",
+    "skipReason": "",
+    "case": "Operator reads live KMS provider status",
+    "payload": null,
+    "pathParams": null,
+    "expectedStatus": 200,
+    "expectedResponse": null,
+    "dependsOn": [],
+    "sdk": "sdk-vault",
+    "file": "tests/api_definitions/admin/vault-kms-status-get.json",
+    "sourceFile": "services/api-gateway/src/app.ts",
+    "description": "Reports, per KMS provider (aws-kms, gcp-kms, hsm-pkcs11), what is ACTUALLY serving calls in this process: credentialsPresent, mode (real | synthetic | unregistered) and wiredBy — the environment variables that would wire it. Always returns all three entries, so a provider is never silently missing from the report. This exists because CONFIGURATION AND RUNTIME DISAGREE, and the disagreement is the thing worth seeing: a vault.kms config row naming a provider states intent, while whether its credentials reached the process is a separate fact. Production ran for weeks configured for BYOK and served by a simulation, because the registry substituted a synthetic provider whenever real credentials were absent — no flag, no log line, and every screen reporting success. mode is derived, not stored: 'real' when the provider's own available() probe passes; otherwise 'unregistered' in a protected environment (anything explicitly named other than development/dev/local/test), where the substitution is now refused so BYOK calls fail loudly; otherwise 'synthetic', which is permitted only on a developer machine and is accompanied by a boot warning when the environment declares nothing at all. Pure and side-effect free — it probes env and the provider registry, and registers nothing. Edge cases: an environment with no credentials at all still returns 200 with three entries rather than an error, because 'nothing is wired' is a legitimate and important answer; the response never contains a credential, only the NAMES of the variables that would supply one.",
+    "errorCases": [
+      {
+        "status": 401,
+        "code": "admin token required",
+        "message": "admin token required",
+        "when": "The x-admin-ops-token header is absent, empty, or does not match ADMIN_OPS_TOKEN",
+        "reproducible": true
+      }
+    ],
+    "fieldEnums": {},
+    "generated": "sync-qa-apis"
+  },
+  {
+    "epicId": "",
+    "featureId": "",
+    "taskId": "",
+    "endpoint": "/api/applications/:application_id",
+    "method": "PATCH",
+    "requiresAuth": true,
+    "testability": "auto",
+    "skipReason": "",
+    "case": "Rename the application just created",
+    "payload": {
+      "name": "renamed-integration-{{dynamic:slug}}",
+      "description": "Updated by the api_definition regression suite"
+    },
+    "pathParams": {
+      "application_id": "{{cache:applications.create.response.data.application.application_id}}"
+    },
+    "expectedStatus": 200,
+    "expectedResponse": {
+      "data": {
+        "application": {
+          "application_id": "string",
+          "name": "string"
+        }
+      }
+    },
+    "dependsOn": [
+      "POST /api/auth/signup-tenant",
+      "POST /api/applications"
+    ],
+    "sdk": "sdk-api-keys",
+    "file": "tests/api_definitions/applications/id-patch.json",
+    "sourceFile": "packages/sdk-api-keys/src/server/handlers/apiKeyController.ts",
+    "description": "Updates an application's mutable metadata and returns 200 with data.application. ONLY name and description can be changed - every other field, including slug and status, is ignored rather than rejected, so a caller sending {slug:'new'} gets a 200 and no change. Use POST /api/applications/:application_id/disable to change status; slug is immutable because it is the client_id half of the client_credentials grant and rewriting it would silently break every integration holding a key. Both fields are optional and read only when they are strings, so a PATCH with an empty body is a valid no-op that returns the unchanged record. The tenant is taken from the verified claim via tenantOf(); an application_id belonging to another tenant is 404, not 403, so the route never confirms another tenant's applications exist. Unlike createApplicationHandler this route does NOT call tenantMismatch(), so a body tenant_id is simply ignored rather than refused.",
+    "errorCases": [
+      {
+        "name": "Unauthenticated",
+        "pathParams": {
+          "application_id": "{{cache:applications.create.response.data.application.application_id}}"
+        },
+        "payload": {
+          "name": "should-not-apply"
+        },
+        "expectedStatus": 401,
+        "status": 401,
+        "code": "Unauthorized",
+        "message": "Missing bearer token",
+        "when": "No Authorization: Bearer header - the gateway default-deny authGate"
+      },
+      {
+        "status": 400,
+        "code": "ValidationError",
+        "message": "This credential carries no tenant context",
+        "when": "tenantOf() cannot resolve a tenant - the JWT carries no tenant_id claim, e.g. a bare /api/auth/register token"
+      },
+      {
+        "status": 404,
+        "code": "NotFound",
+        "message": "No such application",
+        "when": "No application matches (application_id, tenant_id) - including one owned by a DIFFERENT tenant, which answers 404 rather than 403"
+      },
+      {
+        "status": 500,
+        "code": "InternalError",
+        "message": "InternalError",
+        "when": "updateApplication throws - a non-UUID application_id that fails the Postgres uuid cast, or any database error"
+      }
+    ],
+    "fieldEnums": {},
+    "generated": "sync-qa-apis"
+  },
+  {
+    "epicId": "75f3f5a3-faa8-4b82-badf-4feda46c00e7",
+    "featureId": "5f6dc00d-cb8f-4a54-9a19-9b1e0f0b2f5a",
+    "taskId": "422472b0-117e-4cb0-9f90-0c6962439155",
+    "endpoint": "/api/coverage/backup-designations",
+    "method": "GET",
+    "requiresAuth": true,
+    "testability": "auto",
+    "skipReason": "",
+    "case": "List every backup designation in the tenant",
+    "payload": null,
+    "pathParams": null,
+    "expectedStatus": 200,
+    "expectedResponse": {
+      "data": {
+        "designations": "array"
+      }
+    },
+    "dependsOn": [
+      "POST /api/auth/signup-tenant",
+      "POST /api/coverage/backup-designations"
+    ],
+    "sdk": "sdk-coverage",
+    "file": "tests/api_definitions/coverage/backup-designations-get.json",
+    "sourceFile": "packages/sdk-coverage/src/server/routes.ts",
+    "description": "Every backup designation in the tenant, returned as data.designations. Takes no filter - the handler passes only the resolved tenant to listBackups - so a primary_persona_id query parameter is ignored rather than narrowing the result. Each row pairs a primary_persona_id with the backup_persona_id that covers it, plus the optional scope and acceptance_window_minutes. A persona designating itself is refused at write time as 422, so no row here is ever self-referential and a reader need not defend against that cycle. The tenant comes from the verified claim: a disagreeing tenant_id is 403 and no tenant at all is 400.",
+    "errorCases": [
+      {
+        "name": "Unauthenticated",
+        "queryParams": {
+          "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}"
+        },
+        "expectedStatus": 401,
+        "status": 401,
+        "code": "Unauthorized",
+        "message": "Missing bearer token",
+        "when": "No Authorization: Bearer header - requireAuth preHandler, and the gateway default-deny authGate ahead of it"
+      },
+      {
+        "status": 403,
+        "code": "Forbidden",
+        "message": "tenant_id does not match the authenticated tenant",
+        "when": "The query names a tenant_id different from the credential's tenant claim"
+      },
+      {
+        "status": 400,
+        "code": "ValidationError",
+        "message": "tenant_id is required",
+        "when": "The credential carries no tenant_id claim and none is supplied in the query"
+      },
+      {
+        "status": 500,
+        "code": "InternalError",
+        "message": "InternalError",
+        "when": "listBackups throws a non-domain error - a database failure"
+      }
+    ],
+    "fieldEnums": {},
+    "generated": "sync-qa-apis"
+  },
+  {
+    "epicId": "75f3f5a3-faa8-4b82-badf-4feda46c00e7",
+    "featureId": "5f6dc00d-cb8f-4a54-9a19-9b1e0f0b2f5a",
+    "taskId": "422472b0-117e-4cb0-9f90-0c6962439155",
+    "endpoint": "/api/coverage/capacity-policies",
+    "method": "GET",
+    "requiresAuth": true,
+    "testability": "auto",
+    "skipReason": "",
+    "case": "List every capacity policy in the tenant",
+    "payload": null,
+    "pathParams": null,
+    "expectedStatus": 200,
+    "expectedResponse": {
+      "data": {
+        "policies": "array"
+      }
+    },
+    "dependsOn": [
+      "POST /api/auth/signup-tenant",
+      "POST /api/coverage/capacity-policies"
+    ],
+    "sdk": "sdk-coverage",
+    "file": "tests/api_definitions/coverage/capacity-policies-get.json",
+    "sourceFile": "packages/sdk-coverage/src/server/routes.ts",
+    "description": "Every capacity policy the tenant has configured, returned as data.policies. Takes no filter - the handler passes only the resolved tenant to listCapacityPolicies - so a persona_id or role_ref query parameter is ignored rather than narrowing the result. A policy is subject-scoped by exactly one of persona_id or role_ref (the POST's CapacityPolicySubjectError enforces that), so a reader must branch on which one is populated rather than assuming persona. max_concurrent_by_band and freeze_threshold_by_band are per-band maps, and daily_cap is nullable, meaning 'no daily ceiling' rather than zero. The tenant comes from the verified claim: a disagreeing tenant_id is 403 and no tenant at all is 400.",
+    "errorCases": [
+      {
+        "name": "Unauthenticated",
+        "queryParams": {
+          "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}"
+        },
+        "expectedStatus": 401,
+        "status": 401,
+        "code": "Unauthorized",
+        "message": "Missing bearer token",
+        "when": "No Authorization: Bearer header - requireAuth preHandler, and the gateway default-deny authGate ahead of it"
+      },
+      {
+        "status": 403,
+        "code": "Forbidden",
+        "message": "tenant_id does not match the authenticated tenant",
+        "when": "The query names a tenant_id different from the credential's tenant claim"
+      },
+      {
+        "status": 400,
+        "code": "ValidationError",
+        "message": "tenant_id is required",
+        "when": "The credential carries no tenant_id claim and none is supplied in the query"
+      },
+      {
+        "status": 500,
+        "code": "InternalError",
+        "message": "InternalError",
+        "when": "listCapacityPolicies throws a non-domain error - a database failure"
+      }
+    ],
+    "fieldEnums": {},
+    "generated": "sync-qa-apis"
+  },
+  {
+    "epicId": "75f3f5a3-faa8-4b82-badf-4feda46c00e7",
+    "featureId": "5f6dc00d-cb8f-4a54-9a19-9b1e0f0b2f5a",
+    "taskId": "422472b0-117e-4cb0-9f90-0c6962439155",
+    "endpoint": "/api/coverage/holiday-calendars",
+    "method": "GET",
+    "requiresAuth": true,
+    "testability": "auto",
+    "skipReason": "",
+    "case": "List every holiday calendar in the tenant",
+    "payload": null,
+    "pathParams": null,
+    "expectedStatus": 200,
+    "expectedResponse": {
+      "data": {
+        "calendars": "array"
+      }
+    },
+    "dependsOn": [
+      "POST /api/auth/signup-tenant",
+      "POST /api/coverage/holiday-calendars"
+    ],
+    "sdk": "sdk-coverage",
+    "file": "tests/api_definitions/coverage/holiday-calendars-get.json",
+    "sourceFile": "packages/sdk-coverage/src/server/routes.ts",
+    "description": "Every holiday calendar the tenant maintains, returned as data.calendars. Takes no filter of any kind - the handler passes only the resolved tenant to listHolidayCalendars - so a region query parameter is accepted by the router and ignored rather than narrowing the result. Regions are per-tenant strings, not an ISO set, because a tenant's holiday regions follow its operating calendar and not a country code. The tenant comes from the verified claim: a disagreeing tenant_id in the query is 403 and no tenant at all is 400.",
+    "errorCases": [
+      {
+        "name": "Unauthenticated",
+        "queryParams": {
+          "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}"
+        },
+        "expectedStatus": 401,
+        "status": 401,
+        "code": "Unauthorized",
+        "message": "Missing bearer token",
+        "when": "No Authorization: Bearer header - requireAuth preHandler, and the gateway default-deny authGate ahead of it"
+      },
+      {
+        "status": 403,
+        "code": "Forbidden",
+        "message": "tenant_id does not match the authenticated tenant",
+        "when": "The query names a tenant_id different from the credential's tenant claim"
+      },
+      {
+        "status": 400,
+        "code": "ValidationError",
+        "message": "tenant_id is required",
+        "when": "The credential carries no tenant_id claim and none is supplied in the query"
+      },
+      {
+        "status": 500,
+        "code": "InternalError",
+        "message": "InternalError",
+        "when": "listHolidayCalendars throws a non-domain error - a database failure"
+      }
+    ],
+    "fieldEnums": {},
+    "generated": "sync-qa-apis"
+  },
+  {
+    "epicId": "75f3f5a3-faa8-4b82-badf-4feda46c00e7",
+    "featureId": "5f6dc00d-cb8f-4a54-9a19-9b1e0f0b2f5a",
+    "taskId": "422472b0-117e-4cb0-9f90-0c6962439155",
+    "endpoint": "/api/coverage/on-call",
+    "method": "GET",
+    "requiresAuth": true,
+    "testability": "auto",
+    "skipReason": "",
+    "case": "List every roster entry in the tenant",
+    "payload": null,
+    "pathParams": null,
+    "expectedStatus": 200,
+    "expectedResponse": {
+      "data": {
+        "roster": "array"
+      }
+    },
+    "dependsOn": [
+      "POST /api/auth/signup-tenant",
+      "POST /api/coverage/on-call"
+    ],
+    "sdk": "sdk-coverage",
+    "file": "tests/api_definitions/coverage/on-call-get.json",
+    "sourceFile": "packages/sdk-coverage/src/server/routes.ts",
+    "description": "The raw on-call roster for the tenant, optionally narrowed to one rotation via the rotation_ref query parameter. Returns 200 with data.roster as an array of entries, each carrying its tier and its starts_at/ends_at window. This is deliberately NOT the same question as GET /api/coverage/on-call/current: this route lists every entry as stored, including past and future windows, while /current resolves who is on call at one instant and applies tier fallback. Reading the roster to work out who is on duty now duplicates that resolution and gets the tier precedence wrong. The tenant comes from the verified claim: a disagreeing tenant_id is 403 and no tenant at all is 400.",
+    "errorCases": [
+      {
+        "name": "Unauthenticated",
+        "queryParams": {
+          "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}"
+        },
+        "expectedStatus": 401,
+        "status": 401,
+        "code": "Unauthorized",
+        "message": "Missing bearer token",
+        "when": "No Authorization: Bearer header - requireAuth preHandler, and the gateway default-deny authGate ahead of it"
+      },
+      {
+        "status": 403,
+        "code": "Forbidden",
+        "message": "tenant_id does not match the authenticated tenant",
+        "when": "The query names a tenant_id different from the credential's tenant claim"
+      },
+      {
+        "status": 400,
+        "code": "ValidationError",
+        "message": "tenant_id is required",
+        "when": "The credential carries no tenant_id claim and none is supplied in the query"
+      },
+      {
+        "status": 500,
+        "code": "InternalError",
+        "message": "InternalError",
+        "when": "listRoster throws a non-domain error - a database failure"
+      }
+    ],
+    "fieldEnums": {},
+    "generated": "sync-qa-apis"
+  },
+  {
+    "epicId": "75f3f5a3-faa8-4b82-badf-4feda46c00e7",
+    "featureId": "5f6dc00d-cb8f-4a54-9a19-9b1e0f0b2f5a",
+    "taskId": "422472b0-117e-4cb0-9f90-0c6962439155",
+    "endpoint": "/api/coverage/time-off",
+    "method": "GET",
+    "requiresAuth": true,
+    "testability": "auto",
+    "skipReason": "",
+    "case": "List every time-off record in the tenant",
+    "payload": null,
+    "pathParams": null,
+    "expectedStatus": 200,
+    "expectedResponse": {
+      "data": {
+        "time_off": "array"
+      }
+    },
+    "dependsOn": [
+      "POST /api/auth/signup-tenant",
+      "POST /api/coverage/time-off"
+    ],
+    "sdk": "sdk-coverage",
+    "file": "tests/api_definitions/coverage/time-off-get.json",
+    "sourceFile": "packages/sdk-coverage/src/server/routes.ts",
+    "description": "Time-off records for the tenant, optionally narrowed to one persona via the persona_id query parameter. Returns 200 with data.time_off as an array; an empty tenant answers 200 with [] rather than 404, because 'this persona has booked no leave' is an answer, not a missing resource. The tenant is taken from the verified claim: a tenant_id in the query that disagrees with the credential is 403, not silently preferred, and a caller with neither is 400. Unlike the POST, this route performs no date parsing, so it has no 422 path - the only refusals are the auth and tenant-resolution ones below.",
+    "errorCases": [
+      {
+        "name": "Unauthenticated",
+        "queryParams": {
+          "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}"
+        },
+        "expectedStatus": 401,
+        "status": 401,
+        "code": "Unauthorized",
+        "message": "Missing bearer token",
+        "when": "No Authorization: Bearer header - requireAuth preHandler, and the gateway default-deny authGate ahead of it"
+      },
+      {
+        "status": 403,
+        "code": "Forbidden",
+        "message": "tenant_id does not match the authenticated tenant",
+        "when": "The query names a tenant_id different from the credential's tenant claim - tenantOf() refuses rather than preferring either side"
+      },
+      {
+        "status": 400,
+        "code": "ValidationError",
+        "message": "tenant_id is required",
+        "when": "The credential carries no tenant_id claim and none is supplied in the query"
+      },
+      {
+        "status": 500,
+        "code": "InternalError",
+        "message": "InternalError",
+        "when": "listTimeOff throws a non-domain error - a database failure; domain errors are 422 but this read path raises none"
+      }
+    ],
+    "fieldEnums": {
+      "kind": [
+        "PTO",
+        "MEETING",
+        "OUTAGE",
+        "HOLIDAY"
+      ]
+    },
+    "generated": "sync-qa-apis"
+  },
+  {
+    "epicId": "",
+    "featureId": "",
+    "taskId": "",
+    "endpoint": "/api/keys/:key_id/rotate",
+    "method": "POST",
+    "requiresAuth": true,
+    "testability": "auto",
+    "skipReason": "",
+    "case": "Rotate the key just issued",
+    "payload": {},
+    "pathParams": {
+      "key_id": "{{cache:keys.create.response.data.key_id}}"
+    },
+    "expectedStatus": 201,
+    "expectedResponse": {
+      "data": {
+        "key": {
+          "key_id": "string",
+          "prefix": "string"
+        },
+        "plaintext": "string"
+      }
+    },
+    "dependsOn": [
+      "POST /api/auth/signup-tenant",
+      "POST /api/keys"
+    ],
+    "sdk": "sdk-api-keys",
+    "file": "tests/api_definitions/keys/key-id-rotate-post.json",
+    "sourceFile": "packages/sdk-api-keys/src/server/handlers/apiKeyController.ts",
+    "description": "Rotates an API key: mints replacement material and returns 201 with the new record and its one-time plaintext. DEPRECATED ALIAS - /api/keys/* is retained for older integrations behind a deprecate preHandler and delegates to exactly the same rotateKeyHandler as the canonical /api/api-keys/:key_id/rotate. New callers should use the canonical path. Answers 201 rather than 200 because rotation CREATES new key material rather than editing the existing row; the plaintext is returned exactly once and is unrecoverable afterwards, so it must be captured from this response. Rotation is not idempotent - each call mints another key. A key_id that is already revoked, or that belongs to another tenant, is 404 'No rotatable key with that id' rather than 403, so the route never confirms another tenant's keys exist.",
+    "errorCases": [
+      {
+        "name": "Unauthenticated",
+        "pathParams": {
+          "key_id": "{{cache:keys.create.response.data.key_id}}"
+        },
+        "payload": {},
+        "expectedStatus": 401,
+        "status": 401,
+        "code": "Unauthorized",
+        "message": "Missing bearer token",
+        "when": "No Authorization: Bearer header - the gateway default-deny authGate"
+      },
+      {
+        "status": 400,
+        "code": "ValidationError",
+        "message": "This credential carries no tenant context",
+        "when": "tenantOf() cannot resolve a tenant - the JWT carries no tenant_id claim"
+      },
+      {
+        "status": 404,
+        "code": "NotFound",
+        "message": "No rotatable key with that id",
+        "when": "No active key matches (key_id, tenant_id) - the key never existed, is already revoked or expired, or belongs to a DIFFERENT tenant"
+      },
+      {
+        "status": 500,
+        "code": "InternalError",
+        "message": "InternalError",
+        "when": "rotateKey throws - a non-UUID key_id that fails the Postgres uuid cast, key-material generation failure, or any database error"
+      }
+    ],
+    "fieldEnums": {},
+    "generated": "sync-qa-apis"
+  },
+  {
+    "epicId": "9a0f06fa-f1a9-4292-8bc5-715ec836bbc8",
+    "featureId": "50face32-51ba-4a44-8641-d2d1ee5d96c9",
+    "taskId": "1a62f247-b638-412d-a317-e9da3dbd6dc4",
+    "endpoint": "/api/offers/:offer_id",
+    "method": "GET",
+    "requiresAuth": true,
+    "testability": "auto",
+    "skipReason": "",
+    "case": "Fetch the offer just created",
+    "payload": null,
+    "pathParams": {
+      "offer_id": "{{cache:offers.create.response.data.offer.offer_id}}"
+    },
+    "expectedStatus": 200,
+    "expectedResponse": {
+      "data": {
+        "offer": {
+          "offer_id": "string",
+          "name": "string",
+          "slug": "string"
+        }
+      }
+    },
+    "dependsOn": [
+      "POST /api/auth/signup-tenant",
+      "POST /api/offers"
+    ],
+    "sdk": "sdk-offer-catalog",
+    "file": "tests/api_definitions/offers/offer_id-get.json",
+    "sourceFile": "packages/sdk-offer-catalog/src/server/routes.ts",
+    "description": "Fetches a single offer by id and returns 200 with data.offer. tenant_id is a REQUIRED QUERY PARAMETER, not a claim: getOffer scopes by (tenant_id, offer_id), so omitting it is 400 rather than defaulting to the caller's tenant. That also means the 404 is tenant-scoped - an offer_id that exists under a different tenant answers 404 NotFound, not 403, so this route never confirms the existence of another tenant's offer. Returns the offer envelope only; it does not include versions or the current live version - use GET /api/offers/:offer_id/versions and GET /api/offers/:offer_id/current for those.",
+    "errorCases": [
+      {
+        "name": "Unauthenticated",
+        "pathParams": {
+          "offer_id": "{{cache:offers.create.response.data.offer.offer_id}}"
+        },
+        "queryParams": {
+          "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}"
+        },
+        "expectedStatus": 401,
+        "status": 401,
+        "code": "Unauthorized",
+        "message": "Missing bearer token",
+        "when": "No Authorization: Bearer header - requireAuth preHandler, and the gateway default-deny authGate ahead of it"
+      },
+      {
+        "status": 400,
+        "code": "ValidationError",
+        "message": "tenant_id query param required",
+        "when": "The tenant_id query parameter is absent - this route reads the tenant from the query, never from the JWT claim"
+      },
+      {
+        "status": 404,
+        "code": "NotFound",
+        "message": "NotFound",
+        "when": "No offer matches (tenant_id, offer_id) - including an offer that exists under a DIFFERENT tenant, which answers 404 rather than 403 so the route never confirms another tenant's data"
+      },
+      {
+        "status": 500,
+        "code": "InternalError",
+        "message": "Fastify default error payload from the uncaught service throw",
+        "when": "getOffer throws - a non-UUID offer_id that fails the Postgres uuid cast, or any database error"
+      }
+    ],
+    "fieldEnums": {},
+    "generated": "sync-qa-apis"
+  },
+  {
+    "epicId": "9a0f06fa-f1a9-4292-8bc5-715ec836bbc8",
+    "featureId": "50face32-51ba-4a44-8641-d2d1ee5d96c9",
+    "taskId": "1a62f247-b638-412d-a317-e9da3dbd6dc4",
+    "endpoint": "/api/offers/:offer_id/versions",
+    "method": "GET",
+    "requiresAuth": true,
+    "testability": "auto",
+    "skipReason": "",
+    "case": "List the versions of the offer just created",
+    "payload": null,
+    "pathParams": {
+      "offer_id": "{{cache:offers.create.response.data.offer.offer_id}}"
+    },
+    "expectedStatus": 200,
+    "expectedResponse": {
+      "data": {
+        "versions": "array"
+      }
+    },
+    "dependsOn": [
+      "POST /api/auth/signup-tenant",
+      "POST /api/offers",
+      "POST /api/offers/:offer_id/versions"
+    ],
+    "sdk": "sdk-offer-catalog",
+    "file": "tests/api_definitions/offers/offer_id-versions-get.json",
+    "sourceFile": "packages/sdk-offer-catalog/src/server/routes.ts",
+    "description": "Every version of one offer, returned as data.versions. tenant_id is a REQUIRED QUERY PARAMETER - listOfferVersions scopes by (tenant_id, offer_id) - so omitting it is 400. Unlike GET /api/offers/:offer_id this route does NOT 404 on an unknown offer_id: an offer that does not exist and an offer with no versions yet both answer 200 with an empty array, because the handler never checks the parent exists. A caller that needs to distinguish those two must read the offer first. The list is the full version history including superseded ones, not just the live version - exactly one version is live at a time and activate atomically demotes the prior one, so read status rather than assuming order.",
+    "errorCases": [
+      {
+        "name": "Unauthenticated",
+        "pathParams": {
+          "offer_id": "{{cache:offers.create.response.data.offer.offer_id}}"
+        },
+        "queryParams": {
+          "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}"
+        },
+        "expectedStatus": 401,
+        "status": 401,
+        "code": "Unauthorized",
+        "message": "Missing bearer token",
+        "when": "No Authorization: Bearer header - requireAuth preHandler, and the gateway default-deny authGate ahead of it"
+      },
+      {
+        "status": 400,
+        "code": "ValidationError",
+        "message": "tenant_id query param required",
+        "when": "The tenant_id query parameter is absent - this route reads the tenant from the query, never from the JWT claim"
+      },
+      {
+        "status": 500,
+        "code": "InternalError",
+        "message": "Fastify default error payload from the uncaught service throw",
+        "when": "listOfferVersions throws - a non-UUID offer_id that fails the Postgres uuid cast, or any database error. Note there is NO 404 path: an unknown offer_id returns 200 with an empty array"
+      }
+    ],
+    "fieldEnums": {},
+    "generated": "sync-qa-apis"
+  },
+  {
+    "epicId": "9a0f06fa-f1a9-4292-8bc5-715ec836bbc8",
+    "featureId": "50face32-51ba-4a44-8641-d2d1ee5d96c9",
+    "taskId": "1a62f247-b638-412d-a317-e9da3dbd6dc4",
+    "endpoint": "/api/offers/:offer_id/versions/:version_id",
+    "method": "GET",
+    "requiresAuth": true,
+    "testability": "auto",
+    "skipReason": "",
+    "case": "Fetch the version just created",
+    "payload": null,
+    "pathParams": {
+      "offer_id": "{{cache:offers.create.response.data.offer.offer_id}}",
+      "version_id": "{{cache:offers.version.create.response.data.version.offer_version_id}}"
+    },
+    "expectedStatus": 200,
+    "expectedResponse": {
+      "data": {
+        "version": {
+          "offer_version_id": "string",
+          "version": "string"
+        }
+      }
+    },
+    "dependsOn": [
+      "POST /api/auth/signup-tenant",
+      "POST /api/offers",
+      "POST /api/offers/:offer_id/versions"
+    ],
+    "sdk": "sdk-offer-catalog",
+    "file": "tests/api_definitions/offers/offer_id-versions-version_id-get.json",
+    "sourceFile": "packages/sdk-offer-catalog/src/server/routes.ts",
+    "description": "Fetches one offer version by id and returns 200 with data.version. tenant_id is a REQUIRED QUERY PARAMETER, so omitting it is 400. NOTE the resolution asymmetry: getOfferVersion is called with (tenant_id, version_id) ONLY - offer_id is in the path for URL shape but is NOT used to scope the lookup, so a version_id belonging to a different offer under the same tenant resolves 200 through a mismatched offer_id in the path. Do not treat this route as a check that the version belongs to the offer. A version_id under a different TENANT is correctly 404, and 404 is used rather than 403 so the route never confirms another tenant's data. Route ordering matters here: this pattern is registered AFTER /versions/:version_id/features, so 'features' is matched by that route rather than being read as a version_id.",
+    "errorCases": [
+      {
+        "name": "Unauthenticated",
+        "pathParams": {
+          "offer_id": "{{cache:offers.create.response.data.offer.offer_id}}",
+          "version_id": "{{cache:offers.version.create.response.data.version.offer_version_id}}"
+        },
+        "queryParams": {
+          "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}"
+        },
+        "expectedStatus": 401,
+        "status": 401,
+        "code": "Unauthorized",
+        "message": "Missing bearer token",
+        "when": "No Authorization: Bearer header - requireAuth preHandler, and the gateway default-deny authGate ahead of it"
+      },
+      {
+        "status": 400,
+        "code": "ValidationError",
+        "message": "tenant_id query param required",
+        "when": "The tenant_id query parameter is absent - this route reads the tenant from the query, never from the JWT claim"
+      },
+      {
+        "status": 404,
+        "code": "NotFound",
+        "message": "NotFound",
+        "when": "No version matches (tenant_id, version_id) - including a version under a DIFFERENT tenant. A version under a different OFFER in the same tenant does NOT 404, because offer_id does not scope the lookup"
+      },
+      {
+        "status": 500,
+        "code": "InternalError",
+        "message": "Fastify default error payload from the uncaught service throw",
+        "when": "getOfferVersion throws - a non-UUID version_id that fails the Postgres uuid cast, or any database error"
+      }
+    ],
+    "fieldEnums": {},
+    "generated": "sync-qa-apis"
+  },
+  {
+    "epicId": "",
+    "featureId": "",
+    "taskId": "",
+    "endpoint": "/api/relationships/:relationship_id/attest",
+    "method": "POST",
+    "requiresAuth": true,
+    "testability": "auto",
+    "skipReason": "",
+    "case": "Attest the relationship as CONFIRMED with an evidence ref",
+    "payload": {
+      "trust_state": "CONFIRMED",
+      "evidence_refs": [
+        "evidence://qa/attestation-{{dynamic:slug}}"
+      ]
+    },
+    "pathParams": {
+      "relationship_id": "{{cache:relationships.create.response.data.relationship.relationship_id}}"
+    },
+    "expectedStatus": 200,
+    "expectedResponse": {
+      "data": {
+        "role": {
+          "trust_state": "string"
+        }
+      }
+    },
+    "dependsOn": [
+      "POST /api/auth/signup-tenant",
+      "POST /api/relationships"
+    ],
+    "sdk": "sdk-rebac",
+    "file": "tests/api_definitions/relationships/relationship_id-attest-post.json",
+    "sourceFile": "packages/sdk-rebac/src/server/handlers/rebacController.ts",
+    "description": "Records the trust state of a relationship's contextual role and returns 200 with data.role. trust_state is required and must be one of CONFIRMED, CANDIDATE or DOCUMENTED. THE EVIDENCE RULE IS THE POINT: CONFIRMED and DOCUMENTED both mean 'somebody checked', so attestContextualRole refuses either without at least one non-empty evidence_ref - a claim that a check happened must say what was checked. CANDIDATE is the only state that may carry no evidence, because it asserts nothing was verified. The two 400s are distinguishable by code: VALIDATION_ERROR for a trust_state outside the enum (rejected in the controller before any service call), EVIDENCE_REQUIRED for a valid state missing its evidence (raised by the service). Re-attesting MERGES evidence_refs with what is already stored rather than replacing them, deduplicated, so promoting a CANDIDATE to CONFIRMED can supply only the new reference. An unknown relationship_id is 404 RELATIONSHIP_NOT_FOUND.",
+    "errorCases": [
+      {
+        "name": "Unauthenticated",
+        "pathParams": {
+          "relationship_id": "{{cache:relationships.create.response.data.relationship.relationship_id}}"
+        },
+        "payload": {
+          "trust_state": "CANDIDATE"
+        },
+        "expectedStatus": 401,
+        "status": 401,
+        "code": "Unauthorized",
+        "message": "Missing bearer token",
+        "when": "No Authorization: Bearer header - requireAuth preHandler, and the gateway default-deny authGate ahead of it"
+      },
+      {
+        "status": 400,
+        "code": "VALIDATION_ERROR",
+        "message": "trust_state must be one of CONFIRMED, CANDIDATE, DOCUMENTED",
+        "when": "trust_state is absent or outside the enum - rejected in the controller before attestContextualRole is called"
+      },
+      {
+        "status": 400,
+        "code": "EVIDENCE_REQUIRED",
+        "message": "[sdk-rebac] trust_state '<state>' requires at least one evidence_ref",
+        "when": "trust_state is CONFIRMED or DOCUMENTED and evidence_refs is absent, empty, or contains only blank strings - both states assert a check was made, so they must name what was checked"
+      },
+      {
+        "status": 404,
+        "code": "RELATIONSHIP_NOT_FOUND",
+        "message": "NotFound",
+        "when": "No relationship matches relationship_id"
+      },
+      {
+        "status": 500,
+        "code": "InternalError",
+        "message": "InternalError",
+        "when": "attestContextualRole throws anything other than the evidence error - a non-UUID relationship_id that fails the Postgres uuid cast, or any database error"
+      }
+    ],
+    "fieldEnums": {
+      "trust_state": [
+        "CONFIRMED",
+        "CANDIDATE",
+        "DOCUMENTED"
+      ]
+    },
+    "generated": "sync-qa-apis"
+  },
+  {
+    "epicId": "4df864ec-e460-4cc9-a58a-92baadec5269",
+    "featureId": "c705caee-690d-465f-8ae4-c84521bacb7d",
+    "taskId": "41c92779-7aec-4747-b111-ada104733228",
+    "endpoint": "/api/scheduling/availability-rules",
+    "method": "GET",
+    "requiresAuth": true,
+    "testability": "auto",
+    "skipReason": "",
+    "case": "List the availability rules for the host just configured",
+    "payload": null,
+    "pathParams": null,
+    "expectedStatus": 200,
+    "expectedResponse": {
+      "data": {
+        "rules": "array"
+      }
+    },
+    "dependsOn": [
+      "POST /api/auth/signup-tenant",
+      "POST /api/personas",
+      "POST /api/scheduling/availability-rules"
+    ],
+    "sdk": "sdk-scheduling",
+    "file": "tests/api_definitions/scheduling/availability-rules-get.json",
+    "sourceFile": "packages/sdk-scheduling/src/server/routes.ts",
+    "description": "The recurring availability rules for ONE host, returned as data.rules. BOTH tenant_id AND host_persona_id are required query parameters - listAvailabilityRules takes the pair, so this route cannot list rules across hosts and omitting either is the same single 400. Returns the rules as authored (weekday plus start/end local times), NOT bookable slots: GET /api/scheduling/availability is the route that intersects these rules with existing appointments, meeting-type duration and time-off to produce concrete slots. Reading rules and computing slots client-side duplicates that logic and misses the exclusions. An unknown host_persona_id is 200 with an empty array rather than 404, because the handler never checks the persona exists.",
+    "errorCases": [
+      {
+        "name": "Unauthenticated",
+        "queryParams": {
+          "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+          "host_persona_id": "{{cache:personas.create.response.data.persona.persona_id}}"
+        },
+        "expectedStatus": 401,
+        "status": 401,
+        "code": "Unauthorized",
+        "message": "Missing bearer token",
+        "when": "No Authorization: Bearer header - requireAuth preHandler, and the gateway default-deny authGate ahead of it"
+      },
+      {
+        "status": 400,
+        "code": "ValidationError",
+        "message": "tenant_id and host_persona_id query params required",
+        "when": "Either query parameter is absent - both are required together and produce this same single message"
+      },
+      {
+        "status": 500,
+        "code": "InternalError",
+        "message": "Fastify default error payload from the uncaught service throw",
+        "when": "listAvailabilityRules throws - a non-UUID tenant_id or host_persona_id that fails the Postgres uuid cast, or any database error"
+      }
+    ],
+    "fieldEnums": {
+      "weekday": [
+        "0",
+        "1",
+        "2",
+        "3",
+        "4",
+        "5",
+        "6"
+      ]
+    },
+    "generated": "sync-qa-apis"
+  },
+  {
+    "epicId": "",
+    "featureId": "",
+    "taskId": "6c0db85c-cb84-4cac-8b51-24f0c8a259e5",
+    "endpoint": "/api/sequences",
+    "method": "GET",
+    "requiresAuth": true,
+    "testability": "auto",
+    "skipReason": "",
+    "case": "List every sequence in the tenant",
+    "payload": null,
+    "pathParams": null,
+    "expectedStatus": 200,
+    "expectedResponse": {
+      "data": {
+        "sequences": "array"
+      }
+    },
+    "dependsOn": [
+      "POST /api/auth/signup-tenant",
+      "POST /api/sequences"
+    ],
+    "sdk": "sdk-sequence",
+    "file": "tests/api_definitions/sequences/index-get.json",
+    "sourceFile": "packages/sdk-sequence/src/server/routes.ts",
+    "description": "Every sequence defined for a tenant, returned as data.sequences. tenant_id is a REQUIRED QUERY PARAMETER, not a claim: listSequences takes it directly, so omitting it is 400 rather than defaulting to the caller's tenant. Takes no other filter - status and channel query parameters are ignored rather than narrowing the result. Returns the sequence definitions themselves, not enrolments or step state; a caller tracking a contact through a sequence wants the enrolment routes instead. An empty tenant answers 200 with an empty array rather than 404, because 'this tenant has defined no sequences' is an answer.",
+    "errorCases": [
+      {
+        "name": "Unauthenticated",
+        "queryParams": {
+          "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}"
+        },
+        "expectedStatus": 401,
+        "status": 401,
+        "code": "Unauthorized",
+        "message": "Missing bearer token",
+        "when": "No Authorization: Bearer header - requireAuth preHandler, and the gateway default-deny authGate ahead of it"
+      },
+      {
+        "status": 400,
+        "code": "ValidationError",
+        "message": "tenant_id query param required",
+        "when": "The tenant_id query parameter is absent - this route reads the tenant from the query, never from the JWT claim"
+      },
+      {
+        "status": 500,
+        "code": "InternalError",
+        "message": "Fastify default error payload from the uncaught service throw",
+        "when": "listSequences throws - a non-UUID tenant_id that fails the Postgres uuid cast, or any database error"
+      }
+    ],
+    "fieldEnums": {},
+    "generated": "sync-qa-apis"
+  },
+  {
+    "epicId": "",
+    "featureId": "",
+    "taskId": "",
+    "endpoint": "/api/vault/keys",
+    "method": "GET",
+    "requiresAuth": true,
+    "testability": "auto",
+    "skipReason": "",
+    "case": "List the calling tenant's keys",
+    "payload": null,
+    "pathParams": null,
+    "expectedStatus": 200,
+    "expectedResponse": null,
+    "dependsOn": [
+      "POST /api/auth/signup-tenant",
+      "POST /api/vault/keys"
+    ],
+    "sdk": "sdk-vault",
+    "file": "tests/api_definitions/vault/keys-get.json",
+    "sourceFile": "packages/sdk-vault/src/server/routes.ts",
+    "description": "Lists the vault keys VISIBLE TO THE CALLING TENANT, newest first, with optional tier and scope_id narrowing and a limit capped at 500 (default 200). Returns metadata only — key_id, tier, scope_id, parent_key_id, kms_ref, state, algorithm, issued_at, rotated_at, shredded_at, tenant_id, region. There is no key material in vault.key at all, so nothing secret is returned; kms_ref is a handle, not a key. The tenant filter is applied IN SQL (listKeysForTenant), not by the handler, because every read into vault.key is a potential cross-tenant key inventory: tier + scope_id + kms_ref describe the shape of another customer's key hierarchy and parent_key_id walks upward through it. Tiers ABOVE tenant — root, app, pool — carry tenant_id NULL because they wrap every tenant, so they are excluded by construction and are NOT visible here even to the tenant that created them; an operator view goes through an ADMIN_OPS_TOKEN route instead. The definition captures NOTHING: the only key producer for this project creates a ROOT-tier key (tenant_id NULL), which this tenant-scoped list deliberately excludes, so data.0 would never populate and any consumer binding it would block forever. Edge cases: a token carrying no tenant_id is 403 rather than an empty list, because an empty list would read as 'you have no keys' when the truth is 'this token cannot express a key scope'; a fresh tenant legitimately returns an empty array with 200; tier and scope_id can only narrow within the tenant and can never widen beyond it; limit is clamped rather than rejected, so an absurd value degrades instead of failing.",
+    "errorCases": [
+      {
+        "status": 401,
+        "code": "Unauthorized",
+        "message": "Missing bearer token",
+        "when": "No Authorization header, or not in Bearer form — rejected by the gateway default-deny authGate before requireAuth",
+        "reproducible": true
+      },
+      {
+        "status": 401,
+        "code": "Unauthorized",
+        "message": "Invalid or expired token",
+        "when": "The bearer token fails JWT verification or has expired",
+        "reproducible": true
+      },
+      {
+        "status": 403,
+        "code": "no tenant scope",
+        "message": "This token carries no tenant, so no key scope can be derived",
+        "when": "The JWT verifies but carries no tenant_id claim — a platform-level token cannot list tenant keys and must use the admin route",
+        "reproducible": false
+      },
+      {
+        "status": 500,
+        "code": "InternalError",
+        "message": "InternalError",
+        "when": "The vault.key query fails — database unavailable or the pool is exhausted",
+        "reproducible": false
+      }
+    ],
+    "fieldEnums": {},
+    "generated": "sync-qa-apis"
+  },
+  {
+    "epicId": "",
+    "featureId": "",
+    "taskId": "",
+    "endpoint": "/api/vault/keys/:key_id",
+    "method": "GET",
+    "requiresAuth": true,
+    "testability": "auto",
+    "skipReason": "",
+    "case": "A root-tier key is NOT visible to a tenant token",
+    "payload": null,
+    "pathParams": {
+      "key_id": "{{cache:vault.keys.create.response.data.key_id}}"
+    },
+    "expectedStatus": 404,
+    "expectedResponse": null,
+    "dependsOn": [
+      "POST /api/auth/signup-tenant",
+      "POST /api/vault/keys"
+    ],
+    "sdk": "sdk-vault",
+    "file": "tests/api_definitions/vault/keys-key-id-get.json",
+    "sourceFile": "packages/sdk-vault/src/server/routes.ts",
+    "description": "Reads ONE vault key, and only if it belongs to the calling tenant. Returns metadata only — vault.key holds no key material. The tenant predicate is part of the SQL (getKeyForTenant), so the ownership check cannot be skipped by a caller that forgets it. A key belonging to another tenant answers 404, never 403: a 403 would confirm the id EXISTS somewhere, which is precisely what a caller enumerating ids wants, so absence and denial are made indistinguishable. WHY THE PRIMARY CASE IS A 404 AND NOT A 200. The only producer for this endpoint, POST /api/vault/keys, creates a ROOT-tier key, and root/app/pool rows carry tenant_id NULL because they wrap every tenant — so a tenant token deliberately cannot see them, and chaining that id and expecting 200 is unsatisfiable by construction. Reaching a 200 needs a TENANT-tier key, which requires two POSTs to this same endpoint in order (root, then tenant with parent_key_id), and one definition per METHOD+ENDPOINT cannot express that — the constraint recorded in TK-4137. So the case asserts the isolation instead, which is the property actually worth pinning: a root key is invisible to a tenant, and is indistinguishable from a key that does not exist. Flip the first case to 200 once a tenant-tier key id is reachable from cache. Edge cases: a shredded key still reads back for its owner, showing state 'shredded' with shredded_at set and kms_ref NULL, because the row is the audit trail of the erasure; a non-UUID key_id raises 22P02 from the ::uuid cast and surfaces as 500 rather than 400.",
+    "errorCases": [
+      {
+        "status": 401,
+        "code": "Unauthorized",
+        "message": "Missing bearer token",
+        "when": "No Authorization header, or not in Bearer form — rejected by the gateway default-deny authGate before requireAuth",
+        "reproducible": true
+      },
+      {
+        "status": 403,
+        "code": "no tenant scope",
+        "message": "This token carries no tenant, so no key scope can be derived",
+        "when": "The JWT verifies but carries no tenant_id claim",
+        "reproducible": false
+      },
+      {
+        "status": 404,
+        "code": "Key not found",
+        "message": "Key not found",
+        "when": "No key with that id within the calling tenant — covers both a genuinely unknown id and a key owned by another tenant, deliberately indistinguishable",
+        "reproducible": true
+      },
+      {
+        "status": 500,
+        "code": "InternalError",
+        "message": "InternalError",
+        "when": "key_id is not a valid UUID so the ::uuid cast raises 22P02, or the database is unavailable",
+        "reproducible": false
+      }
+    ],
+    "fieldEnums": {},
+    "generated": "sync-qa-apis"
+  },
+  {
+    "epicId": "00996d23-f667-4a82-9285-7728ba357e7b",
+    "featureId": "15044723-73ce-4f33-8443-4c3a970380dd",
+    "taskId": "982573d2-36a0-4fb0-a02d-76eb80941df2",
+    "endpoint": "/api/policies",
+    "method": "GET",
+    "requiresAuth": true,
+    "testability": "auto",
+    "skipReason": "",
+    "case": "List the tenant-wide policies for the calling tenant",
+    "payload": null,
+    "pathParams": null,
+    "expectedStatus": 200,
+    "expectedResponse": {
+      "data": {
+        "policies": []
+      }
+    },
+    "dependsOn": [
+      "POST /api/auth/register"
+    ],
+    "sdk": "sdk-policy",
+    "file": "tests/api_definitions/policies/index-get.json",
+    "sourceFile": "",
+    "description": "Lists the ACTIVE policy bundles governing a scope, returned under data.policies. The tenant is taken from the caller's JWT and never from the query string - a policy names what a caller may do, so allowing one to be listed by naming somebody else's tenant would hand over their access model; a credential carrying no tenant answers 400 ValidationError. With no app_id the response is the tenant-wide rules only (app_id IS NULL). With ?app_id= it is that app's own rules FOLLOWED BY the tenant-wide rules the app inherits, ordered app-specific first. Edge cases: the ordering is for presentation and for callers that want the narrowest rule - it is NOT first-match-wins, because access rules COMPOSE and silently dropping an inherited tenant-wide rule because a more specific app rule exists would widen access at exactly the moment somebody added a restriction; only status='active' rows are returned, so draft and retired bundles are invisible here; an app_id that matches no policy is not an error and yields just the inherited tenant-wide rules.",
+    "errorCases": [
+      {
+        "status": 400,
+        "code": "ValidationError",
+        "message": "This credential carries no tenant context",
+        "when": "The JWT carries no tenant_id - for example a person-level token minted by a login that named no tenant"
+      },
+      {
+        "status": 401,
+        "code": "Unauthorized",
+        "message": "Missing bearer token",
+        "when": "Authorization header absent or not in Bearer form (requireAuth)"
+      },
+      {
+        "status": 401,
+        "code": "Unauthorized",
+        "message": "Invalid or expired token",
+        "when": "Bearer token fails JWT verification (requireAuth)"
+      },
+      {
+        "status": 500,
+        "code": "InternalError",
+        "message": "InternalError",
+        "when": "listPoliciesForScope throws - any database error while reading policy.policy"
+      }
+    ],
+    "fieldEnums": {
+      "status": [
+        "draft",
+        "active",
+        "deprecated",
+        "retired"
+      ]
+    },
     "generated": "sync-qa-apis"
   }
 ]

@@ -43,6 +43,47 @@
 <p>Customers who build <strong>multiple applications</strong> sit inside a four-level scope hierarchy (architecture §7.1). Understanding it is the key to onboarding more than one app.</p>
 <table><thead><tr><th>Scope</th><th>Meaning</th><th>Who owns it</th><th>Example</th></tr></thead><tbody><tr><td><code>org_id</code></td><td>Meta-tenant / reseller / holding company</td><td>ProjexCloud + reseller</td><td><code>acme-robotics-group</code></td></tr><tr><td><code>app_id</code></td><td>An application surface — its own data model &amp; event namespace</td><td>Registered by Platform Admin (App owner)</td><td><code>acme.warehouse-bot</code>, <code>acme.humanoid-ops</code></td></tr><tr><td><code>tenant_id</code></td><td>A customer organization inside an app</td><td>Provisioned per customer</td><td><code>acme-plant-dallas</code>, <code>acme-plant-berlin</code></td></tr><tr><td><code>bu_id</code></td><td>A business unit inside a tenant (optional)</td><td>Tenant Admin</td><td><code>dallas-line-3</code>, <code>emea-fleet</code></td></tr></tbody></table>
 <div class="callout info"><b>The rule for multiple apps.</b> <strong>One App = one product surface</strong> with its own data model. A company building three products registers <strong>three Apps</strong>. Each App then has its <strong>own tenants</strong> (its customers or its internal sites), and each tenant has its <strong>own members and BUs</strong>. Identities are shared at the person level (L1) but <strong>isolated per app at L2/L3</strong> — so a developer on <code>acme.warehouse-bot</code> does not automatically see <code>acme.humanoid-ops</code> data.</div>
+
+<h2>3.1 · When the apps belong to different companies</h2>
+<p>Everything above describes <em>one</em> company registering several Apps. The model also
+covers the case where the tenants are different companies — one uses another's app, and both
+publish apps of their own. Nothing new is created at the person layer; only the layers above
+it are added.</p>
+<table><thead><tr><th>You want</th><th>What is created</th><th>Layer</th></tr></thead><tbody>
+<tr><td>Tenant B's employee uses Tenant A's app</td><td><code>tenant_membership</code> in <strong>A</strong> + <code>app_identity</code> for A's <code>app_id</code> + a <strong>second persona</strong></td><td>L2, L3, L4</td></tr>
+<tr><td>Same human keeps their job at Tenant B</td><td>nothing — their existing memberships and personas are untouched</td><td>—</td></tr>
+<tr><td>Tenant A subscribes to Tenant B's app</td><td>the mirror of row 1, with the roles reversed</td><td>L2, L3, L4</td></tr>
+</tbody></table>
+<p>The same human is <strong>one <code>person_id</code></strong> throughout. <code>identity.alias</code>
+declares <code>UNIQUE (kind, value_hash)</code>, so one email resolves to exactly one person
+platform-wide: a user who later becomes a provider is necessarily the same person, with no
+account-linking or identity-migration step, because the split never happened.</p>
+<div class="callout warn"><b>Three rules that decide whether this works.</b>
+<ul>
+<li><strong>Membership is the gate, and it belongs to the provider.</strong> Logging in with a
+<code>tenant_id</code> returns <strong>403 NoMembership</strong> unless a membership already
+exists, so nobody joins a tenant by guessing its id. The provider admits them by creating the
+membership; the <code>app_identity</code> then mints itself on first login.</li>
+<li><strong>Never register the same human twice.</strong> A second
+<code>POST /api/auth/register</code> fails on the unique alias. That failure is the constraint
+working — creating a second person would break MDM convergence and split their audit trail
+permanently.</li>
+<li><strong>The password is global.</strong> One person has one
+<code>identity.credential</code>, so a credential collected on one provider's own login page
+also works at every other provider. If your tenants must be mutually untrusting, host login
+centrally and hand them a redirect flow.</li>
+</ul></div>
+<div class="callout info"><b>Known gap — an existing user cannot self-serve into a provider.</b>
+The data model supports it completely; the provisioning endpoint does not.
+<code>POST /api/auth/signup-tenant</code> raises <code>PersonExistsError</code> when the email
+already has an alias, and <code>POST /api/tenants</code> accepts no <code>person_id</code> to
+bind an owner — so neither call promotes an existing user. Compose it from an authorised
+caller for now: <code>POST /api/tenants</code> → <code>POST /api/memberships</code> (binding the
+<em>existing</em> <code>person_id</code>) → <code>POST /api/memberships/{id}/personas</code> →
+<code>POST /api/applications</code> → mint a key. The worked request bodies for all three
+cases are in the developer hub under
+<a href="../v3.1/developer-hub/authentication.html">Authentication → “One person, many roles”</a>.</div>
+
 <h1>4 · End-to-end onboarding flow (using the three portals)</h1>
 <p>The canonical path from zero to a running application, and who does each step in which portal:</p>
 <ol><li><strong>Register the App</strong> — *Platform Admin (/console)* or the ProjexCloud onboarding team creates the App record (<code>tenant.app</code>): the product surface, its data model namespace, role-template catalogue, and module subscriptions. Do this <strong>once per application</strong>.</li><li><strong>Provision the Tenant</strong> — *Platform Admin* (or self-serve trial signup) creates the tenant under that App: <code>display_name</code> (company), region, isolation tier (S/P/G), optional brand domain. This writes <code>tenant.tenant</code> and assigns pool placement. The first user is auto-promoted to tenant admin.</li><li><strong>Tenant Admin sets up the org</strong> — *Tenant Admin (/tenant)*: configure billing, invite members by email, assign personas &amp; roles (Developer, Operator, Viewer…), create Business Units, issue API keys, wire connectors/webhooks, set AI providers and BYOK.</li><li><strong>Developers build</strong> — *Workspace (/workspace)*: invited developers sign in, discover SDKs, compose a build plan (or use the CLI + MCP), and deploy. Multiple developers collaborate inside the same app/tenant; ReBAC governs who can touch what.</li><li><strong>End users use the app</strong> — the scaffolded vertical application: ordinary users (Buyer, Patient, Operator, Devotee…) sign in with the same identity system, scoped to their persona, with consent and audit on every read of personal data.</li></ol>

@@ -1,13 +1,18 @@
 import { FastifyInstance } from 'fastify';
 import { requireAuth } from '@projexlight/sdk-identity';
 import {
+  checkConsentBulkHandler,
   checkConsentHandler,
   exportReceiptsHandler,
   grantConsentHandler,
+  listPurposesHandler,
   registerPurposeHandler,
   revokeConsentHandler,
 } from './handlers/consentController';
 import { getReceiptState } from '../services/consentService';
+
+/** Canonical uuid shape — guards path params before they reach a uuid column. */
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /**
  * Registers /api/consents/* routes per P2-Identity-Access §6.
@@ -21,6 +26,26 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
       if (!reply.sent) reply.code(500).send({ error: 'InternalError' });
     }
   });
+
+  // Reads the registry the POST above writes into. Registered adjacent to it so
+  // the pair is impossible to miss — the absence of this route is what made
+  // GET /api/consents/purposes bind ':receipt_id' to "purposes" and answer 500,
+  // so an integrator probing for a list was told the consent service was down.
+  //
+  // Fastify matches static segments ahead of parameterised ones, so this wins over
+  // '/api/consents/:receipt_id' regardless of registration order.
+  app.get<{ Querystring: { app_id?: string; category?: string; legal_basis?: string; limit?: string; offset?: string } }>(
+    '/api/consents/purposes',
+    { preHandler: requireAuth },
+    async (req, reply) => {
+      try {
+        await listPurposesHandler(req, reply);
+      } catch (err) {
+        req.log.error(err);
+        if (!reply.sent) reply.code(500).send({ error: 'InternalError' });
+      }
+    },
+  );
 
   app.post('/api/consents', { preHandler: requireAuth }, async (req, reply) => {
     try {
@@ -67,6 +92,20 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
             error: 'This token carries no tenant, so no receipt scope can be derived',
           });
         }
+        // A receipt_id that is not a uuid never reaches the database. Without this
+        // the lookup reached Postgres, failed to parse the literal, and surfaced as
+        // 500 InternalError — so probing a plausible collection path answered
+        // "the server is broken" instead of "there is nothing here". That is not a
+        // hypothetical: GET /api/consents/purposes binds ':receipt_id' to "purposes"
+        // (there is no purposes-list route), and an integrator looking for one was
+        // told the consent service was down.
+        //
+        // 404 rather than 400, matching the tenant rule below: this route's answer to
+        // "does this name a receipt I may read" is always the same shape, and a
+        // distinguishable response is itself a disclosure.
+        if (!UUID_RE.test(req.params.receipt_id)) {
+          return reply.code(404).send({ success: false, error: 'Receipt not found' });
+        }
         const state = await getReceiptState(req.params.receipt_id, tenant_id);
         // 404, never 403, for a receipt in another tenant: a receipt names a person and
         // a purpose, so confirming one exists elsewhere is itself the disclosure.
@@ -82,6 +121,17 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
   app.post('/api/consents/check', { preHandler: requireAuth }, async (req, reply) => {
     try {
       await checkConsentHandler(req, reply);
+    } catch (err) {
+      req.log.error(err);
+      if (!reply.sent) reply.code(500).send({ error: 'InternalError' });
+    }
+  });
+
+  // N tuples, one query. See checkConsentBulk for why a loop behind this route
+  // would not be a fix.
+  app.post('/api/consents/check/bulk', { preHandler: requireAuth }, async (req, reply) => {
+    try {
+      await checkConsentBulkHandler(req, reply);
     } catch (err) {
       req.log.error(err);
       if (!reply.sent) reply.code(500).send({ error: 'InternalError' });

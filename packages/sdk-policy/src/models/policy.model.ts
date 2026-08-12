@@ -33,6 +33,8 @@ export interface CedarTerm {
 export interface PolicyRecord {
   policy_id: string;
   tenant_id: string | null;
+  /** Owning app. NULL = every app of this tenant (platform-wide if tenant is null too). */
+  app_id: string | null;
   name: string;
   iql_source: string;
   cedar_compiled: CedarTerm | Record<string, unknown>;
@@ -76,6 +78,8 @@ export interface DecisionRecord {
 
 export interface CreatePolicyInput {
   tenant_id?: string;
+  /** Scope this rule to ONE app. Omit for a tenant-wide rule (the previous behaviour). */
+  app_id?: string;
   name: string;
   iql_source: string;
   version: string;

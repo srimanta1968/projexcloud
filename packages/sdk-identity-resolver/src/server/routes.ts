@@ -1,8 +1,10 @@
-import { FastifyInstance } from 'fastify';
+import { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { requireAuth } from '@projexlight/sdk-identity';
 import type { Decision } from '@projexlight/sdk-approval';
 import { explain, resolveIdentityContext } from '../services/resolverService';
 import {
+  CandidateLinkNotFoundError,
+  MergeNotFoundError,
   adjudicateCandidate,
   enqueueStewardReview,
   getEmpiMetrics,
@@ -59,14 +61,52 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
   const personaOf = (req: { auth?: { primary_persona_id?: string | null; sub?: string } }): string =>
     req.auth?.primary_persona_id ?? req.auth?.sub ?? '';
 
+  /**
+   * Tenant comes from the CREDENTIAL, never from the query or body. EMPI rows
+   * carry person ids paired with the provenance explaining why two humans were
+   * thought to be the same, so a caller-supplied tenant would let anyone read
+   * anyone's. Answers 400 when the credential carries no tenant rather than
+   * falling back to an unscoped read.
+   */
+  const tenantOf = (req: FastifyRequest, reply: FastifyReply): string | null => {
+    const tenant_id = req.auth?.tenant_id;
+    if (!tenant_id) {
+      reply.code(400).send({
+        error: 'ValidationError',
+        details: ['This credential carries no tenant context'],
+      });
+      return null;
+    }
+    return tenant_id;
+  };
+
+  /**
+   * Maps a service error onto a status. An id that does not resolve is 404, not
+   * 500: it is the caller naming something absent, and answering 500 both sends
+   * an integrator debugging a server fault that never happened and — because a
+   * 5xx is retryable and a 404 is not — makes their client retry a request that
+   * can never succeed.
+   */
+  const sendEmpiError = (reply: FastifyReply, err: unknown): void => {
+    if (reply.sent) return;
+    if (err instanceof CandidateLinkNotFoundError || err instanceof MergeNotFoundError) {
+      reply.code(404).send({ error: err.code, details: [(err as Error).message] });
+      return;
+    }
+    reply.code(500).send({ error: 'InternalError', details: [(err as Error).message] });
+  };
+
   // GET /api/empi/candidate-links?band=high|medium|low&status=open — query by band.
   app.get<{ Querystring: { band?: ConfidenceBand; status?: string; min?: string; max?: string; limit?: string } }>(
     '/api/empi/candidate-links',
     { preHandler: requireAuth },
     async (req, reply) => {
       const q = req.query ?? {};
+      const tenant_id = tenantOf(req, reply);
+      if (!tenant_id) return;
       try {
         const links = await queryCandidateLinksByBand({
+          tenant_id,
           band: q.band,
           status: q.status as 'open' | 'merged' | 'rejected' | 'superseded' | undefined,
           min: q.min ? parseFloat(q.min) : undefined,
@@ -87,9 +127,12 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
     { preHandler: requireAuth },
     async (req, reply) => {
       const b = req.body ?? {};
-      const tenant_id = b.tenant_id ?? req.auth?.tenant_id ?? '';
-      if (!b.route_id || !tenant_id) {
-        return reply.code(400).send({ error: 'ValidationError', details: ['route_id, tenant_id are required'] });
+      // Deliberately NOT b.tenant_id: a body-supplied tenant would let a caller
+      // queue another tenant's link for review under their own approval route.
+      const tenant_id = tenantOf(req, reply);
+      if (!tenant_id) return;
+      if (!b.route_id) {
+        return reply.code(400).send({ error: 'ValidationError', details: ['route_id is required'] });
       }
       try {
         const result = await enqueueStewardReview(req.params.link_id, {
@@ -100,7 +143,7 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
         return reply.code(201).send({ data: result });
       } catch (err) {
         req.log.error(err);
-        if (!reply.sent) reply.code(500).send({ error: 'InternalError', details: [(err as Error).message] });
+        sendEmpiError(reply, err);
       }
     },
   );
@@ -114,12 +157,14 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
       if (!b.step_id || (b.decision !== 'approve' && b.decision !== 'reject')) {
         return reply.code(400).send({ error: 'ValidationError', details: ['step_id and decision (approve|reject) are required'] });
       }
+      const tenant_id = tenantOf(req, reply);
+      if (!tenant_id) return;
       try {
-        const result = await adjudicateCandidate(req.params.link_id, b.step_id, personaOf(req), b.decision, b.reason);
+        const result = await adjudicateCandidate(req.params.link_id, tenant_id, b.step_id, personaOf(req), b.decision, b.reason);
         return reply.code(200).send({ data: result });
       } catch (err) {
         req.log.error(err);
-        if (!reply.sent) reply.code(500).send({ error: 'InternalError', details: [(err as Error).message] });
+        sendEmpiError(reply, err);
       }
     },
   );
@@ -133,8 +178,11 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
       if (!b.surviving_person_id || !b.merged_person_id) {
         return reply.code(400).send({ error: 'ValidationError', details: ['surviving_person_id, merged_person_id are required'] });
       }
+      const tenant_id = tenantOf(req, reply);
+      if (!tenant_id) return;
       try {
         const merge = await mergeRecords({
+          tenant_id,
           surviving_person_id: b.surviving_person_id,
           merged_person_id: b.merged_person_id,
           link_id: b.link_id,
@@ -144,7 +192,7 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
         return reply.code(201).send({ data: { merge } });
       } catch (err) {
         req.log.error(err);
-        if (!reply.sent) reply.code(500).send({ error: 'InternalError', details: [(err as Error).message] });
+        sendEmpiError(reply, err);
       }
     },
   );
@@ -154,23 +202,27 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
     '/api/empi/merges/:merge_id/unmerge',
     { preHandler: requireAuth },
     async (req, reply) => {
+      const tenant_id = tenantOf(req, reply);
+      if (!tenant_id) return;
       try {
-        const compensation = await unmergeRecords(req.params.merge_id, {
+        const compensation = await unmergeRecords(req.params.merge_id, tenant_id, {
           decided_by: personaOf(req),
           reason: req.body?.reason,
         });
         return reply.code(200).send({ data: { merge: compensation } });
       } catch (err) {
         req.log.error(err);
-        if (!reply.sent) reply.code(500).send({ error: 'InternalError', details: [(err as Error).message] });
+        sendEmpiError(reply, err);
       }
     },
   );
 
   // GET /api/empi/metrics — calibration (ECE) + unresolved/reversal metrics.
   app.get('/api/empi/metrics', { preHandler: requireAuth }, async (req, reply) => {
+    const tenant_id = tenantOf(req, reply);
+    if (!tenant_id) return;
     try {
-      const metrics = await getEmpiMetrics();
+      const metrics = await getEmpiMetrics(tenant_id);
       return reply.code(200).send({ data: { metrics } });
     } catch (err) {
       req.log.error(err);

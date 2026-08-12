@@ -280,12 +280,25 @@ AUTH_PLAYBOOK = {
         "+ policy already own that; a parallel table breaks tenant isolation and the audit chain.",
         "A human JWT carries NO scopes. Authority is resolved from the persona and its grants at "
         "request time, so a revoked role takes effect immediately rather than at token expiry.",
-        "THE SAME IS TRUE OF A MACHINE TOKEN, and this is the step everyone misses: exchanging a "
-        "pk_ key via POST /api/auth/token returns a token carrying scopes (e.g. ['crm']) and "
-        "actor {kind: service} — and it will STILL 403. The scopes on the token are not the "
-        "authority; the credential is bound to a SYNTHETIC PERSONA that starts with NO grants. "
-        "You must grant it: POST /api/role-assignments {persona_id, role_template_id}. A valid key plus a successful "
-        "token exchange plus 403 on every call is not a broken key — it is an ungranted persona.",
+        "A MACHINE credential is different: its token DOES carry scopes and the gate enforces "
+        "them. Scopes are <domain>.<resource>.<action> — THREE DOT-SEPARATED PARTS, derived from "
+        "the request path (action = read for GET/HEAD else write, both segments singularised): "
+        "GET /api/crm/contacts needs crm.contact.read; POST /api/sla/clocks needs sla.clock.write; "
+        "GET /api/sequences needs sequence.sequence.read (a domain with no sub-segment doubles as "
+        "its own resource). Tail wildcards work and are usually what you want: crm.* covers every "
+        "CRM resource and action. THE VALIDATOR ACCEPTS ANY NON-EMPTY STRING ARRAY, so ['crm'] or "
+        "['crm:read'] is stored happily and then satisfies NOTHING — every call 403s. If a key "
+        "403s everywhere, read the body first: it names required_scopes and granted_scopes.",
+        "A machine credential is ALSO bound to a synthetic persona (created with the key, in the "
+        "same transaction) so machine traffic is attributable as actor {kind: service} instead of "
+        "borrowing a human's. It starts with NO role grants. Routes that authorize on tenant + "
+        "scope — most reads — work immediately. A route that consults ReBAC or a role template "
+        "403s WITHOUT naming a scope; that is the case that needs "
+        "POST /api/role-assignments {persona_id, role_template_id}.",
+        "POST /api/auth/token: client_id is OPTIONAL and the client_secret alone identifies the "
+        "key, so omitting it is safest. If sent it must be the APPLICATION's slug or "
+        "application_id — NOT the tenant's app_id, which is a different row. A mismatch is a hard "
+        "401 invalid_client, not a warning.",
         "Everything downstream keys on persona_id (L4), not on person_id and not on a user_id.",
     ],
     "flows": {

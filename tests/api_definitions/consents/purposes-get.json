@@ -1,0 +1,69 @@
+{
+  "name": "GET /api/consents/purposes - List the registered purpose taxonomy",
+  "endpoint": "/api/consents/purposes",
+  "sdk": "sdk-consent",
+  "sourceFile": "packages/sdk-consent/src/server/routes.ts",
+  "method": "GET",
+  "requiresAuth": true,
+  "expectedStatus": 200,
+  "sprintId": "8ef1d09e-dd8e-4daf-8d03-54dcd9f812f8",
+  "featureId": "29651845-09ac-4f92-8964-35792daf8a86",
+  "epicId": "00996d23-f667-4a82-9285-7728ba357e7b",
+  "priority": 45,
+  "dependsOn": [
+    "POST /api/auth/register",
+    "POST /api/consents/purposes"
+  ],
+  "testCases": [
+    {
+      "name": "List the registry and see the purpose just registered",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.register.response.data.token}}"
+      },
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "data": {
+          "purposes": "array",
+          "total": "number",
+          "limit": "number",
+          "offset": "number"
+        }
+      }
+    }
+  ],
+  "expectedResponse": {
+    "data": {
+      "purposes": "array",
+      "total": "number",
+      "limit": "number",
+      "offset": "number"
+    }
+  },
+  "description": "Reads the purpose registry that POST /api/consents/purposes writes into. Optional query filters app_id, category and legal_basis are ANDed; limit (default 100, clamped 1..500) and offset page the result, and total reports the unpaged count so a caller can distinguish a complete taxonomy from a truncated first page. Ordered by (app_id, purpose_id) for a stable page boundary. The registry is a single platform-wide namespace and this reports it as one: consent.purpose.purpose_id is a global TEXT primary key, so two tenants cannot both register the same id and the second already learns of the first through a 409 on register - scoping the read while leaving the write globally unique would hide names the write path reveals on the next collision. Read-only, side-effect-free and safely repeatable. Requires a valid JWT, or a key holding consent.purpose.read (note this is a DIFFERENT scope from consent.check.write).",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "Authorization header absent or not in Bearer form (requireAuth / gateway default-deny authGate)"
+    },
+    {
+      "status": 403,
+      "code": "Forbidden",
+      "message": "Service token is missing required scope: consent.purpose.read",
+      "when": "An API key or machine token that does not hold consent.purpose.read (or a covering wildcard) is presented"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "limit and offset must be numbers",
+      "when": "limit or offset is present but not parseable as a number"
+    },
+    {
+      "status": 500,
+      "code": "InternalError",
+      "message": "InternalError",
+      "when": "listPurposes throws (database unavailable or query error)"
+    }
+  ]
+}

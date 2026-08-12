@@ -1,12 +1,22 @@
 import { FastifyReply, FastifyRequest } from 'fastify';
 import {
+  bulkItemError,
+  bulkResponse,
+  parseBulkEnvelope,
+  type BulkItemResult,
+} from '@projexlight/contracts';
+import {
   CrossBorderError,
   checkConsent,
+  checkConsentBulk,
   exportReceipts,
   grantConsent,
+  listPurposes,
   registerPurpose,
   revokeConsent,
+  type BulkCheckItem,
 } from '../../services/consentService';
+import type { CheckConsentResult } from '../../models/consent.model';
 import {
   validateCheckConsent,
   validateGrantConsent,
@@ -85,7 +95,13 @@ export async function revokeConsentHandler(
     return;
   }
   try {
-    const revocation = await revokeConsent(req.params.receipt_id, validation.value);
+    // Read from the credential, NOT from the validated body. A body field named
+    // authenticated_principal would be trivially forgeable and worse than absent.
+    const revocation = await revokeConsent(req.params.receipt_id, {
+      ...validation.value,
+      authenticated_principal: req.auth?.primary_persona_id ?? req.auth?.sub ?? undefined,
+      authenticated_actor_kind: req.auth?.actor?.kind === 'service' ? 'service' : 'human',
+    });
     reply.code(200).send({ data: { revocation } });
   } catch (err) {
     const msg = (err as Error).message;
@@ -111,6 +127,84 @@ export async function checkConsentHandler(req: FastifyRequest, reply: FastifyRep
   try {
     const result = await checkConsent(validation.value);
     reply.code(200).send({ data: result });
+  } catch (err) {
+    req.log.error(err);
+    reply.code(500).send({ error: 'InternalError' });
+  }
+}
+
+/**
+ * GET /api/consents/purposes — reads the purpose registry that
+ * POST /api/consents/purposes writes into.
+ *
+ * Its absence blocked three separate things downstream: a consent screen's
+ * taxonomy panel had nothing to render, a signature-encryption path could not be
+ * exercised end to end because issuing a real receipt needs a valid registered
+ * purpose_id and none could be discovered, and a decision engine was populating a
+ * purpose enum from a mockup. All three needed the same list.
+ */
+export async function listPurposesHandler(
+  req: FastifyRequest<{ Querystring: { app_id?: string; category?: string; legal_basis?: string; limit?: string; offset?: string } }>,
+  reply: FastifyReply,
+): Promise<void> {
+  const q = req.query ?? {};
+  const limit = q.limit === undefined ? undefined : Number(q.limit);
+  const offset = q.offset === undefined ? undefined : Number(q.offset);
+  if ((limit !== undefined && !Number.isFinite(limit)) || (offset !== undefined && !Number.isFinite(offset))) {
+    reply.code(400).send({ error: 'ValidationError', details: ['limit and offset must be numbers'] });
+    return;
+  }
+  try {
+    const result = await listPurposes({
+      app_id: q.app_id,
+      category: q.category,
+      legal_basis: q.legal_basis,
+      limit,
+      offset,
+    });
+    reply.code(200).send({ data: result });
+  } catch (err) {
+    req.log.error(err);
+    reply.code(500).send({ error: 'InternalError' });
+  }
+}
+
+/**
+ * POST /api/consents/check/bulk — the four-tuple check for N subjects in one
+ * request and one query.
+ *
+ * Per-item validation happens HERE rather than in the service, because a rejected
+ * item must keep its slot: the caller zips these verdicts back onto its own
+ * subject list, and an item that vanished would shift every verdict after it.
+ */
+export async function checkConsentBulkHandler(req: FastifyRequest, reply: FastifyReply): Promise<void> {
+  const envelope = parseBulkEnvelope(req.body);
+  if (!envelope.ok) {
+    reply.code(400).send({ error: envelope.error, details: envelope.details });
+    return;
+  }
+
+  const valid: BulkCheckItem[] = [];
+  const results: BulkItemResult<CheckConsentResult>[] = [];
+  envelope.items.forEach((raw, index) => {
+    const validation = validateCheckConsent(raw);
+    if (!validation.ok) {
+      results.push(bulkItemError(index, 'VALIDATION_ERROR', validation.errors.join('; ')));
+      return;
+    }
+    valid.push({ ...validation.value, index });
+  });
+
+  try {
+    const rows = await checkConsentBulk(valid);
+    for (const row of rows) {
+      const { index, ...verdict } = row;
+      results.push({ index, ok: true, ...verdict });
+    }
+    // Restore the caller's order — validation failures were collected first, and
+    // the query returns only the rows it was given.
+    results.sort((a, b) => a.index - b.index);
+    reply.code(200).send({ data: bulkResponse(results) });
   } catch (err) {
     req.log.error(err);
     reply.code(500).send({ error: 'InternalError' });

@@ -3,38 +3,118 @@
   "version": "1.0.0",
   "schema_version": "1.0",
   "summary": "Policy engine for ProjexCloud — declarative ABAC rules (attribute-based access control) that complement ReBAC for cases needing dynamic, attribute-driven decisions (time-of-day, geo, risk score, recent incidents). Policies authored in a small DSL, compiled to a fast evaluator, and called from every SDK that needs 'is this safe right now?' beyond simple relationship checks.",
-  "tags": ["policy", "abac", "rules-engine", "authorization", "foundation"],
+  "tags": [
+    "policy",
+    "abac",
+    "rules-engine",
+    "authorization",
+    "foundation"
+  ],
   "provides": {
     "endpoints": [
-      { "method": "POST", "path": "/api/policies",          "description": "Publish a new policy version (DSL source + compiled evaluator)." },
-      { "method": "GET",  "path": "/api/policies/:policy_id","description": "Fetch the latest version of a named policy + its evaluation history." },
-      { "method": "POST", "path": "/api/policies/evaluate", "description": "Evaluate a policy against an attribute bundle; returns allow/deny + which rule matched." }
+      {
+        "method": "POST",
+        "path": "/api/policies",
+        "description": "Publish a new policy version (DSL source + compiled evaluator)."
+      },
+      {
+        "method": "GET",
+        "path": "/api/policies/:policy_id",
+        "description": "Fetch the latest version of a named policy + its evaluation history."
+      },
+      {
+        "method": "POST",
+        "path": "/api/policies/evaluate",
+        "description": "Evaluate a policy against an attribute bundle; returns allow/deny + which rule matched."
+      },
+      {
+        "method": "GET",
+        "path": "/api/policies",
+        "description": "The active rules in force for a scope (optionally ?app_id=), most specific first. Tenant comes from the credential, never the query."
+      },
+      {
+        "method": "POST",
+        "path": "/api/policies/evaluate/bulk",
+        "description": "Up to 1000 evaluations in one request: ONE policy read per DISTINCT policy_id, one batched INSERT for the decision rows. An item naming an absent policy reports POLICY_NOT_FOUND in its own slot rather than 404-ing the request. NOTE: the audit fan-out is aggregated — one policy.evaluated-bulk.v1 per (batch, policy) carrying the allow/deny split, not one event per subject. Every individual decision is still written to policy.decision; use the single endpoint when per-subject audit events are required."
+      }
     ],
     "events": [
-      { "name": "policy.published.v1",         "retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "New policy version published; carries DSL hash + compiler version." },
-      { "name": "policy.decision.evaluated.v1","retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "Per-evaluation row: which policy, which rule matched, decision, attributes fetched." },
-      { "name": "policy.attribute.fetched.v1", "retention_class": "operational","conflict_policy": "lww",          "description": "Attribute-fetcher run resolved a remote attribute; cached for the cache TTL." }
+      {
+        "name": "policy.published.v1",
+        "retention_class": "regulated",
+        "conflict_policy": "event-sourcing",
+        "description": "New policy version published; carries DSL hash + compiler version."
+      },
+      {
+        "name": "policy.decision.evaluated.v1",
+        "retention_class": "regulated",
+        "conflict_policy": "event-sourcing",
+        "description": "Per-evaluation row: which policy, which rule matched, decision, attributes fetched."
+      },
+      {
+        "name": "policy.attribute.fetched.v1",
+        "retention_class": "operational",
+        "conflict_policy": "lww",
+        "description": "Attribute-fetcher run resolved a remote attribute; cached for the cache TTL."
+      }
     ],
     "models": [
-      { "schema": "policy", "table": "policy",            "description": "Per-version row: name, version, dsl_source, compiled_blob, published_at, published_by." },
-      { "schema": "policy", "table": "attribute_fetcher", "description": "Per-fetcher row: name, source (sql / http / sdk), config, cache_ttl_ms." },
-      { "schema": "policy", "table": "decision",          "description": "Per-evaluation audit row: policy, rule_matched, decision, attributes_snapshot, evaluated_at." }
+      {
+        "schema": "policy",
+        "table": "policy",
+        "description": "Per-version row: name, version, dsl_source, compiled_blob, published_at, published_by."
+      },
+      {
+        "schema": "policy",
+        "table": "attribute_fetcher",
+        "description": "Per-fetcher row: name, source (sql / http / sdk), config, cache_ttl_ms."
+      },
+      {
+        "schema": "policy",
+        "table": "decision",
+        "description": "Per-evaluation audit row: policy, rule_matched, decision, attributes_snapshot, evaluated_at."
+      }
     ],
     "hooks": [
-      { "name": "publishPolicy",      "description": "Compile + publish a new policy version; idempotent on (name, version)." },
-      { "name": "evaluatePolicy",     "description": "Run the evaluator against an attribute bundle; returns decision + matched rule + evaluation trace." },
-      { "name": "registerFetcher",    "description": "Register an attribute fetcher (e.g. 'fetch current risk_score from sdk-fraud')." },
-      { "name": "startDecisionAuditor","description": "Background worker: replays decisions periodically against the current policy + flags drift." }
+      {
+        "name": "publishPolicy",
+        "description": "Compile + publish a new policy version; idempotent on (name, version)."
+      },
+      {
+        "name": "evaluatePolicy",
+        "description": "Run the evaluator against an attribute bundle; returns decision + matched rule + evaluation trace."
+      },
+      {
+        "name": "registerFetcher",
+        "description": "Register an attribute fetcher (e.g. 'fetch current risk_score from sdk-fraud')."
+      },
+      {
+        "name": "startDecisionAuditor",
+        "description": "Background worker: replays decisions periodically against the current policy + flags drift."
+      }
     ],
     "ui_components": []
   },
   "consumes": {
     "events": [
-      { "name": "rebac.decision.evaluated.v1", "from": "@projexlight/sdk-rebac" },
-      { "name": "tenant.created.v1",           "from": "@projexlight/sdk-tenant" }
+      {
+        "name": "rebac.decision.evaluated.v1",
+        "from": "@projexlight/sdk-rebac"
+      },
+      {
+        "name": "tenant.created.v1",
+        "from": "@projexlight/sdk-tenant"
+      }
     ],
-    "infra": ["postgres", "redis-optional"],
-    "config_keys": ["POLICY_DEFAULT_DECISION", "POLICY_EVAL_CACHE_TTL_MS", "POLICY_DSL_MAX_RULES"]
+    "infra": [
+      "postgres",
+      "redis-optional"
+    ],
+    "config_keys": [
+      "POLICY_DEFAULT_DECISION",
+      "POLICY_EVAL_CACHE_TTL_MS",
+      "POLICY_DSL_MAX_RULES"
+    ]
   },
   "scenarios": [
     {
@@ -74,13 +154,27 @@
     }
   ],
   "compliance_posture": {
-    "regimes": ["SOC2-CC6.1-access-control", "SOX-Section-404-controls", "GDPR-Art-32", "PCI-DSS-7.1-need-to-know", "EU-AI-Act-Annex-IV-decision-transparency"],
+    "regimes": [
+      "SOC2-CC6.1-access-control",
+      "SOX-Section-404-controls",
+      "GDPR-Art-32",
+      "PCI-DSS-7.1-need-to-know",
+      "EU-AI-Act-Annex-IV-decision-transparency"
+    ],
     "notes": "Every decision pinned to the policy version + matched rule + attribute snapshot — fully reproducible for SOX + EU AI Act decision-transparency requirements. Default-deny posture (POLICY_DEFAULT_DECISION) means a misconfigured policy fails closed."
   },
   "pool_placement": "admin",
   "pricing_skus": [
-    { "sku": "policy.publish",  "mode": "flat",    "unit_description": "per policy version published" },
-    { "sku": "policy.evaluate", "mode": "metered", "unit_description": "per evaluation (cached at the attribute layer)" }
+    {
+      "sku": "policy.publish",
+      "mode": "flat",
+      "unit_description": "per policy version published"
+    },
+    {
+      "sku": "policy.evaluate",
+      "mode": "metered",
+      "unit_description": "per evaluation (cached at the attribute layer)"
+    }
   ],
   "links": {
     "readme": "packages/sdk-policy/README.md",

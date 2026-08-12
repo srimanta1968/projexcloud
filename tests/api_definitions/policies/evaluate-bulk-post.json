@@ -1,0 +1,120 @@
+{
+  "name": "POST /api/policies/evaluate/bulk - Evaluate a policy for many subjects at once",
+  "endpoint": "/api/policies/evaluate/bulk",
+  "sdk": "sdk-policy",
+  "sourceFile": "packages/sdk-policy/src/server/routes.ts",
+  "method": "POST",
+  "requiresAuth": true,
+  "expectedStatus": 200,
+  "sprintId": "8ef1d09e-dd8e-4daf-8d03-54dcd9f812f8",
+  "featureId": "15044723-73ce-4f33-8443-4c3a970380dd",
+  "epicId": "00996d23-f667-4a82-9285-7728ba357e7b",
+  "priority": 51,
+  "dependsOn": [
+    "POST /api/auth/register",
+    "POST /api/policies"
+  ],
+  "testCases": [
+    {
+      "name": "Evaluate one policy for the same subject twice - one bare, one with full context",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.register.response.data.token}}"
+      },
+      "payload": {
+        "items": [
+          {
+            "policy_id": "{{cache:policies.create.response.data.policy.policy_id}}",
+            "subject_id": "{{cache:auth.register.response.data.userId}}",
+            "context": {
+              "subject": {
+                "persona": {
+                  "role": "doctor"
+                }
+              },
+              "projection_version": 1
+            },
+            "resource_class": "sensitive"
+          },
+          {
+            "policy_id": "{{cache:policies.create.response.data.policy.policy_id}}",
+            "subject_id": "{{cache:auth.register.response.data.userId}}"
+          }
+        ]
+      },
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "data": {
+          "results": "array",
+          "summary": {
+            "requested": "number",
+            "succeeded": "number",
+            "failed": "number"
+          }
+        }
+      }
+    }
+  ],
+  "expectedResponse": {
+    "data": {
+      "results": "array",
+      "summary": {
+        "requested": "number",
+        "succeeded": "number",
+        "failed": "number"
+      }
+    }
+  },
+  "captureResponse": {
+    "policies.evaluate-bulk.response.data.results.0.result.decision": "data.results.0.result.decision"
+  },
+  "fieldEnums": {
+    "resource_class": ["sensitive", "low_risk"],
+    "decision": ["ALLOW", "DENY"],
+    "error_code": ["VALIDATION_ERROR", "POLICY_NOT_FOUND"]
+  },
+  "description": "Evaluates up to 1000 (policy, subject) pairs in one request. Collapses the cost that made the per-subject form unusable at campaign scale: ONE policy read per DISTINCT policy_id rather than per item, and ONE batched INSERT for all decision rows. Cedar evaluation stays per item, in process, against an already-compiled term, and the consent gate is the same code path the single endpoint uses so the two cannot disagree about a DENY. Results are order-preserving with an explicit index. An item naming a policy that does not exist reports ok=false with error_code POLICY_NOT_FOUND in its own slot - the single endpoint's 404 is right when the request IS one evaluation, but failing ten thousand verdicts because one named a deleted policy is not. IMPORTANT DIFFERENCE FROM THE SINGLE ENDPOINT: the audit fan-out is aggregated - one policy.evaluated-bulk.v1 per (batch, policy) carrying the allow/deny split, rather than one policy.evaluated.v1 per subject, because N hash-chain appends would serialize the whole batch behind the audit writer. Every individual decision is still written to policy.decision; a caller that needs per-subject audit events must use POST /api/policies/evaluate.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "Authorization header absent or not in Bearer form (requireAuth / gateway default-deny authGate)"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "body must be an object with an items[] array",
+      "when": "Request body is absent, not a JSON object, or is itself an array"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "items must not be empty",
+      "when": "items is an empty array"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "items exceeds the per-request maximum of 1000; page the batch",
+      "when": "More than 1000 items are supplied"
+    },
+    {
+      "status": 200,
+      "code": "POLICY_NOT_FOUND",
+      "message": "Policy <policy_id> not found",
+      "when": "An item names a policy that does not exist. Reported as ok=false IN THAT ITEM'S SLOT with the request still 200 — deliberately not the single endpoint's 404, because failing ten thousand verdicts because one item named a deleted policy is the failure this endpoint exists to avoid. Not expressible as a payload in the test case above, since a literal UUID there would violate the FK-via-cache rule; asserted in the route harness instead."
+    },
+    {
+      "status": 200,
+      "code": "VALIDATION_ERROR",
+      "message": "policy_id must be a uuid | subject_id must be a uuid | <field> is required",
+      "when": "An item is malformed. Reported per item with the request still 200; the uuid guard matters here because an unchecked value would abort the batched INSERT and cost every other subject its verdict"
+    },
+    {
+      "status": 500,
+      "code": "InternalError",
+      "message": "InternalError",
+      "when": "evaluatePolicyBulk throws outside a single item (database unavailable, or the batched decision insert fails)"
+    }
+  ]
+}

@@ -185,12 +185,34 @@ export async function revokeConsent(receipt_id: string, input: RevokeConsentInpu
     [receipt_id],
   );
   if (receipt) {
+    // TWO DIFFERENT FACTS, RECORDED SEPARATELY.
+    //
+    // `revoked_by` is supplied in the request body: it is who the CALLER SAYS
+    // performed the revocation, and nothing verifies it. `authenticated_principal`
+    // is the credential the platform actually authenticated. Previously only the
+    // former was stored and the audit actor was the constant 'sdk-consent.revoke',
+    // so the platform's answer to "who revoked this receipt" was a string the
+    // caller chose — which is precisely the question a regulator asks by name, and
+    // consent revocation is the surface they ask it about.
+    //
+    // Recording both keeps the caller's claim (an application may legitimately be
+    // acting for a named human it authenticated itself) while making the trail
+    // independently checkable: a claim that disagrees with the principal is now
+    // visible rather than indistinguishable.
     await emitEvent({
       event_type: 'consent.revoked.v1',
-      payload: { receipt_id, revoked_by: revocation.revoked_by, reason: revocation.reason },
+      payload: {
+        receipt_id,
+        revoked_by: revocation.revoked_by,
+        reason: revocation.reason,
+        authenticated_principal: input.authenticated_principal ?? null,
+        actor_kind: input.authenticated_actor_kind ?? null,
+      },
       pool_index: POOL_INDEX,
-      actor_kind: 'service',
-      actor_id: 'sdk-consent.revoke',
+      // Falls back to the old constant only when no principal was threaded
+      // through — an in-process caller rather than an HTTP one.
+      actor_kind: input.authenticated_actor_kind ?? 'service',
+      actor_id: input.authenticated_principal ?? 'sdk-consent.revoke',
       tenant_id: receipt.tenant_id,
       subject_kind: 'person',
       subject_id: receipt.person_id,
@@ -235,6 +257,161 @@ export async function checkConsent(input: CheckConsentInput): Promise<CheckConse
     expires_at: row.expires_at,
     revoked_at: row.revoked_at,
   };
+}
+
+export interface ListPurposesFilter {
+  app_id?: string;
+  category?: string;
+  legal_basis?: string;
+  limit?: number;
+  offset?: number;
+}
+
+export interface ListPurposesResult {
+  purposes: PurposeRecord[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+/**
+ * Reads the purpose registry — what `POST /api/consents/purposes` writes into.
+ *
+ * WHY THIS IS NOT TENANT-SCOPED, WHICH IS UNUSUAL HERE AND DELIBERATE.
+ *
+ * `consent.purpose.purpose_id` is a TEXT PRIMARY KEY: the registry is a single
+ * PLATFORM-WIDE namespace by construction, not a per-tenant one. Two tenants
+ * cannot both register 'marketing-email' — the second gets 409 Conflict, which
+ * already discloses that the first exists. Scoping the read while leaving the
+ * write globally unique would hide names that the write path reveals on the very
+ * next collision, which is worse than either choice made consistently: an
+ * integrator would see an empty list, register the obvious id, take a 409, and
+ * have no way to find out what it collided with.
+ *
+ * The table carries no tenant_id to scope BY, and inferring one from app_id is
+ * not available either — app_id here is a free-form string chosen by whoever
+ * registered the purpose, not the api_keys.application id a credential carries.
+ *
+ * So: the registry is global, and this reports it as global. The consequence
+ * worth stating plainly is that `description` is readable by any authenticated
+ * tenant. Purposes are a legal taxonomy rather than customer data, so that is
+ * defensible, but it is a product decision and not merely an implementation
+ * detail — if it must become per-tenant, purpose_id has to stop being the global
+ * primary key first, and that is a schema change with an FK from every receipt.
+ */
+export async function listPurposes(filter: ListPurposesFilter = {}): Promise<ListPurposesResult> {
+  const limit = Math.min(Math.max(filter.limit ?? 100, 1), 500);
+  const offset = Math.max(filter.offset ?? 0, 0);
+  const params = [
+    filter.app_id ?? null,
+    filter.category ?? null,
+    filter.legal_basis ?? null,
+  ];
+  const where = `WHERE ($1::text IS NULL OR app_id = $1)
+                   AND ($2::text IS NULL OR category = $2)
+                   AND ($3::text IS NULL OR legal_basis = $3)`;
+
+  // Total is reported alongside the page so a caller can tell "this is all of
+  // them" from "this is the first hundred" — the difference between a complete
+  // taxonomy panel and one that quietly truncates.
+  const countRow = await dataService.one<{ n: string }>(
+    `SELECT count(*)::text AS n FROM consent.purpose ${where}`,
+    params,
+  );
+  const purposes = await dataService.rows<PurposeRecord>(
+    `SELECT purpose_id, app_id, description, legal_basis, default_jurisdictions,
+            created_at, category, segmented
+       FROM consent.purpose
+     ${where}
+      ORDER BY app_id, purpose_id
+      LIMIT $4 OFFSET $5`,
+    [...params, limit, offset],
+  );
+  return { purposes, total: Number(countRow?.n ?? 0), limit, offset };
+}
+
+/** One tuple in a bulk consent check, carrying the caller's slot for it. */
+export interface BulkCheckItem extends CheckConsentInput {
+  index: number;
+}
+
+export interface BulkCheckRow extends CheckConsentResult {
+  index: number;
+}
+
+/**
+ * checkConsent for N tuples in ONE round trip and ONE query.
+ *
+ * The point is not saving HTTP overhead — it is that the composer's alternative
+ * is N sequential calls, deliberately sequential because firing them at once
+ * trips the rate limiter and then the circuit breaker for every other consumer
+ * of this SDK. At four upstream checks per subject a 100k audience is 400k
+ * sequential calls; the arithmetic does not fit in any request budget, and
+ * parallelising it converts one caller's latency problem into everyone's outage.
+ *
+ * So this must be genuinely set-based. A loop over checkConsent() behind a bulk
+ * route would look like a fix and move the same N queries one layer down.
+ *
+ * The DISTINCT ON reproduces the single-tuple `ORDER BY granted_at DESC LIMIT 1`
+ * exactly, per input row — including the case where the same tuple appears twice
+ * in one batch, which gets the same verdict in both slots rather than one of them
+ * silently dropping out of the join.
+ */
+export async function checkConsentBulk(items: BulkCheckItem[]): Promise<BulkCheckRow[]> {
+  if (items.length === 0) return [];
+  const rows = await dataService.rows<{
+    idx: number;
+    receipt_id: string | null;
+    granted_at: Date | null;
+    expires_at: Date | null;
+    revoked_at: Date | null;
+  }>(
+    `WITH q AS (
+       SELECT * FROM unnest($1::uuid[], $2::text[], $3::text[], $4::text[], $5::int[])
+         AS t(person_id, purpose_id, processor, jurisdiction, idx)
+     )
+     SELECT DISTINCT ON (q.idx)
+            q.idx,
+            r.receipt_id, r.granted_at, r.expires_at, r.revoked_at
+       FROM q
+       LEFT JOIN consent.receipt r
+         ON r.person_id    = q.person_id
+        AND r.purpose_id   = q.purpose_id
+        AND r.processor    = q.processor
+        AND r.jurisdiction = q.jurisdiction
+      ORDER BY q.idx, r.granted_at DESC`,
+    [
+      items.map((i) => i.person_id),
+      items.map((i) => i.purpose_id),
+      items.map((i) => i.processor),
+      items.map((i) => i.jurisdiction),
+      items.map((i) => i.index),
+    ],
+  );
+
+  const now = Date.now();
+  return rows.map((row) => {
+    if (!row.receipt_id) {
+      return {
+        index: row.idx,
+        granted: false,
+        receipt_id: null,
+        granted_at: null,
+        expires_at: null,
+        revoked_at: null,
+      };
+    }
+    const expired = row.expires_at != null && new Date(row.expires_at).getTime() <= now;
+    const revoked = row.revoked_at != null;
+    return {
+      index: row.idx,
+      granted: !expired && !revoked,
+      receipt_id: row.receipt_id,
+      granted_at: row.granted_at,
+      expires_at: row.expires_at,
+      revoked_at: row.revoked_at,
+    };
+  });
 }
 
 /**

@@ -81,6 +81,10 @@ rather than an update to the row.
 </div>
 
 <h3>Worked example — an email provider for every app, except one</h3>
+<p class="lede"><code>email.provider</code> below is illustrative — it keeps the example
+readable. The key sdk-notification actually resolves is
+<code>notification.email.credential</code>; see the wired-keys table further down before
+copying a key name into a real call.</p>
 <pre><code># 1 · tenant-wide default: every LeadFlow app sends through SendGrid
 POST /api/config
 { "scope":"tenant", "scope_id":"&lt;tenant_id&gt;", "key":"email.provider",
@@ -172,6 +176,68 @@ never land in <code>config_value.value</code> — which is plain JSONB returned 
 That rule is enforced by a test that asserts it for EVERY descriptor, so a provider added later
 cannot quietly regress it.
 <br><br>Still open: these pages are written but not yet exercised against a running portal.
+</div>
+
+<h3>Three gaps to design around today</h3>
+<p>The APIs above are all live. These three limits are in the current build, and each one
+changes what you should promise a tenant.</p>
+
+<div class="panel warn">
+<strong>1 · App-scope config is now editable in the portal; app_user scope is still API-only.</strong>
+The Configuration page carries a scope switcher — "All apps (tenant default)" plus one entry per
+application — and the chosen scope lives in the URL (<code>/config?app=&lt;application_id&gt;</code>)
+rather than in client state, so it survives a reload and is visible before you write to it. Each
+card still reports which scope answered, so an inherited value is distinguishable from one set
+here. <strong>app_user scope remains API-only</strong> (<code>POST /api/config</code> with
+<code>scope:"app_user"</code>); <code>assertWritable</code> permits it for the user themselves or
+a tenant admin.
+</div>
+
+<div class="panel ok">
+<strong>2 · Policies can now vary per app.</strong> <code>policy.policy</code> carries an
+<code>app_id</code>, scoped the same way <code>tenant.role_template</code> always was:
+<table>
+<thead><tr><th><code>tenant_id</code></th><th><code>app_id</code></th><th>Means</th></tr></thead>
+<tbody>
+<tr><td>NULL</td><td>NULL</td><td>platform default — applies everywhere</td></tr>
+<tr><td>set</td><td>NULL</td><td>tenant-wide — every app of that tenant (the previous behaviour)</td></tr>
+<tr><td>set</td><td>set</td><td>that one app only</td></tr>
+</tbody></table>
+<pre><code>POST /api/policies { "name":"pii-read", "version":"1.0.0", "app_id":"leadflow-web", … }
+GET  /api/policies?app_id=leadflow-web   → the app's rules FIRST, then the tenant-wide ones it inherits
+GET  /api/policies                       → tenant-wide only</code></pre>
+Existing rows keep <code>app_id NULL</code> and stay tenant-wide — stamping them with an app
+would silently narrow live access rules, which is the one migration outcome nobody can review
+after the fact.
+<p><strong>Listing is not "first match wins", and the difference matters.</strong> A config key
+has one value, so the most specific scope answers and the rest are ignored. Access rules
+<em>compose</em>: a tenant-wide rule and an app rule are both in force. The ordering exists so
+an override is presented before the rule it narrows — not so a caller may drop the remainder.
+Dropping inherited rules because a more specific one exists would widen access at precisely the
+moment somebody added a restriction.</p>
+</div>
+
+<div class="panel warn">
+<strong>3 · Not every provider key is wired to a consumer.</strong> Setting a key that nothing
+reads looks identical to setting one that works — the row saves, the page shows it, and the
+feature stays dead. Only these keys are resolved by runtime code today, via
+<code>checkProviderConfigured()</code>:
+<table>
+<thead><tr><th>Key</th><th>Consumed by</th><th>Status</th></tr></thead>
+<tbody>
+<tr><td><code>llm.provider</code></td><td>sdk-ai-gateway</td><td>live</td></tr>
+<tr><td><code>payment.provider</code></td><td>sdk-payment</td><td>live</td></tr>
+<tr><td><code>notification.email.credential</code></td><td>sdk-notification</td><td>live</td></tr>
+<tr><td><code>search.provider</code></td><td>—</td><td>no consumer yet</td></tr>
+<tr><td><code>media.s3</code></td><td>—</td><td>no consumer yet</td></tr>
+</tbody></table>
+The key names are now consistent — the portal cards and the provider descriptors both use the
+runtime keys (<code>llm.provider</code>, <code>payment.provider</code>,
+<code>notification.email.credential</code>, <code>media.s3</code>); the portal previously wrote
+<code>aws.s3</code>, which matched neither the platform default nor any consumer. <strong>The
+naming is fixed; the missing consumers are not.</strong> Storage and search settings now land on
+the right key and will take effect the moment an SDK resolves them, but until then filling those
+cards changes no behaviour. Treat them as staged configuration, not as working features.
 </div>
 
 <h3>What that UI needs to get right</h3>

@@ -107,11 +107,10 @@ import {
   installAdminOpsInvalidator,
 } from './admin/adminOpsAuth';
 import { issueOpsToken, revokeOpsToken, listOpsTokens } from './admin/opsTokenStore';
-import { resolveIdentityContext, getEmpiMetrics } from '@projexlight/sdk-identity-resolver';
+import { resolveIdentityContext } from '@projexlight/sdk-identity-resolver';
 import { emitEvent, addEmitTap } from '@projexlight/sdk-audit';
 import {
   registry as metricsRegistry,
-  recordMdmMetrics,
   recordConsentCheck,
   runDetections,
 } from '@projexlight/telemetry';
@@ -584,11 +583,13 @@ app.addHook('onResponse', async (req, reply) => {
   }
 });
 app.get('/metrics', async (_req, reply) => {
-  try {
-    recordMdmMetrics(await getEmpiMetrics());
-  } catch {
-    // best-effort: MDM gauges refresh on the next scrape
-  }
+  // NOTE: the mdm_* gauges are deliberately NOT refreshed here. getEmpiMetrics()
+  // is tenant-scoped, but /metrics is on the public (unauthenticated) allowlist
+  // and the mdm_* gauges carry no tenant label — so there is no tenant to scope a
+  // refresh to, and publishing one tenant's EMPI counts under a global name would
+  // both misreport the platform and expose that tenant's numbers to an anonymous
+  // scrape. A platform-wide aggregate (or per-tenant gauges behind an authenticated
+  // endpoint) is the correct way to restore these; see recordMdmMetrics().
   reply.header('Content-Type', 'text/plain; version=0.0.4');
   return metricsRegistry.render();
 });

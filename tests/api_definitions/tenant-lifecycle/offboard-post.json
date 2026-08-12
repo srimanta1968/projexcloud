@@ -13,7 +13,10 @@
   "priority": 40,
   "testability": "auto",
   "dependsOn": [
-    "POST /api/auth/signup-tenant"
+    "POST /api/auth/signup-tenant",
+    "POST /api/tenant-lifecycle/:tenant_id/suspend",
+    "POST /api/tenant-lifecycle/:tenant_id/reinstate",
+    "GET /api/tenant-lifecycle/:tenant_id/state"
   ],
   "testCases": [
     {
@@ -69,7 +72,7 @@
       }
     ]
   },
-  "description": "Starts tenant offboarding and stamps a data-retention deadline, defaulting to 30 days from now (per FR-TLC-6) when deadline_at is omitted, and returns the resulting lifecycle state. Edge cases: ownership is checked first — a JWT whose tenant_id and parent_tenant_id both differ from the path tenant_id gets 403; deadline_at must parse as a date, and any unparseable string (including a non-ISO format) yields 400 \"deadline_at must be ISO-8601\"; a deadline in the past is accepted by the route because only NaN is rejected, so back-dated deadlines are not guarded here; offboarding a tenant that is already offboarding or in a state with no legal edge to offboarded returns 409, making repeat calls non-idempotent.",
+  "description": "Starts tenant offboarding and stamps a data-retention deadline, defaulting to 30 days from now (per FR-TLC-6) when deadline_at is omitted, and returns the resulting lifecycle state. Edge cases: ownership is checked first — a JWT whose tenant_id and parent_tenant_id both differ from the path tenant_id gets 403; deadline_at must parse as a date, and any unparseable string (including a non-ISO format) yields 400 \"deadline_at must be ISO-8601\"; a deadline in the past is accepted by the route because only NaN is rejected, so back-dated deadlines are not guarded here; offboarding a tenant that is already offboarding or in a state with no legal edge to offboarded returns 409, making repeat calls non-idempotent. TEST ORDERING: suspend, reinstate and state are listed in dependsOn for SEQUENCING, not for data — every tenant-lifecycle definition drives the SAME tenant from signup-tenant, and offboarding is terminal for the states they need. When this ran first it left the tenant in 'offboarding' and suspend/reinstate then failed 409 'Invalid tenant lifecycle transition offboarding -> suspended|active' — a green Dev run and two red Test-MCP rows for the same code, purely from execution order.",
   "errorCases": [
     {
       "status": 401,

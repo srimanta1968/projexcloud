@@ -81,8 +81,17 @@ export interface GrantConsentInput {
 }
 
 export interface RevokeConsentInput {
+  /** Who the CALLER says revoked it. Request-supplied and unverified. */
   revoked_by: string;
   reason: string;
+  /**
+   * The principal the platform authenticated for this request (persona id).
+   * Set by the HTTP layer from req.auth, never from the body — the whole point
+   * is that it cannot be asserted. Optional so in-process callers still compile.
+   */
+  authenticated_principal?: string;
+  /** 'human' or 'service', from the authenticated credential. */
+  authenticated_actor_kind?: 'human' | 'service';
 }
 
 export interface CheckConsentInput {

@@ -3,41 +3,213 @@
   "version": "1.0.0",
   "schema_version": "1.0",
   "summary": "Multichannel notification fan-out for ProjexCloud: SMS + email + push + voice + in-app, driven by named templates with localization + brand kits. Quiet-hours engine respects per-recipient + per-tenant DND windows; channel fallback (SMS fails → email) is configured per template. Source-of-truth for any outbound customer + tech + operator message.",
-  "tags": ["notification", "sms", "email", "push", "voice", "templates", "p7"],
+  "tags": [
+    "notification",
+    "sms",
+    "email",
+    "push",
+    "voice",
+    "templates",
+    "p7"
+  ],
   "provides": {
     "endpoints": [
-      { "method": "POST", "path": "/api/notifications/send",        "description": "Send a notification (template-driven or raw). Returns message_id + per-channel status." },
-      { "method": "POST", "path": "/api/notifications/templates",   "description": "Create or update a notification template (multi-channel, multi-locale)." },
-      { "method": "POST", "path": "/api/notifications/quiet-hours", "description": "Set per-recipient or per-tenant quiet-hours windows. Repeat-sends inside a window are deferred or routed to a fallback channel." }
+      {
+        "method": "POST",
+        "path": "/api/notifications/send",
+        "description": "Send a notification (template-driven or raw). Returns message_id + per-channel status."
+      },
+      {
+        "method": "POST",
+        "path": "/api/notifications/templates",
+        "description": "Create or update a notification template (multi-channel, multi-locale)."
+      },
+      {
+        "method": "POST",
+        "path": "/api/notifications/quiet-hours",
+        "description": "Set per-recipient or per-tenant quiet-hours windows. Repeat-sends inside a window are deferred or routed to a fallback channel."
+      },
+      {
+        "method": "POST",
+        "path": "/api/notifications/dispatch",
+        "description": "Unified channel-routing transport with provider failover (email SES/SMTP, SMS Twilio), deferring on per-persona quiet hours. Optional frequency-cap and dedup-window enforcement."
+      },
+      {
+        "method": "POST",
+        "path": "/api/notifications/send-window",
+        "description": "Read-only pre-flight: \"may I send to this subject on this channel now, and if not, when?\". Returns the quiet-hours verdict, next_open_at, and the resolved frequency policy with current usage. Reserves nothing — a check that reserved would burn one unit of the cap per subject ASKED ABOUT. Scope: notification.send-window.write."
+      },
+      {
+        "method": "POST",
+        "path": "/api/notifications/send-window/bulk",
+        "description": "The same verdict for up to 1000 subjects. Query count is (distinct personas) + (distinct tenant/channel/purpose), which for a campaign is 1 + 1. remaining is a tenant-wide rolling-24h figure, not a per-subject reservation — compare it against your batch size."
+      },
+      {
+        "method": "POST",
+        "path": "/api/notifications/providers",
+        "description": "Bind a customer-owned email provider (BYO SMTP / SendGrid / SES). Credentials go through the sdk-secrets envelope."
+      },
+      {
+        "method": "GET",
+        "path": "/api/notifications/providers",
+        "description": "List the tenant's bound email providers (no secret material returned)."
+      },
+      {
+        "method": "PATCH",
+        "path": "/api/notifications/providers/:provider_id",
+        "description": "Rotate a bound provider's credential."
+      },
+      {
+        "method": "DELETE",
+        "path": "/api/notifications/providers/:provider_id",
+        "description": "Revoke a bound email provider."
+      },
+      {
+        "method": "POST",
+        "path": "/api/notifications/providers/:provider_id/verify",
+        "description": "Verify a bound provider by attempting a real authenticated connection."
+      },
+      {
+        "method": "POST",
+        "path": "/api/notifications/sms-settings",
+        "description": "Configure inbound-SMS settings: webhook signing secret and STOP/HELP/START auto-reply text."
+      },
+      {
+        "method": "POST",
+        "path": "/api/notifications/webhooks/sms/inbound",
+        "description": "PUBLIC inbound-SMS webhook (Twilio). HMAC-verified when a per-tenant secret is configured. Classifies STOP/START/HELP and routes the intent to the consent pipeline. Idempotent per message SID; tenant via ?tenant_id=."
+      },
+      {
+        "method": "GET",
+        "path": "/api/notifications/sms-inbound",
+        "description": "List inbound SMS for a tenant, optionally by keyword intent."
+      },
+      {
+        "method": "POST",
+        "path": "/api/notifications/sms-consent",
+        "description": "Propagate an SMS opt-out/opt-in to suppression + consent + event (idempotent, PII-safe)."
+      },
+      {
+        "method": "GET",
+        "path": "/api/notifications/sms-consent",
+        "description": "List SMS consent state for a tenant."
+      },
+      {
+        "method": "POST",
+        "path": "/api/notifications/webhooks/delivery/:provider",
+        "description": "PUBLIC delivery-status webhook (Twilio/SES/SendGrid). Normalizes the status, maps it by provider_message_id, records an idempotent receipt and feeds reputation. Tenant via ?tenant_id=."
+      },
+      {
+        "method": "GET",
+        "path": "/api/notifications/delivery-receipts",
+        "description": "List delivery receipts for a tenant, optionally by status."
+      },
+      {
+        "method": "PUT",
+        "path": "/api/notifications/frequency-policy",
+        "description": "Upsert a TENANT frequency policy for a (channel, purpose). max_per_day null means uncapped and is deliberately distinct from 0, which blocks everything."
+      },
+      {
+        "method": "GET",
+        "path": "/api/notifications/frequency-policy",
+        "description": "List resolved frequency policies; when ?channel= is named, also returns current usage against the cap."
+      }
     ],
     "events": [
-      { "name": "notification.message.sent.v1",      "retention_class": "operational", "conflict_policy": "event-sourcing", "description": "Notification accepted by the carrier/provider; per-channel transit." },
-      { "name": "notification.message.delivered.v1", "retention_class": "operational", "conflict_policy": "lww",            "description": "Provider confirmed delivery (read-receipt where supported)." },
-      { "name": "notification.message.failed.v1",    "retention_class": "regulated",   "conflict_policy": "event-sourcing", "description": "All channel attempts failed; carries error class + which fallback (if any) was used." },
-      { "name": "notification.template.published.v1","retention_class": "regulated",   "conflict_policy": "event-sourcing", "description": "New template version published; carries the diff vs. prior version." }
+      {
+        "name": "notification.message.sent.v1",
+        "retention_class": "operational",
+        "conflict_policy": "event-sourcing",
+        "description": "Notification accepted by the carrier/provider; per-channel transit."
+      },
+      {
+        "name": "notification.message.delivered.v1",
+        "retention_class": "operational",
+        "conflict_policy": "lww",
+        "description": "Provider confirmed delivery (read-receipt where supported)."
+      },
+      {
+        "name": "notification.message.failed.v1",
+        "retention_class": "regulated",
+        "conflict_policy": "event-sourcing",
+        "description": "All channel attempts failed; carries error class + which fallback (if any) was used."
+      },
+      {
+        "name": "notification.template.published.v1",
+        "retention_class": "regulated",
+        "conflict_policy": "event-sourcing",
+        "description": "New template version published; carries the diff vs. prior version."
+      }
     ],
     "models": [
-      { "schema": "notification", "table": "template",    "description": "Per-template definition: name, version, channels, localized bodies, fallback chain." },
-      { "schema": "notification", "table": "message",     "description": "Per-send row: template_ref or raw body, recipient, channel, status, delivery_at." },
-      { "schema": "notification", "table": "quiet_hours", "description": "Per-(recipient or tenant) quiet-hours window (timezone-aware)." }
+      {
+        "schema": "notification",
+        "table": "template",
+        "description": "Per-template definition: name, version, channels, localized bodies, fallback chain."
+      },
+      {
+        "schema": "notification",
+        "table": "message",
+        "description": "Per-send row: template_ref or raw body, recipient, channel, status, delivery_at."
+      },
+      {
+        "schema": "notification",
+        "table": "quiet_hours",
+        "description": "Per-(recipient or tenant) quiet-hours window (timezone-aware)."
+      }
     ],
     "hooks": [
-      { "name": "sendNotification",   "description": "Service entry — accepts template + recipient, returns message_id + channel statuses." },
-      { "name": "publishTemplate",    "description": "Publish a new template version; idempotent on (name, version)." },
-      { "name": "setQuietHours",      "description": "Set per-recipient or per-tenant quiet-hours window." },
-      { "name": "startProviderWebhook","description": "Stand up the webhook receiver for carrier callbacks (delivery, opens, replies)." }
+      {
+        "name": "sendNotification",
+        "description": "Service entry — accepts template + recipient, returns message_id + channel statuses."
+      },
+      {
+        "name": "publishTemplate",
+        "description": "Publish a new template version; idempotent on (name, version)."
+      },
+      {
+        "name": "setQuietHours",
+        "description": "Set per-recipient or per-tenant quiet-hours window."
+      },
+      {
+        "name": "startProviderWebhook",
+        "description": "Stand up the webhook receiver for carrier callbacks (delivery, opens, replies)."
+      }
     ],
     "ui_components": []
   },
   "consumes": {
     "events": [
-      { "name": "dispatch.route.materialized.v1",  "from": "@projexlight/sdk-dispatch" },
-      { "name": "dispatch.task.completed.v1",      "from": "@projexlight/sdk-dispatch" },
-      { "name": "storm.event.declared.v1",         "from": "@projexlight/sdk-storm" },
-      { "name": "hdk-map.tiles.quota.warn.v1",     "from": "@projexlight/hdk-map" }
+      {
+        "name": "dispatch.route.materialized.v1",
+        "from": "@projexlight/sdk-dispatch"
+      },
+      {
+        "name": "dispatch.task.completed.v1",
+        "from": "@projexlight/sdk-dispatch"
+      },
+      {
+        "name": "storm.event.declared.v1",
+        "from": "@projexlight/sdk-storm"
+      },
+      {
+        "name": "hdk-map.tiles.quota.warn.v1",
+        "from": "@projexlight/hdk-map"
+      }
     ],
-    "infra": ["postgres", "twilio-or-equivalent-sms", "ses-or-equivalent-email", "apns-and-fcm-push", "redis-optional"],
-    "config_keys": ["NOTIFICATION_DEFAULT_FROM_SMS", "NOTIFICATION_DEFAULT_FROM_EMAIL", "NOTIFICATION_QUIET_HOURS_DEFAULT_TZ", "NOTIFICATION_RATE_LIMIT_PER_RECIPIENT_PER_HOUR"]
+    "infra": [
+      "postgres",
+      "twilio-or-equivalent-sms",
+      "ses-or-equivalent-email",
+      "apns-and-fcm-push",
+      "redis-optional"
+    ],
+    "config_keys": [
+      "NOTIFICATION_DEFAULT_FROM_SMS",
+      "NOTIFICATION_DEFAULT_FROM_EMAIL",
+      "NOTIFICATION_QUIET_HOURS_DEFAULT_TZ",
+      "NOTIFICATION_RATE_LIMIT_PER_RECIPIENT_PER_HOUR"
+    ]
   },
   "scenarios": [
     {
@@ -77,16 +249,42 @@
     }
   ],
   "compliance_posture": {
-    "regimes": ["TCPA-Section-227-sms", "CAN-SPAM-email", "GDPR-Art-7-consent", "CCPA-opt-out", "SOC2-CC7.1"],
+    "regimes": [
+      "TCPA-Section-227-sms",
+      "CAN-SPAM-email",
+      "GDPR-Art-7-consent",
+      "CCPA-opt-out",
+      "SOC2-CC7.1"
+    ],
     "notes": "TCPA + CAN-SPAM require recorded consent per recipient + per channel + an opt-out path; sdk-consent + sdk-notification join via recipient.persona_id. Quiet-hours engine respects do-not-disturb windows. Provider webhooks update delivered/failed status, persisted for the per-message audit trail."
   },
   "pool_placement": "app",
   "pricing_skus": [
-    { "sku": "notification.sms.send",      "mode": "metered", "unit_description": "per SMS (carrier passthrough billed separately)" },
-    { "sku": "notification.email.send",    "mode": "metered", "unit_description": "per email" },
-    { "sku": "notification.push.send",     "mode": "metered", "unit_description": "per push" },
-    { "sku": "notification.voice.minute",  "mode": "metered", "unit_description": "per voice-call minute" },
-    { "sku": "notification.template.publish","mode": "flat",  "unit_description": "per template version published" }
+    {
+      "sku": "notification.sms.send",
+      "mode": "metered",
+      "unit_description": "per SMS (carrier passthrough billed separately)"
+    },
+    {
+      "sku": "notification.email.send",
+      "mode": "metered",
+      "unit_description": "per email"
+    },
+    {
+      "sku": "notification.push.send",
+      "mode": "metered",
+      "unit_description": "per push"
+    },
+    {
+      "sku": "notification.voice.minute",
+      "mode": "metered",
+      "unit_description": "per voice-call minute"
+    },
+    {
+      "sku": "notification.template.publish",
+      "mode": "flat",
+      "unit_description": "per template version published"
+    }
   ],
   "links": {
     "readme": "packages/sdk-notification/README.md",

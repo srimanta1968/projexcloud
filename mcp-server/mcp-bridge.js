@@ -241,13 +241,13 @@ const TOOLS = [
   },
   {
     name: 'projexlight_get_instruction',
-    description: 'Get detailed implementation instructions for a specific task',
+    description: 'THE tool to call when you are about to write code for a task you know the id of. Returns that task\'s full implementation instruction: description, acceptance criteria, code templates, validation rules, quality gates, and any outstanding api-definition/violation gaps you must fix as part of it. taskId accepts EITHER the UUID or the short ID in any form a person types — TK-4135, tk-4135, or just 4135 — so pass the id the user quoted straight through instead of looking the UUID up first. Use projexlight_get_task instead only when you want the task metadata WITHOUT the instruction.',
     inputSchema: {
       type: 'object',
       properties: {
         taskId: {
           type: 'string',
-          description: 'The UUID of the task to get instructions for'
+          description: 'Task UUID, or short ID in any form: TK-4135, tk-4135, or just 4135'
         },
         taskType: {
           type: 'string',
@@ -1416,6 +1416,47 @@ const TOOLS = [
     }
   },
   {
+    name: 'projexlight_list_tasks',
+    description: 'List/filter tasks by STATUS or TASK TYPE — the generic task query. Use this whenever you need tasks you do NOT already have an id for ("what is still in the backlog?", "which api_endpoint tasks are left?", "show me everything blocked"): every other task lookup needs a featureId, scenarioId or taskId you must already know. Filters combine (AND), and each of status/task_type/priority/cli_generation_status also accepts a comma-separated list to match ANY value, e.g. status="backlog,todo". Two independent status axes: `status` is the board column a human moves, `cli_generation_status` is how far code generation got — filter on the one you mean. Pass includeCounts=true to get the project\'s status/task_type distribution instead of guessing which values it uses. Take an id off the result and pass it to projexlight_get_instruction to start coding it.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        status: {
+          type: 'string',
+          description: 'Board status: backlog, ready_for_sprint, todo, in_progress, blocked, review, done, completed, archived. Comma-separated list allowed (matches ANY).'
+        },
+        task_type: {
+          type: 'string',
+          description: 'Task type, e.g. api_endpoint, ui_component, service_layer, data_layer, crud_operations, database_migration, unit_testing, integration_testing, frontend, backend, database, testing, documentation, development. Comma-separated list allowed (matches ANY). NOTE: use service_layer, not service.'
+        },
+        cli_generation_status: {
+          type: 'string',
+          description: 'Code-generation status (independent of `status`): not_started, in_progress, completed, failed, manual. Comma-separated list allowed.'
+        },
+        priority: {
+          type: 'string',
+          description: 'Priority: low, medium, high, critical. Comma-separated list allowed.'
+        },
+        feature_id: { type: 'string', description: 'Scope to one feature (UUID)' },
+        epic_id: { type: 'string', description: 'Scope to one epic (UUID)' },
+        scenario_id: { type: 'string', description: 'Scope to one scenario (UUID)' },
+        sprint_id: { type: 'string', description: 'Scope to one sprint (UUID)' },
+        assigned_to: { type: 'string', description: 'Scope to one assignee (user UUID)' },
+        search: { type: 'string', description: 'Free-text match on title, description, business value or user story' },
+        includeCounts: {
+          type: 'boolean',
+          description: 'Also return meta.counts — how many tasks sit in each status, task_type and cli_generation_status for this project. Use it to discover the vocabulary before filtering.'
+        },
+        limit: { type: 'number', description: 'Page size (default 50, max 200)' },
+        offset: { type: 'number', description: 'Pagination offset (default 0)' },
+        orderBy: { type: 'string', description: 'Sort column: created_at (default), updated_at, due_date, title, status, priority, task_type, story_points, short_id' },
+        orderDirection: { type: 'string', enum: ['ASC', 'DESC'], description: 'Sort direction (default DESC)' },
+        projectPath: { type: 'string', description: 'Unix-style path to project root for multi-project setups. Auto-detected if not provided.' }
+      },
+      required: []
+    }
+  },
+  {
     name: 'projexlight_create_tasks_bulk',
     description: 'Create multiple tasks at once for a feature. More efficient than creating tasks one by one. Each task requires title, description, task_type, feature_id, epic_id, sprint_id.',
     inputSchema: {
@@ -1672,6 +1713,8 @@ const TOOL_ENDPOINTS = {
   'projexlight_get_scenarios_by_feature': { method: 'POST', path: '/api/features/scenarios' },
   'projexlight_get_tasks_by_feature_lookup': { method: 'POST', path: '/api/features/tasks' },
   'projexlight_get_tasks_by_scenario': { method: 'POST', path: '/api/scenarios/tasks' },
+  // Generic task query — by status / task type, no id needed
+  'projexlight_list_tasks': { method: 'POST', path: '/api/tasks/list' },
   'projexlight_create_tasks_bulk': { method: 'POST', path: '/api/tasks/create-bulk' },
   'projexlight_implement': { method: 'POST', path: '/api/implement' },
   'projexlight_update_scenario_steps': { method: 'POST', path: '/api/scenarios/update-steps' },

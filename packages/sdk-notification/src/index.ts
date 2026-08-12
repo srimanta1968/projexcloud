@@ -7,7 +7,16 @@ export {
   markDelivered,
   TemplateNotFoundError,
 } from './services/notificationService';
-export { getQuietHours, setQuietHours, isInQuietHours } from './services/quietHours';
+export { getQuietHours, getQuietHoursBulk, setQuietHours, isInQuietHours, quietHoursState } from './services/quietHours';
+// Read-only send-window pre-flight: the quiet-hours + frequency-cap verdict
+// WITHOUT attempting a send (P16 EP-383 follow-on).
+export { checkSendWindow, checkSendWindowBulk } from './services/sendWindow';
+export type {
+  SendWindowQuery,
+  SendWindowVerdict,
+  BulkSendWindowQuery,
+  BulkSendWindowRow,
+} from './services/sendWindow';
 export {
   unifiedDispatch,
   makeSequenceStepSender,

@@ -1,0 +1,91 @@
+{
+  "name": "POST /api/notifications/send-window - May I send to this subject right now?",
+  "endpoint": "/api/notifications/send-window",
+  "sdk": "sdk-notification",
+  "sourceFile": "packages/sdk-notification/src/server/routes.ts",
+  "method": "POST",
+  "requiresAuth": true,
+  "expectedStatus": 200,
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "featureId": "194c1735-da09-4428-ab1e-c7890bbd532b",
+  "epicId": "f7f7186e-8f69-4e44-97b8-212928e870f6",
+  "priority": 31,
+  "dependsOn": [
+    "POST /api/auth/signup-tenant"
+  ],
+  "testCases": [
+    {
+      "name": "Ask whether an email send is open for a tenant and purpose",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "payload": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "channel": "email",
+        "purpose": "marketing"
+      },
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "data": {
+          "send_window": {
+            "open": "boolean",
+            "reasons": "array",
+            "evaluated_at": "string"
+          }
+        }
+      }
+    }
+  ],
+  "expectedResponse": {
+    "data": {
+      "send_window": {
+        "open": "boolean",
+        "reasons": "array",
+        "evaluated_at": "string"
+      }
+    }
+  },
+  "captureResponse": {
+    "notifications.send-window.response.data.send_window.open": "data.send_window.open"
+  },
+  "fieldEnums": {
+    "channel": ["email", "sms", "whatsapp", "push", "slack"],
+    "policy_source": ["tenant", "platform", "builtin"]
+  },
+  "fieldEnumNotes": {
+    "purpose": "NOT an enum. Free text chosen by the tenant, matched against notification.frequency_policy.purpose with '*' as the catch-all row — resolveFrequencyPolicy prefers an exact purpose match over the wildcard. There is no closed list to publish, and inventing one would put values into the QA docs that the validator does not actually enforce."
+  },
+  "description": "Read-only pre-flight: may a send go to this subject on this channel at this moment, and if not, when does the window open. Returns open, reasons (most-blocking first), next_open_at, a quiet_hours block (quiet, reason, and unconfigured so an absent record is distinguishable from an open one) and a frequency block (max_per_day, used_last_24h, remaining, policy_source). channel must be one of email, sms, whatsapp, push, slack. tenant_id falls back to the caller's credential. subject_persona_id is optional and selects whose quiet hours apply; purpose selects the frequency policy, since caps are per purpose so an OTP is not throttled by marketing. An optional ISO-8601 `at` evaluates a future moment for a scheduled campaign - an unparseable value is rejected rather than silently answered for now, because a verdict about the wrong moment is the one failure mode this check must not have. RESERVES NOTHING: it calls getSendUsage, never reserveSend, because a pre-flight that reserved would burn one unit of the daily cap per subject ASKED ABOUT, exhausting the allowance before a message went out and then suppressing the real sends as duplicates. Consequently `remaining` is a tenant-wide rolling-24h figure for the (channel, purpose), not a per-subject reservation - a caller planning a batch must compare it against its own batch size, which the returned capacity_note states. Requires a valid JWT, or a key holding notification.send-window.write.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "Authorization header absent or not in Bearer form (requireAuth / gateway default-deny authGate)"
+    },
+    {
+      "status": 403,
+      "code": "Forbidden",
+      "message": "Service token is missing required scope: notification.send-window.write",
+      "when": "An API key or machine token that does not hold notification.send-window.write (or a covering wildcard) is presented"
+    },
+    {
+      "status": 400,
+      "code": "VALIDATION_ERROR",
+      "message": "tenant_id is required (absent from the request and from the credential)",
+      "when": "No tenant_id in the body and the credential carries none"
+    },
+    {
+      "status": 400,
+      "code": "VALIDATION_ERROR",
+      "message": "channel must be one of email, sms, whatsapp, push, slack",
+      "when": "channel is absent or not a supported dispatch channel"
+    },
+    {
+      "status": 400,
+      "code": "VALIDATION_ERROR",
+      "message": "at must be an ISO-8601 timestamp",
+      "when": "`at` is supplied but does not parse as a date"
+    }
+  ]
+}

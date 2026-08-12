@@ -101,6 +101,11 @@ export const EVENT_TYPE_REGISTRY: Record<string, EventTypeMetadata> = {
   /* --- sdk-policy (§5.4) --- */
   'policy.evaluated.v1':              { event_type: 'policy.evaluated.v1',              retention_class: 'operational', conflict_policy: 'lww',            schema_state: 'active', compaction_policy: 'lww',  schema_version: 1 },
   'policy.updated.v1':                { event_type: 'policy.updated.v1',                retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+  // Aggregate fan-out for POST /api/policies/evaluate/bulk: ONE event per
+  // (batch, policy) carrying the allow/deny split, not one per subject. N
+  // hash-chain appends would serialize a batch evaluation behind the audit
+  // writer. The per-subject record is still complete in policy.decision.
+  'policy.evaluated-bulk.v1':         { event_type: 'policy.evaluated-bulk.v1',         retention_class: 'operational', conflict_policy: 'lww',            schema_state: 'active', compaction_policy: 'lww',  schema_version: 1 },
 
   /* --- sdk-rebac (§5.5) --- */
   'rebac.relationship.created.v1':       { event_type: 'rebac.relationship.created.v1',       retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },

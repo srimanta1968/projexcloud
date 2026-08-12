@@ -3,42 +3,146 @@
   "version": "1.0.0",
   "schema_version": "1.0",
   "summary": "Explicit-consent receipt ledger for ProjexCloud: define data-processing Purposes once, grant per-subject Receipts referencing them, check at runtime before any purpose-scoped read/write, and revoke triggers a sdk-data-rights fan-out. Supports the offline-grant queue (in-person + paper-signed channels reconciled when the device reconnects) and signed export for DSAR fulfillment. Mandatory upstream of any PII processing in healthcare and GDPR-scoped tenants.",
-  "tags": ["consent", "gdpr", "hipaa", "privacy", "receipt-ledger", "p2"],
+  "tags": [
+    "consent",
+    "gdpr",
+    "hipaa",
+    "privacy",
+    "receipt-ledger",
+    "p2"
+  ],
   "provides": {
     "endpoints": [
-      { "method": "POST", "path": "/api/consents/purposes",              "description": "Register a data-processing Purpose. Required before any Receipt can reference it." },
-      { "method": "POST", "path": "/api/consents",                       "description": "Grant a new Receipt for (subject, purpose). Carries channel (portal / in-person / paper-signed / voice-recorded)." },
-      { "method": "POST", "path": "/api/consents/:receipt_id/revoke",    "description": "Revoke a receipt. Emits consent.receipt.revoked.v1 → sdk-data-rights starts the erasure fan-out." },
-      { "method": "POST", "path": "/api/consents/check",                 "description": "Runtime gate: does (subject, purpose) have an active, non-expired Receipt? Used by every PII-touching SDK on the hot path." },
-      { "method": "GET",  "path": "/api/consents/export",                "description": "Export every Receipt for a subject (DSAR Art-15)." }
+      {
+        "method": "POST",
+        "path": "/api/consents/purposes",
+        "description": "Register a data-processing Purpose. Required before any Receipt can reference it."
+      },
+      {
+        "method": "POST",
+        "path": "/api/consents",
+        "description": "Grant a new Receipt for (subject, purpose). Carries channel (portal / in-person / paper-signed / voice-recorded)."
+      },
+      {
+        "method": "POST",
+        "path": "/api/consents/:receipt_id/revoke",
+        "description": "Revoke a receipt. Emits consent.receipt.revoked.v1 → sdk-data-rights starts the erasure fan-out."
+      },
+      {
+        "method": "POST",
+        "path": "/api/consents/check",
+        "description": "Runtime gate: does (subject, purpose) have an active, non-expired Receipt? Used by every PII-touching SDK on the hot path."
+      },
+      {
+        "method": "GET",
+        "path": "/api/consents/export",
+        "description": "Export every Receipt for a subject (DSAR Art-15)."
+      },
+      {
+        "method": "GET",
+        "path": "/api/consents/purposes",
+        "description": "List the registered purpose taxonomy (filter by app_id / category / legal_basis, paged with total). The registry is a single platform-wide namespace — purpose_id is a global primary key, so a name is unique across all tenants and a collision answers 409 on register."
+      },
+      {
+        "method": "GET",
+        "path": "/api/consents/:receipt_id",
+        "description": "Point-read ONE receipt: \"is the basis I recorded still valid?\". Distinct from POST /check, which asks whether ANY active consent exists for a tuple — a later receipt can satisfy that while the receipt something was captured under is revoked. Tenant-scoped; another tenant's receipt answers 404, never 403."
+      },
+      {
+        "method": "POST",
+        "path": "/api/consents/check/bulk",
+        "description": "The four-tuple check for up to 1000 subjects in one request and ONE query. Order-preserving with an explicit per-item index; a malformed item reports in its own slot and never fails the batch. Same scope as POST /check (consent.check.write)."
+      }
     ],
     "events": [
-      { "name": "consent.purpose.registered.v1", "retention_class": "regulated", "conflict_policy": "lww",            "description": "New processing-purpose defined for a tenant." },
-      { "name": "consent.receipt.granted.v1",    "retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "Subject granted consent for a purpose. Carries channel + expires_at." },
-      { "name": "consent.receipt.revoked.v1",    "retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "Receipt revoked. Downstream sdk-data-rights consumes this to start the erasure fan-out." },
-      { "name": "consent.check.denied.v1",       "retention_class": "operational","conflict_policy": "lww",            "description": "Runtime check returned false; useful for observability ('are we asking for purposes nobody consented to?')." },
-      { "name": "consent.export.delivered.v1",   "retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "DSAR-style export bundle delivered to the requesting subject." }
+      {
+        "name": "consent.purpose.registered.v1",
+        "retention_class": "regulated",
+        "conflict_policy": "lww",
+        "description": "New processing-purpose defined for a tenant."
+      },
+      {
+        "name": "consent.receipt.granted.v1",
+        "retention_class": "regulated",
+        "conflict_policy": "event-sourcing",
+        "description": "Subject granted consent for a purpose. Carries channel + expires_at."
+      },
+      {
+        "name": "consent.receipt.revoked.v1",
+        "retention_class": "regulated",
+        "conflict_policy": "event-sourcing",
+        "description": "Receipt revoked. Downstream sdk-data-rights consumes this to start the erasure fan-out."
+      },
+      {
+        "name": "consent.check.denied.v1",
+        "retention_class": "operational",
+        "conflict_policy": "lww",
+        "description": "Runtime check returned false; useful for observability ('are we asking for purposes nobody consented to?')."
+      },
+      {
+        "name": "consent.export.delivered.v1",
+        "retention_class": "regulated",
+        "conflict_policy": "event-sourcing",
+        "description": "DSAR-style export bundle delivered to the requesting subject."
+      }
     ],
     "models": [
-      { "schema": "consent", "table": "purpose",              "description": "Processing-purpose definition: tenant_id, name, description, legal_basis, default_expiry_days." },
-      { "schema": "consent", "table": "receipt",              "description": "Per-(subject, purpose) receipt: granted_at, expires_at, channel, version_of_purpose_text." },
-      { "schema": "consent", "table": "revocation",           "description": "Per-receipt revocation log (one-to-zero-or-one with receipt)." },
-      { "schema": "consent", "table": "offline_grant_queue",  "description": "In-person / paper-signed grants captured on a device offline; reconciled to receipts on reconnect." }
+      {
+        "schema": "consent",
+        "table": "purpose",
+        "description": "Processing-purpose definition: tenant_id, name, description, legal_basis, default_expiry_days."
+      },
+      {
+        "schema": "consent",
+        "table": "receipt",
+        "description": "Per-(subject, purpose) receipt: granted_at, expires_at, channel, version_of_purpose_text."
+      },
+      {
+        "schema": "consent",
+        "table": "revocation",
+        "description": "Per-receipt revocation log (one-to-zero-or-one with receipt)."
+      },
+      {
+        "schema": "consent",
+        "table": "offline_grant_queue",
+        "description": "In-person / paper-signed grants captured on a device offline; reconciled to receipts on reconnect."
+      }
     ],
     "hooks": [
-      { "name": "registerPurpose",   "description": "Idempotent on (tenant_id, name). Required before any Receipt can reference the purpose." },
-      { "name": "grantConsent",      "description": "Service-layer grant. Auto-fills expires_at from purpose.default_expiry_days if not provided." },
-      { "name": "checkConsent",      "description": "Runtime hot-path gate. Pulls cached Receipt + checks not-expired + not-revoked. Sub-ms when warm." },
-      { "name": "revokeConsent",     "description": "Revoke + emit. The actual erasure happens via sdk-data-rights consuming the event." }
+      {
+        "name": "registerPurpose",
+        "description": "Idempotent on (tenant_id, name). Required before any Receipt can reference the purpose."
+      },
+      {
+        "name": "grantConsent",
+        "description": "Service-layer grant. Auto-fills expires_at from purpose.default_expiry_days if not provided."
+      },
+      {
+        "name": "checkConsent",
+        "description": "Runtime hot-path gate. Pulls cached Receipt + checks not-expired + not-revoked. Sub-ms when warm."
+      },
+      {
+        "name": "revokeConsent",
+        "description": "Revoke + emit. The actual erasure happens via sdk-data-rights consuming the event."
+      }
     ],
     "ui_components": []
   },
   "consumes": {
     "events": [
-      { "name": "tenant.offboarded.v1", "from": "@projexlight/sdk-tenant-lifecycle" }
+      {
+        "name": "tenant.offboarded.v1",
+        "from": "@projexlight/sdk-tenant-lifecycle"
+      }
     ],
-    "infra": ["postgres", "redis-optional"],
-    "config_keys": ["CONSENT_DEFAULT_EXPIRY_DAYS", "CONSENT_CACHE_TTL_MS"]
+    "infra": [
+      "postgres",
+      "redis-optional"
+    ],
+    "config_keys": [
+      "CONSENT_DEFAULT_EXPIRY_DAYS",
+      "CONSENT_CACHE_TTL_MS"
+    ]
   },
   "scenarios": [
     {
@@ -78,15 +182,37 @@
     }
   ],
   "compliance_posture": {
-    "regimes": ["GDPR-Art-6-Art-7-Art-21", "HIPAA-Privacy-Rule-164.508", "CCPA-CPRA-Right-to-Opt-Out", "Brazil-LGPD-Art-8", "Quebec-Law-25"],
+    "regimes": [
+      "GDPR-Art-6-Art-7-Art-21",
+      "HIPAA-Privacy-Rule-164.508",
+      "CCPA-CPRA-Right-to-Opt-Out",
+      "Brazil-LGPD-Art-8",
+      "Quebec-Law-25"
+    ],
     "notes": "Article 7(3) GDPR: withdrawal must be as easy as grant — revokeConsent is one call, no manager approval needed. HIPAA 164.508 authorization fields (purpose, expiration, signature) all captured in the Receipt + Purpose pair. Receipts are append-only — revocation writes a separate row, never edits the grant."
   },
   "pool_placement": "app",
   "pricing_skus": [
-    { "sku": "consent.grant",   "mode": "metered", "unit_description": "per receipt granted" },
-    { "sku": "consent.check",   "mode": "metered", "unit_description": "per check call (most are cache hits; cache misses billed at a higher rate)" },
-    { "sku": "consent.revoke",  "mode": "flat",    "unit_description": "per revocation (free; we want revocation to be friction-free)" },
-    { "sku": "consent.export",  "mode": "metered", "unit_description": "per DSAR export bundle" }
+    {
+      "sku": "consent.grant",
+      "mode": "metered",
+      "unit_description": "per receipt granted"
+    },
+    {
+      "sku": "consent.check",
+      "mode": "metered",
+      "unit_description": "per check call (most are cache hits; cache misses billed at a higher rate)"
+    },
+    {
+      "sku": "consent.revoke",
+      "mode": "flat",
+      "unit_description": "per revocation (free; we want revocation to be friction-free)"
+    },
+    {
+      "sku": "consent.export",
+      "mode": "metered",
+      "unit_description": "per DSAR export bundle"
+    }
   ],
   "links": {
     "readme": "packages/sdk-consent/README.md",

@@ -158,11 +158,19 @@ export function inspectSettings(env: NodeJS.ProcessEnv = process.env): Preflight
  */
 export function runSettingsPreflight(env: NodeJS.ProcessEnv = process.env): PreflightResult {
   const result = inspectSettings(env);
-  const mode = result.isProduction ? 'production' : (env.NODE_ENV || 'development');
+  // Report what the environment actually DECLARES, not the fallback we assume.
+  // An unset NODE_ENV is not the same as NODE_ENV=development: sdk-secrets and
+  // sdk-vault treat an undeclared environment as a developer machine and fall back
+  // to a synthetic KMS. Printing "NODE_ENV=development" when nothing is declared
+  // hid precisely the condition their warnings are trying to surface.
+  const declared = env.APP_ENV || env.DEPLOY_ENV || env.NODE_ENV || '';
+  const mode = result.isProduction
+    ? 'production'
+    : declared || 'UNDECLARED (assuming development)';
   const checked = REQUIRED_SECRETS.length;
   const present = checked - result.missing.length;
 
-  console.log(`[preflight] settings check — NODE_ENV=${mode}, ${present}/${checked} required secrets present`);
+  console.log(`[preflight] settings check — env=${mode}, ${present}/${checked} required secrets present`);
 
   for (const { spec, marker } of result.insecure) {
     console.error(`[preflight] INSECURE  ${spec.key} contains "${marker}" — ${spec.sdk} will refuse to start`);

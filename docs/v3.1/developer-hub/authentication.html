@@ -395,10 +395,31 @@ it later; create a second application for production.
 
 <h3>Step 2 — mint the key</h3>
 <pre><code>POST /api/applications/{application_id}/keys
-{ "name": "server-side worker", "scopes": ["crm:read", "crm:write"] }
+{ "name": "server-side worker", "scopes": ["crm.contact.read", "crm.deal.write"] }
      → { key_id, api_key: "pk_test_a1b2c3…", prefix, created_at }</code></pre>
 <p>The full secret is returned <strong>once</strong>. Store it in your secret manager at that
 moment — the platform keeps only a hash, so there is no "show me the key again" call by design.</p>
+
+<div class="panel warn">
+<strong>Scopes are <code>&lt;domain&gt;.&lt;resource&gt;.&lt;action&gt;</code> — three dot-separated
+parts, and the validator will not catch a wrong shape.</strong> It accepts any non-empty string
+array, so <code>"crm"</code> or <code>"crm:read"</code> is stored happily and then satisfies
+<em>nothing</em>: every call 403s. The required scope is <strong>derived from the request path</strong>
+rather than declared per route — <code>action</code> is <code>read</code> for GET/HEAD and
+<code>write</code> otherwise, and both segments are singularised:
+<table>
+<tr><th>Request</th><th>Required scope</th></tr>
+<tr><td><code>GET /api/crm/contacts</code></td><td><code>crm.contact.read</code></td></tr>
+<tr><td><code>POST /api/sla/clocks</code></td><td><code>sla.clock.write</code></td></tr>
+<tr><td><code>POST /api/sla/policies/{id}/rungs</code></td><td><code>sla.policy.write</code></td></tr>
+<tr><td><code>GET /api/sequences</code></td><td><code>sequence.sequence.read</code></td></tr>
+</table>
+When a route has no segment after its domain, the domain doubles as the resource — hence
+<code>sequence.sequence.read</code>. Tail wildcards are accepted and are what you usually want for
+a server-side integration: <code>crm.*</code> covers every CRM resource and action, including ones
+added after the key was issued. A missing scope answers <strong>403 naming both the required and
+the granted scopes</strong>, so it diagnoses itself — and it is a 403, never a 401.
+</div>
 
 <h3>Step 3 — call the API with it</h3>
 <pre><code>curl https://cloud.projexlight.com/api/crm/next-actions \
@@ -406,22 +427,43 @@ moment — the platform keeps only a hash, so there is no "show me the key again
 <p>Same header as a JWT. The gateway routes on the <code>pk_</code> prefix.</p>
 
 <div class="panel err">
-<strong>A valid key that 403s on every call is not a broken key — it is an ungranted persona.</strong>
-The exchange succeeds and hands you a token carrying <code>scopes</code> and
-<code>actor: {kind: service}</code>, which looks authoritative and is not. Those scopes are not the
-authority: the credential is bound to a <strong>synthetic persona that starts with no grants</strong>,
-and authority resolves from the persona at request time — the same rule as for a human JWT, which
-is easy to miss because a machine token, unlike a human one, <em>does</em> carry scopes. Grant it
-before you integrate:
+<strong>A valid key that 403s on every call is almost always mis-scoped — read the 403 body before
+concluding anything else.</strong> The gate names both the required and the granted scopes, so the
+answer is in the response:
+<pre><code>{ "error": "Forbidden",
+  "details": ["API key pk_test_ZZWB…MUUL is missing required scope: credit.balance.read"],
+  "required_scopes": ["credit.balance.read"],
+  "granted_scopes": ["crm.*", "sla.*", …] }</code></pre>
+If the 403 names a scope, fix the scope — it is not a persona problem. A key scoped
+<code>["crm","rebac","consent"]</code> fails <em>every</em> route this way while looking
+entirely reasonable in the portal.
+<p>A key is additionally bound to a <strong>synthetic persona</strong> (machine identity, created
+with the key in the same transaction) so that machine traffic is attributable in the audit trail as
+<code>actor: {kind: service}</code> rather than borrowing a human's. That persona starts with no
+role grants. Routes that authorize on tenant + scope — most reads — work immediately; a route that
+consults ReBAC or a role template will 403 <em>without</em> naming a scope, and that is the case
+that needs a grant:</p>
 <pre><code>POST /api/role-assignments {persona_id, role_template_id}</code></pre>
 </div>
 
 <h3>Step 4 — optionally exchange it for a short-lived token</h3>
 <pre><code>POST /api/auth/token          # public, client_credentials
-{ "grant_type": "client_credentials", "client_id": "…", "client_secret": "…" }
-     → { access_token, expires_in }</code></pre>
+{ "grant_type": "client_credentials", "client_secret": "pk_test_a1b2c3…" }
+     → { access_token, expires_in: 900, scope, tenant_id, application_id }</code></pre>
 <p>Prefer this when the credential would otherwise sit on a device or in a browser: a
 short-lived token limits the blast radius of a leak to its lifetime.</p>
+<div class="panel warn">
+<strong><code>client_id</code> is optional — and sending the wrong one is a hard
+<code>401 invalid_client</code>.</strong> The <code>client_secret</code> alone identifies the key,
+so the safest call omits <code>client_id</code> entirely. If you do send it, it must be the
+<strong>application's <code>slug</code> or its <code>application_id</code></strong> — not the
+tenant's <code>app_id</code>, which is a different row entirely and the easiest of the two to
+reach for. A mismatch is rejected rather than ignored, deliberately: silently accepting it would
+let a copy-paste error reach production and surface later as unexplained failures.
+<p>An optional <code>scope</code> (space-delimited, RFC 6749) may <em>narrow</em> the key's scopes
+and can never widen them; requesting one the key does not hold is <code>invalid_scope</code>.
+The gate enforces the token's scope claim, so narrowing is real, not decorative.</p>
+</div>
 
 <h3>Step 5 — rotate and revoke</h3>
 <table>
@@ -509,6 +551,63 @@ starve the console. Isolation tier (<code>S</code> shared / <code>P</code> priva
 <code>G</code> dedicated) is per tenant, so a large customer can be moved without touching the
 others. The audit ledger is chained <em>per pool</em> — each pool's sequence restarts at 1, so
 verify a chain within one pool rather than across them.</p>
+
+<hr>
+
+<h2>Building an operator console over your own customers</h2>
+
+<p>Once you serve several customers you need a screen that reads across all of them —
+subscriptions, usage, support. That actor is the one that must cross tenant boundaries, so it
+is also the single path every leak can run through. Two rules decide whether it holds.</p>
+
+<h3>1 · The operator is a persona in your ROOT tenant, not a role inside a customer's</h3>
+<p>The tempting shortcut is an <code>operator</code> value in your own app's role column. That
+turns a cross-tenant authority into a tenant-scoped one, and then "which customers may this
+person see" has no answer the schema can give. Use the hierarchy that already exists:</p>
+<pre><code>tenant.tenant   parent_tenant_id, root_tenant_id (materialised), reseller_id
+tenant.org      org_id, parent_org_id
+tenant.reseller reseller_id, org_id</code></pre>
+<p>Your company is the root tenant; each customer is a child tenant carrying
+<code>parent_tenant_id</code>. <code>root_tenant_id</code> is materialised on write so ancestor
+queries stay O(1), and it is <strong>already in the JWT</strong> — so "is this operator allowed
+to act on that customer" is answerable from the token without a join. This is the same Option A
+recommended above for modelling several apps; one hierarchy serves both.</p>
+<div class="panel warn">
+The <code>/console</code> portal is <strong>not</strong> this. That is for ProjexCloud operators,
+and a tenant identity cannot sign into it. Your operator console is your own surface, built on
+your own root tenant.
+</div>
+
+<h3>2 · Reach the data through a different connection, not a wider flag</h3>
+<p>A session flag such as <code>SET app.bypass_rls = true</code> is the obvious alternative and
+it is the weaker one: a bug on an ordinary request can set a flag, whereas a bug cannot reach a
+different connection pool. The platform is already multi-pool — <code>registerPool(pool_index,
+cfg)</code> in <code>db-runtime</code>, with <code>admin_pool_index</code> and
+<code>app_pool_index</code> carried in the JWT — so this is configuration, not new machinery.
+Mount operator routes on their own router with their own guard; a tenant route then has no code
+path into an operator query rather than merely being trusted not to take one.</p>
+
+<h3>3 · Record the operator, not a service constant</h3>
+<p>Every cross-tenant action must name the human who took it. Writing a constant actor and a
+caller-supplied "on behalf of" string produces an audit trail that cannot answer the only
+question anyone will ask it. Where a call accepts a claimed identity, store it <em>alongside</em>
+the authenticated principal rather than instead of it, so a disagreement is visible.</p>
+
+<h3>The scoping contract your app should assume</h3>
+<div class="panel err">
+<strong>Tenant comes from the credential, never from a parameter.</strong> Every tenant-facing
+read derives its tenant from the caller's token or API key. Endpoints do not take a
+<code>tenant_id</code> query parameter for scoping, and where one appears in a body it is
+checked against the credential and answers <strong>403</strong> on mismatch. A resource
+belonging to another tenant answers <strong>404, not 403</strong> — a 403 would confirm the id
+is real.
+</div>
+<p><strong>Attribution is not isolation, and the difference is easy to miss.</strong> Some
+records name the tenant that <em>decided</em> something without that decision being tenant-local.
+An identity merge is the clearest case: it acts on the global L1 <code>identity.person</code>,
+so a merge one tenant decides is visible to every tenant sharing that person. The tenant column
+tells you who acted; it does not promise the effect stopped there. When you build on a
+person-centric SDK, check which of the two a column means before you present it as a boundary.</p>
 
 <hr>
 

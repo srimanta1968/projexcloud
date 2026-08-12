@@ -9,7 +9,9 @@
       "Credential-management routes (/api/applications, /api/api-keys) require a HUMAN JWT and reject an API key by design: a key that can mint another key cannot be contained.",
       "Do NOT build your own users/roles/sessions tables. identity + persona + tenant + rebac + policy already own that; a parallel table breaks tenant isolation and the audit chain.",
       "A human JWT carries NO scopes. Authority is resolved from the persona and its grants at request time, so a revoked role takes effect immediately rather than at token expiry.",
-      "THE SAME IS TRUE OF A MACHINE TOKEN, and this is the step everyone misses: exchanging a pk_ key via POST /api/auth/token returns a token carrying scopes (e.g. ['crm']) and actor {kind: service} — and it will STILL 403. The scopes on the token are not the authority; the credential is bound to a SYNTHETIC PERSONA that starts with NO grants. You must grant it: POST /api/role-assignments {persona_id, role_template_id}. A valid key plus a successful token exchange plus 403 on every call is not a broken key — it is an ungranted persona.",
+      "A MACHINE credential is different: its token DOES carry scopes and the gate enforces them. Scopes are <domain>.<resource>.<action> — THREE DOT-SEPARATED PARTS, derived from the request path (action = read for GET/HEAD else write, both segments singularised): GET /api/crm/contacts needs crm.contact.read; POST /api/sla/clocks needs sla.clock.write; GET /api/sequences needs sequence.sequence.read (a domain with no sub-segment doubles as its own resource). Tail wildcards work and are usually what you want: crm.* covers every CRM resource and action. THE VALIDATOR ACCEPTS ANY NON-EMPTY STRING ARRAY, so ['crm'] or ['crm:read'] is stored happily and then satisfies NOTHING — every call 403s. If a key 403s everywhere, read the body first: it names required_scopes and granted_scopes.",
+      "A machine credential is ALSO bound to a synthetic persona (created with the key, in the same transaction) so machine traffic is attributable as actor {kind: service} instead of borrowing a human's. It starts with NO role grants. Routes that authorize on tenant + scope — most reads — work immediately. A route that consults ReBAC or a role template 403s WITHOUT naming a scope; that is the case that needs POST /api/role-assignments {persona_id, role_template_id}.",
+      "POST /api/auth/token: client_id is OPTIONAL and the client_secret alone identifies the key, so omitting it is safest. If sent it must be the APPLICATION's slug or application_id — NOT the tenant's app_id, which is a different row. A mismatch is a hard 401 invalid_client, not a warning.",
       "Everything downstream keys on persona_id (L4), not on person_id and not on a user_id."
     ],
     "flows": {
@@ -88,12 +90,12 @@
   },
   "api_reference": "https://cloud.projexlight.com/workspace/docs/api/index.html",
   "sdk_count": 77,
-  "api_count": 609,
+  "api_count": 630,
   "groups": [
     {
       "name": "Platform & Multi-Tenancy",
       "sdk_count": 15,
-      "api_count": 88,
+      "api_count": 90,
       "sdks": [
         {
           "sdk": "registry-mcp",
@@ -231,7 +233,7 @@
             "owner",
             "allocation"
           ],
-          "api_count": 14,
+          "api_count": 16,
           "docs_url": "https://cloud.projexlight.com/workspace/docs/api/index.html#sdk-sdk-assignment",
           "apis": [
             {
@@ -373,6 +375,51 @@
                 "POST /api/auth/signup-tenant",
                 "POST /api/assignment/routes",
                 "POST /api/assignment/route"
+              ]
+            },
+            {
+              "method": "GET",
+              "endpoint": "/api/assignment/simulations",
+              "requiresAuth": true,
+              "summary": "The tenant's runs come back newest first",
+              "payload_shape": [],
+              "fieldEnums": {
+                "limit": [
+                  "1",
+                  "50",
+                  "500"
+                ]
+              },
+              "dependsOn": [
+                "POST /api/auth/signup-tenant",
+                "POST /api/personas",
+                "POST /api/coverage/schedules",
+                "POST /api/assignment/routes",
+                "POST /api/assignment/route",
+                "POST /api/assignment/simulate"
+              ]
+            },
+            {
+              "method": "GET",
+              "endpoint": "/api/assignment/simulations/:simulation_id",
+              "requiresAuth": true,
+              "summary": "A cited simulation resolves to the report it produced",
+              "payload_shape": [],
+              "fieldEnums": {
+                "outcome": [
+                  "ASSIGNED",
+                  "FALLBACK",
+                  "REVIEW",
+                  "UNROUTABLE"
+                ]
+              },
+              "dependsOn": [
+                "POST /api/auth/signup-tenant",
+                "POST /api/personas",
+                "POST /api/coverage/schedules",
+                "POST /api/assignment/routes",
+                "POST /api/assignment/route",
+                "POST /api/assignment/simulate"
               ]
             },
             {
@@ -1931,7 +1978,7 @@
     {
       "name": "Outreach & Communication",
       "sdk_count": 9,
-      "api_count": 116,
+      "api_count": 121,
       "sdks": [
         {
           "sdk": "connector-twilio-voice",
@@ -3423,7 +3470,7 @@
             "package",
             "plan"
           ],
-          "api_count": 10,
+          "api_count": 13,
           "docs_url": "https://cloud.projexlight.com/workspace/docs/api/index.html#sdk-sdk-offer-catalog",
           "apis": [
             {
@@ -3440,6 +3487,18 @@
               "fieldEnums": {},
               "dependsOn": [
                 "POST /api/auth/signup-tenant"
+              ]
+            },
+            {
+              "method": "GET",
+              "endpoint": "/api/offers/:offer_id",
+              "requiresAuth": true,
+              "summary": "Fetch the offer just created",
+              "payload_shape": [],
+              "fieldEnums": {},
+              "dependsOn": [
+                "POST /api/auth/signup-tenant",
+                "POST /api/offers"
               ]
             },
             {
@@ -3492,6 +3551,19 @@
               ]
             },
             {
+              "method": "GET",
+              "endpoint": "/api/offers/:offer_id/versions",
+              "requiresAuth": true,
+              "summary": "List the versions of the offer just created",
+              "payload_shape": [],
+              "fieldEnums": {},
+              "dependsOn": [
+                "POST /api/auth/signup-tenant",
+                "POST /api/offers",
+                "POST /api/offers/:offer_id/versions"
+              ]
+            },
+            {
               "method": "POST",
               "endpoint": "/api/offers/:offer_id/versions",
               "requiresAuth": true,
@@ -3508,6 +3580,19 @@
               "dependsOn": [
                 "POST /api/auth/signup-tenant",
                 "POST /api/offers"
+              ]
+            },
+            {
+              "method": "GET",
+              "endpoint": "/api/offers/:offer_id/versions/:version_id",
+              "requiresAuth": true,
+              "summary": "Fetch the version just created",
+              "payload_shape": [],
+              "fieldEnums": {},
+              "dependsOn": [
+                "POST /api/auth/signup-tenant",
+                "POST /api/offers",
+                "POST /api/offers/:offer_id/versions"
               ]
             },
             {
@@ -3630,7 +3715,7 @@
             "no-show",
             "reschedule"
           ],
-          "api_count": 30,
+          "api_count": 31,
           "docs_url": "https://cloud.projexlight.com/workspace/docs/api/index.html#sdk-sdk-scheduling",
           "apis": [
             {
@@ -3876,6 +3961,29 @@
                 "POST /api/auth/signup-tenant",
                 "POST /api/personas",
                 "POST /api/scheduling/meeting-types",
+                "POST /api/scheduling/availability-rules"
+              ]
+            },
+            {
+              "method": "GET",
+              "endpoint": "/api/scheduling/availability-rules",
+              "requiresAuth": true,
+              "summary": "List the availability rules for the host just configured",
+              "payload_shape": [],
+              "fieldEnums": {
+                "weekday": [
+                  "0",
+                  "1",
+                  "2",
+                  "3",
+                  "4",
+                  "5",
+                  "6"
+                ]
+              },
+              "dependsOn": [
+                "POST /api/auth/signup-tenant",
+                "POST /api/personas",
                 "POST /api/scheduling/availability-rules"
               ]
             },
@@ -4213,7 +4321,7 @@
             "multi-touch",
             "enrollment"
           ],
-          "api_count": 11,
+          "api_count": 12,
           "docs_url": "https://cloud.projexlight.com/workspace/docs/api/index.html#sdk-sdk-sequence",
           "apis": [
             {
@@ -4241,6 +4349,18 @@
               },
               "dependsOn": [
                 "POST /api/auth/signup-tenant"
+              ]
+            },
+            {
+              "method": "GET",
+              "endpoint": "/api/sequences",
+              "requiresAuth": true,
+              "summary": "List every sequence in the tenant",
+              "payload_shape": [],
+              "fieldEnums": {},
+              "dependsOn": [
+                "POST /api/auth/signup-tenant",
+                "POST /api/sequences"
               ]
             },
             {
@@ -4482,7 +4602,7 @@
     {
       "name": "CRM & Engagement",
       "sdk_count": 10,
-      "api_count": 116,
+      "api_count": 119,
       "sdks": [
         {
           "sdk": "sdk-campaign",
@@ -4740,9 +4860,21 @@
             "out of office",
             "shift"
           ],
-          "api_count": 11,
+          "api_count": 16,
           "docs_url": "https://cloud.projexlight.com/workspace/docs/api/index.html#sdk-sdk-coverage",
           "apis": [
+            {
+              "method": "GET",
+              "endpoint": "/api/coverage/backup-designations",
+              "requiresAuth": true,
+              "summary": "List every backup designation in the tenant",
+              "payload_shape": [],
+              "fieldEnums": {},
+              "dependsOn": [
+                "POST /api/auth/signup-tenant",
+                "POST /api/coverage/backup-designations"
+              ]
+            },
             {
               "method": "POST",
               "endpoint": "/api/coverage/backup-designations",
@@ -4759,6 +4891,18 @@
               "dependsOn": [
                 "POST /api/auth/signup-tenant",
                 "POST /api/personas"
+              ]
+            },
+            {
+              "method": "GET",
+              "endpoint": "/api/coverage/capacity-policies",
+              "requiresAuth": true,
+              "summary": "List every capacity policy in the tenant",
+              "payload_shape": [],
+              "fieldEnums": {},
+              "dependsOn": [
+                "POST /api/auth/signup-tenant",
+                "POST /api/coverage/capacity-policies"
               ]
             },
             {
@@ -4821,6 +4965,18 @@
               ]
             },
             {
+              "method": "GET",
+              "endpoint": "/api/coverage/holiday-calendars",
+              "requiresAuth": true,
+              "summary": "List every holiday calendar in the tenant",
+              "payload_shape": [],
+              "fieldEnums": {},
+              "dependsOn": [
+                "POST /api/auth/signup-tenant",
+                "POST /api/coverage/holiday-calendars"
+              ]
+            },
+            {
               "method": "POST",
               "endpoint": "/api/coverage/holiday-calendars",
               "requiresAuth": true,
@@ -4835,6 +4991,18 @@
               "fieldEnums": {},
               "dependsOn": [
                 "POST /api/auth/signup-tenant"
+              ]
+            },
+            {
+              "method": "GET",
+              "endpoint": "/api/coverage/on-call",
+              "requiresAuth": true,
+              "summary": "List every roster entry in the tenant",
+              "payload_shape": [],
+              "fieldEnums": {},
+              "dependsOn": [
+                "POST /api/auth/signup-tenant",
+                "POST /api/coverage/on-call"
               ]
             },
             {
@@ -4958,6 +5126,25 @@
               "dependsOn": [
                 "POST /api/auth/signup-tenant",
                 "POST /api/personas"
+              ]
+            },
+            {
+              "method": "GET",
+              "endpoint": "/api/coverage/time-off",
+              "requiresAuth": true,
+              "summary": "List every time-off record in the tenant",
+              "payload_shape": [],
+              "fieldEnums": {
+                "kind": [
+                  "PTO",
+                  "MEETING",
+                  "OUTAGE",
+                  "HOLIDAY"
+                ]
+              },
+              "dependsOn": [
+                "POST /api/auth/signup-tenant",
+                "POST /api/coverage/time-off"
               ]
             },
             {
@@ -5842,7 +6029,7 @@
             "domain event",
             "stream"
           ],
-          "api_count": 6,
+          "api_count": 4,
           "docs_url": "https://cloud.projexlight.com/workspace/docs/api/index.html#sdk-sdk-event",
           "apis": [
             {
@@ -5925,275 +6112,6 @@
                 "POST /api/app-identities",
                 "POST /api/memberships",
                 "POST /api/personas"
-              ]
-            },
-            {
-              "method": "GET",
-              "endpoint": "/api/events/types",
-              "requiresAuth": false,
-              "summary": "List all registered event types",
-              "payload_shape": [],
-              "fieldEnums": {},
-              "dependsOn": []
-            },
-            {
-              "method": "GET",
-              "endpoint": "/api/events/types/:type",
-              "requiresAuth": true,
-              "summary": "Look up a registered event type from the compile-time registry",
-              "payload_shape": [],
-              "fieldEnums": {
-                "type": [
-                  "vault.key.issued.v1",
-                  "vault.key.rotated.v1",
-                  "vault.key.shredded.v1",
-                  "vault.encounter.opened.v1",
-                  "vault.encounter.sealed.v1",
-                  "secrets.ref.resolved.v1",
-                  "secrets.key.rotated.v1",
-                  "tenant.pool.assigned.v1",
-                  "pool.lifecycle.changed.v1",
-                  "usage.event.v1",
-                  "audit.chain.verified.v1",
-                  "audit.chain.break.v1",
-                  "audit.export.requested.v1",
-                  "audit.export.ready.v1",
-                  "tenant.created.v1",
-                  "tenant.subtenant.created.v1",
-                  "tenant.bu.created.v1",
-                  "tenant.bu.moved.v1",
-                  "tenant.role-template.updated.v1",
-                  "tenant.fiscal-calendar.updated.v1",
-                  "reseller.created.v1",
-                  "reseller.tenant.attached.v1",
-                  "identity.login.v1",
-                  "identity.app-identity.created.v1",
-                  "identity.alias.merged.v1",
-                  "identity.federation.configured.v1",
-                  "identity.mfa.challenged.v1",
-                  "identity.mfa.verified.v1",
-                  "identity.impersonation.requested.v1",
-                  "identity.impersonation.granted.v1",
-                  "identity.impersonation.ended.v1",
-                  "consent.granted.v1",
-                  "consent.revoked.v1",
-                  "consent.purpose.registered.v1",
-                  "consent.cross-tenant.granted.v1",
-                  "policy.evaluated.v1",
-                  "policy.updated.v1",
-                  "rebac.relationship.created.v1",
-                  "rebac.relationship.scope.changed.v1",
-                  "rebac.relationship.terminated.v1",
-                  "rebac.decision.v1",
-                  "api-key.issued.v1",
-                  "api-key.rotated.v1",
-                  "api-key.revoked.v1",
-                  "api-key.used.v1",
-                  "identity.projection.refreshed.v1",
-                  "identity.projection.miss.v1",
-                  "profile.band.updated.v1",
-                  "profile.field.shredded.v1",
-                  "identity.persona.created.v1",
-                  "identity.persona.shred.v1",
-                  "identity.membership.created.v1",
-                  "identity.membership.suspended.v1",
-                  "identity.membership.reactivated.v1",
-                  "identity.membership.terminated.v1",
-                  "identity.role.assigned.v1",
-                  "identity.role.revoked.v1",
-                  "identity.resolver.fallback.v1",
-                  "data-rights.request.submitted.v1",
-                  "data-rights.request.transitioned.v1",
-                  "data-rights.executed.v1",
-                  "data-rights.certificate.issued.v1",
-                  "data-rights.reconciliation.completed.v1",
-                  "pool-residency.touched.v1",
-                  "geo.address.canonicalized.v1",
-                  "geo.address.merged.v1",
-                  "device.registered.v1",
-                  "device.attested.v1",
-                  "device.revoked.v1",
-                  "device.person-link.changed.v1",
-                  "feature-flag.updated.v1",
-                  "feature-flag.rollout.updated.v1",
-                  "feature-flag.kill-switch.flipped.v1",
-                  "hdk-sync.queue.replayed.v1",
-                  "hdk-sync.conflict.resolved.v1",
-                  "hdk-sync.conflict.escalated-to-human.v1",
-                  "hdk-sync.event-type-policy.registered.v1",
-                  "hdk-idp.device-claim.registered.v1",
-                  "hdk-idp.offline-auth.synced.v1",
-                  "hdk-permissions.surface.snapshot.v1",
-                  "media.blob.uploaded.v1",
-                  "media.transcode.completed.v1",
-                  "media.blob.shredded.v1",
-                  "notification.sent.v1",
-                  "notification.delivered.v1",
-                  "notification.failed.v1",
-                  "payment.charge.v1",
-                  "payment.refund.v1",
-                  "payment.distributed.v1",
-                  "billing.invoice.finalized.v1",
-                  "billing.invoice.paid.v1",
-                  "billing.dunning.advanced.v1",
-                  "billing.reprice.dry-run.completed.v1",
-                  "approval.step.decided.v1",
-                  "engagement.encounter.opened.v1",
-                  "engagement.encounter.closed.v1",
-                  "engagement.encounter.sealed.v1",
-                  "engagement.relationship.created.v1",
-                  "engagement.relationship.terminated.v1",
-                  "engagement.encounter.grant.issued.v1",
-                  "engagement.encounter.grant.revoked.v1",
-                  "crm.contact.created.v1",
-                  "crm.contact.updated.v1",
-                  "crm.deal.created.v1",
-                  "crm.deal.transitioned.v1",
-                  "crm.activity.logged.v1",
-                  "content.item.created.v1",
-                  "content.version.published.v1",
-                  "service-request.ticket.created.v1",
-                  "service-request.ticket.transitioned.v1",
-                  "service-request.ticket.sla.breached.v1",
-                  "event.session.opened.v1",
-                  "event.ticket.issued.v1",
-                  "event.ticket.checked-in.v1",
-                  "campaign.created.v1",
-                  "campaign.segment.computed.v1",
-                  "campaign.journey.advanced.v1",
-                  "social.handle.authorized.v1",
-                  "social.interaction.ingested.v1",
-                  "social.lead.captured.v1",
-                  "connector.installed.v1",
-                  "connector.uninstalled.v1",
-                  "connector.sync.completed.v1",
-                  "connector.sync.conflict.v1",
-                  "hdk-scanner.code.captured.v1",
-                  "hdk-image.edit.applied.v1",
-                  "hdk-video.trim.applied.v1",
-                  "tenant.lifecycle.transitioned.v1",
-                  "tenant.lifecycle.sandbox.created.v1",
-                  "tenant.lifecycle.offboarded.v1",
-                  "slack.workspace.connected.v1",
-                  "slack.message.posted.v1",
-                  "slack.thread.message.v1",
-                  "slack.interaction.received.v1",
-                  "webhook.delivery.failed.v1",
-                  "webhook.delivery.dlq.v1",
-                  "agent.run.started.v1",
-                  "agent.run.completed.v1",
-                  "agent.run.terminated.v1",
-                  "agent.run.replayed.v1",
-                  "agent.run.rolled-back.v1",
-                  "agent.tool.invoked.v1",
-                  "agent.scope.exceeded.v1",
-                  "agent.capability-token.minted.v1",
-                  "agent.capability-token.revoked.v1",
-                  "agent.log.purged.v1",
-                  "agent.kill-switch.triggered.v1",
-                  "ai-gateway.complete.v1",
-                  "ai-gateway.stream.v1",
-                  "ai-gateway.provider.circuit-state.changed.v1",
-                  "trace.export.requested.v1",
-                  "trace.export.ready.v1",
-                  "mcp.server.registered.v1",
-                  "mcp.server.disabled.v1",
-                  "mcp.tool.invoked.v1",
-                  "mcp.exposed-server.activated.v1",
-                  "taxonomy.version.activated.v1",
-                  "taxonomy.version.deprecated.v1",
-                  "connector.github.webhook.received.v1",
-                  "connector.github.pr.upserted.v1",
-                  "rag.corpus.created.v1",
-                  "rag.document.indexed.v1",
-                  "rag.document.reindexed.v1",
-                  "rag.retrieval.completed.v1",
-                  "parsing.job.queued.v1",
-                  "parsing.stage.completed.v1",
-                  "parsing.field.extracted.v1",
-                  "parsing.review.routed.v1",
-                  "parsing.job.completed.v1",
-                  "conversation.session.opened.v1",
-                  "conversation.turn.recorded.v1",
-                  "conversation.handoff.v1",
-                  "conversation.session.closed.v1",
-                  "recommendation.model.trained.v1",
-                  "recommendation.suggestion.generated.v1",
-                  "recommendation.feedback.captured.v1",
-                  "analytics.rollup.executed.v1",
-                  "analytics.extract.published.v1",
-                  "lineage.edge.emitted.v1",
-                  "lineage.projection.queued.v1",
-                  "lineage.projection.completed.v1",
-                  "lineage.projection.failed.v1",
-                  "semantic.ontology.registered.v1",
-                  "semantic.ontology.deprecated.v1",
-                  "semantic.intent.planned.v1",
-                  "semantic.plan.executed.v1",
-                  "semantic.policy.evaluated.v1",
-                  "semantic.bridge.created.v1",
-                  "snowflake.installed.v1",
-                  "snowflake.binding.created.v1",
-                  "snowflake.sync.completed.v1",
-                  "snowflake.query.executed.v1",
-                  "storm.event.ingested.v1",
-                  "storm.intensity.updated.v1",
-                  "dispatch.task.enqueued.v1",
-                  "dispatch.task.assigned.v1",
-                  "dispatch.task.completed.v1",
-                  "dispatch.route.optimized.v1",
-                  "assignment.assigned.v1",
-                  "assignment.accepted.v1",
-                  "assignment.rejected.v1",
-                  "lead-scoring.scored.v1",
-                  "lead-scoring.model.trained.v1",
-                  "evidence.captured.v1",
-                  "evidence.variant.created.v1",
-                  "evidence.chain.appended.v1",
-                  "evidence.legal-export.generated.v1",
-                  "evidence.shredded.v1",
-                  "evidence.sealed.v1",
-                  "diagnostic.crash.reported.v1",
-                  "diagnostic.health.captured.v1",
-                  "diagnostic.session-replay.event.v1",
-                  "federation.route.resolved.v1",
-                  "federation.failover.executed.v1",
-                  "iceberg.table.compacted.v1",
-                  "iceberg.query.executed.v1",
-                  "usage.hardcap.exceeded.v1",
-                  "usage.hardcap.override.applied.v1",
-                  "hdk-measure.captured.v1",
-                  "hdk-watermark.applied.v1",
-                  "byok.binding.created.v1",
-                  "byok.cmk.used.v1",
-                  "byok.cmk.rotated.v1",
-                  "byok.binding.revoked.v1",
-                  "sovereign.bundle.shipped.v1",
-                  "sovereign.bundle.applied.v1",
-                  "sovereign.attestation.issued.v1",
-                  "sovereign.leak.alert.v1",
-                  "onprem.bundle.applied.v1",
-                  "onprem.bundle.rolled-back.v1",
-                  "onprem.local-llm.loaded.v1",
-                  "active-active.profile.activated.v1",
-                  "active-active.failover.drill.v1",
-                  "active-active.tier.downgraded.v1",
-                  "ai_gateway.tenant_credential.bound.v1",
-                  "ai_gateway.tenant_credential.rotated.v1",
-                  "ai_gateway.tenant_credential.revoked.v1",
-                  "security.principal_token.key_rotated.v1",
-                  "security.break_glass.granted.v1",
-                  "security.break_glass.used.v1",
-                  "resource_registry.quarantined.v1",
-                  "mdm.candidate_link.created.v1",
-                  "mdm.steward.decided.v1",
-                  "mdm.merge.performed.v1",
-                  "mdm.merge.reversed.v1",
-                  "mdm.calibration.drift.v1"
-                ]
-              },
-              "dependsOn": [
-                "POST /api/auth/register"
               ]
             }
           ]
@@ -8513,7 +8431,7 @@
     {
       "name": "Governance, Consent & Security",
       "sdk_count": 10,
-      "api_count": 58,
+      "api_count": 67,
       "sdks": [
         {
           "sdk": "sdk-approval",
@@ -8749,7 +8667,7 @@
             "tamper-evident",
             "history"
           ],
-          "api_count": 3,
+          "api_count": 6,
           "docs_url": "https://cloud.projexlight.com/workspace/docs/api/index.html#sdk-sdk-audit",
           "apis": [
             {
@@ -8823,6 +8741,316 @@
               "fieldEnums": {},
               "dependsOn": [
                 "POST /api/auth/signup-tenant"
+              ]
+            },
+            {
+              "method": "GET",
+              "endpoint": "/api/events/types",
+              "requiresAuth": false,
+              "summary": "List the platform baseline plus this tenant's own event types",
+              "payload_shape": [],
+              "fieldEnums": {},
+              "dependsOn": []
+            },
+            {
+              "method": "POST",
+              "endpoint": "/api/events/types",
+              "requiresAuth": true,
+              "summary": "Register a tenant event type",
+              "payload_shape": [
+                "compaction_policy",
+                "conflict_policy",
+                "event_type",
+                "retention_class",
+                "schema_state",
+                "schema_version"
+              ],
+              "fieldEnums": {
+                "retention_class": [
+                  "transient",
+                  "operational",
+                  "regulated"
+                ],
+                "conflict_policy": [
+                  "crdt",
+                  "lww",
+                  "merge",
+                  "event-sourcing",
+                  "human-review"
+                ],
+                "schema_state": [
+                  "active",
+                  "deprecated",
+                  "retired"
+                ],
+                "compaction_policy": [
+                  "none",
+                  "lww",
+                  "count"
+                ]
+              },
+              "dependsOn": [
+                "POST /api/auth/signup-tenant"
+              ]
+            },
+            {
+              "method": "GET",
+              "endpoint": "/api/events/types/:type",
+              "requiresAuth": true,
+              "summary": "Look up one event type, platform baseline first then tenant",
+              "payload_shape": [],
+              "fieldEnums": {
+                "type": [
+                  "vault.key.issued.v1",
+                  "vault.key.rotated.v1",
+                  "vault.key.shredded.v1",
+                  "vault.encounter.opened.v1",
+                  "vault.encounter.sealed.v1",
+                  "secrets.ref.resolved.v1",
+                  "secrets.key.rotated.v1",
+                  "tenant.pool.assigned.v1",
+                  "pool.lifecycle.changed.v1",
+                  "usage.event.v1",
+                  "audit.chain.verified.v1",
+                  "audit.chain.break.v1",
+                  "audit.export.requested.v1",
+                  "audit.export.ready.v1",
+                  "tenant.created.v1",
+                  "tenant.subtenant.created.v1",
+                  "tenant.bu.created.v1",
+                  "tenant.bu.moved.v1",
+                  "tenant.role-template.updated.v1",
+                  "tenant.fiscal-calendar.updated.v1",
+                  "reseller.created.v1",
+                  "reseller.tenant.attached.v1",
+                  "identity.login.v1",
+                  "identity.app-identity.created.v1",
+                  "identity.alias.merged.v1",
+                  "identity.federation.configured.v1",
+                  "identity.mfa.challenged.v1",
+                  "identity.mfa.verified.v1",
+                  "identity.impersonation.requested.v1",
+                  "identity.impersonation.granted.v1",
+                  "identity.impersonation.ended.v1",
+                  "consent.granted.v1",
+                  "consent.revoked.v1",
+                  "consent.purpose.registered.v1",
+                  "consent.cross-tenant.granted.v1",
+                  "policy.evaluated.v1",
+                  "policy.updated.v1",
+                  "rebac.relationship.created.v1",
+                  "rebac.relationship.scope.changed.v1",
+                  "rebac.relationship.terminated.v1",
+                  "rebac.decision.v1",
+                  "api-key.issued.v1",
+                  "api-key.rotated.v1",
+                  "api-key.revoked.v1",
+                  "api-key.used.v1",
+                  "identity.projection.refreshed.v1",
+                  "identity.projection.miss.v1",
+                  "profile.band.updated.v1",
+                  "profile.field.shredded.v1",
+                  "identity.persona.created.v1",
+                  "identity.persona.shred.v1",
+                  "identity.membership.created.v1",
+                  "identity.membership.suspended.v1",
+                  "identity.membership.reactivated.v1",
+                  "identity.membership.terminated.v1",
+                  "identity.role.assigned.v1",
+                  "identity.role.revoked.v1",
+                  "identity.resolver.fallback.v1",
+                  "data-rights.request.submitted.v1",
+                  "data-rights.request.transitioned.v1",
+                  "data-rights.executed.v1",
+                  "data-rights.certificate.issued.v1",
+                  "data-rights.reconciliation.completed.v1",
+                  "pool-residency.touched.v1",
+                  "geo.address.canonicalized.v1",
+                  "geo.address.merged.v1",
+                  "device.registered.v1",
+                  "device.attested.v1",
+                  "device.revoked.v1",
+                  "device.person-link.changed.v1",
+                  "feature-flag.updated.v1",
+                  "feature-flag.rollout.updated.v1",
+                  "feature-flag.kill-switch.flipped.v1",
+                  "hdk-sync.queue.replayed.v1",
+                  "hdk-sync.conflict.resolved.v1",
+                  "hdk-sync.conflict.escalated-to-human.v1",
+                  "hdk-sync.event-type-policy.registered.v1",
+                  "hdk-idp.device-claim.registered.v1",
+                  "hdk-idp.offline-auth.synced.v1",
+                  "hdk-permissions.surface.snapshot.v1",
+                  "media.blob.uploaded.v1",
+                  "media.transcode.completed.v1",
+                  "media.blob.shredded.v1",
+                  "notification.sent.v1",
+                  "notification.delivered.v1",
+                  "notification.failed.v1",
+                  "payment.charge.v1",
+                  "payment.refund.v1",
+                  "payment.distributed.v1",
+                  "billing.invoice.finalized.v1",
+                  "billing.invoice.paid.v1",
+                  "billing.dunning.advanced.v1",
+                  "billing.reprice.dry-run.completed.v1",
+                  "approval.step.decided.v1",
+                  "engagement.encounter.opened.v1",
+                  "engagement.encounter.closed.v1",
+                  "engagement.encounter.sealed.v1",
+                  "engagement.relationship.created.v1",
+                  "engagement.relationship.terminated.v1",
+                  "engagement.encounter.grant.issued.v1",
+                  "engagement.encounter.grant.revoked.v1",
+                  "crm.contact.created.v1",
+                  "crm.contact.updated.v1",
+                  "crm.deal.created.v1",
+                  "crm.deal.transitioned.v1",
+                  "crm.activity.logged.v1",
+                  "content.item.created.v1",
+                  "content.version.published.v1",
+                  "service-request.ticket.created.v1",
+                  "service-request.ticket.transitioned.v1",
+                  "service-request.ticket.sla.breached.v1",
+                  "event.session.opened.v1",
+                  "event.ticket.issued.v1",
+                  "event.ticket.checked-in.v1",
+                  "campaign.created.v1",
+                  "campaign.segment.computed.v1",
+                  "campaign.journey.advanced.v1",
+                  "social.handle.authorized.v1",
+                  "social.interaction.ingested.v1",
+                  "social.lead.captured.v1",
+                  "connector.installed.v1",
+                  "connector.uninstalled.v1",
+                  "connector.sync.completed.v1",
+                  "connector.sync.conflict.v1",
+                  "hdk-scanner.code.captured.v1",
+                  "hdk-image.edit.applied.v1",
+                  "hdk-video.trim.applied.v1",
+                  "tenant.lifecycle.transitioned.v1",
+                  "tenant.lifecycle.sandbox.created.v1",
+                  "tenant.lifecycle.offboarded.v1",
+                  "slack.workspace.connected.v1",
+                  "slack.message.posted.v1",
+                  "slack.thread.message.v1",
+                  "slack.interaction.received.v1",
+                  "webhook.delivery.failed.v1",
+                  "webhook.delivery.dlq.v1",
+                  "agent.run.started.v1",
+                  "agent.run.completed.v1",
+                  "agent.run.terminated.v1",
+                  "agent.run.replayed.v1",
+                  "agent.run.rolled-back.v1",
+                  "agent.tool.invoked.v1",
+                  "agent.scope.exceeded.v1",
+                  "agent.capability-token.minted.v1",
+                  "agent.capability-token.revoked.v1",
+                  "agent.log.purged.v1",
+                  "agent.kill-switch.triggered.v1",
+                  "ai-gateway.complete.v1",
+                  "ai-gateway.stream.v1",
+                  "ai-gateway.provider.circuit-state.changed.v1",
+                  "trace.export.requested.v1",
+                  "trace.export.ready.v1",
+                  "mcp.server.registered.v1",
+                  "mcp.server.disabled.v1",
+                  "mcp.tool.invoked.v1",
+                  "mcp.exposed-server.activated.v1",
+                  "taxonomy.version.activated.v1",
+                  "taxonomy.version.deprecated.v1",
+                  "connector.github.webhook.received.v1",
+                  "connector.github.pr.upserted.v1",
+                  "rag.corpus.created.v1",
+                  "rag.document.indexed.v1",
+                  "rag.document.reindexed.v1",
+                  "rag.retrieval.completed.v1",
+                  "parsing.job.queued.v1",
+                  "parsing.stage.completed.v1",
+                  "parsing.field.extracted.v1",
+                  "parsing.review.routed.v1",
+                  "parsing.job.completed.v1",
+                  "conversation.session.opened.v1",
+                  "conversation.turn.recorded.v1",
+                  "conversation.handoff.v1",
+                  "conversation.session.closed.v1",
+                  "recommendation.model.trained.v1",
+                  "recommendation.suggestion.generated.v1",
+                  "recommendation.feedback.captured.v1",
+                  "analytics.rollup.executed.v1",
+                  "analytics.extract.published.v1",
+                  "lineage.edge.emitted.v1",
+                  "lineage.projection.queued.v1",
+                  "lineage.projection.completed.v1",
+                  "lineage.projection.failed.v1",
+                  "semantic.ontology.registered.v1",
+                  "semantic.ontology.deprecated.v1",
+                  "semantic.intent.planned.v1",
+                  "semantic.plan.executed.v1",
+                  "semantic.policy.evaluated.v1",
+                  "semantic.bridge.created.v1",
+                  "snowflake.installed.v1",
+                  "snowflake.binding.created.v1",
+                  "snowflake.sync.completed.v1",
+                  "snowflake.query.executed.v1",
+                  "storm.event.ingested.v1",
+                  "storm.intensity.updated.v1",
+                  "dispatch.task.enqueued.v1",
+                  "dispatch.task.assigned.v1",
+                  "dispatch.task.completed.v1",
+                  "dispatch.route.optimized.v1",
+                  "assignment.assigned.v1",
+                  "assignment.accepted.v1",
+                  "assignment.rejected.v1",
+                  "lead-scoring.scored.v1",
+                  "lead-scoring.model.trained.v1",
+                  "evidence.captured.v1",
+                  "evidence.variant.created.v1",
+                  "evidence.chain.appended.v1",
+                  "evidence.legal-export.generated.v1",
+                  "evidence.shredded.v1",
+                  "evidence.sealed.v1",
+                  "diagnostic.crash.reported.v1",
+                  "diagnostic.health.captured.v1",
+                  "diagnostic.session-replay.event.v1",
+                  "federation.route.resolved.v1",
+                  "federation.failover.executed.v1",
+                  "iceberg.table.compacted.v1",
+                  "iceberg.query.executed.v1",
+                  "usage.hardcap.exceeded.v1",
+                  "usage.hardcap.override.applied.v1",
+                  "hdk-measure.captured.v1",
+                  "hdk-watermark.applied.v1",
+                  "byok.binding.created.v1",
+                  "byok.cmk.used.v1",
+                  "byok.cmk.rotated.v1",
+                  "byok.binding.revoked.v1",
+                  "sovereign.bundle.shipped.v1",
+                  "sovereign.bundle.applied.v1",
+                  "sovereign.attestation.issued.v1",
+                  "sovereign.leak.alert.v1",
+                  "onprem.bundle.applied.v1",
+                  "onprem.bundle.rolled-back.v1",
+                  "onprem.local-llm.loaded.v1",
+                  "active-active.profile.activated.v1",
+                  "active-active.failover.drill.v1",
+                  "active-active.tier.downgraded.v1",
+                  "ai_gateway.tenant_credential.bound.v1",
+                  "ai_gateway.tenant_credential.rotated.v1",
+                  "ai_gateway.tenant_credential.revoked.v1",
+                  "security.principal_token.key_rotated.v1",
+                  "security.break_glass.granted.v1",
+                  "security.break_glass.used.v1",
+                  "resource_registry.quarantined.v1",
+                  "mdm.candidate_link.created.v1",
+                  "mdm.steward.decided.v1",
+                  "mdm.merge.performed.v1",
+                  "mdm.merge.reversed.v1",
+                  "mdm.calibration.drift.v1"
+                ]
+              },
+              "dependsOn": [
+                "POST /api/auth/register"
               ]
             }
           ]
@@ -9274,9 +9502,27 @@
             "conditional access",
             "guardrail"
           ],
-          "api_count": 3,
+          "api_count": 4,
           "docs_url": "https://cloud.projexlight.com/workspace/docs/api/index.html#sdk-sdk-policy",
           "apis": [
+            {
+              "method": "GET",
+              "endpoint": "/api/policies",
+              "requiresAuth": true,
+              "summary": "List the tenant-wide policies for the calling tenant",
+              "payload_shape": [],
+              "fieldEnums": {
+                "status": [
+                  "draft",
+                  "active",
+                  "deprecated",
+                  "retired"
+                ]
+              },
+              "dependsOn": [
+                "POST /api/auth/register"
+              ]
+            },
             {
               "method": "POST",
               "endpoint": "/api/policies",
@@ -9364,7 +9610,7 @@
             "sharing",
             "team access"
           ],
-          "api_count": 8,
+          "api_count": 9,
           "docs_url": "https://cloud.projexlight.com/workspace/docs/api/index.html#sdk-sdk-rebac",
           "apis": [
             {
@@ -9388,6 +9634,27 @@
                 "POST /api/app-identities",
                 "POST /api/memberships",
                 "POST /api/personas"
+              ]
+            },
+            {
+              "method": "POST",
+              "endpoint": "/api/relationships/:relationship_id/attest",
+              "requiresAuth": true,
+              "summary": "Attest the relationship as CONFIRMED with an evidence ref",
+              "payload_shape": [
+                "evidence_refs",
+                "trust_state"
+              ],
+              "fieldEnums": {
+                "trust_state": [
+                  "CONFIRMED",
+                  "CANDIDATE",
+                  "DOCUMENTED"
+                ]
+              },
+              "dependsOn": [
+                "POST /api/auth/signup-tenant",
+                "POST /api/relationships"
               ]
             },
             {
@@ -9529,9 +9796,21 @@
             "token",
             "secure store"
           ],
-          "api_count": 3,
+          "api_count": 5,
           "docs_url": "https://cloud.projexlight.com/workspace/docs/api/index.html#sdk-sdk-secrets",
           "apis": [
+            {
+              "method": "GET",
+              "endpoint": "/api/secrets",
+              "requiresAuth": true,
+              "summary": "Retrieve a previously registered SecretRef by ref",
+              "payload_shape": [],
+              "fieldEnums": {},
+              "dependsOn": [
+                "POST /api/auth/register",
+                "POST /api/secrets"
+              ]
+            },
             {
               "method": "POST",
               "endpoint": "/api/secrets",
@@ -9571,6 +9850,20 @@
               "requiresAuth": true,
               "summary": "Rotate previously registered SecretRef",
               "payload_shape": [],
+              "fieldEnums": {},
+              "dependsOn": [
+                "POST /api/auth/register",
+                "POST /api/secrets"
+              ]
+            },
+            {
+              "method": "POST",
+              "endpoint": "/api/secrets/rotate",
+              "requiresAuth": true,
+              "summary": "Rotate previously registered SecretRef",
+              "payload_shape": [
+                "ref"
+              ],
               "fieldEnums": {},
               "dependsOn": [
                 "POST /api/auth/register",
@@ -9679,7 +9972,7 @@
             "kms",
             "envelope"
           ],
-          "api_count": 6,
+          "api_count": 8,
           "docs_url": "https://cloud.projexlight.com/workspace/docs/api/index.html#sdk-sdk-vault",
           "apis": [
             {
@@ -9726,6 +10019,18 @@
               "dependsOn": []
             },
             {
+              "method": "GET",
+              "endpoint": "/api/vault/keys",
+              "requiresAuth": true,
+              "summary": "List the calling tenant's keys",
+              "payload_shape": [],
+              "fieldEnums": {},
+              "dependsOn": [
+                "POST /api/auth/signup-tenant",
+                "POST /api/vault/keys"
+              ]
+            },
+            {
               "method": "POST",
               "endpoint": "/api/vault/keys",
               "requiresAuth": true,
@@ -9753,6 +10058,18 @@
               },
               "dependsOn": [
                 "POST /api/auth/signup-tenant"
+              ]
+            },
+            {
+              "method": "GET",
+              "endpoint": "/api/vault/keys/:key_id",
+              "requiresAuth": true,
+              "summary": "A root-tier key is NOT visible to a tenant token",
+              "payload_shape": [],
+              "fieldEnums": {},
+              "dependsOn": [
+                "POST /api/auth/signup-tenant",
+                "POST /api/vault/keys"
               ]
             },
             {
@@ -9790,7 +10107,7 @@
     {
       "name": "Identity & Access (AIM)",
       "sdk_count": 5,
-      "api_count": 64,
+      "api_count": 66,
       "sdks": [
         {
           "sdk": "sdk-api-keys",
@@ -9812,7 +10129,7 @@
             "publishable key",
             "server to server"
           ],
-          "api_count": 13,
+          "api_count": 15,
           "docs_url": "https://cloud.projexlight.com/workspace/docs/api/index.html#sdk-sdk-api-keys",
           "apis": [
             {
@@ -9930,6 +10247,21 @@
                   "test"
                 ]
               },
+              "dependsOn": [
+                "POST /api/auth/signup-tenant",
+                "POST /api/applications"
+              ]
+            },
+            {
+              "method": "PATCH",
+              "endpoint": "/api/applications/:application_id",
+              "requiresAuth": true,
+              "summary": "Rename the application just created",
+              "payload_shape": [
+                "description",
+                "name"
+              ],
+              "fieldEnums": {},
               "dependsOn": [
                 "POST /api/auth/signup-tenant",
                 "POST /api/applications"
@@ -10057,6 +10389,18 @@
               "fieldEnums": {},
               "dependsOn": [
                 "POST /api/auth/register",
+                "POST /api/auth/signup-tenant",
+                "POST /api/keys"
+              ]
+            },
+            {
+              "method": "POST",
+              "endpoint": "/api/keys/:key_id/rotate",
+              "requiresAuth": true,
+              "summary": "Rotate the key just issued",
+              "payload_shape": [],
+              "fieldEnums": {},
+              "dependsOn": [
                 "POST /api/auth/signup-tenant",
                 "POST /api/keys"
               ]

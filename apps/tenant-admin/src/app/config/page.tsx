@@ -38,7 +38,7 @@ interface ConfigRow {
 /** Static definition of every tenant-scoped card rendered on this page. */
 const TENANT_CARDS: ConfigEntry[] = [
   {
-    key: 'aws.s3',
+    key: 'media.s3',
     label: 'AWS / S3 storage',
     description: 'Store your app files in your own S3 bucket.',
     kind: 'value',
@@ -80,15 +80,32 @@ const TENANT_CARDS: ConfigEntry[] = [
   },
 ];
 
+/** The tenant's applications — the choices in the scope switcher. */
+async function fetchApplications(): Promise<Array<{ application_id: string; name: string }>> {
+  try {
+    const res = await fetch(`${GATEWAY}/api/applications`, {
+      headers: { Authorization: `Bearer ${bearer()}` },
+      cache: 'no-store',
+    });
+    if (!res.ok) return [];
+    const body = await res.json();
+    return (body?.data ?? body ?? []) as Array<{ application_id: string; name: string }>;
+  } catch {
+    return [];
+  }
+}
+
 /** Bearer header from the portal session cookie (tenant JWT). */
 function bearer(): string {
   return cookies().get(SESSION_COOKIE)?.value ?? '';
 }
 
-/** Active tenant-scope config rows. Fail-soft: [] on any error. */
-async function fetchTenantConfig(): Promise<ConfigRow[]> {
+/** Active config rows AT ONE EXACT SCOPE (no chain walk). Fail-soft: [] on error. */
+async function fetchScopeConfig(scope: string, scopeId?: string): Promise<ConfigRow[]> {
   try {
-    const res = await fetch(`${GATEWAY}/api/config?scope=tenant`, {
+    const qs = new URLSearchParams({ scope });
+    if (scopeId) qs.set('scope_id', scopeId);
+    const res = await fetch(`${GATEWAY}/api/config?${qs.toString()}`, {
       cache: 'no-store',
       headers: { Authorization: `Bearer ${bearer()}` },
     });
@@ -99,12 +116,21 @@ async function fetchTenantConfig(): Promise<ConfigRow[]> {
   }
 }
 
-/** Persist a tenant-scope value/secret. tenant_id is implicit in the JWT. */
+/**
+ * Persist a value/secret at the scope being edited. tenant_id is implicit in the JWT.
+ *
+ * `scopeId` is BOUND at render time (`.bind(null, appId)`) rather than passed by
+ * ConfigForm, whose onSave signature is fixed and shared across portals. Binding
+ * keeps the target scope with the action that will run, instead of leaving a
+ * server action to guess which tab produced it.
+ */
 async function saveConfigAction(
+  scopeId: string,
   key: string,
   payload: { value?: Record<string, unknown>; secret_ref?: string },
 ): Promise<{ ok: boolean; error?: string }> {
   'use server';
+  const scope = scopeId ? 'app' : 'tenant';
   try {
     const res = await fetch(`${GATEWAY}/api/config`, {
       method: 'POST',
@@ -113,7 +139,7 @@ async function saveConfigAction(
         'content-type': 'application/json',
         Authorization: `Bearer ${cookies().get(SESSION_COOKIE)?.value ?? ''}`,
       },
-      body: JSON.stringify({ scope: 'tenant', key, ...payload }),
+      body: JSON.stringify({ scope, ...(scopeId ? { scope_id: scopeId } : {}), key, ...payload }),
     });
     if (!res.ok) {
       const body = await res.json().catch(() => ({}));
@@ -126,9 +152,10 @@ async function saveConfigAction(
   }
 }
 
-/** Revoke (soft-delete) a tenant-scope config value. */
-async function revokeConfigAction(key: string): Promise<{ ok: boolean; error?: string }> {
+/** Revoke (soft-delete) the override at the scope being edited. */
+async function revokeConfigAction(scopeId: string, key: string): Promise<{ ok: boolean; error?: string }> {
   'use server';
+  const scope = scopeId ? 'app' : 'tenant';
   try {
     const res = await fetch(`${GATEWAY}/api/config/revoke`, {
       method: 'POST',
@@ -137,7 +164,7 @@ async function revokeConfigAction(key: string): Promise<{ ok: boolean; error?: s
         'content-type': 'application/json',
         Authorization: `Bearer ${cookies().get(SESSION_COOKIE)?.value ?? ''}`,
       },
-      body: JSON.stringify({ scope: 'tenant', key }),
+      body: JSON.stringify({ scope, ...(scopeId ? { scope_id: scopeId } : {}), key }),
     });
     if (!res.ok) {
       const body = await res.json().catch(() => ({}));
@@ -168,7 +195,12 @@ async function saveProviderAction(formData: FormData): Promise<void> {
     const v = formData.get(f.name);
     if (typeof v === 'string' && v.trim()) submitted[f.name] = v.trim();
   }
-  await saveProvider(descriptor, submitted, { scope: 'tenant' });
+  // The scope being edited travels in the form, not in module state: a server
+  // action has no memory of which tab rendered it, and defaulting to 'tenant'
+  // here would silently write a tenant-wide value while the admin believed they
+  // were overriding one app.
+  const scopeId = String(formData.get('__scope_id') ?? '');
+  await saveProvider(descriptor, submitted, scopeId ? { scope: 'app', scope_id: scopeId } : { scope: 'tenant' });
   revalidatePath('/config');
 }
 
@@ -177,12 +209,27 @@ async function removeOverrideAction(formData: FormData): Promise<void> {
   'use server';
   const key = String(formData.get('__key') ?? '');
   if (!key) return;
-  await removeOverride(key, { scope: 'tenant' });
+  const scopeId = String(formData.get('__scope_id') ?? '');
+  await removeOverride(key, scopeId ? { scope: 'app', scope_id: scopeId } : { scope: 'tenant' });
   revalidatePath('/config');
 }
 
-export default async function ConfigPage(): Promise<JSX.Element> {
-  const rows = await fetchTenantConfig();
+export default async function ConfigPage({
+  searchParams,
+}: {
+  searchParams?: { app?: string };
+}): Promise<JSX.Element> {
+  // The edited scope lives in the URL, not in client state, so the page stays a
+  // server component and a chosen app survives a reload, a bookmark and the
+  // redirect that follows every save.
+  const apps = await fetchApplications();
+  const appId = searchParams?.app && apps.some((a) => a.application_id === searchParams.app)
+    ? searchParams.app
+    : '';
+  const scope = appId ? 'app' : 'tenant';
+  const scopeCtx = appId ? { scope: 'app' as const, scope_id: appId } : { scope: 'tenant' as const };
+
+  const rows = await fetchScopeConfig(scope, appId || undefined);
   const byKey = new Map(rows.map((r) => [r.key, r]));
 
   // Resolve each provider key through the chain so the card can state WHICH scope
@@ -191,10 +238,10 @@ export default async function ConfigPage(): Promise<JSX.Element> {
   // it affects one app or all of them.
   const providerKeys = [...new Set(PROVIDER_DESCRIPTORS.map((d) => d.key))];
   const resolved = await Promise.all(
-    providerKeys.map((k) => resolveEntry(k, { scope: 'tenant' })),
+    providerKeys.map((k) => resolveEntry(k, scopeCtx)),
   );
   const originByKey = new Map(
-    resolved.map((r) => [r.key, { label: originLabel(r, 'tenant'), overridden: r.overriddenHere }]),
+    resolved.map((r) => [r.key, { label: originLabel(r, scope), overridden: r.overriddenHere }]),
   );
 
   const entries: ConfigEntry[] = TENANT_CARDS.map((c) => {
@@ -219,13 +266,50 @@ export default async function ConfigPage(): Promise<JSX.Element> {
     <div>
       <PageHeader
         title="Settings & Integrations"
-        description="Bring your own providers for your tenant. Values here override the platform defaults."
+        description={
+          appId
+            ? 'Editing ONE app. A value saved here overrides what this app inherits from the tenant; every other app is unaffected.'
+            : 'Editing the tenant default. Every one of your apps inherits these values unless it overrides them.'
+        }
       />
+
+      {/* Scope switcher. Plain links, so choosing a scope is an explicit
+          navigation rather than a hidden mode toggle — an admin can see in the
+          URL which scope they are about to write to. */}
+      <nav aria-label="Configuration scope" style={{ display: 'flex', gap: 8, flexWrap: 'wrap', margin: '12px 0 20px' }}>
+        <a
+          href="/config"
+          aria-current={!appId ? 'page' : undefined}
+          style={{
+            padding: '6px 12px', borderRadius: 6, fontSize: 13, textDecoration: 'none',
+            border: '1px solid #30363d', color: !appId ? '#0d1117' : '#c9d1d9',
+            background: !appId ? '#58a6ff' : 'transparent',
+          }}
+        >
+          All apps (tenant default)
+        </a>
+        {apps.map((a) => (
+          <a
+            key={a.application_id}
+            href={`/config?app=${encodeURIComponent(a.application_id)}`}
+            aria-current={appId === a.application_id ? 'page' : undefined}
+            style={{
+              padding: '6px 12px', borderRadius: 6, fontSize: 13, textDecoration: 'none',
+              border: '1px solid #30363d',
+              color: appId === a.application_id ? '#0d1117' : '#c9d1d9',
+              background: appId === a.application_id ? '#58a6ff' : 'transparent',
+            }}
+          >
+            {a.name}
+          </a>
+        ))}
+      </nav>
+
       <ConfigForm
-        scope="tenant"
+        scope={scope}
         entries={entries}
-        onSave={saveConfigAction}
-        onRevoke={revokeConfigAction}
+        onSave={saveConfigAction.bind(null, appId)}
+        onRevoke={revokeConfigAction.bind(null, appId)}
       />
 
       {/* ── Providers, rendered from descriptors ───────────────────────────── */}

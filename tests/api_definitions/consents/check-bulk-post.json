@@ -1,0 +1,105 @@
+{
+  "name": "POST /api/consents/check/bulk - Check consent for many subjects at once",
+  "endpoint": "/api/consents/check/bulk",
+  "sdk": "sdk-consent",
+  "sourceFile": "packages/sdk-consent/src/server/routes.ts",
+  "method": "POST",
+  "requiresAuth": true,
+  "expectedStatus": 200,
+  "sprintId": "8ef1d09e-dd8e-4daf-8d03-54dcd9f812f8",
+  "featureId": "29651845-09ac-4f92-8964-35792daf8a86",
+  "epicId": "00996d23-f667-4a82-9285-7728ba357e7b",
+  "priority": 51,
+  "dependsOn": [
+    "POST /api/auth/register",
+    "POST /api/consents/purposes",
+    "POST /api/consents"
+  ],
+  "testCases": [
+    {
+      "name": "One granted tuple and one malformed item - the bad item must not fail the batch",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.register.response.data.token}}"
+      },
+      "payload": {
+        "items": [
+          {
+            "person_id": "{{cache:auth.register.response.data.userId}}",
+            "purpose_id": "{{cache:consents.purposes.create.response.data.purpose.purpose_id}}",
+            "processor": "tenant",
+            "jurisdiction": "US-CA"
+          },
+          {
+            "person_id": "not-a-uuid",
+            "purpose_id": "{{cache:consents.purposes.create.response.data.purpose.purpose_id}}",
+            "processor": "tenant",
+            "jurisdiction": "US-CA"
+          }
+        ]
+      },
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "data": {
+          "results": "array",
+          "summary": {
+            "requested": "number",
+            "succeeded": "number",
+            "failed": "number"
+          }
+        }
+      }
+    }
+  ],
+  "expectedResponse": {
+    "data": {
+      "results": "array",
+      "summary": {
+        "requested": "number",
+        "succeeded": "number",
+        "failed": "number"
+      }
+    }
+  },
+  "captureResponse": {
+    "consents.check-bulk.response.data.results.0.receipt_id": "data.results.0.receipt_id"
+  },
+  "description": "The four-tuple consent check for up to 1000 subjects in ONE request and ONE query - the bulk form of POST /api/consents/check, with identical per-tuple semantics (a DISTINCT ON reproduces the single endpoint's ORDER BY granted_at DESC LIMIT 1 per input row). Results are order-preserving and each carries an explicit index, so a caller that filters before zipping cannot silently misalign subjects with verdicts. Failure is per item, never per batch: a malformed item reports ok=false with error_code VALIDATION_ERROR in its own slot while every other subject still returns a verdict, because a campaign check that fails whole is a campaign that silently does not go out. The same tuple repeated in one batch keeps both slots. Envelope-level 400s are reserved for a request that is meaningless rather than partly wrong. Read-only, side-effect-free and safely repeatable; same scope as the single endpoint (consent.check.write).",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "Authorization header absent or not in Bearer form (requireAuth / gateway default-deny authGate)"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "body must be an object with an items[] array",
+      "when": "Request body is absent, not a JSON object, or is itself an array"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "items must be an array",
+      "when": "The items key is present but is not an array"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "items must not be empty",
+      "when": "items is an empty array - rejected rather than answered '0 of 0 succeeded', which would let a campaign report a clean check having evaluated nobody"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "items exceeds the per-request maximum of 1000; page the batch",
+      "when": "More than 1000 items are supplied"
+    },
+    {
+      "status": 500,
+      "code": "InternalError",
+      "message": "InternalError",
+      "when": "checkConsentBulk throws (database unavailable or query error)"
+    }
+  ]
+}

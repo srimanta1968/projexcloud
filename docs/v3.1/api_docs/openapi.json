@@ -197,7 +197,7 @@
     },
     {
       "name": "sdk-identity-resolver",
-      "description": "Records a steward's approve/reject decision on a candidate link's open approval step and labels the match outcome for calibration. step_id is required and decision must be exactly 'approve' or 'reject' (any other value, including a missing one, is a 400); reason is optional. The deciding persona com"
+      "description": "Records a steward verdict (approve merges the pair reversibly; reject marks the link rejected and stamps decided_at, feeding review-latency). Needs step_id from steward-review, and the acting persona MUST equal that step's approver or sdk-approval rejects it. 404 when the link is not the caller tena"
     },
     {
       "name": "sdk-import",
@@ -13167,7 +13167,7 @@
           "sdk-identity-resolver"
         ],
         "summary": "Steward approves a candidate link (triggers reversible merge)",
-        "description": "Records a steward's approve/reject decision on a candidate link's open approval step and labels the match outcome for calibration. step_id is required and decision must be exactly 'approve' or 'reject' (any other value, including a missing one, is a 400); reason is optional. The deciding persona comes from the JWT, not the body. Edge cases: an unknown link_id throws 'empi: candidate link <id> not found' and surfaces as 500 InternalError rather than 404; a step_id that is already decided, or that does not belong to the link, likewise fails inside the service as a 500; approving feeds a positive calibration label and reject a negative one, so double-adjudicating the same step is not a safe retry.",
+        "description": "Records a steward verdict (approve merges the pair reversibly; reject marks the link rejected and stamps decided_at, feeding review-latency). Needs step_id from steward-review, and the acting persona MUST equal that step's approver or sdk-approval rejects it. 404 when the link is not the caller tenant's.",
         "operationId": "post_api_empi_candidate_links_link_id_adjudicate",
         "parameters": [
           {
@@ -13252,7 +13252,7 @@
           "sdk-identity-resolver"
         ],
         "summary": "List candidate links in the high-confidence band",
-        "description": "Queries probabilistic EMPI candidate links, filtered by confidence band (high|medium|low) or an explicit min/max score range, optionally narrowed by status (open|merged|rejected|superseded) and capped by limit. Edge cases: every query param is optional - an unfiltered call returns links across all bands; min/max arrive as strings and are parsed with parseFloat/parseInt, so non-numeric values become NaN and silently widen rather than 400; an unrecognised band or status is passed straight through to the query and simply matches nothing; no matches returns 200 with an empty array, never a 404; any query failure is caught and flattened to a bare 500 InternalError.",
+        "description": "Steward review queue: POSSIBLY_SAME candidate links by confidence band (band=high|medium|low, or explicit min/max) and status. TENANT-SCOPED — results are restricted to the tenant on the calling credential; there is no tenant_id parameter and pre-2026-08 rows with no tenant are excluded.",
         "operationId": "get_api_empi_candidate_links",
         "parameters": [],
         "responses": {
@@ -13296,7 +13296,7 @@
           "sdk-identity-resolver"
         ],
         "summary": "Merge two person records (event-sourced, reversible)",
-        "description": "Performs a direct reversible merge of two person records (steward/ops path, bypassing the approval queue). surviving_person_id and merged_person_id are both required; link_id optionally ties the merge back to the candidate link that motivated it and reason is free text. decided_by is taken from the JWT persona, never the body. Edge cases: either person id missing -> 400; a non-existent person id, or merging a record into itself, is not guarded at the route and fails inside mergeRecords ('empi: merge failed' or an FK error) as a 500 InternalError; the merge is reversible only through the unmerge endpoint; repeating the same merge creates a second merge row, so the endpoint is not idempotent.",
+        "description": "Merges two persons as a reversible, event-sourced merge event; never destructive. Attributed to the calling tenant. NOTE: the merge acts on the global L1 identity.person, so its effect is visible to every tenant sharing that person — attribution is per tenant, the effect is not.",
         "operationId": "post_api_empi_merges",
         "parameters": [],
         "responses": {
@@ -13376,7 +13376,7 @@
           "sdk-identity-resolver"
         ],
         "summary": "Read EMPI observability metrics",
-        "description": "Returns EMPI quality metrics: probability calibration (expected calibration error over the score bins), the count of unresolved candidate links, and the merge reversal rate. Edge cases: the endpoint takes no parameters and is not tenant-filtered - it reports across the whole EMPI store; with no adjudicated links yet the calibration bins are empty and the ECE/rates come back as zeros rather than erroring; any failure inside getEmpiMetrics is caught and flattened to a bare 500 InternalError with no detail.",
+        "description": "EMPI observability for the CALLING TENANT only: unresolved links, merge reversals, confidence distribution, calibration ECE + drift alert, per-band adjudicated outcomes (band_outcomes / high_risk_precision) and review latency (review_latency: median_minutes, p90_minutes over window_days). Null precision/median means nothing adjudicated yet — render 'not measured', not zero.",
         "operationId": "get_api_empi_metrics",
         "parameters": [],
         "responses": {
@@ -13420,7 +13420,7 @@
           "sdk-identity-resolver"
         ],
         "summary": "Queue a candidate link for steward review",
-        "description": "Queues a candidate link for human steward adjudication by opening an approval step on the given route_id; the steward identity is taken from the JWT (primary_persona_id, falling back to sub), never from the body. tenant_id falls back to the JWT tenant claim when the body omits it. Edge cases: a missing route_id, or no tenant_id in either the body or the token, -> 400; a candidate link that does not exist throws 'empi: candidate link <id> not found' inside the service and surfaces as a 500 InternalError with that message in details, NOT a 404 - this is the single most misleading status on the route; re-queuing an already-queued link opens a second approval step, so the endpoint is not idempotent; a token with no persona claim yields an empty steward_persona_id rather than an error.",
+        "description": "Queues a candidate link for steward review via sdk-approval; returns pending step ids for adjudicate. Requires route_id (an approval route whose step approver is the persona the adjudicating caller will present). tenant_id in the body is IGNORED — the tenant comes from the credential.",
         "operationId": "post_api_empi_candidate_links_link_id_steward_review",
         "parameters": [
           {
@@ -13500,7 +13500,7 @@
           "sdk-identity-resolver"
         ],
         "summary": "Reverse a prior merge via compensating event",
-        "description": "Reverses a prior merge by writing a compensating merge record; the reversing persona comes from the JWT and reason (the only body field, optional) is recorded with it. Edge cases: the entire body is optional, so an empty POST is valid; an unknown merge_id throws 'empi: merge <id> not found' and surfaces as a 500 InternalError, NOT a 404; unmerging a merge that has already been reversed is not guarded at the route and produces either a second compensation row or an 'empi: unmerge failed' 500, so this is not a safe retry; reversal counts feed the EMPI reversal-rate metric.",
+        "description": "Reverses a merge with a compensating unmerge event and reopens the originating candidate link (clearing decided_at). 404 MergeNotFound when the id is unknown OR belongs to another tenant — deliberately indistinguishable.",
         "operationId": "post_api_empi_merges_merge_id_unmerge",
         "parameters": [
           {
@@ -14462,10 +14462,10 @@
     "/api/events/types": {
       "get": {
         "tags": [
-          "sdk-event"
+          "sdk-audit"
         ],
-        "summary": "List all registered event types",
-        "description": "Lists every event type in the compile-time EVENT_TYPE_REGISTRY together with its metadata and a count, for runtime discovery and validation by producers and consumers. Edge cases: the registry is static compile-time data with no DB access, so the response is identical on every call and never empty in a correctly built image; the route takes no parameters, no pagination and no tenant scoping - the registry is global, not per-tenant; the handler declares no requireAuth of its own, so its 401 comes from the gateway default-deny auth gate (the path is not on the public allowlist).",
+        "summary": "List the platform baseline plus this tenant's own event types",
+        "description": "Lists every event type the caller may emit - the compile-time EVENT_TYPE_REGISTRY platform baseline plus the types this tenant has registered itself - with metadata, a total count and separate platform_count/tenant_count. Edge cases: the baseline half is static compile-time data, so it is identical on every call and never empty in a correctly built image, while the tenant half is a DB read scoped to the JWT's tenant_id claim and is empty for a tenant that has registered nothing; a token with no tenant_id claim gets the baseline only, never another tenant's types; the route takes no parameters and no pagination; the handler declares no requireAuth of its own, so its 401 comes from the gateway default-deny auth gate (the path is not on the public allowlist).",
         "operationId": "get_api_events_types",
         "parameters": [],
         "responses": {
@@ -14494,15 +14494,87 @@
           }
         },
         "security": []
+      },
+      "post": {
+        "tags": [
+          "sdk-audit"
+        ],
+        "summary": "Register a tenant event type",
+        "description": "Registers ONE event type for the caller's own tenant, extending the compile-time EVENT_TYPE_REGISTRY baseline so a consuming application can emit its own audit events without a platform release. The tenant comes from the verified JWT claim and is never read from the body, so a user of tenant A cannot define vocabulary inside tenant B. Resolution at append time is baseline-first, then this tenant's rows, so a registration can never shadow or redefine a platform type. Edge cases: registering an event_type that already exists for this tenant is ADDITIVE, returning 200 with the STORED metadata and created:false rather than overwriting it (a boot-time provisioner re-running on every deploy is the expected caller); an event_type that collides with a platform baseline name is rejected 400 rather than accepted as a shadow; a name that does not match <domain>.<entity>.<verb>.v<N> is rejected 400 at REGISTRATION, where the author can still fix it, rather than at append time in production; schema_state defaults to 'active', compaction_policy to 'none' and schema_version to 1 when omitted; a token carrying no tenant_id claim is rejected 400 because the row has nowhere to land. IDEMPOTENCY (MUST-47): the primary key is (tenant_id, event_type) and tenant_id comes from a tenant created fresh by the signup-tenant dependency on every run, so the fixed event_type below cannot collide across runs. NOTE ON fieldEnums (MUST-39): event_type is deliberately absent from fieldEnums because it is NOT enum-backed - it is pattern-validated against EVENT_TYPE_NAME_PATTERN (<domain>.<entity>.<verb>.v<N>) and any conforming name is valid, so publishing a finite list would tell QA something false about what the field accepts. The four metadata fields below ARE enum-backed (Postgres CHECK-in-list) and are enumerated.",
+        "operationId": "post_api_events_types",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": "Success",
+            "content": {
+              "application/json": {}
+            }
+          },
+          "400": {
+            "description": "ValidationError — details[]: a tenant-scoped token is required to register an event type"
+          },
+          "401": {
+            "description": "Unauthorized — Missing bearer token"
+          },
+          "500": {
+            "description": "InternalError — InternalError"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "apiKey": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "event_type": {
+                    "type": "string"
+                  },
+                  "retention_class": {
+                    "type": "string"
+                  },
+                  "conflict_policy": {
+                    "type": "string"
+                  },
+                  "schema_state": {
+                    "type": "string"
+                  },
+                  "compaction_policy": {
+                    "type": "string"
+                  },
+                  "schema_version": {
+                    "type": "integer"
+                  }
+                }
+              },
+              "example": {
+                "event_type": "capture.lead.created.v1",
+                "retention_class": "regulated",
+                "conflict_policy": "event-sourcing",
+                "schema_state": "active",
+                "compaction_policy": "none",
+                "schema_version": 1
+              }
+            }
+          }
+        }
       }
     },
     "/api/events/types/{type}": {
       "get": {
         "tags": [
-          "sdk-event"
+          "sdk-audit"
         ],
-        "summary": "Look up a registered event type from the compile-time registry",
-        "description": "Looks up one event type in the compile-time EVENT_TYPE_REGISTRY by its exact type key and returns its metadata. Edge cases: the lookup is an exact, case-sensitive key match against a plain object, so a versionless or mis-cased name (e.g. 'event.ticket.issued' instead of 'event.ticket.issued.v1') returns 404 UnregisteredEventType echoing the requested type in details; the registry is static compile-time data so results never vary per tenant or over the life of the process; the handler declares no requireAuth of its own, so its 401 comes from the gateway default-deny auth gate.",
+        "summary": "Look up one event type, platform baseline first then tenant",
+        "description": "Looks up one event type by its exact key and returns its metadata plus a 'source' of 'platform' or 'tenant'. The compile-time EVENT_TYPE_REGISTRY baseline is checked FIRST and the caller's tenant-registered types second, which is the property that stops a tenant registration shadowing a platform type. Edge cases: the lookup is an exact, case-sensitive key match, so a versionless or mis-cased name (e.g. 'event.ticket.issued' instead of 'event.ticket.issued.v1') returns 404 UnregisteredEventType echoing the requested type and pointing at POST /api/events/types; a name registered by ANOTHER tenant also 404s, since only the caller's own tenant rows are consulted; the baseline half never varies per tenant or over the life of the process; the handler declares no requireAuth of its own, so its 401 comes from the gateway default-deny auth gate.",
         "operationId": "get_api_events_types_type",
         "parameters": [
           {
@@ -23633,6 +23705,50 @@
             }
           }
         }
+      },
+      "get": {
+        "tags": [
+          "sdk-offer-catalog"
+        ],
+        "summary": "List the versions of the offer just created",
+        "description": "Every version of one offer, returned as data.versions. tenant_id is a REQUIRED QUERY PARAMETER - listOfferVersions scopes by (tenant_id, offer_id) - so omitting it is 400. Unlike GET /api/offers/:offer_id this route does NOT 404 on an unknown offer_id: an offer that does not exist and an offer with no versions yet both answer 200 with an empty array, because the handler never checks the parent exists. A caller that needs to distinguish those two must read the offer first. The list is the full version history including superseded ones, not just the live version - exactly one version is live at a time and activate atomically demotes the prior one, so read status rather than assuming order.",
+        "operationId": "get_api_offers_offer_id_versions",
+        "parameters": [
+          {
+            "name": "offer_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "offer_id path parameter"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {}
+            }
+          },
+          "400": {
+            "description": "ValidationError — tenant_id query param required"
+          },
+          "401": {
+            "description": "Unauthorized — Missing bearer token"
+          },
+          "500": {
+            "description": "InternalError — Fastify default error payload from the uncaught service throw"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "apiKey": []
+          }
+        ]
       }
     },
     "/api/offers/{offer_id}/versions/{version_id}/activate": {
@@ -25706,7 +25822,7 @@
           "sdk-policy"
         ],
         "summary": "Create a doctor-care-team policy bundle",
-        "description": "Creates a versioned policy bundle (name + version + IQL source, with optional obligations) per FR-POL-4 and returns 201. Requires a valid tenant JWT (requireAuth). Edge cases: name, version and iql_source are all mandatory presence checks; obligations, when present, must be an object and each sub-field is type-checked - mask_fields must be an array of strings, row_filter must be an object, audit_level must be one of the allowed levels, and ttl_seconds must be a non-negative number (0 is allowed, -1 is a 400); a syntactically invalid IQL body is a 400 IQLParseError raised by the parser rather than the validator, so it is a distinct failure mode from ValidationError; re-creating the same name+version pair trips the unique constraint and is a 409 Conflict, so the endpoint is not idempotent - bump the version to publish a change.",
+        "description": "Creates a versioned policy bundle (name + version + IQL source, with optional obligations) per FR-POL-4 and returns 201. Requires a valid tenant JWT (requireAuth). Edge cases: name, version and iql_source are all mandatory presence checks; obligations, when present, must be an object and each sub-field is type-checked - mask_fields must be an array of strings, row_filter must be an object, audit_level must be one of the allowed levels, and ttl_seconds must be a non-negative number (0 is allowed, -1 is a 400); a syntactically invalid IQL body is a 400 IQLParseError raised by the parser rather than the validator, so it is a distinct failure mode from ValidationError; re-creating the same name+version pair trips the unique constraint and is a 409 Conflict, so the endpoint is not idempotent - bump the version to publish a change. SCOPING: an optional app_id scopes the rule to ONE app; omit it for a tenant-wide rule that every app of the tenant is evaluated against (the pre-2026-08 behaviour, and what existing rows still are). tenant_id NULL with app_id NULL is a platform default. Uniqueness is enforced by two PARTIAL indexes - (tenant_id, name, version) WHERE app_id IS NULL and (tenant_id, app_id, name, version) WHERE app_id IS NOT NULL - so an app-scoped override may carry the SAME name and version as the tenant-wide rule it narrows; a single four-column UNIQUE would not have worked because Postgres treats NULLs as distinct and would have permitted unlimited duplicate tenant-wide rows.",
         "operationId": "post_api_policies",
         "parameters": [],
         "responses": {
@@ -25828,6 +25944,40 @@
             }
           }
         }
+      },
+      "get": {
+        "tags": [
+          "sdk-policy"
+        ],
+        "summary": "List the tenant-wide policies for the calling tenant",
+        "description": "Lists the ACTIVE policy bundles governing a scope, returned under data.policies. The tenant is taken from the caller's JWT and never from the query string - a policy names what a caller may do, so allowing one to be listed by naming somebody else's tenant would hand over their access model; a credential carrying no tenant answers 400 ValidationError. With no app_id the response is the tenant-wide rules only (app_id IS NULL). With ?app_id= it is that app's own rules FOLLOWED BY the tenant-wide rules the app inherits, ordered app-specific first. Edge cases: the ordering is for presentation and for callers that want the narrowest rule - it is NOT first-match-wins, because access rules COMPOSE and silently dropping an inherited tenant-wide rule because a more specific app rule exists would widen access at exactly the moment somebody added a restriction; only status='active' rows are returned, so draft and retired bundles are invisible here; an app_id that matches no policy is not an error and yields just the inherited tenant-wide rules.",
+        "operationId": "get_api_policies",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {}
+            }
+          },
+          "400": {
+            "description": "ValidationError — This credential carries no tenant context"
+          },
+          "401": {
+            "description": "Unauthorized — Missing bearer token"
+          },
+          "500": {
+            "description": "InternalError — InternalError"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "apiKey": []
+          }
+        ]
       }
     },
     "/api/policies/evaluate": {
@@ -28748,6 +28898,40 @@
             }
           }
         }
+      },
+      "get": {
+        "tags": [
+          "sdk-scheduling"
+        ],
+        "summary": "List the availability rules for the host just configured",
+        "description": "The recurring availability rules for ONE host, returned as data.rules. BOTH tenant_id AND host_persona_id are required query parameters - listAvailabilityRules takes the pair, so this route cannot list rules across hosts and omitting either is the same single 400. Returns the rules as authored (weekday plus start/end local times), NOT bookable slots: GET /api/scheduling/availability is the route that intersects these rules with existing appointments, meeting-type duration and time-off to produce concrete slots. Reading rules and computing slots client-side duplicates that logic and misses the exclusions. An unknown host_persona_id is 200 with an empty array rather than 404, because the handler never checks the persona exists.",
+        "operationId": "get_api_scheduling_availability_rules",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {}
+            }
+          },
+          "400": {
+            "description": "ValidationError — tenant_id and host_persona_id query params required"
+          },
+          "401": {
+            "description": "Unauthorized — Missing bearer token"
+          },
+          "500": {
+            "description": "InternalError — Fastify default error payload from the uncaught service throw"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "apiKey": []
+          }
+        ]
       }
     },
     "/api/scheduling/calendar-connections/{connection_id}": {
@@ -30672,6 +30856,43 @@
             }
           }
         }
+      },
+      "get": {
+        "tags": [
+          "sdk-secrets"
+        ],
+        "summary": "Retrieve a previously registered SecretRef by ref",
+        "description": "Looks up a SecretRef in the catalog by its ref string, passed as the `ref` QUERY parameter, and returns the catalog record (ref, scope, kms_key_id, rotation metadata) - never the secret material itself. Requires a valid tenant JWT (requireAuth). WHY THE QUERY FORM: secretRefCatalog validates every reference against /^secret:\\/\\/(app|pool|tenant)\\/(.+)$/, so a conformant ref ALWAYS contains '://' and at least one further '/' - three or more path segments. A Fastify ':ref' parameter matches exactly ONE segment, so the sibling route GET /api/secrets/:ref can never match a real ref and 404s on every conformant value; it is retained in the code only as a harmless legacy path. The query string is where a slash is not a delimiter, so this is the form that actually works and the one QA must use. Edge cases: an absent or whitespace-only ref returns 400 ValidationError naming the expected shape; an unknown but well-formed ref returns 404 NotFound with the ref echoed in details[]; the caller JWT tenant is never compared to the record, so any authenticated caller can resolve any ref.",
+        "operationId": "get_api_secrets",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {}
+            }
+          },
+          "400": {
+            "description": "ValidationError — ref query parameter is required, e.g. ?ref=secret://tenant/my-key"
+          },
+          "401": {
+            "description": "Unauthorized — Missing bearer token"
+          },
+          "404": {
+            "description": "NotFound — No SecretRef registered for <ref>"
+          },
+          "500": {
+            "description": "InternalError — InternalError"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "apiKey": []
+          }
+        ]
       }
     },
     "/api/sequence-templates": {
@@ -31134,6 +31355,40 @@
             }
           }
         }
+      },
+      "get": {
+        "tags": [
+          "sdk-sequence"
+        ],
+        "summary": "List every sequence in the tenant",
+        "description": "Every sequence defined for a tenant, returned as data.sequences. tenant_id is a REQUIRED QUERY PARAMETER, not a claim: listSequences takes it directly, so omitting it is 400 rather than defaulting to the caller's tenant. Takes no other filter - status and channel query parameters are ignored rather than narrowing the result. Returns the sequence definitions themselves, not enrolments or step state; a caller tracking a contact through a sequence wants the enrolment routes instead. An empty tenant answers 200 with an empty array rather than 404, because 'this tenant has defined no sequences' is an answer.",
+        "operationId": "get_api_sequences",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {}
+            }
+          },
+          "400": {
+            "description": "ValidationError — tenant_id query param required"
+          },
+          "401": {
+            "description": "Unauthorized — Missing bearer token"
+          },
+          "500": {
+            "description": "InternalError — Fastify default error payload from the uncaught service throw"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "apiKey": []
+          }
+        ]
       }
     },
     "/api/sequences/{sequence_id}/enroll": {
@@ -34035,6 +34290,40 @@
             }
           }
         }
+      },
+      "get": {
+        "tags": [
+          "sdk-vault"
+        ],
+        "summary": "List the calling tenant's keys",
+        "description": "Lists the vault keys VISIBLE TO THE CALLING TENANT, newest first, with optional tier and scope_id narrowing and a limit capped at 500 (default 200). Returns metadata only — key_id, tier, scope_id, parent_key_id, kms_ref, state, algorithm, issued_at, rotated_at, shredded_at, tenant_id, region. There is no key material in vault.key at all, so nothing secret is returned; kms_ref is a handle, not a key. The tenant filter is applied IN SQL (listKeysForTenant), not by the handler, because every read into vault.key is a potential cross-tenant key inventory: tier + scope_id + kms_ref describe the shape of another customer's key hierarchy and parent_key_id walks upward through it. Tiers ABOVE tenant — root, app, pool — carry tenant_id NULL because they wrap every tenant, so they are excluded by construction and are NOT visible here even to the tenant that created them; an operator view goes through an ADMIN_OPS_TOKEN route instead. The definition captures NOTHING: the only key producer for this project creates a ROOT-tier key (tenant_id NULL), which this tenant-scoped list deliberately excludes, so data.0 would never populate and any consumer binding it would block forever. Edge cases: a token carrying no tenant_id is 403 rather than an empty list, because an empty list would read as 'you have no keys' when the truth is 'this token cannot express a key scope'; a fresh tenant legitimately returns an empty array with 200; tier and scope_id can only narrow within the tenant and can never widen beyond it; limit is clamped rather than rejected, so an absurd value degrades instead of failing.",
+        "operationId": "get_api_vault_keys",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {}
+            }
+          },
+          "401": {
+            "description": "Unauthorized — Missing bearer token"
+          },
+          "403": {
+            "description": "no tenant scope — This token carries no tenant, so no key scope can be derived"
+          },
+          "500": {
+            "description": "InternalError — InternalError"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "apiKey": []
+          }
+        ]
       }
     },
     "/api/vault/keys/{key_id}/rotate": {
@@ -35895,6 +36184,75 @@
             "apiKey": []
           }
         ]
+      },
+      "patch": {
+        "tags": [
+          "sdk-api-keys"
+        ],
+        "summary": "Rename the application just created",
+        "description": "Updates an application's mutable metadata and returns 200 with data.application. ONLY name and description can be changed - every other field, including slug and status, is ignored rather than rejected, so a caller sending {slug:'new'} gets a 200 and no change. Use POST /api/applications/:application_id/disable to change status; slug is immutable because it is the client_id half of the client_credentials grant and rewriting it would silently break every integration holding a key. Both fields are optional and read only when they are strings, so a PATCH with an empty body is a valid no-op that returns the unchanged record. The tenant is taken from the verified claim via tenantOf(); an application_id belonging to another tenant is 404, not 403, so the route never confirms another tenant's applications exist. Unlike createApplicationHandler this route does NOT call tenantMismatch(), so a body tenant_id is simply ignored rather than refused.",
+        "operationId": "patch_api_applications_application_id",
+        "parameters": [
+          {
+            "name": "application_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "application_id path parameter"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {}
+            }
+          },
+          "400": {
+            "description": "ValidationError — This credential carries no tenant context"
+          },
+          "401": {
+            "description": "Unauthorized — Missing bearer token"
+          },
+          "404": {
+            "description": "NotFound — No such application"
+          },
+          "500": {
+            "description": "InternalError — InternalError"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "apiKey": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "description": {
+                    "type": "string"
+                  }
+                }
+              },
+              "example": {
+                "name": "renamed-integration-{{dynamic:slug}}",
+                "description": "Updated by the api_definition regression suite"
+              }
+            }
+          }
+        }
       }
     },
     "/api/applications/{application_id}/keys": {
@@ -38576,6 +38934,43 @@
             }
           }
         }
+      },
+      "get": {
+        "tags": [
+          "sdk-coverage"
+        ],
+        "summary": "List every backup designation in the tenant",
+        "description": "Every backup designation in the tenant, returned as data.designations. Takes no filter - the handler passes only the resolved tenant to listBackups - so a primary_persona_id query parameter is ignored rather than narrowing the result. Each row pairs a primary_persona_id with the backup_persona_id that covers it, plus the optional scope and acceptance_window_minutes. A persona designating itself is refused at write time as 422, so no row here is ever self-referential and a reader need not defend against that cycle. The tenant comes from the verified claim: a disagreeing tenant_id is 403 and no tenant at all is 400.",
+        "operationId": "get_api_coverage_backup_designations",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {}
+            }
+          },
+          "400": {
+            "description": "ValidationError — tenant_id is required"
+          },
+          "401": {
+            "description": "Unauthorized — Missing bearer token"
+          },
+          "403": {
+            "description": "Forbidden — tenant_id does not match the authenticated tenant"
+          },
+          "500": {
+            "description": "InternalError — InternalError"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "apiKey": []
+          }
+        ]
       }
     },
     "/api/coverage/capacity-policies": {
@@ -38683,6 +39078,43 @@
             }
           }
         }
+      },
+      "get": {
+        "tags": [
+          "sdk-coverage"
+        ],
+        "summary": "List every capacity policy in the tenant",
+        "description": "Every capacity policy the tenant has configured, returned as data.policies. Takes no filter - the handler passes only the resolved tenant to listCapacityPolicies - so a persona_id or role_ref query parameter is ignored rather than narrowing the result. A policy is subject-scoped by exactly one of persona_id or role_ref (the POST's CapacityPolicySubjectError enforces that), so a reader must branch on which one is populated rather than assuming persona. max_concurrent_by_band and freeze_threshold_by_band are per-band maps, and daily_cap is nullable, meaning 'no daily ceiling' rather than zero. The tenant comes from the verified claim: a disagreeing tenant_id is 403 and no tenant at all is 400.",
+        "operationId": "get_api_coverage_capacity_policies",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {}
+            }
+          },
+          "400": {
+            "description": "ValidationError — tenant_id is required"
+          },
+          "401": {
+            "description": "Unauthorized — Missing bearer token"
+          },
+          "403": {
+            "description": "Forbidden — tenant_id does not match the authenticated tenant"
+          },
+          "500": {
+            "description": "InternalError — InternalError"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "apiKey": []
+          }
+        ]
       }
     },
     "/api/coverage/eligible": {
@@ -38853,6 +39285,43 @@
             }
           }
         }
+      },
+      "get": {
+        "tags": [
+          "sdk-coverage"
+        ],
+        "summary": "List every holiday calendar in the tenant",
+        "description": "Every holiday calendar the tenant maintains, returned as data.calendars. Takes no filter of any kind - the handler passes only the resolved tenant to listHolidayCalendars - so a region query parameter is accepted by the router and ignored rather than narrowing the result. Regions are per-tenant strings, not an ISO set, because a tenant's holiday regions follow its operating calendar and not a country code. The tenant comes from the verified claim: a disagreeing tenant_id in the query is 403 and no tenant at all is 400.",
+        "operationId": "get_api_coverage_holiday_calendars",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {}
+            }
+          },
+          "400": {
+            "description": "ValidationError — tenant_id is required"
+          },
+          "401": {
+            "description": "Unauthorized — Missing bearer token"
+          },
+          "403": {
+            "description": "Forbidden — tenant_id does not match the authenticated tenant"
+          },
+          "500": {
+            "description": "InternalError — InternalError"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "apiKey": []
+          }
+        ]
       }
     },
     "/api/coverage/on-call/current": {
@@ -38978,6 +39447,43 @@
             }
           }
         }
+      },
+      "get": {
+        "tags": [
+          "sdk-coverage"
+        ],
+        "summary": "List every roster entry in the tenant",
+        "description": "The raw on-call roster for the tenant, optionally narrowed to one rotation via the rotation_ref query parameter. Returns 200 with data.roster as an array of entries, each carrying its tier and its starts_at/ends_at window. This is deliberately NOT the same question as GET /api/coverage/on-call/current: this route lists every entry as stored, including past and future windows, while /current resolves who is on call at one instant and applies tier fallback. Reading the roster to work out who is on duty now duplicates that resolution and gets the tier precedence wrong. The tenant comes from the verified claim: a disagreeing tenant_id is 403 and no tenant at all is 400.",
+        "operationId": "get_api_coverage_on_call",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {}
+            }
+          },
+          "400": {
+            "description": "ValidationError — tenant_id is required"
+          },
+          "401": {
+            "description": "Unauthorized — Missing bearer token"
+          },
+          "403": {
+            "description": "Forbidden — tenant_id does not match the authenticated tenant"
+          },
+          "500": {
+            "description": "InternalError — InternalError"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "apiKey": []
+          }
+        ]
       }
     },
     "/api/coverage/presence": {
@@ -39289,6 +39795,43 @@
             }
           }
         }
+      },
+      "get": {
+        "tags": [
+          "sdk-coverage"
+        ],
+        "summary": "List every time-off record in the tenant",
+        "description": "Time-off records for the tenant, optionally narrowed to one persona via the persona_id query parameter. Returns 200 with data.time_off as an array; an empty tenant answers 200 with [] rather than 404, because 'this persona has booked no leave' is an answer, not a missing resource. The tenant is taken from the verified claim: a tenant_id in the query that disagrees with the credential is 403, not silently preferred, and a caller with neither is 400. Unlike the POST, this route performs no date parsing, so it has no 422 path - the only refusals are the auth and tenant-resolution ones below.",
+        "operationId": "get_api_coverage_time_off",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {}
+            }
+          },
+          "400": {
+            "description": "ValidationError — tenant_id is required"
+          },
+          "401": {
+            "description": "Unauthorized — Missing bearer token"
+          },
+          "403": {
+            "description": "Forbidden — tenant_id does not match the authenticated tenant"
+          },
+          "500": {
+            "description": "InternalError — InternalError"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "apiKey": []
+          }
+        ]
       }
     },
     "/api/crm/close-reasons": {
@@ -46683,6 +47226,432 @@
           },
           "401": {
             "description": "Unauthorized — missing or invalid token"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "apiKey": []
+          }
+        ]
+      }
+    },
+    "/api/assignment/simulations": {
+      "get": {
+        "tags": [
+          "sdk-assignment"
+        ],
+        "summary": "The tenant's runs come back newest first",
+        "description": "The list a reviewer opens before they know which simulation_id they want: this tenant's recorded runs, newest first, each row a summary (simulation_id, candidate_version, rule_set_name, subjects_replayed, created_at) rather than the whole report - a full report per row would make the common case, browsing, pay for the rare case, reading one. Filters narrow to a rule set by name and to one candidate_version, which is how the question is actually asked: show me every simulation of the version we shipped. QA edge cases: results are tenant-scoped, so another tenant's runs never appear regardless of filter; a tenant with no runs gets 200 and an empty array, not 404, because no simulations is a valid state and not a missing resource; limit is clamped to a 1-500 range so a caller cannot ask for the whole table; rule_set_name and candidate_version are independent and combine; an unknown rule_set_name yields an empty array rather than an error, because a name that matched nothing is an answer.",
+        "operationId": "get_api_assignment_simulations",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {}
+            }
+          },
+          "400": {
+            "description": "VALIDATION_ERROR — candidate_version must be an integer"
+          },
+          "401": {
+            "description": "Unauthorized — missing or invalid tenant token"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "apiKey": []
+          }
+        ]
+      }
+    },
+    "/api/assignment/simulations/{simulation_id}": {
+      "get": {
+        "tags": [
+          "sdk-assignment"
+        ],
+        "summary": "A cited simulation resolves to the report it produced",
+        "description": "Resolves the simulation_id a routing proposal cited back to the IDENTICAL report the simulate call returned. This is the half that makes a simulation evidence rather than a screenshot: a routing change is proposed on the strength of a simulation, approved weeks later and questioned months after that, and candidate_version identifies the RULES, never the RUN - two simulations of the same version over different windows or candidate pools are different evidence carrying the same version number. The stored row is immutable, so the numbers a reviewer re-opens are the numbers the decision was made on. QA edge cases: the run is tenant-scoped, so a simulation_id belonging to another tenant is 404 and NOT another tenant's evidence - absence and forbidden are deliberately indistinguishable here, because confirming an id exists elsewhere leaks that a simulation happened; a well-formed but never-issued id is 404; a malformed id is refused as a validation error before it reaches the database; the returned body carries created_at alongside the report so a reviewer can see WHEN the question was asked, and its side_effects block still reads all zeros because recording a run is not a routing effect.",
+        "operationId": "get_api_assignment_simulations_simulation_id",
+        "parameters": [
+          {
+            "name": "simulation_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "simulation_id path parameter"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {}
+            }
+          },
+          "400": {
+            "description": "VALIDATION_ERROR — simulation_id must be a UUID"
+          },
+          "401": {
+            "description": "Unauthorized — missing or invalid tenant token"
+          },
+          "404": {
+            "description": "SIMULATION_NOT_FOUND — no simulation run with that id for this tenant"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "apiKey": []
+          }
+        ]
+      }
+    },
+    "/api/secrets/rotate": {
+      "post": {
+        "tags": [
+          "sdk-secrets"
+        ],
+        "summary": "Rotate previously registered SecretRef",
+        "description": "Rotates the KMS key version backing a registered SecretRef and stamps rotated_at on the catalog row, returning the rotation result. The reference is passed as `ref` in the BODY. Requires a valid tenant JWT (requireAuth). WHY THE BODY FORM: secretRefCatalog validates every reference against /^secret:\\/\\/(app|pool|tenant)\\/(.+)$/, so a conformant ref ALWAYS contains '://' and at least one further '/' - three or more path segments. A Fastify ':ref' parameter matches exactly ONE segment, so the sibling route POST /api/secrets/:ref/rotate can never match a real ref and 404s on every conformant value; it is retained in the code only as a harmless legacy path. The body is where a slash is not a delimiter, so this is the form that actually works and the one QA must use. Edge cases: an absent or whitespace-only ref is a 400 ValidationError naming the expected shape; rotating an unregistered ref is a 404 NotFound, matched on the service message starting with \"Secret reference not registered\"; rotation is repeatable but not idempotent - each call mints a new key version and rewrites rotated_at, so callers must not retry blindly; a KMS-side failure is a 500 InternalError, indistinguishable in status from a DB failure.",
+        "operationId": "post_api_secrets_rotate",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {}
+            }
+          },
+          "400": {
+            "description": "ValidationError — ref is required in the body, e.g. { \"ref\": \"secret://tenant/my-key\" }"
+          },
+          "401": {
+            "description": "Unauthorized — Missing bearer token"
+          },
+          "404": {
+            "description": "NotFound — Secret reference not registered: <ref>"
+          },
+          "500": {
+            "description": "InternalError — InternalError"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "apiKey": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "ref": {
+                    "type": "string"
+                  }
+                }
+              },
+              "example": {
+                "ref": "<id from secrets>"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/keys/{key_id}/rotate": {
+      "post": {
+        "tags": [
+          "sdk-api-keys"
+        ],
+        "summary": "Rotate the key just issued",
+        "description": "Rotates an API key: mints replacement material and returns 201 with the new record and its one-time plaintext. DEPRECATED ALIAS - /api/keys/* is retained for older integrations behind a deprecate preHandler and delegates to exactly the same rotateKeyHandler as the canonical /api/api-keys/:key_id/rotate. New callers should use the canonical path. Answers 201 rather than 200 because rotation CREATES new key material rather than editing the existing row; the plaintext is returned exactly once and is unrecoverable afterwards, so it must be captured from this response. Rotation is not idempotent - each call mints another key. A key_id that is already revoked, or that belongs to another tenant, is 404 'No rotatable key with that id' rather than 403, so the route never confirms another tenant's keys exist.",
+        "operationId": "post_api_keys_key_id_rotate",
+        "parameters": [
+          {
+            "name": "key_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "key_id path parameter"
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Success",
+            "content": {
+              "application/json": {}
+            }
+          },
+          "400": {
+            "description": "ValidationError — This credential carries no tenant context"
+          },
+          "401": {
+            "description": "Unauthorized — Missing bearer token"
+          },
+          "404": {
+            "description": "NotFound — No rotatable key with that id"
+          },
+          "500": {
+            "description": "InternalError — InternalError"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "apiKey": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {}
+              },
+              "example": {}
+            }
+          }
+        }
+      }
+    },
+    "/api/offers/{offer_id}": {
+      "get": {
+        "tags": [
+          "sdk-offer-catalog"
+        ],
+        "summary": "Fetch the offer just created",
+        "description": "Fetches a single offer by id and returns 200 with data.offer. tenant_id is a REQUIRED QUERY PARAMETER, not a claim: getOffer scopes by (tenant_id, offer_id), so omitting it is 400 rather than defaulting to the caller's tenant. That also means the 404 is tenant-scoped - an offer_id that exists under a different tenant answers 404 NotFound, not 403, so this route never confirms the existence of another tenant's offer. Returns the offer envelope only; it does not include versions or the current live version - use GET /api/offers/:offer_id/versions and GET /api/offers/:offer_id/current for those.",
+        "operationId": "get_api_offers_offer_id",
+        "parameters": [
+          {
+            "name": "offer_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "offer_id path parameter"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {}
+            }
+          },
+          "400": {
+            "description": "ValidationError — tenant_id query param required"
+          },
+          "401": {
+            "description": "Unauthorized — Missing bearer token"
+          },
+          "404": {
+            "description": "NotFound — NotFound"
+          },
+          "500": {
+            "description": "InternalError — Fastify default error payload from the uncaught service throw"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "apiKey": []
+          }
+        ]
+      }
+    },
+    "/api/offers/{offer_id}/versions/{version_id}": {
+      "get": {
+        "tags": [
+          "sdk-offer-catalog"
+        ],
+        "summary": "Fetch the version just created",
+        "description": "Fetches one offer version by id and returns 200 with data.version. tenant_id is a REQUIRED QUERY PARAMETER, so omitting it is 400. NOTE the resolution asymmetry: getOfferVersion is called with (tenant_id, version_id) ONLY - offer_id is in the path for URL shape but is NOT used to scope the lookup, so a version_id belonging to a different offer under the same tenant resolves 200 through a mismatched offer_id in the path. Do not treat this route as a check that the version belongs to the offer. A version_id under a different TENANT is correctly 404, and 404 is used rather than 403 so the route never confirms another tenant's data. Route ordering matters here: this pattern is registered AFTER /versions/:version_id/features, so 'features' is matched by that route rather than being read as a version_id.",
+        "operationId": "get_api_offers_offer_id_versions_version_id",
+        "parameters": [
+          {
+            "name": "offer_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "offer_id path parameter"
+          },
+          {
+            "name": "version_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "version_id path parameter"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {}
+            }
+          },
+          "400": {
+            "description": "ValidationError — tenant_id query param required"
+          },
+          "401": {
+            "description": "Unauthorized — Missing bearer token"
+          },
+          "404": {
+            "description": "NotFound — NotFound"
+          },
+          "500": {
+            "description": "InternalError — Fastify default error payload from the uncaught service throw"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "apiKey": []
+          }
+        ]
+      }
+    },
+    "/api/relationships/{relationship_id}/attest": {
+      "post": {
+        "tags": [
+          "sdk-rebac"
+        ],
+        "summary": "Attest the relationship as CONFIRMED with an evidence ref",
+        "description": "Records the trust state of a relationship's contextual role and returns 200 with data.role. trust_state is required and must be one of CONFIRMED, CANDIDATE or DOCUMENTED. THE EVIDENCE RULE IS THE POINT: CONFIRMED and DOCUMENTED both mean 'somebody checked', so attestContextualRole refuses either without at least one non-empty evidence_ref - a claim that a check happened must say what was checked. CANDIDATE is the only state that may carry no evidence, because it asserts nothing was verified. The two 400s are distinguishable by code: VALIDATION_ERROR for a trust_state outside the enum (rejected in the controller before any service call), EVIDENCE_REQUIRED for a valid state missing its evidence (raised by the service). Re-attesting MERGES evidence_refs with what is already stored rather than replacing them, deduplicated, so promoting a CANDIDATE to CONFIRMED can supply only the new reference. An unknown relationship_id is 404 RELATIONSHIP_NOT_FOUND.",
+        "operationId": "post_api_relationships_relationship_id_attest",
+        "parameters": [
+          {
+            "name": "relationship_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "relationship_id path parameter"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {}
+            }
+          },
+          "400": {
+            "description": "VALIDATION_ERROR — trust_state must be one of CONFIRMED, CANDIDATE, DOCUMENTED"
+          },
+          "401": {
+            "description": "Unauthorized — Missing bearer token"
+          },
+          "404": {
+            "description": "RELATIONSHIP_NOT_FOUND — NotFound"
+          },
+          "500": {
+            "description": "InternalError — InternalError"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "apiKey": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "trust_state": {
+                    "type": "string"
+                  },
+                  "evidence_refs": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  }
+                }
+              },
+              "example": {
+                "trust_state": "CONFIRMED",
+                "evidence_refs": [
+                  "evidence://qa/attestation-{{dynamic:slug}}"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/vault/keys/{key_id}": {
+      "get": {
+        "tags": [
+          "sdk-vault"
+        ],
+        "summary": "A root-tier key is NOT visible to a tenant token",
+        "description": "Reads ONE vault key, and only if it belongs to the calling tenant. Returns metadata only — vault.key holds no key material. The tenant predicate is part of the SQL (getKeyForTenant), so the ownership check cannot be skipped by a caller that forgets it. A key belonging to another tenant answers 404, never 403: a 403 would confirm the id EXISTS somewhere, which is precisely what a caller enumerating ids wants, so absence and denial are made indistinguishable. WHY THE PRIMARY CASE IS A 404 AND NOT A 200. The only producer for this endpoint, POST /api/vault/keys, creates a ROOT-tier key, and root/app/pool rows carry tenant_id NULL because they wrap every tenant — so a tenant token deliberately cannot see them, and chaining that id and expecting 200 is unsatisfiable by construction. Reaching a 200 needs a TENANT-tier key, which requires two POSTs to this same endpoint in order (root, then tenant with parent_key_id), and one definition per METHOD+ENDPOINT cannot express that — the constraint recorded in TK-4137. So the case asserts the isolation instead, which is the property actually worth pinning: a root key is invisible to a tenant, and is indistinguishable from a key that does not exist. Flip the first case to 200 once a tenant-tier key id is reachable from cache. Edge cases: a shredded key still reads back for its owner, showing state 'shredded' with shredded_at set and kms_ref NULL, because the row is the audit trail of the erasure; a non-UUID key_id raises 22P02 from the ::uuid cast and surfaces as 500 rather than 400.",
+        "operationId": "get_api_vault_keys_key_id",
+        "parameters": [
+          {
+            "name": "key_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "key_id path parameter"
+          }
+        ],
+        "responses": {
+          "401": {
+            "description": "Unauthorized — Missing bearer token"
+          },
+          "403": {
+            "description": "no tenant scope — This token carries no tenant, so no key scope can be derived"
+          },
+          "404": {
+            "description": "Success",
+            "content": {
+              "application/json": {}
+            }
+          },
+          "500": {
+            "description": "InternalError — InternalError"
           }
         },
         "security": [

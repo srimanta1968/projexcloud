@@ -1,14 +1,3 @@
-# Compose PROJECT NAME, pinned.
-#
-# Without this, Compose derives the project name from the DIRECTORY — 'mcp-server' —
-# and every ProjexLight consumer repo has an mcp-server/ folder. Two repos therefore
-# produced the SAME compose project AND the same container_name, so `docker compose up`
-# from either one silently took over the other's containers and re-pointed /workspace at
-# its own tree. The Dev MCP then correctly recorded the swap ('/workspace re-homed'),
-# and the evicted project lost its mount. Pinning the name and suffixing the containers
-# makes the two stacks independent.
-name: projexcloud-mcp
-
 version: '3.8'
 #
 # ProjexLight DEV MCP Server - Docker Compose
@@ -29,7 +18,7 @@ services:
   # ProjexLight DEV MCP Server - Code Review & Development Agent
   dev-mcp-server:
     image: projexlight/projex-dev-mcp:latest
-    container_name: projexlight-dev-mcp-projexcloud
+    container_name: projexlight-dev-mcp
     # Defaults to root (required for git-hook installation on Windows). On NATIVE
     # LINUX set MCP_RUN_AS="$(id -u):$(id -g)" in .env so files the container writes
     # into your project (.mcp-logs/, test-results/, feedback/) are not root-owned;

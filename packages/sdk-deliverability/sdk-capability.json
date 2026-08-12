@@ -18,49 +18,63 @@
         "path": "/api/deliverability/check",
         "description": "Pre-send enforcement: return whether a single {address} or a batch of {addresses[]} is suppressed for the tenant (or globally) on a channel; call before every send.",
         "kind": "query",
-        "auth_scopes": ["deliverability:read"]
+        "auth_scopes": [
+          "deliverability:read"
+        ]
       },
       {
         "method": "POST",
         "path": "/api/deliverability/suppressions",
         "description": "Add (or refresh) a reason-tagged suppression for an address on a channel, at tenant or global scope, with optional expiry.",
         "kind": "mutation",
-        "auth_scopes": ["deliverability:write"]
+        "auth_scopes": [
+          "deliverability:write"
+        ]
       },
       {
         "method": "GET",
         "path": "/api/deliverability/suppressions",
         "description": "List a tenant's suppressions plus global rows, optionally filtered by channel and limited.",
         "kind": "query",
-        "auth_scopes": ["deliverability:read"]
+        "auth_scopes": [
+          "deliverability:read"
+        ]
       },
       {
         "method": "POST",
         "path": "/api/deliverability/suppressions/remove",
         "description": "Remove (un-suppress) an address for a channel at the given scope so it becomes contactable again.",
         "kind": "mutation",
-        "auth_scopes": ["deliverability:write"]
+        "auth_scopes": [
+          "deliverability:write"
+        ]
       },
       {
         "method": "POST",
         "path": "/api/deliverability/optout-tokens",
         "description": "Mint a single-purpose opt-out (unsubscribe/resubscribe/preferences) token; the raw token is returned exactly once and only its hash is stored.",
         "kind": "mutation",
-        "auth_scopes": ["deliverability:write"]
+        "auth_scopes": [
+          "deliverability:write"
+        ]
       },
       {
         "method": "POST",
         "path": "/api/deliverability/optout/redeem",
         "description": "Redeem an opt-out token one time: suppress the address and write an opt-out event; 410 Gone if the token is unknown, already used, or expired.",
         "kind": "mutation",
-        "auth_scopes": ["deliverability:write"]
+        "auth_scopes": [
+          "deliverability:write"
+        ]
       },
       {
         "method": "POST",
         "path": "/api/deliverability/webhook-secrets",
         "description": "Register or rotate a tenant's HMAC signing secret for a provider's inbound bounce/complaint webhook.",
         "kind": "mutation",
-        "auth_scopes": ["deliverability:admin"]
+        "auth_scopes": [
+          "deliverability:admin"
+        ]
       },
       {
         "method": "POST",
@@ -73,63 +87,86 @@
         "path": "/api/deliverability/bounce-events",
         "description": "List a tenant's processed bounce/complaint events, optionally filtered by classification and limited.",
         "kind": "query",
-        "auth_scopes": ["deliverability:read"]
+        "auth_scopes": [
+          "deliverability:read"
+        ]
       },
       {
         "method": "POST",
         "path": "/api/deliverability/mailboxes",
         "description": "Register a per-tenant IMAP mailbox config that the reply worker polls for inbound replies.",
         "kind": "mutation",
-        "auth_scopes": ["deliverability:write"]
+        "auth_scopes": [
+          "deliverability:write"
+        ]
       },
       {
         "method": "GET",
         "path": "/api/deliverability/mailboxes",
         "description": "List a tenant's configured IMAP mailboxes.",
         "kind": "query",
-        "auth_scopes": ["deliverability:read"]
+        "auth_scopes": [
+          "deliverability:read"
+        ]
       },
       {
         "method": "POST",
         "path": "/api/deliverability/mailboxes/:mailbox_id/sync",
         "description": "Poll a mailbox once over IMAP via the pluggable fetcher (no-op without a live client); 404 when the mailbox is unknown.",
         "kind": "ingest",
-        "auth_scopes": ["deliverability:write"]
+        "auth_scopes": [
+          "deliverability:write"
+        ]
       },
       {
         "method": "POST",
         "path": "/api/deliverability/mailboxes/:mailbox_id/replies",
         "description": "Ingest a single inbound reply (what the IMAP worker calls per message): classify, record, and fire pause-on-reply for human replies.",
         "kind": "ingest",
-        "auth_scopes": ["deliverability:write"]
+        "auth_scopes": [
+          "deliverability:write"
+        ]
       },
       {
         "method": "GET",
         "path": "/api/deliverability/reply-events",
         "description": "List a tenant's captured inbound reply events, optionally filtered by classification and limited.",
         "kind": "query",
-        "auth_scopes": ["deliverability:read"]
+        "auth_scopes": [
+          "deliverability:read"
+        ]
       },
       {
         "method": "POST",
         "path": "/api/deliverability/reputation/record",
         "description": "Record send outcomes (sent/delivered/bounced/complained) for a channel and recompute reputation status, auto-pausing when the bounce/complaint rate crosses threshold.",
         "kind": "mutation",
-        "auth_scopes": ["deliverability:write"]
+        "auth_scopes": [
+          "deliverability:write"
+        ]
       },
       {
         "method": "GET",
         "path": "/api/deliverability/reputation",
         "description": "Return reputation signals for a tenant across all channels, or a single channel via ?channel=.",
         "kind": "query",
-        "auth_scopes": ["deliverability:read"]
+        "auth_scopes": [
+          "deliverability:read"
+        ]
       },
       {
         "method": "POST",
         "path": "/api/deliverability/reputation/resume",
         "description": "Manually resume a paused channel (human override), clearing the pause and resetting the window; 404 when no reputation row exists.",
         "kind": "mutation",
-        "auth_scopes": ["deliverability:admin"]
+        "auth_scopes": [
+          "deliverability:admin"
+        ]
+      },
+      {
+        "method": "POST",
+        "path": "/api/deliverability/check/bulk",
+        "description": "Pre-send suppression check for up to 1000 recipients in one request and ONE query. Every item carries its own channel, so a mixed email+sms audience is one call — unlike the addresses[] form of POST /check, which holds channel fixed and issues a query per address. tenant_id falls back to the credential."
       }
     ],
     "events": [],
@@ -180,7 +217,9 @@
   },
   "consumes": {
     "events": [],
-    "infra": ["postgres"],
+    "infra": [
+      "postgres"
+    ],
     "config_keys": []
   },
   "scenarios": [
@@ -214,7 +253,11 @@
     }
   ],
   "compliance_posture": {
-    "regimes": ["SOC2", "GDPR", "CAN-SPAM"],
+    "regimes": [
+      "SOC2",
+      "GDPR",
+      "CAN-SPAM"
+    ],
     "notes": "Enforces opt-out / do-not-contact obligations for outbound email and SMS (CAN-SPAM one-click unsubscribe, honoured suppressions). PII-safe by design: recipients are matched by sha256 address_hash and/or the L4 subject_persona_id and are never stored as raw email/phone; opt-out tokens persist only a token_hash. Suppressions and opt-out/bounce audits are append-friendly and tenant-scoped (with an explicit cross-tenant global scope). Webhook signing secrets are stored inline in the SDK today and should point at the sdk-secrets vault in production."
   },
   "pool_placement": "app",

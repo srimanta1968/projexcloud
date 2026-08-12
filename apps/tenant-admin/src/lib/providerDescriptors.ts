@@ -55,7 +55,7 @@ export interface ProviderDescriptor {
 export const PROVIDER_DESCRIPTORS: ProviderDescriptor[] = [
   // ── email ────────────────────────────────────────────────────────────────
   {
-    key: 'email.provider',
+    key: 'notification.email.credential',
     category: 'email',
     driver: 'sendgrid',
     label: 'SendGrid',
@@ -66,7 +66,7 @@ export const PROVIDER_DESCRIPTORS: ProviderDescriptor[] = [
     ],
   },
   {
-    key: 'email.provider',
+    key: 'notification.email.credential',
     category: 'email',
     driver: 'ses',
     label: 'Amazon SES',
@@ -81,7 +81,7 @@ export const PROVIDER_DESCRIPTORS: ProviderDescriptor[] = [
 
   // ── storage ──────────────────────────────────────────────────────────────
   {
-    key: 'storage.provider',
+    key: 'media.s3',
     category: 'storage',
     driver: 's3',
     label: 'AWS S3',
@@ -120,7 +120,7 @@ export const PROVIDER_DESCRIPTORS: ProviderDescriptor[] = [
 
   // ── ai ───────────────────────────────────────────────────────────────────
   {
-    key: 'ai.provider',
+    key: 'llm.provider',
     category: 'ai',
     driver: 'anthropic',
     label: 'Anthropic',

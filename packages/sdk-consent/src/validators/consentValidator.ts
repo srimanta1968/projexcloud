@@ -108,6 +108,9 @@ export function validateRevokeConsent(body: unknown): ValidationResult<RevokeCon
   return { ok: true, value: { revoked_by, reason } };
 }
 
+/** Canonical uuid shape — guards a value before it reaches a uuid column. */
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 export function validateCheckConsent(body: unknown): ValidationResult<CheckConsentInput> {
   if (!body || typeof body !== 'object') return { ok: false, errors: ['body must be an object'] };
   const b = body as Record<string, unknown>;
@@ -119,6 +122,13 @@ export function validateCheckConsent(body: unknown): ValidationResult<CheckConse
   const jurisdiction = asString(b.jurisdiction);
 
   if (!person_id) errors.push('person_id is required');
+  // consent.receipt.person_id is a uuid column. Without this the value reached
+  // Postgres, failed to parse, and surfaced as 500 InternalError — the same
+  // defect class already fixed on GET /api/consents/:receipt_id, where a
+  // non-uuid path param made an absent record look like a broken service.
+  // In the bulk path it is worse than cosmetic: one bad id would abort the
+  // unnest and take every other subject's verdict down with it.
+  else if (!UUID_RE.test(person_id)) errors.push('person_id must be a uuid');
   if (!purpose_id) errors.push('purpose_id is required');
   if (!processor) errors.push('processor is required');
   if (!jurisdiction) errors.push('jurisdiction is required');

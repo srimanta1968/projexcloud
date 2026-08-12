@@ -1,0 +1,98 @@
+{
+  "name": "POST /api/deliverability/check/bulk - Pre-send suppression check for many recipients",
+  "endpoint": "/api/deliverability/check/bulk",
+  "sdk": "sdk-deliverability",
+  "sourceFile": "packages/sdk-deliverability/src/server/routes.ts",
+  "method": "POST",
+  "requiresAuth": true,
+  "expectedStatus": 200,
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "featureId": "38948f60-76b4-47b0-9635-8f9dc024f792",
+  "epicId": "287f42d8-2045-4105-8948-5e1f25fba3ba",
+  "priority": 11,
+  "dependsOn": [
+    "POST /api/auth/signup-tenant"
+  ],
+  "testCases": [
+    {
+      "name": "Mixed email and sms recipients in one call, plus one invalid channel",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "payload": {
+        "items": [
+          {
+            "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+            "channel": "email",
+            "address": "{{dynamic:email}}"
+          },
+          {
+            "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+            "channel": "sms",
+            "address": "+15551234567"
+          },
+          {
+            "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+            "channel": "carrier-pigeon",
+            "address": "someone@example.com"
+          }
+        ]
+      },
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "data": {
+          "results": "array",
+          "summary": {
+            "requested": "number",
+            "succeeded": "number",
+            "failed": "number"
+          }
+        }
+      }
+    }
+  ],
+  "expectedResponse": {
+    "data": {
+      "results": "array",
+      "summary": {
+        "requested": "number",
+        "succeeded": "number",
+        "failed": "number"
+      }
+    }
+  },
+  "captureResponse": {
+    "deliverability.check-bulk.response.data.results.0.suppressed": "data.results.0.suppressed"
+  },
+  "fieldEnums": {
+    "channel": ["email", "sms", "all"],
+    "error_code": ["VALIDATION_ERROR"]
+  },
+  "description": "Pre-send suppression enforcement for up to 1000 recipients in ONE request and ONE query. Distinct from the addresses[] form of POST /api/deliverability/check, which is kept for compatibility but holds tenant and channel fixed across the list and issues a query per address: here every item carries its own channel, so a mixed email+sms audience is a single call. tenant_id may be omitted per item and falls back to the caller's credential. Addresses are never sent to the database in plaintext - each is normalized (email lowercased/trimmed, sms reduced to +digits) and sha256-hashed with the channel as salt, and the query joins on hashes. A row is suppressed when a tenant-scoped or global entry matches the address for that channel (or channel 'all') and has not expired. Results are order-preserving with an explicit index and echo back the address and channel asked about; a malformed item reports ok=false in its own slot rather than failing the batch. The same address may appear more than once and each occurrence keeps its slot. Read-only, side-effect-free and safely repeatable.",
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "Authorization header absent or not in Bearer form (requireAuth / gateway default-deny authGate)"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "body must be an object with an items[] array",
+      "when": "Request body is absent, not a JSON object, or is itself an array"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "items must not be empty",
+      "when": "items is an empty array"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "items exceeds the per-request maximum of 1000; page the batch",
+      "when": "More than 1000 items are supplied"
+    }
+  ]
+}

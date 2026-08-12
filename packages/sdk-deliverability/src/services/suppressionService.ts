@@ -131,6 +131,66 @@ export async function isSuppressed(args: { tenantId: string; channel: Channel; a
   }
 }
 
+export interface BulkSuppressionQuery {
+  index: number;
+  tenantId: string;
+  channel: Channel;
+  address: string;
+}
+
+export interface BulkSuppressionVerdict {
+  index: number;
+  suppressed: boolean;
+}
+
+/**
+ * isSuppressed for N recipients in ONE query.
+ *
+ * The pre-existing `addresses[]` form of POST /api/deliverability/check already
+ * accepted a list, but ran `Promise.all` over per-address queries — N round trips
+ * fired concurrently, which is the shape that trips the connection pool under a
+ * campaign-sized batch. It also pinned every address to a single channel, so a
+ * mixed email+sms audience still needed one request per channel.
+ *
+ * Hashing stays in the application (addresses are never sent to the database in
+ * plaintext, and the hash is channel-salted), so the query joins on the hashes.
+ * Channel is carried per row rather than as one parameter, which is what lets a
+ * single call answer for a mixed-channel audience.
+ *
+ * The same address may legitimately appear more than once in a batch; each
+ * occurrence keeps its own slot rather than collapsing, because the caller
+ * indexes verdicts by position.
+ */
+export async function isSuppressedBulk(queries: BulkSuppressionQuery[]): Promise<BulkSuppressionVerdict[]> {
+  if (queries.length === 0) return [];
+  try {
+    const rows = await dataService.rows<{ idx: number; suppressed: boolean }>(
+      `WITH q AS (
+         SELECT * FROM unnest($1::int[], $2::uuid[], $3::text[], $4::text[])
+           AS t(idx, tenant_id, channel, address_hash)
+       )
+       SELECT q.idx,
+              EXISTS (
+                SELECT 1 FROM deliverability.suppression s
+                 WHERE s.address_hash = q.address_hash
+                   AND s.channel IN (q.channel, 'all')
+                   AND (s.scope = 'global' OR s.tenant_id = q.tenant_id)
+                   AND (s.expires_at IS NULL OR s.expires_at > now())
+              ) AS suppressed
+         FROM q`,
+      [
+        queries.map((q) => q.index),
+        queries.map((q) => q.tenantId),
+        queries.map((q) => q.channel),
+        queries.map((q) => hashAddress(q.channel, q.address)),
+      ],
+    );
+    return rows.map((r) => ({ index: r.idx, suppressed: r.suppressed }));
+  } catch (err) {
+    throw new Error(`[sdk-deliverability] isSuppressedBulk failed: ${(err as Error).message}`);
+  }
+}
+
 /** Remove a tenant (or global) suppression for an address. */
 export async function unsuppress(args: { tenantId: string; channel: Channel; address: string; scope?: SuppressionScope }): Promise<void> {
   const scope = args.scope ?? 'tenant';

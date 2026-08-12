@@ -15,6 +15,7 @@ export * from './p10-security';
 export * from './p10-enforce';
 export * from './tool-manifest';
 export * from './trace-context';
+export * from './bulk';
 
 /**
  * `@cross_pool_sanctioned(reason)` - marker decorator recognized by the OC-5

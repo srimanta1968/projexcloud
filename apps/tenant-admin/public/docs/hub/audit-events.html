@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Audit Events &amp; the Event Type Registry — ProjexCloud Developer Hub</title>
+<style>
+  :root{--bg:#0d1117;--panel:#161b22;--line:#30363d;--tx:#e6edf3;--dim:#8b949e;--acc:#58a6ff;--ok:#3fb950;--warn:#d29922;--err:#f85149;--code:#1f2428}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--tx);font:15px/1.65 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
+  .wrap{max-width:1080px;margin:0 auto;padding:32px 24px 96px}
+  h1{font-size:30px;margin:0 0 6px;letter-spacing:-.02em}
+  h2{font-size:21px;margin:44px 0 12px;padding-bottom:8px;border-bottom:1px solid var(--line)}
+  h3{font-size:16px;margin:26px 0 8px;color:var(--acc)}
+  p,li{color:#c9d1d9}
+  .lede{color:var(--dim);font-size:16px;margin:0 0 8px}
+  code{background:var(--code);padding:2px 6px;border-radius:4px;font:13px ui-monospace,SFMono-Regular,Menlo,monospace;color:#a5d6ff}
+  pre{background:var(--code);border:1px solid var(--line);border-radius:8px;padding:14px 16px;overflow-x:auto}
+  pre code{background:none;padding:0;color:#c9d1d9;font-size:12.5px;line-height:1.6}
+  table{width:100%;border-collapse:collapse;margin:14px 0;font-size:14px;display:block;overflow-x:auto}
+  th,td{border:1px solid var(--line);padding:9px 11px;text-align:left;vertical-align:top}
+  th{background:var(--panel);font-weight:600}
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:16px 18px;margin:16px 0}
+  .warn{border-left:3px solid var(--warn)}.err{border-left:3px solid var(--err)}.ok{border-left:3px solid var(--ok)}
+  .m{font-weight:700;font-size:11px;padding:2px 7px;border-radius:4px;color:#000}
+  .post{background:#3fb950}.get{background:#58a6ff}
+  a{color:var(--acc)} hr{border:0;border-top:1px solid var(--line);margin:32px 0}
+  .crumb{font-size:13px;color:var(--dim);margin-bottom:18px}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<div class="crumb"><a href="index.html">Developer Hub</a> › Audit Events &amp; the Event Type Registry</div>
+
+<h1>Audit Events &amp; the Event Type Registry</h1>
+<p class="lede">How your application emits its own audited events — registering the event types it
+owns, naming them so they stay queryable in five years, and confirming they actually landed.</p>
+
+<div class="panel err">
+<strong>Read this before your first <code>POST /api/audit/append</code>.</strong> The event
+vocabulary is closed: an <code>event_type</code> the platform has never heard of is rejected
+before anything is written. That rejection is <em>silent in practice</em> — the emit path is
+non-throwing by design, so an app that never registers its types reports every governed action
+as recorded while its audit chain stays empty. One vertical shipped 32 event names, none of
+which could ever be appended, and found out only by going to look at why the ledger was empty.
+</div>
+
+<h2>Why the vocabulary is closed</h2>
+
+<p>Producers reject any <code>event_type</code> that is not registered. This is a deliberate
+constraint (OC-2), not an oversight, and it is worth understanding before you try to work
+around it.</p>
+
+<p>An open vocabulary decays within a single release. One team writes <code>lead.routed</code>,
+another <code>lead.route</code>, a third <code>routing.applied</code> — all three land in the
+ledger, all three are queryable, and nobody can answer <em>"how often was a lead routed?"</em>
+without knowing the history of who wrote which. An audit ledger that cannot answer that question
+is a log file with extra steps.</p>
+
+<p>So the rule stays. What changed on <strong>3 August 2026</strong> is that you now have a
+supported way <em>in</em>: a tenant-scoped registration endpoint. Before that the registry was a
+compile-time constant in the platform's own source, and the only way to add a type was a pull
+request against the platform plus a deploy — which coupled every one of your releases to one of
+ours.</p>
+
+<h2>The rules, in order of what they will cost you</h2>
+
+<h3>1 · The name must be <code>&lt;domain&gt;.&lt;entity&gt;.&lt;verb&gt;.v&lt;N&gt;</code></h3>
+
+<p>Lowercase; <code>-</code> or <code>_</code> allowed inside a segment; at least two segments
+before the version. All 294 platform types follow it, and registration rejects anything that
+does not.</p>
+
+<table>
+<tr><th>Accepted</th><th>Rejected</th><th>Why</th></tr>
+<tr><td><code>capture.lead.created.v1</code></td><td><code>capture.created</code></td><td>no version suffix</td></tr>
+<tr><td><code>billing.invoice.finalized.v1</code></td><td><code>Capture.Lead.Created.v1</code></td><td>uppercase</td></tr>
+<tr><td><code>ai_gateway.tenant_credential.bound.v1</code></td><td><code>capture.v1</code></td><td>only one segment before the version</td></tr>
+<tr><td><code>tenant.role-template.updated.v1</code></td><td><code>capture lead created.v1</code></td><td>whitespace</td></tr>
+</table>
+
+<div class="panel warn">
+<strong>The <code>.v&lt;N&gt;</code> suffix is the whole point, not decoration.</strong> It is
+what lets the payload shape change later <em>without</em> breaking historical queries: when your
+capture payload gains a required field, you register <code>capture.lead.created.v2</code> and it
+ships <em>alongside</em> v1. Rows already written under the old shape keep meaning what they
+meant. A ledger whose types can be redefined in place cannot answer a question about the past —
+which is the only kind of question an audit ledger is for.
+</div>
+
+<h3>2 · Register before you append</h3>
+
+<p>Once per type, typically from a boot-time provisioner alongside your consent-purpose and role
+provisioning. Registration is <strong>additive</strong>: a repeat returns <code>200</code> with
+the <em>stored</em> metadata and <code>created: false</code>, so re-running it on every deploy is
+both safe and the intended usage.</p>
+
+<h3>3 · Your events are yours; platform events are not</h3>
+
+<p>Do not file a business event under a platform name (<code>vault.*</code>,
+<code>tenant.*</code>, <code>audit.*</code>). It is worse than having no entry at all: the row
+exists, is queryable, and means something else entirely. Registration refuses a baseline name
+outright, and resolution reads the platform baseline <em>first</em>, so a tenant registration can
+never shadow a platform type. Nor can another tenant see yours, or you theirs.</p>
+
+<h3>4 · A 2xx is not proof the event landed</h3>
+
+<p><code>emitEvent</code> catches and logs rather than propagating, so an audit outage never
+blocks the caller's hot path. That is correct — but it means a <em>permanent</em> contract
+rejection looks exactly like a transient blip. If you need certainty, query
+<code>audit.entry</code>.</p>
+
+<div class="panel warn">
+<strong>An empty chain verifies clean.</strong> <code>POST /api/audit/verify</code> returning
+<code>ok: true</code> proves nothing if nothing was ever appended. Assert on
+<code>entries_checked</code>, not on <code>ok</code> alone — a green verification over an empty
+chain is the exact shape this whole failure took.
+</div>
+
+<h3>5 · <code>retention_class</code> is load-bearing</h3>
+
+<p>When an append omits it, the <em>registered type's</em> class applies. Declaring
+<code>operational</code> on something regulated shreds it at 90 days instead of seven years —
+quietly, and years after the decision.</p>
+
+<h2>The calls</h2>
+
+<table>
+<tr><th>Call</th><th>Who</th><th>Purpose</th></tr>
+<tr><td><span class="m post">POST</span> <code>/api/events/types</code></td><td>tenant JWT</td><td>Register one event type for your tenant. <code>201</code> first time, <code>200</code> on a repeat.</td></tr>
+<tr><td><span class="m get">GET</span> <code>/api/events/types</code></td><td>tenant JWT</td><td>The platform baseline plus your own, with <code>platform_count</code> / <code>tenant_count</code>.</td></tr>
+<tr><td><span class="m get">GET</span> <code>/api/events/types/{type}</code></td><td>tenant JWT</td><td>One type, with <code>source: "platform" | "tenant"</code>.</td></tr>
+<tr><td><span class="m post">POST</span> <code>/api/audit/append</code></td><td>tenant JWT</td><td>Append a hash-chained entry. Rejects an unresolvable type before any write.</td></tr>
+<tr><td><span class="m post">POST</span> <code>/api/audit/verify</code></td><td>tenant JWT</td><td>Walk the chain for a pool and prove it is unbroken.</td></tr>
+</table>
+
+<h3>Registration payload</h3>
+<pre><code>POST /api/events/types            Authorization: Bearer &lt;tenant JWT&gt;
+{
+  "event_type":        "capture.lead.created.v1",
+  "retention_class":   "regulated",        // transient | operational | regulated
+  "conflict_policy":   "event-sourcing",   // crdt | lww | merge | event-sourcing | human-review
+  "schema_state":      "active",           // optional — default active
+  "compaction_policy": "none",             // optional — default none
+  "schema_version":    1                   // optional — default 1
+}</code></pre>
+
+<p>The tenant comes from your verified token, never from the body — a user of one tenant cannot
+define vocabulary inside another.</p>
+
+<h2>Worked example — a vertical provisioning its vocabulary at boot</h2>
+
+<pre><code># 1 · register each type your app owns. Idempotent: run it on every deploy.
+for t in capture.lead.created.v1 capture.lead.promoted.v1 capture.lead.rejected.v1; do
+  curl -sS -X POST "$GW/api/events/types" \
+    -H "Authorization: Bearer $TENANT_JWT" -H 'Content-Type: application/json' \
+    -d "{\"event_type\":\"$t\",\"retention_class\":\"regulated\",
+         \"conflict_policy\":\"event-sourcing\"}"
+done
+# -> 201 {"data":{"event_type":"capture.lead.created.v1", ... ,"created":true,"source":"tenant"}}
+# -> 200 with "created":false on the next deploy. Not an error.
+
+# 2 · now the append your app was always making succeeds
+curl -sS -X POST "$GW/api/audit/append" \
+  -H "Authorization: Bearer $TENANT_JWT" -H 'Content-Type: application/json' \
+  -d '{"pool_index":"'"$POOL"'","event_type":"capture.lead.created.v1",
+       "actor_kind":"human","payload":{"lead_id":"L-1"}}'
+# -> 201 {"data":{"entry_id":"...","seq":1,"entry_hash":"...","retention_class":"regulated"}}
+#    retention_class came from the REGISTERED type — the append never mentioned it.
+
+# 3 · prove it landed. entries_checked is the number that carries information.
+curl -sS -X POST "$GW/api/audit/verify" \
+  -H "Authorization: Bearer $TENANT_JWT" -H 'Content-Type: application/json' \
+  -d '{"pool_index":"'"$POOL"'"}'
+# -> {"data":{"ok":true,"entries_checked":1, ...}}   ok:true with entries_checked:0 means
+#    you have verified an empty chain and learned nothing.</code></pre>
+
+<h2>Errors you will actually hit</h2>
+
+<table>
+<tr><th>Status / code</th><th>What it means</th><th>Fix</th></tr>
+<tr><td><code>400 UnregisteredEventType</code><br>on <code>/api/audit/append</code></td><td>The type is in neither the platform baseline nor your tenant's registered types.</td><td>Register it first. If you believe you did, check the name character-for-character and that you registered it for <em>this</em> tenant.</td></tr>
+<tr><td><code>400 ValidationError</code><br>"does not follow the naming convention"</td><td>Almost always a missing <code>.v1</code>.</td><td>Rename. This is rejected at registration precisely so you meet it while you can still fix it, rather than in production.</td></tr>
+<tr><td><code>400 ValidationError</code><br>"is a platform baseline type"</td><td>You tried to register a name the platform already owns.</td><td>Use it as-is — it is already emittable — or pick a name in your own domain.</td></tr>
+<tr><td><code>400 ValidationError</code><br>"a tenant-scoped token is required"</td><td>Your token carries no <code>tenant_id</code> claim.</td><td>Log in with a <code>tenant_id</code>, or exchange an application credential scoped to the tenant.</td></tr>
+<tr><td><code>200</code> with <code>created: false</code></td><td>Not an error. The type was already registered and was <strong>not</strong> overwritten.</td><td>Nothing. If the returned metadata differs from what you sent, the stored version wins — registration is additive by design.</td></tr>
+</table>
+
+<div class="panel ok">
+<strong>Why re-registration cannot overwrite.</strong> Silently rewriting a live type's
+<code>retention_class</code> would change the regulatory meaning of every entry already written
+under it, and the ledger cannot be re-derived. The database enforces this too: <code>UPDATE</code>
+on the registry table is blocked by trigger, not merely discouraged in the service. To change a
+payload shape, register the next version.
+</div>
+
+<hr>
+
+<p style="color:var(--dim);font-size:13.5px">
+See also: <a href="../../CONSUMPTION-CONTRACT.md">Consumption contract §2.1</a> — what an
+application may and may not extend locally ·
+<a href="../api_docs/AGENTS.md">AGENTS.md</a> — the same rules in the form an AI coding agent
+loads first · <a href="authentication.html">Authentication &amp; Identity</a> — getting the
+tenant JWT these calls need.
+</p>
+
+</div>
+</body>
+</html>

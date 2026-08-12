@@ -3,30 +3,107 @@
   "version": "1.0.0",
   "schema_version": "1.0",
   "summary": "Identity-resolution layer for ProjexCloud: given a partial signal (email, phone, anonymous device cookie, IP block, Salesforce contact id), return the canonical persona + the resolution explanation (what fields matched, what confidence, which version of the matching rules). Foundation for any 'who is this' workflow — anonymous-visitor-to-known-contact, multi-channel attribution, de-duplication.",
-  "tags": ["identity", "resolver", "matching", "attribution", "p2"],
+  "tags": [
+    "identity",
+    "resolver",
+    "matching",
+    "attribution",
+    "p2"
+  ],
   "provides": {
     "endpoints": [
-      { "method": "POST", "path": "/api/resolver/resolve",  "description": "Resolve a signal bundle to the most-likely persona; returns persona_id + confidence + matched fields." },
-      { "method": "POST", "path": "/api/resolver/explain",  "description": "Explain a past resolution — which rules fired, which fields matched." }
+      {
+        "method": "POST",
+        "path": "/api/resolver/resolve",
+        "description": "Resolve a signal bundle to the most-likely persona; returns persona_id + confidence + matched fields."
+      },
+      {
+        "method": "POST",
+        "path": "/api/resolver/explain",
+        "description": "Explain a past resolution — which rules fired, which fields matched."
+      },
+      {
+        "method": "GET",
+        "path": "/api/empi/candidate-links",
+        "description": "EMPI: list POSSIBLY_SAME candidate links by confidence band (band=high|medium|low, or explicit min/max) and status. The steward review queue. TENANT-SCOPED from the credential — no tenant_id parameter."
+      },
+      {
+        "method": "POST",
+        "path": "/api/empi/candidate-links/:link_id/steward-review",
+        "description": "EMPI: queue a candidate link for steward review via sdk-approval. Requires route_id (an approval route accepting subject_kind 'empi_candidate'); returns the pending step ids that adjudicate consumes. Body tenant_id is ignored — tenant comes from the credential."
+      },
+      {
+        "method": "POST",
+        "path": "/api/empi/candidate-links/:link_id/adjudicate",
+        "description": "EMPI: record a steward verdict (approve merges the pair reversibly, reject marks the link rejected). Needs the step_id from steward-review; the acting persona MUST be that step's approver."
+      },
+      {
+        "method": "POST",
+        "path": "/api/empi/merges",
+        "description": "EMPI: merge two persons directly as a reversible, event-sourced merge event. Never destructive. Attributed to the calling tenant, but acts on the global L1 person — the effect is visible to every tenant sharing that person."
+      },
+      {
+        "method": "POST",
+        "path": "/api/empi/merges/:merge_id/unmerge",
+        "description": "EMPI: reverse a merge with a compensating unmerge event; reopens the originating candidate link. 404s when the merge id is unknown."
+      },
+      {
+        "method": "GET",
+        "path": "/api/empi/metrics",
+        "description": "EMPI observability for the calling tenant: unresolved links, merge reversals, confidence distribution, calibration ECE + drift alert, per-band adjudicated outcomes (high_risk_precision) and review latency (median/p90 minutes). Null precision/median = nothing adjudicated yet, not zero. COUNTING CAVEAT: unresolved_candidate_links counts OPEN cases only, while confidence_distribution spans ALL statuses - so a caller can legitimately see total: 1 next to high_risk: 2. Both numbers are correct; they count different populations. Do not reconcile them by treating the distribution as a breakdown of the unresolved total."
+      }
     ],
     "events": [
-      { "name": "identity-resolver.resolution.v1", "retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "Per-resolution row: input signals, resolved persona, matched_rules_json, confidence." },
-      { "name": "identity-resolver.merge.suggested.v1", "retention_class": "regulated", "conflict_policy": "event-sourcing", "description": "Two distinct personas look like they should merge (high cross-match confidence). Suggested, not applied — operator confirms." }
+      {
+        "name": "identity-resolver.resolution.v1",
+        "retention_class": "regulated",
+        "conflict_policy": "event-sourcing",
+        "description": "Per-resolution row: input signals, resolved persona, matched_rules_json, confidence."
+      },
+      {
+        "name": "identity-resolver.merge.suggested.v1",
+        "retention_class": "regulated",
+        "conflict_policy": "event-sourcing",
+        "description": "Two distinct personas look like they should merge (high cross-match confidence). Suggested, not applied — operator confirms."
+      }
     ],
     "models": [],
     "hooks": [
-      { "name": "resolve", "description": "Resolve a signal bundle to a persona; returns persona_id + confidence + matched fields." },
-      { "name": "explain", "description": "Explain a past resolution: which rules fired, which fields matched, which confidence threshold applied." }
+      {
+        "name": "resolve",
+        "description": "Resolve a signal bundle to a persona; returns persona_id + confidence + matched fields."
+      },
+      {
+        "name": "explain",
+        "description": "Explain a past resolution: which rules fired, which fields matched, which confidence threshold applied."
+      }
     ],
     "ui_components": []
   },
   "consumes": {
     "events": [
-      { "name": "crm.contact.created.v1",   "from": "@projexlight/sdk-crm" },
-      { "name": "persona.app_identity.created.v1","from": "@projexlight/sdk-persona" }
+      {
+        "name": "crm.contact.created.v1",
+        "from": "@projexlight/sdk-crm"
+      },
+      {
+        "name": "persona.app_identity.created.v1",
+        "from": "@projexlight/sdk-persona"
+      }
     ],
-    "infra": ["postgres", "redis-optional"],
-    "config_keys": ["RESOLVER_CONFIDENCE_AUTO_THRESHOLD", "RESOLVER_MERGE_SUGGEST_THRESHOLD", "RESOLVER_RULE_VERSION"]
+    "infra": [
+      "postgres",
+      "redis-optional"
+    ],
+    "config_keys": [
+      "RESOLVER_CONFIDENCE_AUTO_THRESHOLD",
+      "RESOLVER_MERGE_SUGGEST_THRESHOLD",
+      "RESOLVER_RULE_VERSION",
+      "EMPI_CANDIDATE_MIN",
+      "EMPI_MATCH_THRESHOLD",
+      "EMPI_ECE_ALERT",
+      "EMPI_REVIEW_WINDOW_DAYS"
+    ]
   },
   "scenarios": [
     {
@@ -66,14 +143,31 @@
     }
   ],
   "compliance_posture": {
-    "regimes": ["GDPR-Art-22-automated-decisions", "EU-AI-Act-Annex-IV-explainability", "SOC2-CC7.1", "CCPA-Section-1798"],
+    "regimes": [
+      "GDPR-Art-22-automated-decisions",
+      "EU-AI-Act-Annex-IV-explainability",
+      "SOC2-CC7.1",
+      "CCPA-Section-1798"
+    ],
     "notes": "Every resolution pinned to the rule-set version + the matched fields, so a regulator can replay how an identity was inferred. Merge suggestions never auto-apply for high-stakes verticals (healthcare / finserv) — operator confirmation required."
   },
   "pool_placement": "admin",
   "pricing_skus": [
-    { "sku": "identity-resolver.resolve", "mode": "metered", "unit_description": "per resolution" },
-    { "sku": "identity-resolver.explain", "mode": "metered", "unit_description": "per explanation served" },
-    { "sku": "identity-resolver.merge-suggest", "mode": "metered", "unit_description": "per merge candidate suggested" }
+    {
+      "sku": "identity-resolver.resolve",
+      "mode": "metered",
+      "unit_description": "per resolution"
+    },
+    {
+      "sku": "identity-resolver.explain",
+      "mode": "metered",
+      "unit_description": "per explanation served"
+    },
+    {
+      "sku": "identity-resolver.merge-suggest",
+      "mode": "metered",
+      "unit_description": "per merge candidate suggested"
+    }
   ],
   "no_endpoints": false,
   "links": {

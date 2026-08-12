@@ -61,6 +61,8 @@ export function validateCreatePolicy(body: unknown): ValidationResult<CreatePoli
   const iql_source = asString(b.iql_source);
   const version = asString(b.version);
   const tenant_id = typeof b.tenant_id === 'string' ? b.tenant_id : undefined;
+  // Omitted = tenant-wide (every app). Present = this rule governs one app only.
+  const app_id = typeof b.app_id === 'string' && b.app_id.trim() ? b.app_id.trim() : undefined;
 
   if (!name) errors.push('name is required');
   if (!iql_source) errors.push('iql_source is required');
@@ -69,8 +71,11 @@ export function validateCreatePolicy(body: unknown): ValidationResult<CreatePoli
   const obligations = parseObligations(b.obligations, errors);
 
   if (errors.length > 0) return { ok: false, errors };
-  return { ok: true, value: { name, iql_source, version, tenant_id, ...(obligations ? { obligations } : {}) } };
+  return { ok: true, value: { name, iql_source, version, tenant_id, app_id, ...(obligations ? { obligations } : {}) } };
 }
+
+/** Canonical uuid shape — guards a value before it reaches a uuid column. */
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export function validateEvaluatePolicy(body: unknown): ValidationResult<EvaluatePolicyInput> {
   if (!body || typeof body !== 'object') return { ok: false, errors: ['body must be an object'] };
@@ -86,6 +91,16 @@ export function validateEvaluatePolicy(body: unknown): ValidationResult<Evaluate
 
   if (!policy_id) errors.push('policy_id is required');
   if (!subject_id) errors.push('subject_id is required');
+  // policy.decision keys policy_id/subject_id/target_id as uuid columns. A
+  // non-uuid used to reach Postgres and surface as 500 InternalError, which
+  // reads as a broken evaluator rather than a malformed request. In the bulk
+  // path an unchecked value is worse: the batched INSERT would abort and every
+  // other subject in the request would lose its verdict.
+  if (policy_id && !UUID_RE.test(policy_id)) errors.push('policy_id must be a uuid');
+  if (subject_id && !UUID_RE.test(subject_id)) errors.push('subject_id must be a uuid');
+  if (target_id !== undefined && target_id !== '' && !UUID_RE.test(target_id)) {
+    errors.push('target_id must be a uuid');
+  }
 
   // P10/E3: optional consent-gating inputs.
   const purpose = typeof b.purpose === 'string' ? b.purpose : undefined;

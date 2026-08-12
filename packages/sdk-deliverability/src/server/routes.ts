@@ -1,12 +1,20 @@
 import { FastifyInstance } from 'fastify';
 import { requireAuth } from '@projexlight/sdk-identity';
 import {
+  bulkItemError,
+  bulkResponse,
+  parseBulkEnvelope,
+  type BulkItemResult,
+} from '@projexlight/contracts';
+import {
   suppress,
   isSuppressed,
+  isSuppressedBulk,
   unsuppress,
   listSuppressions,
   issueOptoutToken,
   redeemOptoutToken,
+  type BulkSuppressionQuery,
   type Channel,
   type SuppressionReason,
   type SuppressionScope,
@@ -64,6 +72,54 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
     }
     const suppressed = await isSuppressed({ tenantId: body.tenant_id, channel: body.channel, address: body.address });
     return reply.code(200).send({ data: { suppressed } });
+  });
+
+  /**
+   * Bulk pre-send enforcement: N recipients, one request, one query.
+   *
+   * Distinct from the `addresses[]` form above, which is kept for compatibility:
+   * that one holds channel and tenant fixed across the list and issues a query
+   * per address. Here every item carries its own channel, so a mixed
+   * email+sms audience is one call, and a malformed item reports in its own slot
+   * instead of rejecting the batch.
+   *
+   * tenant_id comes from the credential when the item omits it — the sibling
+   * routes in this SDK take it from the body, and changing that here would break
+   * them, but a bulk caller should not have to repeat it ten thousand times.
+   */
+  app.post('/api/deliverability/check/bulk', { preHandler: requireAuth }, async (req, reply) => {
+    const envelope = parseBulkEnvelope(req.body);
+    if (!envelope.ok) {
+      return reply.code(400).send({ error: envelope.error, details: envelope.details });
+    }
+    const credentialTenant = (req as { auth?: { tenant_id?: string | null } }).auth?.tenant_id ?? null;
+
+    const queries: BulkSuppressionQuery[] = [];
+    const results: BulkItemResult<{ address: string; channel: Channel; suppressed: boolean }>[] = [];
+    const echo = new Map<number, { address: string; channel: Channel }>();
+
+    envelope.items.forEach((raw, index) => {
+      const item = (raw ?? {}) as { tenant_id?: string; channel?: Channel; address?: string };
+      const tenantId = item.tenant_id ?? credentialTenant;
+      const errors: string[] = [];
+      if (!tenantId) errors.push('tenant_id is required (absent from the item and from the credential)');
+      if (!item.channel) errors.push('channel is required');
+      else if (!CHANNELS.includes(item.channel)) errors.push('channel must be email, sms or all');
+      if (!item.address) errors.push('address is required');
+      if (errors.length) {
+        results.push(bulkItemError(index, 'VALIDATION_ERROR', errors.join('; ')));
+        return;
+      }
+      echo.set(index, { address: item.address!, channel: item.channel! });
+      queries.push({ index, tenantId: tenantId!, channel: item.channel!, address: item.address! });
+    });
+
+    for (const verdict of await isSuppressedBulk(queries)) {
+      const sent = echo.get(verdict.index)!;
+      results.push({ index: verdict.index, ok: true, ...sent, suppressed: verdict.suppressed });
+    }
+    results.sort((a, b) => a.index - b.index);
+    return reply.code(200).send({ data: bulkResponse(results) });
   });
 
   // Add (or refresh) a suppression.
