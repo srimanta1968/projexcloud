@@ -208,6 +208,44 @@ export function getSearchClient(): SearchClient {
 }
 
 /**
+ * What kind of client is actually wired, so a caller can tell "search is not
+ * available here" from "search ran and matched nothing".
+ *
+ * WHY THIS IS WORTH EXPOSING. Those two are indistinguishable from the outside
+ * today: an unwired deployment answers every query with a 500 that a consuming
+ * app reasonably renders as an empty result set, so a screen shows "0 results"
+ * for a backend that was never connected. A consumer that can read this degrades
+ * honestly — "search is unavailable" — instead of quietly asserting there is
+ * nothing to find.
+ *
+ * 'fail-loud' is the state that matters: it means production has no backend and
+ * every query WILL 500.
+ */
+export function searchClientState(): {
+  kind: 'registered' | 'synthetic' | 'fail-loud';
+  available: boolean;
+  reason?: string;
+} {
+  if (activeClient instanceof FailLoudSearchClient) {
+    return {
+      kind: 'fail-loud',
+      available: false,
+      reason:
+        'no SearchClient registered for this deployment — every query will fail until '
+        + 'registerSearchClient(new OpenSearchClient(...)) is wired at boot',
+    };
+  }
+  if (activeClient instanceof SyntheticSearchClient) {
+    return {
+      kind: 'synthetic',
+      available: true,
+      reason: 'synthetic in-memory client — results are fabricated and must not be trusted in production',
+    };
+  }
+  return { kind: 'registered', available: true };
+}
+
+/**
  * Per-pool tenant-scoped index name (FR-SRC-3).
  * Convention: ten-{pool_index}-{tenant_id}-{entity_kind}.
  * Pool index defaults to 0 if not supplied — production resolves per-tenant
