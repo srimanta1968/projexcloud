@@ -2,6 +2,26 @@ import * as React from 'react';
 import { cn } from '../lib/cn';
 
 /**
+ * Prefix a root-relative href with the portal's basePath.
+ *
+ * next/link does this automatically; a plain <a> does not, and this package is
+ * framework-agnostic so it cannot use next/link. Without it, every CTA rendered
+ * here points outside the portal — see the note at the call site.
+ *
+ * NEXT_PUBLIC_* is inlined at build time by Next, so this reads correctly in
+ * both server and client components. Absolute URLs, protocol-relative URLs and
+ * pure anchors are returned untouched; so is an href that already carries the
+ * prefix, which keeps this safe to apply twice.
+ */
+function withBasePath(href: string): string {
+  const base = process.env.NEXT_PUBLIC_BASE_PATH ?? '';
+  if (!base) return href;
+  if (!href.startsWith('/') || href.startsWith('//')) return href;
+  if (href === base || href.startsWith(`${base}/`)) return href;
+  return `${base}${href}`;
+}
+
+/**
  * A single onboarding step shown on a portal dashboard. `done` drives the
  * green ✓ vs the numbered "to do" state; when not done and an `href` is given a
  * one-click CTA takes the user straight to where they fix it.
@@ -72,7 +92,28 @@ export function SetupChecklist({
                   <span className="shrink-0 text-xs font-medium text-primary">Configured</span>
                 ) : s.href ? (
                   <a
-                    href={s.href}
+                    /*
+                     * basePath MUST BE APPLIED BY HAND HERE.
+                     *
+                     * This is a plain <a>, not a next/link <Link>, because this
+                     * package is framework-agnostic and cannot import next/link.
+                     * Next only rewrites hrefs for <Link>, so a root-relative
+                     * href written here escapes the portal entirely: on the
+                     * console, href="/config" resolves to
+                     * https://cloud.projexlight.com/config, which is not a portal
+                     * route at all — it reaches the api-gateway, whose
+                     * default-deny gate answers
+                     * {"error":"Unauthorized","details":["Missing bearer token"]}.
+                     *
+                     * That is precisely what every "Set up →" button did: the
+                     * operator clicked a setup step and got a raw auth error from
+                     * a different service, which reads as "I am not logged in"
+                     * rather than "this link is wrong".
+                     *
+                     * Only root-relative hrefs are prefixed; absolute URLs and
+                     * anchors are passed through untouched.
+                     */
+                    href={withBasePath(s.href)}
                     className="shrink-0 rounded-md bg-primary px-3 py-1 text-xs font-medium text-primary-foreground hover:bg-primary/90"
                   >
                     {s.cta ?? 'Set up →'}

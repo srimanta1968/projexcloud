@@ -4,6 +4,17 @@ import { SESSION_COOKIE } from '@projexlight/design-system/auth';
 import { ConfigForm, PageHeader } from '@projexlight/design-system';
 import { PROVIDER_DESCRIPTORS, toConfigEntry, splitSecretFields } from '@/lib/providerDescriptors';
 import { resolveEntry, originLabel, saveProvider, removeOverride } from '@/lib/scopedConfig';
+
+/*
+ * The scope switcher below uses plain <a> deliberately (an explicit navigation,
+ * so the admin can see in the URL which scope they are about to write to), and
+ * Next only rewrites hrefs for <Link>. A bare href="/config" therefore leaves the
+ * portal: on cloud.projexlight.com it resolves to /config, which is not a portal
+ * route but the api-gateway, whose default-deny gate answers
+ * {"error":"Unauthorized","details":["Missing bearer token"]}. Prefixing by hand
+ * is what keeps these links inside /tenant.
+ */
+const BASE_PATH = process.env.NEXT_PUBLIC_BASE_PATH ?? '';
 import type { ConfigEntry } from '@projexlight/design-system';
 
 /**
@@ -278,7 +289,7 @@ export default async function ConfigPage({
           URL which scope they are about to write to. */}
       <nav aria-label="Configuration scope" style={{ display: 'flex', gap: 8, flexWrap: 'wrap', margin: '12px 0 20px' }}>
         <a
-          href="/config"
+          href={`${BASE_PATH}/config`}
           aria-current={!appId ? 'page' : undefined}
           style={{
             padding: '6px 12px', borderRadius: 6, fontSize: 13, textDecoration: 'none',
@@ -291,7 +302,7 @@ export default async function ConfigPage({
         {apps.map((a) => (
           <a
             key={a.application_id}
-            href={`/config?app=${encodeURIComponent(a.application_id)}`}
+            href={`${BASE_PATH}/config?app=${encodeURIComponent(a.application_id)}`}
             aria-current={appId === a.application_id ? 'page' : undefined}
             style={{
               padding: '6px 12px', borderRadius: 6, fontSize: 13, textDecoration: 'none',
