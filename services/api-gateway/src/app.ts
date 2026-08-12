@@ -3677,7 +3677,35 @@ const start = async (): Promise<void> => {
         }
         return { success: true, data: { person_id, band_written, phone_updated: b.phone !== undefined } };
       } catch (e) {
-        return reply.code(500).send({ success: false, error: (e as Error).message });
+        const msg = (e as Error).message;
+        /*
+         * A PHONE ALREADY OWNED BY SOMEONE ELSE IS A CONFLICT, NOT A CRASH.
+         *
+         * identity.alias carries UNIQUE (kind, value_hash) GLOBALLY, not per
+         * person — that constraint is what makes one phone resolve to exactly one
+         * identity.person across the platform, and it is load-bearing for MDM.
+         * So setting a number another person already holds is a legitimate,
+         * caller-fixable refusal.
+         *
+         * Reported as a 500 it read as a platform fault, which sends whoever is
+         * on call looking for an outage that is not there — the same failure mode
+         * as SIGNING_SECRET_NOT_CONFIGURED surfacing as InternalError. The DELETE
+         * above only clears THIS person's alias, so the collision is always with
+         * another person's, and the message says so rather than leaking the raw
+         * constraint name.
+         */
+        if (msg.includes('alias_kind_value_hash_key') || msg.includes('duplicate key')) {
+          return reply.code(409).send({
+            success: false,
+            error: 'Conflict',
+            code: 'ALIAS_ALREADY_CLAIMED',
+            details: [
+              'that phone number is already registered to another person — identity.alias is unique on (kind, value) across the platform, so one number resolves to exactly one person',
+            ],
+          });
+        }
+        req.log.error(e);
+        return reply.code(500).send({ success: false, error: msg });
       }
     });
 

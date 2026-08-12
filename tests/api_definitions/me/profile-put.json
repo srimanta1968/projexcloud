@@ -59,10 +59,16 @@
       "when": "requireAuth passed but req.auth.sub is absent, so no person_id can be resolved (payload is { success:false, error:\"Unauthorized\" })"
     },
     {
+      "status": 409,
+      "code": "ALIAS_ALREADY_CLAIMED",
+      "message": "that phone number is already registered to another person",
+      "when": "the supplied phone is already held by a DIFFERENT person — identity.alias is UNIQUE (kind, value_hash) globally, which is what makes one number resolve to exactly one identity.person. The DELETE clears only this person's alias, so a collision is always with someone else's. Previously surfaced as a raw 500 carrying the constraint name."
+    },
+    {
       "status": 500,
       "code": "InternalError",
-      "message": "<Postgres error message>",
-      "when": "Any DB failure in the try block — phone alias DELETE/INSERT (e.g. pgcrypto digest() unavailable or a unique-constraint clash on value_hash), the app_identity upsert, or the profile.band_l2 upsert; returned as { success:false, error:<message> }"
+      "message": "<postgres error message>",
+      "when": "any other database failure — the duplicate-alias case is now a 409 and no longer reaches here"
     }
   ]
 }
