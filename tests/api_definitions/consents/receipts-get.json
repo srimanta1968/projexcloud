@@ -1,0 +1,93 @@
+{
+  "name": "GET /api/consents/receipts - The caller tenant's consent receipt register",
+  "endpoint": "/api/consents/receipts",
+  "sdk": "sdk-consent",
+  "sourceFile": "packages/sdk-consent/src/server/routes.ts",
+  "method": "GET",
+  "requiresAuth": true,
+  "expectedStatus": 200,
+  "taskId": "713656e3-114e-4fc6-8d2a-9a94536ce639",
+  "sprintId": "8ef1d09e-dd8e-4daf-8d03-54dcd9f812f8",
+  "featureId": "29651845-09ac-4f92-8964-35792daf8a86",
+  "epicId": "00996d23-f667-4a82-9285-7728ba357e7b",
+  "priority": 55,
+  "dependsOn": [
+    "POST /api/auth/register",
+    "POST /api/consents/purposes",
+    "POST /api/consents"
+  ],
+  "testCases": [
+    {
+      "name": "List this tenant's register, newest first",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.register.response.data.token}}"
+      },
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "data": {
+          "receipts": "array"
+        }
+      }
+    },
+    {
+      "name": "The page reports the total it was drawn from, not its own length",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.register.response.data.token}}"
+      },
+      "queryParams": {
+        "limit": "1"
+      },
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "data": {
+          "limit": 1,
+          "offset": 0
+        }
+      }
+    },
+    {
+      "name": "An out-of-range limit is clamped rather than refused",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.register.response.data.token}}"
+      },
+      "queryParams": {
+        "limit": "100000"
+      },
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "data": {
+          "limit": 500
+        }
+      }
+    }
+  ],
+  "expectedResponse": {
+    "data": {
+      "receipts": "array",
+      "total": "number",
+      "limit": "number",
+      "offset": "number"
+    }
+  },
+  "description": "The receipt register for the tenant on the credential: every receipt where the tenant is either the source or the target, newest first, under { data: { receipts, total, limit, offset } }.\n\nWHY IT EXISTS. There was no tenant-wide receipt list, so a consumer that needed one approximated it from GET /api/consents/export - which at the time was unscoped, and therefore rendered other tenants' receipts. An endpoint that does not exist is not a safe absence: consumers build the nearest thing they can reach.\n\nTHE TOTAL IS COUNTED, NOT THE PAGE LENGTH. A register showing the first fifty of an unknown number invites the reader to conclude that is all of them, and for a consent register that is a conclusion with legal weight. limit is clamped to 1..500 and offset to >= 0 rather than trusted; an unbounded limit is a denial of service with extra steps.\n\nTenant is taken from the credential and never from the query string, so there is no parameter with which to ask for somebody else's register. Revoked and expired receipts are included - the register is what the controller holds, and status is derived by the reader from revoked_at / expires_at.",
+  "errorCases": [
+    {
+      "status": 403,
+      "code": "Forbidden",
+      "message": "This token carries no tenant, so no receipt scope can be derived",
+      "when": "the credential verifies but carries no tenant claim"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "Authorization header absent or not in Bearer form (gateway default-deny authGate)"
+    },
+    {
+      "status": 500,
+      "code": "InternalError",
+      "message": "InternalError",
+      "when": "listTenantReceipts throws - database errors only; the query takes no caller-supplied identifiers beyond the clamped paging numbers"
+    }
+  ]
+}

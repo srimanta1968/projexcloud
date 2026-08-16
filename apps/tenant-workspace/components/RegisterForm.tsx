@@ -1,7 +1,7 @@
 'use client';
 
 import { FormEvent, useState } from 'react';
-import { Button, Field, Input } from '@projexlight/design-system';
+import { Button, EmailField, Field, Input } from '@projexlight/design-system';
 import { registerUser } from '../services/authApi';
 
 export interface RegisterFormProps {
@@ -37,7 +37,17 @@ export default function RegisterForm({ onSuccess }: RegisterFormProps): JSX.Elem
       const result = await registerUser({ email, password });
       if (onSuccess) onSuccess(result.userId, result.email);
     } catch (err) {
-      const e = err as { error?: string; details?: string[] };
+      const e = err as { error?: string; code?: string; details?: string[]; did_you_mean?: string | null };
+      /* The server refuses an address it could never deliver the link to. Its
+         sentence already names the domain and the remedy, so it is shown as
+         written rather than replaced with a generic failure. */
+      if (e.code === 'EMAIL_UNDELIVERABLE') {
+        setError(
+          `${e.details?.join(', ') || 'That address cannot receive email.'}` +
+          `${e.did_you_mean ? ` Did you mean ${e.did_you_mean}?` : ''}`,
+        );
+        return;
+      }
       const msg = e.details?.join(', ') || e.error || 'Registration failed.';
       setError(msg);
     } finally {
@@ -47,11 +57,13 @@ export default function RegisterForm({ onSuccess }: RegisterFormProps): JSX.Elem
 
   return (
     <form onSubmit={handleSubmit} aria-label="Register" className="flex flex-col gap-3.5">
-      <Field label="Email" htmlFor="register-email">
-        <Input
-          id="register-email" type="email" required autoComplete="email"
-          value={email} onChange={(e) => setEmail(e.target.value)} />
-      </Field>
+      {/* The address is checked while the form is still open, because the link
+          that completes this registration is sent to it: a dead domain means an
+          account nobody can ever finish creating, and this is the last moment
+          the person can still fix it. */}
+      <EmailField
+        id="register-email" label="Email" required autoComplete="email"
+        value={email} onChange={setEmail} />
 
       <Field label="Password" htmlFor="register-password" hint="Minimum 8 characters.">
         <Input

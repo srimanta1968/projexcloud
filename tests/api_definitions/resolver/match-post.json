@@ -1,0 +1,88 @@
+{
+  "name": "POST /api/resolver/match - Resolve a signal bundle to a person or a steward case",
+  "endpoint": "/api/resolver/match",
+  "sdk": "sdk-identity-resolver",
+  "sourceFile": "packages/sdk-identity-resolver/src/server/routes.ts",
+  "method": "POST",
+  "requiresAuth": true,
+  "expectedStatus": 200,
+  "taskId": "304f05ff-29db-482b-9248-4ed36b7289e7",
+  "sprintId": "8ef1d09e-dd8e-4daf-8d03-54dcd9f812f8",
+  "featureId": "9daac052-eec4-48be-ac02-eda45bf2f005",
+  "epicId": "93a549d6-9a93-4d82-86bb-bac5167fa960",
+  "priority": 30,
+  "testability": "auto",
+  "dependsOn": [
+    "POST /api/auth/signup-tenant"
+  ],
+  "testCases": [
+    {
+      "name": "A bundle with nothing this tenant holds answers no_match, and writes nothing",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "payload": {
+        "traits": {
+          "name": "Nobody This Tenant Has Ever Heard Of",
+          "email": "nobody-{{random}}@example.test"
+        }
+      },
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "data": {
+          "match_type": "no_match",
+          "case_id": null
+        }
+      }
+    },
+    {
+      "name": "Reject a bundle carrying no usable trait",
+      "testType": "negative",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "payload": {
+        "traits": {}
+      },
+      "expectedStatus": 400,
+      "expectedError": {
+        "code": "ValidationError"
+      }
+    }
+  ],
+  "expectedResponse": {
+    "data": {
+      "match_type": "string",
+      "person_id": "string",
+      "case_id": "string",
+      "candidate_links": "array"
+    }
+  },
+  "description": "Takes the signal bundle a caller actually has — name, email, phone, dob, address, external_id — and answers which person it is about. Tenant comes from the credential; there is no parameter with which to match inside somebody else's data.\n\nTHREE ANSWERS, AND ONLY ONE OF THEM LINKS. 'exact_crosswalk' means a recorded identifier (an app_identity for this app, or an alias hash) already names this person WITHIN this tenant, so linking is a fact rather than a judgement; person_id is returned. 'possibly_same' means the bundle scored at/above EMPI_CANDIDATE_MIN against one of the tenant's own linked records: a POSSIBLY_SAME candidate link is raised for steward review and returned as case_id with its confidence, and nothing is merged. 'no_match' means nothing scored high enough to be worth a steward's time.\n\nWHY IT EXISTS. The capability manifest advertised this operation at /api/resolver/resolve, which has never done it — that route reads an identity context for a person_id you already have — so every consumer that sent traits got 400. Worse, matchAndLink had no caller anywhere in the platform, so empi.candidate_link could only be populated by hand and the steward review queue was structurally empty.\n\nWRITES ARE DELIBERATELY NARROW. A crosswalk hit writes nothing. A no_match writes nothing — promotion is a governed act with its own endpoint, and registering a person for every inbound trait bundle would populate the identity graph from unreviewed input. Only 'possibly_same' registers a coexistence person for the incoming record, because a candidate link needs two person ids by construction, plus alias rows for the identifiers supplied so the NEXT capture is a crosswalk hit rather than a second case.\n\nCandidate traits are read from the tenant's own normalised source records rather than from identity.alias, which stores a hash and an encrypted envelope — checkable, deliberately not readable, and therefore useless for 'is this name a bit like that name'.",
+  "errorCases": [
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "traits must carry at least one of name, email, phone, dob, address, external_id",
+      "when": "the bundle is empty or every trait is blank. Answering no_match instead would report an absence nobody looked for."
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "This credential carries no tenant context",
+      "when": "the token verifies but carries no tenant claim (tenantOf)"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "Authorization header absent or not Bearer form (requireAuth)"
+    },
+    {
+      "status": 500,
+      "code": "InternalError",
+      "message": "InternalError",
+      "when": "the candidate read or the link write throws"
+    }
+  ]
+}

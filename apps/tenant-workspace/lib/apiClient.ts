@@ -52,6 +52,18 @@ export interface ApiError {
   status: number;
   error: string;
   details?: string[];
+  /**
+   * The machine code, when the server sends one.
+   *
+   * CARRIED THROUGH, because the whole point of a code is that a client can
+   * branch on it: EMAIL_NOT_VERIFIED means offer the link again, while a 401
+   * means the password was wrong. Dropping it here left every caller matching
+   * on human-readable strings.
+   */
+  code?: string;
+  /** Field-level detail some handlers attach, e.g. a suggested correction. */
+  field?: string;
+  did_you_mean?: string | null;
 }
 
 /**
@@ -77,11 +89,14 @@ export async function apiPost<TResp>(path: string, body: unknown): Promise<TResp
   }
 
   if (!res.ok) {
-    const p = (payload as { error?: string; details?: string[] }) ?? {};
+    const p = (payload as { error?: string; details?: string[]; code?: string; field?: string; did_you_mean?: string | null }) ?? {};
     const err: ApiError = {
       status: res.status,
       error: p.error || `HTTP_${res.status}`,
       details: p.details,
+      code: p.code,
+      field: p.field,
+      did_you_mean: p.did_you_mean ?? null,
     };
     throw err;
   }
@@ -105,7 +120,12 @@ export async function apiGet<TResp>(path: string): Promise<TResp> {
 
   if (!res.ok) {
     const p = (payload as { error?: string; details?: string[] }) ?? {};
-    throw { status: res.status, error: p.error || `HTTP_${res.status}`, details: p.details } as ApiError;
+    throw {
+      status: res.status,
+      error: p.error || `HTTP_${res.status}`,
+      details: p.details,
+      code: (p as { code?: string }).code,
+    } as ApiError;
   }
   return (payload as { data: TResp }).data;
 }
@@ -131,7 +151,12 @@ export async function apiPut<TResp>(path: string, body: unknown): Promise<TResp>
 
   if (!res.ok) {
     const p = (payload as { error?: string; details?: string[] }) ?? {};
-    throw { status: res.status, error: p.error || `HTTP_${res.status}`, details: p.details } as ApiError;
+    throw {
+      status: res.status,
+      error: p.error || `HTTP_${res.status}`,
+      details: p.details,
+      code: (p as { code?: string }).code,
+    } as ApiError;
   }
   return (payload as { data: TResp }).data;
 }

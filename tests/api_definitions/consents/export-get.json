@@ -26,6 +26,17 @@
         "person_id": "{{cache:auth.register.response.data.userId}}"
       },
       "expectedStatus": 200
+    },
+    {
+      "name": "Refuse an export with no subject - this endpoint is not a register",
+      "testType": "negative",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.register.response.data.token}}"
+      },
+      "expectedStatus": 400,
+      "expectedError": {
+        "code": "ValidationError"
+      }
     }
   ],
   "expectedResponse": {
@@ -33,8 +44,20 @@
       "receipts": "array"
     }
   },
-  "description": "Exports consent receipts as a JSONL-friendly array under { data: { receipts } } with status 200 - the DSAR / portability surface. The person_id query parameter is optional: when supplied the export is filtered to that person, and when omitted EVERY receipt in the store is returned. Edge cases: the export is unpaginated and has no limit, so calling it without person_id on a large store returns the entire table in one response; an unknown person_id returns 200 with an empty receipts array rather than a 404; revoked and expired receipts are included (this is a full history, not a live-consent view); no tenant scoping is applied - the only filter is person_id; requires a valid JWT.",
+  "description": "Exports the receipts THIS TENANT holds for ONE subject, as a JSONL-friendly array under { data: { receipts } } with status 200 - the DSAR / Article-15 surface. person_id is REQUIRED and the read is scoped to the tenant on the credential.\n\nBOTH OF THOSE ARE CHANGES, AND THE OLD BEHAVIOUR WAS A DISCLOSURE. person_id used to be optional: omitting it returned the most recent thousand receipts belonging to EVERY tenant on the platform, and supplying one returned that person's receipts from every tenant they had ever dealt with - so the endpoint whose purpose is answering a subject-access request was the one assembling a cross-controller profile of the subject. LeadFlow's consent register called it with no person filter and rendered another tenant's receipts as its own. A caller that wants its own register wants GET /api/consents/receipts, which is a different question with a different shape.\n\nEdge cases: an unknown person_id returns 200 with an empty receipts array rather than a 404, and a person in another tenant is indistinguishable from an unknown one, which is the point; revoked and expired receipts are included (this is a full history, not a live-consent view); the export is unpaginated, bounded in practice by one subject's receipt count; requires a valid JWT carrying a tenant.",
   "errorCases": [
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "person_id is required — this endpoint answers a subject access request",
+      "when": "person_id is absent or blank. Deliberately NOT a defaulted export-everything: that default was the leak."
+    },
+    {
+      "status": 403,
+      "code": "Forbidden",
+      "message": "This token carries no tenant, so no receipt scope can be derived",
+      "when": "the credential verifies but carries no tenant claim. Matches the rule the point-read route already applies: an unscoped receipt query is not a broad answer, it is somebody else's answer."
+    },
     {
       "status": 401,
       "code": "Unauthorized",

@@ -8,6 +8,7 @@ export * from './components/AdminLoginForm';
 export * from './components/AdminLogout';
 export * from './components/Container';
 export * from './components/CurrentUser';
+export * from './components/EmailField';
 export * from './components/Field';
 export * from './components/Input';
 export * from './components/Label';

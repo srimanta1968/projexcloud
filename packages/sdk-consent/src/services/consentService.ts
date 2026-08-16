@@ -490,24 +490,97 @@ export async function getReceiptState(
   return { ...row, revoked, expired, active: !revoked && !expired };
 }
 
-export async function exportReceipts(person_id?: string): Promise<ReceiptRecord[]> {
-  if (person_id) {
-    return dataService.rows<ReceiptRecord>(
-      `SELECT receipt_id, person_id, purpose_id, processor, app_id, jurisdiction,
-              granted_by_actor, granted_at, expires_at,
-              source_tenant_id, target_tenant_id, revoked_at, revocation_id, evidence_hash
-         FROM consent.receipt
-        WHERE person_id = $1
-        ORDER BY granted_at DESC`,
-      [person_id],
-    );
-  }
-  return dataService.rows<ReceiptRecord>(
-    `SELECT receipt_id, person_id, purpose_id, processor, app_id, jurisdiction,
+/** The columns every receipt read returns. One list, so they cannot drift apart. */
+const RECEIPT_COLS = `receipt_id, person_id, purpose_id, processor, app_id, jurisdiction,
             granted_by_actor, granted_at, expires_at,
-            source_tenant_id, target_tenant_id, revoked_at, revocation_id, evidence_hash
+            source_tenant_id, target_tenant_id, revoked_at, revocation_id, evidence_hash`;
+
+/**
+ * The Article-15 export: every receipt held for ONE subject, within one tenant.
+ *
+ * TENANT IS REQUIRED AND IS APPLIED IN SQL, exactly as `getReceiptState` above
+ * applies it. Both branches of this function previously ran unscoped: omitting
+ * `person_id` returned the most recent thousand receipts belonging to every
+ * tenant on the platform, and supplying one returned that person's receipts from
+ * every tenant they had ever dealt with. Either answer discloses who consented
+ * to what, to a caller holding a credential for somewhere else entirely — and
+ * the second is the worse of the two, because the endpoint whose purpose is
+ * answering a subject-access request was the one assembling a cross-controller
+ * profile of the subject.
+ *
+ * That it was reachable was not theoretical. LeadFlow's Consent & Preferences
+ * register called this without a person filter and rendered another tenant's
+ * receipts as its own.
+ *
+ * PERSON_ID IS NOW REQUIRED TOO. A DSAR is a question about a person; a caller
+ * that wants their tenant's register wants `listTenantReceipts`, which is a
+ * different question with a different shape (paged, counted). Leaving the
+ * parameter optional is what made "export everything" the easy call to make.
+ */
+export async function exportReceipts(
+  tenant_id: string,
+  person_id: string,
+): Promise<ReceiptRecord[]> {
+  if (!tenant_id) throw new Error('consent: tenant_id is required to export receipts');
+  if (!person_id) throw new Error('consent: person_id is required to export receipts');
+  return dataService.rows<ReceiptRecord>(
+    `SELECT ${RECEIPT_COLS}
        FROM consent.receipt
-      ORDER BY granted_at DESC
-      LIMIT 1000`,
+      WHERE person_id = $1::uuid
+        AND (source_tenant_id = $2::uuid OR target_tenant_id = $2::uuid)
+      ORDER BY granted_at DESC`,
+    [person_id, tenant_id],
   );
+}
+
+/** One page of a tenant's receipt register, with the total it was drawn from. */
+export interface TenantReceiptPage {
+  receipts: ReceiptRecord[];
+  /** Rows matching the query, NOT the page size — the caller needs both to be honest. */
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+/**
+ * The receipt register for one tenant.
+ *
+ * WHY THIS EXISTS AT ALL. There was no tenant-wide receipt list, so a consumer
+ * wanting one had to approximate it from the DSAR export — which is how the
+ * unscoped read above came to be called in the first place. An endpoint that
+ * does not exist is not a safe absence: consumers build the nearest thing they
+ * can reach, and the nearest thing was every tenant's data.
+ *
+ * THE TOTAL IS COUNTED, NOT INFERRED FROM THE PAGE. A register showing the first
+ * fifty of an unknown number invites the reader to conclude that is all of them,
+ * and for a consent register that is a conclusion with legal weight.
+ */
+export async function listTenantReceipts(input: {
+  tenant_id: string;
+  limit?: number;
+  offset?: number;
+}): Promise<TenantReceiptPage> {
+  if (!input.tenant_id) throw new Error('consent: tenant_id is required to list receipts');
+  // Clamped rather than trusted: an unbounded limit is a denial-of-service with
+  // extra steps, and a negative offset is a syntax error the caller cannot see.
+  const limit = Math.min(Math.max(Math.trunc(input.limit ?? 100), 1), 500);
+  const offset = Math.max(Math.trunc(input.offset ?? 0), 0);
+
+  const receipts = await dataService.rows<ReceiptRecord>(
+    `SELECT ${RECEIPT_COLS}
+       FROM consent.receipt
+      WHERE source_tenant_id = $1::uuid OR target_tenant_id = $1::uuid
+      ORDER BY granted_at DESC
+      LIMIT $2 OFFSET $3`,
+    [input.tenant_id, limit, offset],
+  );
+
+  const counted = await dataService.one<{ total: string }>(
+    `SELECT COUNT(*)::text AS total
+       FROM consent.receipt
+      WHERE source_tenant_id = $1::uuid OR target_tenant_id = $1::uuid`,
+    [input.tenant_id],
+  );
+
+  return { receipts, total: Number(counted?.total ?? 0), limit, offset };
 }

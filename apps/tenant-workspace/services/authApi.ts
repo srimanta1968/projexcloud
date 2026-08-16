@@ -9,6 +9,10 @@ export interface RegisterResponse {
   userId: string;
   email: string;
   token?: string;
+  /** False only if the server did not send the link, so the client should. */
+  verification_email_sent?: boolean;
+  /** True when an unverified account cannot sign in yet. */
+  verification_required?: boolean;
 }
 
 /**
@@ -20,7 +24,16 @@ export interface RegisterResponse {
  */
 export async function registerUser(input: RegisterRequest): Promise<RegisterResponse> {
   const data = await apiPost<RegisterResponse>('/api/auth/register', input);
-  await sendVerificationEmail(data.userId, data.email).catch(() => undefined);
+  /*
+   * THE SERVER SENDS THE LINK NOW. register/signup stash it on the reply and the
+   * gateway's onResponse hook delivers it, so this no longer issues a follow-up
+   * call — a closed tab or a failed fetch used to leave an account that could
+   * never be verified. `verification_email_sent` says so on the response; the
+   * resend button below remains the way to ask for another.
+   */
+  if (data.verification_email_sent === false) {
+    await sendVerificationEmail(data.userId, data.email).catch(() => undefined);
+  }
   return data;
 }
 
@@ -34,6 +47,10 @@ export interface SignupTenantRequest {
 export interface SignupTenantResponse {
   userId: string;
   email: string;
+  /** False only if the server did not send the link, so the client should. */
+  verification_email_sent?: boolean;
+  /** True when an unverified account cannot sign in yet. */
+  verification_required?: boolean;
   tenant_id: string;
   app_id: string;
   org_id: string;
@@ -50,7 +67,10 @@ export interface SignupTenantResponse {
  */
 export async function signupTenant(input: SignupTenantRequest): Promise<SignupTenantResponse> {
   const data = await apiPost<SignupTenantResponse>('/api/auth/signup-tenant', input);
-  await sendVerificationEmail(data.userId, data.email).catch(() => undefined);
+  // Same as registerUser(): the server owns the send unless it says otherwise.
+  if (data.verification_email_sent === false) {
+    await sendVerificationEmail(data.userId, data.email).catch(() => undefined);
+  }
   return data;
 }
 

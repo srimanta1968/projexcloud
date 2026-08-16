@@ -2,6 +2,7 @@ import { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { requireAuth } from '@projexlight/sdk-identity';
 import type { Decision } from '@projexlight/sdk-approval';
 import { explain, resolveIdentityContext } from '../services/resolverService';
+import { resolveTraits } from '../services/matchService';
 import {
   CandidateLinkNotFoundError,
   MergeNotFoundError,
@@ -37,6 +38,57 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
       options: { bypass_cache: body.bypass_cache },
     });
     return reply.code(200).send({ data: { identity_context: ctx } });
+  });
+
+  /*
+   * POST /api/resolver/match — traits in, a person or a case out.
+   *
+   * THE ROUTE THE MANIFEST HAS ALWAYS DESCRIBED. `sdk-capability.json` advertised
+   * "/api/resolver/resolve: resolve a signal bundle to the most-likely persona",
+   * which is this operation; the route of that name reads an identity context for
+   * a person_id you already have. Consumers built against the description, sent
+   * traits, and got 400 — while `empi.candidate_link` stayed empty because nothing
+   * in the platform ever raised one. Added alongside rather than by changing
+   * /resolve, whose existing callers pass person_id and want the context.
+   */
+  app.post('/api/resolver/match', { preHandler: requireAuth }, async (req, reply) => {
+    const body = (req.body ?? {}) as Partial<{
+      traits: Record<string, string>;
+      person_id: string;
+      app_id: string;
+      source_record_id: string;
+    }>;
+
+    const tenant_id = tenantOf(req, reply);
+    if (!tenant_id) return;
+
+    const traits = body.traits ?? {};
+    // A bundle with nothing to match on cannot answer "which person is this",
+    // and answering `no_match` for it would report an absence we never looked
+    // for. 400, so the caller learns their extraction produced nothing.
+    const hasSignal = ['name', 'email', 'phone', 'dob', 'address', 'external_id'].some(
+      (key) => typeof traits[key] === 'string' && traits[key].trim() !== '',
+    );
+    if (!hasSignal) {
+      return reply.code(400).send({
+        error: 'ValidationError',
+        details: ['traits must carry at least one of name, email, phone, dob, address, external_id'],
+      });
+    }
+
+    try {
+      const result = await resolveTraits({
+        tenant_id,
+        app_id: body.app_id ?? req.auth?.app_id ?? undefined,
+        source_record_id: body.source_record_id,
+        person_id: body.person_id,
+        traits,
+      });
+      return reply.code(200).send({ data: result });
+    } catch (err) {
+      req.log.error(err);
+      if (!reply.sent) reply.code(500).send({ error: 'InternalError' });
+    }
   });
 
   app.post('/api/resolver/explain', { preHandler: requireAuth }, async (req, reply) => {

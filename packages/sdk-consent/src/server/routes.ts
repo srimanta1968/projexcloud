@@ -6,6 +6,7 @@ import {
   exportReceiptsHandler,
   grantConsentHandler,
   listPurposesHandler,
+  listReceiptsHandler,
   registerPurposeHandler,
   revokeConsentHandler,
 } from './handlers/consentController';
@@ -137,6 +138,23 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
       if (!reply.sent) reply.code(500).send({ error: 'InternalError' });
     }
   });
+
+  // The tenant's own register. Registered BEFORE '/api/consents/:receipt_id'
+  // would make no difference — Fastify matches static segments first — but it
+  // sits next to the export it replaces for tenant-wide reads, because the two
+  // are constantly mistaken for each other and that mistake was a data leak.
+  app.get<{ Querystring: { limit?: string; offset?: string } }>(
+    '/api/consents/receipts',
+    { preHandler: requireAuth },
+    async (req, reply) => {
+      try {
+        await listReceiptsHandler(req, reply);
+      } catch (err) {
+        req.log.error(err);
+        if (!reply.sent) reply.code(500).send({ error: 'InternalError' });
+      }
+    },
+  );
 
   app.get<{ Querystring: { person_id?: string } }>(
     '/api/consents/export',

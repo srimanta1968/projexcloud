@@ -15,7 +15,12 @@
       {
         "method": "POST",
         "path": "/api/resolver/resolve",
-        "description": "Resolve a signal bundle to the most-likely persona; returns persona_id + confidence + matched fields."
+        "description": "Read the identity CONTEXT for a person you already have: requires person_id + app_id + tenant_id, returns the projection (personas, role closure, consents, pool indexes). This is NOT trait matching — that is POST /api/resolver/match. The description here previously promised signal-bundle resolution, which this route has never done, and consumers that believed it sent traits and got 400."
+      },
+      {
+        "method": "POST",
+        "path": "/api/resolver/match",
+        "description": "Resolve a signal bundle (name / email / phone / dob / address / external_id) to a person. A recorded crosswalk — an app_identity or an alias hash within your tenant — answers match_type 'exact_crosswalk' with the person_id, and is the ONLY answer a caller may link on unattended. Anything short of that scores against the tenant's own linked records and raises POSSIBLY_SAME candidate links for steward review, answering 'possibly_same' with case_id + confidence; nothing is merged. 'no_match' means nothing scored above EMPI_CANDIDATE_MIN. Tenant comes from the credential. A bundle with no usable trait answers 400."
       },
       {
         "method": "POST",

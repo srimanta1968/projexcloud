@@ -99,7 +99,7 @@ import {
   migrationsDir as resourceRegistryMigrations,
   server as resourceRegistryServer,
 } from '@projexlight/sdk-resource-registry';
-import { requireAuth, provisionFederationConfig } from '@projexlight/sdk-identity';
+import { requireAuth, provisionFederationConfig, setAddressChecker } from '@projexlight/sdk-identity';
 import { adminOpsMigrationsDir } from './admin/migrations';
 import {
   verifyAdminOpsToken,
@@ -357,7 +357,7 @@ import {
 // live DB and their HTTP surfaces are reachable.
 import { migrationsDir as sequenceMigrations, server as sequenceServer, startSequenceExecutor, setSequenceStepSender } from '@projexlight/sdk-sequence';
 import { migrationsDir as schedulingMigrations, server as schedulingServer, startSchedulingReminderWorker } from '@projexlight/sdk-scheduling';
-import { migrationsDir as deliverabilityMigrations, server as deliverabilityServer, startReplySyncWorker, suppressionService as deliverabilitySuppression, reputationService as deliverabilityReputation, isChannelPaused } from '@projexlight/sdk-deliverability';
+import { migrationsDir as deliverabilityMigrations, server as deliverabilityServer, startReplySyncWorker, suppressionService as deliverabilitySuppression, reputationService as deliverabilityReputation, isChannelPaused, checkBeforeSending as checkAddressBeforeSending, maskAddress } from '@projexlight/sdk-deliverability';
 import { migrationsDir as offerCatalogMigrations, server as offerCatalogServer } from '@projexlight/sdk-offer-catalog';
 import { migrationsDir as handoffMigrations, server as handoffServer, registerHandoffSaga, setHandoffApprovalCreator } from '@projexlight/sdk-handoff';
 import { migrationsDir as incidentMigrations, server as incidentServer } from '@projexlight/sdk-incident';
@@ -3919,8 +3919,28 @@ const start = async (): Promise<void> => {
     app.get<{
       Querystring: { tenant_id?: string; subject_persona_id?: string; purpose_id?: string };
     }>('/api/consent/receipts', async (req, reply) => {
-      const tenant_id = req.query.tenant_id;
-      if (!tenant_id) return reply.code(400).send({ success: false, error: 'tenant_id required' });
+      // TENANT COMES FROM THE CREDENTIAL, NOT THE QUERY. The auth gate means a
+      // caller here is authenticated, but this route scoped itself by whatever
+      // tenant_id was typed into the query string — so any tenant could read any
+      // other tenant's receipts by asking for them by id, and a receipt names a
+      // person, a purpose and a processor. The parameter is still accepted, and
+      // still required, so existing callers and definitions do not break; it is
+      // now checked against the credential instead of believed.
+      const claimed = req.query.tenant_id;
+      if (!claimed) return reply.code(400).send({ success: false, error: 'tenant_id required' });
+      const credentialTenant = req.auth?.tenant_id;
+      if (!credentialTenant) {
+        return reply.code(403).send({
+          success: false,
+          error: 'This token carries no tenant, so no receipt scope can be derived',
+        });
+      }
+      if (claimed !== credentialTenant) {
+        // 404-shaped refusal rather than 403: confirming that another tenant's
+        // receipts exist is itself the disclosure this route was leaking.
+        return reply.code(404).send({ success: false, error: 'No receipts for that tenant' });
+      }
+      const tenant_id = credentialTenant;
       try {
         // consent.receipt identifies the subject by person_id and carries
         // source_/target_tenant_id (no bare tenant_id); active/revoked state is
@@ -3950,11 +3970,42 @@ const start = async (): Promise<void> => {
     });
 
     app.post<{ Params: { receipt_id: string }; Body: { reason?: string } }>('/api/consent/receipts/:receipt_id/revoke', async (req, reply) => {
+      // A WRITE WITH NO TENANT PREDICATE was the worse half of the pair above:
+      // this revoked any receipt on the platform by id, from any tenant's token.
+      // Revocation is not a reversible edit — the receipt is the evidence that
+      // earlier messages were lawful — so a stranger could invalidate a basis
+      // somebody else is relying on and nothing here would have noticed.
+      const tenant_id = req.auth?.tenant_id;
+      if (!tenant_id) {
+        return reply.code(403).send({
+          success: false,
+          error: 'This token carries no tenant, so no receipt scope can be derived',
+        });
+      }
       try {
-        await dataService.query(
-          `UPDATE consent.receipt SET revoked_at = now() WHERE receipt_id = $1`,
-          [req.params.receipt_id],
+        const { rowCount } = await dataService.query(
+          `UPDATE consent.receipt
+              SET revoked_at = now()
+            WHERE receipt_id = $1::uuid
+              AND (source_tenant_id = $2::uuid OR target_tenant_id = $2::uuid)
+              AND revoked_at IS NULL`,
+          [req.params.receipt_id, tenant_id],
         );
+        // Already-revoked and belongs-to-someone-else answer the same 404, for
+        // the same reason the read does: a distinguishable response confirms the
+        // receipt exists. Re-revoking is not an error worth reporting either —
+        // the state the caller asked for is the state it is in.
+        if (rowCount === 0) {
+          const stillOurs = await dataService.query(
+            `SELECT 1 FROM consent.receipt
+              WHERE receipt_id = $1::uuid
+                AND (source_tenant_id = $2::uuid OR target_tenant_id = $2::uuid)`,
+            [req.params.receipt_id, tenant_id],
+          );
+          if (stillOurs.rowCount === 0) {
+            return reply.code(404).send({ success: false, error: 'Receipt not found' });
+          }
+        }
         return { success: true };
       } catch (e) {
         return reply.code(500).send({ success: false, error: (e as Error).message });
@@ -4401,12 +4452,60 @@ const start = async (): Promise<void> => {
 
     // Pre-send guard: skip a suppressed recipient / reputation-paused channel BEFORE the
     // provider is called (bridges sdk-notification's transport to sdk-deliverability).
+    /*
+     * Registration address check: sdk-identity asks whether a new account's
+     * address can receive its own verification link, and sdk-deliverability
+     * answers. Wired here because identity cannot import deliverability —
+     * deliverability already imports identity for requireAuth, and the cycle
+     * would not build. Same seam pattern as the verification-email hook above.
+     *
+     * The SAME function the send paths call, so an address accepted at sign-up
+     * is one the platform can actually write to.
+     */
+    setAddressChecker(async (address) => {
+      const { verification, decision } = await checkAddressBeforeSending(address);
+      return {
+        allowed: decision.allowed,
+        reason: verification.reason,
+        verdict: verification.verdict,
+        code: verification.code,
+        didYouMean: verification.did_you_mean,
+      };
+    });
+
     setPreSendGuard(async ({ tenant_id, channel, destination }) => {
       if (channel !== 'email' && channel !== 'sms') return { blocked: false };
       try {
         const suppressed = await deliverabilitySuppression.isSuppressed({ tenantId: tenant_id, channel, address: destination });
         if (suppressed) return { blocked: true, reason: 'recipient is suppressed' };
         if (await isChannelPaused(tenant_id, channel)) return { blocked: true, reason: 'channel paused for reputation' };
+
+        /*
+         * CAN THIS ADDRESS RECEIVE MAIL AT ALL? Asked here because this is the
+         * one place every tenant send passes through, and because the three
+         * questions belong together: suppressed (they asked us to stop), paused
+         * (we are protecting the channel), unreachable (the message has nowhere
+         * to go). Until now only the first two were asked, and a typo'd domain
+         * became a hard bounce against the platform's sending reputation.
+         *
+         * EMAIL ONLY. A phone number is not an address and this says nothing
+         * about one.
+         *
+         * The verdict decides nothing by itself — sendDecision() inside the SDK
+         * applies EMAIL_VALIDATION_MODE, so `off` and `soft` never block here
+         * and `strict` refuses only what is proven undeliverable plus whatever
+         * policy the deployment opted into.
+         */
+        if (channel === 'email') {
+          const { verification, decision } = await checkAddressBeforeSending(destination);
+          if (!decision.allowed) {
+            app.log.warn(
+              { code: verification.code, verdict: verification.verdict, to: maskAddress(destination) },
+              'pre-send: refusing an address that cannot receive mail',
+            );
+            return { blocked: true, reason: verification.reason };
+          }
+        }
       } catch { /* fail-open: never block a send on a guard error */ }
       return { blocked: false };
     });

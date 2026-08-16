@@ -18,8 +18,15 @@ import {
  */
 
 const POOL_INDEX = process.env.POOL_INDEX || 'admin';
-/** Confidence at/above which a pair is auto-linked as a candidate. */
-const CANDIDATE_MIN = parseFloat(process.env.EMPI_CANDIDATE_MIN || '0.5');
+/**
+ * Confidence at/above which a pair is auto-linked as a candidate.
+ *
+ * Exported so trait resolution raises candidates at the SAME bar this module
+ * uses. A second copy of the number in the caller is a threshold that drifts
+ * silently, and the direction it drifts decides whether a duplicate reaches a
+ * steward or is never mentioned again.
+ */
+export const CANDIDATE_MIN = parseFloat(process.env.EMPI_CANDIDATE_MIN || '0.5');
 /** Confidence at/above which a match is surfaced by probabilisticMatch. */
 const DEFAULT_THRESHOLD = parseFloat(process.env.EMPI_MATCH_THRESHOLD || '0.7');
 /** ECE above which a calibration-drift alert fires. */

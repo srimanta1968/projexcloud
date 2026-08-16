@@ -23,6 +23,36 @@ import {
   validateRegisterInput,
   validateSignupTenantInput,
 } from '../../validators/authValidator';
+import {
+  checkRegistrationAddress,
+  emailVerificationRequired,
+} from '../../services/addressCheck';
+
+/**
+ * Refuse an address that could never receive its own verification link.
+ *
+ * Returns true when the caller has already been answered. See the note in
+ * services/addressCheck.ts for why this belongs at registration rather than at
+ * the send: an account whose link cannot arrive is an account nobody can ever
+ * finish creating, and the form is the last place the person can still fix it.
+ */
+async function refusedForAddress(
+  email: string,
+  reply: FastifyReply,
+): Promise<boolean> {
+  const check = await checkRegistrationAddress(email);
+  if (check.allowed) return false;
+  reply.code(400).send({
+    error: 'UndeliverableEmail',
+    code: 'EMAIL_UNDELIVERABLE',
+    field: 'email',
+    verdict: check.verdict,
+    reason_code: check.code,
+    did_you_mean: check.didYouMean ?? null,
+    details: [check.reason ?? 'That address cannot receive email.'],
+  });
+  return true;
+}
 
 /**
  * POST /api/auth/register — creates a canonical identity.person + email alias
@@ -34,6 +64,8 @@ export async function registerHandler(req: FastifyRequest, reply: FastifyReply):
     reply.code(400).send({ error: 'ValidationError', details: validation.errors });
     return;
   }
+  if (await refusedForAddress(validation.value.email, reply)) return;
+
   try {
     const result = await registerPerson({
       email: validation.value.email,
@@ -50,11 +82,30 @@ export async function registerHandler(req: FastifyRequest, reply: FastifyReply):
       actor_kind: 'human',
       mfa_methods: ['pwd'],
     }));
+    /*
+     * THE LINK IS SENT BY THE SERVER, not by a follow-up call from the browser.
+     * It used to depend on the client issuing POST /api/auth/send-verification-email
+     * after this returned, which means a closed tab, a failed fetch or a
+     * different client left an account that can never be verified and no record
+     * that anything was missing. Stashing it here puts the send on the same code
+     * path as the account it belongs to. The gateway's onResponse hook delivers
+     * it without blocking this response.
+     */
+    (reply as { verificationEmail?: unknown }).verificationEmail = {
+      email: validation.value.email,
+      token: signEmailVerifyToken(result.person.person_id, validation.value.email),
+      userId: result.person.person_id,
+    };
+
     reply.code(201).send({
       data: {
         userId: result.person.person_id,
         email: validation.value.email,
         token,
+        /* Says plainly whether this account is usable yet. The portal shows the
+           "check your email" screen off the back of it rather than assuming. */
+        verification_required: emailVerificationRequired(),
+        verification_email_sent: true,
       },
     });
   } catch (err) {
@@ -85,6 +136,8 @@ export async function signupTenantHandler(req: FastifyRequest, reply: FastifyRep
     reply.code(400).send({ error: 'ValidationError', details: validation.errors });
     return;
   }
+  if (await refusedForAddress(validation.value.email, reply)) return;
+
   try {
     // signup-tenant is PUBLIC, so most callers arrive with no token and this stays undefined —
     // the duplicate-email refusal is unchanged for them. An existing app user who is becoming a
@@ -107,10 +160,19 @@ export async function signupTenantHandler(req: FastifyRequest, reply: FastifyRep
       actor_kind: 'human',
       mfa_methods: ['pwd'],
     }));
+    // Same reasoning as register(): the server owns the send.
+    (reply as { verificationEmail?: unknown }).verificationEmail = {
+      email: validation.value.email,
+      token: signEmailVerifyToken(result.person_id, validation.value.email),
+      userId: result.person_id,
+    };
+
     reply.code(201).send({
       data: {
         userId: result.person_id,
         email: validation.value.email,
+        verification_required: emailVerificationRequired(),
+        verification_email_sent: true,
         tenant_id: result.tenant_id,
         app_id: result.app_id,
         org_id: result.org_id,
@@ -147,6 +209,39 @@ export async function loginHandler(req: FastifyRequest, reply: FastifyReply): Pr
   }
   try {
     const verified = await verifyEmailPassword(validation.value.email, validation.value.password);
+
+    /*
+     * REGISTRATION IS NOT COMPLETE UNTIL THE ADDRESS IS PROVEN.
+     *
+     * AFTER the password check, deliberately. Answering "verify your email"
+     * to a wrong password would tell an anonymous caller which addresses hold
+     * accounts — the credential is checked first, so this only ever reaches
+     * somebody who already proved the account is theirs.
+     *
+     * OFF UNLESS EMAIL_VERIFICATION_REQUIRED=true. Enforcement was previously
+     * client-side only ("the UI checks status and requests a send"), which is
+     * an honest UX but not a control: anything talking to the API directly
+     * simply skipped it. This makes it real, while leaving the default alone
+     * so existing unverified accounts and the API test suite are unaffected
+     * until somebody decides otherwise.
+     *
+     * 403 WITH A DISTINCT CODE, not 401. The credentials were right. The client
+     * needs to tell these apart to offer "resend the link" rather than
+     * "check your password".
+     */
+    if (emailVerificationRequired()) {
+      const status = await getEmailVerificationStatus(verified.email);
+      if (!status.verified) {
+        reply.code(403).send({
+          error: 'EmailNotVerified',
+          code: 'EMAIL_NOT_VERIFIED',
+          email: verified.email,
+          details: ['Confirm your email address to finish creating your account. We can send the link again.'],
+        });
+        return;
+      }
+    }
+
     let activeTenantId: string | null = null;
     let activeBuId: string | null = null;
 

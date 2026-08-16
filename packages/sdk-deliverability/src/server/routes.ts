@@ -40,6 +40,12 @@ import {
   resumeChannel,
   type RepChannel,
 } from '../services/reputationService';
+import {
+  verifyAddress,
+  verifyAddresses,
+  sendDecision,
+  describeConfiguration,
+} from '../services/addressVerification';
 
 /**
  * sdk-deliverability Fastify routes (P14·E3, TK-3624). The pre-send suppression
@@ -49,6 +55,9 @@ import {
  * (never stored raw). tenant_id is carried in the body/query as in the sibling SDKs.
  */
 const CHANNELS: Channel[] = ['email', 'sms', 'all'];
+
+/** Ceiling on one address-verification call. See the note on the route. */
+const MAX_VERIFY_BATCH = 100;
 
 export async function registerRoutes(app: FastifyInstance): Promise<void> {
   // Pre-send enforcement: single {address} or batch {addresses:[]}. Returns whether
@@ -120,6 +129,81 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
     }
     results.sort((a, b) => a.index - b.index);
     return reply.code(200).send({ data: bulkResponse(results) });
+  });
+
+  /**
+   * POST /api/deliverability/address/verify — can this address receive mail at all?
+   *
+   * A DIFFERENT QUESTION FROM /check ABOVE, and the two are deliberately
+   * separate routes. `/check` asks whether a recipient is SUPPRESSED — they
+   * exist, and they asked us to stop. This asks whether the address is
+   * REACHABLE at all: syntax, reserved/placeholder/disposable policy, and
+   * whether the domain publishes a mail exchanger. A typo'd domain is not a
+   * suppression and would never appear on that list.
+   *
+   * THE SAME CODE THE SEND PATH RUNS. The gateway's pre-send guard calls the
+   * same functions, so a portal that shows "we can reach this person" and a
+   * send that goes ahead cannot disagree.
+   *
+   * A BAD ADDRESS IS A 200, not a 400. The request was well formed and the
+   * verdict is the answer; 400 is reserved for a body with no address in it.
+   *
+   * NOT TENANT-SCOPED. Whether gmail.com publishes an MX record is a fact about
+   * DNS, not about a tenant — so unlike its neighbours this needs no tenant_id.
+   * It stays behind requireAuth because it performs outbound DNS on caller-supplied
+   * input, which is not something to leave open.
+   */
+  app.post('/api/deliverability/address/verify', { preHandler: requireAuth }, async (req, reply) => {
+    const body = (req.body ?? {}) as { address?: unknown; addresses?: unknown; recheck?: unknown };
+
+    const single = typeof body.address === 'string' ? [body.address] : [];
+    const many = Array.isArray(body.addresses)
+      ? body.addresses.filter((a): a is string => typeof a === 'string')
+      : [];
+    const inputs = [...single, ...many];
+
+    if (inputs.length === 0) {
+      return reply.code(400).send({
+        error: 'ValidationError',
+        details: ['address (string) or addresses (string[]) is required'],
+      });
+    }
+    if (inputs.length > MAX_VERIFY_BATCH) {
+      /* A cap, never a silent truncation: returning 100 verdicts for a list of
+         500 would let the caller believe the other 400 passed. */
+      return reply.code(400).send({
+        error: 'ValidationError',
+        details: [`at most ${MAX_VERIFY_BATCH} addresses per call; ${inputs.length} were supplied`],
+      });
+    }
+
+    /* `force` — an operator who explicitly asks for a verdict gets one even
+       where EMAIL_VALIDATION_MODE is `off`. The mode governs whether a verdict
+       may BLOCK a send; `policy` below reports it so the caller can see that
+       nothing would be blocked here. */
+    const verifications = inputs.length === 1
+      ? [await verifyAddress(inputs[0], { skipCache: body.recheck === true, force: true })]
+      : await verifyAddresses(inputs, { force: true });
+
+    const results = verifications.map((verification) => {
+      const decision = sendDecision(verification);
+      return { ...verification, allowed: decision.allowed, blocked_because: decision.reason };
+    });
+
+    return reply.code(200).send({
+      data: {
+        results,
+        checked: results.length,
+        deliverable: results.filter((r) => r.verdict === 'deliverable').length,
+        undeliverable: results.filter((r) => r.verdict === 'undeliverable').length,
+        risky: results.filter((r) => r.verdict === 'risky').length,
+        unknown: results.filter((r) => r.verdict === 'unknown').length,
+        would_block: results.filter((r) => !r.allowed).length,
+        /* Returned with every answer so an operator reading a surprising verdict
+           does not have to guess whether probing was even on. */
+        policy: describeConfiguration(),
+      },
+    });
   });
 
   // Add (or refresh) a suppression.

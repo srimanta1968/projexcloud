@@ -1,7 +1,7 @@
 'use client';
 
 import { FormEvent, useState } from 'react';
-import { Button, Field, Input, Select } from '@projexlight/design-system';
+import { Button, EmailField, Field, Input, Select } from '@projexlight/design-system';
 import { signupTenant, type SignupTenantResponse } from '../services/authApi';
 
 export interface SignupFormProps {
@@ -48,10 +48,10 @@ export default function SignupForm({ onSuccess }: SignupFormProps): JSX.Element 
 
   return (
     <form onSubmit={handleSubmit} aria-label="Sign up" className="flex max-w-md flex-col gap-3.5">
-      <Field label="Work email" htmlFor="signup-email">
-        <Input id="signup-email" type="email" required autoComplete="email"
-          value={email} onChange={(e) => setEmail(e.target.value)} />
-      </Field>
+      {/* Checked here for the same reason as /register: the verification link
+          that completes this signup is sent to this address. */}
+      <EmailField id="signup-email" label="Work email" required autoComplete="email"
+        value={email} onChange={setEmail} />
 
       <Field label="Password" htmlFor="signup-password" hint="Minimum 8 characters.">
         <Input id="signup-password" type="password" required minLength={8} autoComplete="new-password"

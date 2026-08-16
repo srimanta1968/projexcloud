@@ -1,4 +1,5 @@
 import { FastifyReply, FastifyRequest } from 'fastify';
+import { verifyAddress } from '@projexlight/sdk-deliverability';
 import {
   bindEmailProvider,
   listEmailProviders,
@@ -52,6 +53,34 @@ export async function createEmailProviderHandler(req: FastifyRequest, reply: Fas
   if (errors.length) {
     reply.code(400).send({ error: 'ValidationError', details: errors });
     return;
+  }
+
+  /*
+   * THE SENDER ADDRESS IS CHECKED TOO, and refused when its domain cannot
+   * receive mail.
+   *
+   * A from_address is not a recipient, so this is not about delivering to it —
+   * it is about everything that comes BACK. Bounces, complaint reports and
+   * replies are all addressed to the sender, and a from-domain with no mail
+   * exchanger silently discards every one of them. The tenant then has a
+   * provider that looks configured, mail that appears to send, and no way to
+   * learn that any of it bounced.
+   *
+   * Validated at the API rather than in each portal's form, so the two admin
+   * consoles and any direct API caller are held to the same rule.
+   */
+  const fromAddress = body.from_address ? String(body.from_address).trim() : '';
+  if (fromAddress) {
+    const check = await verifyAddress(fromAddress, { force: true });
+    if (check.verdict === 'undeliverable') {
+      reply.code(400).send({
+        error: 'ValidationError',
+        code: 'FROM_ADDRESS_UNDELIVERABLE',
+        field: 'from_address',
+        details: [`${check.reason} Bounces and replies to this sender would go nowhere.`],
+      });
+      return;
+    }
   }
   try {
     const binding = await bindEmailProvider({

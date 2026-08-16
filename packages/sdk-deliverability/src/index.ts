@@ -13,3 +13,32 @@ export * as replyService from './services/replyService';
 export { startReplySyncWorker, setImapFetcher, setReplyNotifier } from './services/replyService';
 export * as reputationService from './services/reputationService';
 export { isChannelPaused } from './services/reputationService';
+
+/**
+ * Address verification — "can this address receive mail at all", asked before a
+ * send rather than discovered from a bounce.
+ *
+ * Exported as named functions rather than only as a namespace because the
+ * gateway's pre-send guard and sdk-notification both call them directly, and a
+ * send path should not have to reach through a namespace to ask the one
+ * question that decides whether it may proceed.
+ */
+export * as addressVerification from './services/addressVerification';
+export {
+  verifyAddress,
+  verifyAddresses,
+  sendDecision,
+  checkBeforeSending,
+  describeConfiguration as describeAddressCheck,
+  validationMode,
+  clearVerificationCache,
+  maskAddress,
+} from './services/addressVerification';
+export type {
+  AddressVerification,
+  SendDecision,
+  Verdict,
+  VerificationCode,
+  StageResult,
+  ValidationMode,
+} from './services/addressVerification';

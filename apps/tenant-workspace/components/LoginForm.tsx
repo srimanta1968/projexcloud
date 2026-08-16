@@ -55,7 +55,16 @@ export default function LoginForm({ onSuccess }: LoginFormProps): JSX.Element {
       const result = await loginUser({ email, password });
       onSuccess?.(result);
     } catch (err) {
-      const e = err as { error?: string; status?: number };
+      const e = err as { error?: string; code?: string; status?: number };
+      /* The server enforces verification too when EMAIL_VERIFICATION_REQUIRED is
+         on. It answers 403 with a distinct code rather than 401 precisely so
+         this can offer "resend the link" instead of "check your password" — the
+         credentials were right. The client-side check above is kept because it
+         spares a round trip and still works when the server is not enforcing. */
+      if (e.status === 403 && e.code === 'EMAIL_NOT_VERIFIED') {
+        setNeedsVerify(true);
+        return;
+      }
       if (e.status === 401) setError('Incorrect email or password.');
       else setError(e.error ?? 'Sign-in failed. Please try again.');
     } finally {

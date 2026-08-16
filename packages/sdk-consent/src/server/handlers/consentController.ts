@@ -12,6 +12,7 @@ import {
   exportReceipts,
   grantConsent,
   listPurposes,
+  listTenantReceipts,
   registerPurpose,
   revokeConsent,
   type BulkCheckItem,
@@ -212,16 +213,84 @@ export async function checkConsentBulkHandler(req: FastifyRequest, reply: Fastif
 }
 
 /**
- * GET /api/consents/export — exports all receipts (optionally for one person)
- * as JSONL-friendly array.
+ * The tenant this credential speaks for, or a refusal.
+ *
+ * 403 rather than a tenant-less read, which is the rule the point-read route
+ * already follows: a receipt names a person and a purpose, so a query with no
+ * scope is not a broad answer, it is somebody else's answer.
+ */
+function tenantOf(req: FastifyRequest, reply: FastifyReply): string | null {
+  const tenant_id = req.auth?.tenant_id ?? '';
+  if (!tenant_id) {
+    reply.code(403).send({
+      success: false,
+      error: 'This token carries no tenant, so no receipt scope can be derived',
+    });
+    return null;
+  }
+  return tenant_id;
+}
+
+/**
+ * GET /api/consents/export?person_id= — the Article-15 export for ONE subject,
+ * within the caller's tenant.
+ *
+ * PERSON_ID IS REQUIRED NOW. It was optional, and omitting it exported every
+ * tenant's receipts; the shape of the mistake was that "export" with no argument
+ * had a meaning at all. A caller that wants its own register wants
+ * GET /api/consents/receipts, which is a different question and says so.
  */
 export async function exportReceiptsHandler(
   req: FastifyRequest<{ Querystring: { person_id?: string } }>,
   reply: FastifyReply,
 ): Promise<void> {
+  const tenant_id = tenantOf(req, reply);
+  if (!tenant_id) return;
+
+  const person_id = (req.query.person_id ?? '').trim();
+  if (!person_id) {
+    reply.code(400).send({
+      error: 'ValidationError',
+      details: ['person_id is required — this endpoint answers a subject access request'],
+    });
+    return;
+  }
+
   try {
-    const receipts = await exportReceipts(req.query.person_id);
+    const receipts = await exportReceipts(tenant_id, person_id);
     reply.code(200).send({ data: { receipts } });
+  } catch (err) {
+    req.log.error(err);
+    reply.code(500).send({ error: 'InternalError' });
+  }
+}
+
+/**
+ * GET /api/consents/receipts — the caller tenant's receipt register, paged.
+ *
+ * The list a controller needs to see what it holds, which until now did not
+ * exist and was approximated from the DSAR export above.
+ */
+export async function listReceiptsHandler(
+  req: FastifyRequest<{ Querystring: { limit?: string; offset?: string } }>,
+  reply: FastifyReply,
+): Promise<void> {
+  const tenant_id = tenantOf(req, reply);
+  if (!tenant_id) return;
+
+  const asInt = (raw: string | undefined): number | undefined => {
+    if (raw === undefined || raw.trim() === '') return undefined;
+    const parsed = Number(raw);
+    return Number.isFinite(parsed) ? parsed : undefined;
+  };
+
+  try {
+    const page = await listTenantReceipts({
+      tenant_id,
+      limit: asInt(req.query.limit),
+      offset: asInt(req.query.offset),
+    });
+    reply.code(200).send({ data: page });
   } catch (err) {
     req.log.error(err);
     reply.code(500).send({ error: 'InternalError' });
