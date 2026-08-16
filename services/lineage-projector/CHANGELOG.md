@@ -1,0 +1,9 @@
+# @projexlight/service-lineage-projector
+
+## 1.0.1
+
+### Patch Changes
+
+- Updated dependencies [343ffca]
+  - @projexlight/sdk-audit@0.2.0
+  - @projexlight/sdk-lineage@1.0.1
