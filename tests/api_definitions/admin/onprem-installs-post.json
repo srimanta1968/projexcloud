@@ -30,9 +30,22 @@
   "_generated": true,
   "testability": "auto",
   "fieldEnums": {
-    "k8s_distribution": ["vanilla", "openshift", "rancher", "tanzu"],
-    "air_gap_mode": ["strict", "diode-in", "diode-bidi"],
-    "billing_mode": ["internal-report-only", "flat-fee", "per-incident"]
+    "k8s_distribution": [
+      "vanilla",
+      "openshift",
+      "rancher",
+      "tanzu"
+    ],
+    "air_gap_mode": [
+      "strict",
+      "diode-in",
+      "diode-bidi"
+    ],
+    "billing_mode": [
+      "internal-report-only",
+      "flat-fee",
+      "per-incident"
+    ]
   },
   "captureResponse": {
     "onprem.register-install.response.data.install_id": "data.install_id",
@@ -42,7 +55,7 @@
     {
       "name": "Register an on-prem install (air-gapped cluster)",
       "payload": {
-        "customer_id": "{{var:customer_id}}",
+        "customer_id": "{{dynamic:customer_id}}",
         "cluster_name": "{{dynamic:name}}",
         "k8s_distribution": "openshift",
         "installed_version": "2026.3.0",
@@ -54,5 +67,6 @@
         "x-admin-ops-token": "{{var:ADMIN_OPS_TOKEN}}"
       }
     }
-  ]
+  ],
+  "idempotencyNote": "customer_id is generated per run, not taken from test-config. The table carries a composite UNIQUE on (customer_id, cluster_name); a fixed {{var:customer_id}} put all the uniqueness on cluster_name alone, and a repeat run answered 'duplicate key value violates unique constraint onprem_install_customer_cluster_uq'. This endpoint produces install_id, so that one collision blocked every dependent endpoint [MUST-47]."
 }

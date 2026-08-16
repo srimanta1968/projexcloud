@@ -32,6 +32,8 @@ enumerate real errors; do not guess.
 - [ ] `POST /api/connectors/lead-forms/:tenant_id/:platform` — tests/api_definitions/connectors/lead-form-inbound-post.json → missing: negative testCase for 2 errorCase(s) (MUST-64): 401/INVALID_SIGNATURE, 404/UNKNOWN_PLATFORM
 - [ ] `POST /api/connectors/lead-forms/:tenant_id/events/:event_id/reprocess` — tests/api_definitions/connectors/lead-form-reprocess-post.json → missing: negative testCase for 2 errorCase(s) (MUST-64): 404/LEAD_FORM_EVENT_NOT_FOUND, 401/Unauthorized
 - [ ] `POST /api/connectors/lead-forms/:tenant_id/website` — tests/api_definitions/connectors/website-chat-inbound-post.json → missing: negative testCase for 3 errorCase(s) (MUST-64): 401/INVALID_SIGNATURE, 202/UNKNOWN_EVENT_KIND, 202/PERMISSION_NOT_GRANTED
+- [ ] `GET /api/consents/export` — tests/api_definitions/consents/export-get.json → missing: negative testCase for 3 errorCase(s) (MUST-64): 403/Forbidden, 401/Unauthorized, 401/Unauthorized
+- [ ] `GET /api/consents/receipts` — tests/api_definitions/consents/receipts-get.json → missing: negative testCase for 2 errorCase(s) (MUST-64): 403/Forbidden, 401/Unauthorized
 - [ ] `INTERNAL_FUNCTION internal://contracts/event-type-registry/p6a` — tests/api_definitions/contracts/p6a-event-registry-post.json → missing: negative testCase for 2 errorCase(s) (MUST-64): 400/EVENT_TYPE_NAME_INVALID, 400/EVENT_TYPE_REQUIRED
 - [ ] `INTERNAL_FUNCTION internal://contracts/event-type-registry/p6b` — tests/api_definitions/contracts/p6b-event-registry-post.json → missing: negative testCase for 2 errorCase(s) (MUST-64): 400/EVENT_TYPE_NAME_INVALID, 400/EVENT_TYPE_REQUIRED
 - [ ] `POST /api/coverage/backup-designations` — tests/api_definitions/coverage/backup-designations-post.json → missing: negative testCase for 3 errorCase(s) (MUST-64): None/?, None/?, 422/VALIDATION_ERROR
@@ -87,6 +89,7 @@ enumerate real errors; do not guess.
 - [ ] `GET /api/policies` — tests/api_definitions/policies/index-get.json → missing: negative testCase for 2 errorCase(s) (MUST-64): 401/Unauthorized, 401/Unauthorized
 - [ ] `GET /api/relationships/roles` — tests/api_definitions/rebac/relationship-roles-get.json → missing: negative testCase for 2 errorCase(s) (MUST-64): 400/VALIDATION_ERROR, 401/Unauthorized
 - [ ] `POST /api/relationships/roles` — tests/api_definitions/rebac/relationship-roles-post.json → missing: negative testCase for 5 errorCase(s) (MUST-64): 400/EVIDENCE_REQUIRED, 400/VALIDATION_ERROR, 400/VALIDATION_ERROR, 409/ROLE_ALREADY_LIVE
+- [ ] `POST /api/resolver/match` — tests/api_definitions/resolver/match-post.json → missing: negative testCase for 1 errorCase(s) (MUST-64): 401/Unauthorized
 - [ ] `GET /api/role-templates` — tests/api_definitions/role-templates/index-get.json → missing: negative testCase for 2 errorCase(s) (MUST-64): 401/Unauthorized, 400/ValidationError
 - [ ] `GET /api/secrets` — tests/api_definitions/secrets/ref-get.json → missing: negative testCase for 4 errorCase(s) (MUST-64): 401/Unauthorized, 401/Unauthorized, 400/ValidationError, 404/NotFound
 - [ ] `GET /api/secrets/:ref` — tests/api_definitions/secrets/ref-path-get.json → missing: negative testCase for 2 errorCase(s) (MUST-64): 401/Unauthorized, 404/NotFound

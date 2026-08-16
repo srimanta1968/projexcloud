@@ -20,7 +20,8 @@
         "scim_bearer_token": "test-scim-bearer-token",
         "customer_kms_key_arn": "arn:aws:kms:us-east-1:111122223333:key/1234abcd-12ab-34cd-56ef-1234567890ab",
         "data_credits_capability_key": "validate.phone-smoke",
-        "lead_form_secret": "local-dev-lead-form-secret"
+        "lead_form_secret": "local-dev-lead-form-secret",
+        "notification_from_address": "welcome@projexlight.com"
       },
       "portals": {
         "workspace": {
@@ -375,6 +376,13 @@
       "sensitive": true,
       "reason": "HMAC secret for all 5 connector webhook signatures in computedHeaders (x-hub-signature-256, x-li-signature, x-tt-signature, x-goog-signature, x-projex-signature).",
       "action": "SET PER ENVIRONMENT. It is referenced ONLY from computedHeaders, never from an api_definition, so it was invisible to the incremental import and staging/production did not even list the name. Unset, the signature is skipped and the connector endpoints reject the request - which reads as a broken endpoint."
+    },
+    "notification_from_address": {
+      "type": "email",
+      "scope": "environment",
+      "source": "authored",
+      "reason": "Outbound SENDER address for the tenant email-provider binding (POST /api/notifications/providers, POST /admin/notifications/providers).",
+      "action": "Use an address on a domain you actually control and that has MX records. It is validated unconditionally by verifyAddress(..., {force:true}) in sdk-notification/src/server/handlers/emailProviderController.ts, so it is NOT relaxed by EMAIL_VALIDATION_MODE=soft. {{dynamic:email}} cannot be used here: the generator emits @example.com, a reserved domain that by standard never receives mail, so a sender there would silently discard every bounce and reply."
     }
   },
   "authRealms": {

@@ -72,6 +72,26 @@ services:
       KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
       KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
       KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      # ON A VOLUME, not in the container's writable layer.
+      #
+      # The image defaults log.dirs to /tmp/kafka-logs, which is ordinary
+      # container filesystem: it survives a stop/start of the SAME container and
+      # is destroyed the moment the container is replaced — an image bump,
+      # --force-recreate, or down+up. That takes __consumer_offsets with it.
+      #
+      # WHY THAT IS WORSE THAN IT SOUNDS. kafka-runtime subscribes with
+      # fromBeginning:false, so a consumer that finds no committed offset
+      # resumes at the TAIL. The meter-collector would silently skip every usage
+      # event in the topic and report nothing wrong — unbilled usage that looks
+      # exactly like a quiet period. Losing the broker's disk is not a
+      # dev-convenience problem, it is a metering-accuracy one.
+      KAFKA_LOG_DIRS: /var/lib/kafka/data
+    volumes:
+      # Named, so it is visible in `docker volume ls` and survives a recreate.
+      # The image also declares an ANONYMOUS volume at this path; naming it here
+      # replaces that, which is the point — an anonymous volume is the first
+      # casualty of any `docker volume prune`.
+      - kafka_data:/var/lib/kafka/data
     restart: unless-stopped
     networks:
       - app_network
@@ -142,6 +162,11 @@ volumes:
   redis_data:
     driver: local
   clickhouse_data:
+    driver: local
+  # Kafka log dirs — see the note on the kafka service. Holds the event topics
+  # AND __consumer_offsets, which is what makes a restart resumable rather than
+  # a silent gap in metering.
+  kafka_data:
     driver: local
 
 networks:

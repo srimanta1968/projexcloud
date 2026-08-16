@@ -1,0 +1,341 @@
+{
+  "version": 2,
+  "generatedBy": "dev-mcp/fixture_planner",
+  "routeCount": 688,
+  "summary": {
+    "fixtures": 11,
+    "byTier": {
+      "api": 3,
+      "sql": 8
+    },
+    "tierDowngradesAvailable": 4,
+    "justifiedSqlFixtures": 17
+  },
+  "entries": [
+    {
+      "fixture": "00_seed_fixtures.sql",
+      "declaredTier": "sql",
+      "scope": "tenant",
+      "tables": [
+        "federation_federation",
+        "geo_address",
+        "dispatch_queue",
+        "dispatch_task",
+        "routing_pool",
+        "taxonomy_version",
+        "taxonomy_extraction_schema",
+        "taxonomy_prompt_template",
+        "trace_trace",
+        "empi_candidate_link"
+      ],
+      "createRoutes": {
+        "federation_federation": null,
+        "geo_address": null,
+        "dispatch_queue": null,
+        "dispatch_task": null,
+        "routing_pool": null,
+        "taxonomy_version": null,
+        "taxonomy_extraction_schema": null,
+        "taxonomy_prompt_template": null,
+        "trace_trace": null,
+        "empi_candidate_link": null
+      }
+    },
+    {
+      "fixture": "assignment_seed_workload_pool.py",
+      "declaredTier": "api",
+      "scope": "tenant",
+      "tables": [],
+      "createRoutes": {}
+    },
+    {
+      "fixture": "data_credits_catalog.sql",
+      "declaredTier": "sql",
+      "scope": "tenant",
+      "tables": [
+        "data_credits_capability",
+        "data_credits_provider_binding"
+      ],
+      "createRoutes": {
+        "data_credits_capability": null,
+        "data_credits_provider_binding": null
+      }
+    },
+    {
+      "fixture": "empi_seed_candidate_link.sql",
+      "declaredTier": "sql",
+      "scope": "tenant",
+      "tables": [
+        "empi_candidate_link",
+        "empi_match_outcome",
+        "empi_merge_event",
+        "approval_route"
+      ],
+      "createRoutes": {
+        "empi_candidate_link": null,
+        "empi_match_outcome": null,
+        "empi_merge_event": null,
+        "approval_route": "POST /approvals/routes"
+      }
+    },
+    {
+      "fixture": "federation_seed_federation.sql",
+      "declaredTier": "sql",
+      "scope": "tenant",
+      "tables": [
+        "federation_federation"
+      ],
+      "createRoutes": {
+        "federation_federation": null
+      }
+    },
+    {
+      "fixture": "federation_seed_route.sql",
+      "declaredTier": "sql",
+      "scope": "tenant",
+      "tables": [
+        "federation_route"
+      ],
+      "createRoutes": {
+        "federation_route": null
+      }
+    },
+    {
+      "fixture": "media_seed_tenant_vault_key.sql",
+      "declaredTier": "sql",
+      "scope": "definition",
+      "tables": [
+        "vault_key"
+      ],
+      "createRoutes": {
+        "vault_key": "POST /vault/keys"
+      }
+    },
+    {
+      "fixture": "provision_lead_scoring_retire_fixture.py",
+      "declaredTier": "api",
+      "scope": "tenant",
+      "tables": [],
+      "createRoutes": {}
+    },
+    {
+      "fixture": "provision_media_and_ontology.py",
+      "declaredTier": "api",
+      "scope": "tenant",
+      "tables": [],
+      "createRoutes": {}
+    },
+    {
+      "fixture": "seed_webhook_dlq.sql",
+      "declaredTier": "sql",
+      "scope": "definition",
+      "tables": [
+        "webhook_endpoint",
+        "webhook_subscription",
+        "webhook_delivery",
+        "set"
+      ],
+      "createRoutes": {
+        "webhook_endpoint": "POST /webhooks/endpoints",
+        "webhook_subscription": null,
+        "webhook_delivery": "POST /notifications/webhooks/delivery/:p",
+        "set": null
+      }
+    },
+    {
+      "fixture": "taxonomy_seed_prompt_template.sql",
+      "declaredTier": "sql",
+      "scope": "tenant",
+      "tables": [
+        "taxonomy_version",
+        "taxonomy_prompt_template"
+      ],
+      "createRoutes": {
+        "taxonomy_version": null,
+        "taxonomy_prompt_template": null
+      }
+    }
+  ],
+  "findings": [
+    {
+      "kind": "tier-downgrade-available",
+      "severity": "high",
+      "fixture": "empi_seed_candidate_link.sql",
+      "resource": "approval_route",
+      "table": "approval_route",
+      "currentTier": "sql",
+      "recommendedTier": "api",
+      "createRoute": "POST /approvals/routes",
+      "detail": "'empi_seed_candidate_link.sql' seeds 'approval_route' with SQL, but POST /approvals/routes creates it. A T3 fixture is a defect when a create route exists [MUST-49] \u2014 and it does not run in the API-only Test MCP, so every definition depending on it silently skips there while passing here."
+    },
+    {
+      "kind": "tier-downgrade-available",
+      "severity": "high",
+      "fixture": "media_seed_tenant_vault_key.sql",
+      "resource": "vault_key",
+      "table": "vault_key",
+      "currentTier": "sql",
+      "recommendedTier": "api",
+      "createRoute": "POST /vault/keys",
+      "detail": "'media_seed_tenant_vault_key.sql' seeds 'vault_key' with SQL, but POST /vault/keys creates it. A T3 fixture is a defect when a create route exists [MUST-49] \u2014 and it does not run in the API-only Test MCP, so every definition depending on it silently skips there while passing here."
+    },
+    {
+      "kind": "tier-downgrade-available",
+      "severity": "high",
+      "fixture": "seed_webhook_dlq.sql",
+      "resource": "webhook_endpoint",
+      "table": "webhook_endpoint",
+      "currentTier": "sql",
+      "recommendedTier": "api",
+      "createRoute": "POST /webhooks/endpoints",
+      "detail": "'seed_webhook_dlq.sql' seeds 'webhook_endpoint' with SQL, but POST /webhooks/endpoints creates it. A T3 fixture is a defect when a create route exists [MUST-49] \u2014 and it does not run in the API-only Test MCP, so every definition depending on it silently skips there while passing here."
+    },
+    {
+      "kind": "tier-downgrade-available",
+      "severity": "high",
+      "fixture": "seed_webhook_dlq.sql",
+      "resource": "webhook_delivery",
+      "table": "webhook_delivery",
+      "currentTier": "sql",
+      "recommendedTier": "api",
+      "createRoute": "POST /notifications/webhooks/delivery/:p",
+      "detail": "'seed_webhook_dlq.sql' seeds 'webhook_delivery' with SQL, but POST /notifications/webhooks/delivery/:p creates it. A T3 fixture is a defect when a create route exists [MUST-49] \u2014 and it does not run in the API-only Test MCP, so every definition depending on it silently skips there while passing here."
+    },
+    {
+      "kind": "no-creating-route",
+      "severity": "info",
+      "fixture": "00_seed_fixtures.sql",
+      "resource": "federation_federation",
+      "table": "federation_federation",
+      "detail": "No scanned route creates 'federation_federation', so the T3 SQL seed in '00_seed_fixtures.sql' is legitimate [MUST-49]. Record why on the fixture itself [MUST-77]. If no operator can create it either, dependent tests must SKIP naming this reason rather than assert a fabricated identifier \u2014 and they will not run at all in the API-only Test MCP."
+    },
+    {
+      "kind": "no-creating-route",
+      "severity": "info",
+      "fixture": "00_seed_fixtures.sql",
+      "resource": "geo_address",
+      "table": "geo_address",
+      "detail": "No scanned route creates 'geo_address', so the T3 SQL seed in '00_seed_fixtures.sql' is legitimate [MUST-49]. Record why on the fixture itself [MUST-77]. If no operator can create it either, dependent tests must SKIP naming this reason rather than assert a fabricated identifier \u2014 and they will not run at all in the API-only Test MCP."
+    },
+    {
+      "kind": "no-creating-route",
+      "severity": "info",
+      "fixture": "00_seed_fixtures.sql",
+      "resource": "dispatch_queue",
+      "table": "dispatch_queue",
+      "detail": "No scanned route creates 'dispatch_queue', so the T3 SQL seed in '00_seed_fixtures.sql' is legitimate [MUST-49]. Record why on the fixture itself [MUST-77]. If no operator can create it either, dependent tests must SKIP naming this reason rather than assert a fabricated identifier \u2014 and they will not run at all in the API-only Test MCP."
+    },
+    {
+      "kind": "no-creating-route",
+      "severity": "info",
+      "fixture": "00_seed_fixtures.sql",
+      "resource": "dispatch_task",
+      "table": "dispatch_task",
+      "detail": "No scanned route creates 'dispatch_task', so the T3 SQL seed in '00_seed_fixtures.sql' is legitimate [MUST-49]. Record why on the fixture itself [MUST-77]. If no operator can create it either, dependent tests must SKIP naming this reason rather than assert a fabricated identifier \u2014 and they will not run at all in the API-only Test MCP."
+    },
+    {
+      "kind": "no-creating-route",
+      "severity": "info",
+      "fixture": "00_seed_fixtures.sql",
+      "resource": "routing_pool",
+      "table": "routing_pool",
+      "detail": "No scanned route creates 'routing_pool', so the T3 SQL seed in '00_seed_fixtures.sql' is legitimate [MUST-49]. Record why on the fixture itself [MUST-77]. If no operator can create it either, dependent tests must SKIP naming this reason rather than assert a fabricated identifier \u2014 and they will not run at all in the API-only Test MCP."
+    },
+    {
+      "kind": "no-creating-route",
+      "severity": "info",
+      "fixture": "00_seed_fixtures.sql",
+      "resource": "taxonomy_version",
+      "table": "taxonomy_version",
+      "detail": "No scanned route creates 'taxonomy_version', so the T3 SQL seed in '00_seed_fixtures.sql' is legitimate [MUST-49]. Record why on the fixture itself [MUST-77]. If no operator can create it either, dependent tests must SKIP naming this reason rather than assert a fabricated identifier \u2014 and they will not run at all in the API-only Test MCP."
+    },
+    {
+      "kind": "no-creating-route",
+      "severity": "info",
+      "fixture": "00_seed_fixtures.sql",
+      "resource": "taxonomy_extraction_schema",
+      "table": "taxonomy_extraction_schema",
+      "detail": "No scanned route creates 'taxonomy_extraction_schema', so the T3 SQL seed in '00_seed_fixtures.sql' is legitimate [MUST-49]. Record why on the fixture itself [MUST-77]. If no operator can create it either, dependent tests must SKIP naming this reason rather than assert a fabricated identifier \u2014 and they will not run at all in the API-only Test MCP."
+    },
+    {
+      "kind": "no-creating-route",
+      "severity": "info",
+      "fixture": "00_seed_fixtures.sql",
+      "resource": "taxonomy_prompt_template",
+      "table": "taxonomy_prompt_template",
+      "detail": "No scanned route creates 'taxonomy_prompt_template', so the T3 SQL seed in '00_seed_fixtures.sql' is legitimate [MUST-49]. Record why on the fixture itself [MUST-77]. If no operator can create it either, dependent tests must SKIP naming this reason rather than assert a fabricated identifier \u2014 and they will not run at all in the API-only Test MCP."
+    },
+    {
+      "kind": "no-creating-route",
+      "severity": "info",
+      "fixture": "00_seed_fixtures.sql",
+      "resource": "trace_trace",
+      "table": "trace_trace",
+      "detail": "No scanned route creates 'trace_trace', so the T3 SQL seed in '00_seed_fixtures.sql' is legitimate [MUST-49]. Record why on the fixture itself [MUST-77]. If no operator can create it either, dependent tests must SKIP naming this reason rather than assert a fabricated identifier \u2014 and they will not run at all in the API-only Test MCP."
+    },
+    {
+      "kind": "no-creating-route",
+      "severity": "info",
+      "fixture": "00_seed_fixtures.sql",
+      "resource": "empi_candidate_link",
+      "table": "empi_candidate_link",
+      "detail": "No scanned route creates 'empi_candidate_link', so the T3 SQL seed in '00_seed_fixtures.sql' is legitimate [MUST-49]. Record why on the fixture itself [MUST-77]. If no operator can create it either, dependent tests must SKIP naming this reason rather than assert a fabricated identifier \u2014 and they will not run at all in the API-only Test MCP."
+    },
+    {
+      "kind": "no-creating-route",
+      "severity": "info",
+      "fixture": "data_credits_catalog.sql",
+      "resource": "data_credits_capability",
+      "table": "data_credits_capability",
+      "detail": "No scanned route creates 'data_credits_capability', so the T3 SQL seed in 'data_credits_catalog.sql' is legitimate [MUST-49]. Record why on the fixture itself [MUST-77]. If no operator can create it either, dependent tests must SKIP naming this reason rather than assert a fabricated identifier \u2014 and they will not run at all in the API-only Test MCP."
+    },
+    {
+      "kind": "no-creating-route",
+      "severity": "info",
+      "fixture": "data_credits_catalog.sql",
+      "resource": "data_credits_provider_binding",
+      "table": "data_credits_provider_binding",
+      "detail": "No scanned route creates 'data_credits_provider_binding', so the T3 SQL seed in 'data_credits_catalog.sql' is legitimate [MUST-49]. Record why on the fixture itself [MUST-77]. If no operator can create it either, dependent tests must SKIP naming this reason rather than assert a fabricated identifier \u2014 and they will not run at all in the API-only Test MCP."
+    },
+    {
+      "kind": "no-creating-route",
+      "severity": "info",
+      "fixture": "empi_seed_candidate_link.sql",
+      "resource": "empi_match_outcome",
+      "table": "empi_match_outcome",
+      "detail": "No scanned route creates 'empi_match_outcome', so the T3 SQL seed in 'empi_seed_candidate_link.sql' is legitimate [MUST-49]. Record why on the fixture itself [MUST-77]. If no operator can create it either, dependent tests must SKIP naming this reason rather than assert a fabricated identifier \u2014 and they will not run at all in the API-only Test MCP."
+    },
+    {
+      "kind": "no-creating-route",
+      "severity": "info",
+      "fixture": "empi_seed_candidate_link.sql",
+      "resource": "empi_merge_event",
+      "table": "empi_merge_event",
+      "detail": "No scanned route creates 'empi_merge_event', so the T3 SQL seed in 'empi_seed_candidate_link.sql' is legitimate [MUST-49]. Record why on the fixture itself [MUST-77]. If no operator can create it either, dependent tests must SKIP naming this reason rather than assert a fabricated identifier \u2014 and they will not run at all in the API-only Test MCP."
+    },
+    {
+      "kind": "no-creating-route",
+      "severity": "info",
+      "fixture": "federation_seed_route.sql",
+      "resource": "federation_route",
+      "table": "federation_route",
+      "detail": "No scanned route creates 'federation_route', so the T3 SQL seed in 'federation_seed_route.sql' is legitimate [MUST-49]. Record why on the fixture itself [MUST-77]. If no operator can create it either, dependent tests must SKIP naming this reason rather than assert a fabricated identifier \u2014 and they will not run at all in the API-only Test MCP."
+    },
+    {
+      "kind": "no-creating-route",
+      "severity": "info",
+      "fixture": "seed_webhook_dlq.sql",
+      "resource": "webhook_subscription",
+      "table": "webhook_subscription",
+      "detail": "No scanned route creates 'webhook_subscription', so the T3 SQL seed in 'seed_webhook_dlq.sql' is legitimate [MUST-49]. Record why on the fixture itself [MUST-77]. If no operator can create it either, dependent tests must SKIP naming this reason rather than assert a fabricated identifier \u2014 and they will not run at all in the API-only Test MCP."
+    },
+    {
+      "kind": "no-creating-route",
+      "severity": "info",
+      "fixture": "seed_webhook_dlq.sql",
+      "resource": "set",
+      "table": "set",
+      "detail": "No scanned route creates 'set', so the T3 SQL seed in 'seed_webhook_dlq.sql' is legitimate [MUST-49]. Record why on the fixture itself [MUST-77]. If no operator can create it either, dependent tests must SKIP naming this reason rather than assert a fabricated identifier \u2014 and they will not run at all in the API-only Test MCP."
+    }
+  ]
+}

@@ -148,5 +148,7 @@
       "message": "InternalError",
       "when": "Invoice generation throws for any other reason (usage aggregation failure, ClickHouse/Postgres unreachable)"
     }
-  ]
+  ],
+  "timeoutMs": 45000,
+  "timeoutReason": "Invoice generation aggregates metered usage for the period before it can respond, so it is legitimately slower than the 10s default and has timed out intermittently since 2026-08-05 while passing on faster runs. It is also the producer of invoice_id, so its timeout starves every dependent definition. 45s is a stated budget, not a mute: exceeding it still fails the test."
 }
