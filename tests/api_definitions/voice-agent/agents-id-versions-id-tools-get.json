@@ -1,0 +1,69 @@
+{
+  "name": "GET /api/voice-agent/agents/:agent_id/versions/:version_id/tools - A version's effective tools",
+  "endpoint": "/api/voice-agent/agents/:agent_id/versions/:version_id/tools",
+  "sdk": "sdk-voice-agent",
+  "sourceFile": "packages/sdk-voice-agent/src/server/toolRoutes.ts",
+  "method": "GET",
+  "requiresAuth": true,
+  "expectedStatus": 200,
+  "taskId": "1de111bf-c80a-4a82-bb22-9f90a9064670",
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "featureId": "d2be1741-684c-4302-a7c3-ce1460f519cf",
+  "epicId": "9c7a8dc4-3db7-4cd2-9121-7649f143525c",
+  "priority": 94,
+  "testability": "auto",
+  "coversCriterion": [
+    "d2be1741-684c-4302-a7c3-ce1460f519cf#AC3"
+  ],
+  "description": "Returns the tools a NEW call on this version is offered: the version's tool_ids that are still enabled (d2be1741-684c-4302-a7c3-ce1460f519cf#AC3 — a disabled tool is not offered to the agent on new calls). The voice runtime's call bootstrap reads the same set, so this is the preview of what the agent can call.",
+  "dependsOn": [
+    "POST /api/auth/signup-tenant",
+    "POST /api/ai-gateway/tenant-credentials",
+    "POST /api/voice-agent/stack-profiles",
+    "POST /api/voice-agent/agents",
+    "POST /api/voice-agent/agents/:agent_id/versions"
+  ],
+  "testCases": [
+    {
+      "name": "List the version's effective tools",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "pathParams": {
+        "agent_id": "{{cache:voice-agent.agents.create.response.data.agent.agent_id}}",
+        "version_id": "{{cache:voice-agent.agents.versions.create.response.data.version.version_id}}"
+      },
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "data": {
+          "tools": []
+        }
+      }
+    },
+    {
+      "name": "Unknown version is 404",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "pathParams": {
+        "agent_id": "{{cache:voice-agent.agents.create.response.data.agent.agent_id}}",
+        "version_id": "{{dynamic:uuid}}"
+      },
+      "expectedStatus": 404
+    }
+  ],
+  "errorCases": [
+    {
+      "status": 404,
+      "code": "NotFound",
+      "message": "agent version not found",
+      "when": "no such version for the agent and tenant"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "no Authorization header"
+    }
+  ]
+}

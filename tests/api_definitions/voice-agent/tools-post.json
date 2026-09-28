@@ -1,0 +1,197 @@
+{
+  "name": "POST /api/voice-agent/tools - Register an app tool",
+  "endpoint": "/api/voice-agent/tools",
+  "sdk": "sdk-voice-agent",
+  "sourceFile": "packages/sdk-voice-agent/src/server/toolRoutes.ts",
+  "method": "POST",
+  "requiresAuth": true,
+  "expectedStatus": 201,
+  "taskId": "1de111bf-c80a-4a82-bb22-9f90a9064670",
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "featureId": "d2be1741-684c-4302-a7c3-ce1460f519cf",
+  "epicId": "9c7a8dc4-3db7-4cd2-9121-7649f143525c",
+  "priority": 90,
+  "testability": "auto",
+  "coversCriterion": [
+    "d2be1741-684c-4302-a7c3-ce1460f519cf#AC1",
+    "d2be1741-684c-4302-a7c3-ce1460f519cf#AC2"
+  ],
+  "description": "Registers an HTTPS endpoint a consumer app exposes for the agent to call mid-conversation (d2be1741-684c-4302-a7c3-ce1460f519cf#AC1 — a consumer app can register, list, update and disable an HTTPS tool with a JSON schema; d2be1741-684c-4302-a7c3-ce1460f519cf#AC2 — the signing secret is stored only as a reference). name is snake_case and unique per (tenant, app); json_schema must be a JSON-Schema object with typed properties (required[] must name existing properties); url must be https:// without embedded credentials; signing_secret_ref must be an sdk-secrets reference secret://{app|pool|tenant}/{id} — a raw secret is rejected; timeout_ms 100-10000 (default 1500).",
+  "dependsOn": [
+    "POST /api/auth/signup-tenant"
+  ],
+  "testCases": [
+    {
+      "name": "Register a qualify_lead tool for the tenant app",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "payload": {
+        "name": "qualify_lead_{{dynamic:slug}}",
+        "description": "Score and qualify a lead from the call",
+        "json_schema": {
+          "type": "object",
+          "properties": {
+            "lead_id": {
+              "type": "string"
+            },
+            "budget": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "timeline": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "lead_id"
+          ]
+        },
+        "url": "https://leadflow.example.com/api/voice-tools/qualify_lead",
+        "signing_secret_ref": "secret://app/leadflow-voice-tools",
+        "timeout_ms": 1500,
+        "idempotent": true,
+        "app_id": "{{cache:auth.signup-tenant.response.data.app_id}}"
+      },
+      "expectedStatus": 201,
+      "expectedResponse": {
+        "data": {
+          "tool": {
+            "tool_id": "string",
+            "name": "string",
+            "enabled": "boolean",
+            "signing_secret_ref": "string"
+          }
+        }
+      }
+    },
+    {
+      "name": "Reject a raw secret instead of a reference",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "payload": {
+        "name": "raw_secret_tool_{{dynamic:slug}}",
+        "json_schema": {
+          "type": "object",
+          "properties": {
+            "lead_id": {
+              "type": "string"
+            },
+            "budget": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "timeline": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "lead_id"
+          ]
+        },
+        "url": "https://leadflow.example.com/x",
+        "signing_secret_ref": "{{static:whsec_live_abc123}}"
+      },
+      "expectedStatus": 400
+    },
+    {
+      "name": "Reject a non-https url",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "payload": {
+        "name": "plain_http_tool_{{dynamic:slug}}",
+        "json_schema": {
+          "type": "object",
+          "properties": {
+            "lead_id": {
+              "type": "string"
+            },
+            "budget": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "timeline": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "lead_id"
+          ]
+        },
+        "url": "{{static:http://leadflow.example.com/x}}",
+        "signing_secret_ref": "secret://app/leadflow-voice-tools"
+      },
+      "expectedStatus": 400
+    },
+    {
+      "name": "Reject a schema that is not an object",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "payload": {
+        "name": "bad_schema_tool_{{dynamic:slug}}",
+        "json_schema": {
+          "type": "string"
+        },
+        "url": "https://leadflow.example.com/x",
+        "signing_secret_ref": "secret://app/leadflow-voice-tools"
+      },
+      "expectedStatus": 400
+    }
+  ],
+  "captureResponse": {
+    "voice-agent.tools.create.response.data.tool.tool_id": "data.tool.tool_id"
+  },
+  "errorCases": [
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "name must be snake_case: a lowercase letter then letters, digits or _ (2-64 chars)",
+      "when": "name missing or not snake_case"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "json_schema.type must be \"object\" | json_schema.properties.<key> needs a valid JSON Schema \"type\" | json_schema.required must list property names that exist in properties",
+      "when": "schema not a typed object schema"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "url must be an https:// URL | url must not embed credentials",
+      "when": "url not https or carries user:pass"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "signing_secret_ref must be an sdk-secrets reference (secret://{app|pool|tenant}/{id}), never the secret itself",
+      "when": "value is not a secret:// reference"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "timeout_ms must be an integer between 100 and 10000",
+      "when": "timeout out of range"
+    },
+    {
+      "status": 409,
+      "code": "Conflict",
+      "message": "a tool with this name is already registered for this app",
+      "when": "same (tenant, app, name) exists"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "no Authorization header"
+    }
+  ]
+}

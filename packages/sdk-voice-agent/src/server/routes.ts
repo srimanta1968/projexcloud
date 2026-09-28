@@ -12,6 +12,7 @@ import {
 } from '../services/stackProfileService';
 import { resolveTenant } from './tenantScope';
 import { registerAgentRoutes } from './agentRoutes';
+import { registerToolRoutes } from './toolRoutes';
 import { sendError } from './sendError';
 
 /**
@@ -25,6 +26,7 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
   });
 
   registerAgentRoutes(app);
+  registerToolRoutes(app);
 
   // TK-4469 — stack profiles.
   app.post('/api/voice-agent/stack-profiles', { preHandler: requireAuth }, async (req, reply) => {

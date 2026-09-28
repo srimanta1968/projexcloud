@@ -1,0 +1,125 @@
+{
+  "name": "PATCH /api/voice-agent/tools/:tool_id - Update or disable an app tool",
+  "endpoint": "/api/voice-agent/tools/:tool_id",
+  "sdk": "sdk-voice-agent",
+  "sourceFile": "packages/sdk-voice-agent/src/server/toolRoutes.ts",
+  "method": "PATCH",
+  "requiresAuth": true,
+  "expectedStatus": 200,
+  "taskId": "1de111bf-c80a-4a82-bb22-9f90a9064670",
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "featureId": "d2be1741-684c-4302-a7c3-ce1460f519cf",
+  "epicId": "9c7a8dc4-3db7-4cd2-9121-7649f143525c",
+  "priority": 93,
+  "testability": "auto",
+  "coversCriterion": [
+    "d2be1741-684c-4302-a7c3-ce1460f519cf#AC1",
+    "d2be1741-684c-4302-a7c3-ce1460f519cf#AC3"
+  ],
+  "description": "Updates a tool's schema, url, secret reference, timeout, idempotency or description, and disables/enables it (d2be1741-684c-4302-a7c3-ce1460f519cf#AC1). Disabling withdraws the tool from every version's effective tool set, so new calls stop offering it without publishing a new version (d2be1741-684c-4302-a7c3-ce1460f519cf#AC3). name and app_id are immutable (400).",
+  "dependsOn": [
+    "POST /api/auth/signup-tenant",
+    "POST /api/voice-agent/tools",
+    "GET /api/voice-agent/tools/:tool_id"
+  ],
+  "testCases": [
+    {
+      "name": "Disable the tool and widen its timeout",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "pathParams": {
+        "tool_id": "{{cache:voice-agent.tools.create.response.data.tool.tool_id}}"
+      },
+      "payload": {
+        "enabled": false,
+        "timeout_ms": 2500,
+        "description": "Qualify a lead (temporarily withdrawn)",
+        "json_schema": {
+          "type": "object",
+          "properties": {
+            "lead_id": {
+              "type": "string"
+            },
+            "budget": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "timeline": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "lead_id"
+          ]
+        },
+        "url": "https://leadflow.example.com/api/voice-tools/qualify_lead",
+        "idempotent": true
+      },
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "data": {
+          "tool": {
+            "tool_id": "string",
+            "enabled": "boolean",
+            "timeout_ms": "number"
+          }
+        }
+      }
+    },
+    {
+      "name": "Reject a rename",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "pathParams": {
+        "tool_id": "{{cache:voice-agent.tools.create.response.data.tool.tool_id}}"
+      },
+      "payload": {
+        "name": "{{static:other_name}}"
+      },
+      "expectedStatus": 400
+    },
+    {
+      "name": "Reject a raw secret on update",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "pathParams": {
+        "tool_id": "{{cache:voice-agent.tools.create.response.data.tool.tool_id}}"
+      },
+      "payload": {
+        "signing_secret_ref": "{{static:plain-secret-value}}"
+      },
+      "expectedStatus": 400
+    }
+  ],
+  "errorCases": [
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "name and app_id cannot be changed; register a new tool",
+      "when": "name or app_id in the body"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "signing_secret_ref must be an sdk-secrets reference (secret://{app|pool|tenant}/{id}), never the secret itself",
+      "when": "raw secret"
+    },
+    {
+      "status": 404,
+      "code": "NotFound",
+      "message": "tool not found",
+      "when": "no such tool for the authenticated tenant"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "no Authorization header"
+    }
+  ]
+}

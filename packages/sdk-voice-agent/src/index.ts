@@ -68,5 +68,8 @@ export {
 } from './services/numberService';
 export type { Carrier, Fallback, NumberBinding, BindNumberInput, InboundRoute, KillSwitchState } from './services/numberService';
 
+export { registerTool, listTools, getTool, updateTool, effectiveTools } from './services/toolService';
+export type { AppTool, RegisterToolInput, UpdateToolInput } from './services/toolService';
+
 // HTTP surface — mounted by the api-gateway.
 export * as server from './server';

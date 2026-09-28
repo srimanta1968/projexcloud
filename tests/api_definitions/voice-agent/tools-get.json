@@ -1,0 +1,73 @@
+{
+  "name": "GET /api/voice-agent/tools - List the tenant's app tools",
+  "endpoint": "/api/voice-agent/tools",
+  "sdk": "sdk-voice-agent",
+  "sourceFile": "packages/sdk-voice-agent/src/server/toolRoutes.ts",
+  "method": "GET",
+  "requiresAuth": true,
+  "expectedStatus": 200,
+  "taskId": "1de111bf-c80a-4a82-bb22-9f90a9064670",
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "featureId": "d2be1741-684c-4302-a7c3-ce1460f519cf",
+  "epicId": "9c7a8dc4-3db7-4cd2-9121-7649f143525c",
+  "priority": 91,
+  "testability": "auto",
+  "coversCriterion": [
+    "d2be1741-684c-4302-a7c3-ce1460f519cf#AC1"
+  ],
+  "description": "Lists the tenant's tools ordered by name, filtered by app_id and/or enabled (true|false), paged by limit (1-100) and offset (d2be1741-684c-4302-a7c3-ce1460f519cf#AC1).",
+  "dependsOn": [
+    "POST /api/auth/signup-tenant",
+    "POST /api/voice-agent/tools"
+  ],
+  "testCases": [
+    {
+      "name": "List the tenant app's enabled tools",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "queryParams": {
+        "app_id": "{{cache:auth.signup-tenant.response.data.app_id}}",
+        "enabled": "{{static:true}}"
+      },
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "data": {
+          "tools": [
+            {
+              "tool_id": "string",
+              "name": "string",
+              "app_id": "string"
+            }
+          ],
+          "limit": "number",
+          "offset": "number"
+        }
+      }
+    },
+    {
+      "name": "Reject an enabled filter that is not true/false",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "queryParams": {
+        "enabled": "{{static:maybe}}"
+      },
+      "expectedStatus": 400
+    }
+  ],
+  "errorCases": [
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "enabled must be true or false",
+      "when": "enabled filter invalid"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "no Authorization header"
+    }
+  ]
+}

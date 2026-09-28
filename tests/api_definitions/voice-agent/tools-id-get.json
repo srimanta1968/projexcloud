@@ -1,0 +1,69 @@
+{
+  "name": "GET /api/voice-agent/tools/:tool_id - Get one app tool",
+  "endpoint": "/api/voice-agent/tools/:tool_id",
+  "sdk": "sdk-voice-agent",
+  "sourceFile": "packages/sdk-voice-agent/src/server/toolRoutes.ts",
+  "method": "GET",
+  "requiresAuth": true,
+  "expectedStatus": 200,
+  "taskId": "1de111bf-c80a-4a82-bb22-9f90a9064670",
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "featureId": "d2be1741-684c-4302-a7c3-ce1460f519cf",
+  "epicId": "9c7a8dc4-3db7-4cd2-9121-7649f143525c",
+  "priority": 92,
+  "testability": "auto",
+  "coversCriterion": [
+    "d2be1741-684c-4302-a7c3-ce1460f519cf#AC1",
+    "d2be1741-684c-4302-a7c3-ce1460f519cf#AC2"
+  ],
+  "description": "Returns one tool including its signing_secret_ref — the reference, never a secret value (d2be1741-684c-4302-a7c3-ce1460f519cf#AC2). Another tenant's tool reads as 404 (d2be1741-684c-4302-a7c3-ce1460f519cf#AC1).",
+  "dependsOn": [
+    "POST /api/auth/signup-tenant",
+    "POST /api/voice-agent/tools"
+  ],
+  "testCases": [
+    {
+      "name": "Get the tool just registered",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "pathParams": {
+        "tool_id": "{{cache:voice-agent.tools.create.response.data.tool.tool_id}}"
+      },
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "data": {
+          "tool": {
+            "tool_id": "string",
+            "json_schema": {},
+            "signing_secret_ref": "string"
+          }
+        }
+      }
+    },
+    {
+      "name": "Unknown tool is 404",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "pathParams": {
+        "tool_id": "{{dynamic:uuid}}"
+      },
+      "expectedStatus": 404
+    }
+  ],
+  "errorCases": [
+    {
+      "status": 404,
+      "code": "NotFound",
+      "message": "tool not found",
+      "when": "no such tool for the authenticated tenant"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "no Authorization header"
+    }
+  ]
+}

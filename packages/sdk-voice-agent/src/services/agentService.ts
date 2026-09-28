@@ -350,12 +350,17 @@ export async function createVersion(tenantId: string, agentId: string, input: Cr
     throw validationError('stack_profile_id does not reference an active stack profile of this tenant');
   }
   if (toolIds.length > 0) {
-    const found = await dataService.rows<{ tool_id: string }>(
-      `SELECT tool_id FROM voice_agent.app_tool WHERE tenant_id = $1 AND enabled AND tool_id = ANY($2::uuid[])`,
+    const found = await dataService.rows<{ tool_id: string; name: string }>(
+      `SELECT tool_id, name FROM voice_agent.app_tool WHERE tenant_id = $1 AND enabled AND tool_id = ANY($2::uuid[])`,
       [tenantId, toolIds],
     );
     const missing = toolIds.filter((id) => !found.some((t) => t.tool_id === id));
     if (missing.length > 0) throw validationError(`tool_ids are not enabled tools of this tenant: ${missing.join(', ')}`);
+    // The LLM calls a tool by NAME, so one agent must never be offered two tools with the
+    // same name (two apps may each register e.g. book_meeting).
+    const names = found.map((t) => t.name);
+    const duplicate = names.find((n, i) => names.indexOf(n) !== i);
+    if (duplicate) throw validationError(`tool names must be unique per agent; ${duplicate} appears more than once`);
   }
 
   for (let attempt = 1; ; attempt++) {
