@@ -1,0 +1,133 @@
+{
+  "name": "POST /api/voice-agent/agents/:agent_id/numbers - Bind an inbound number to an agent",
+  "endpoint": "/api/voice-agent/agents/:agent_id/numbers",
+  "sdk": "sdk-voice-agent",
+  "sourceFile": "packages/sdk-voice-agent/src/server/agentRoutes.ts",
+  "method": "POST",
+  "requiresAuth": true,
+  "expectedStatus": 201,
+  "taskId": "0c2c7c02-2f9d-4d2a-bae1-152714b460ca",
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "featureId": "8076dcb4-e91f-46a5-9825-f6bf2e2b2a47",
+  "epicId": "9c7a8dc4-3db7-4cd2-9121-7649f143525c",
+  "priority": 79,
+  "testability": "auto",
+  "coversCriterion": [
+    "8076dcb4-e91f-46a5-9825-f6bf2e2b2a47#AC4"
+  ],
+  "description": "Binds an E.164 number to an agent with the fallback used when the agent is unavailable (8076dcb4-e91f-46a5-9825-f6bf2e2b2a47#AC4 — a bound number routes inbound calls to its agent and uses the configured fallback when the agent is unavailable). carrier is twilio, telnyx or sip; fallback is voicemail (default), forward (needs fallback_target as E.164) or ivr. A number can be ACTIVE on only one binding platform-wide, so binding a number another agent (any tenant) holds is 409 Conflict.",
+  "dependsOn": [
+    "POST /api/auth/signup-tenant",
+    "POST /api/voice-agent/agents"
+  ],
+  "fieldEnums": {
+    "carrier": [
+      "twilio",
+      "telnyx",
+      "sip"
+    ],
+    "fallback": [
+      "voicemail",
+      "forward",
+      "ivr"
+    ]
+  },
+  "testCases": [
+    {
+      "name": "Bind a fresh number with a forward fallback",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "pathParams": {
+        "agent_id": "{{cache:voice-agent.agents.create.response.data.agent.agent_id}}"
+      },
+      "payload": {
+        "phone_number": "{{dynamic:phone}}",
+        "carrier": "{{static:twilio}}",
+        "fallback": "{{static:forward}}",
+        "fallback_target": "{{static:+14155550199}}"
+      },
+      "expectedStatus": 201,
+      "expectedResponse": {
+        "data": {
+          "binding": {
+            "binding_id": "string",
+            "phone_number": "string",
+            "active": "boolean"
+          }
+        }
+      }
+    },
+    {
+      "name": "Reject a number that is not E.164",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "pathParams": {
+        "agent_id": "{{cache:voice-agent.agents.create.response.data.agent.agent_id}}"
+      },
+      "payload": {
+        "phone_number": "{{static:4155550123}}",
+        "carrier": "{{static:twilio}}"
+      },
+      "expectedStatus": 400
+    },
+    {
+      "name": "Reject forward without a target",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "pathParams": {
+        "agent_id": "{{cache:voice-agent.agents.create.response.data.agent.agent_id}}"
+      },
+      "payload": {
+        "phone_number": "{{dynamic:phone}}",
+        "carrier": "{{static:twilio}}",
+        "fallback": "{{static:forward}}"
+      },
+      "expectedStatus": 400
+    }
+  ],
+  "captureResponse": {
+    "voice-agent.agents.numbers.create.response.data.binding.binding_id": "data.binding.binding_id",
+    "voice-agent.agents.numbers.create.response.data.binding.phone_number": "data.binding.phone_number"
+  },
+  "errorCases": [
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "phone_number must be E.164, e.g. +14155550123",
+      "when": "phone_number not E.164"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "carrier must be twilio, telnyx or sip",
+      "when": "carrier outside the enum"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "fallback forward needs fallback_target as an E.164 number",
+      "when": "forward fallback without a valid target"
+    },
+    {
+      "status": 404,
+      "code": "NotFound",
+      "message": "agent not found",
+      "when": "no such agent for the tenant"
+    },
+    {
+      "status": 409,
+      "code": "Conflict",
+      "message": "this number is already bound to an active agent",
+      "when": "the number is active on another binding (any tenant), or the agent is archived"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "no Authorization header"
+    }
+  ]
+}

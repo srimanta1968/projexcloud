@@ -32,6 +32,8 @@ export interface Agent {
   acting_persona_id: string | null;
   published_version_id: string | null;
   kill_switch_flag_id: string | null;
+  /** True when the kill switch has taken the agent out of service (TK-4472). */
+  kill_switch_engaged: boolean;
   status: AgentStatus;
   latest_version_no: number;
   created_at: string;
@@ -97,6 +99,8 @@ export interface RecordEvalRunInput {
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const LANGUAGE_RE = /^[a-z]{2,3}(-[A-Z]{2})?$/;
+/** ProjexCloud app identifiers are text slugs (e.g. appid-1790637274916-ea9975), not uuids. */
+const APP_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
 const MAX_NAME_LENGTH = 120;
 const MAX_PROMPT_LENGTH = 20000;
 const MAX_GREETING_LENGTH = 1000;
@@ -172,7 +176,7 @@ interface AgentRow extends Omit<Agent, 'created_at' | 'updated_at' | 'latest_ver
 
 const AGENT_SELECT = `
   SELECT a.agent_id, a.tenant_id, a.app_id, a.name, a.direction, a.acting_persona_id,
-         a.published_version_id, a.kill_switch_flag_id, a.status, a.created_at, a.updated_at,
+         a.published_version_id, a.kill_switch_flag_id, a.kill_switch_engaged, a.status, a.created_at, a.updated_at,
          (SELECT MAX(v.version_no) FROM voice_agent.agent_version v WHERE v.agent_id = a.agent_id)::int AS latest_version_no
     FROM voice_agent.agent a`;
 
@@ -198,7 +202,10 @@ export async function createAgent(tenantId: string, input: CreateAgentInput): Pr
   if (!(AGENT_DIRECTIONS as readonly string[]).includes(direction)) {
     throw validationError('direction must be inbound, outbound or both');
   }
-  const appId = optionalUuid('app_id', input.app_id);
+  const appId = input.app_id === undefined || input.app_id === null || input.app_id === '' ? null : input.app_id;
+  if (appId !== null && (typeof appId !== 'string' || !APP_ID_RE.test(appId))) {
+    throw validationError('app_id must be an app identifier (letters, digits, . _ : -; at most 128 characters)');
+  }
   const personaId = optionalUuid('acting_persona_id', input.acting_persona_id);
   try {
     const row = await dataService.one<{ agent_id: string }>(

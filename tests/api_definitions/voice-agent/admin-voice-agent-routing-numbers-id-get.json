@@ -1,0 +1,73 @@
+{
+  "name": "GET /api/admin/voice-agent/routing/numbers/:phone_number - Resolve an inbound call (operator)",
+  "endpoint": "/api/admin/voice-agent/routing/numbers/:phone_number",
+  "sdk": "sdk-voice-agent",
+  "sourceFile": "services/api-gateway/src/app.ts",
+  "method": "GET",
+  "requiresAuth": true,
+  "expectedStatus": 200,
+  "taskId": "0c2c7c02-2f9d-4d2a-bae1-152714b460ca",
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "featureId": "8076dcb4-e91f-46a5-9825-f6bf2e2b2a47",
+  "epicId": "9c7a8dc4-3db7-4cd2-9121-7649f143525c",
+  "priority": 81,
+  "testability": "auto",
+  "coversCriterion": [
+    "8076dcb4-e91f-46a5-9825-f6bf2e2b2a47#AC4",
+    "8076dcb4-e91f-46a5-9825-f6bf2e2b2a47#AC5"
+  ],
+  "description": "What the voice runtime calls when an INVITE arrives (8076dcb4-e91f-46a5-9825-f6bf2e2b2a47#AC4, 8076dcb4-e91f-46a5-9825-f6bf2e2b2a47#AC5). An INVITE carries only the dialled number, so this resolves ACROSS tenants and is therefore operator-only: it authenticates with x-admin-ops-token and a tenant JWT is 401. action=agent with the live version_id when the agent is published and not killed; otherwise action=fallback with reason not_published | paused | archived | kill_switch, the binding's fallback and fallback_target, and kill_message when the kill switch is engaged. In the dependency chain the agent has not been published, so the call takes the fallback. An unbound number is 404.",
+  "dependsOn": [
+    "POST /api/auth/signup-tenant",
+    "POST /api/voice-agent/agents",
+    "POST /api/voice-agent/agents/:agent_id/numbers"
+  ],
+  "testCases": [
+    {
+      "name": "Unpublished agent routes the call to the fallback",
+      "headers": {
+        "x-admin-ops-token": "{{var:ADMIN_OPS_TOKEN}}"
+      },
+      "pathParams": {
+        "phone_number": "{{cache:voice-agent.agents.numbers.create.response.data.binding.phone_number}}"
+      },
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "success": true,
+        "data": {
+          "route": {
+            "action": "string",
+            "reason": "string",
+            "fallback": "string",
+            "tenant_id": "string",
+            "agent_id": "string"
+          }
+        }
+      }
+    },
+    {
+      "name": "Unbound number is 404",
+      "headers": {
+        "x-admin-ops-token": "{{var:ADMIN_OPS_TOKEN}}"
+      },
+      "pathParams": {
+        "phone_number": "{{dynamic:phone}}"
+      },
+      "expectedStatus": 404
+    }
+  ],
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "admin token required",
+      "when": "x-admin-ops-token missing or wrong (a tenant JWT is not accepted)"
+    },
+    {
+      "status": 404,
+      "code": "NotFound",
+      "message": "number is not bound to an active agent",
+      "when": "no active binding for the number"
+    }
+  ]
+}

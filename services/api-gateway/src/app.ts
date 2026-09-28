@@ -362,7 +362,7 @@ import { migrationsDir as offerCatalogMigrations, server as offerCatalogServer }
 import { migrationsDir as handoffMigrations, server as handoffServer, registerHandoffSaga, setHandoffApprovalCreator } from '@projexlight/sdk-handoff';
 import { migrationsDir as incidentMigrations, server as incidentServer } from '@projexlight/sdk-incident';
 // VA·E2 — voice agent control plane (stack profiles, agents, numbers, app tools, calls).
-import { migrationsDir as voiceAgentMigrations, server as voiceAgentServer } from '@projexlight/sdk-voice-agent';
+import { migrationsDir as voiceAgentMigrations, server as voiceAgentServer, resolveInboundNumber } from '@projexlight/sdk-voice-agent';
 // P16 · EP-374 — the provenance kernel. Every ingesting SDK lands its rows here.
 import {
   migrationsDir as sourceRecordMigrations,
@@ -1126,6 +1126,16 @@ app.post('/api/admin/commands/dispatch-now', async (req, reply) => {
   } catch (err) {
     return reply.code(500).send({ success: false, error: describeError(err) });
   }
+});
+
+// VA·E2 (TK-4472) — inbound call routing for the voice runtime. An INVITE carries only
+// the dialled number, so this resolves across tenants by design and is therefore
+// operator-only (x-admin-ops-token), never reachable with a tenant credential.
+app.get<{ Params: { phone_number: string } }>('/api/admin/voice-agent/routing/numbers/:phone_number', async (req, reply) => {
+  if (!(await checkAdminToken(req, reply))) return;
+  const route = await resolveInboundNumber(decodeURIComponent(req.params.phone_number));
+  if (!route) return reply.code(404).send({ success: false, error: 'NotFound', details: ['number is not bound to an active agent'] });
+  return reply.code(200).send({ success: true, data: { route } });
 });
 
 // P12 · E1 — per-asset command delivery stream. An edge agent for a robot

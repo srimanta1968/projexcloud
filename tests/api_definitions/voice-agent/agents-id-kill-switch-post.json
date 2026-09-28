@@ -1,0 +1,106 @@
+{
+  "name": "POST /api/voice-agent/agents/:agent_id/kill-switch - Engage or release the kill switch",
+  "endpoint": "/api/voice-agent/agents/:agent_id/kill-switch",
+  "sdk": "sdk-voice-agent",
+  "sourceFile": "packages/sdk-voice-agent/src/server/agentRoutes.ts",
+  "method": "POST",
+  "requiresAuth": true,
+  "expectedStatus": 200,
+  "taskId": "0c2c7c02-2f9d-4d2a-bae1-152714b460ca",
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "featureId": "8076dcb4-e91f-46a5-9825-f6bf2e2b2a47",
+  "epicId": "9c7a8dc4-3db7-4cd2-9121-7649f143525c",
+  "priority": 82,
+  "testability": "auto",
+  "coversCriterion": [
+    "8076dcb4-e91f-46a5-9825-f6bf2e2b2a47#AC5"
+  ],
+  "description": "Takes an agent out of service at once without unpublishing it (8076dcb4-e91f-46a5-9825-f6bf2e2b2a47#AC5 — tripping the kill switch ends calls gracefully with a scripted message). engaged=true stores message (default provided) and the actor; inbound routing then returns action=fallback, reason=kill_switch with kill_message, which the voice runtime speaks before ending live calls. engaged=false releases it. Emits voice.agent.killed.v1 / voice.agent.resumed.v1.",
+  "dependsOn": [
+    "POST /api/auth/signup-tenant",
+    "POST /api/voice-agent/agents",
+    "POST /api/voice-agent/agents/:agent_id/numbers",
+    "GET /api/admin/voice-agent/routing/numbers/:phone_number"
+  ],
+  "testCases": [
+    {
+      "name": "Engage the kill switch with a scripted message",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "pathParams": {
+        "agent_id": "{{cache:voice-agent.agents.create.response.data.agent.agent_id}}"
+      },
+      "payload": {
+        "engaged": true,
+        "message": "We are closed for maintenance, goodbye."
+      },
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "data": {
+          "kill_switch": {
+            "agent_id": "string",
+            "kill_switch_engaged": "boolean",
+            "kill_message": "string",
+            "kill_engaged_at": "string"
+          }
+        }
+      }
+    },
+    {
+      "name": "Reject a non-boolean engaged",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "pathParams": {
+        "agent_id": "{{cache:voice-agent.agents.create.response.data.agent.agent_id}}"
+      },
+      "payload": {
+        "engaged": "{{static:yes}}"
+      },
+      "expectedStatus": 400
+    },
+    {
+      "name": "Unknown agent is 404",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "pathParams": {
+        "agent_id": "{{dynamic:uuid}}"
+      },
+      "payload": {
+        "engaged": true
+      },
+      "expectedStatus": 404
+    }
+  ],
+  "captureResponse": {
+    "voice-agent.agents.kill-switch.response.data.kill_switch.kill_engaged_at": "data.kill_switch.kill_engaged_at"
+  },
+  "errorCases": [
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "engaged (boolean) is required",
+      "when": "engaged missing or not boolean"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "message must be a string of at most 500 characters",
+      "when": "message too long"
+    },
+    {
+      "status": 404,
+      "code": "NotFound",
+      "message": "agent not found",
+      "when": "no such agent for the tenant"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "no Authorization header"
+    }
+  ]
+}

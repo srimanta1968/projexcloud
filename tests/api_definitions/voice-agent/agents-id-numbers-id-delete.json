@@ -1,0 +1,85 @@
+{
+  "name": "DELETE /api/voice-agent/agents/:agent_id/numbers/:binding_id - Release a number",
+  "endpoint": "/api/voice-agent/agents/:agent_id/numbers/:binding_id",
+  "sdk": "sdk-voice-agent",
+  "sourceFile": "packages/sdk-voice-agent/src/server/agentRoutes.ts",
+  "method": "DELETE",
+  "requiresAuth": true,
+  "expectedStatus": 204,
+  "taskId": "0c2c7c02-2f9d-4d2a-bae1-152714b460ca",
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "featureId": "8076dcb4-e91f-46a5-9825-f6bf2e2b2a47",
+  "epicId": "9c7a8dc4-3db7-4cd2-9121-7649f143525c",
+  "priority": 89,
+  "testability": "auto",
+  "coversCriterion": [
+    "8076dcb4-e91f-46a5-9825-f6bf2e2b2a47#AC4"
+  ],
+  "description": "Releases a binding (active -> inactive); the number is free to bind again and inbound routing for it returns 404. Supports 8076dcb4-e91f-46a5-9825-f6bf2e2b2a47#AC4.",
+  "dependsOn": [
+    "POST /api/auth/signup-tenant",
+    "POST /api/voice-agent/agents",
+    "POST /api/voice-agent/agents/:agent_id/numbers",
+    "GET /api/voice-agent/agents/:agent_id/numbers",
+    "GET /api/admin/voice-agent/routing/numbers/:phone_number",
+    "POST /api/voice-agent/agents/:agent_id/kill-switch"
+  ],
+  "statusTransitions": {
+    "entity": "voice_agent.number_binding",
+    "field": "active",
+    "flow": [
+      "true",
+      "false"
+    ],
+    "transitions": [
+      {
+        "from": "",
+        "to": "true",
+        "via": "POST /api/voice-agent/agents/:agent_id/numbers"
+      },
+      {
+        "from": "true",
+        "to": "false",
+        "via": "DELETE /api/voice-agent/agents/:agent_id/numbers/:binding_id"
+      }
+    ]
+  },
+  "testCases": [
+    {
+      "name": "Release the number",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "pathParams": {
+        "agent_id": "{{cache:voice-agent.agents.create.response.data.agent.agent_id}}",
+        "binding_id": "{{cache:voice-agent.agents.numbers.create.response.data.binding.binding_id}}"
+      },
+      "expectedStatus": 204
+    },
+    {
+      "name": "Unknown binding is 404",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "pathParams": {
+        "agent_id": "{{cache:voice-agent.agents.create.response.data.agent.agent_id}}",
+        "binding_id": "{{dynamic:uuid}}"
+      },
+      "expectedStatus": 404
+    }
+  ],
+  "errorCases": [
+    {
+      "status": 404,
+      "code": "NotFound",
+      "message": "number binding not found",
+      "when": "no such binding for the agent and tenant"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "no Authorization header"
+    }
+  ]
+}

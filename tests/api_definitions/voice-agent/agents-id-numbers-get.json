@@ -1,0 +1,71 @@
+{
+  "name": "GET /api/voice-agent/agents/:agent_id/numbers - List an agent's number bindings",
+  "endpoint": "/api/voice-agent/agents/:agent_id/numbers",
+  "sdk": "sdk-voice-agent",
+  "sourceFile": "packages/sdk-voice-agent/src/server/agentRoutes.ts",
+  "method": "GET",
+  "requiresAuth": true,
+  "expectedStatus": 200,
+  "taskId": "0c2c7c02-2f9d-4d2a-bae1-152714b460ca",
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "featureId": "8076dcb4-e91f-46a5-9825-f6bf2e2b2a47",
+  "epicId": "9c7a8dc4-3db7-4cd2-9121-7649f143525c",
+  "priority": 80,
+  "testability": "auto",
+  "coversCriterion": [
+    "8076dcb4-e91f-46a5-9825-f6bf2e2b2a47#AC4"
+  ],
+  "description": "Lists the agent's active number bindings (include_inactive=true adds released ones). Supports 8076dcb4-e91f-46a5-9825-f6bf2e2b2a47#AC4.",
+  "dependsOn": [
+    "POST /api/auth/signup-tenant",
+    "POST /api/voice-agent/agents",
+    "POST /api/voice-agent/agents/:agent_id/numbers"
+  ],
+  "testCases": [
+    {
+      "name": "List active bindings",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "pathParams": {
+        "agent_id": "{{cache:voice-agent.agents.create.response.data.agent.agent_id}}"
+      },
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "data": {
+          "bindings": [
+            {
+              "binding_id": "string",
+              "phone_number": "string",
+              "fallback": "string"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "Unknown agent is 404",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "pathParams": {
+        "agent_id": "{{dynamic:uuid}}"
+      },
+      "expectedStatus": 404
+    }
+  ],
+  "errorCases": [
+    {
+      "status": 404,
+      "code": "NotFound",
+      "message": "agent not found",
+      "when": "no such agent for the tenant"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "no Authorization header"
+    }
+  ]
+}

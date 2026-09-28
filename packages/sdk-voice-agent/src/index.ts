@@ -57,5 +57,16 @@ export type {
   RecordEvalRunInput,
 } from './services/agentService';
 
+export {
+  CARRIERS,
+  FALLBACKS,
+  bindNumber,
+  listNumbers,
+  unbindNumber,
+  resolveInboundNumber,
+  setKillSwitch,
+} from './services/numberService';
+export type { Carrier, Fallback, NumberBinding, BindNumberInput, InboundRoute, KillSwitchState } from './services/numberService';
+
 // HTTP surface — mounted by the api-gateway.
 export * as server from './server';

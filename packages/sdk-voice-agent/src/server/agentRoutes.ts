@@ -14,6 +14,7 @@ import {
   type CreateVersionInput,
   type RecordEvalRunInput,
 } from '../services/agentService';
+import { bindNumber, listNumbers, setKillSwitch, unbindNumber, type BindNumberInput } from '../services/numberService';
 import { resolveTenant } from './tenantScope';
 import { sendError } from './sendError';
 
@@ -132,6 +133,59 @@ export function registerAgentRoutes(app: FastifyInstance): void {
       if (!tenantId) return reply;
       try {
         return reply.code(200).send({ data: await publishVersion(tenantId, req.params.agent_id, req.params.version_id) });
+      } catch (err) {
+        return sendError(reply, err);
+      }
+    },
+  );
+
+  // TK-4472 — inbound number bindings.
+  app.post<{ Params: AgentParams }>(
+    '/api/voice-agent/agents/:agent_id/numbers', { preHandler: requireAuth }, async (req, reply) => {
+      const body = (req.body ?? {}) as Partial<BindNumberInput> & { tenant_id?: string };
+      const tenantId = resolveTenant(req, reply, body.tenant_id);
+      if (!tenantId) return reply;
+      try {
+        return reply.code(201).send({ data: { binding: await bindNumber(tenantId, req.params.agent_id, body as BindNumberInput) } });
+      } catch (err) {
+        return sendError(reply, err);
+      }
+    },
+  );
+
+  app.get<{ Params: AgentParams; Querystring: { tenant_id?: string; include_inactive?: string } }>(
+    '/api/voice-agent/agents/:agent_id/numbers', { preHandler: requireAuth }, async (req, reply) => {
+      const tenantId = resolveTenant(req, reply, req.query.tenant_id);
+      if (!tenantId) return reply;
+      try {
+        const bindings = await listNumbers(tenantId, req.params.agent_id, req.query.include_inactive === 'true');
+        return reply.code(200).send({ data: { bindings } });
+      } catch (err) {
+        return sendError(reply, err);
+      }
+    },
+  );
+
+  app.delete<{ Params: AgentParams & { binding_id: string }; Querystring: { tenant_id?: string } }>(
+    '/api/voice-agent/agents/:agent_id/numbers/:binding_id', { preHandler: requireAuth }, async (req, reply) => {
+      const tenantId = resolveTenant(req, reply, req.query.tenant_id);
+      if (!tenantId) return reply;
+      const found = await unbindNumber(tenantId, req.params.agent_id, req.params.binding_id);
+      if (!found) return reply.code(404).send({ error: 'NotFound', details: ['number binding not found'] });
+      return reply.code(204).send();
+    },
+  );
+
+  // TK-4472 — kill switch (action endpoint, 200).
+  app.post<{ Params: AgentParams }>(
+    '/api/voice-agent/agents/:agent_id/kill-switch', { preHandler: requireAuth }, async (req, reply) => {
+      const body = (req.body ?? {}) as { tenant_id?: string; engaged?: unknown; message?: unknown };
+      const tenantId = resolveTenant(req, reply, body.tenant_id);
+      if (!tenantId) return reply;
+      try {
+        const actor = req.auth?.primary_persona_id ?? req.auth?.sub ?? 'unknown';
+        const state = await setKillSwitch(tenantId, req.params.agent_id, body, actor);
+        return reply.code(200).send({ data: { kill_switch: state } });
       } catch (err) {
         return sendError(reply, err);
       }
