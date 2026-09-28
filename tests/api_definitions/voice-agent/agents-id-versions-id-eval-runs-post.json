@@ -1,0 +1,115 @@
+{
+  "name": "POST /api/voice-agent/agents/:agent_id/versions/:version_id/eval-runs - Record an evaluation run",
+  "endpoint": "/api/voice-agent/agents/:agent_id/versions/:version_id/eval-runs",
+  "sdk": "sdk-voice-agent",
+  "sourceFile": "packages/sdk-voice-agent/src/server/agentRoutes.ts",
+  "method": "POST",
+  "requiresAuth": true,
+  "expectedStatus": 201,
+  "taskId": "ebbb8ef0-b3d9-4250-9b61-97d3b55b63dd",
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "featureId": "8076dcb4-e91f-46a5-9825-f6bf2e2b2a47",
+  "epicId": "9c7a8dc4-3db7-4cd2-9121-7649f143525c",
+  "priority": 75,
+  "testability": "auto",
+  "coversCriterion": [
+    "8076dcb4-e91f-46a5-9825-f6bf2e2b2a47#AC2"
+  ],
+  "description": "Records an evaluation run against a version; written by the simulated-caller harness (VA·E10). The publish gate reads the NEWEST run for the version, so a later failing run blocks a re-publish (8076dcb4-e91f-46a5-9825-f6bf2e2b2a47#AC2 — publishing fails unless there is a passing evaluation run and an approval). score is 0..1.",
+  "dependsOn": [
+    "POST /api/auth/signup-tenant",
+    "POST /api/ai-gateway/tenant-credentials",
+    "POST /api/voice-agent/stack-profiles",
+    "POST /api/voice-agent/agents",
+    "POST /api/voice-agent/agents/:agent_id/versions"
+  ],
+  "testCases": [
+    {
+      "name": "Record a passing smoke evaluation",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "pathParams": {
+        "agent_id": "{{cache:voice-agent.agents.create.response.data.agent.agent_id}}",
+        "version_id": "{{cache:voice-agent.agents.versions.create.response.data.version.version_id}}"
+      },
+      "payload": {
+        "passed": true,
+        "score": 0.93,
+        "suite": "{{static:smoke}}",
+        "metrics": {
+          "p95_voice_to_voice_ms": 980,
+          "barge_in_ms": 85,
+          "task_success": 0.95
+        }
+      },
+      "expectedStatus": 201,
+      "expectedResponse": {
+        "data": {
+          "eval_run": {
+            "eval_run_id": "string",
+            "passed": "boolean"
+          }
+        }
+      }
+    },
+    {
+      "name": "Reject a score above 1",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "pathParams": {
+        "agent_id": "{{cache:voice-agent.agents.create.response.data.agent.agent_id}}",
+        "version_id": "{{cache:voice-agent.agents.versions.create.response.data.version.version_id}}"
+      },
+      "payload": {
+        "passed": true,
+        "score": 1.5
+      },
+      "expectedStatus": 400
+    },
+    {
+      "name": "Reject a missing passed flag",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "pathParams": {
+        "agent_id": "{{cache:voice-agent.agents.create.response.data.agent.agent_id}}",
+        "version_id": "{{cache:voice-agent.agents.versions.create.response.data.version.version_id}}"
+      },
+      "payload": {
+        "score": 0.5
+      },
+      "expectedStatus": 400
+    }
+  ],
+  "captureResponse": {
+    "voice-agent.agents.versions.eval-runs.create.response.data.eval_run.eval_run_id": "data.eval_run.eval_run_id"
+  },
+  "errorCases": [
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "passed (boolean) is required",
+      "when": "passed missing or not boolean"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "score must be a number between 0 and 1",
+      "when": "score out of range"
+    },
+    {
+      "status": 404,
+      "code": "NotFound",
+      "message": "agent version not found",
+      "when": "no agent version with that id for the authenticated tenant"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "no Authorization header"
+    }
+  ]
+}

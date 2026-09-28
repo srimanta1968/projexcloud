@@ -1,7 +1,6 @@
-import type { FastifyInstance, FastifyReply } from 'fastify';
+import type { FastifyInstance } from 'fastify';
 import { requireAuth } from '@projexlight/sdk-identity';
 import { VOICE_PRESETS } from '../models/presets';
-import { VoiceAgentError } from '../models/errors';
 import {
   archiveStackProfile,
   createStackProfile,
@@ -12,14 +11,8 @@ import {
   type UpdateStackProfileInput,
 } from '../services/stackProfileService';
 import { resolveTenant } from './tenantScope';
-
-/** Sends a VoiceAgentError as { error, details }; rethrows anything else to the gateway. */
-function sendError(reply: FastifyReply, err: unknown): FastifyReply {
-  if (err instanceof VoiceAgentError) {
-    return reply.code(err.status).send({ error: err.code, details: [err.message] });
-  }
-  throw err;
-}
+import { registerAgentRoutes } from './agentRoutes';
+import { sendError } from './sendError';
 
 /**
  * HTTP surface for sdk-voice-agent (VA·E2). Every route requires a tenant credential
@@ -30,6 +23,8 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
   app.get('/api/voice-agent/presets', { preHandler: requireAuth }, async (_req, reply) => {
     return reply.code(200).send({ data: { presets: VOICE_PRESETS } });
   });
+
+  registerAgentRoutes(app);
 
   // TK-4469 — stack profiles.
   app.post('/api/voice-agent/stack-profiles', { preHandler: requireAuth }, async (req, reply) => {

@@ -1,0 +1,104 @@
+{
+  "name": "POST /api/voice-agent/agents/:agent_id/rollback - Roll back to a previously published version",
+  "endpoint": "/api/voice-agent/agents/:agent_id/rollback",
+  "sdk": "sdk-voice-agent",
+  "sourceFile": "packages/sdk-voice-agent/src/server/agentRoutes.ts",
+  "method": "POST",
+  "requiresAuth": true,
+  "expectedStatus": 200,
+  "taskId": "a6c28c9d-5289-4816-8609-0add20ce904c",
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "featureId": "8076dcb4-e91f-46a5-9825-f6bf2e2b2a47",
+  "epicId": "9c7a8dc4-3db7-4cd2-9121-7649f143525c",
+  "priority": 78,
+  "testability": "auto",
+  "coversCriterion": [
+    "8076dcb4-e91f-46a5-9825-f6bf2e2b2a47#AC3"
+  ],
+  "description": "Re-points the agent at an earlier version (8076dcb4-e91f-46a5-9825-f6bf2e2b2a47#AC3 — rolling back re-points the agent to a previous version). Only a version that was PUBLISHED before qualifies, so a rollback can never put live a version that skipped the evaluation and approval gates: a never-published version is 409 InvalidTransition. In the dependency chain the version has not been published, so the first case asserts that refusal; the successful rollback is the second dataset. Emits voice.agent.published.v1 with via=rollback.",
+  "dependsOn": [
+    "POST /api/auth/signup-tenant",
+    "POST /api/ai-gateway/tenant-credentials",
+    "POST /api/voice-agent/stack-profiles",
+    "POST /api/voice-agent/agents",
+    "POST /api/voice-agent/agents/:agent_id/versions"
+  ],
+  "testCases": [
+    {
+      "name": "Refuse to roll back to a version that was never published",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "pathParams": {
+        "agent_id": "{{cache:voice-agent.agents.create.response.data.agent.agent_id}}"
+      },
+      "payload": {
+        "version_id": "{{cache:voice-agent.agents.versions.create.response.data.version.version_id}}"
+      },
+      "expectedStatus": 409,
+      "expectedResponse": {
+        "error": "InvalidTransition"
+      }
+    },
+    {
+      "name": "Roll back to an earlier published version",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "pathParams": {
+        "agent_id": "{{cache:voice-agent.agents.create.response.data.agent.agent_id}}"
+      },
+      "payload": {
+        "version_id": "{{cache:voice-agent.agents.versions.create.response.data.version.version_id}}"
+      },
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "data": {
+          "agent": {
+            "published_version_id": "string"
+          }
+        }
+      }
+    },
+    {
+      "name": "Reject a missing version_id",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "pathParams": {
+        "agent_id": "{{cache:voice-agent.agents.create.response.data.agent.agent_id}}"
+      },
+      "payload": {},
+      "expectedStatus": 400
+    }
+  ],
+  "captureResponse": {
+    "voice-agent.agents.rollback.response.data.agent.published_version_id": "data.agent.published_version_id"
+  },
+  "errorCases": [
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "version_id is required",
+      "when": "version_id missing"
+    },
+    {
+      "status": 409,
+      "code": "InvalidTransition",
+      "message": "only a version that was published before can be rolled back to",
+      "when": "version never published"
+    },
+    {
+      "status": 404,
+      "code": "NotFound",
+      "message": "agent not found",
+      "when": "no agent with that id for the authenticated tenant"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "no Authorization header"
+    }
+  ]
+}

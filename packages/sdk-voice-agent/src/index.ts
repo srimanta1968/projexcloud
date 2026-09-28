@@ -32,5 +32,30 @@ export type {
   InvalidCredentialRef,
 } from './services/stackProfileService';
 
+export {
+  AGENT_DIRECTIONS,
+  VERSION_APPROVAL_SUBJECT_KIND,
+  createAgent,
+  getAgent,
+  listAgents,
+  createVersion,
+  getVersion,
+  listVersions,
+  recordEvalRun,
+  requestPublishApproval,
+  publishVersion,
+  rollbackAgent,
+} from './services/agentService';
+export type {
+  Agent,
+  AgentVersion,
+  AgentDirection,
+  AgentStatus,
+  EvalRun,
+  CreateAgentInput,
+  CreateVersionInput,
+  RecordEvalRunInput,
+} from './services/agentService';
+
 // HTTP surface — mounted by the api-gateway.
 export * as server from './server';

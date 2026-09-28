@@ -1,0 +1,79 @@
+{
+  "name": "GET /api/voice-agent/agents/:agent_id/versions - List agent versions",
+  "endpoint": "/api/voice-agent/agents/:agent_id/versions",
+  "sdk": "sdk-voice-agent",
+  "sourceFile": "packages/sdk-voice-agent/src/server/agentRoutes.ts",
+  "method": "GET",
+  "requiresAuth": true,
+  "expectedStatus": 200,
+  "taskId": "a6c28c9d-5289-4816-8609-0add20ce904c",
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "featureId": "8076dcb4-e91f-46a5-9825-f6bf2e2b2a47",
+  "epicId": "9c7a8dc4-3db7-4cd2-9121-7649f143525c",
+  "priority": 74,
+  "testability": "auto",
+  "coversCriterion": [
+    "8076dcb4-e91f-46a5-9825-f6bf2e2b2a47#AC1",
+    "8076dcb4-e91f-46a5-9825-f6bf2e2b2a47#AC3"
+  ],
+  "description": "Lists an agent's versions newest first with is_live marking the one version the agent points at (supports 8076dcb4-e91f-46a5-9825-f6bf2e2b2a47#AC1 and 8076dcb4-e91f-46a5-9825-f6bf2e2b2a47#AC3 — after a rollback exactly one earlier version is live).",
+  "dependsOn": [
+    "POST /api/auth/signup-tenant",
+    "POST /api/ai-gateway/tenant-credentials",
+    "POST /api/voice-agent/stack-profiles",
+    "POST /api/voice-agent/agents",
+    "POST /api/voice-agent/agents/:agent_id/versions"
+  ],
+  "testCases": [
+    {
+      "name": "List versions of the agent",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "pathParams": {
+        "agent_id": "{{cache:voice-agent.agents.create.response.data.agent.agent_id}}"
+      },
+      "queryParams": {
+        "limit": "{{static:10}}"
+      },
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "data": {
+          "versions": [
+            {
+              "version_id": "string",
+              "version_no": "number",
+              "is_live": "boolean"
+            }
+          ],
+          "limit": "number",
+          "offset": "number"
+        }
+      }
+    },
+    {
+      "name": "Unknown agent is 404",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "pathParams": {
+        "agent_id": "{{dynamic:uuid}}"
+      },
+      "expectedStatus": 404
+    }
+  ],
+  "errorCases": [
+    {
+      "status": 404,
+      "code": "NotFound",
+      "message": "agent not found",
+      "when": "no agent with that id for the authenticated tenant"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "no Authorization header"
+    }
+  ]
+}

@@ -1,0 +1,134 @@
+{
+  "name": "POST /api/voice-agent/agents/:agent_id/versions - Add an immutable agent version",
+  "endpoint": "/api/voice-agent/agents/:agent_id/versions",
+  "sdk": "sdk-voice-agent",
+  "sourceFile": "packages/sdk-voice-agent/src/server/agentRoutes.ts",
+  "method": "POST",
+  "requiresAuth": true,
+  "expectedStatus": 201,
+  "taskId": "a6c28c9d-5289-4816-8609-0add20ce904c",
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "featureId": "8076dcb4-e91f-46a5-9825-f6bf2e2b2a47",
+  "epicId": "9c7a8dc4-3db7-4cd2-9121-7649f143525c",
+  "priority": 73,
+  "testability": "auto",
+  "coversCriterion": [
+    "8076dcb4-e91f-46a5-9825-f6bf2e2b2a47#AC1"
+  ],
+  "description": "Adds an immutable version to an agent (covers 8076dcb4-e91f-46a5-9825-f6bf2e2b2a47#AC1 — immutable versions with prompt, greeting, stack, tools, knowledge and escalation rules). version_no is the next number for the agent; versions are never edited. stack_profile_id must be an ACTIVE stack profile of the same tenant and every tool_id an enabled app tool of the tenant (400 otherwise). language is a BCP-47 tag (default en-US).",
+  "dependsOn": [
+    "POST /api/auth/signup-tenant",
+    "POST /api/ai-gateway/tenant-credentials",
+    "POST /api/voice-agent/stack-profiles",
+    "POST /api/voice-agent/agents"
+  ],
+  "testCases": [
+    {
+      "name": "Create version 1 on the tenant stack profile",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "pathParams": {
+        "agent_id": "{{cache:voice-agent.agents.create.response.data.agent.agent_id}}"
+      },
+      "payload": {
+        "system_prompt": "You are the front desk. Qualify callers and book meetings.",
+        "greeting": "Thanks for calling, how can I help?",
+        "language": "{{static:en-US}}",
+        "stack_profile_id": "{{cache:voice-agent.stack-profiles.create.response.data.stack_profile.profile_id}}",
+        "tool_ids": [],
+        "kb_corpus_ids": [
+          "{{dynamic:uuid}}"
+        ],
+        "escalation_rules": {
+          "transfer_on": [
+            "angry",
+            "legal"
+          ]
+        },
+        "business_hours": {
+          "tz": "America/New_York",
+          "mon_fri": "08:00-18:00"
+        }
+      },
+      "expectedStatus": 201,
+      "expectedResponse": {
+        "data": {
+          "version": {
+            "version_id": "string",
+            "version_no": "number",
+            "is_live": "boolean"
+          }
+        }
+      }
+    },
+    {
+      "name": "Reject a stack profile that is not the tenant's",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "pathParams": {
+        "agent_id": "{{cache:voice-agent.agents.create.response.data.agent.agent_id}}"
+      },
+      "payload": {
+        "system_prompt": "x",
+        "stack_profile_id": "{{dynamic:uuid}}"
+      },
+      "expectedStatus": 400
+    },
+    {
+      "name": "Reject a missing system prompt",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "pathParams": {
+        "agent_id": "{{cache:voice-agent.agents.create.response.data.agent.agent_id}}"
+      },
+      "payload": {
+        "stack_profile_id": "{{cache:voice-agent.stack-profiles.create.response.data.stack_profile.profile_id}}"
+      },
+      "expectedStatus": 400
+    }
+  ],
+  "captureResponse": {
+    "voice-agent.agents.versions.create.response.data.version.version_id": "data.version.version_id"
+  },
+  "errorCases": [
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "system_prompt and stack_profile_id are required",
+      "when": "either missing"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "stack_profile_id does not reference an active stack profile of this tenant",
+      "when": "unknown, archived or another tenant's profile"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "tool_ids are not enabled tools of this tenant: <ids>",
+      "when": "a tool id is unknown or disabled"
+    },
+    {
+      "status": 404,
+      "code": "NotFound",
+      "message": "agent not found",
+      "when": "no agent with that id for the authenticated tenant"
+    },
+    {
+      "status": 409,
+      "code": "Conflict",
+      "message": "archived agents cannot get new versions",
+      "when": "agent archived"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "no Authorization header"
+    }
+  ]
+}

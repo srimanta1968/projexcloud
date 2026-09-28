@@ -1,0 +1,110 @@
+{
+  "name": "POST /api/voice-agent/agents - Create a voice agent",
+  "endpoint": "/api/voice-agent/agents",
+  "sdk": "sdk-voice-agent",
+  "sourceFile": "packages/sdk-voice-agent/src/server/agentRoutes.ts",
+  "method": "POST",
+  "requiresAuth": true,
+  "expectedStatus": 201,
+  "taskId": "a6c28c9d-5289-4816-8609-0add20ce904c",
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "featureId": "8076dcb4-e91f-46a5-9825-f6bf2e2b2a47",
+  "epicId": "9c7a8dc4-3db7-4cd2-9121-7649f143525c",
+  "priority": 70,
+  "testability": "auto",
+  "coversCriterion": [
+    "8076dcb4-e91f-46a5-9825-f6bf2e2b2a47#AC1"
+  ],
+  "description": "Creates a voice agent in status draft for the authenticated tenant (covers 8076dcb4-e91f-46a5-9825-f6bf2e2b2a47#AC1 — a tenant can create an agent and add immutable versions). direction is inbound (default), outbound or both; app_id (the consumer app) and acting_persona_id are optional loose uuids. Names are unique per tenant (409 Conflict). An explicit tenant_id must match the JWT tenant (403).",
+  "dependsOn": [
+    "POST /api/auth/signup-tenant"
+  ],
+  "fieldEnums": {
+    "direction": [
+      "inbound",
+      "outbound",
+      "both"
+    ]
+  },
+  "testCases": [
+    {
+      "name": "Create an inbound receptionist agent",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "payload": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "name": "{{dynamic:name}}",
+        "direction": "{{static:inbound}}",
+        "acting_persona_id": "{{cache:auth.signup-tenant.response.data.userId}}",
+        "app_id": "{{cache:auth.signup-tenant.response.data.app_id}}"
+      },
+      "expectedStatus": 201,
+      "expectedResponse": {
+        "data": {
+          "agent": {
+            "agent_id": "string",
+            "status": "string",
+            "latest_version_no": "number"
+          }
+        }
+      }
+    },
+    {
+      "name": "Reject an unknown direction",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "payload": {
+        "name": "{{dynamic:name}}",
+        "direction": "{{static:sideways}}"
+      },
+      "expectedStatus": 400
+    },
+    {
+      "name": "Reject a missing name",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "payload": {
+        "direction": "{{static:outbound}}"
+      },
+      "expectedStatus": 400
+    }
+  ],
+  "captureResponse": {
+    "voice-agent.agents.create.response.data.agent.agent_id": "data.agent.agent_id"
+  },
+  "errorCases": [
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "name is required",
+      "when": "name missing or blank"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "direction must be inbound, outbound or both",
+      "when": "direction outside the enum"
+    },
+    {
+      "status": 403,
+      "code": "Forbidden",
+      "message": "tenant_id does not match the authenticated tenant",
+      "when": "body tenant_id differs from the JWT tenant"
+    },
+    {
+      "status": 409,
+      "code": "Conflict",
+      "message": "an agent with this name already exists",
+      "when": "name already used by the tenant"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "no Authorization header"
+    }
+  ]
+}

@@ -1,0 +1,115 @@
+{
+  "name": "POST /api/voice-agent/agents/:agent_id/versions/:version_id/publish-request - Request approval to publish",
+  "endpoint": "/api/voice-agent/agents/:agent_id/versions/:version_id/publish-request",
+  "sdk": "sdk-voice-agent",
+  "sourceFile": "packages/sdk-voice-agent/src/server/agentRoutes.ts",
+  "method": "POST",
+  "requiresAuth": true,
+  "expectedStatus": 200,
+  "taskId": "ebbb8ef0-b3d9-4250-9b61-97d3b55b63dd",
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "featureId": "8076dcb4-e91f-46a5-9825-f6bf2e2b2a47",
+  "epicId": "9c7a8dc4-3db7-4cd2-9121-7649f143525c",
+  "priority": 76,
+  "testability": "auto",
+  "coversCriterion": [
+    "8076dcb4-e91f-46a5-9825-f6bf2e2b2a47#AC2"
+  ],
+  "description": "Opens (or returns the already-open) sdk-approval request whose subject is this version (subject_kind voice_agent.agent_version) on one of the TENANT'S approval routes; the request id is stored on the version. Part of 8076dcb4-e91f-46a5-9825-f6bf2e2b2a47#AC2. The approver decides through POST /api/approvals/steps/:step_id/decide. A route belonging to another tenant is rejected (400). initiator_persona_id defaults to the caller's persona.",
+  "dependsOn": [
+    "POST /api/auth/signup-tenant",
+    "POST /api/ai-gateway/tenant-credentials",
+    "POST /api/voice-agent/stack-profiles",
+    "POST /api/voice-agent/agents",
+    "POST /api/voice-agent/agents/:agent_id/versions",
+    "POST /api/voice-agent/agents/:agent_id/versions/:version_id/eval-runs",
+    "POST /api/approvals/routes"
+  ],
+  "testCases": [
+    {
+      "name": "Request publish approval on the tenant route",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "pathParams": {
+        "agent_id": "{{cache:voice-agent.agents.create.response.data.agent.agent_id}}",
+        "version_id": "{{cache:voice-agent.agents.versions.create.response.data.version.version_id}}"
+      },
+      "payload": {
+        "route_id": "{{cache:approvals.routes.create.response.data.route.route_id}}",
+        "initiator_persona_id": "{{cache:auth.signup-tenant.response.data.userId}}",
+        "reason": "Go-live after passing smoke eval"
+      },
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "data": {
+          "version": {
+            "approval_id": "string"
+          },
+          "approval": {
+            "request": {
+              "request_id": "string",
+              "status": "string"
+            },
+            "pending_steps": [
+              {
+                "step_id": "string"
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "name": "Reject a route that does not belong to the tenant",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "pathParams": {
+        "agent_id": "{{cache:voice-agent.agents.create.response.data.agent.agent_id}}",
+        "version_id": "{{cache:voice-agent.agents.versions.create.response.data.version.version_id}}"
+      },
+      "payload": {
+        "route_id": "{{dynamic:uuid}}",
+        "initiator_persona_id": "{{cache:auth.signup-tenant.response.data.userId}}"
+      },
+      "expectedStatus": 400
+    }
+  ],
+  "captureResponse": {
+    "voice-agent.agents.versions.publish-request.response.data.approval.request.request_id": "data.approval.request.request_id",
+    "voice-agent.agents.versions.publish-request.response.data.approval.pending_steps.0.step_id": "data.approval.pending_steps.0.step_id"
+  },
+  "errorCases": [
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "route_id and initiator_persona_id are required",
+      "when": "route_id missing"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "route_id does not reference an active approval route of this tenant",
+      "when": "unknown or other-tenant route"
+    },
+    {
+      "status": 404,
+      "code": "NotFound",
+      "message": "agent version not found",
+      "when": "no agent version with that id for the authenticated tenant"
+    },
+    {
+      "status": 409,
+      "code": "Conflict",
+      "message": "this version is already live",
+      "when": "version is the live version"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "no Authorization header"
+    }
+  ]
+}

@@ -1,0 +1,85 @@
+{
+  "name": "GET /api/voice-agent/agents - List the tenant's voice agents",
+  "endpoint": "/api/voice-agent/agents",
+  "sdk": "sdk-voice-agent",
+  "sourceFile": "packages/sdk-voice-agent/src/server/agentRoutes.ts",
+  "method": "GET",
+  "requiresAuth": true,
+  "expectedStatus": 200,
+  "taskId": "a6c28c9d-5289-4816-8609-0add20ce904c",
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "featureId": "8076dcb4-e91f-46a5-9825-f6bf2e2b2a47",
+  "epicId": "9c7a8dc4-3db7-4cd2-9121-7649f143525c",
+  "priority": 71,
+  "testability": "auto",
+  "coversCriterion": [
+    "8076dcb4-e91f-46a5-9825-f6bf2e2b2a47#AC1"
+  ],
+  "description": "Lists the authenticated tenant's agents newest first, optionally filtered by status (draft, published, paused, archived) and direction, paged by limit (1-100, default 50) and offset. Supports 8076dcb4-e91f-46a5-9825-f6bf2e2b2a47#AC1 by listing the agent the tenant created.",
+  "dependsOn": [
+    "POST /api/auth/signup-tenant",
+    "POST /api/voice-agent/agents"
+  ],
+  "fieldEnums": {
+    "status": [
+      "draft",
+      "published",
+      "paused",
+      "archived"
+    ],
+    "direction": [
+      "inbound",
+      "outbound",
+      "both"
+    ]
+  },
+  "testCases": [
+    {
+      "name": "List draft agents",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "queryParams": {
+        "status": "{{static:draft}}",
+        "limit": "{{static:20}}"
+      },
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "data": {
+          "agents": [
+            {
+              "agent_id": "string",
+              "name": "string"
+            }
+          ],
+          "limit": "number",
+          "offset": "number"
+        }
+      }
+    },
+    {
+      "name": "Reject an unknown status",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "queryParams": {
+        "status": "{{static:deleted}}"
+      },
+      "expectedStatus": 400
+    }
+  ],
+  "errorCases": [
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "status must be draft, published, paused or archived",
+      "when": "status outside the enum"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "no Authorization header"
+    }
+  ]
+}
