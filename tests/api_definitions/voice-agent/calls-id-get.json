@@ -1,0 +1,79 @@
+{
+  "name": "GET /api/voice-agent/calls/:call_id - One AI call with its transcript",
+  "endpoint": "/api/voice-agent/calls/:call_id",
+  "sdk": "sdk-voice-agent",
+  "sourceFile": "packages/sdk-voice-agent/src/server/callRoutes.ts",
+  "method": "GET",
+  "requiresAuth": true,
+  "expectedStatus": 200,
+  "taskId": "d0ffb04a-951c-45b3-963f-294251f7577c",
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "featureId": "ebd2f4af-72a1-4e29-b56f-a13d1c1a8b84",
+  "epicId": "9c7a8dc4-3db7-4cd2-9121-7649f143525c",
+  "priority": 97,
+  "testability": "auto",
+  "coversCriterion": [
+    "ebd2f4af-72a1-4e29-b56f-a13d1c1a8b84#AC2"
+  ],
+  "description": "Returns one call with transcript (turns in order: speaker caller|agent|system, text, per-turn latency stt_ms/ttft_ms/ttfa_ms, interrupted, tool_calls), summary, disposition, gate_verdicts and cost_breakdown (ebd2f4af-72a1-4e29-b56f-a13d1c1a8b84#AC2). Another tenant's call reads as 404. No call exists in the runner's chain (see POST /api/voice-agent/calls), so testCases[0] exercises the 404; the 200 detail is proven end-to-end.",
+  "dependsOn": [
+    "POST /api/auth/signup-tenant"
+  ],
+  "testCases": [
+    {
+      "name": "Unknown call is 404",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "pathParams": {
+        "call_id": "{{dynamic:uuid}}"
+      },
+      "expectedStatus": 404,
+      "expectedResponse": {
+        "error": "NotFound"
+      }
+    },
+    {
+      "name": "Get a placed call with its transcript",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "pathParams": {
+        "call_id": "{{cache:voice-agent.calls.create.response.data.call.call_id}}"
+      },
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "data": {
+          "call": {
+            "call_id": "string",
+            "agent_id": "string",
+            "agent_version_id": "string",
+            "status": "string",
+            "direction": "string",
+            "to_number": "string",
+            "idempotency_key": "string",
+            "transcript": [],
+            "summary": "string",
+            "disposition": "string",
+            "gate_verdicts": {},
+            "cost_breakdown": {}
+          }
+        }
+      }
+    }
+  ],
+  "errorCases": [
+    {
+      "status": 404,
+      "code": "NotFound",
+      "message": "call not found",
+      "when": "no such call for the authenticated tenant"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "no Authorization header"
+    }
+  ]
+}

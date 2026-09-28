@@ -71,5 +71,19 @@ export type { Carrier, Fallback, NumberBinding, BindNumberInput, InboundRoute, K
 export { registerTool, listTools, getTool, updateTool, effectiveTools } from './services/toolService';
 export type { AppTool, RegisterToolInput, UpdateToolInput } from './services/toolService';
 
+export { CALL_STATUSES, CALL_DIRECTIONS, placeCall, getCall, listCalls, setCallDispatcher } from './services/callService';
+export type {
+  Call,
+  CallDetail,
+  CallTurn,
+  CallStatus,
+  CallDirection,
+  CallDispatcher,
+  PlaceCallInput,
+  PlaceCallOptions,
+  PlaceCallResult,
+  ListCallsFilter,
+} from './services/callService';
+
 // HTTP surface — mounted by the api-gateway.
 export * as server from './server';

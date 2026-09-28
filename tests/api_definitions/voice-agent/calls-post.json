@@ -1,0 +1,150 @@
+{
+  "name": "POST /api/voice-agent/calls - Place an outbound AI call",
+  "endpoint": "/api/voice-agent/calls",
+  "sdk": "sdk-voice-agent",
+  "sourceFile": "packages/sdk-voice-agent/src/server/callRoutes.ts",
+  "method": "POST",
+  "requiresAuth": true,
+  "expectedStatus": 201,
+  "taskId": "d0ffb04a-951c-45b3-963f-294251f7577c",
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "featureId": "ebd2f4af-72a1-4e29-b56f-a13d1c1a8b84",
+  "epicId": "9c7a8dc4-3db7-4cd2-9121-7649f143525c",
+  "priority": 95,
+  "testability": "auto",
+  "coversCriterion": [
+    "ebd2f4af-72a1-4e29-b56f-a13d1c1a8b84#AC1"
+  ],
+  "description": "Queues an outbound AI call on the agent's PUBLISHED version and hands it to the dialer (ebd2f4af-72a1-4e29-b56f-a13d1c1a8b84#AC1 — the same Idempotency-Key returns the same call and places it once). Body: agent_id (uuid), to (E.164), optional from (E.164), subject_ref (<=256 chars, e.g. lead:123), context (JSON object <=32KB, available to the agent's prompt). Header Idempotency-Key (1-255 printable ASCII): a retry with the same key and body returns 200 with the stored call, replayed=true and header Idempotent-Replayed: true, and is NOT dispatched again; the same key with a different body is 422 IdempotencyKeyReused. A new call returns 201 with status queued. The agent must be outbound or both, published and not kill-switched (409). The runner's agent chain ends at a draft agent, so testCases[0] exercises the 409 refusal; the 201/200 replay cases are proven end-to-end against a published agent.",
+  "dependsOn": [
+    "POST /api/auth/signup-tenant",
+    "POST /api/voice-agent/agents"
+  ],
+  "testCases": [
+    {
+      "name": "Refuse a call on an agent with no published outbound version",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}",
+        "Idempotency-Key": "call-{{dynamic:uuid}}"
+      },
+      "payload": {
+        "agent_id": "{{cache:voice-agent.agents.create.response.data.agent.agent_id}}",
+        "to": "+14155550123",
+        "subject_ref": "lead:{{dynamic:uuid}}",
+        "context": {
+          "first_name": "Ana",
+          "product": "solar",
+          "lead_score": 72
+        }
+      },
+      "expectedStatus": 409,
+      "expectedResponse": {
+        "error": "Conflict"
+      }
+    },
+    {
+      "name": "Place a call on a published outbound agent",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}",
+        "Idempotency-Key": "call-{{dynamic:uuid}}"
+      },
+      "payload": {
+        "agent_id": "{{cache:voice-agent.agents.create.response.data.agent.agent_id}}",
+        "to": "+14155550123",
+        "subject_ref": "lead:123",
+        "context": {
+          "first_name": "Ana",
+          "product": "solar",
+          "lead_score": 72
+        }
+      },
+      "expectedStatus": 201,
+      "expectedResponse": {
+        "data": {
+          "call": {
+            "call_id": "string",
+            "agent_id": "string",
+            "agent_version_id": "string",
+            "status": "string",
+            "direction": "string",
+            "to_number": "string",
+            "idempotency_key": "string"
+          },
+          "replayed": "boolean"
+        }
+      }
+    },
+    {
+      "name": "Reject a non-E.164 destination",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "payload": {
+        "agent_id": "{{cache:voice-agent.agents.create.response.data.agent.agent_id}}",
+        "to": "{{static:4155550123}}"
+      },
+      "expectedStatus": 400
+    },
+    {
+      "name": "Reject a context that is not an object",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "payload": {
+        "agent_id": "{{cache:voice-agent.agents.create.response.data.agent.agent_id}}",
+        "to": "+14155550123",
+        "context": [
+          1,
+          2
+        ]
+      },
+      "expectedStatus": 400
+    },
+    {
+      "name": "Unknown agent is 404",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "payload": {
+        "agent_id": "{{dynamic:uuid}}",
+        "to": "+14155550123"
+      },
+      "expectedStatus": 404
+    }
+  ],
+  "captureResponse": {
+    "voice-agent.calls.create.response.data.call.call_id": "data.call.call_id"
+  },
+  "errorCases": [
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "agent_id must be a uuid | to must be an E.164 phone number, e.g. +14155550100 | from must be an E.164 phone number | subject_ref must be a non-empty string of at most 256 characters | context must be a JSON object | context must be at most 32768 bytes | Idempotency-Key must be 1-255 printable ASCII characters",
+      "when": "invalid body or header"
+    },
+    {
+      "status": 404,
+      "code": "NotFound",
+      "message": "agent not found",
+      "when": "agent does not belong to the tenant"
+    },
+    {
+      "status": 409,
+      "code": "Conflict",
+      "message": "agent is inbound-only and cannot place outbound calls | agent kill switch is engaged | agent has no published version",
+      "when": "agent cannot place calls"
+    },
+    {
+      "status": 422,
+      "code": "IdempotencyKeyReused",
+      "message": "Idempotency-Key was already used for a different call request",
+      "when": "same key, different body"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "no Authorization header"
+    }
+  ]
+}

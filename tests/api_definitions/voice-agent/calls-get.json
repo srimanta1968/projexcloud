@@ -1,0 +1,88 @@
+{
+  "name": "GET /api/voice-agent/calls - List the tenant's AI calls",
+  "endpoint": "/api/voice-agent/calls",
+  "sdk": "sdk-voice-agent",
+  "sourceFile": "packages/sdk-voice-agent/src/server/callRoutes.ts",
+  "method": "GET",
+  "requiresAuth": true,
+  "expectedStatus": 200,
+  "taskId": "d0ffb04a-951c-45b3-963f-294251f7577c",
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "featureId": "ebd2f4af-72a1-4e29-b56f-a13d1c1a8b84",
+  "epicId": "9c7a8dc4-3db7-4cd2-9121-7649f143525c",
+  "priority": 96,
+  "testability": "auto",
+  "coversCriterion": [
+    "ebd2f4af-72a1-4e29-b56f-a13d1c1a8b84#AC2"
+  ],
+  "description": "Lists the tenant's calls newest first, filtered by agent_id, status (queued|deferred|refused|dialing|ringing|in_progress|transferred|completed|failed), direction (inbound|outbound), subject_ref and is_test (true|false), paged by limit (1-100, default 50) and offset. Each row carries summary, disposition, gate_verdicts and cost_breakdown (ebd2f4af-72a1-4e29-b56f-a13d1c1a8b84#AC2); the transcript is on GET /api/voice-agent/calls/:call_id.",
+  "dependsOn": [
+    "POST /api/auth/signup-tenant",
+    "POST /api/voice-agent/agents"
+  ],
+  "fieldEnums": {
+    "status": [
+      "queued",
+      "deferred",
+      "refused",
+      "dialing",
+      "ringing",
+      "in_progress",
+      "transferred",
+      "completed",
+      "failed"
+    ],
+    "direction": [
+      "inbound",
+      "outbound"
+    ],
+    "is_test": [
+      "true",
+      "false"
+    ]
+  },
+  "testCases": [
+    {
+      "name": "List the agent's calls",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "queryParams": {
+        "agent_id": "{{cache:voice-agent.agents.create.response.data.agent.agent_id}}",
+        "limit": "{{static:20}}"
+      },
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "data": {
+          "calls": [],
+          "limit": "number",
+          "offset": "number"
+        }
+      }
+    },
+    {
+      "name": "Reject an unknown status filter",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "queryParams": {
+        "status": "{{static:ringingish}}"
+      },
+      "expectedStatus": 400
+    }
+  ],
+  "errorCases": [
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "status must be one of queued, deferred, refused, dialing, ringing, in_progress, transferred, completed, failed | direction must be inbound or outbound | is_test must be true or false | limit must be an integer between 1 and 100",
+      "when": "invalid filter"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "no Authorization header"
+    }
+  ]
+}
