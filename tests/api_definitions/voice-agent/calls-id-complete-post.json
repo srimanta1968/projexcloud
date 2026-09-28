@@ -1,0 +1,178 @@
+{
+  "name": "POST /api/voice-agent/calls/:call_id/complete - Report the end of a call",
+  "endpoint": "/api/voice-agent/calls/:call_id/complete",
+  "sdk": "sdk-voice-agent",
+  "sourceFile": "packages/sdk-voice-agent/src/server/callRoutes.ts",
+  "method": "POST",
+  "requiresAuth": true,
+  "expectedStatus": 200,
+  "taskId": "82fe868b-1ef6-4ea7-97ec-fa0f07c447b5",
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "featureId": "ebd2f4af-72a1-4e29-b56f-a13d1c1a8b84",
+  "epicId": "9c7a8dc4-3db7-4cd2-9121-7649f143525c",
+  "priority": 98,
+  "testability": "auto",
+  "coversCriterion": [
+    "ebd2f4af-72a1-4e29-b56f-a13d1c1a8b84#AC3",
+    "ebd2f4af-72a1-4e29-b56f-a13d1c1a8b84#AC2"
+  ],
+  "description": "The voice runtime reports a finished call once: status (completed|failed), optional disposition (runtime/carrier outcome, e.g. no_answer, voicemail — it takes precedence), answered_by (human|machine|unknown), turns [{turn_index, speaker caller|agent|system, text, started_ms, stt_ms, ttft_ms, ttfa_ms, interrupted, tool_calls}], started_at/answered_at/ended_at, duration_s, cost_breakdown (merged), recording_ref, recording_consent, carrier_call_ref, crm_encounter_id, conversation_thread_id. Turns are upserted; the summary and disposition come from the tenant's own llm_complex model via sdk-ai-gateway, falling back to an extractive summary (post_call.summary_source). The call is then mirrored (ebd2f4af-72a1-4e29-b56f-a13d1c1a8b84#AC3 — a completed call appears on the subject's conversation thread and CRM activity timeline): each non-system turn becomes a VOICE message on the subject's open thread (INBOUND/RECEIVED for the caller, OUTBOUND/DELIVERED for the agent), and the encounter's CRM timeline gets one call activity (external_call_id voice-agent:<call_id>). Repeating the same report is idempotent; voice.call.completed.v1 is emitted once. Returns the call detail (ebd2f4af-72a1-4e29-b56f-a13d1c1a8b84#AC2). The runner cannot place a call (see POST /api/voice-agent/calls), so testCases[0] exercises the 404; the 200 path is proven end-to-end.",
+  "dependsOn": [
+    "POST /api/auth/signup-tenant"
+  ],
+  "testCases": [
+    {
+      "name": "Completing an unknown call is 404",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "pathParams": {
+        "call_id": "{{dynamic:uuid}}"
+      },
+      "payload": {
+        "status": "completed",
+        "answered_by": "human",
+        "duration_s": 58,
+        "turns": [
+          {
+            "turn_index": 0,
+            "speaker": "agent",
+            "text": "Hi Ana, this is Sam from Sunny Solar.",
+            "started_ms": 0
+          },
+          {
+            "turn_index": 1,
+            "speaker": "caller",
+            "text": "Call me back next week.",
+            "started_ms": 3200
+          }
+        ],
+        "cost_breakdown": {
+          "stt_usd": 0.0058,
+          "tts_usd": 0.0093
+        }
+      },
+      "expectedStatus": 404,
+      "expectedResponse": {
+        "error": "NotFound"
+      }
+    },
+    {
+      "name": "Complete a placed call with its transcript",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "pathParams": {
+        "call_id": "{{cache:voice-agent.calls.create.response.data.call.call_id}}"
+      },
+      "payload": {
+        "status": "completed",
+        "answered_by": "human",
+        "duration_s": 58,
+        "turns": [
+          {
+            "turn_index": 0,
+            "speaker": "agent",
+            "text": "Hi Ana, this is Sam from Sunny Solar.",
+            "started_ms": 0
+          },
+          {
+            "turn_index": 1,
+            "speaker": "caller",
+            "text": "Call me back next week.",
+            "started_ms": 3200
+          }
+        ]
+      },
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "data": {
+          "call": {
+            "call_id": "string",
+            "status": "string",
+            "summary": "string",
+            "transcript": [],
+            "post_call": {}
+          }
+        }
+      }
+    },
+    {
+      "name": "Reject an unknown speaker",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "pathParams": {
+        "call_id": "{{dynamic:uuid}}"
+      },
+      "payload": {
+        "turns": [
+          {
+            "turn_index": 0,
+            "speaker": "{{static:robot}}",
+            "text": "x"
+          }
+        ]
+      },
+      "expectedStatus": 400
+    }
+  ],
+  "errorCases": [
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "status must be completed or failed | disposition must be one of connected_qualified, connected_not_interested, callback_requested, meeting_booked, voicemail, no_answer, busy, wrong_number, opt_out, failed | answered_by must be human, machine or unknown | turns[i].speaker must be caller, agent or system | turns[i].turn_index N is duplicated | cost_breakdown must be a JSON object | crm_encounter_id does not reference an encounter of this tenant",
+      "when": "invalid report"
+    },
+    {
+      "status": 404,
+      "code": "NotFound",
+      "message": "call not found",
+      "when": "no such call for the authenticated tenant"
+    },
+    {
+      "status": 409,
+      "code": "Conflict",
+      "message": "call already ended as <status>",
+      "when": "a different terminal status was already reported"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "no Authorization header"
+    }
+  ],
+  "captureResponse": {
+    "voice-agent.calls.complete.response.data.call.conversation_thread_id": "data.call.conversation_thread_id",
+    "voice-agent.calls.complete.response.data.call.post_call.crm.activity_id": "data.call.post_call.crm.activity_id"
+  },
+  "fieldEnums": {
+    "status": [
+      "completed",
+      "failed"
+    ],
+    "disposition": [
+      "connected_qualified",
+      "connected_not_interested",
+      "callback_requested",
+      "meeting_booked",
+      "voicemail",
+      "no_answer",
+      "busy",
+      "wrong_number",
+      "opt_out",
+      "failed"
+    ],
+    "answered_by": [
+      "human",
+      "machine",
+      "unknown"
+    ],
+    "speaker": [
+      "caller",
+      "agent",
+      "system"
+    ]
+  }
+}

@@ -60,6 +60,10 @@ export interface Call {
   is_test: boolean;
   idempotency_key: string | null;
   requested_by: string | null;
+  crm_encounter_id: string | null;
+  conversation_thread_id: string | null;
+  /** What post-call processing did (TK-4475): summary_source, mirror results, errors. */
+  post_call: Record<string, unknown>;
   next_attempt_at: string | null;
   started_at: string | null;
   answered_at: string | null;
@@ -79,6 +83,10 @@ export interface PlaceCallInput {
   from?: unknown;
   subject_ref?: unknown;
   context?: unknown;
+  /** sdk-crm encounter whose timeline receives the call activity. */
+  crm_encounter_id?: unknown;
+  /** sdk-conversation thread to mirror the turns onto; resolved from subject_ref when omitted. */
+  conversation_thread_id?: unknown;
 }
 
 export interface PlaceCallOptions {
@@ -114,7 +122,7 @@ const CALL_COLUMNS = `
   call_id, tenant_id, agent_id, agent_version_id, direction, subject_ref, from_number, to_number,
   carrier_call_ref, status, answered_by, disposition, summary, context, gate_verdicts,
   recording_consent, recording_ref, cost_breakdown, is_test, idempotency_key, requested_by,
-  next_attempt_at, started_at, answered_at, ended_at, duration_s, created_at, updated_at`;
+  crm_encounter_id, conversation_thread_id, post_call, next_attempt_at, started_at, answered_at, ended_at, duration_s, created_at, updated_at`;
 
 type CallRow = Omit<Call, 'next_attempt_at' | 'started_at' | 'answered_at' | 'ended_at' | 'created_at' | 'updated_at'> & {
   request_hash?: string | null;
@@ -157,6 +165,8 @@ interface ValidCall {
   from: string | null;
   subjectRef: string | null;
   context: Record<string, unknown>;
+  crmEncounterId: string | null;
+  threadId: string | null;
 }
 
 function validatePlaceCall(input: PlaceCallInput): ValidCall {
@@ -174,12 +184,18 @@ function validatePlaceCall(input: PlaceCallInput): ValidCall {
   if (Buffer.byteLength(JSON.stringify(context), 'utf8') > MAX_CONTEXT_BYTES) {
     throw validationError(`context must be at most ${MAX_CONTEXT_BYTES} bytes`);
   }
+  for (const f of ['crm_encounter_id', 'conversation_thread_id'] as const) {
+    const val = input[f];
+    if (val !== undefined && val !== null && (typeof val !== 'string' || !UUID_RE.test(val))) throw validationError(`${f} must be a uuid`);
+  }
   return {
     agentId: input.agent_id,
     to: input.to,
     from: (input.from as string | undefined) ?? null,
     subjectRef: (input.subject_ref as string | undefined) ?? null,
     context: context as Record<string, unknown>,
+    crmEncounterId: (input.crm_encounter_id as string | undefined) ?? null,
+    threadId: (input.conversation_thread_id as string | undefined) ?? null,
   };
 }
 
@@ -198,6 +214,30 @@ function replayOf(row: CallRow, requestHash: string): PlaceCallResult {
 }
 
 /**
+ * A CRM encounter or conversation thread named on a call must be the SAME tenant's —
+ * otherwise post-call mirroring would write this tenant's call onto another tenant's
+ * timeline. Both read as "not found" to avoid confirming another tenant's ids.
+ *
+ * @throws VoiceAgentError 400.
+ */
+export async function assertLinksOwned(tenantId: string, crmEncounterId: string | null, threadId: string | null): Promise<void> {
+  if (crmEncounterId) {
+    const enc = await dataService.one<{ encounter_id: string }>(
+      `SELECT encounter_id FROM engagement.encounter WHERE encounter_id = $1 AND tenant_id = $2`,
+      [crmEncounterId, tenantId],
+    );
+    if (!enc) throw validationError('crm_encounter_id does not reference an encounter of this tenant');
+  }
+  if (threadId) {
+    const thread = await dataService.one<{ thread_id: string }>(
+      `SELECT thread_id FROM conversation.thread WHERE thread_id = $1 AND tenant_id = $2`,
+      [threadId, tenantId],
+    );
+    if (!thread) throw validationError('conversation_thread_id does not reference a thread of this tenant');
+  }
+}
+
+/**
  * Places (queues) an outbound AI call.
  *
  * @throws VoiceAgentError 400 invalid input, 404 unknown agent, 409 the agent cannot place
@@ -210,7 +250,11 @@ export async function placeCall(tenantId: string, input: PlaceCallInput, opts: P
   }
   const v = validatePlaceCall(input);
   const requestHash = createHash('sha256')
-    .update(canonical({ agent_id: v.agentId, to: v.to, from: v.from, subject_ref: v.subjectRef, context: v.context }))
+    .update(canonical({
+      agent_id: v.agentId, to: v.to, from: v.from, subject_ref: v.subjectRef, context: v.context,
+      ...(v.crmEncounterId ? { crm_encounter_id: v.crmEncounterId } : {}),
+      ...(v.threadId ? { conversation_thread_id: v.threadId } : {}),
+    }))
     .digest('hex');
 
   // A retry is answered from the stored call BEFORE the agent is re-checked: a call that
@@ -231,16 +275,17 @@ export async function placeCall(tenantId: string, input: PlaceCallInput, opts: P
   if (agent.direction === 'inbound') throw conflict('agent is inbound-only and cannot place outbound calls');
   if (agent.kill_switch_engaged) throw conflict('agent kill switch is engaged');
   if (agent.status !== 'published' || !agent.published_version_id) throw conflict('agent has no published version');
+  await assertLinksOwned(tenantId, v.crmEncounterId, v.threadId);
 
   const row = await dataService.one<CallRow>(
     `INSERT INTO voice_agent.call
        (tenant_id, agent_id, agent_version_id, direction, subject_ref, from_number, to_number,
-        context, idempotency_key, request_hash, requested_by)
-     VALUES ($1, $2, $3, 'outbound', $4, $5, $6, $7::jsonb, $8, $9, $10)
+        context, idempotency_key, request_hash, requested_by, crm_encounter_id, conversation_thread_id)
+     VALUES ($1, $2, $3, 'outbound', $4, $5, $6, $7::jsonb, $8, $9, $10, $11, $12)
      ON CONFLICT (tenant_id, idempotency_key) DO NOTHING
      RETURNING ${CALL_COLUMNS}`,
     [tenantId, v.agentId, agent.published_version_id, v.subjectRef, v.from, v.to,
-      JSON.stringify(v.context), key ?? null, requestHash, opts.requestedBy ?? null],
+      JSON.stringify(v.context), key ?? null, requestHash, opts.requestedBy ?? null, v.crmEncounterId, v.threadId],
   );
   if (!row) {
     // Lost a race with a concurrent request carrying the same key: that one placed it.

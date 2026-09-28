@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { requireAuth } from '@projexlight/sdk-identity';
 import { getCall, listCalls, placeCall, type PlaceCallInput } from '../services/callService';
+import { completeCall, type CompleteCallInput } from '../services/postCallService';
 import { resolveTenant } from './tenantScope';
 import { sendError } from './sendError';
 
@@ -47,6 +48,22 @@ export function registerCallRoutes(app: FastifyInstance): void {
       const call = await getCall(tenantId, req.params.call_id);
       if (!call) return reply.code(404).send({ error: 'NotFound', details: ['call not found'] });
       return reply.code(200).send({ data: { call } });
+    },
+  );
+
+  // The voice runtime reports the end of a call (turns + outcome); post-call summary and
+  // mirroring run here. Repeating the same report is safe.
+  app.post<{ Params: { call_id: string } }>(
+    '/api/voice-agent/calls/:call_id/complete', { preHandler: requireAuth }, async (req, reply) => {
+      const body = (req.body ?? {}) as CompleteCallInput & { tenant_id?: string };
+      const tenantId = resolveTenant(req, reply, body.tenant_id);
+      if (!tenantId) return reply;
+      try {
+        const actor = req.auth?.primary_persona_id ?? req.auth?.sub ?? 'unknown';
+        return reply.code(200).send({ data: { call: await completeCall(tenantId, req.params.call_id, body, actor) } });
+      } catch (err) {
+        return sendError(reply, err);
+      }
     },
   );
 }

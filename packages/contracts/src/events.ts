@@ -433,6 +433,8 @@ export const EVENT_TYPE_REGISTRY: Record<string, EventTypeMetadata> = {
   'voice.agent.resumed.v1':                   { event_type: 'voice.agent.resumed.v1',                   retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
   // VA·E2 (TK-4474) — an outbound AI call was accepted and queued for the dialer.
   'voice.call.queued.v1':                     { event_type: 'voice.call.queued.v1',                     retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+  // VA·E2 (TK-4475) — an AI call ended; summary written and mirrored to conversation + CRM.
+  'voice.call.completed.v1':                  { event_type: 'voice.call.completed.v1',                  retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
 
   /* --- sdk-incident (P15·E3) — exception/incident lifecycle + SLA --- */
   'incident.opened.v1':                       { event_type: 'incident.opened.v1',                       retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },

@@ -15,7 +15,7 @@
   "coversCriterion": [
     "ebd2f4af-72a1-4e29-b56f-a13d1c1a8b84#AC1"
   ],
-  "description": "Queues an outbound AI call on the agent's PUBLISHED version and hands it to the dialer (ebd2f4af-72a1-4e29-b56f-a13d1c1a8b84#AC1 — the same Idempotency-Key returns the same call and places it once). Body: agent_id (uuid), to (E.164), optional from (E.164), subject_ref (<=256 chars, e.g. lead:123), context (JSON object <=32KB, available to the agent's prompt). Header Idempotency-Key (1-255 printable ASCII): a retry with the same key and body returns 200 with the stored call, replayed=true and header Idempotent-Replayed: true, and is NOT dispatched again; the same key with a different body is 422 IdempotencyKeyReused. A new call returns 201 with status queued. The agent must be outbound or both, published and not kill-switched (409). The runner's agent chain ends at a draft agent, so testCases[0] exercises the 409 refusal; the 201/200 replay cases are proven end-to-end against a published agent.",
+  "description": "Queues an outbound AI call on the agent's PUBLISHED version and hands it to the dialer (ebd2f4af-72a1-4e29-b56f-a13d1c1a8b84#AC1 — the same Idempotency-Key returns the same call and places it once). Body: agent_id (uuid), to (E.164), optional from (E.164), subject_ref (<=256 chars, e.g. lead:123), context (JSON object <=32KB, available to the agent's prompt), crm_encounter_id (uuid of this tenant's encounter; its CRM timeline receives the call activity) and conversation_thread_id (uuid of this tenant's thread; otherwise resolved from subject_ref when the call completes). Header Idempotency-Key (1-255 printable ASCII): a retry with the same key and body returns 200 with the stored call, replayed=true and header Idempotent-Replayed: true, and is NOT dispatched again; the same key with a different body is 422 IdempotencyKeyReused. A new call returns 201 with status queued. The agent must be outbound or both, published and not kill-switched (409). The runner's agent chain ends at a draft agent, so testCases[0] exercises the 409 refusal; the 201/200 replay cases are proven end-to-end against a published agent.",
   "dependsOn": [
     "POST /api/auth/signup-tenant",
     "POST /api/voice-agent/agents"
@@ -119,8 +119,8 @@
     {
       "status": 400,
       "code": "ValidationError",
-      "message": "agent_id must be a uuid | to must be an E.164 phone number, e.g. +14155550100 | from must be an E.164 phone number | subject_ref must be a non-empty string of at most 256 characters | context must be a JSON object | context must be at most 32768 bytes | Idempotency-Key must be 1-255 printable ASCII characters",
-      "when": "invalid body or header"
+      "message": "agent_id must be a uuid | to must be an E.164 phone number, e.g. +14155550100 | from must be an E.164 phone number | subject_ref must be a non-empty string of at most 256 characters | context must be a JSON object | context must be at most 32768 bytes | Idempotency-Key must be 1-255 printable ASCII characters | crm_encounter_id must be a uuid | crm_encounter_id does not reference an encounter of this tenant | conversation_thread_id does not reference a thread of this tenant",
+      "when": "invalid body or header, or a link to another tenant"
     },
     {
       "status": 404,

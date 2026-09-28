@@ -72,6 +72,9 @@ export { registerTool, listTools, getTool, updateTool, effectiveTools } from './
 export type { AppTool, RegisterToolInput, UpdateToolInput } from './services/toolService';
 
 export { CALL_STATUSES, CALL_DIRECTIONS, placeCall, getCall, listCalls, setCallDispatcher } from './services/callService';
+
+export { VOICE_DISPOSITIONS, completeCall, setCallSummarizer } from './services/postCallService';
+export type { VoiceDisposition, CompleteCallInput, TurnInput, CallSummary, CallSummarizer } from './services/postCallService';
 export type {
   Call,
   CallDetail,
