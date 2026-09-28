@@ -1,4 +1,5 @@
 import dotenv from 'dotenv';
+import fs from 'fs';
 import path from 'path';
 // Load .env from the monorepo root, not from services/api-gateway's cwd.
 // ts-node-dev resolves cwd to the package dir, so a bare dotenv.config()
@@ -26,6 +27,14 @@ export const config = {
     user: process.env.DB_USER || 'postgres',
     password: process.env.DB_PASSWORD || 'postgres',
     ssl: process.env.DB_SSL === 'true',
+    // When DB_SSL is on, VERIFY the server certificate. It used to skip certificate
+    // checks entirely, i.e. encrypted but open to a man-in-the-middle on the DB link.
+    // DB_SSL_CA points at a PEM bundle for a private CA (e.g. the RDS bundle);
+    // DB_SSL_REJECT_UNAUTHORIZED=false is the explicit, visible opt-out for a
+    // self-signed dev database. No deployment sets DB_SSL today, so nothing changes
+    // until someone turns TLS on — and then it is verified by default.
+    sslRejectUnauthorized: process.env.DB_SSL_REJECT_UNAUTHORIZED !== 'false',
+    sslCaPath: process.env.DB_SSL_CA || undefined,
     poolMin: parseInt(process.env.DB_POOL_MIN || '2', 10),
     poolMax: parseInt(process.env.DB_POOL_MAX || '10', 10),
   },
@@ -58,3 +67,16 @@ export const config = {
     database: process.env.CLICKHOUSE_DATABASE || 'meter',
   },
 };
+
+/**
+ * TLS options for the gateway's Postgres pool: `false` when DB_SSL is off, otherwise
+ * certificate-verifying TLS (optionally against the DB_SSL_CA bundle).
+ *
+ * @throws Error when DB_SSL_CA is set but unreadable — failing at boot beats silently
+ *   connecting without the CA the operator asked for.
+ */
+export function dbSslOptions(): false | { rejectUnauthorized: boolean; ca?: string } {
+  if (!config.db.ssl) return false;
+  const ca = config.db.sslCaPath ? fs.readFileSync(config.db.sslCaPath, 'utf8') : undefined;
+  return { rejectUnauthorized: config.db.sslRejectUnauthorized, ...(ca ? { ca } : {}) };
+}

@@ -361,6 +361,8 @@ import { migrationsDir as deliverabilityMigrations, server as deliverabilityServ
 import { migrationsDir as offerCatalogMigrations, server as offerCatalogServer } from '@projexlight/sdk-offer-catalog';
 import { migrationsDir as handoffMigrations, server as handoffServer, registerHandoffSaga, setHandoffApprovalCreator } from '@projexlight/sdk-handoff';
 import { migrationsDir as incidentMigrations, server as incidentServer } from '@projexlight/sdk-incident';
+// VA·E2 — voice agent control plane (stack profiles, agents, numbers, app tools, calls).
+import { migrationsDir as voiceAgentMigrations } from '@projexlight/sdk-voice-agent';
 // P16 · EP-374 — the provenance kernel. Every ingesting SDK lands its rows here.
 import {
   migrationsDir as sourceRecordMigrations,
@@ -483,7 +485,7 @@ import { server as hdkImageEditorServer } from '@projexlight/hdk-image-editor';
 import { server as hdkVideoEditorServer } from '@projexlight/hdk-video-editor';
 import { server as hdkCameraServer }      from '@projexlight/hdk-camera';
 import { server as hdkMapServer }         from '@projexlight/hdk-map';
-import { config } from './config';
+import { config, dbSslOptions } from './config';
 import { eventRegistryRoutes } from './routes/events';
 import { obligationEnforcementPlugin } from './plugins/obligationEnforcement';
 import { registerAuthGate } from './plugins/authGate';
@@ -1188,7 +1190,7 @@ const start = async (): Promise<void> => {
       database: config.db.database,
       user: config.db.user,
       password: config.db.password,
-      ssl: config.db.ssl ? { rejectUnauthorized: false } : false,
+      ssl: dbSslOptions(),
       min: config.db.poolMin,
       max: config.db.poolMax,
     });
@@ -1390,6 +1392,8 @@ const start = async (): Promise<void> => {
       { sdk: 'sdk-offer-catalog',       dir: offerCatalogMigrations },
       { sdk: 'sdk-handoff',             dir: handoffMigrations },
       { sdk: 'sdk-incident',            dir: incidentMigrations },
+      // VA·E2 — self-contained voice_agent schema; persona/approval/credential refs are loose.
+      { sdk: 'sdk-voice-agent',         dir: voiceAgentMigrations },
       // Self-contained (no cross-schema FKs) — ordering free.
       { sdk: 'sdk-source-record',       dir: sourceRecordMigrations },
       // Self-contained: entity refs are loose (kind, id) pairs, so ordering is free.
