@@ -1,0 +1,51 @@
+{
+  "name": "DELETE /api/voice-agent/stack-profiles/:profile_id - Archive a stack profile",
+  "endpoint": "/api/voice-agent/stack-profiles/:profile_id",
+  "sdk": "sdk-voice-agent",
+  "sourceFile": "packages/sdk-voice-agent/src/server/routes.ts",
+  "method": "DELETE",
+  "requiresAuth": true,
+  "expectedStatus": 204,
+  "taskId": "9911dc89-b62c-408c-a819-f94578e92fed",
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "featureId": "deef80bf-b0ce-4295-9cf0-878c4f5bfd02",
+  "epicId": "9c7a8dc4-3db7-4cd2-9121-7649f143525c",
+  "priority": 69,
+  "testability": "auto",
+  "coversCriterion": ["deef80bf-b0ce-4295-9cf0-878c4f5bfd02#AC3"],
+  "description": "Archives a stack profile (soft delete: status active -> archived) so no new agent version can select it, while versions that already use it keep resolving. Archiving an already-archived profile is idempotent (204). Rows are never hard-deleted because published agent versions reference them.",
+  "dependsOn": [
+    "POST /api/auth/signup-tenant",
+    "POST /api/ai-gateway/tenant-credentials",
+    "POST /api/voice-agent/stack-profiles",
+    "GET /api/voice-agent/stack-profiles/:profile_id",
+    "PATCH /api/voice-agent/stack-profiles/:profile_id"
+  ],
+  "statusTransitions": {
+    "entity": "voice_agent.stack_profile",
+    "field": "status",
+    "flow": ["active", "archived"],
+    "transitions": [
+      { "from": "", "to": "active", "via": "POST /api/voice-agent/stack-profiles" },
+      { "from": "active", "to": "archived", "via": "DELETE /api/voice-agent/stack-profiles/:profile_id" }
+    ]
+  },
+  "testCases": [
+    {
+      "name": "Archive the profile",
+      "headers": { "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}" },
+      "pathParams": { "profile_id": "{{cache:voice-agent.stack-profiles.create.response.data.stack_profile.profile_id}}" },
+      "expectedStatus": 204
+    },
+    {
+      "name": "Unknown profile id is 404",
+      "headers": { "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}" },
+      "pathParams": { "profile_id": "{{dynamic:uuid}}" },
+      "expectedStatus": 404
+    }
+  ],
+  "errorCases": [
+    { "status": 404, "code": "NotFound", "message": "stack profile not found", "when": "no profile with that id for the tenant" },
+    { "status": 401, "code": "Unauthorized", "message": "Missing bearer token", "when": "no Authorization header" }
+  ]
+}

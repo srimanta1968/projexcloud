@@ -362,7 +362,7 @@ import { migrationsDir as offerCatalogMigrations, server as offerCatalogServer }
 import { migrationsDir as handoffMigrations, server as handoffServer, registerHandoffSaga, setHandoffApprovalCreator } from '@projexlight/sdk-handoff';
 import { migrationsDir as incidentMigrations, server as incidentServer } from '@projexlight/sdk-incident';
 // VA·E2 — voice agent control plane (stack profiles, agents, numbers, app tools, calls).
-import { migrationsDir as voiceAgentMigrations } from '@projexlight/sdk-voice-agent';
+import { migrationsDir as voiceAgentMigrations, server as voiceAgentServer } from '@projexlight/sdk-voice-agent';
 // P16 · EP-374 — the provenance kernel. Every ingesting SDK lands its rows here.
 import {
   migrationsDir as sourceRecordMigrations,
@@ -695,6 +695,8 @@ app.register(deliverabilityServer.registerRoutes);
 app.register(offerCatalogServer.registerRoutes);
 app.register(handoffServer.registerRoutes);
 app.register(incidentServer.registerRoutes);
+// VA·E2 — voice agent control plane (/api/voice-agent/*).
+app.register(voiceAgentServer.registerRoutes);
 app.register(sourceRecordServer.registerRoutes);
 app.register(importServer.registerRoutes);
 app.register(slaServer.registerRoutes);

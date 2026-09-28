@@ -36,6 +36,11 @@ export type { RouteDecision, RetryOptions } from './services/routingEngine';
 export { redactPrompt, invalidateRedactionCache } from './services/piiRedactor';
 export type { RedactResult } from './services/piiRedactor';
 
+// Tenant BYOK credential bindings — read side, for SDKs that reference a binding by id
+// (sdk-voice-agent stack profiles). Never returns the envelope, only binding metadata.
+export { listTenantCredentials } from './services/tenantCredentialService';
+export type { TenantCredentialBinding } from './services/tenantCredentialService';
+
 // Completion service (FR-AGW-1..9 / AC-1) — TK-3289 service body + TK-3290 REST.
 export { complete, stream } from './services/completionService';
 

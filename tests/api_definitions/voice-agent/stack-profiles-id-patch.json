@@ -1,0 +1,58 @@
+{
+  "name": "PATCH /api/voice-agent/stack-profiles/:profile_id - Update overrides, credentials or fallbacks",
+  "endpoint": "/api/voice-agent/stack-profiles/:profile_id",
+  "sdk": "sdk-voice-agent",
+  "sourceFile": "packages/sdk-voice-agent/src/server/routes.ts",
+  "method": "PATCH",
+  "requiresAuth": true,
+  "expectedStatus": 200,
+  "taskId": "9911dc89-b62c-408c-a819-f94578e92fed",
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "featureId": "deef80bf-b0ce-4295-9cf0-878c4f5bfd02",
+  "epicId": "9c7a8dc4-3db7-4cd2-9121-7649f143525c",
+  "priority": 64,
+  "testability": "auto",
+  "coversCriterion": ["deef80bf-b0ce-4295-9cf0-878c4f5bfd02#AC3"],
+  "description": "Updates an active stack profile: rename it, merge per-layer overrides onto the preset, or replace credential_refs / fallbacks. Every credential reference in the resulting profile is re-validated, so an update that points a layer at a missing or revoked binding is rejected with 422 CredentialInvalid — the same rule as create (deef80bf-b0ce-4295-9cf0-878c4f5bfd02#AC3). preset_key is immutable; archived profiles cannot be edited (409 Conflict).",
+  "dependsOn": [
+    "POST /api/auth/signup-tenant",
+    "POST /api/ai-gateway/tenant-credentials",
+    "POST /api/voice-agent/stack-profiles"
+  ],
+  "testCases": [
+    {
+      "name": "Override the TTS voice and keep the fast-LLM credential",
+      "headers": { "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}" },
+      "pathParams": { "profile_id": "{{cache:voice-agent.stack-profiles.create.response.data.stack_profile.profile_id}}" },
+      "payload": {
+        "name": "{{dynamic:name}}",
+        "overrides": { "tts": { "provider": "cartesia", "model": "sonic-2", "voice": "sophie" } },
+        "credential_refs": { "llm_fast": { "primary": "{{cache:ai-gateway-tenant-credentials.create.response.data.binding.binding_id}}" } },
+        "fallbacks": {}
+      },
+      "expectedStatus": 200,
+      "expectedResponse": { "data": { "stack_profile": { "profile_id": "string", "tts": {} } } }
+    },
+    {
+      "name": "Reject pointing a layer at a credential that does not exist",
+      "headers": { "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}" },
+      "pathParams": { "profile_id": "{{cache:voice-agent.stack-profiles.create.response.data.stack_profile.profile_id}}" },
+      "payload": { "credential_refs": { "tts": { "primary": "{{dynamic:uuid}}" } } },
+      "expectedStatus": 422
+    },
+    {
+      "name": "Reject changing the preset",
+      "headers": { "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}" },
+      "pathParams": { "profile_id": "{{cache:voice-agent.stack-profiles.create.response.data.stack_profile.profile_id}}" },
+      "payload": { "preset_key": "{{static:premium}}" },
+      "expectedStatus": 400
+    }
+  ],
+  "errorCases": [
+    { "status": 400, "code": "ValidationError", "message": "preset_key cannot be changed; create a new profile", "when": "preset_key present in the body" },
+    { "status": 404, "code": "NotFound", "message": "stack profile not found", "when": "no profile with that id for the tenant" },
+    { "status": 409, "code": "Conflict", "message": "archived stack profiles cannot be edited", "when": "profile status is archived, or the new name is already used" },
+    { "status": 422, "code": "CredentialInvalid", "message": "credential <binding_id> for layer <layer> is missing or revoked", "when": "a referenced binding is missing for the tenant or revoked" },
+    { "status": 401, "code": "Unauthorized", "message": "Missing bearer token", "when": "no Authorization header" }
+  ]
+}

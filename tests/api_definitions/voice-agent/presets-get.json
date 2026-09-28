@@ -1,0 +1,40 @@
+{
+  "name": "GET /api/voice-agent/presets - List voice agent preset stacks",
+  "endpoint": "/api/voice-agent/presets",
+  "sdk": "sdk-voice-agent",
+  "sourceFile": "packages/sdk-voice-agent/src/server/routes.ts",
+  "method": "GET",
+  "requiresAuth": true,
+  "expectedStatus": 200,
+  "taskId": "9911dc89-b62c-408c-a819-f94578e92fed",
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "featureId": "deef80bf-b0ce-4295-9cf0-878c4f5bfd02",
+  "epicId": "9c7a8dc4-3db7-4cd2-9121-7649f143525c",
+  "priority": 60,
+  "testability": "auto",
+  "coversCriterion": ["deef80bf-b0ce-4295-9cf0-878c4f5bfd02#AC2"],
+  "description": "Returns the generally-available BYOK preset stacks a tenant clones into a stack profile: budget, balanced and premium (covers deef80bf-b0ce-4295-9cf0-878c4f5bfd02#AC2 — GET /api/voice-agent/presets returns the Budget, Balanced and Premium presets). Each preset names a provider+model per layer (telephony, stt, llm_fast, llm_complex, tts), the layers a stack profile needs credentials for, and an indicative provider cost per call-minute. Static catalogue data — no tenant rows are read, but the route still requires a tenant JWT like every voice-agent route.",
+  "dependsOn": ["POST /api/auth/signup-tenant"],
+  "testCases": [
+    {
+      "name": "List the three GA presets",
+      "headers": { "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}" },
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "data": {
+          "presets": [
+            { "key": "string", "name": "string", "layers": { "telephony": {}, "stt": {}, "llm_fast": {}, "llm_complex": {}, "tts": {} }, "required_credential_layers": [], "estimated_cost_per_min": { "low": "number", "high": "number" } }
+          ]
+        }
+      }
+    },
+    {
+      "name": "Reject a request without a bearer token",
+      "headers": {},
+      "expectedStatus": 401
+    }
+  ],
+  "errorCases": [
+    { "status": 401, "code": "Unauthorized", "message": "Missing bearer token", "when": "no Authorization header (requireAuth preHandler)" }
+  ]
+}

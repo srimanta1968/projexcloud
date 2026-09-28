@@ -7,3 +7,30 @@
  * control plane once per call; see docs/v3.1/voiceagent/VoiceAgent-Architecture-v3.1.html.
  */
 export { migrationsDir } from './db';
+
+export { VOICE_LAYERS, PRESET_KEYS, VOICE_PRESETS, findPreset, isVoiceLayer } from './models/presets';
+export type { VoiceLayer, PresetKey, LayerConfig, LayerMap, VoicePreset } from './models/presets';
+export { VoiceAgentError } from './models/errors';
+
+export {
+  createStackProfile,
+  listStackProfiles,
+  getStackProfile,
+  updateStackProfile,
+  archiveStackProfile,
+  setCredentialChecker,
+} from './services/stackProfileService';
+export type {
+  StackProfile,
+  CredentialRef,
+  CredentialRefs,
+  LayerOverrides,
+  LayerFallbacks,
+  CreateStackProfileInput,
+  UpdateStackProfileInput,
+  CredentialChecker,
+  InvalidCredentialRef,
+} from './services/stackProfileService';
+
+// HTTP surface — mounted by the api-gateway.
+export * as server from './server';
