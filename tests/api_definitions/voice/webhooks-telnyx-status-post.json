@@ -1,0 +1,70 @@
+{
+  "name": "POST /api/voice/webhooks/telnyx/status - Telnyx signed call-status webhook",
+  "endpoint": "/api/voice/webhooks/telnyx/status",
+  "method": "POST",
+  "sdk": "connector-telnyx-voice",
+  "sourceFile": "packages/connector-telnyx-voice/src/server/routes.ts",
+  "requiresAuth": false,
+  "expectedStatus": 200,
+  "taskId": "833821c3-1880-4406-83b1-b49e2fee85d9",
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "featureId": "a0b36c83-48b0-4356-a5e7-6e253ac9e822",
+  "epicId": "7aa29f0e-cca5-46fa-8055-bd79b25855bf",
+  "priority": 146,
+  "testability": "auto",
+  "coversCriterion": [
+    "a0b36c83-48b0-4356-a5e7-6e253ac9e822#AC3"
+  ],
+  "description": "PUBLIC signed webhook (a0b36c83-48b0-4356-a5e7-6e253ac9e822#AC3 — Telnyx status webhooks are signature-verified and mirrored idempotently). Telnyx signs each webhook with Ed25519: telnyx-signature-ed25519 is the base64 signature over `${telnyx-timestamp}|${raw body}`, checked against TELNYX_PUBLIC_KEY; a timestamp more than TELNYX_WEBHOOK_TOLERANCE_S (300 s) away is refused as a replay, and a tampered body fails. Verification fails closed in production when the key is unset and is unenforced outside production. The gateway auth gate allowlists /api/voice/webhooks/. Events: call.initiated -> initiated, call.ringing -> ringing, call.answered / call.bridged -> in-progress, call.hangup -> completed when the leg was answered, else busy (user_busy) / no-answer (no_answer, timeout) / canceled (originator_cancel, normal_clearing) / failed; call.machine.detection.ended sets answered_by. Idempotent: every event id is recorded, so a redelivery returns duplicate=true and changes nothing; a status never moves backwards. The mirror row (connector_telnyx_voice.voice_call, keyed by call_leg_id) takes its tenant from the Telnyx connection id of the tenant's trunk, and the event is applied to the AI call whose carrier_call_sid is the call_leg_id (ai_call_id). Every recorded event is acknowledged with 200 so Telnyx stops retrying.",
+  "dependsOn": [],
+  "fieldEnums": {
+    "status": ["initiated", "ringing", "in-progress", "completed", "busy", "no-answer", "canceled", "failed"],
+    "event_type": ["call.initiated", "call.ringing", "call.answered", "call.bridged", "call.hangup", "call.machine.detection.ended"]
+  },
+  "testCases": [
+    {
+      "name": "Answered event for an unknown leg (unsigned: key not configured in test)",
+      "capturesResponse": true,
+      "headers": { "Content-Type": "application/json" },
+      "payload": {
+        "data": {
+          "id": "{{dynamic:uuid}}",
+          "event_type": "call.answered",
+          "occurred_at": "{{dynamic:datetime}}",
+          "payload": {
+            "call_leg_id": "leg_{{dynamic:slug}}",
+            "call_control_id": "cc_{{dynamic:slug}}",
+            "connection_id": "{{static:1234567890}}",
+            "from": "{{static:+14155550100}}",
+            "to": "{{static:+14155550101}}",
+            "direction": "{{static:outgoing}}"
+          }
+        }
+      },
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "data": {
+          "event_id": "string",
+          "event_type": "string",
+          "duplicate": "boolean",
+          "status": "string|null",
+          "voice_call_id": "string|null",
+          "ai_call_id": "string|null"
+        }
+      }
+    },
+    {
+      "name": "Missing event id",
+      "headers": { "Content-Type": "application/json" },
+      "payload": { "data": {} },
+      "expectedStatus": 400
+    }
+  ],
+  "captureResponse": {
+    "voice.webhooks.telnyx.status.response.data.voice_call_id": "data.voice_call_id"
+  },
+  "errorCases": [
+    { "status": 400, "code": "ValidationError", "message": "webhook body must carry data.id and data.event_type", "when": "the body is not JSON or lacks data.id / data.event_type" },
+    { "status": 401, "code": "InvalidSignature", "message": "signature mismatch", "when": "signature missing or wrong, timestamp outside the tolerance window, body altered, or (production) TELNYX_PUBLIC_KEY not configured" }
+  ]
+}

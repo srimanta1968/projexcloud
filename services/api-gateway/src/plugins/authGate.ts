@@ -81,7 +81,7 @@ const PUBLIC_PREFIX = [
   '/api/connectors/inbound/', // signature-verified inbound webhooks
   '/api/deliverability/webhooks/', // provider bounce/complaint webhooks (HMAC-verified in handler)
   '/api/notifications/webhooks/', // inbound SMS (Twilio) webhooks (HMAC-verified in handler)
-  '/api/voice/webhooks/', // Twilio voice status/recording callbacks (X-Twilio-Signature verified in handler)
+  '/api/voice/webhooks/', // Twilio (X-Twilio-Signature) + Telnyx (Ed25519) voice status callbacks, verified in handler
   '/api/scheduling/public/', // anonymous booking via a shared link (slug + capability token in handler)
 ];
 

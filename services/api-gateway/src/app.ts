@@ -460,7 +460,10 @@ import {
 // VA·E6 (TK-4501) — Telnyx as a voice-agent carrier.
 import {
   migrationsDir as telnyxVoiceMigrations,
+  server as telnyxVoiceServer,
   telnyxProvisioner,
+  setTelnyxStatusForwarder,
+  setTelnyxTenantResolver,
 } from '@projexlight/connector-telnyx-voice';
 import { migrationsDir as leadScoringMigrations }         from '@projexlight/sdk-lead-scoring';
 import { migrationsDir as configMigrations, server as configServer, importEnvDefaults } from '@projexlight/sdk-config';
@@ -759,6 +762,17 @@ app.register(speechServer.registerRoutes);
 setCallDispatcher(async (call) => { await dispatchCall(call); });
 // VA·E6 (TK-4501) — POST /api/voice-agent/trunks accepts carrier telnyx.
 registerCarrierProvisioner(telnyxProvisioner);
+// VA·E6 (TK-4502) — signed Telnyx status webhooks: the connection id names the tenant's
+// trunk, and each event is applied to the AI call whose carrier_call_sid is the call_leg_id.
+app.register(telnyxVoiceServer.registerRoutes);
+setTelnyxTenantResolver(async (connectionId) => (await dataService.one<{ tenant_id: string }>(
+  `SELECT tenant_id FROM voice_agent.sip_trunk WHERE carrier = 'telnyx' AND carrier_trunk_ref = $1 AND status <> 'deleted' ORDER BY created_at DESC LIMIT 1`,
+  [connectionId],
+))?.tenant_id ?? null);
+setTelnyxStatusForwarder(async (e) => {
+  const r = await applyCarrierStatus({ carrier_call_sid: e.carrier_call_sid, status: e.status, answered_by: e.answered_by, duration_s: e.duration_s });
+  return { matched: r.matched, ai_call_id: r.call_id };
+});
 // VA·E6 (TK-4499) — a dispatched outbound call is placed over the tenant's SIP trunk (a
 // LiveKit SIP participant on its outbound trunk). An origination failure fails the call,
 // which frees its slot and applies the retry policy; it never stops the dispatch loop.
