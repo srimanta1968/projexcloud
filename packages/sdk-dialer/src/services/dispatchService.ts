@@ -99,15 +99,16 @@ export async function dispatchCall(call: Call): Promise<ChainOutcome> {
     );
     if (ctx.contact_id) {
       // A campaign paused between pick and dial is not the contact's fault: it goes back to
-      // pending and the attempt is not counted.
+      // pending. Attempts are counted when a call is actually dispatched (queueDispatcher),
+      // not here — a deferral or refusal never reached the person.
       const campaignStopped = outcome.reason === 'campaign_not_running';
       await q(
         `UPDATE dialer.campaign_contact
-            SET status = $3, attempts = attempts + $7, last_call_id = $4, last_outcome = $5,
+            SET status = $3, last_call_id = $4, last_outcome = $5,
                 next_attempt_at = $6::timestamptz, updated_at = now()
           WHERE tenant_id = $1 AND contact_id = $2`,
         [call.tenant_id, ctx.contact_id, campaignStopped ? 'pending' : status, call.call_id, outcome.reason ?? 'queued',
-          outcome.next_attempt_at, campaignStopped ? 0 : 1],
+          outcome.next_attempt_at],
       );
     }
   });
@@ -149,7 +150,8 @@ async function auditOutcome(call: Call, ctx: GateContext, outcome: ChainOutcome)
   }
 }
 
-const DIALABLE_CONTACT = ['pending', 'deferred'];
+// A deferred contact already has a call waiting to be re-gated; only pending ones get a new call.
+const DIALABLE_CONTACT = ['pending'];
 
 /**
  * Dials one campaign contact now, through placeCall and therefore the same gate chain as
@@ -161,11 +163,11 @@ const DIALABLE_CONTACT = ['pending', 'deferred'];
  */
 export async function dialContact(tenantId: string, campaignId: string, contactId: string, actorId: string | null): Promise<PlaceCallResult> {
   const row = await dataService.one<{
-    agent_id: string; campaign_status: string; status: string; attempts: number; phone_number: string; subject_ref: string | null;
+    agent_id: string; campaign_status: string; status: string; attempts: number; updated_at: Date; phone_number: string; subject_ref: string | null;
     crm_encounter_id: string | null; person_id: string | null; jurisdiction: string | null; timezone: string | null;
     context: Record<string, unknown>; campaign_context: Record<string, unknown>;
   }>(
-    `SELECT c.agent_id, c.status AS campaign_status, k.status, k.attempts, k.phone_number, k.subject_ref, k.crm_encounter_id, k.person_id, k.jurisdiction, k.timezone,
+    `SELECT c.agent_id, c.status AS campaign_status, k.status, k.attempts, k.updated_at, k.phone_number, k.subject_ref, k.crm_encounter_id, k.person_id, k.jurisdiction, k.timezone,
             k.context, c.context AS campaign_context
        FROM dialer.campaign_contact k JOIN dialer.campaign c ON c.campaign_id = k.campaign_id AND c.tenant_id = k.tenant_id
       WHERE k.tenant_id = $1 AND k.campaign_id = $2 AND k.contact_id = $3`,
@@ -186,6 +188,8 @@ export async function dialContact(tenantId: string, campaignId: string, contactI
       timezone: row.timezone,
       context: { ...row.campaign_context, ...row.context, [DIALER_CONTEXT_KEY]: { campaign_id: campaignId, contact_id: contactId } },
     },
-    { idempotencyKey: `dialer:${contactId}:${row.attempts + 1}`, requestedBy: actorId ?? undefined },
+    // Keyed on the contact's state: a retried request for the same dial replays the same call,
+    // while any change to the contact (an outcome, a retry being scheduled) makes a new key.
+    { idempotencyKey: `dialer:${contactId}:${new Date(row.updated_at).getTime()}`, requestedBy: actorId ?? undefined },
   );
 }

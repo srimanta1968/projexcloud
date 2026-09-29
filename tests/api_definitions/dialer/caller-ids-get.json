@@ -1,0 +1,70 @@
+{
+  "name": "GET /api/dialer/caller-ids - List the tenant's caller-ID pool",
+  "endpoint": "/api/dialer/caller-ids",
+  "sdk": "sdk-dialer",
+  "sourceFile": "packages/sdk-dialer/src/server/routes.ts",
+  "method": "GET",
+  "requiresAuth": true,
+  "expectedStatus": 200,
+  "taskId": "927e63df-dcac-4660-a498-af69a3987a8a",
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "featureId": "e6ae5703-37a6-4d27-a7d5-23ec80c4a001",
+  "epicId": "4362a53f-a31a-4166-85be-ad1c383d60b5",
+  "priority": 124,
+  "testability": "auto",
+  "coversCriterion": [
+    "e6ae5703-37a6-4d27-a7d5-23ec80c4a001#AC3"
+  ],
+  "description": "Lists the pool (by number) with attestation, active flag and last_used_at, optionally filtered by active=true|false (e6ae5703-37a6-4d27-a7d5-23ec80c4a001#AC3). Dispatch picks each outbound call's caller ID from the tenant's ACTIVE pool — a number in the destination's NANP area code first (local presence), then the least recently used — narrowed to the campaign's caller_id_pool when set, and stores it as the call's from_number with caller_id_attestation. A from number the caller names must be an active pool number (else refused caller_id_not_owned); with no usable number the call is refused no_caller_id and its slot released.",
+  "dependsOn": [
+    "POST /api/auth/signup-tenant",
+    "POST /api/dialer/caller-ids"
+  ],
+  "testCases": [
+    {
+      "name": "List the active numbers",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "queryParams": {
+        "active": "{{static:true}}"
+      },
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "data": {
+          "caller_ids": [
+            {
+              "caller_id_id": "string",
+              "phone_number": "string",
+              "attestation": "string"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "Reject an active filter that is not true/false",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "queryParams": {
+        "active": "{{static:maybe}}"
+      },
+      "expectedStatus": 400
+    }
+  ],
+  "errorCases": [
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "active must be true or false",
+      "when": "invalid filter"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "no Authorization header"
+    }
+  ]
+}

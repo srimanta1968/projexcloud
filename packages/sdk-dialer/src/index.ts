@@ -64,5 +64,10 @@ export type { TickOptions, TickResult, TenantWeightResolver } from './services/s
 export { ANSWERED_BY, reportAmd } from './services/amdService';
 export type { AnsweredBy, AmdAction, AmdDecision } from './services/amdService';
 
+export { ATTESTATIONS, addCallerId, listCallerIds, deactivateCallerId, pickCallerId } from './services/callerIdService';
+export type { Attestation, CallerId } from './services/callerIdService';
+export { RETRYABLE_OUTCOMES, applyRetryPolicy } from './services/retryService';
+export type { EndedCall, RetryOutcome } from './services/retryService';
+
 // HTTP surface — mounted by the api-gateway.
 export * as server from './server';

@@ -14,6 +14,7 @@ import { dialContact } from '../services/dispatchService';
 import { capacitySnapshot } from '../services/capacityService';
 import { dispatchQueued } from '../services/queueDispatcher';
 import { reportAmd } from '../services/amdService';
+import { addCallerId, deactivateCallerId, listCallerIds } from '../services/callerIdService';
 import { resolveTenant } from './tenantScope';
 import { sendError } from './sendError';
 
@@ -130,6 +131,39 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
     if (!tenantId) return reply;
     try {
       return reply.code(200).send({ data: { decision: await reportAmd(tenantId, req.params.call_id, body) } });
+    } catch (err) {
+      return sendError(reply, err);
+    }
+  });
+
+  // TK-4487 — the tenant's caller-ID pool.
+  app.post('/api/dialer/caller-ids', { preHandler: requireAuth }, async (req, reply) => {
+    const body = (req.body ?? {}) as { phone_number?: unknown; attestation?: unknown; label?: unknown; tenant_id?: string };
+    const tenantId = resolveTenant(req, reply, body.tenant_id);
+    if (!tenantId) return reply;
+    try {
+      return reply.code(201).send({ data: { caller_id: await addCallerId(tenantId, body) } });
+    } catch (err) {
+      return sendError(reply, err);
+    }
+  });
+
+  app.get<{ Querystring: { tenant_id?: string; active?: string } }>('/api/dialer/caller-ids', { preHandler: requireAuth }, async (req, reply) => {
+    const tenantId = resolveTenant(req, reply, req.query.tenant_id);
+    if (!tenantId) return reply;
+    try {
+      return reply.code(200).send({ data: { caller_ids: await listCallerIds(tenantId, { active: req.query.active }) } });
+    } catch (err) {
+      return sendError(reply, err);
+    }
+  });
+
+  app.post<{ Params: { caller_id_id: string } }>('/api/dialer/caller-ids/:caller_id_id/deactivate', { preHandler: requireAuth }, async (req, reply) => {
+    const body = (req.body ?? {}) as { tenant_id?: string };
+    const tenantId = resolveTenant(req, reply, body.tenant_id);
+    if (!tenantId) return reply;
+    try {
+      return reply.code(200).send({ data: { caller_id: await deactivateCallerId(tenantId, req.params.caller_id_id) } });
     } catch (err) {
       return sendError(reply, err);
     }

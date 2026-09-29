@@ -70,6 +70,8 @@ export interface Call {
   recipient_timezone: string | null;
   /** Action taken when a machine answered (drop_tts | drop_recording | hang_up); null = none. */
   voicemail_action: string | null;
+  /** STIR/SHAKEN attestation (A | B | C) of the caller ID the dialer presented. */
+  caller_id_attestation: string | null;
   /** What post-call processing did (TK-4475): summary_source, mirror results, errors. */
   post_call: Record<string, unknown>;
   next_attempt_at: string | null;
@@ -145,7 +147,7 @@ const CALL_COLUMNS = `
   call_id, tenant_id, agent_id, agent_version_id, direction, subject_ref, from_number, to_number,
   carrier_call_ref, status, answered_by, disposition, summary, context, gate_verdicts,
   recording_consent, recording_ref, cost_breakdown, is_test, idempotency_key, requested_by,
-  crm_encounter_id, conversation_thread_id, person_id, jurisdiction, recipient_timezone, voicemail_action, post_call, next_attempt_at, started_at, answered_at, ended_at, duration_s, created_at, updated_at`;
+  crm_encounter_id, conversation_thread_id, person_id, jurisdiction, recipient_timezone, voicemail_action, caller_id_attestation, post_call, next_attempt_at, started_at, answered_at, ended_at, duration_s, created_at, updated_at`;
 
 type CallRow = Omit<Call, 'next_attempt_at' | 'started_at' | 'answered_at' | 'ended_at' | 'created_at' | 'updated_at'> & {
   request_hash?: string | null;

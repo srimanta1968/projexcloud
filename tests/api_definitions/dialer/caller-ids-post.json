@@ -1,0 +1,81 @@
+{
+  "name": "POST /api/dialer/caller-ids - Add a caller ID to the tenant's pool",
+  "endpoint": "/api/dialer/caller-ids",
+  "sdk": "sdk-dialer",
+  "sourceFile": "packages/sdk-dialer/src/server/routes.ts",
+  "method": "POST",
+  "requiresAuth": true,
+  "expectedStatus": 201,
+  "taskId": "927e63df-dcac-4660-a498-af69a3987a8a",
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "featureId": "e6ae5703-37a6-4d27-a7d5-23ec80c4a001",
+  "epicId": "4362a53f-a31a-4166-85be-ad1c383d60b5",
+  "priority": 123,
+  "testability": "auto",
+  "coversCriterion": [
+    "e6ae5703-37a6-4d27-a7d5-23ec80c4a001#AC3"
+  ],
+  "description": "Adds (or re-activates) a number the tenant may present as caller ID (e6ae5703-37a6-4d27-a7d5-23ec80c4a001#AC3 — outbound calls use a caller ID from the tenant's pool and store the attestation level). Body: phone_number (E.164), attestation (STIR/SHAKEN level the tenant's carrier signs it at: A full, B partial, C gateway; default B), label. Dispatch picks each outbound call's caller ID from the tenant's ACTIVE pool — a number in the destination's NANP area code first (local presence), then the least recently used — narrowed to the campaign's caller_id_pool when set, and stores it as the call's from_number with caller_id_attestation. A from number the caller names must be an active pool number (else refused caller_id_not_owned); with no usable number the call is refused no_caller_id and its slot released.",
+  "dependsOn": [
+    "POST /api/auth/signup-tenant"
+  ],
+  "fieldEnums": {
+    "attestation": [
+      "A",
+      "B",
+      "C"
+    ]
+  },
+  "testCases": [
+    {
+      "name": "Add a local number with full attestation",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "payload": {
+        "phone_number": "+1415{{dynamic:number}}5550",
+        "attestation": "A",
+        "label": "SF main line"
+      },
+      "expectedStatus": 201,
+      "expectedResponse": {
+        "data": {
+          "caller_id": {
+            "caller_id_id": "string",
+            "phone_number": "string",
+            "attestation": "string",
+            "active": "boolean"
+          }
+        }
+      }
+    },
+    {
+      "name": "Reject an unknown attestation level",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "payload": {
+        "phone_number": "+1415{{dynamic:number}}5551",
+        "attestation": "{{static:Z}}"
+      },
+      "expectedStatus": 400
+    }
+  ],
+  "captureResponse": {
+    "dialer.caller-ids.create.response.data.caller_id.caller_id_id": "data.caller_id.caller_id_id"
+  },
+  "errorCases": [
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "phone_number must be E.164, e.g. +14155550100 | attestation must be A, B or C | label must be at most 120 characters",
+      "when": "invalid body"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "no Authorization header"
+    }
+  ]
+}

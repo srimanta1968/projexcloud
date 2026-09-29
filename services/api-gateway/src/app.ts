@@ -383,6 +383,7 @@ import {
   runSchedulerTick,
   startDispatchScheduler,
   admitInbound,
+  applyRetryPolicy,
   DialerError,
 } from '@projexlight/sdk-dialer';
 // P16 · EP-374 — the provenance kernel. Every ingesting SDK lands its rows here.
@@ -726,6 +727,8 @@ app.register(dialerServer.registerRoutes);
 setCallDispatcher(async (call) => { await dispatchCall(call); });
 // VA·E5 (TK-4484) — a call that ends frees its concurrency slot.
 onCallEnded(async (call) => { await releaseSlot(call.call_id); });
+// VA·E5 (TK-4487) — a campaign call that ends schedules the contact's retry (or closes it).
+onCallEnded(async (call) => { await applyRetryPolicy(call); });
 
 // VA·E5 (TK-4485) — operator surface for the fair-share scheduler and inbound admission.
 // Both act across tenants (the tick) or before any tenant credential exists (an inbound

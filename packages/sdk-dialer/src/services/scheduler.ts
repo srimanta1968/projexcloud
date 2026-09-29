@@ -1,6 +1,8 @@
 import { dataService } from '@projexlight/db-runtime';
 import { acquireSlot, type SlotDecision } from './capacityService';
 import { dispatchQueued } from './queueDispatcher';
+import { dialContact, dispatchCall } from './dispatchService';
+import { getCall } from '@projexlight/sdk-voice-agent';
 import { conflict, notFound } from '../models/errors';
 
 /**
@@ -41,6 +43,10 @@ export interface TickOptions {
 }
 
 export interface TickResult {
+  /** Deferred calls whose not_before passed and were run through the gate chain again. */
+  regated: number;
+  /** New calls placed for due pending campaign contacts. */
+  fed: number;
   rounds: number;
   dispatched: number;
   by_tenant: Record<string, number>;
@@ -52,6 +58,12 @@ export interface TickResult {
 export async function runSchedulerTick(opts: TickOptions = {}): Promise<TickResult> {
   const budget = opts.budget ?? 200;
   const quantum = opts.quantum ?? 5;
+  const scope = opts.tenant_ids && opts.tenant_ids.length > 0 ? opts.tenant_ids : null;
+  // 1. Calls deferred by a gate (calling window, number in flight) whose time has come are
+  //    gated again — the same call, not a new one, so a deferral never burns an attempt.
+  const regated = await regateDue(scope, budget);
+  // 2. Due pending contacts of running campaigns get their call placed (TK-4487 retries).
+  const fed = await feedCampaigns(scope);
   const tenants = await dataService.rows<{ tenant_id: string }>(
     `SELECT tenant_id
        FROM dialer.dispatch_queue
@@ -65,7 +77,7 @@ export async function runSchedulerTick(opts: TickOptions = {}): Promise<TickResu
   const weights = new Map<string, number>();
   for (const t of tenants) weights.set(t.tenant_id, Math.max(1, Math.floor(await weightResolver(t.tenant_id))));
 
-  const result: TickResult = { rounds: 0, dispatched: 0, by_tenant: {}, capped: [] };
+  const result: TickResult = { regated, fed, rounds: 0, dispatched: 0, by_tenant: {}, capped: [] };
   const active = new Set(tenants.map((t) => t.tenant_id));
   while (active.size > 0 && result.dispatched < budget) {
     result.rounds += 1;
@@ -85,6 +97,58 @@ export async function runSchedulerTick(opts: TickOptions = {}): Promise<TickResu
     if (!progress) break;
   }
   return result;
+}
+
+async function regateDue(scope: string[] | null, limit: number): Promise<number> {
+  const rows = await dataService.rows<{ tenant_id: string; call_id: string }>(
+    `SELECT tenant_id, call_id FROM dialer.dispatch_queue
+      WHERE state = 'deferred' AND not_before <= now() AND ($1::uuid[] IS NULL OR tenant_id = ANY($1::uuid[]))
+      ORDER BY not_before LIMIT $2`,
+    [scope, limit],
+  );
+  let n = 0;
+  for (const r of rows) {
+    const call = await getCall(r.tenant_id, r.call_id);
+    if (!call || call.status !== 'deferred') continue;
+    await dispatchCall(call);
+    n += 1;
+  }
+  return n;
+}
+
+/** Keeps each running campaign's pipeline at about twice its concurrency. */
+async function feedCampaigns(scope: string[] | null): Promise<number> {
+  const campaigns = await dataService.rows<{ tenant_id: string; campaign_id: string; max_concurrency: number }>(
+    `SELECT tenant_id, campaign_id, max_concurrency FROM dialer.campaign
+      WHERE status = 'running' AND ($1::uuid[] IS NULL OR tenant_id = ANY($1::uuid[]))`,
+    [scope],
+  );
+  let n = 0;
+  for (const c of campaigns) {
+    const busy = await dataService.one<{ n: number }>(
+      `SELECT count(*)::int AS n FROM dialer.campaign_contact
+        WHERE tenant_id = $1 AND campaign_id = $2 AND status IN ('queued','in_progress','deferred')`,
+      [c.tenant_id, c.campaign_id],
+    );
+    const room = c.max_concurrency * 2 - (busy?.n ?? 0);
+    if (room <= 0) continue;
+    const due = await dataService.rows<{ contact_id: string }>(
+      `SELECT contact_id FROM dialer.campaign_contact
+        WHERE tenant_id = $1 AND campaign_id = $2 AND status = 'pending'
+          AND (next_attempt_at IS NULL OR next_attempt_at <= now())
+        ORDER BY next_attempt_at NULLS FIRST, created_at LIMIT $3`,
+      [c.tenant_id, c.campaign_id, room],
+    );
+    for (const k of due) {
+      try {
+        await dialContact(c.tenant_id, c.campaign_id, k.contact_id, null);
+        n += 1;
+      } catch (err) {
+        console.error('[sdk-dialer] could not dial contact', k.contact_id, (err as Error).message);
+      }
+    }
+  }
+  return n;
 }
 
 let timer: NodeJS.Timeout | null = null;

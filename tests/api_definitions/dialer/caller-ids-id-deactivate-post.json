@@ -1,0 +1,73 @@
+{
+  "name": "POST /api/dialer/caller-ids/:caller_id_id/deactivate - Take a caller ID out of rotation",
+  "endpoint": "/api/dialer/caller-ids/:caller_id_id/deactivate",
+  "sdk": "sdk-dialer",
+  "sourceFile": "packages/sdk-dialer/src/server/routes.ts",
+  "method": "POST",
+  "requiresAuth": true,
+  "expectedStatus": 200,
+  "taskId": "927e63df-dcac-4660-a498-af69a3987a8a",
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "featureId": "e6ae5703-37a6-4d27-a7d5-23ec80c4a001",
+  "epicId": "4362a53f-a31a-4166-85be-ad1c383d60b5",
+  "priority": 125,
+  "testability": "auto",
+  "coversCriterion": [
+    "e6ae5703-37a6-4d27-a7d5-23ec80c4a001#AC3"
+  ],
+  "description": "Stops a number being picked for new calls (kept for history; adding it again re-activates it) (e6ae5703-37a6-4d27-a7d5-23ec80c4a001#AC3). Another tenant's number reads as 404.",
+  "dependsOn": [
+    "POST /api/auth/signup-tenant",
+    "POST /api/dialer/caller-ids",
+    "GET /api/dialer/caller-ids"
+  ],
+  "testCases": [
+    {
+      "name": "Deactivate the number",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "pathParams": {
+        "caller_id_id": "{{cache:dialer.caller-ids.create.response.data.caller_id.caller_id_id}}"
+      },
+      "payload": {},
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "data": {
+          "caller_id": {
+            "caller_id_id": "string",
+            "active": "boolean"
+          }
+        }
+      }
+    },
+    {
+      "name": "Unknown caller ID is 404",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "pathParams": {
+        "caller_id_id": "{{dynamic:uuid}}"
+      },
+      "payload": {},
+      "expectedStatus": 404
+    }
+  ],
+  "captureResponse": {
+    "dialer.caller-ids.deactivate.response.data.caller_id.active": "data.caller_id.active"
+  },
+  "errorCases": [
+    {
+      "status": 404,
+      "code": "NotFound",
+      "message": "caller ID not found",
+      "when": "unknown number or another tenant’s"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "no Authorization header"
+    }
+  ]
+}
