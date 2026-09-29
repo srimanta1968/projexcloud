@@ -1,0 +1,111 @@
+{
+  "sdk": "sdk-voice-agent",
+  "sourceFile": "packages/sdk-voice-agent/src/server/trunkRoutes.ts",
+  "requiresAuth": true,
+  "taskId": "899b4d80-8fdc-4863-8830-92ce6f4f8144",
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "featureId": "506bbf30-2d83-440b-a853-1a8205f4b3cb",
+  "epicId": "7aa29f0e-cca5-46fa-8055-bd79b25855bf",
+  "testability": "auto",
+  "name": "POST /api/voice-agent/trunks - Provision the tenant's Twilio SIP trunk to LiveKit",
+  "endpoint": "/api/voice-agent/trunks",
+  "method": "POST",
+  "expectedStatus": 201,
+  "priority": 140,
+  "coversCriterion": [
+    "506bbf30-2d83-440b-a853-1a8205f4b3cb#AC1",
+    "506bbf30-2d83-440b-a853-1a8205f4b3cb#AC2"
+  ],
+  "description": "Wires the tenant's Twilio Elastic SIP trunk to the platform's LiveKit SIP service with the tenant's own Twilio credential (a telephony-layer ai-gateway binding stored as <AccountSid>:<AuthToken>). Twilio: creates a trunk (or attaches trunk_sid), points its origination URL at LIVEKIT_SIP_URI, creates a SIP credential list for termination and attaches the tenant's bound Twilio numbers (looked up in the tenant's own account; others are returned in skipped_numbers). LiveKit: an inbound trunk for those numbers plus a dispatch rule that puts each call in its own room with the voice-runtime agent (506bbf30-2d83-440b-a853-1a8205f4b3cb#AC1 — an inbound call to a tenant's Twilio number is delivered to the voice runtime over the tenant's trunk), and an outbound trunk to the Twilio termination domain with the same SIP credential, over which the dialer originates outbound AI calls as SIP participants (506bbf30-2d83-440b-a853-1a8205f4b3cb#AC2). The SIP password is never stored. One live trunk per tenant and carrier (409). Audited as voice.trunk.provisioned.v1. The API runner has no Twilio account or LiveKit SIP service, so its datasets lead with the deterministic refusals; the provisioning path is exercised against Twilio/LiveKit API stubs that check every request.",
+  "dependsOn": [
+    "POST /api/auth/signup-tenant",
+    "POST /api/ai-gateway/tenant-credentials"
+  ],
+  "fieldEnums": {
+    "carrier": [
+      "twilio"
+    ],
+    "status": [
+      "provisioning",
+      "active",
+      "error",
+      "deleted"
+    ]
+  },
+  "testCases": [
+    {
+      "name": "Carrier not supported by this endpoint yet",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "payload": {
+        "carrier": "{{static:telnyx}}",
+        "credential_binding_id": "{{cache:ai-gateway-tenant-credentials.create.response.data.binding.binding_id}}"
+      },
+      "expectedStatus": 400,
+      "expectedResponse": {
+        "error": "string",
+        "details": [
+          "string"
+        ]
+      }
+    },
+    {
+      "name": "Missing credential",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "payload": {
+        "carrier": "{{static:twilio}}"
+      },
+      "expectedStatus": 400
+    }
+  ],
+  "captureResponse": {
+    "voice-agent.trunks.create.response.data.trunk.trunk_id": "data.trunk.trunk_id"
+  },
+  "errorCases": [
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "credential_binding_id must be a Twilio telephony credential",
+      "when": "carrier is not twilio, the binding id is missing/not a uuid, the binding is not a twilio telephony key, the key is not <AccountSid>:<AuthToken>, or trunk_sid is malformed"
+    },
+    {
+      "status": 404,
+      "code": "NotFound",
+      "message": "credential binding not found",
+      "when": "the binding does not exist for the caller's tenant"
+    },
+    {
+      "status": 409,
+      "code": "Conflict",
+      "message": "the tenant already has a live Twilio trunk",
+      "when": "a live (not deleted) Twilio trunk exists, or the credential is revoked"
+    },
+    {
+      "status": 422,
+      "code": "CredentialRejected",
+      "message": "Twilio rejected the tenant credential (HTTP 401)",
+      "when": "Twilio refuses the tenant's AccountSid/AuthToken (nothing is left behind)"
+    },
+    {
+      "status": 502,
+      "code": "CarrierError",
+      "message": "Twilio answered HTTP <status>: <message>",
+      "when": "a Twilio or LiveKit (MediaError) call fails after provisioning began; the trunk row keeps status=error so DELETE can clean up"
+    },
+    {
+      "status": 503,
+      "code": "TelephonyNotConfigured",
+      "message": "voice telephony needs LIVEKIT_URL, LIVEKIT_API_KEY, LIVEKIT_API_SECRET and LIVEKIT_SIP_URI",
+      "when": "the deployment has no LiveKit SIP configured"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "no Authorization header"
+    }
+  ]
+}

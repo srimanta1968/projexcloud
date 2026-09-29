@@ -1,0 +1,55 @@
+{
+  "sdk": "sdk-voice-agent",
+  "sourceFile": "packages/sdk-voice-agent/src/server/trunkRoutes.ts",
+  "requiresAuth": true,
+  "taskId": "899b4d80-8fdc-4863-8830-92ce6f4f8144",
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "featureId": "506bbf30-2d83-440b-a853-1a8205f4b3cb",
+  "epicId": "7aa29f0e-cca5-46fa-8055-bd79b25855bf",
+  "testability": "auto",
+  "name": "DELETE /api/voice-agent/trunks/:trunk_id - Remove a SIP trunk",
+  "endpoint": "/api/voice-agent/trunks/:trunk_id",
+  "method": "DELETE",
+  "expectedStatus": 200,
+  "priority": 144,
+  "coversCriterion": [
+    "506bbf30-2d83-440b-a853-1a8205f4b3cb#AC1"
+  ],
+  "description": "Removes the LiveKit inbound/outbound trunks and dispatch rule (best effort) and marks the trunk deleted, freeing the slot for a new one; the Twilio trunk itself stays in the tenant's account. Idempotent. Audited as voice.trunk.deleted.v1 (506bbf30-2d83-440b-a853-1a8205f4b3cb#AC1). The API runner has no Twilio account or LiveKit SIP service, so its datasets lead with the deterministic refusals; the provisioning path is exercised against Twilio/LiveKit API stubs that check every request.",
+  "dependsOn": [
+    "POST /api/auth/signup-tenant"
+  ],
+  "pathParams": {
+    "trunk_id": {
+      "type": "string",
+      "format": "uuid",
+      "required": true
+    }
+  },
+  "testCases": [
+    {
+      "name": "Unknown trunk",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "pathParams": {
+        "trunk_id": "{{dynamic:uuid}}"
+      },
+      "expectedStatus": 404
+    }
+  ],
+  "errorCases": [
+    {
+      "status": 404,
+      "code": "NotFound",
+      "message": "trunk not found",
+      "when": "no trunk with that id for the caller's tenant (includes another tenant's trunk)"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "no Authorization header"
+    }
+  ]
+}

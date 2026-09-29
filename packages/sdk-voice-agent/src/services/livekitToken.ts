@@ -72,3 +72,29 @@ export function signParticipantToken(cfg: LiveKitConfig, input: ParticipantToken
   const sig = createHmac('sha256', cfg.apiSecret).update(`${head}.${body}`).digest('base64url');
   return { token: `${head}.${body}.${sig}`, expiresAt: new Date(exp * 1000).toISOString() };
 }
+
+/**
+ * A short-lived server token for LiveKit's server APIs (SIP trunks, dispatch rules, SIP
+ * participants, agent dispatch) — TK-4499. Carries the SIP admin/call grants and room
+ * admin rights; never handed to a client.
+ */
+export function signServiceToken(cfg: LiveKitConfig, ttlSeconds = 60): string {
+  const now = Math.floor(Date.now() / 1000);
+  const claims = {
+    iss: cfg.apiKey,
+    sub: 'projex-voice-agent-server',
+    nbf: now,
+    exp: now + ttlSeconds,
+    sip: { admin: true, call: true },
+    video: { roomCreate: true, roomList: true, roomAdmin: true },
+  };
+  const head = b64url(JSON.stringify({ alg: 'HS256', typ: 'JWT' }));
+  const body = b64url(JSON.stringify(claims));
+  const sig = createHmac('sha256', cfg.apiSecret).update(`${head}.${body}`).digest('base64url');
+  return `${head}.${body}.${sig}`;
+}
+
+/** HTTP(S) root of the LiveKit server API (LIVEKIT_API_URL, else LIVEKIT_URL with ws->http). */
+export function liveKitApiUrl(cfg: LiveKitConfig): string {
+  return (process.env.LIVEKIT_API_URL || cfg.url.replace(/^ws(s?):\/\//, 'http$1://')).replace(/\/+$/, '');
+}

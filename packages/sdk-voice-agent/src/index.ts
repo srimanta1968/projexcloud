@@ -102,4 +102,14 @@ export type {
 } from './services/callService';
 
 // HTTP surface — mounted by the api-gateway.
+export {
+  provisionTwilioTrunk,
+  listTrunks,
+  getTrunk,
+  syncTrunkNumbers,
+  deleteTrunk,
+  originateCall,
+  setOutboundNumberSource,
+} from './services/telephonyService';
+export type { SipTrunk, ProvisionResult, OriginationResult, OutboundNumberSource } from './services/telephonyService';
 export * as server from './server';

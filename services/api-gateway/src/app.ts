@@ -377,6 +377,9 @@ import {
   getCall as getVoiceCall,
   getLiveCallBroker,
   setCallDispatcher,
+  originateCall,
+  setOutboundNumberSource,
+  completeCall,
   onCallEnded,
   VoiceAgentError,
 } from '@projexlight/sdk-voice-agent';
@@ -392,6 +395,8 @@ import {
   applyRetryPolicy,
   applyDispositionEffects,
   setKeyCapacityResolver,
+  setCallOriginator,
+  listCallerIds,
   DialerError,
 } from '@projexlight/sdk-dialer';
 // VA·E4 — the voice provider catalog (/api/speech/*).
@@ -742,6 +747,19 @@ app.register(speechServer.registerRoutes);
 // through the dialer's gate chain and queue. Wired here so sdk-voice-agent stays free of a
 // dependency on sdk-dialer.
 setCallDispatcher(async (call) => { await dispatchCall(call); });
+// VA·E6 (TK-4499) — a dispatched outbound call is placed over the tenant's SIP trunk (a
+// LiveKit SIP participant on its outbound trunk). An origination failure fails the call,
+// which frees its slot and applies the retry policy; it never stops the dispatch loop.
+setCallOriginator(async ({ tenant_id, call_id }) => {
+  try {
+    await originateCall(tenant_id, call_id);
+  } catch (err) {
+    console.error('[voice-agent] origination failed', call_id, (err as Error).message);
+    await completeCall(tenant_id, call_id, { status: 'failed', disposition: 'failed' }, 'voice-agent.telephony').catch(() => undefined);
+  }
+});
+// The outbound trunk may present the tenant's caller-ID pool numbers.
+setOutboundNumberSource(async (tenantId) => (await listCallerIds(tenantId, { active: 'true' })).map((c) => c.phone_number));
 // VA·E4 (TK-4491) — the key cap is the probed max safe concurrency of the agent's telephony
 // key (POST /api/speech/credentials/:id/validate); an unprobed key or the platform trunk
 // falls back to DIALER_DEFAULT_KEY_CAPACITY (unset = no key cap).

@@ -446,6 +446,10 @@ export const EVENT_TYPE_REGISTRY: Record<string, EventTypeMetadata> = {
   'speech.catalog_entry.updated.v1':          { event_type: 'speech.catalog_entry.updated.v1',          retention_class: 'operational', conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
   // VA·E3 (TK-4498) — a tenant voice/LLM key was revoked; failover_available says whether the layer still has a key.
   'voice.credential.degraded.v1':             { event_type: 'voice.credential.degraded.v1',             retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+  // VA·E6 (TK-4499) — a tenant carrier trunk was wired to LiveKit SIP.
+  'voice.trunk.provisioned.v1':                { event_type: 'voice.trunk.provisioned.v1',                retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+  // VA·E6 (TK-4499) — a tenant SIP trunk was removed.
+  'voice.trunk.deleted.v1':                    { event_type: 'voice.trunk.deleted.v1',                    retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
 
   /* --- sdk-incident (P15·E3) — exception/incident lifecycle + SLA --- */
   'incident.opened.v1':                       { event_type: 'incident.opened.v1',                       retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
