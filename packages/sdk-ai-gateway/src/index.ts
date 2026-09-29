@@ -45,6 +45,9 @@ export {
   recordProviderSuccess,
   recordProviderFailure,
   withRetry,
+  invalidateRouteRules,
+  routeCacheStats,
+  startRouteRuleListener,
 } from './services/routingEngine';
 export type { RouteDecision, RetryOptions } from './services/routingEngine';
 
@@ -73,7 +76,7 @@ export type {
 } from './services/tenantCredentialService';
 
 // Completion service (FR-AGW-1..9 / AC-1) — TK-3289 service body + TK-3290 REST.
-export { complete, stream } from './services/completionService';
+export { complete, stream, flushDeferredWrites, pendingDeferredWrites } from './services/completionService';
 
 // P8 Variant C — local provider preference hook for on-prem deployments.
 // sdk-onprem registers a resolver at boot; selectRoute() consults it first.

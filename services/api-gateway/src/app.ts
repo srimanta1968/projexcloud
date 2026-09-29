@@ -284,6 +284,8 @@ import {
   registerRealProviderAdapters,
   realProviderAdaptersEnabled,
   setModelPriceResolver,
+  startRouteRuleListener,
+  flushDeferredWrites,
 } from '@projexlight/sdk-ai-gateway';
 import {
   migrationsDir as taxonomyMigrations,
@@ -1680,6 +1682,10 @@ const start = async (): Promise<void> => {
         ? { input_per_1m: entry.list_price, output_per_1m: entry.output_list_price }
         : null;
     });
+    // VA·E5 (TK-4495/4496) — route rules are cached in process and invalidated by the
+    // route_rule change notification; deferred stream writes are flushed on shutdown.
+    startRouteRuleListener();
+    app.addHook('onClose', async () => { await flushDeferredWrites(); });
     // P6A — bootstrap LLM provider credentials from env into ai_gateway.provider.
     // Production refuses to start when a required provider is missing.
     try {

@@ -283,6 +283,39 @@ async function redactRequestPrompt(
   return { prompt: messages, applied };
 }
 
+/* ------------------- deferred stream bookkeeping (TK-4496) ------------------- */
+
+/**
+ * Writes a finished stream needs — circuit-breaker success, the completion row and the
+ * audit event — run AFTER the stream has closed, off the response path, so neither
+ * first-token latency nor stream close waits on the database. Failures are logged, never
+ * surfaced to the (already answered) client. Pending writes are tracked so a graceful
+ * shutdown can flush them (flushDeferredWrites).
+ */
+const deferred = new Set<Promise<void>>();
+
+function defer(label: string, work: () => Promise<void>): void {
+  const p = (async () => {
+    try {
+      await work();
+    } catch (err) {
+      console.error(`[ai-gateway] deferred ${label} failed`, (err as Error).message);
+    }
+  })();
+  deferred.add(p);
+  void p.finally(() => deferred.delete(p));
+}
+
+/** Waits for every deferred stream write (graceful shutdown, tests). */
+export async function flushDeferredWrites(): Promise<void> {
+  while (deferred.size > 0) await Promise.allSettled([...deferred]);
+}
+
+/** Number of deferred writes still in flight. */
+export function pendingDeferredWrites(): number {
+  return deferred.size;
+}
+
 async function persistCompletion(input: {
   completion_id: string;
   ctx: AgentContext;
@@ -484,7 +517,6 @@ export async function* stream(
       if (chunk.tool_calls?.length) streamToolCalls = chunk.tool_calls;
       yield enriched;
     }
-    await recordProviderSuccess(selected.provider_id);
   } catch (providerErr) {
     await recordProviderFailure(selected.provider_id);
     throw providerErr;
@@ -508,22 +540,27 @@ export async function* stream(
     finish_reason: finishReason,
   };
 
-  await persistCompletion({
-    completion_id: completionId,
-    ctx,
-    selected,
-    prompt_redacted: redaction.applied,
-    result: synthetic,
-    billed_cost,
-    latency_ms,
-  });
-  await emitCompletionEvent({
-    ctx,
-    selected,
-    result: synthetic,
-    billed_cost,
-    credential_source: providerRow.credential_source,
-    completion_id: completionId,
-    event_type: 'ai-gateway.stream.v1',
+  // Off the response path: the generator returns now, so the client's stream closes
+  // without waiting for these writes.
+  defer('stream bookkeeping', async () => {
+    await recordProviderSuccess(selected.provider_id);
+    await persistCompletion({
+      completion_id: completionId,
+      ctx,
+      selected,
+      prompt_redacted: redaction.applied,
+      result: synthetic,
+      billed_cost,
+      latency_ms,
+    });
+    await emitCompletionEvent({
+      ctx,
+      selected,
+      result: synthetic,
+      billed_cost,
+      credential_source: providerRow.credential_source,
+      completion_id: completionId,
+      event_type: 'ai-gateway.stream.v1',
+    });
   });
 }
