@@ -437,6 +437,9 @@ export const EVENT_TYPE_REGISTRY: Record<string, EventTypeMetadata> = {
   'voice.call.completed.v1':                  { event_type: 'voice.call.completed.v1',                  retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
   // VA·E5 (TK-4479) — dialer campaign status change or contact progress (throttled).
   'voice.campaign.progressed.v1':             { event_type: 'voice.campaign.progressed.v1',             retention_class: 'operational', conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+  // VA·E5 (TK-4483) — every dialer gate-chain outcome (all verdicts), and refusals on their own.
+  'voice.call.gated.v1':                      { event_type: 'voice.call.gated.v1',                      retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+  'voice.call.refused.v1':                    { event_type: 'voice.call.refused.v1',                    retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
 
   /* --- sdk-incident (P15·E3) — exception/incident lifecycle + SLA --- */
   'incident.opened.v1':                       { event_type: 'incident.opened.v1',                       retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },

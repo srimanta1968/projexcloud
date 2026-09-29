@@ -1,4 +1,5 @@
 import { dataService } from '@projexlight/db-runtime';
+import { emitEvent } from '@projexlight/sdk-audit';
 import { placeCall, type Call, type PlaceCallResult } from '@projexlight/sdk-voice-agent';
 import { conflict, notFound } from '../models/errors';
 import { runGateChain, type ChainOutcome, type GateContext } from './gateChain';
@@ -19,6 +20,7 @@ import { runGateChain, type ChainOutcome, type GateContext } from './gateChain';
 
 /** Marker placed in call.context by dialContact; carries which contact the call is for. */
 const DIALER_CONTEXT_KEY = '_dialer';
+const DIALER_AUDIT_POOL = process.env.DIALER_AUDIT_POOL || 'admin-default';
 
 interface DialerMarker {
   campaign_id: string;
@@ -109,7 +111,42 @@ export async function dispatchCall(call: Call): Promise<ChainOutcome> {
       );
     }
   });
+  await auditOutcome(call, ctx, outcome);
   return outcome;
+}
+
+/**
+ * Writes the gate outcome to the audit chain (TK-4483): voice.call.gated.v1 for EVERY
+ * dispatch, carrying each verdict, and voice.call.refused.v1 on a refusal so consumers can
+ * react to it alone. The recipient's number is deliberately not in the payload — the
+ * call_id resolves it for anyone allowed to see it.
+ */
+async function auditOutcome(call: Call, ctx: GateContext, outcome: ChainOutcome): Promise<void> {
+  const verdicts = Object.fromEntries(
+    Object.entries(outcome.verdicts).map(([gate, v]) => [gate, { result: v.result, reason: v.reason ?? null, order: v.order, detail: v.detail ?? null }]),
+  );
+  const base = {
+    call_id: call.call_id,
+    agent_id: call.agent_id,
+    source: ctx.source,
+    campaign_id: ctx.campaign_id,
+    contact_id: ctx.contact_id,
+    decision: outcome.decision,
+    reason: outcome.reason,
+    next_attempt_at: outcome.next_attempt_at,
+  };
+  const common = {
+    pool_index: DIALER_AUDIT_POOL,
+    actor_kind: 'service' as const,
+    actor_id: 'sdk-dialer.gate-chain',
+    tenant_id: call.tenant_id,
+    subject_kind: 'voice_agent.call',
+    subject_id: call.call_id,
+  };
+  await emitEvent({ ...common, event_type: 'voice.call.gated.v1', payload: { ...base, verdicts } });
+  if (outcome.decision === 'refuse') {
+    await emitEvent({ ...common, event_type: 'voice.call.refused.v1', payload: base });
+  }
 }
 
 const DIALABLE_CONTACT = ['pending', 'deferred'];
