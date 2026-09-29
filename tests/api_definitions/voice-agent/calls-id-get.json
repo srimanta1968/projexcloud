@@ -15,11 +15,40 @@
   "coversCriterion": [
     "ebd2f4af-72a1-4e29-b56f-a13d1c1a8b84#AC2"
   ],
-  "description": "Returns one call with transcript (turns in order: speaker caller|agent|system, text, per-turn latency stt_ms/ttft_ms/ttfa_ms, interrupted, tool_calls), summary, disposition, gate_verdicts and cost_breakdown (ebd2f4af-72a1-4e29-b56f-a13d1c1a8b84#AC2). Another tenant's call reads as 404. No call exists in the runner's chain (see POST /api/voice-agent/calls), so testCases[0] exercises the 404; the 200 detail is proven end-to-end.",
+  "description": "Returns one call with transcript (turns in order: speaker caller|agent|system, text, per-turn latency stt_ms/ttft_ms/ttfa_ms, interrupted, tool_calls), summary, disposition, gate_verdicts and cost_breakdown (ebd2f4af-72a1-4e29-b56f-a13d1c1a8b84#AC2). Another tenant's call reads as 404. The runner reads the call a browser test session created (it cannot place a live call without a published agent).",
   "dependsOn": [
-    "POST /api/auth/signup-tenant"
+    "POST /api/auth/signup-tenant",
+    "POST /api/ai-gateway/tenant-credentials",
+    "POST /api/voice-agent/stack-profiles",
+    "POST /api/voice-agent/agents",
+    "POST /api/voice-agent/agents/:agent_id/versions",
+    "POST /api/voice-agent/test-sessions"
   ],
   "testCases": [
+    {
+      "name": "Get a call with its transcript, verdicts and cost breakdown",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "pathParams": {
+        "call_id": "{{cache:voice-agent.test-sessions.create.response.data.session.call_id}}"
+      },
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "data": {
+          "call": {
+            "call_id": "string",
+            "agent_id": "string",
+            "status": "string",
+            "direction": "string",
+            "transcript": [],
+            "gate_verdicts": {},
+            "cost_breakdown": {},
+            "is_test": "boolean"
+          }
+        }
+      }
+    },
     {
       "name": "Unknown call is 404",
       "headers": {
@@ -31,34 +60,6 @@
       "expectedStatus": 404,
       "expectedResponse": {
         "error": "NotFound"
-      }
-    },
-    {
-      "name": "Get a placed call with its transcript",
-      "headers": {
-        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
-      },
-      "pathParams": {
-        "call_id": "{{cache:voice-agent.calls.create.response.data.call.call_id}}"
-      },
-      "expectedStatus": 200,
-      "expectedResponse": {
-        "data": {
-          "call": {
-            "call_id": "string",
-            "agent_id": "string",
-            "agent_version_id": "string",
-            "status": "string",
-            "direction": "string",
-            "to_number": "string",
-            "idempotency_key": "string",
-            "transcript": [],
-            "summary": "string",
-            "disposition": "string",
-            "gate_verdicts": {},
-            "cost_breakdown": {}
-          }
-        }
       }
     }
   ],

@@ -16,11 +16,61 @@
     "ebd2f4af-72a1-4e29-b56f-a13d1c1a8b84#AC3",
     "ebd2f4af-72a1-4e29-b56f-a13d1c1a8b84#AC2"
   ],
-  "description": "The voice runtime reports a finished call once: status (completed|failed), optional disposition (runtime/carrier outcome, e.g. no_answer, voicemail — it takes precedence), answered_by (human|machine|unknown), turns [{turn_index, speaker caller|agent|system, text, started_ms, stt_ms, ttft_ms, ttfa_ms, interrupted, tool_calls}], started_at/answered_at/ended_at, duration_s, cost_breakdown (merged), recording_ref, recording_consent, carrier_call_ref, crm_encounter_id, conversation_thread_id. Turns are upserted; the summary and disposition come from the tenant's own llm_complex model via sdk-ai-gateway, falling back to an extractive summary (post_call.summary_source). The call is then mirrored (ebd2f4af-72a1-4e29-b56f-a13d1c1a8b84#AC3 — a completed call appears on the subject's conversation thread and CRM activity timeline): each non-system turn becomes a VOICE message on the subject's open thread (INBOUND/RECEIVED for the caller, OUTBOUND/DELIVERED for the agent), and the encounter's CRM timeline gets one call activity (external_call_id voice-agent:<call_id>). Repeating the same report is idempotent; voice.call.completed.v1 is emitted once. Returns the call detail (ebd2f4af-72a1-4e29-b56f-a13d1c1a8b84#AC2). The runner cannot place a call (see POST /api/voice-agent/calls), so testCases[0] exercises the 404; the 200 path is proven end-to-end.",
+  "description": "The voice runtime reports a finished call once: status (completed|failed), optional disposition (runtime/carrier outcome, e.g. no_answer, voicemail — it takes precedence), answered_by (human|machine|unknown), turns [{turn_index, speaker caller|agent|system, text, started_ms, stt_ms, ttft_ms, ttfa_ms, interrupted, tool_calls}], started_at/answered_at/ended_at, duration_s, cost_breakdown (merged), recording_ref, recording_consent, carrier_call_ref, crm_encounter_id, conversation_thread_id. Turns are upserted; the summary and disposition come from the tenant's own llm_complex model via sdk-ai-gateway, falling back to an extractive summary (post_call.summary_source). The call is then mirrored (ebd2f4af-72a1-4e29-b56f-a13d1c1a8b84#AC3 — a completed call appears on the subject's conversation thread and CRM activity timeline): each non-system turn becomes a VOICE message on the subject's open thread (INBOUND/RECEIVED for the caller, OUTBOUND/DELIVERED for the agent), and the encounter's CRM timeline gets one call activity (external_call_id voice-agent:<call_id>). Repeating the same report is idempotent; voice.call.completed.v1 is emitted once. Returns the call detail (ebd2f4af-72a1-4e29-b56f-a13d1c1a8b84#AC2). The runner completes the call a browser test session created (test sessions are never mirrored — post_call records skipped: test session); the mirror onto a real subject's thread and CRM timeline is proven end-to-end with a placed call.",
   "dependsOn": [
-    "POST /api/auth/signup-tenant"
+    "POST /api/auth/signup-tenant",
+    "POST /api/ai-gateway/tenant-credentials",
+    "POST /api/voice-agent/stack-profiles",
+    "POST /api/voice-agent/agents",
+    "POST /api/voice-agent/agents/:agent_id/versions",
+    "POST /api/voice-agent/test-sessions",
+    "GET /api/voice-agent/calls/:call_id"
   ],
   "testCases": [
+    {
+      "name": "Complete a call with its transcript and cost breakdown",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "pathParams": {
+        "call_id": "{{cache:voice-agent.test-sessions.create.response.data.session.call_id}}"
+      },
+      "payload": {
+        "status": "completed",
+        "answered_by": "human",
+        "duration_s": 58,
+        "turns": [
+          {
+            "turn_index": 0,
+            "speaker": "agent",
+            "text": "Hi Ana, this is Sam from Sunny Solar.",
+            "started_ms": 0
+          },
+          {
+            "turn_index": 1,
+            "speaker": "caller",
+            "text": "Call me back next week.",
+            "started_ms": 3200
+          }
+        ],
+        "cost_breakdown": {
+          "stt_usd": 0.0058,
+          "tts_usd": 0.0093
+        }
+      },
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "data": {
+          "call": {
+            "call_id": "string",
+            "status": "string",
+            "summary": "string",
+            "transcript": [],
+            "post_call": {}
+          }
+        }
+      }
+    },
     {
       "name": "Completing an unknown call is 404",
       "headers": {
@@ -55,46 +105,6 @@
       "expectedStatus": 404,
       "expectedResponse": {
         "error": "NotFound"
-      }
-    },
-    {
-      "name": "Complete a placed call with its transcript",
-      "headers": {
-        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
-      },
-      "pathParams": {
-        "call_id": "{{cache:voice-agent.calls.create.response.data.call.call_id}}"
-      },
-      "payload": {
-        "status": "completed",
-        "answered_by": "human",
-        "duration_s": 58,
-        "turns": [
-          {
-            "turn_index": 0,
-            "speaker": "agent",
-            "text": "Hi Ana, this is Sam from Sunny Solar.",
-            "started_ms": 0
-          },
-          {
-            "turn_index": 1,
-            "speaker": "caller",
-            "text": "Call me back next week.",
-            "started_ms": 3200
-          }
-        ]
-      },
-      "expectedStatus": 200,
-      "expectedResponse": {
-        "data": {
-          "call": {
-            "call_id": "string",
-            "status": "string",
-            "summary": "string",
-            "transcript": [],
-            "post_call": {}
-          }
-        }
       }
     },
     {

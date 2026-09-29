@@ -405,18 +405,24 @@ export async function completeCall(tenantId: string, callId: string, input: Comp
     [tenantId, call.agent_id],
   );
   let conversation: Record<string, unknown>;
-  try {
-    conversation = await mirrorToConversation(call);
-  } catch (err) {
-    errors.conversation = (err as Error).message;
-    conversation = { failed: true };
-  }
   let crm: Record<string, unknown>;
-  try {
-    crm = await mirrorToCrm(call, persona?.acting_persona_id ?? null);
-  } catch (err) {
-    errors.crm = (err as Error).message;
-    crm = { failed: true };
+  if (call.is_test) {
+    // A browser test session must never land on a real subject's thread or CRM timeline.
+    conversation = { skipped: 'test session' };
+    crm = { skipped: 'test session' };
+  } else {
+    try {
+      conversation = await mirrorToConversation(call);
+    } catch (err) {
+      errors.conversation = (err as Error).message;
+      conversation = { failed: true };
+    }
+    try {
+      crm = await mirrorToCrm(call, persona?.acting_persona_id ?? null);
+    } catch (err) {
+      errors.crm = (err as Error).message;
+      crm = { failed: true };
+    }
   }
   await dataService.query(
     `UPDATE voice_agent.call SET post_call = $3::jsonb, updated_at = now() WHERE tenant_id = $1 AND call_id = $2`,

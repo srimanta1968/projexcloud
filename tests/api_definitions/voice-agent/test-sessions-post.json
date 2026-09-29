@@ -1,0 +1,111 @@
+{
+  "name": "POST /api/voice-agent/test-sessions - Talk to an agent version from the browser",
+  "endpoint": "/api/voice-agent/test-sessions",
+  "sdk": "sdk-voice-agent",
+  "sourceFile": "packages/sdk-voice-agent/src/server/callRoutes.ts",
+  "method": "POST",
+  "requiresAuth": true,
+  "expectedStatus": 201,
+  "taskId": "cf5c6950-cba8-4b93-aabb-ba837f1e6629",
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "featureId": "381767f5-a64c-4c63-9918-9feab02424ec",
+  "epicId": "9c7a8dc4-3db7-4cd2-9121-7649f143525c",
+  "priority": 99,
+  "testability": "auto",
+  "coversCriterion": [
+    "381767f5-a64c-4c63-9918-9feab02424ec#AC1",
+    "381767f5-a64c-4c63-9918-9feab02424ec#AC2"
+  ],
+  "description": "Opens a browser test session against any version of the tenant's agent — drafts included, no phone number (381767f5-a64c-4c63-9918-9feab02424ec#AC1 — a user can open a browser test session against a draft agent version and talk to it). Body: agent_id (uuid), optional version_id (uuid; default = the latest version), ttl_s (60-3600, default 900). Creates a call record flagged is_test=true (direction inbound) and returns a LiveKit participant token for room va-test-<call_id> on the platform LiveKit (livekit_url); the token dispatches the voice-runtime agent with the tenant, call and version to run. is_test calls are never metered as billable minutes and never mirrored onto a subject's conversation thread or CRM timeline (381767f5-a64c-4c63-9918-9feab02424ec#AC2 — test sessions are never metered as billable minutes). The version's stack profile must be active; 503 VoiceRuntimeUnavailable when LiveKit is not configured (LIVEKIT_URL / LIVEKIT_API_KEY / LIVEKIT_API_SECRET).",
+  "dependsOn": [
+    "POST /api/auth/signup-tenant",
+    "POST /api/ai-gateway/tenant-credentials",
+    "POST /api/voice-agent/stack-profiles",
+    "POST /api/voice-agent/agents",
+    "POST /api/voice-agent/agents/:agent_id/versions"
+  ],
+  "testCases": [
+    {
+      "name": "Open a test session on the draft version",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "payload": {
+        "agent_id": "{{cache:voice-agent.agents.create.response.data.agent.agent_id}}",
+        "version_id": "{{cache:voice-agent.agents.versions.create.response.data.version.version_id}}",
+        "ttl_s": 900
+      },
+      "expectedStatus": 201,
+      "expectedResponse": {
+        "data": {
+          "session": {
+            "call_id": "string",
+            "agent_version_id": "string",
+            "room": "string",
+            "livekit_url": "string",
+            "token": "string",
+            "expires_at": "string",
+            "is_test": "boolean"
+          }
+        }
+      }
+    },
+    {
+      "name": "Reject a ttl outside 60-3600 seconds",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "payload": {
+        "agent_id": "{{cache:voice-agent.agents.create.response.data.agent.agent_id}}",
+        "ttl_s": 5
+      },
+      "expectedStatus": 400
+    },
+    {
+      "name": "Unknown agent is 404",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "payload": {
+        "agent_id": "{{dynamic:uuid}}"
+      },
+      "expectedStatus": 404
+    }
+  ],
+  "captureResponse": {
+    "voice-agent.test-sessions.create.response.data.session.call_id": "data.session.call_id",
+    "voice-agent.test-sessions.create.response.data.session.room": "data.session.room"
+  },
+  "errorCases": [
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "agent_id must be a uuid | version_id must be a uuid | ttl_s must be an integer between 60 and 3600",
+      "when": "invalid body"
+    },
+    {
+      "status": 404,
+      "code": "NotFound",
+      "message": "agent not found | agent version not found",
+      "when": "agent or version is not this tenant's"
+    },
+    {
+      "status": 409,
+      "code": "Conflict",
+      "message": "agent is archived | agent has no versions to test | the version's stack profile is not active",
+      "when": "nothing testable"
+    },
+    {
+      "status": 503,
+      "code": "VoiceRuntimeUnavailable",
+      "message": "voice media (LiveKit) is not configured on this deployment",
+      "when": "LIVEKIT_* env not set"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "no Authorization header"
+    }
+  ]
+}

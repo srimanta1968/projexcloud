@@ -74,6 +74,10 @@ export type { AppTool, RegisterToolInput, UpdateToolInput } from './services/too
 export { CALL_STATUSES, CALL_DIRECTIONS, placeCall, getCall, listCalls, setCallDispatcher } from './services/callService';
 
 export { VOICE_DISPOSITIONS, completeCall, setCallSummarizer } from './services/postCallService';
+export { startTestSession } from './services/testSessionService';
+export type { StartTestSessionInput, TestSession } from './services/testSessionService';
+export { liveKitConfig, signParticipantToken } from './services/livekitToken';
+export type { LiveKitConfig, ParticipantTokenInput } from './services/livekitToken';
 export type { VoiceDisposition, CompleteCallInput, TurnInput, CallSummary, CallSummarizer } from './services/postCallService';
 export type {
   Call,

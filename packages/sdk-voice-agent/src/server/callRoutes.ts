@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { requireAuth } from '@projexlight/sdk-identity';
 import { getCall, listCalls, placeCall, type PlaceCallInput } from '../services/callService';
 import { completeCall, type CompleteCallInput } from '../services/postCallService';
+import { startTestSession, type StartTestSessionInput } from '../services/testSessionService';
 import { resolveTenant } from './tenantScope';
 import { sendError } from './sendError';
 
@@ -66,4 +67,17 @@ export function registerCallRoutes(app: FastifyInstance): void {
       }
     },
   );
+
+  // TK-4476 — talk to any version (drafts included) from the browser; never billed.
+  app.post('/api/voice-agent/test-sessions', { preHandler: requireAuth }, async (req, reply) => {
+    const body = (req.body ?? {}) as StartTestSessionInput & { tenant_id?: string };
+    const tenantId = resolveTenant(req, reply, body.tenant_id);
+    if (!tenantId) return reply;
+    try {
+      const tester = req.auth?.primary_persona_id ?? req.auth?.sub ?? 'unknown';
+      return reply.code(201).send({ data: { session: await startTestSession(tenantId, body, tester) } });
+    } catch (err) {
+      return sendError(reply, err);
+    }
+  });
 }
