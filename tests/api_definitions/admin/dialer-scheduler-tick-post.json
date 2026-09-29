@@ -1,0 +1,76 @@
+{
+  "name": "POST /api/admin/dialer/scheduler/tick - Run one fair-share dispatch pass",
+  "endpoint": "/api/admin/dialer/scheduler/tick",
+  "method": "POST",
+  "description": "Operator-only (x-admin-ops-token): runs one pass of the dialer's weighted fair-share scheduler — the same step the background loop runs when DIALER_SCHEDULER_ENABLED=true (180f8a01-0600-48b4-a0e5-f1be092f2fb3#AC2 — a large campaign from one tenant does not prevent other tenants' calls from being dispatched). Tenants with due queued calls are served in deficit round-robin: each gets quantum x weight dispatches per round, in turn, until budget is spent or no tenant can progress, so a tenant with a huge campaign takes only its share of each round. Each dispatch still honours that tenant's concurrency caps. Body: budget (1-5000, default 200), quantum (1-500, default 5), tenant_ids (optional uuid[] to restrict the pass). Returns {tick: {rounds, dispatched, by_tenant, capped}}.",
+  "sdk": "api-gateway",
+  "sourceFile": "services/api-gateway/src/app.ts",
+  "requiresAuth": false,
+  "expectedStatus": 200,
+  "taskId": "b5f609fe-7511-472a-a279-c22bce36c575",
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "featureId": "180f8a01-0600-48b4-a0e5-f1be092f2fb3",
+  "epicId": "4362a53f-a31a-4166-85be-ad1c383d60b5",
+  "priority": 130,
+  "testability": "auto",
+  "coversCriterion": [
+    "180f8a01-0600-48b4-a0e5-f1be092f2fb3#AC2"
+  ],
+  "dependsOn": [
+    "POST /api/auth/signup-tenant"
+  ],
+  "testCases": [
+    {
+      "name": "Run a pass restricted to one tenant",
+      "headers": {
+        "x-admin-ops-token": "{{var:ADMIN_OPS_TOKEN}}"
+      },
+      "payload": {
+        "tenant_ids": [
+          "{{cache:auth.signup-tenant.response.data.tenant_id}}"
+        ],
+        "budget": 20,
+        "quantum": 5
+      },
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "success": "boolean",
+        "data": {
+          "tick": {
+            "rounds": "number",
+            "dispatched": "number",
+            "by_tenant": {},
+            "capped": []
+          }
+        }
+      }
+    },
+    {
+      "name": "Reject a budget outside 1-5000",
+      "headers": {
+        "x-admin-ops-token": "{{var:ADMIN_OPS_TOKEN}}"
+      },
+      "payload": {
+        "budget": 0
+      },
+      "expectedStatus": 400
+    }
+  ],
+  "captureResponse": {
+    "admin.dialer.scheduler.tick.response.data.tick.dispatched": "data.tick.dispatched"
+  },
+  "errorCases": [
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "budget must be 1-5000 and quantum 1-500 | tenant_ids must be an array of uuids",
+      "when": "invalid body"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "admin token required",
+      "when": "x-admin-ops-token missing or not a valid operator token"
+    }
+  ]
+}

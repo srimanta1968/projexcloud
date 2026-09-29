@@ -380,6 +380,10 @@ import {
   dispatchCall,
   ensureVoiceConsentPurposes,
   releaseSlot,
+  runSchedulerTick,
+  startDispatchScheduler,
+  admitInbound,
+  DialerError,
 } from '@projexlight/sdk-dialer';
 // P16 · EP-374 — the provenance kernel. Every ingesting SDK lands its rows here.
 import {
@@ -722,6 +726,42 @@ app.register(dialerServer.registerRoutes);
 setCallDispatcher(async (call) => { await dispatchCall(call); });
 // VA·E5 (TK-4484) — a call that ends frees its concurrency slot.
 onCallEnded(async (call) => { await releaseSlot(call.call_id); });
+
+// VA·E5 (TK-4485) — operator surface for the fair-share scheduler and inbound admission.
+// Both act across tenants (the tick) or before any tenant credential exists (an inbound
+// INVITE), so they are operator-only, like the inbound number routing above.
+const UUID_RE_DIALER = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+app.post('/api/admin/dialer/scheduler/tick', async (req, reply) => {
+  if (!(await checkAdminToken(req, reply))) return;
+  const b = (req.body ?? {}) as { budget?: unknown; quantum?: unknown; tenant_ids?: unknown };
+  const intIn = (v: unknown, lo: number, hi: number) => v === undefined || (Number.isInteger(v) && (v as number) >= lo && (v as number) <= hi);
+  if (!intIn(b.budget, 1, 5000) || !intIn(b.quantum, 1, 500)) {
+    return reply.code(400).send({ success: false, error: 'ValidationError', details: ['budget must be 1-5000 and quantum 1-500'] });
+  }
+  if (b.tenant_ids !== undefined && (!Array.isArray(b.tenant_ids) || !b.tenant_ids.every((t) => typeof t === 'string' && UUID_RE_DIALER.test(t)))) {
+    return reply.code(400).send({ success: false, error: 'ValidationError', details: ['tenant_ids must be an array of uuids'] });
+  }
+  const tick = await runSchedulerTick({ budget: b.budget as number | undefined, quantum: b.quantum as number | undefined, tenant_ids: b.tenant_ids as string[] | undefined });
+  return reply.code(200).send({ success: true, data: { tick } });
+});
+app.post('/api/admin/dialer/inbound/admit', async (req, reply) => {
+  if (!(await checkAdminToken(req, reply))) return;
+  const b = (req.body ?? {}) as { tenant_id?: unknown; call_id?: unknown };
+  if (typeof b.tenant_id !== 'string' || !UUID_RE_DIALER.test(b.tenant_id) || typeof b.call_id !== 'string' || !UUID_RE_DIALER.test(b.call_id)) {
+    return reply.code(400).send({ success: false, error: 'ValidationError', details: ['tenant_id and call_id must be uuids'] });
+  }
+  try {
+    const decision = await admitInbound(b.tenant_id, b.call_id);
+    return reply.code(200).send({ success: true, data: { admitted: decision.granted, decision } });
+  } catch (err) {
+    if (err instanceof DialerError) return reply.code(err.status).send({ success: false, error: err.code, details: [err.message] });
+    throw err;
+  }
+});
+if (process.env.DIALER_SCHEDULER_ENABLED === 'true') {
+  startDispatchScheduler();
+  console.log('[api-gateway] dialer fair-share scheduler running');
+}
 app.register(sourceRecordServer.registerRoutes);
 app.register(importServer.registerRoutes);
 app.register(slaServer.registerRoutes);

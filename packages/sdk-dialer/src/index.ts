@@ -57,5 +57,9 @@ export type { CapDimension, SlotRequest, SlotDecision, PlanCapResolver, KeyCapac
 export { dispatchQueued, setCallOriginator } from './services/queueDispatcher';
 export type { CallOriginator, DispatchSummary } from './services/queueDispatcher';
 
+export { outboundCap } from './services/capacityService';
+export { runSchedulerTick, startDispatchScheduler, admitInbound, setTenantWeightResolver } from './services/scheduler';
+export type { TickOptions, TickResult, TenantWeightResolver } from './services/scheduler';
+
 // HTTP surface — mounted by the api-gateway.
 export * as server from './server';

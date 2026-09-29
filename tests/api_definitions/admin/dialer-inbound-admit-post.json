@@ -1,0 +1,90 @@
+{
+  "name": "POST /api/admin/dialer/inbound/admit - Admit an inbound call to capacity",
+  "endpoint": "/api/admin/dialer/inbound/admit",
+  "method": "POST",
+  "description": "Operator-only (x-admin-ops-token), called by the voice runtime when a routed inbound call arrives (180f8a01-0600-48b4-a0e5-f1be092f2fb3#AC3 — inbound calls are served before queued outbound dispatch on the same capacity). Inbound calls never wait in the dispatch queue: they are admitted immediately against the FULL plan/key cap, while outbound dispatch stops short of it by DIALER_INBOUND_RESERVE_PCT (default 10%), so outbound can never take the headroom an inbound caller needs. Body: tenant_id, call_id (an inbound call). Returns {admitted, decision: {granted, blocked_by, caps, key_ref, backend}}; when not admitted the runtime takes the number's fallback (voicemail / forward). Admitted calls become in_progress.",
+  "sdk": "api-gateway",
+  "sourceFile": "services/api-gateway/src/app.ts",
+  "requiresAuth": false,
+  "expectedStatus": 200,
+  "taskId": "b5f609fe-7511-472a-a279-c22bce36c575",
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "featureId": "180f8a01-0600-48b4-a0e5-f1be092f2fb3",
+  "epicId": "4362a53f-a31a-4166-85be-ad1c383d60b5",
+  "priority": 131,
+  "testability": "auto",
+  "coversCriterion": [
+    "180f8a01-0600-48b4-a0e5-f1be092f2fb3#AC3"
+  ],
+  "dependsOn": [
+    "POST /api/auth/signup-tenant",
+    "POST /api/ai-gateway/tenant-credentials",
+    "POST /api/voice-agent/stack-profiles",
+    "POST /api/voice-agent/agents",
+    "POST /api/voice-agent/agents/:agent_id/versions",
+    "POST /api/voice-agent/test-sessions"
+  ],
+  "testCases": [
+    {
+      "name": "Admit an inbound call",
+      "headers": {
+        "x-admin-ops-token": "{{var:ADMIN_OPS_TOKEN}}"
+      },
+      "payload": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "call_id": "{{cache:voice-agent.test-sessions.create.response.data.session.call_id}}"
+      },
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "success": "boolean",
+        "data": {
+          "admitted": "boolean",
+          "decision": {
+            "granted": "boolean",
+            "backend": "string"
+          }
+        }
+      }
+    },
+    {
+      "name": "Reject non-uuid ids",
+      "headers": {
+        "x-admin-ops-token": "{{var:ADMIN_OPS_TOKEN}}"
+      },
+      "payload": {
+        "tenant_id": "{{static:nope}}",
+        "call_id": "{{static:nope}}"
+      },
+      "expectedStatus": 400
+    }
+  ],
+  "captureResponse": {
+    "admin.dialer.inbound.admit.response.data.admitted": "data.admitted"
+  },
+  "errorCases": [
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "tenant_id and call_id must be uuids",
+      "when": "invalid body"
+    },
+    {
+      "status": 404,
+      "code": "NotFound",
+      "message": "call not found",
+      "when": "no such call for the tenant"
+    },
+    {
+      "status": 409,
+      "code": "Conflict",
+      "message": "only inbound calls are admitted this way | call already ended as <status>",
+      "when": "outbound or ended call"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "admin token required",
+      "when": "x-admin-ops-token missing or not a valid operator token"
+    }
+  ]
+}

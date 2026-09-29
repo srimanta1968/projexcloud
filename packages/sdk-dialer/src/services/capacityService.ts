@@ -32,6 +32,12 @@ export interface SlotRequest {
   call_id: string;
   campaign_id: string | null;
   agent_id: string;
+  /**
+   * Inbound calls are admitted against the FULL plan/key cap; outbound dispatch stops
+   * short of it by the inbound reserve (TK-4485), so a burst of outbound campaign calls
+   * can never leave no room for a customer calling in.
+   */
+  direction?: 'inbound' | 'outbound';
 }
 
 export interface SlotDecision {
@@ -49,6 +55,14 @@ export type PlanCapResolver = (tenantId: string) => Promise<number | null>;
 export type KeyCapacityResolver = (tenantId: string, keyRef: string) => Promise<number | null>;
 
 const ACTIVE_STATUSES = ['dialing', 'ringing', 'in_progress'];
+/** Share of the plan/key cap held back from outbound dispatch for inbound calls. */
+const INBOUND_RESERVE_PCT = Number(process.env.DIALER_INBOUND_RESERVE_PCT ?? 10);
+
+/** The cap outbound dispatch may fill: cap minus the inbound reserve (floor, never negative). */
+export function outboundCap(cap: number | null): number | null {
+  if (cap === null) return null;
+  return Math.max(0, cap - Math.floor((cap * INBOUND_RESERVE_PCT) / 100));
+}
 const LEASE_MS = Number(process.env.DIALER_SLOT_LEASE_MS || 2 * 60 * 60 * 1000);
 
 const envCap = (name: string): number | null => {
@@ -85,6 +99,12 @@ async function keyRefFor(tenantId: string, agentId: string): Promise<string> {
 }
 
 async function capsFor(req: SlotRequest, keyRef: string): Promise<Record<CapDimension, number | null>> {
+  const full = await fullCapsFor(req, keyRef);
+  if (req.direction === 'inbound') return full;
+  return { plan: outboundCap(full.plan), key: outboundCap(full.key), campaign: full.campaign };
+}
+
+async function fullCapsFor(req: SlotRequest, keyRef: string): Promise<Record<CapDimension, number | null>> {
   const campaign = req.campaign_id
     ? await dataService.one<{ max_concurrency: number }>(
       `SELECT max_concurrency FROM dialer.campaign WHERE tenant_id = $1 AND campaign_id = $2`,
