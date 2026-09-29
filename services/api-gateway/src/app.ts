@@ -370,9 +370,10 @@ import {
   redeemLiveTicket,
   getCall as getVoiceCall,
   getLiveCallBroker,
+  setCallDispatcher,
   VoiceAgentError,
 } from '@projexlight/sdk-voice-agent';
-import { migrationsDir as dialerMigrations, server as dialerServer } from '@projexlight/sdk-dialer';
+import { migrationsDir as dialerMigrations, server as dialerServer, dispatchCall } from '@projexlight/sdk-dialer';
 // P16 · EP-374 — the provenance kernel. Every ingesting SDK lands its rows here.
 import {
   migrationsDir as sourceRecordMigrations,
@@ -708,6 +709,10 @@ app.register(incidentServer.registerRoutes);
 // VA·E2 — voice agent control plane (/api/voice-agent/*).
 app.register(voiceAgentServer.registerRoutes);
 app.register(dialerServer.registerRoutes);
+// VA·E5 (TK-4480) — every placed outbound AI call (API or campaign contact) is dispatched
+// through the dialer's gate chain and queue. Wired here so sdk-voice-agent stays free of a
+// dependency on sdk-dialer.
+setCallDispatcher(async (call) => { await dispatchCall(call); });
 app.register(sourceRecordServer.registerRoutes);
 app.register(importServer.registerRoutes);
 app.register(slaServer.registerRoutes);

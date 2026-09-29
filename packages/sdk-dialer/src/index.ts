@@ -37,5 +37,9 @@ export type {
   VoicemailPolicy,
 } from './services/campaignService';
 
+export { registerGate, listGates, runGateChain } from './services/gateChain';
+export type { Gate, GateContext, GateResult, GateVerdict, ChainOutcome } from './services/gateChain';
+export { dispatchCall, dialContact } from './services/dispatchService';
+
 // HTTP surface — mounted by the api-gateway.
 export * as server from './server';

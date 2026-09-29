@@ -1,0 +1,100 @@
+{
+  "name": "POST /api/dialer/campaigns/:campaign_id/contacts/:contact_id/dial - Dial one contact now",
+  "endpoint": "/api/dialer/campaigns/:campaign_id/contacts/:contact_id/dial",
+  "sdk": "sdk-dialer",
+  "sourceFile": "packages/sdk-dialer/src/server/routes.ts",
+  "method": "POST",
+  "requiresAuth": true,
+  "expectedStatus": 201,
+  "taskId": "ef984517-30f3-4a7e-ad1f-55a7e7d2e6a6",
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "featureId": "95b9060e-9695-45f9-a970-323d68d6a444",
+  "epicId": "4362a53f-a31a-4166-85be-ad1c383d60b5",
+  "priority": 119,
+  "testability": "auto",
+  "coversCriterion": [
+    "95b9060e-9695-45f9-a970-323d68d6a444#AC3"
+  ],
+  "description": "Dials one campaign contact immediately. The call is placed through POST /api/voice-agent/calls' own placeCall, so it passes the SAME dialer gate chain as a single API call (95b9060e-9695-45f9-a970-323d68d6a444#AC3 — a single outbound AI call request is dispatched through the same gate chain as campaign contacts): currently campaign_active (contacts only; skip for API calls) then number_in_flight (defer while the tenant is already on the phone with that number), with consent/DNC, calling window, recording jurisdiction and concurrency gates joining the same chain. Every verdict is stored on the call's gate_verdicts; the call and the contact become queued, deferred (with next_attempt_at) or refused, and the call is put on dialer.dispatch_queue. 201 with the call; a retried dial of the same attempt replays it (200). The campaign must be running and the contact pending or deferred (409).",
+  "dependsOn": [
+    "POST /api/auth/signup-tenant",
+    "POST /api/voice-agent/agents",
+    "POST /api/dialer/campaigns",
+    "POST /api/dialer/campaigns/:campaign_id/contacts",
+    "GET /api/dialer/campaigns/:campaign_id/contacts"
+  ],
+  "testCases": [
+    {
+      "name": "Refuse to dial a contact of a campaign that is not running",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "pathParams": {
+        "campaign_id": "{{cache:dialer.campaigns.create.response.data.campaign.campaign_id}}",
+        "contact_id": "{{cache:dialer.campaigns.contacts.list.response.data.contacts.0.contact_id}}"
+      },
+      "payload": {},
+      "expectedStatus": 409,
+      "expectedResponse": {
+        "error": "Conflict"
+      }
+    },
+    {
+      "name": "Dial a pending contact of a running campaign",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "pathParams": {
+        "campaign_id": "{{cache:dialer.campaigns.create.response.data.campaign.campaign_id}}",
+        "contact_id": "{{cache:dialer.campaigns.contacts.list.response.data.contacts.0.contact_id}}"
+      },
+      "payload": {},
+      "expectedStatus": 201,
+      "expectedResponse": {
+        "data": {
+          "call": {
+            "call_id": "string",
+            "status": "string",
+            "gate_verdicts": {}
+          },
+          "replayed": "boolean"
+        }
+      }
+    },
+    {
+      "name": "Unknown contact is 404",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "pathParams": {
+        "campaign_id": "{{dynamic:uuid}}",
+        "contact_id": "{{dynamic:uuid}}"
+      },
+      "payload": {},
+      "expectedStatus": 404
+    }
+  ],
+  "captureResponse": {
+    "dialer.campaigns.contacts.dial.response.data.call.call_id": "data.call.call_id"
+  },
+  "errorCases": [
+    {
+      "status": 404,
+      "code": "NotFound",
+      "message": "contact not found",
+      "when": "unknown contact or another tenant's"
+    },
+    {
+      "status": 409,
+      "code": "Conflict",
+      "message": "campaign is draft; start or resume it to dial contacts | contact is queued and cannot be dialled | agent has no published version",
+      "when": "campaign not running, contact already worked, or the agent cannot place calls"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "no Authorization header"
+    }
+  ]
+}

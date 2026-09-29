@@ -10,6 +10,7 @@ import {
   type CampaignAction,
   type CreateCampaignInput,
 } from '../services/campaignService';
+import { dialContact } from '../services/dispatchService';
 import { resolveTenant } from './tenantScope';
 import { sendError } from './sendError';
 
@@ -80,6 +81,21 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
         return reply.code(200).send({
           data: await listContacts(tenantId, req.params.campaign_id, { status: req.query.status, limit: num(req.query.limit), offset: num(req.query.offset) }),
         });
+      } catch (err) {
+        return sendError(reply, err);
+      }
+    },
+  );
+
+  // TK-4480 — dial one contact now, through placeCall and the same gate chain as an API call.
+  app.post<{ Params: { campaign_id: string; contact_id: string } }>(
+    '/api/dialer/campaigns/:campaign_id/contacts/:contact_id/dial', { preHandler: requireAuth }, async (req, reply) => {
+      const body = (req.body ?? {}) as { tenant_id?: string };
+      const tenantId = resolveTenant(req, reply, body.tenant_id);
+      if (!tenantId) return reply;
+      try {
+        const { call, replayed } = await dialContact(tenantId, req.params.campaign_id, req.params.contact_id, actorOf(req));
+        return reply.code(replayed ? 200 : 201).send({ data: { call, replayed } });
       } catch (err) {
         return sendError(reply, err);
       }

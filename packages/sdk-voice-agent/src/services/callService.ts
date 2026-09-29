@@ -308,8 +308,15 @@ export async function placeCall(tenantId: string, input: PlaceCallInput, opts: P
       subject_ref: call.subject_ref, direction: call.direction,
     },
   });
-  if (dispatcher) await dispatcher(call);
-  return { call, replayed: false };
+  if (!dispatcher) return { call, replayed: false };
+  // The dispatcher runs the gate chain and may defer or refuse the call; return what it
+  // decided, not the pre-dispatch snapshot.
+  await dispatcher(call);
+  const after = await dataService.one<CallRow>(
+    `SELECT ${CALL_COLUMNS} FROM voice_agent.call WHERE tenant_id = $1 AND call_id = $2`,
+    [tenantId, call.call_id],
+  );
+  return { call: after ? toCall(after) : call, replayed: false };
 }
 
 /** One call with its transcript (turns in order), or null when it is not this tenant's. */
