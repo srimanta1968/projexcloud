@@ -388,7 +388,12 @@ import {
   DialerError,
 } from '@projexlight/sdk-dialer';
 // VA·E4 — the voice provider catalog (/api/speech/*).
-import { migrationsDir as speechMigrations, server as speechServer } from '@projexlight/sdk-speech';
+import {
+  migrationsDir as speechMigrations,
+  server as speechServer,
+  updateCatalogEntry,
+  SpeechError,
+} from '@projexlight/sdk-speech';
 // P16 · EP-374 — the provenance kernel. Every ingesting SDK lands its rows here.
 import {
   migrationsDir as sourceRecordMigrations,
@@ -764,6 +769,31 @@ app.post('/api/admin/dialer/inbound/admit', async (req, reply) => {
     return reply.code(200).send({ success: true, data: { admitted: decision.granted, decision } });
   } catch (err) {
     if (err instanceof DialerError) return reply.code(err.status).send({ success: false, error: err.code, details: [err.message] });
+    throw err;
+  }
+});
+// VA·E4 (TK-4490) — operators edit a catalog entry's price or certification at runtime,
+// no deploy. Revoking certification takes effect at once: stack profiles read it live.
+app.patch('/api/admin/speech/catalog/:entry_id', async (req, reply) => {
+  if (!(await checkAdminToken(req, reply))) return;
+  const { entry_id } = req.params as { entry_id: string };
+  try {
+    const { entry, changes } = await updateCatalogEntry(entry_id, req.body ?? {}, 'admin-ops');
+    if (Object.keys(changes).length > 0) {
+      await emitEvent({
+        event_type: 'speech.catalog_entry.updated.v1',
+        pool_index: 'admin-default',
+        actor_kind: 'service',
+        actor_id: 'admin-ops',
+        tenant_id: null,
+        subject_kind: 'speech.catalog_entry',
+        subject_id: entry.entry_id,
+        payload: { catalog_key: entry.catalog_key, changes },
+      });
+    }
+    return reply.code(200).send({ data: { entry, changes } });
+  } catch (err) {
+    if (err instanceof SpeechError) return reply.code(err.status).send({ success: false, error: err.code, details: [err.message] });
     throw err;
   }
 });

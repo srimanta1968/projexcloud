@@ -19,9 +19,12 @@ export {
   updateStackProfile,
   archiveStackProfile,
   setCredentialChecker,
+  listPresetsWithCertification,
 } from './services/stackProfileService';
 export type {
   StackProfile,
+  LayerCertification,
+  PresetWithCertification,
   CredentialRef,
   CredentialRefs,
   LayerOverrides,

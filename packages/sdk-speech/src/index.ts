@@ -16,9 +16,13 @@ export {
   listCatalog,
   getCatalogEntry,
   findCatalogEntries,
+  catalogKey,
+  updateCatalogEntry,
 } from './services/catalogService';
 export type {
   CatalogEntry,
+  CatalogEntryChange,
+  CatalogEntryPatch,
   CatalogFilter,
   CatalogLayer,
   CatalogVoice,

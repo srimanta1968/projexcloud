@@ -12,50 +12,112 @@
   "epicId": "9c7a8dc4-3db7-4cd2-9121-7649f143525c",
   "priority": 61,
   "testability": "auto",
-  "coversCriterion": ["deef80bf-b0ce-4295-9cf0-878c4f5bfd02#AC3"],
-  "description": "Clones a preset (budget | balanced | premium) into a tenant stack profile, applying optional per-layer overrides, and binds provider credentials BY REFERENCE: credential_refs maps a layer (telephony, stt, llm_fast, llm_complex, tts) to {primary, secondary?} ai-gateway tenant-credential binding ids — never raw keys. Covers deef80bf-b0ce-4295-9cf0-878c4f5bfd02#AC3: a tenant can create a stack profile from a preset, and the create is REJECTED with 422 CredentialInvalid when any referenced credential does not exist for the tenant or is revoked. tenant_id may be omitted (taken from the JWT); if given it must match the JWT tenant or the call is 403 Forbidden. `complete` in the response is true only when every required layer has a primary credential. Names are unique per tenant (409 Conflict).",
+  "coversCriterion": [
+    "deef80bf-b0ce-4295-9cf0-878c4f5bfd02#AC3",
+    "322b0d69-8fde-47e0-aaf7-8c6420ed492b#AC3"
+  ],
+  "description": "Clones a preset (budget | balanced | premium) into a tenant stack profile, applying optional per-layer overrides, and binds provider credentials BY REFERENCE: credential_refs maps a layer (telephony, stt, llm_fast, llm_complex, tts) to {primary, secondary?} ai-gateway tenant-credential binding ids — never raw keys. Covers deef80bf-b0ce-4295-9cf0-878c4f5bfd02#AC3: a tenant can create a stack profile from a preset, and the create is REJECTED with 422 CredentialInvalid when any referenced credential does not exist for the tenant or is revoked. tenant_id may be omitted (taken from the JWT); if given it must match the JWT tenant or the call is 403 Forbidden. `complete` in the response is true only when every required layer has a primary credential. Names are unique per tenant (409 Conflict). Every catalog layer (stt, llm_fast, llm_complex, tts) must use a certified speech catalog entry (322b0d69-8fde-47e0-aaf7-8c6420ed492b#AC3); otherwise the request is refused with 422 UncertifiedProvider naming each layer. allow_uncertified: true is an explicit opt-in that saves the profile flagged certified=false. The response carries certified and layer_certification, both evaluated live, so a later revocation shows on read.",
   "dependsOn": [
     "POST /api/auth/signup-tenant",
     "POST /api/ai-gateway/tenant-credentials"
   ],
   "fieldEnums": {
-    "preset_key": ["budget", "balanced", "premium"]
+    "preset_key": [
+      "budget",
+      "balanced",
+      "premium"
+    ],
+    "certification_status": [
+      "certified",
+      "uncertified",
+      "revoked",
+      "not_in_catalog"
+    ]
   },
   "testCases": [
     {
       "name": "Create a balanced profile with the tenant's OpenAI key on the fast LLM layer",
-      "headers": { "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}" },
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
       "payload": {
         "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
         "name": "{{dynamic:name}}",
         "preset_key": "{{static:balanced}}",
-        "overrides": { "llm_fast": { "provider": "openai", "model": "gpt-4.1-mini" } },
-        "credential_refs": { "llm_fast": { "primary": "{{cache:ai-gateway-tenant-credentials.create.response.data.binding.binding_id}}" } },
-        "fallbacks": { "llm_fast": { "provider": "anthropic", "model": "claude-haiku-4-5" } }
+        "overrides": {
+          "llm_fast": {
+            "provider": "openai",
+            "model": "gpt-4.1-mini"
+          }
+        },
+        "credential_refs": {
+          "llm_fast": {
+            "primary": "{{cache:ai-gateway-tenant-credentials.create.response.data.binding.binding_id}}"
+          }
+        },
+        "fallbacks": {
+          "llm_fast": {
+            "provider": "anthropic",
+            "model": "claude-haiku-4-5"
+          }
+        }
       },
       "expectedStatus": 201,
-      "expectedResponse": { "data": { "stack_profile": { "profile_id": "string", "preset_key": "string", "status": "string", "complete": "boolean" } } }
+      "expectedResponse": {
+        "data": {
+          "stack_profile": {
+            "profile_id": "string",
+            "preset_key": "string",
+            "status": "string",
+            "complete": "boolean",
+            "certified": "boolean",
+            "layer_certification": [
+              {
+                "layer": "string",
+                "catalog_key": "string",
+                "certification_status": "string",
+                "certified": "boolean"
+              }
+            ]
+          }
+        }
+      }
     },
     {
       "name": "Reject a referenced credential that does not exist for the tenant",
-      "headers": { "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}" },
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
       "payload": {
         "name": "{{dynamic:name}}",
         "preset_key": "{{static:budget}}",
-        "credential_refs": { "stt": { "primary": "{{dynamic:uuid}}" } }
+        "credential_refs": {
+          "stt": {
+            "primary": "{{dynamic:uuid}}"
+          }
+        }
       },
       "expectedStatus": 422
     },
     {
       "name": "Reject an unknown preset",
-      "headers": { "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}" },
-      "payload": { "name": "{{dynamic:name}}", "preset_key": "{{static:enterprise}}" },
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "payload": {
+        "name": "{{dynamic:name}}",
+        "preset_key": "{{static:enterprise}}"
+      },
       "expectedStatus": 400
     },
     {
       "name": "Reject a missing name",
-      "headers": { "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}" },
-      "payload": { "preset_key": "{{static:budget}}" },
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "payload": {
+        "preset_key": "{{static:budget}}"
+      },
       "expectedStatus": 400
     }
   ],
@@ -64,12 +126,59 @@
     "voice-agent.stack-profiles.create.response.data.stack_profile.name": "data.stack_profile.name"
   },
   "errorCases": [
-    { "status": 400, "code": "ValidationError", "message": "name and preset_key are required", "when": "name or preset_key missing" },
-    { "status": 400, "code": "ValidationError", "message": "unknown preset_key: <key>", "when": "preset_key is not budget, balanced or premium" },
-    { "status": 400, "code": "ValidationError", "message": "unknown layer in credential_refs/overrides/fallbacks: <layer>", "when": "a layer key outside telephony, stt, llm_fast, llm_complex, tts" },
-    { "status": 403, "code": "Forbidden", "message": "tenant_id does not match the authenticated tenant", "when": "body tenant_id differs from the JWT tenant_id" },
-    { "status": 409, "code": "Conflict", "message": "a stack profile with this name already exists", "when": "name already used by the tenant" },
-    { "status": 422, "code": "CredentialInvalid", "message": "credential <binding_id> for layer <layer> is missing or revoked", "when": "a referenced binding id does not exist for the tenant or its status is revoked" },
-    { "status": 401, "code": "Unauthorized", "message": "Missing bearer token", "when": "no Authorization header" }
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "name and preset_key are required",
+      "when": "name or preset_key missing"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "unknown preset_key: <key>",
+      "when": "preset_key is not budget, balanced or premium"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "unknown layer in credential_refs/overrides/fallbacks: <layer>",
+      "when": "a layer key outside telephony, stt, llm_fast, llm_complex, tts"
+    },
+    {
+      "status": 403,
+      "code": "Forbidden",
+      "message": "tenant_id does not match the authenticated tenant",
+      "when": "body tenant_id differs from the JWT tenant_id"
+    },
+    {
+      "status": 409,
+      "code": "Conflict",
+      "message": "a stack profile with this name already exists",
+      "when": "name already used by the tenant"
+    },
+    {
+      "status": 422,
+      "code": "CredentialInvalid",
+      "message": "credential <binding_id> for layer <layer> is missing or revoked",
+      "when": "a referenced binding id does not exist for the tenant or its status is revoked"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "allow_uncertified must be a boolean",
+      "when": "allow_uncertified is present but not a boolean"
+    },
+    {
+      "status": 422,
+      "code": "UncertifiedProvider",
+      "message": "not certified for voice use: <layer> (<catalog_key>: <status>). Choose certified catalog entries or pass allow_uncertified: true",
+      "when": "a stt/llm_fast/llm_complex/tts layer uses a provider/model whose speech catalog entry is uncertified, revoked or absent, and allow_uncertified is not true"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "no Authorization header"
+    }
   ]
 }

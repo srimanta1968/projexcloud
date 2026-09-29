@@ -1,13 +1,16 @@
 import { dataService } from '@projexlight/db-runtime';
 import { listTenantCredentials } from '@projexlight/sdk-ai-gateway';
+import { catalogKey, findCatalogEntries, type CatalogLayer, type CatalogEntry } from '@projexlight/sdk-speech';
 import {
   VOICE_LAYERS,
+  VOICE_PRESETS,
   findPreset,
   isVoiceLayer,
   type LayerConfig,
   type LayerMap,
   type PresetKey,
   type VoiceLayer,
+  type VoicePreset,
 } from '../models/presets';
 import { VoiceAgentError, conflict, notFound, validationError } from '../models/errors';
 
@@ -40,7 +43,10 @@ export interface StackProfile {
   tts: LayerConfig;
   credential_refs: CredentialRefs;
   fallbacks: LayerFallbacks;
+  /** True when every catalog layer (stt, llm_fast, llm_complex, tts) uses a certified catalog entry — evaluated live. */
   certified: boolean;
+  /** Per-layer catalog certification, so a client can flag the uncertified layers. */
+  layer_certification: LayerCertification[];
   status: 'active' | 'archived';
   /** True when every layer the preset requires has a primary credential. */
   complete: boolean;
@@ -54,6 +60,8 @@ export interface CreateStackProfileInput {
   overrides?: LayerOverrides;
   credential_refs?: CredentialRefs;
   fallbacks?: LayerFallbacks;
+  /** Opt in to saving layers whose catalog entry is not certified; the profile is flagged certified=false. */
+  allow_uncertified?: boolean;
 }
 
 export interface UpdateStackProfileInput {
@@ -61,6 +69,90 @@ export interface UpdateStackProfileInput {
   overrides?: LayerOverrides;
   credential_refs?: CredentialRefs;
   fallbacks?: LayerFallbacks;
+  allow_uncertified?: boolean;
+}
+
+/**
+ * Catalog certification of one layer (VA·E4 · TK-4490). Telephony is the tenant's carrier
+ * account and has no catalog entry, so it is never listed.
+ */
+export interface LayerCertification {
+  layer: VoiceLayer;
+  catalog_key: string | null;
+  /** The entry's status, or not_in_catalog when the provider/model has no entry. */
+  certification_status: 'certified' | 'uncertified' | 'revoked' | 'not_in_catalog';
+  certified: boolean;
+}
+
+const CATALOG_LAYER: Record<VoiceLayer, CatalogLayer | null> = {
+  telephony: null,
+  stt: 'stt',
+  llm_fast: 'llm',
+  llm_complex: 'llm',
+  tts: 'tts',
+};
+
+type LayerSet = Pick<LayerMap, VoiceLayer>;
+
+function layerKeys(layers: LayerSet): { layer: VoiceLayer; key: string | null }[] {
+  const out: { layer: VoiceLayer; key: string | null }[] = [];
+  for (const layer of VOICE_LAYERS) {
+    const catalogLayer = CATALOG_LAYER[layer];
+    if (!catalogLayer) continue;
+    const cfg = layers[layer];
+    out.push({ layer, key: cfg?.provider && cfg.model ? catalogKey(catalogLayer, cfg.provider, cfg.model) : null });
+  }
+  return out;
+}
+
+function certificationOf(layers: LayerSet, entries: Map<string, CatalogEntry>): LayerCertification[] {
+  return layerKeys(layers).map(({ layer, key }) => {
+    const entry = key ? entries.get(key) : undefined;
+    const status = entry?.certification_status ?? 'not_in_catalog';
+    return { layer, catalog_key: key, certification_status: status, certified: status === 'certified' };
+  });
+}
+
+/** Catalog certification of each layer of several stacks, with one catalog read. */
+async function certifyMany(stacks: LayerSet[]): Promise<LayerCertification[][]> {
+  const keys = new Set<string>();
+  for (const st of stacks) for (const { key } of layerKeys(st)) if (key) keys.add(key);
+  const entries = await findCatalogEntries([...keys]);
+  return stacks.map((st) => certificationOf(st, entries));
+}
+
+/**
+ * Refuses layers whose catalog entry is not certified (422 UncertifiedProvider), unless
+ * the caller explicitly opted in with allow_uncertified. Returns the certification.
+ */
+async function assertLayersCertified(layers: LayerSet, allowUncertified: unknown): Promise<LayerCertification[]> {
+  if (allowUncertified !== undefined && typeof allowUncertified !== 'boolean') {
+    throw validationError('allow_uncertified must be a boolean');
+  }
+  const [cert] = await certifyMany([layers]);
+  const bad = cert.filter((c) => !c.certified);
+  if (bad.length > 0 && allowUncertified !== true) {
+    const list = bad.map((c) => `${c.layer} (${c.catalog_key ?? 'no model'}: ${c.certification_status})`).join(', ');
+    throw new VoiceAgentError(
+      422,
+      'UncertifiedProvider',
+      `not certified for voice use: ${list}. Choose certified catalog entries or pass allow_uncertified: true`,
+    );
+  }
+  return cert;
+}
+
+/** A preset with its catalog certification: only an available preset can be used as-is. */
+export interface PresetWithCertification extends VoicePreset {
+  layer_certification: LayerCertification[];
+  /** Every catalog layer of the preset is certified. */
+  available: boolean;
+}
+
+/** The offered presets, each flagged with its layers' live catalog certification. */
+export async function listPresetsWithCertification(): Promise<PresetWithCertification[]> {
+  const certs = await certifyMany(VOICE_PRESETS.map((p) => p.layers));
+  return VOICE_PRESETS.map((p, i) => ({ ...p, layer_certification: certs[i], available: certs[i].every((c) => c.certified) }));
 }
 
 /** One reference that failed validation. */
@@ -121,11 +213,13 @@ interface StackProfileRow {
 const COLUMNS = `profile_id, tenant_id, name, preset_key, telephony, stt, llm_fast, llm_complex, tts,
                  credential_refs, fallbacks, certified, status, created_at, updated_at`;
 
-function toModel(row: StackProfileRow): StackProfile {
+function toModel(row: StackProfileRow, cert: LayerCertification[]): StackProfile {
   const preset = findPreset(row.preset_key);
   const required = preset?.required_credential_layers ?? [...VOICE_LAYERS];
   return {
     ...row,
+    certified: cert.every((c) => c.certified),
+    layer_certification: cert,
     complete: required.every((layer) => Boolean(row.credential_refs?.[layer]?.primary)),
     created_at: new Date(row.created_at).toISOString(),
     updated_at: new Date(row.updated_at).toISOString(),
@@ -188,6 +282,12 @@ function mergeLayers(base: LayerMap, overrides: LayerOverrides | undefined): Lay
   return merged;
 }
 
+/** Rows to models, with each profile's certification read live from the catalog (one query). */
+async function toModels(rows: StackProfileRow[]): Promise<StackProfile[]> {
+  const certs = await certifyMany(rows);
+  return rows.map((r, i) => toModel(r, certs[i]));
+}
+
 function isUniqueViolation(err: unknown): boolean {
   return typeof err === 'object' && err !== null && (err as { code?: string }).code === PG_UNIQUE_VIOLATION;
 }
@@ -212,22 +312,24 @@ export async function createStackProfile(tenantId: string, input: CreateStackPro
   const credentialRefs = input.credential_refs ?? {};
   await assertCredentialsUsable(tenantId, credentialRefs);
   const layers = mergeLayers(preset.layers, input.overrides);
+  const cert = await assertLayersCertified(layers, input.allow_uncertified);
 
   try {
     const row = await dataService.one<StackProfileRow>(
       `INSERT INTO voice_agent.stack_profile
-         (tenant_id, name, preset_key, telephony, stt, llm_fast, llm_complex, tts, credential_refs, fallbacks)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+         (tenant_id, name, preset_key, telephony, stt, llm_fast, llm_complex, tts, credential_refs, fallbacks, certified)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
        RETURNING ${COLUMNS}`,
       [
         tenantId, name, preset.key,
         JSON.stringify(layers.telephony), JSON.stringify(layers.stt), JSON.stringify(layers.llm_fast),
         JSON.stringify(layers.llm_complex), JSON.stringify(layers.tts),
         JSON.stringify(credentialRefs), JSON.stringify(input.fallbacks ?? {}),
+        cert.every((c) => c.certified),
       ],
     );
     if (!row) throw new Error('stack profile insert returned no row');
-    return toModel(row);
+    return toModel(row, cert);
   } catch (err) {
     if (isUniqueViolation(err)) throw conflict('a stack profile with this name already exists');
     throw err;
@@ -250,7 +352,7 @@ export async function listStackProfiles(
       LIMIT $3 OFFSET $4`,
     [tenantId, status, limit, offset],
   );
-  return { stack_profiles: rows.map(toModel), limit, offset };
+  return { stack_profiles: await toModels(rows), limit, offset };
 }
 
 /** One of the tenant's stack profiles, or null (another tenant's profile is also null). */
@@ -260,7 +362,7 @@ export async function getStackProfile(tenantId: string, profileId: string): Prom
     `SELECT ${COLUMNS} FROM voice_agent.stack_profile WHERE tenant_id = $1 AND profile_id = $2`,
     [tenantId, profileId],
   );
-  return row ? toModel(row) : null;
+  return row ? (await toModels([row]))[0] : null;
 }
 
 /**
@@ -290,12 +392,13 @@ export async function updateStackProfile(
     { telephony: current.telephony, stt: current.stt, llm_fast: current.llm_fast, llm_complex: current.llm_complex, tts: current.tts },
     input.overrides,
   );
+  const cert = await assertLayersCertified(layers, input.allow_uncertified);
 
   try {
     const row = await dataService.one<StackProfileRow>(
       `UPDATE voice_agent.stack_profile
           SET name = $3, telephony = $4, stt = $5, llm_fast = $6, llm_complex = $7, tts = $8,
-              credential_refs = $9, fallbacks = $10, updated_at = now()
+              credential_refs = $9, fallbacks = $10, certified = $11, updated_at = now()
         WHERE tenant_id = $1 AND profile_id = $2 AND status = 'active'
         RETURNING ${COLUMNS}`,
       [
@@ -303,11 +406,12 @@ export async function updateStackProfile(
         JSON.stringify(layers.telephony), JSON.stringify(layers.stt), JSON.stringify(layers.llm_fast),
         JSON.stringify(layers.llm_complex), JSON.stringify(layers.tts),
         JSON.stringify(credentialRefs), JSON.stringify(input.fallbacks ?? current.fallbacks),
+        cert.every((c) => c.certified),
       ],
     );
     // Archived between the read and the write.
     if (!row) throw conflict('archived stack profiles cannot be edited');
-    return toModel(row);
+    return toModel(row, cert);
   } catch (err) {
     if (isUniqueViolation(err)) throw conflict('a stack profile with this name already exists');
     throw err;

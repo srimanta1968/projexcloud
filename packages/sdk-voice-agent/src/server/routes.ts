@@ -1,10 +1,10 @@
 import type { FastifyInstance } from 'fastify';
 import { requireAuth } from '@projexlight/sdk-identity';
-import { VOICE_PRESETS } from '../models/presets';
 import {
   archiveStackProfile,
   createStackProfile,
   getStackProfile,
+  listPresetsWithCertification,
   listStackProfiles,
   updateStackProfile,
   type CreateStackProfileInput,
@@ -21,9 +21,10 @@ import { sendError } from './sendError';
  * and is scoped to the authenticated tenant (see tenantScope.resolveTenant).
  */
 export async function registerRoutes(app: FastifyInstance): Promise<void> {
-  // TK-4469 — preset catalogue.
+  // TK-4469 — preset catalogue; TK-4490 — each preset flagged with its live catalog
+  // certification (available=false when a layer's catalog entry is not certified).
   app.get('/api/voice-agent/presets', { preHandler: requireAuth }, async (_req, reply) => {
-    return reply.code(200).send({ data: { presets: VOICE_PRESETS } });
+    return reply.code(200).send({ data: { presets: await listPresetsWithCertification() } });
   });
 
   registerAgentRoutes(app);

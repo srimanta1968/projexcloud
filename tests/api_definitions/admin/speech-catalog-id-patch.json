@@ -1,0 +1,122 @@
+{
+  "name": "PATCH /api/admin/speech/catalog/:entry_id - Operator edits a catalog price or certification",
+  "endpoint": "/api/admin/speech/catalog/:entry_id",
+  "method": "PATCH",
+  "description": "Operator-only (x-admin-ops-token): edits one speech catalog entry at runtime, no deploy (322b0d69-8fde-47e0-aaf7-8c6420ed492b#AC2 — an operator can edit a catalog price or certification without a deploy). Editable: list_price, output_list_price (per_1m_tokens entries only, required there), price_verified (true stamps price_verified_at = now, false clears it), certification_status (certified | uncertified | revoked — certifying stamps certified_at, anything else clears it), cert_metrics, display_name, voices, languages, notes. Other fields (layer, provider, model, unit) are read-only. Returns {entry, changes} where changes maps each field that actually changed to {from, to}; a non-empty change set is audited as speech.catalog_entry.updated.v1. Certification is read live by presets and stack profiles, so revoking an entry immediately makes presets that use it unavailable (322b0d69-8fde-47e0-aaf7-8c6420ed492b#AC3).",
+  "sdk": "api-gateway",
+  "sourceFile": "services/api-gateway/src/app.ts",
+  "requiresAuth": false,
+  "expectedStatus": 200,
+  "taskId": "bd4c99bf-a145-44c4-9670-e86ae1792e01",
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "featureId": "322b0d69-8fde-47e0-aaf7-8c6420ed492b",
+  "epicId": "71a6f2dc-a04e-4f2f-9e98-0d191e15e80d",
+  "priority": 133,
+  "testability": "auto",
+  "coversCriterion": [
+    "322b0d69-8fde-47e0-aaf7-8c6420ed492b#AC2",
+    "322b0d69-8fde-47e0-aaf7-8c6420ed492b#AC3"
+  ],
+  "dependsOn": [
+    "POST /api/auth/signup-tenant",
+    "GET /api/speech/catalog"
+  ],
+  "pathParams": {
+    "entry_id": {
+      "type": "string",
+      "format": "uuid",
+      "required": true
+    }
+  },
+  "fieldEnums": {
+    "certification_status": [
+      "certified",
+      "uncertified",
+      "revoked"
+    ],
+    "unit": [
+      "per_minute",
+      "per_1k_chars",
+      "per_1m_tokens"
+    ]
+  },
+  "testCases": [
+    {
+      "name": "Mark the entry price as not yet re-verified (idempotent)",
+      "capturesResponse": true,
+      "headers": {
+        "x-admin-ops-token": "{{var:ADMIN_OPS_TOKEN}}"
+      },
+      "pathParams": {
+        "entry_id": "{{cache:speech.catalog.list.response.data.entries.0.entry_id}}"
+      },
+      "payload": {
+        "price_verified": false
+      },
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "data": {
+          "entry": {
+            "entry_id": "string",
+            "catalog_key": "string",
+            "list_price": "number",
+            "unit": "string",
+            "certification_status": "string",
+            "certified": "boolean",
+            "updated_by": "string"
+          },
+          "changes": "object"
+        }
+      }
+    },
+    {
+      "name": "Unknown certification status",
+      "headers": {
+        "x-admin-ops-token": "{{var:ADMIN_OPS_TOKEN}}"
+      },
+      "pathParams": {
+        "entry_id": "{{cache:speech.catalog.list.response.data.entries.0.entry_id}}"
+      },
+      "payload": {
+        "certification_status": "approved"
+      },
+      "expectedStatus": 400
+    },
+    {
+      "name": "Unknown entry",
+      "headers": {
+        "x-admin-ops-token": "{{var:ADMIN_OPS_TOKEN}}"
+      },
+      "pathParams": {
+        "entry_id": "{{dynamic:uuid}}"
+      },
+      "payload": {
+        "list_price": 1
+      },
+      "expectedStatus": 404
+    }
+  ],
+  "captureResponse": {
+    "speech.catalog.update.response.data.entry.updated_by": "data.entry.updated_by"
+  },
+  "errorCases": [
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "unknown or read-only fields: <fields>",
+      "when": "the body has a field outside the editable set, is empty, or a value is invalid (negative price, bad status, output_list_price on a non-token entry)"
+    },
+    {
+      "status": 404,
+      "code": "NotFound",
+      "message": "catalog entry not found",
+      "when": "no entry has this id"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "admin token required",
+      "when": "missing or invalid x-admin-ops-token (a tenant JWT is not accepted)"
+    }
+  ]
+}
