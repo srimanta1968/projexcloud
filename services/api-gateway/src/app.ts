@@ -372,6 +372,7 @@ import {
   getLiveCallBroker,
   VoiceAgentError,
 } from '@projexlight/sdk-voice-agent';
+import { migrationsDir as dialerMigrations } from '@projexlight/sdk-dialer';
 // P16 · EP-374 — the provenance kernel. Every ingesting SDK lands its rows here.
 import {
   migrationsDir as sourceRecordMigrations,
@@ -1474,6 +1475,8 @@ const start = async (): Promise<void> => {
       { sdk: 'sdk-incident',            dir: incidentMigrations },
       // VA·E2 — self-contained voice_agent schema; persona/approval/credential refs are loose.
       { sdk: 'sdk-voice-agent',         dir: voiceAgentMigrations },
+      // VA·E5 — dialer schema; agent/call ids are loose refs into voice_agent.
+      { sdk: 'sdk-dialer',              dir: dialerMigrations },
       // Self-contained (no cross-schema FKs) — ordering free.
       { sdk: 'sdk-source-record',       dir: sourceRecordMigrations },
       // Self-contained: entity refs are loose (kind, id) pairs, so ordering is free.
