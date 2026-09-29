@@ -1,4 +1,4 @@
-import { FastifyInstance } from 'fastify';
+import { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { requireAuth } from '@projexlight/sdk-identity';
 import {
   openThread,
@@ -29,6 +29,32 @@ function badRequest(reply: any, details: string[]) {
   return reply.code(400).send({ error: 'ValidationError', code: 'VALIDATION_ERROR', details });
 }
 
+/**
+ * Channel names are accepted in any case ('voice' or 'VOICE') and stored upper-case, the
+ * vocabulary of the conversation.message CHECK constraint. Anything else stays as given so
+ * the caller's validation error names what they actually sent.
+ */
+function normalizeChannel<T>(v: T): T | ThreadChannel {
+  if (typeof v !== 'string') return v;
+  const upper = v.toUpperCase() as ThreadChannel;
+  return CHANNELS.includes(upper) ? upper : v;
+}
+
+/**
+ * The named tenant must be the authenticated one. requireAuth verifies the JWT (or the
+ * gateway gate the API key) but these routes take tenant_id from the payload, so without
+ * this check one tenant's token could read or write another tenant's threads — which now
+ * hold AI call transcripts — just by naming its id. Returns false after sending the 403.
+ */
+function pinTenant(req: FastifyRequest, reply: FastifyReply, named: unknown): boolean {
+  const authTenant = req.auth?.tenant_id ?? null;
+  if (authTenant && typeof named === 'string' && named && named !== authTenant) {
+    void reply.code(403).send({ error: 'Forbidden', code: 'TENANT_MISMATCH', details: ['tenant_id does not match the authenticated tenant'] });
+    return false;
+  }
+  return true;
+}
+
 export async function registerRoutes(app: FastifyInstance): Promise<void> {
   // -------------------------------------------------------------------------
   // POST /api/conversations/threads
@@ -47,6 +73,7 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
     // finished, and inventing a placeholder here would defeat the column.
     if (!body.purpose?.trim()) missing.push('purpose is required');
     if (missing.length) return badRequest(reply, missing);
+    if (!pinTenant(req, reply, body.tenant_id)) return reply;
 
     const thread = await openThread({
       tenant_id: body.tenant_id!,
@@ -72,6 +99,7 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
       provider_thread_key: string; provider_message_key: string;
       metadata: Record<string, unknown>;
     }>;
+    body.channel = normalizeChannel(body.channel) as ThreadChannel | undefined;
 
     const missing: string[] = [];
     if (!body.tenant_id) missing.push('tenant_id is required');
@@ -83,6 +111,14 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
       missing.push(`channel must be one of: ${CHANNELS.join(', ')}`);
     }
     if (missing.length) return badRequest(reply, missing);
+    if (!pinTenant(req, reply, body.tenant_id)) return reply;
+    // The FK only proves the thread exists; it must also be THIS tenant's thread, or a
+    // message could be filed onto another tenant's conversation. Unknown and foreign are
+    // both 404 so the response does not confirm the id exists elsewhere.
+    const target = await getThread(body.thread_id!).catch(() => null);
+    if (!target || target.tenant_id !== body.tenant_id) {
+      return reply.code(404).send({ error: 'NotFound', code: 'THREAD_NOT_FOUND' });
+    }
 
     try {
       // An internal note is routed to its own service rather than accepted through the
@@ -146,7 +182,9 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
     };
   }>('/api/conversations/inbox', { preHandler: requireAuth }, async (req, reply) => {
     const q = req.query;
+    q.channel = normalizeChannel(q.channel) as ThreadChannel | undefined;
     if (!q.tenant_id) return badRequest(reply, ['tenant_id query param required']);
+    if (!pinTenant(req, reply, q.tenant_id)) return reply;
     if (q.channel && !CHANNELS.includes(q.channel)) {
       return badRequest(reply, [`channel must be one of: ${CHANNELS.join(', ')}`]);
     }
@@ -182,10 +220,15 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
   // -------------------------------------------------------------------------
   app.get<{
     Params: { id: string };
-    Querystring: { tenant_id?: string; limit?: string; offset?: string; exclude_internal?: string };
+    Querystring: { tenant_id?: string; limit?: string; offset?: string; exclude_internal?: string; channel?: string };
   }>('/api/conversations/threads/:id', { preHandler: requireAuth }, async (req, reply) => {
     const q = req.query;
     if (!q.tenant_id) return badRequest(reply, ['tenant_id query param required']);
+    if (!pinTenant(req, reply, q.tenant_id)) return reply;
+    const channel = normalizeChannel(q.channel);
+    if (channel !== undefined && !CHANNELS.includes(channel as ThreadChannel)) {
+      return badRequest(reply, [`channel must be one of: ${CHANNELS.join(', ')}`]);
+    }
 
     const thread = await getThread(req.params.id);
     // Checked here rather than in the SQL so a cross-tenant read is a 404, not a 200 with
@@ -199,6 +242,7 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
       limit: q.limit ? Number(q.limit) : undefined,
       offset: q.offset ? Number(q.offset) : undefined,
       exclude_internal: q.exclude_internal === 'true',
+      channel: channel as ThreadChannel | undefined,
     });
     return reply.code(200).send({ data: { thread, messages } });
   });
@@ -218,6 +262,7 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
       channel_facts: Record<string, ChannelFacts>;
       thread_status: 'open' | 'awaiting_reply' | 'closed';
     }>;
+    if (Array.isArray(body.channels)) body.channels = body.channels.map((c) => normalizeChannel(c) as ThreadChannel);
 
     const missing: string[] = [];
     if (!body.tenant_id) missing.push('tenant_id is required');
@@ -230,6 +275,7 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
       missing.push('channel_facts is required — this SDK holds no consent or policy logic and cannot decide without resolver output');
     }
     if (missing.length) return badRequest(reply, missing);
+    if (!pinTenant(req, reply, body.tenant_id)) return reply;
 
     const context: GuardrailContext = {
       tenant_id: body.tenant_id!,
@@ -244,7 +290,7 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
     // manufacturing a denial would be this package inventing policy.
     const decision = await evaluateComposeGuardrail(
       context,
-      (_ctx, channel) => body.channel_facts![channel] ?? {},
+      (_ctx, channel) => body.channel_facts![channel] ?? body.channel_facts![channel.toLowerCase()] ?? {},
     );
     return reply.code(200).send({ data: { decision } });
   });

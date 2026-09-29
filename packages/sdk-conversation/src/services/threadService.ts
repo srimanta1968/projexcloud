@@ -607,6 +607,8 @@ export interface ListMessagesInput {
   offset?: number;
   /** Omit internal notes — what a customer-visible transcript export wants. */
   exclude_internal?: boolean;
+  /** Only this channel's messages — e.g. VOICE for an AI call's turns. */
+  channel?: ThreadChannel;
 }
 
 /**
@@ -625,6 +627,7 @@ export async function listThreadMessages(
        FROM conversation.message
       WHERE thread_id = $1::uuid
         AND ($2::boolean IS NOT TRUE OR channel <> 'INTERNAL_NOTE')
+        AND ($5::text IS NULL OR channel = $5)
       ORDER BY occurred_at ASC, received_at ASC, message_id ASC
       LIMIT $3 OFFSET $4`,
     [
@@ -632,6 +635,7 @@ export async function listThreadMessages(
       input.exclude_internal ?? false,
       Math.min(Math.max(input.limit ?? 200, 1), 500),
       Math.max(input.offset ?? 0, 0),
+      input.channel ?? null,
     ],
   );
   return res.rows.map(rowToMessage);
