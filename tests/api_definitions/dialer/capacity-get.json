@@ -13,9 +13,10 @@
   "priority": 120,
   "testability": "auto",
   "coversCriterion": [
-    "180f8a01-0600-48b4-a0e5-f1be092f2fb3#AC1"
+    "180f8a01-0600-48b4-a0e5-f1be092f2fb3#AC1",
+    "76bac964-7761-49f8-8255-464ba36ca311#AC3"
   ],
-  "description": "Returns the tenant's concurrency: backend (redis | postgres), plan_cap, active calls, and per running/paused campaign its active count and cap. A tenant never holds more concurrent calls (dialing, ringing, in progress) than min(plan cap, telephony-key capacity, campaign max_concurrency): the plan cap comes from the tenant plan (default DIALER_DEFAULT_PLAN_CONCURRENCY = 10), key capacity from the telephony credential of the agent’s published stack profile, the campaign cap from the campaign. Slots live in Redis sorted sets with a per-call lease (atomic Lua check-and-take), falling back to an exact Postgres count under a per-tenant advisory lock when Redis is unavailable; a call that ends frees its slot.",
+  "description": "Returns the tenant's concurrency: backend (redis | postgres), plan_cap, alert_at, active calls, and per running/paused campaign its active count and cap (180f8a01-0600-48b4-a0e5-f1be092f2fb3#AC1 — concurrent calls never exceed min(plan, key, campaign) caps; 76bac964-7761-49f8-8255-464ba36ca311#AC3 — a tenant at its plan concurrency cap cannot start another call and receives an alert at 80%). A tenant never holds more concurrent calls (dialing, ringing, in progress) than min(plan cap, telephony-key capacity, campaign max_concurrency). The plan cap is the tenant's voice.concurrent_calls quota policy in meter.quota_policy (hard_cap; a tenant row overrides the platform default of 10 seeded by sdk-meter migration 010) and alert_at is that policy's soft_cap, defaulting to 80% of the cap (rounded up). When a granted call brings active calls to alert_at, voice.capacity.threshold.v1 is emitted with level warning; when a call is refused because the plan cap is full it is emitted with level cap_reached. Each level alerts once per DIALER_CAPACITY_ALERT_TTL_S window (900 s) and re-arms when usage falls back below alert_at. Key capacity comes from the telephony credential of the agent's published stack profile, the campaign cap from the campaign. Slots live in Redis sorted sets with a per-call lease (atomic Lua check-and-take), falling back to an exact Postgres count under a per-tenant advisory lock when Redis is unavailable; a call that ends frees its slot.",
   "dependsOn": [
     "POST /api/auth/signup-tenant"
   ],
@@ -31,6 +32,7 @@
           "capacity": {
             "backend": "string",
             "plan_cap": "number",
+            "alert_at": "number",
             "active": "number",
             "by_campaign": []
           }
@@ -45,5 +47,11 @@
       "message": "Missing bearer token",
       "when": "no Authorization header"
     }
-  ]
+  ],
+  "fieldEnums": {
+    "backend": [
+      "redis",
+      "postgres"
+    ]
+  }
 }

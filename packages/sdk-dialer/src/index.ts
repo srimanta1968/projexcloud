@@ -58,6 +58,8 @@ export { dispatchQueued, setCallOriginator } from './services/queueDispatcher';
 export type { CallOriginator, DispatchSummary } from './services/queueDispatcher';
 
 export { outboundCap } from './services/capacityService';
+export { setPlanAlertResolver, onCapacityAlert, checkPlanThreshold, alertThreshold, defaultAlertAt } from './services/capacityAlert';
+export type { CapacityAlert, CapacityAlertLevel, PlanAlertResolver, CapacityAlertListener } from './services/capacityAlert';
 export { runSchedulerTick, startDispatchScheduler, admitInbound, setTenantWeightResolver } from './services/scheduler';
 export type { TickOptions, TickResult, TenantWeightResolver } from './services/scheduler';
 

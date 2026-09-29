@@ -106,3 +106,49 @@ export async function voiceUsageForPeriod(tenantId: string, periodStart: string,
   );
   return rows.map((r) => ({ sku: r.sku, calls: Number(r.calls), billable_seconds: Number(r.billable_seconds), minutes: Number(r.minutes) }));
 }
+
+/** The SKU carrying a tenant's plan concurrent AI-call cap in meter.quota_policy (TK-4504). */
+export const VOICE_CONCURRENCY_SKU = 'voice.concurrent_calls';
+
+export interface VoiceConcurrencyPolicy {
+  /** Concurrent calls the plan allows; null = unlimited. */
+  hard_cap: number | null;
+  /** Active calls at which the tenant is alerted; null = the dialer's 80 % default. */
+  soft_cap: number | null;
+  /** 'tenant' when the tenant has its own row, 'platform' for the default, 'none' when neither exists. */
+  source: 'tenant' | 'platform' | 'none';
+}
+
+const POLICY_CACHE_MS = Number(process.env.VOICE_CONCURRENCY_POLICY_CACHE_MS ?? 30_000);
+const policyCache = new Map<string, { at: number; policy: VoiceConcurrencyPolicy }>();
+
+/**
+ * The tenant's plan concurrency policy: its own voice.concurrent_calls quota row, else the
+ * platform default (tenant_id NULL), latest active_from first. Read on every call admission,
+ * so it is cached per process for VOICE_CONCURRENCY_POLICY_CACHE_MS (30 s).
+ */
+export async function voiceConcurrencyPolicy(tenantId: string): Promise<VoiceConcurrencyPolicy> {
+  const hit = policyCache.get(tenantId);
+  if (hit && Date.now() - hit.at < POLICY_CACHE_MS) return hit.policy;
+  const row = await dataService.one<{ tenant_id: string | null; soft_cap: string | null; hard_cap: string | null }>(
+    `SELECT tenant_id, soft_cap, hard_cap FROM meter.quota_policy
+      WHERE (tenant_id = $1::uuid OR tenant_id IS NULL) AND sku = $2 AND active_from <= now()
+      ORDER BY tenant_id NULLS LAST, active_from DESC LIMIT 1`,
+    [tenantId, VOICE_CONCURRENCY_SKU],
+  );
+  const policy: VoiceConcurrencyPolicy = row
+    ? {
+      hard_cap: row.hard_cap === null ? null : Number(row.hard_cap),
+      soft_cap: row.soft_cap === null ? null : Number(row.soft_cap),
+      source: row.tenant_id ? 'tenant' : 'platform',
+    }
+    : { hard_cap: null, soft_cap: null, source: 'none' };
+  policyCache.set(tenantId, { at: Date.now(), policy });
+  return policy;
+}
+
+/** Drops cached policies (after a plan change, or in tests). */
+export function clearVoiceConcurrencyPolicyCache(tenantId?: string): void {
+  if (tenantId) policyCache.delete(tenantId);
+  else policyCache.clear();
+}

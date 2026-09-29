@@ -67,6 +67,7 @@ import {
   getRobotUsage,
   report as meterReport,
   meterVoiceCall,
+  voiceConcurrencyPolicy,
 } from '@projexlight/sdk-meter';
 import {
   server as secretsServer,
@@ -399,6 +400,8 @@ import {
   applyRetryPolicy,
   applyDispositionEffects,
   setKeyCapacityResolver,
+  setPlanCapResolver,
+  setPlanAlertResolver,
   setCallOriginator,
   listCallerIds,
   DialerError,
@@ -796,6 +799,17 @@ setKeyCapacityResolver(async (tenantId, keyRef) => {
   if (!UUID_RE_KEYREF.test(keyRef)) return fallback;
   return (await credentialMaxConcurrency(tenantId, keyRef)) ?? fallback;
 });
+// VA·E7 (TK-4504) — the plan concurrent-call cap is the tenant's voice.concurrent_calls quota
+// policy (hard_cap; a tenant row overrides the platform default seeded by meter migration 010)
+// and its soft_cap is the alert threshold (unset = 80 % of the cap). With no policy at all the
+// cap falls back to DIALER_DEFAULT_PLAN_CONCURRENCY (10).
+setPlanCapResolver(async (tenantId) => {
+  const policy = await voiceConcurrencyPolicy(tenantId);
+  if (policy.source !== 'none') return policy.hard_cap;
+  const env = Number(process.env.DIALER_DEFAULT_PLAN_CONCURRENCY);
+  return Number.isInteger(env) && env >= 0 && process.env.DIALER_DEFAULT_PLAN_CONCURRENCY !== '' ? env : 10;
+});
+setPlanAlertResolver(async (tenantId) => (await voiceConcurrencyPolicy(tenantId)).soft_cap);
 // VA·E5 (TK-4484) — a call that ends frees its concurrency slot.
 onCallEnded(async (call) => { await releaseSlot(call.call_id); });
 // VA·E5 (TK-4487) — a campaign call that ends schedules the contact's retry (or closes it).

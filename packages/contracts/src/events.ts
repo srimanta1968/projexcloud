@@ -452,6 +452,8 @@ export const EVENT_TYPE_REGISTRY: Record<string, EventTypeMetadata> = {
   'voice.trunk.deleted.v1':                    { event_type: 'voice.trunk.deleted.v1',                    retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
   // VA·E6 (TK-4502) — a signed Telnyx status webhook updated a mirrored call leg.
   'telnyx-voice.call.status.v1':               { event_type: 'telnyx-voice.call.status.v1',               retention_class: 'operational', conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+  // VA·E7 (TK-4504) — a tenant reached its plan concurrency alert threshold (warning) or cap (cap_reached).
+  'voice.capacity.threshold.v1':               { event_type: 'voice.capacity.threshold.v1',               retention_class: 'operational', conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
 
   /* --- sdk-incident (P15·E3) — exception/incident lifecycle + SLA --- */
   'incident.opened.v1':                       { event_type: 'incident.opened.v1',                       retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },

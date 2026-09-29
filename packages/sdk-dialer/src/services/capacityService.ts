@@ -1,5 +1,6 @@
 import { dataService } from '@projexlight/db-runtime';
 import { getRedis } from '@projexlight/redis-runtime';
+import { alertThreshold, checkPlanThreshold, rearmIfBelow } from './capacityAlert';
 
 /**
  * Effective concurrency caps (VA·E5 · TK-4484).
@@ -75,7 +76,7 @@ const envCap = (name: string): number | null => {
 let planCapResolver: PlanCapResolver = async () => envCap('DIALER_DEFAULT_PLAN_CONCURRENCY') ?? 10;
 let keyCapacityResolver: KeyCapacityResolver = async () => envCap('DIALER_DEFAULT_KEY_CAPACITY');
 
-/** Installs the plan-cap source (sdk-billing entitlement, TK-4504). */
+/** Installs the plan-cap source (the tenant's voice.concurrent_calls quota policy, TK-4504). */
 export function setPlanCapResolver(fn: PlanCapResolver): void {
   planCapResolver = fn;
 }
@@ -98,10 +99,10 @@ async function keyRefFor(tenantId: string, agentId: string): Promise<string> {
   return row?.ref ?? 'platform';
 }
 
-async function capsFor(req: SlotRequest, keyRef: string): Promise<Record<CapDimension, number | null>> {
+async function capsFor(req: SlotRequest, keyRef: string): Promise<{ caps: Record<CapDimension, number | null>; fullPlan: number | null }> {
   const full = await fullCapsFor(req, keyRef);
-  if (req.direction === 'inbound') return full;
-  return { plan: outboundCap(full.plan), key: outboundCap(full.key), campaign: full.campaign };
+  if (req.direction === 'inbound') return { caps: full, fullPlan: full.plan };
+  return { caps: { plan: outboundCap(full.plan), key: outboundCap(full.key), campaign: full.campaign }, fullPlan: full.plan };
 }
 
 async function fullCapsFor(req: SlotRequest, keyRef: string): Promise<Record<CapDimension, number | null>> {
@@ -152,10 +153,20 @@ function redisOrNull(): ReturnType<typeof getRedis> | null {
   }
 }
 
-/** Takes one concurrency slot for a call, or reports which cap is full. */
+/**
+ * Takes one concurrency slot for a call, or reports which cap is full. Every decision is
+ * then checked against the plan's alert threshold (TK-4504): reaching it raises a
+ * 'warning' alert, a refusal on the plan cap a 'cap_reached' one.
+ */
 export async function acquireSlot(req: SlotRequest): Promise<SlotDecision> {
   const keyRef = await keyRefFor(req.tenant_id, req.agent_id);
-  const caps = await capsFor(req, keyRef);
+  const { caps, fullPlan } = await capsFor(req, keyRef);
+  const decision = await takeSlot(req, keyRef, caps);
+  await checkPlanThreshold(req.tenant_id, fullPlan, decision.blocked_by === 'plan');
+  return decision;
+}
+
+async function takeSlot(req: SlotRequest, keyRef: string, caps: Record<CapDimension, number | null>): Promise<SlotDecision> {
   const redis = redisOrNull();
   if (redis) {
     const keys = redisKeys(req, keyRef);
@@ -211,13 +222,21 @@ export async function releaseSlot(callId: string): Promise<void> {
   if (!redis) return; // Postgres counting frees the slot when the call's status leaves the active set.
   const lease = await redis.get(`dialer:lease:${callId}`);
   if (!lease) return;
-  for (const key of JSON.parse(lease) as string[]) await redis.zrem(key, callId);
+  const keys = JSON.parse(lease) as string[];
+  for (const key of keys) await redis.zrem(key, callId);
   await redis.del(`dialer:lease:${callId}`);
+  const tenantKey = keys.find((k) => k.startsWith('dialer:active:tenant:'));
+  if (tenantKey) {
+    const tenantId = tenantKey.slice('dialer:active:tenant:'.length);
+    await rearmIfBelow(tenantId, await planCapResolver(tenantId));
+  }
 }
 
 export interface CapacitySnapshot {
   backend: 'redis' | 'postgres';
   plan_cap: number | null;
+  /** Active calls at which the plan alert fires (the plan's soft cap, 80 % by default); null = unlimited plan. */
+  alert_at: number | null;
   active: number;
   by_campaign: { campaign_id: string; active: number; cap: number }[];
 }
@@ -225,6 +244,7 @@ export interface CapacitySnapshot {
 /** What a tenant is using right now, for the capacity view. */
 export async function capacitySnapshot(tenantId: string): Promise<CapacitySnapshot> {
   const plan_cap = await planCapResolver(tenantId);
+  const alert_at = plan_cap !== null && plan_cap > 0 ? await alertThreshold(tenantId, plan_cap) : null;
   const redis = redisOrNull();
   const campaigns = await dataService.rows<{ campaign_id: string; max_concurrency: number }>(
     `SELECT campaign_id, max_concurrency FROM dialer.campaign WHERE tenant_id = $1 AND status IN ('running','paused')`,
@@ -239,6 +259,7 @@ export async function capacitySnapshot(tenantId: string): Promise<CapacitySnapsh
     return {
       backend: 'redis',
       plan_cap,
+      alert_at,
       active: await count(`dialer:active:tenant:${tenantId}`),
       by_campaign: await Promise.all(campaigns.map(async (c) => ({
         campaign_id: c.campaign_id, cap: c.max_concurrency, active: await count(`dialer:active:campaign:${c.campaign_id}`),
@@ -255,6 +276,7 @@ export async function capacitySnapshot(tenantId: string): Promise<CapacitySnapsh
   return {
     backend: 'postgres',
     plan_cap,
+    alert_at,
     active: rows.reduce((a, r) => a + r.n, 0),
     by_campaign: campaigns.map((c) => ({ campaign_id: c.campaign_id, cap: c.max_concurrency, active: rows.find((r) => r.campaign_id === c.campaign_id)?.n ?? 0 })),
   };
