@@ -472,6 +472,20 @@ export async function completeCall(tenantId: string, callId: string, input: Comp
         conversation_thread_id: call.conversation_thread_id, crm_activity_id: (crm.activity_id as string | undefined) ?? null,
       },
     });
+    // TK-4509 — a failed call is also announced on its own, so a consumer can subscribe to
+    // failures without filtering every completion.
+    if (call.status === 'failed') {
+      await emitEvent({
+        event_type: 'voice.call.failed.v1',
+        pool_index: VOICE_AUDIT_POOL,
+        actor_kind: 'agent',
+        actor_id: call.agent_id,
+        tenant_id: tenantId,
+        subject_kind: 'voice_agent.call',
+        subject_id: callId,
+        payload: { call_id: callId, agent_id: call.agent_id, disposition: call.disposition, subject_ref: call.subject_ref, duration_s: call.duration_s },
+      });
+    }
   }
   return call;
 }

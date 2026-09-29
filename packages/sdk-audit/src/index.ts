@@ -2,8 +2,8 @@ export * as client from './client';
 export * as server from './server';
 export { migrationsDir } from './db';
 export * as services from './services/auditService';
-export { appendAuditEntry } from './services/auditService';
-export type { AppendInput, LedgerEntry, ActorKind, RetentionClass } from './services/auditService';
+export { appendAuditEntry, onAuditAppended } from './services/auditService';
+export type { AppendInput, LedgerEntry, ActorKind, RetentionClass, AppendListener } from './services/auditService';
 export {
   resolveEventType,
   assertResolvableEventType,

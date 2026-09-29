@@ -102,6 +102,27 @@ function chainLockKey(pool_index: string): string {
 }
 
 /**
+ * Called with every entry AFTER its append transaction has committed (VA·E7 · TK-4509) —
+ * the place to fan a recorded event out (e.g. to tenant webhooks) knowing it is really in
+ * the ledger and has its entry_id. Listeners run detached: they never delay the append,
+ * and a failing listener is logged, never propagated.
+ */
+export type AppendListener = (entry: LedgerEntry) => void | Promise<void>;
+const appendListeners: AppendListener[] = [];
+
+export function onAuditAppended(listener: AppendListener): void {
+  appendListeners.push(listener);
+}
+
+function notifyAppended(entry: LedgerEntry): void {
+  for (const fn of appendListeners) {
+    void Promise.resolve()
+      .then(() => fn(entry))
+      .catch((err) => console.error('[sdk-audit] append listener failed', entry.event_type, entry.entry_id, (err as Error).message));
+  }
+}
+
+/**
  * Appends a new entry to the per-pool chain, in ONE transaction with the
  * `audit.chain_head` update. Per P1-Foundation-Spine §7.
  *
@@ -135,7 +156,7 @@ export async function appendAuditEntry(input: AppendInput): Promise<LedgerEntry>
   const actor_kind: ActorKind = input.actor_kind ?? 'service';
   const expires_at = computeExpiresAt(retention_class, occurred_at);
 
-  return dataService.tx(async (q) => {
+  const committed = await dataService.tx(async (q) => {
     // One appender per chain at a time. Everything below — the head read, the
     // hash, the insert and the head update — is now a single atomic step.
     await q(`SELECT pg_advisory_xact_lock($1::bigint)`, [chainLockKey(input.pool_index)]);
@@ -193,4 +214,6 @@ export async function appendAuditEntry(input: AppendInput): Promise<LedgerEntry>
 
     return entry;
   });
+  if (appendListeners.length > 0) notifyAppended(committed);
+  return committed;
 }

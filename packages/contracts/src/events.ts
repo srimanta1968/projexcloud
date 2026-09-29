@@ -454,6 +454,16 @@ export const EVENT_TYPE_REGISTRY: Record<string, EventTypeMetadata> = {
   'telnyx-voice.call.status.v1':               { event_type: 'telnyx-voice.call.status.v1',               retention_class: 'operational', conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
   // VA·E7 (TK-4504) — a tenant reached its plan concurrency alert threshold (warning) or cap (cap_reached).
   'voice.capacity.threshold.v1':               { event_type: 'voice.capacity.threshold.v1',               retention_class: 'operational', conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+  // VA·E7 (TK-4509) — the voice runtime connected an AI call leg (emitted by services/voice-runtime).
+  'voice.call.started.v1':                     { event_type: 'voice.call.started.v1',                    retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+  // VA·E7 (TK-4509) — the carrier reported the call answered (in_progress).
+  'voice.call.answered.v1':                    { event_type: 'voice.call.answered.v1',                   retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+  // VA·E7 (TK-4509) — the call ended failed (also covered by voice.call.completed.v1).
+  'voice.call.failed.v1':                      { event_type: 'voice.call.failed.v1',                     retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+  // VA·E7 (TK-4509) — the AI handed the call to a human (emitted by services/voice-runtime).
+  'voice.call.transferred.v1':                 { event_type: 'voice.call.transferred.v1',                retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+  // VA·E7 (TK-4509) — an app tool was authorized for an AI call by its session capability token.
+  'voice.tool.invoked.v1':                     { event_type: 'voice.tool.invoked.v1',                    retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
 
   /* --- sdk-incident (P15·E3) — exception/incident lifecycle + SLA --- */
   'incident.opened.v1':                       { event_type: 'incident.opened.v1',                       retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },

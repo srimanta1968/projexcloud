@@ -110,7 +110,7 @@ import {
 } from './admin/adminOpsAuth';
 import { issueOpsToken, revokeOpsToken, listOpsTokens } from './admin/opsTokenStore';
 import { resolveIdentityContext } from '@projexlight/sdk-identity-resolver';
-import { emitEvent, addEmitTap } from '@projexlight/sdk-audit';
+import { emitEvent, addEmitTap, onAuditAppended } from '@projexlight/sdk-audit';
 import {
   registry as metricsRegistry,
   recordConsentCheck,
@@ -181,6 +181,7 @@ import {
   migrationsDir as webhookMigrations,
   server as webhookServer,
   startDeliveryWorker,
+  publishEvent as publishWebhookEvent,
 } from '@projexlight/sdk-webhook';
 import {
   migrationsDir as approvalMigrations,
@@ -815,6 +816,31 @@ setPlanCapResolver(async (tenantId) => {
   return Number.isInteger(env) && env >= 0 && process.env.DIALER_DEFAULT_PLAN_CONCURRENCY !== '' ? env : 10;
 });
 setPlanAlertResolver(async (tenantId) => (await voiceConcurrencyPolicy(tenantId)).soft_cap);
+// VA·E7 (TK-4509) — voice events reach tenant webhooks. Every committed audit entry whose
+// type starts with one of WEBHOOK_AUDIT_EVENT_PREFIXES (default 'voice.') is published to
+// sdk-webhook, which fans it out to the tenant's active subscriptions for that type and
+// delivers it HMAC-signed (X-Projexcloud-Signature) with retries and a DLQ. The ledger
+// entry_id is the event_id, so the webhook outbox's (subscription, event) key makes the
+// fan-out idempotent, and every delivered event has its audit.entry row by construction.
+const WEBHOOK_AUDIT_EVENT_PREFIXES = (process.env.WEBHOOK_AUDIT_EVENT_PREFIXES ?? 'voice.')
+  .split(',').map((p) => p.trim()).filter(Boolean);
+onAuditAppended(async (entry) => {
+  if (!entry.tenant_id || !WEBHOOK_AUDIT_EVENT_PREFIXES.some((p) => entry.event_type.startsWith(p))) return;
+  await publishWebhookEvent({
+    tenant_id: entry.tenant_id,
+    event_type: entry.event_type,
+    event_id: entry.entry_id,
+    payload: {
+      event_id: entry.entry_id,
+      event_type: entry.event_type,
+      occurred_at: new Date(entry.occurred_at).toISOString(),
+      tenant_id: entry.tenant_id,
+      subject_kind: entry.subject_kind,
+      subject_id: entry.subject_id,
+      data: entry.payload,
+    },
+  });
+});
 // VA·E7 (TK-4508) — a call that ends revokes its session capability token.
 onCallEnded(async (call) => {
   await revokeSessionTokens({ tier: 'voice', session_ref: `voice_agent.call:${call.call_id}`, reason: 'call_ended', actor_id: 'sdk-voice-agent' });
@@ -1388,6 +1414,20 @@ app.post<{ Params: { call_id: string } }>('/api/admin/voice-agent/calls/:call_id
     return reply.code(400).send({ success: false, error: 'ValidationError', details: ['token and tool are required strings'] });
   }
   const check = await validateSessionToken(body.token, body.tool, { session_ref: `voice_agent.call:${req.params.call_id}` });
+  // TK-4509 — the runtime validates right before it calls the tool, so an authorized check is
+  // the platform's record that the tool was invoked on this call.
+  if (check.valid) {
+    await emitEvent({
+      event_type: 'voice.tool.invoked.v1',
+      pool_index: process.env.VOICE_AGENT_AUDIT_POOL || 'admin-default',
+      actor_kind: 'agent',
+      actor_id: 'voice-runtime',
+      tenant_id: check.tenant_id,
+      subject_kind: 'voice_agent.call',
+      subject_id: req.params.call_id,
+      payload: { call_id: req.params.call_id, tool: check.tool, token_id: check.token_id, use_count: check.use_count },
+    });
+  }
   return reply.code(200).send({ success: true, data: check });
 });
 setStatusCallbackForwarder(async (params) => {

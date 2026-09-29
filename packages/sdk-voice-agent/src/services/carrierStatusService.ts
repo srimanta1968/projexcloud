@@ -1,4 +1,5 @@
 import { dataService } from '@projexlight/db-runtime';
+import { emitEvent } from '@projexlight/sdk-audit';
 import { completeCall, VOICE_DISPOSITIONS } from './postCallService';
 import { VoiceAgentError, conflict, notFound, validationError } from '../models/errors';
 
@@ -145,5 +146,19 @@ export async function applyCarrierStatus(input: CarrierStatusInput): Promise<Car
       RETURNING status`,
     [call.call_id, next, call.status],
   );
+  // TK-4509 — the call was answered (exactly once: the rank guard lets only one transition
+  // into in_progress win), so consumers can react before the call ends.
+  if (r && next === 'in_progress') {
+    await emitEvent({
+      event_type: 'voice.call.answered.v1',
+      pool_index: process.env.VOICE_AGENT_AUDIT_POOL || 'admin-default',
+      actor_kind: 'service',
+      actor_id: 'voice-agent.carrier-status',
+      tenant_id: call.tenant_id,
+      subject_kind: 'voice_agent.call',
+      subject_id: call.call_id,
+      payload: { call_id: call.call_id, carrier_status: raw, answered_by: answeredBy },
+    });
+  }
   return { ...base, status: r?.status ?? call.status, applied: !!r };
 }
