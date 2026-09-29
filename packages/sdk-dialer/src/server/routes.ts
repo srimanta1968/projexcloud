@@ -13,6 +13,7 @@ import {
 import { dialContact } from '../services/dispatchService';
 import { capacitySnapshot } from '../services/capacityService';
 import { dispatchQueued } from '../services/queueDispatcher';
+import { reportAmd } from '../services/amdService';
 import { resolveTenant } from './tenantScope';
 import { sendError } from './sendError';
 
@@ -120,6 +121,18 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
       return reply.code(400).send({ error: 'ValidationError', details: ['limit must be an integer between 1 and 500'] });
     }
     return reply.code(200).send({ data: await dispatchQueued(tenantId, limit as number) });
+  });
+
+  // TK-4486 — the carrier's answering-machine result; answers with connect or the voicemail policy.
+  app.post<{ Params: { call_id: string } }>('/api/dialer/calls/:call_id/amd', { preHandler: requireAuth }, async (req, reply) => {
+    const body = (req.body ?? {}) as { answered_by?: unknown; tenant_id?: string };
+    const tenantId = resolveTenant(req, reply, body.tenant_id);
+    if (!tenantId) return reply;
+    try {
+      return reply.code(200).send({ data: { decision: await reportAmd(tenantId, req.params.call_id, body) } });
+    } catch (err) {
+      return sendError(reply, err);
+    }
   });
 
   // Lifecycle actions — literal paths (not a loop) so route scanners and docs see each one.

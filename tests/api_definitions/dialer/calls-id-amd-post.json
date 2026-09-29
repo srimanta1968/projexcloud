@@ -1,0 +1,117 @@
+{
+  "name": "POST /api/dialer/calls/:call_id/amd - Report answering-machine detection",
+  "endpoint": "/api/dialer/calls/:call_id/amd",
+  "sdk": "sdk-dialer",
+  "sourceFile": "packages/sdk-dialer/src/server/routes.ts",
+  "method": "POST",
+  "requiresAuth": true,
+  "expectedStatus": 200,
+  "taskId": "712257f8-2adf-4f31-861b-8f6b53e2d5c5",
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "featureId": "e6ae5703-37a6-4d27-a7d5-23ec80c4a001",
+  "epicId": "4362a53f-a31a-4166-85be-ad1c383d60b5",
+  "priority": 122,
+  "testability": "auto",
+  "coversCriterion": [
+    "e6ae5703-37a6-4d27-a7d5-23ec80c4a001#AC1"
+  ],
+  "description": "The carrier's answering-machine result for an ACTIVE outbound call (dialing / ringing / in progress), reported by the voice runtime or the telephony connector (e6ae5703-37a6-4d27-a7d5-23ec80c4a001#AC1 — when a machine answers, the campaign's voicemail policy (drop or hang up) is applied and answered_by is recorded). Body: answered_by (human | machine | unknown). Records answered_by on the call and returns the decision {action, message, policy_source}: human or unknown -> connect (a live person is never dropped on); machine -> the campaign's voicemail_policy — drop_tts (message = the campaign's voicemail_message), drop_recording (message = the recording reference) or hang_up — and the call's disposition becomes voicemail with voicemail_action recorded. API calls without a campaign use DIALER_DEFAULT_VOICEMAIL_POLICY (default hang_up). Repeating the same report is idempotent; a conflicting one is 409. The runner cannot put an outbound call on the phone (no published agent in its chain), so testCases[0] exercises the refusal for the test session's inbound call; the decisions are proven end-to-end.",
+  "dependsOn": [
+    "POST /api/auth/signup-tenant",
+    "POST /api/ai-gateway/tenant-credentials",
+    "POST /api/voice-agent/stack-profiles",
+    "POST /api/voice-agent/agents",
+    "POST /api/voice-agent/agents/:agent_id/versions",
+    "POST /api/voice-agent/test-sessions"
+  ],
+  "fieldEnums": {
+    "answered_by": [
+      "human",
+      "machine",
+      "unknown"
+    ]
+  },
+  "testCases": [
+    {
+      "name": "Refuse AMD for an inbound call",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "pathParams": {
+        "call_id": "{{cache:voice-agent.test-sessions.create.response.data.session.call_id}}"
+      },
+      "payload": {
+        "answered_by": "machine"
+      },
+      "expectedStatus": 409,
+      "expectedResponse": {
+        "error": "Conflict"
+      }
+    },
+    {
+      "name": "A machine answers an active campaign call",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "pathParams": {
+        "call_id": "{{cache:dialer.campaigns.contacts.dial.response.data.call.call_id}}"
+      },
+      "payload": {
+        "answered_by": "machine"
+      },
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "data": {
+          "decision": {
+            "call_id": "string",
+            "answered_by": "string",
+            "action": "string",
+            "policy_source": "string"
+          }
+        }
+      }
+    },
+    {
+      "name": "Reject an unknown answered_by",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "pathParams": {
+        "call_id": "{{cache:voice-agent.test-sessions.create.response.data.session.call_id}}"
+      },
+      "payload": {
+        "answered_by": "{{static:robot}}"
+      },
+      "expectedStatus": 400
+    }
+  ],
+  "captureResponse": {
+    "dialer.calls.amd.response.data.decision.action": "data.decision.action"
+  },
+  "errorCases": [
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "answered_by must be human, machine or unknown",
+      "when": "invalid answered_by"
+    },
+    {
+      "status": 404,
+      "code": "NotFound",
+      "message": "call not found",
+      "when": "unknown call or another tenant's"
+    },
+    {
+      "status": 409,
+      "code": "Conflict",
+      "message": "answering-machine detection applies to outbound calls | answered_by was already recorded as <value> | call is <status>, not active",
+      "when": "inbound, conflicting, or not-yet-active call"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "no Authorization header"
+    }
+  ]
+}

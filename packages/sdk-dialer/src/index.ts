@@ -61,5 +61,8 @@ export { outboundCap } from './services/capacityService';
 export { runSchedulerTick, startDispatchScheduler, admitInbound, setTenantWeightResolver } from './services/scheduler';
 export type { TickOptions, TickResult, TenantWeightResolver } from './services/scheduler';
 
+export { ANSWERED_BY, reportAmd } from './services/amdService';
+export type { AnsweredBy, AmdAction, AmdDecision } from './services/amdService';
+
 // HTTP surface — mounted by the api-gateway.
 export * as server from './server';
