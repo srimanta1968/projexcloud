@@ -84,6 +84,15 @@ export type CallSummarizer = (call: CallDetail, llm: { provider: string; model: 
 
 let summarizer: CallSummarizer = llmSummarizer;
 
+/** Notified once when a call reaches a terminal status (e.g. to free its concurrency slot). */
+export type CallEndedListener = (call: CallDetail) => Promise<void> | void;
+const endedListeners: CallEndedListener[] = [];
+
+/** Registers a listener for calls ending. A throwing listener is logged, never fatal. */
+export function onCallEnded(fn: CallEndedListener): void {
+  endedListeners.push(fn);
+}
+
 /** Replaces the summariser (tests, or a tenant-specific one). Pass null to restore the LLM default. */
 export function setCallSummarizer(next: CallSummarizer | null): void {
   summarizer = next ?? llmSummarizer;
@@ -433,6 +442,13 @@ export async function completeCall(tenantId: string, callId: string, input: Comp
   call = (await getCall(tenantId, callId)) as CallDetail;
 
   if (transitioned) {
+    for (const fn of endedListeners) {
+      try {
+        await fn(call);
+      } catch (err) {
+        console.error('[sdk-voice-agent] call-ended listener failed', callId, (err as Error).message);
+      }
+    }
     getLiveCallBroker().publish({ kind: 'ended', call_id: callId, status: call.status, disposition: call.disposition, emitted_at: new Date().toISOString() });
     await emitEvent({
       event_type: 'voice.call.completed.v1',

@@ -1,0 +1,49 @@
+{
+  "name": "GET /api/dialer/capacity - Concurrent calls in use vs. caps",
+  "endpoint": "/api/dialer/capacity",
+  "sdk": "sdk-dialer",
+  "sourceFile": "packages/sdk-dialer/src/server/routes.ts",
+  "method": "GET",
+  "requiresAuth": true,
+  "expectedStatus": 200,
+  "taskId": "74536e0d-9e9e-4f2c-8d74-2b50bb583f1d",
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "featureId": "180f8a01-0600-48b4-a0e5-f1be092f2fb3",
+  "epicId": "4362a53f-a31a-4166-85be-ad1c383d60b5",
+  "priority": 120,
+  "testability": "auto",
+  "coversCriterion": [
+    "180f8a01-0600-48b4-a0e5-f1be092f2fb3#AC1"
+  ],
+  "description": "Returns the tenant's concurrency: backend (redis | postgres), plan_cap, active calls, and per running/paused campaign its active count and cap. A tenant never holds more concurrent calls (dialing, ringing, in progress) than min(plan cap, telephony-key capacity, campaign max_concurrency): the plan cap comes from the tenant plan (default DIALER_DEFAULT_PLAN_CONCURRENCY = 10), key capacity from the telephony credential of the agent’s published stack profile, the campaign cap from the campaign. Slots live in Redis sorted sets with a per-call lease (atomic Lua check-and-take), falling back to an exact Postgres count under a per-tenant advisory lock when Redis is unavailable; a call that ends frees its slot.",
+  "dependsOn": [
+    "POST /api/auth/signup-tenant"
+  ],
+  "testCases": [
+    {
+      "name": "Read the tenant's concurrency",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "data": {
+          "capacity": {
+            "backend": "string",
+            "plan_cap": "number",
+            "active": "number",
+            "by_campaign": []
+          }
+        }
+      }
+    }
+  ],
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "no Authorization header"
+    }
+  ]
+}

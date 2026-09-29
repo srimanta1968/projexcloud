@@ -73,7 +73,8 @@ export type { AppTool, RegisterToolInput, UpdateToolInput } from './services/too
 
 export { CALL_STATUSES, CALL_DIRECTIONS, placeCall, getCall, listCalls, setCallDispatcher } from './services/callService';
 
-export { VOICE_DISPOSITIONS, completeCall, setCallSummarizer } from './services/postCallService';
+export { VOICE_DISPOSITIONS, completeCall, setCallSummarizer, onCallEnded } from './services/postCallService';
+export type { CallEndedListener } from './services/postCallService';
 export { startTestSession } from './services/testSessionService';
 export { authorizeLiveView, issueLiveTicket, redeemLiveTicket, appendLiveTurns } from './services/liveService';
 export type { LiveViewer, LiveTicket } from './services/liveService';

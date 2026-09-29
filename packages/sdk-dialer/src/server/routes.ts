@@ -11,6 +11,8 @@ import {
   type CreateCampaignInput,
 } from '../services/campaignService';
 import { dialContact } from '../services/dispatchService';
+import { capacitySnapshot } from '../services/capacityService';
+import { dispatchQueued } from '../services/queueDispatcher';
 import { resolveTenant } from './tenantScope';
 import { sendError } from './sendError';
 
@@ -101,6 +103,24 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
       }
     },
   );
+
+  // TK-4484 — concurrency in use vs. caps, and an on-demand drain of the tenant's queue.
+  app.get<{ Querystring: { tenant_id?: string } }>('/api/dialer/capacity', { preHandler: requireAuth }, async (req, reply) => {
+    const tenantId = resolveTenant(req, reply, req.query.tenant_id);
+    if (!tenantId) return reply;
+    return reply.code(200).send({ data: { capacity: await capacitySnapshot(tenantId) } });
+  });
+
+  app.post('/api/dialer/dispatch', { preHandler: requireAuth }, async (req, reply) => {
+    const body = (req.body ?? {}) as { tenant_id?: string; limit?: unknown };
+    const tenantId = resolveTenant(req, reply, body.tenant_id);
+    if (!tenantId) return reply;
+    const limit = body.limit ?? 50;
+    if (!Number.isInteger(limit) || (limit as number) < 1 || (limit as number) > 500) {
+      return reply.code(400).send({ error: 'ValidationError', details: ['limit must be an integer between 1 and 500'] });
+    }
+    return reply.code(200).send({ data: await dispatchQueued(tenantId, limit as number) });
+  });
 
   // Lifecycle actions — literal paths (not a loop) so route scanners and docs see each one.
   const transition = (action: CampaignAction) => async (

@@ -1,0 +1,68 @@
+{
+  "name": "POST /api/dialer/dispatch - Dispatch the tenant's queued calls within its caps",
+  "endpoint": "/api/dialer/dispatch",
+  "sdk": "sdk-dialer",
+  "sourceFile": "packages/sdk-dialer/src/server/routes.ts",
+  "method": "POST",
+  "requiresAuth": true,
+  "expectedStatus": 200,
+  "taskId": "74536e0d-9e9e-4f2c-8d74-2b50bb583f1d",
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "featureId": "180f8a01-0600-48b4-a0e5-f1be092f2fb3",
+  "epicId": "4362a53f-a31a-4166-85be-ad1c383d60b5",
+  "priority": 121,
+  "testability": "auto",
+  "coversCriterion": [
+    "180f8a01-0600-48b4-a0e5-f1be092f2fb3#AC1"
+  ],
+  "description": "Hands up to limit (1-500, default 50) of the tenant's due queued calls to the carrier, highest priority first. Each call must take a concurrency slot: a full campaign only holds back that campaign's calls, a full plan or key stops the drain. Dispatched calls become dialing (their contacts in_progress); held calls stay queued with last_reason capacity:<dimension>. Returns {dispatched: call_id[], blocked: {plan|key|campaign: n}, remaining}. A tenant never holds more concurrent calls (dialing, ringing, in progress) than min(plan cap, telephony-key capacity, campaign max_concurrency): the plan cap comes from the tenant plan (default DIALER_DEFAULT_PLAN_CONCURRENCY = 10), key capacity from the telephony credential of the agent’s published stack profile, the campaign cap from the campaign. Slots live in Redis sorted sets with a per-call lease (atomic Lua check-and-take), falling back to an exact Postgres count under a per-tenant advisory lock when Redis is unavailable; a call that ends frees its slot. The background fair-share scheduler runs the same step across tenants.",
+  "dependsOn": [
+    "POST /api/auth/signup-tenant"
+  ],
+  "testCases": [
+    {
+      "name": "Drain the tenant's queue",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "payload": {
+        "limit": 50
+      },
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "data": {
+          "dispatched": [],
+          "blocked": {},
+          "remaining": "number"
+        }
+      }
+    },
+    {
+      "name": "Reject a limit outside 1-500",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "payload": {
+        "limit": 0
+      },
+      "expectedStatus": 400
+    }
+  ],
+  "captureResponse": {
+    "dialer.dispatch.response.data.remaining": "data.remaining"
+  },
+  "errorCases": [
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "limit must be an integer between 1 and 500",
+      "when": "invalid limit"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "no Authorization header"
+    }
+  ]
+}

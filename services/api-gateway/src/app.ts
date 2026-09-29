@@ -371,6 +371,7 @@ import {
   getCall as getVoiceCall,
   getLiveCallBroker,
   setCallDispatcher,
+  onCallEnded,
   VoiceAgentError,
 } from '@projexlight/sdk-voice-agent';
 import {
@@ -378,6 +379,7 @@ import {
   server as dialerServer,
   dispatchCall,
   ensureVoiceConsentPurposes,
+  releaseSlot,
 } from '@projexlight/sdk-dialer';
 // P16 · EP-374 — the provenance kernel. Every ingesting SDK lands its rows here.
 import {
@@ -718,6 +720,8 @@ app.register(dialerServer.registerRoutes);
 // through the dialer's gate chain and queue. Wired here so sdk-voice-agent stays free of a
 // dependency on sdk-dialer.
 setCallDispatcher(async (call) => { await dispatchCall(call); });
+// VA·E5 (TK-4484) — a call that ends frees its concurrency slot.
+onCallEnded(async (call) => { await releaseSlot(call.call_id); });
 app.register(sourceRecordServer.registerRoutes);
 app.register(importServer.registerRoutes);
 app.register(slaServer.registerRoutes);
