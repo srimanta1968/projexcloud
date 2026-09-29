@@ -72,7 +72,8 @@ export {
 } from './services/numberService';
 export type { Carrier, Fallback, NumberBinding, BindNumberInput, InboundRoute, KillSwitchState } from './services/numberService';
 
-export { registerTool, listTools, getTool, updateTool, effectiveTools } from './services/toolService';
+export { registerTool, listTools, getTool, updateTool, effectiveTools, callSessionContext } from './services/toolService';
+export type { CallSessionContext } from './services/toolService';
 export type { AppTool, RegisterToolInput, UpdateToolInput } from './services/toolService';
 
 export { CALL_STATUSES, CALL_DIRECTIONS, placeCall, getCall, listCalls, setCallDispatcher } from './services/callService';

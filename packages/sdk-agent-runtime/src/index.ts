@@ -25,6 +25,10 @@ export type {
   RevokeInput,
 } from './services/capabilityTokenIssuer';
 
+// VA·E7 (TK-4508) — session-scoped capability tokens (one per AI call).
+export { mintSessionToken, validateSessionToken, revokeSessionTokens, SessionTokenError, SESSION_TIER_MAX_TTL_S } from './services/sessionCapabilityToken';
+export type { SessionTier, SessionToken, MintSessionTokenInput, SessionTokenCheck, SessionTokenRejectReason } from './services/sessionCapabilityToken';
+
 // Signing key loader + test hook.
 export { getCurrentSigningKey, resetSigningKeyCache } from './services/signingKey';
 

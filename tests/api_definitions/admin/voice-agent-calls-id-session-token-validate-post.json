@@ -1,0 +1,110 @@
+{
+  "name": "POST /api/admin/voice-agent/calls/:call_id/session-token/validate - Does the call token authorize this tool",
+  "endpoint": "/api/admin/voice-agent/calls/:call_id/session-token/validate",
+  "method": "POST",
+  "sdk": "sdk-agent-runtime",
+  "sourceFile": "services/api-gateway/src/app.ts",
+  "requiresAuth": false,
+  "taskId": "e07f2d48-3604-4ca9-a6e0-6e186ad0f9aa",
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "featureId": "a10e376c-cc5f-4c0d-961c-2db9260a1aa8",
+  "epicId": "7aa29f0e-cca5-46fa-8055-bd79b25855bf",
+  "testability": "auto",
+  "coversCriterion": [
+    "a10e376c-cc5f-4c0d-961c-2db9260a1aa8#AC1"
+  ],
+  "dependsOn": [
+    "POST /api/auth/signup-tenant",
+    "POST /api/ai-gateway/tenant-credentials",
+    "POST /api/voice-agent/stack-profiles",
+    "POST /api/voice-agent/agents",
+    "POST /api/voice-agent/agents/:agent_id/versions",
+    "POST /api/voice-agent/test-sessions",
+    "POST /api/admin/voice-agent/calls/:call_id/session-token"
+  ],
+  "expectedStatus": 200,
+  "priority": 151,
+  "description": "OPERATOR route (x-admin-ops-token). The voice runtime asks, before invoking a tool, whether the call's session token authorizes it (a10e376c-cc5f-4c0d-961c-2db9260a1aa8#AC1). Always 200 with {valid, reason}: valid:true carries token_id, tool, use_count (incremented per authorized use) and expires_at; valid:false carries the reason — malformed, not_found, secret_mismatch (forged secret, or the stored row was edited: the digest binds tenant, session, agent, version, tool list and times), revoked (the call ended, or the token was reissued), expired, session_mismatch (a token of another call), tool_not_allowed (a tool the call's agent version does not offer). token and tool are required strings (400).",
+  "fieldEnums": {
+    "reason": [
+      "malformed",
+      "not_found",
+      "revoked",
+      "expired",
+      "secret_mismatch",
+      "tool_not_allowed",
+      "tenant_mismatch",
+      "session_mismatch"
+    ]
+  },
+  "testCases": [
+    {
+      "name": "A tool the call does not offer is refused",
+      "coversCriterion": [
+        "a10e376c-cc5f-4c0d-961c-2db9260a1aa8#AC1"
+      ],
+      "capturesResponse": true,
+      "headers": {
+        "x-admin-ops-token": "{{var:ADMIN_OPS_TOKEN}}"
+      },
+      "pathParams": {
+        "call_id": "{{cache:voice-agent.test-sessions.create.response.data.session.call_id}}"
+      },
+      "payload": {
+        "token": "{{cache:admin.voice-agent.session-token.response.data.token}}",
+        "tool": "not_offered_tool"
+      },
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "success": "boolean",
+        "data": {
+          "valid": "boolean"
+        }
+      }
+    },
+    {
+      "name": "400 - token and tool are required",
+      "testType": "negative",
+      "coversErrorCase": "400|ValidationError",
+      "headers": {
+        "x-admin-ops-token": "{{var:ADMIN_OPS_TOKEN}}"
+      },
+      "pathParams": {
+        "call_id": "{{cache:voice-agent.test-sessions.create.response.data.session.call_id}}"
+      },
+      "payload": {},
+      "expectedStatus": 400
+    },
+    {
+      "name": "401 - no ops token",
+      "testType": "negative",
+      "coversErrorCase": "401|Unauthorized",
+      "headers": {},
+      "pathParams": {
+        "call_id": "{{cache:voice-agent.test-sessions.create.response.data.session.call_id}}"
+      },
+      "payload": {
+        "token": "sct_{{dynamic:slug}}",
+        "tool": "y"
+      },
+      "expectedStatus": 401
+    }
+  ],
+  "captureResponse": {
+    "admin.voice-agent.session-token.validate.response.data.valid": "data.valid"
+  },
+  "errorCases": [
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "token and tool are required strings",
+      "when": "token or tool missing or not a string"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "admin ops token required",
+      "when": "x-admin-ops-token missing or wrong"
+    }
+  ]
+}

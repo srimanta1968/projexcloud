@@ -277,6 +277,10 @@ import {
   startLogRetentionWorker,
   startSigningKeyRotation,
   assertVectorNamespaceIsolation,
+  mintSessionToken,
+  validateSessionToken,
+  revokeSessionTokens,
+  SessionTokenError,
 } from '@projexlight/sdk-agent-runtime';
 import {
   migrationsDir as aiGatewayMigrations,
@@ -382,6 +386,7 @@ import {
   originateCall,
   setOutboundNumberSource,
   linkCarrierCall,
+  callSessionContext,
   applyCarrierStatus,
   registerCarrierProvisioner,
   completeCall,
@@ -810,6 +815,10 @@ setPlanCapResolver(async (tenantId) => {
   return Number.isInteger(env) && env >= 0 && process.env.DIALER_DEFAULT_PLAN_CONCURRENCY !== '' ? env : 10;
 });
 setPlanAlertResolver(async (tenantId) => (await voiceConcurrencyPolicy(tenantId)).soft_cap);
+// VA·E7 (TK-4508) — a call that ends revokes its session capability token.
+onCallEnded(async (call) => {
+  await revokeSessionTokens({ tier: 'voice', session_ref: `voice_agent.call:${call.call_id}`, reason: 'call_ended', actor_id: 'sdk-voice-agent' });
+});
 // VA·E5 (TK-4484) — a call that ends frees its concurrency slot.
 onCallEnded(async (call) => { await releaseSlot(call.call_id); });
 // VA·E5 (TK-4487) — a campaign call that ends schedules the contact's retry (or closes it).
@@ -1334,6 +1343,52 @@ app.post<{ Params: { call_id: string } }>('/api/admin/voice-agent/calls/:call_id
     if (err instanceof VoiceAgentError) return reply.code(err.status).send({ success: false, error: err.code, details: [err.message] });
     throw err;
   }
+});
+// VA·E7 (TK-4508) — one capability token per AI call. The voice runtime (operator-authed,
+// like carrier-call above) mints it when the call starts: it authorizes every tool the
+// call's agent version offers, any number of times, for the call's lifetime (voice tier,
+// TTL <= 2 h, VOICE_SESSION_TOKEN_TTL_S). The bearer string is returned only by the mint;
+// a runtime that lost it re-issues ({ reissue: true }), which revokes the old one. Before a
+// tool call the runtime validates the token for that tool; the call's end revokes it.
+const VOICE_SESSION_TOKEN_TTL_S = Number(process.env.VOICE_SESSION_TOKEN_TTL_S || 7200);
+const sessionTokenError = (reply: FastifyReply, err: unknown) => {
+  if (err instanceof VoiceAgentError) return reply.code(err.status).send({ success: false, error: err.code, details: [err.message] });
+  if (err instanceof SessionTokenError) return reply.code(err.status).send({ success: false, error: err.code, details: [err.message] });
+  throw err;
+};
+app.post<{ Params: { call_id: string } }>('/api/admin/voice-agent/calls/:call_id/session-token', async (req, reply) => {
+  if (!(await checkAdminToken(req, reply))) return;
+  const body = (req.body ?? {}) as { reissue?: unknown };
+  if (body.reissue !== undefined && typeof body.reissue !== 'boolean') {
+    return reply.code(400).send({ success: false, error: 'ValidationError', details: ['reissue must be a boolean'] });
+  }
+  try {
+    const ctx = await callSessionContext(req.params.call_id);
+    const token = await mintSessionToken({
+      tier: 'voice',
+      tenant_id: ctx.tenant_id,
+      session_ref: ctx.session_ref,
+      agent_ref: ctx.agent_id,
+      agent_version_ref: ctx.agent_version_id,
+      acting_persona_id: ctx.acting_persona_id,
+      allowed_tools: ctx.allowed_tools,
+      ttl_seconds: VOICE_SESSION_TOKEN_TTL_S,
+      reissue: body.reissue === true,
+      actor_id: 'voice-runtime',
+    });
+    return reply.code(token.minted ? 201 : 200).send({ success: true, data: { call_id: ctx.call_id, ...token } });
+  } catch (err) {
+    return sessionTokenError(reply, err);
+  }
+});
+app.post<{ Params: { call_id: string } }>('/api/admin/voice-agent/calls/:call_id/session-token/validate', async (req, reply) => {
+  if (!(await checkAdminToken(req, reply))) return;
+  const body = (req.body ?? {}) as { token?: unknown; tool?: unknown };
+  if (typeof body.token !== 'string' || typeof body.tool !== 'string' || !body.tool) {
+    return reply.code(400).send({ success: false, error: 'ValidationError', details: ['token and tool are required strings'] });
+  }
+  const check = await validateSessionToken(body.token, body.tool, { session_ref: `voice_agent.call:${req.params.call_id}` });
+  return reply.code(200).send({ success: true, data: check });
 });
 setStatusCallbackForwarder(async (params) => {
   const r = await applyCarrierStatus({

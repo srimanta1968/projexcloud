@@ -250,3 +250,49 @@ export async function effectiveTools(tenantId: string, versionId: string): Promi
   );
   return rows.map(toTool);
 }
+
+/** Call statuses in which a session capability token may still be issued (TK-4508). */
+const TOKEN_ELIGIBLE_STATUSES = ['queued', 'dialing', 'ringing', 'in_progress', 'transferred'];
+
+export interface CallSessionContext {
+  call_id: string;
+  tenant_id: string;
+  agent_id: string;
+  agent_version_id: string | null;
+  acting_persona_id: string | null;
+  status: string;
+  /** Names of the tools this call may invoke: its agent version's enabled tools. */
+  allowed_tools: string[];
+  /** The session_ref a call's capability token is bound to. */
+  session_ref: string;
+}
+
+/**
+ * What a call's session capability token must cover (VA·E7 · TK-4508): the tenant, the
+ * agent and the exact version the call runs, and that version's enabled tools.
+ *
+ * @throws VoiceAgentError 404 unknown call; 409 the call already ended (no new token).
+ */
+export async function callSessionContext(callId: string): Promise<CallSessionContext> {
+  if (!UUID_RE.test(callId)) throw notFound('call not found');
+  const call = await dataService.one<{ tenant_id: string; agent_id: string; agent_version_id: string | null; status: string; acting_persona_id: string | null }>(
+    `SELECT c.tenant_id, c.agent_id, c.agent_version_id, c.status, a.acting_persona_id
+       FROM voice_agent.call c
+       JOIN voice_agent.agent a ON a.agent_id = c.agent_id AND a.tenant_id = c.tenant_id
+      WHERE c.call_id = $1`,
+    [callId],
+  );
+  if (!call) throw notFound('call not found');
+  if (!TOKEN_ELIGIBLE_STATUSES.includes(call.status)) throw conflict(`call is ${call.status}; a session token is only issued for a call that has not ended`);
+  const tools = call.agent_version_id ? await effectiveTools(call.tenant_id, call.agent_version_id) : [];
+  return {
+    call_id: callId,
+    tenant_id: call.tenant_id,
+    agent_id: call.agent_id,
+    agent_version_id: call.agent_version_id,
+    acting_persona_id: call.acting_persona_id,
+    status: call.status,
+    allowed_tools: tools.map((t) => t.name),
+    session_ref: `voice_agent.call:${callId}`,
+  };
+}

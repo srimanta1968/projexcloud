@@ -1,0 +1,132 @@
+{
+  "name": "POST /api/admin/voice-agent/calls/:call_id/session-token - One capability token per AI call",
+  "endpoint": "/api/admin/voice-agent/calls/:call_id/session-token",
+  "method": "POST",
+  "sdk": "sdk-agent-runtime",
+  "sourceFile": "services/api-gateway/src/app.ts",
+  "requiresAuth": false,
+  "taskId": "e07f2d48-3604-4ca9-a6e0-6e186ad0f9aa",
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "featureId": "a10e376c-cc5f-4c0d-961c-2db9260a1aa8",
+  "epicId": "7aa29f0e-cca5-46fa-8055-bd79b25855bf",
+  "testability": "auto",
+  "coversCriterion": [
+    "a10e376c-cc5f-4c0d-961c-2db9260a1aa8#AC1"
+  ],
+  "dependsOn": [
+    "POST /api/auth/signup-tenant",
+    "POST /api/ai-gateway/tenant-credentials",
+    "POST /api/voice-agent/stack-profiles",
+    "POST /api/voice-agent/agents",
+    "POST /api/voice-agent/agents/:agent_id/versions",
+    "POST /api/voice-agent/test-sessions"
+  ],
+  "expectedStatus": 201,
+  "priority": 150,
+  "description": "OPERATOR route (x-admin-ops-token = ADMIN_OPS_TOKEN, like the other voice-runtime admin routes; the gateway auth gate lets it self-guard). Mints the call's session-scoped capability token (a10e376c-cc5f-4c0d-961c-2db9260a1aa8#AC1 — one capability token per call authorizes all of that call's allowed tools for the call's lifetime). The token covers exactly the tools the call's agent version offers (its enabled tool_ids), may be presented for any of them any number of times, and lives for the voice tier TTL: VOICE_SESSION_TOKEN_TTL_S, capped at 2 h in code and by a DB CHECK. One token per call: calling again returns 200 with the SAME token_id, minted:false and token:null — the bearer string (sct_<token_id>.<64 hex>) is returned ONLY by the mint (201), because only a SHA-256 digest of its secret over the bound fields is stored. reissue:true revokes the live token and mints a new one (for a runtime that lost it). The token is revoked when the call ends (onCallEnded, reason call_ended). No signing key is involved, so key rotation never voids a live call's token. Mint and revoke are audited as agent.capability-token.minted.v1 / .revoked.v1 with scope session. Edge cases: unknown call 404; a call that already ended 409 (no token for an ended call); reissue not a boolean 400; missing/wrong ops token 401/403.",
+  "fieldEnums": {
+    "tier": [
+      "voice"
+    ]
+  },
+  "testCases": [
+    {
+      "name": "Mint the test-session call's token",
+      "coversCriterion": [
+        "a10e376c-cc5f-4c0d-961c-2db9260a1aa8#AC1"
+      ],
+      "capturesResponse": true,
+      "headers": {
+        "x-admin-ops-token": "{{var:ADMIN_OPS_TOKEN}}"
+      },
+      "pathParams": {
+        "call_id": "{{cache:voice-agent.test-sessions.create.response.data.session.call_id}}"
+      },
+      "payload": {},
+      "expectedStatus": 201,
+      "expectedResponse": {
+        "success": "boolean",
+        "data": {
+          "call_id": "string",
+          "token": "string",
+          "token_id": "string",
+          "tier": "string",
+          "session_ref": "string",
+          "allowed_tools": [],
+          "issued_at": "string",
+          "expires_at": "string",
+          "minted": "boolean"
+        }
+      }
+    },
+    {
+      "name": "404 - unknown call",
+      "testType": "negative",
+      "coversErrorCase": "404|NotFound",
+      "headers": {
+        "x-admin-ops-token": "{{var:ADMIN_OPS_TOKEN}}"
+      },
+      "pathParams": {
+        "call_id": "00000000-0000-4000-8000-000000000000"
+      },
+      "payload": {},
+      "expectedStatus": 404
+    },
+    {
+      "name": "400 - reissue is not a boolean",
+      "testType": "negative",
+      "coversErrorCase": "400|ValidationError",
+      "headers": {
+        "x-admin-ops-token": "{{var:ADMIN_OPS_TOKEN}}"
+      },
+      "pathParams": {
+        "call_id": "{{cache:voice-agent.test-sessions.create.response.data.session.call_id}}"
+      },
+      "payload": {
+        "reissue": "yes"
+      },
+      "expectedStatus": 400
+    },
+    {
+      "name": "401 - no ops token",
+      "testType": "negative",
+      "coversErrorCase": "401|Unauthorized",
+      "headers": {},
+      "pathParams": {
+        "call_id": "{{cache:voice-agent.test-sessions.create.response.data.session.call_id}}"
+      },
+      "payload": {},
+      "expectedStatus": 401
+    }
+  ],
+  "captureResponse": {
+    "admin.voice-agent.session-token.response.data.token": "data.token",
+    "admin.voice-agent.session-token.response.data.token_id": "data.token_id"
+  },
+  "errorCases": [
+    {
+      "status": 404,
+      "code": "NotFound",
+      "message": "call not found",
+      "when": "call_id names no call"
+    },
+    {
+      "status": 409,
+      "code": "Conflict",
+      "message": "call is completed; a session token is only issued for a call that has not ended",
+      "when": "the call already ended (completed, failed, refused, deferred)"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "reissue must be a boolean",
+      "when": "reissue is present and not a boolean"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "admin ops token required",
+      "when": "x-admin-ops-token missing or wrong"
+    }
+  ]
+}
