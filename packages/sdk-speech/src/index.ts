@@ -30,4 +30,7 @@ export type {
   PriceUnit,
 } from './services/catalogService';
 
+export { validateCredential } from './services/keyValidationService';
+export type { KeyValidation } from './services/keyValidationService';
+
 export * as server from './server';

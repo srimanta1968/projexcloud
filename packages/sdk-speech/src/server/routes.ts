@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { requireAuth } from '@projexlight/sdk-identity';
 import { getCatalogEntry, listCatalog, type CatalogFilter } from '../services/catalogService';
+import { validateCredential } from '../services/keyValidationService';
 import { sendError } from './sendError';
 
 /**
@@ -23,6 +24,19 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
     const { entry_id } = req.params as { entry_id: string };
     try {
       return reply.code(200).send({ data: { entry: await getCatalogEntry(entry_id) } });
+    } catch (err) {
+      return sendError(reply, err);
+    }
+  });
+
+  // TK-4491 — validate one of the tenant's keys and probe its capacity. The outcome is a
+  // typed status in a 200 body (a rejected key is a result, not a request error).
+  app.post('/api/speech/credentials/:binding_id/validate', { preHandler: requireAuth }, async (req, reply) => {
+    const tenantId = req.auth?.tenant_id;
+    if (!tenantId) return reply.code(400).send({ error: 'ValidationError', details: ['tenant_id is required'] });
+    const { binding_id } = req.params as { binding_id: string };
+    try {
+      return reply.code(200).send({ data: await validateCredential(tenantId, binding_id) });
     } catch (err) {
       return sendError(reply, err);
     }

@@ -236,7 +236,8 @@ async function ensureKillSwitchClear(ctx: AgentContext): Promise<void> {
   });
 }
 
-async function unwrapCredential(envelope: Buffer): Promise<Buffer> {
+/** Decrypts a credential envelope. Exported for tenantCredentialService.withTenantCredentialKey only. */
+export async function unwrapCredential(envelope: Buffer): Promise<Buffer> {
   // Production: sdk-secrets envelopeDecrypt with a per-call wrapped DEK.
   // Prototype: when the envelope is JSON with {ref, wrapped}, decrypt;
   // otherwise treat the envelope itself as the plain credential (dev mode).

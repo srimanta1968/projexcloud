@@ -3,7 +3,7 @@ import { appendAuditEntry } from '@projexlight/sdk-audit';
 import { envelopeEncrypt, storeSecret, retrieveSecret } from '@projexlight/sdk-secrets';
 import { setConfig, revokeConfig } from '@projexlight/sdk-config';
 import type { ProviderId } from '@projexlight/contracts';
-import { invalidateProviderCache } from './completionService';
+import { invalidateProviderCache, unwrapCredential } from './completionService';
 
 /**
  * Mirror a BYOK credential binding into the unified config plane (EP-341) so
@@ -467,6 +467,76 @@ async function emitCredentialDegraded(binding: TenantCredentialBinding, reason: 
   } catch (err) {
     console.error('[ai-gateway.byok] voice.credential.degraded emit failed', binding.binding_id, (err as Error).message);
   }
+}
+
+/** Thrown by withTenantCredentialKey: no such binding for the tenant, or it is revoked. */
+export class CredentialUnavailableError extends Error {
+  constructor(public readonly reason: 'not_found' | 'revoked', message: string) {
+    super(message);
+    this.name = 'CredentialUnavailableError';
+  }
+}
+
+/**
+ * Runs `fn` with the decrypted key of one of the tenant's ACTIVE bindings (TK-4491 key
+ * validation). The raw key exists only inside the callback: it is never returned, logged
+ * or persisted by this function, and callers must not let it escape either.
+ *
+ * @throws CredentialUnavailableError not_found (unknown id or another tenant's) | revoked.
+ */
+export async function withTenantCredentialKey<T>(
+  tenantId: string,
+  bindingId: string,
+  fn: (rawKey: string, binding: TenantCredentialBinding) => Promise<T>,
+): Promise<T> {
+  const row = await dataService.one<BindingRow & { credential_envelope: Buffer }>(
+    `SELECT ${BINDING_COLUMNS}, credential_envelope
+       FROM ai_gateway.tenant_provider_credential
+      WHERE tenant_id = $1::uuid AND binding_id = $2::uuid`,
+    [tenantId, bindingId],
+  );
+  if (!row) throw new CredentialUnavailableError('not_found', 'credential binding not found');
+  if (row.status !== 'active') throw new CredentialUnavailableError('revoked', 'credential binding is revoked');
+  const { credential_envelope, ...rest } = row;
+  const key = (await unwrapCredential(credential_envelope)).toString('utf8');
+  return fn(key, rowToBinding(rest));
+}
+
+export interface CredentialValidationResult {
+  status: ValidationStatus;
+  rate_limit_tier: string | null;
+  max_concurrency: number | null;
+  error: string | null;
+}
+
+/**
+ * Stores a key-validation / capacity-probe result on the tenant's binding (FR-SP-2). The
+ * dialer's key-capacity cap reads max_concurrency from here.
+ */
+export async function recordCredentialValidation(
+  tenantId: string,
+  bindingId: string,
+  result: CredentialValidationResult,
+): Promise<TenantCredentialBinding | null> {
+  const row = await dataService.one<BindingRow>(
+    `UPDATE ai_gateway.tenant_provider_credential
+        SET validation_status = $3, rate_limit_tier = $4, max_concurrency = $5,
+            validation_error = $6, validated_at = now(), updated_at = now()
+      WHERE tenant_id = $1::uuid AND binding_id = $2::uuid
+      RETURNING ${BINDING_COLUMNS}`,
+    [tenantId, bindingId, result.status, result.rate_limit_tier, result.max_concurrency, result.error],
+  );
+  return row ? rowToBinding(row) : null;
+}
+
+/** The stored max safe concurrency of one of the tenant's active bindings, or null. */
+export async function credentialMaxConcurrency(tenantId: string, bindingId: string): Promise<number | null> {
+  const row = await dataService.one<{ max_concurrency: number | null }>(
+    `SELECT max_concurrency FROM ai_gateway.tenant_provider_credential
+      WHERE tenant_id = $1::uuid AND binding_id = $2::uuid AND status = 'active'`,
+    [tenantId, bindingId],
+  );
+  return row?.max_concurrency ?? null;
 }
 
 /**

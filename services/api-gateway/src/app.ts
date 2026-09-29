@@ -280,6 +280,7 @@ import {
   migrationsDir as aiGatewayMigrations,
   server as aiGatewayServer,
   bootstrapLLMCredentials,
+  credentialMaxConcurrency,
 } from '@projexlight/sdk-ai-gateway';
 import {
   migrationsDir as taxonomyMigrations,
@@ -385,6 +386,7 @@ import {
   admitInbound,
   applyRetryPolicy,
   applyDispositionEffects,
+  setKeyCapacityResolver,
   DialerError,
 } from '@projexlight/sdk-dialer';
 // VA·E4 — the voice provider catalog (/api/speech/*).
@@ -734,6 +736,15 @@ app.register(speechServer.registerRoutes);
 // through the dialer's gate chain and queue. Wired here so sdk-voice-agent stays free of a
 // dependency on sdk-dialer.
 setCallDispatcher(async (call) => { await dispatchCall(call); });
+// VA·E4 (TK-4491) — the key cap is the probed max safe concurrency of the agent's telephony
+// key (POST /api/speech/credentials/:id/validate); an unprobed key or the platform trunk
+// falls back to DIALER_DEFAULT_KEY_CAPACITY (unset = no key cap).
+const UUID_RE_KEYREF = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+setKeyCapacityResolver(async (tenantId, keyRef) => {
+  const fallback = process.env.DIALER_DEFAULT_KEY_CAPACITY ? Number(process.env.DIALER_DEFAULT_KEY_CAPACITY) : null;
+  if (!UUID_RE_KEYREF.test(keyRef)) return fallback;
+  return (await credentialMaxConcurrency(tenantId, keyRef)) ?? fallback;
+});
 // VA·E5 (TK-4484) — a call that ends frees its concurrency slot.
 onCallEnded(async (call) => { await releaseSlot(call.call_id); });
 // VA·E5 (TK-4487) — a campaign call that ends schedules the contact's retry (or closes it).

@@ -43,12 +43,17 @@ export {
   CREDENTIAL_LAYERS,
   CREDENTIAL_PRIORITIES,
   LAYER_PROVIDERS,
+  withTenantCredentialKey,
+  recordCredentialValidation,
+  credentialMaxConcurrency,
+  CredentialUnavailableError,
 } from './services/tenantCredentialService';
 export type {
   TenantCredentialBinding,
   CredentialLayer,
   CredentialPriority,
   ValidationStatus,
+  CredentialValidationResult,
 } from './services/tenantCredentialService';
 
 // Completion service (FR-AGW-1..9 / AC-1) — TK-3289 service body + TK-3290 REST.
