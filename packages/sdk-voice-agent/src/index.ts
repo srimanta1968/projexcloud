@@ -20,6 +20,7 @@ export {
   archiveStackProfile,
   setCredentialChecker,
   listPresetsWithCertification,
+  estimateStackProfileCost,
 } from './services/stackProfileService';
 export type {
   StackProfile,

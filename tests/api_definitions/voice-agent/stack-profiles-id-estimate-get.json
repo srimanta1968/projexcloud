@@ -1,0 +1,179 @@
+{
+  "name": "GET /api/voice-agent/stack-profiles/:profile_id/estimate - Estimated provider cost per minute",
+  "endpoint": "/api/voice-agent/stack-profiles/:profile_id/estimate",
+  "sdk": "sdk-voice-agent",
+  "sourceFile": "packages/sdk-voice-agent/src/server/routes.ts",
+  "method": "GET",
+  "expectedStatus": 200,
+  "requiresAuth": true,
+  "taskId": "4b501be1-e6dc-488b-aff5-51cefe142448",
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "featureId": "7227c780-62bf-4956-b678-56562cd0ed74",
+  "epicId": "71a6f2dc-a04e-4f2f-9e98-0d191e15e80d",
+  "testability": "auto",
+  "priority": 135,
+  "coversCriterion": [
+    "7227c780-62bf-4956-b678-56562cd0ed74#AC2"
+  ],
+  "description": "Estimated provider spend per call-minute for one of the tenant's stack profiles, from speech catalog list prices (7227c780-62bf-4956-b678-56562cd0ed74#AC2 — a stack profile returns an estimated provider cost per minute from catalog prices). One line per priced layer (stt, llm_fast, llm_complex, tts) with its catalog_key, unit, list price, quantity per call-minute and cost; per_1m_tokens LLM lines split turns between llm_fast and llm_complex by complex_turn_share. The usage profile defaults to turns_per_min 8, input_tokens_per_turn 1500, output_tokens_per_turn 60, complex_turn_share 0.2, tts_chars_per_min 600, agent_talk_share 0.5, stt_minutes_per_min 1, and each can be overridden in the query. Telephony is excluded (the tenant's carrier prices it). A layer whose provider/model has no catalog entry has cost_per_min null and makes complete=false. The tenant pays providers directly (BYOK): the estimate is shown, never invoiced. Another tenant's profile is 404.",
+  "dependsOn": [
+    "POST /api/auth/signup-tenant",
+    "POST /api/voice-agent/stack-profiles"
+  ],
+  "pathParams": {
+    "profile_id": {
+      "type": "string",
+      "format": "uuid",
+      "required": true
+    }
+  },
+  "queryParams": {
+    "turns_per_min": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 60,
+      "required": false
+    },
+    "input_tokens_per_turn": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 200000,
+      "required": false
+    },
+    "output_tokens_per_turn": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 8000,
+      "required": false
+    },
+    "complex_turn_share": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1,
+      "required": false
+    },
+    "tts_chars_per_min": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 5000,
+      "required": false
+    },
+    "agent_talk_share": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1,
+      "required": false
+    },
+    "stt_minutes_per_min": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 2,
+      "required": false
+    }
+  },
+  "fieldEnums": {
+    "unit": [
+      "per_minute",
+      "per_1k_chars",
+      "per_1m_tokens"
+    ],
+    "layer": [
+      "stt",
+      "llm_fast",
+      "llm_complex",
+      "tts"
+    ]
+  },
+  "testCases": [
+    {
+      "name": "Estimate the tenant profile at the default usage profile",
+      "capturesResponse": true,
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "pathParams": {
+        "profile_id": "{{cache:voice-agent.stack-profiles.create.response.data.stack_profile.profile_id}}"
+      },
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "data": {
+          "estimate": {
+            "profile_id": "string",
+            "preset_key": "string",
+            "currency": "string",
+            "cost_per_min": "number",
+            "complete": "boolean",
+            "lines": [
+              {
+                "layer": "string",
+                "catalog_key": "string|null",
+                "unit": "string|null",
+                "list_price": "number|null",
+                "quantity": "object",
+                "cost_per_min": "number|null",
+                "certified": "boolean"
+              }
+            ],
+            "usage_profile": "object",
+            "excludes": [
+              "string"
+            ],
+            "basis": "string"
+          }
+        }
+      }
+    },
+    {
+      "name": "Usage override out of range",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "pathParams": {
+        "profile_id": "{{cache:voice-agent.stack-profiles.create.response.data.stack_profile.profile_id}}"
+      },
+      "queryParams": {
+        "complex_turn_share": "2"
+      },
+      "expectedStatus": 400
+    },
+    {
+      "name": "Unknown profile",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "pathParams": {
+        "profile_id": "{{dynamic:uuid}}"
+      },
+      "expectedStatus": 404
+    }
+  ],
+  "captureResponse": {
+    "voice-agent.stack-profiles.estimate.response.data.estimate.cost_per_min": "data.estimate.cost_per_min"
+  },
+  "errorCases": [
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "<field> must be a number between <min> and <max>",
+      "when": "a usage override is not a number or out of range"
+    },
+    {
+      "status": 404,
+      "code": "NotFound",
+      "message": "stack profile not found",
+      "when": "no such profile for the caller's tenant"
+    },
+    {
+      "status": 403,
+      "code": "Forbidden",
+      "message": "tenant_id does not match the authenticated tenant",
+      "when": "tenant_id query names another tenant"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "no Authorization header"
+    }
+  ]
+}

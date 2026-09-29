@@ -1,6 +1,14 @@
 import { dataService } from '@projexlight/db-runtime';
 import { listTenantCredentials, type CredentialLayer } from '@projexlight/sdk-ai-gateway';
-import { catalogKey, findCatalogEntries, type CatalogLayer, type CatalogEntry } from '@projexlight/sdk-speech';
+import {
+  catalogKey,
+  estimateCostPerMinute,
+  findCatalogEntries,
+  parseUsageProfile,
+  type CatalogLayer,
+  type CatalogEntry,
+  type CostEstimate,
+} from '@projexlight/sdk-speech';
 import {
   VOICE_LAYERS,
   VOICE_PRESETS,
@@ -426,6 +434,27 @@ export async function updateStackProfile(
     if (isUniqueViolation(err)) throw conflict('a stack profile with this name already exists');
     throw err;
   }
+}
+
+/**
+ * Estimated provider cost per call-minute for one of the tenant's stack profiles (TK-4492),
+ * from speech catalog list prices and a usage profile (`usage` overrides the defaults).
+ * Null when the tenant has no such profile.
+ */
+export async function estimateStackProfileCost(
+  tenantId: string,
+  profileId: string,
+  usage?: Record<string, unknown>,
+): Promise<(CostEstimate & { profile_id: string; preset_key: string }) | null> {
+  const profile = await getStackProfile(tenantId, profileId);
+  if (!profile) return null;
+  const layers = VOICE_LAYERS.flatMap((layer) => {
+    const catalogLayer = CATALOG_LAYER[layer];
+    const cfg = profile[layer];
+    return catalogLayer ? [{ layer, catalog_layer: catalogLayer, provider: cfg.provider, model: cfg.model }] : [];
+  });
+  const estimate = await estimateCostPerMinute(layers, parseUsageProfile(usage));
+  return { profile_id: profile.profile_id, preset_key: profile.preset_key, ...estimate };
 }
 
 /** Archive (soft-delete) a profile. False when the tenant has no such profile; idempotent otherwise. */

@@ -33,4 +33,10 @@ export type {
 export { validateCredential } from './services/keyValidationService';
 export type { KeyValidation } from './services/keyValidationService';
 
+export { DEFAULT_USAGE_PROFILE, parseUsageProfile, estimateCostPerMinute } from './services/costService';
+export type { UsageProfile, PricedLayerInput, CostLine, CostEstimate } from './services/costService';
+
+export { MAX_PREVIEW_CHARS, previewVoice } from './services/voicePreviewService';
+export type { PreviewInput, VoicePreview } from './services/voicePreviewService';
+
 export * as server from './server';

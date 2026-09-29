@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { requireAuth } from '@projexlight/sdk-identity';
 import { getCatalogEntry, listCatalog, type CatalogFilter } from '../services/catalogService';
 import { validateCredential } from '../services/keyValidationService';
+import { previewVoice, type PreviewInput } from '../services/voicePreviewService';
 import { sendError } from './sendError';
 
 /**
@@ -37,6 +38,17 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
     const { binding_id } = req.params as { binding_id: string };
     try {
       return reply.code(200).send({ data: await validateCredential(tenantId, binding_id) });
+    } catch (err) {
+      return sendError(reply, err);
+    }
+  });
+
+  // TK-4492 — hear a voice with the tenant's own TTS key before choosing it.
+  app.post('/api/speech/voices/preview', { preHandler: requireAuth }, async (req, reply) => {
+    const tenantId = req.auth?.tenant_id;
+    if (!tenantId) return reply.code(400).send({ error: 'ValidationError', details: ['tenant_id is required'] });
+    try {
+      return reply.code(200).send({ data: { preview: await previewVoice(tenantId, (req.body ?? {}) as PreviewInput) } });
     } catch (err) {
       return sendError(reply, err);
     }

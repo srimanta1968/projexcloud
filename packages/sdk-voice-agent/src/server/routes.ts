@@ -4,6 +4,7 @@ import {
   archiveStackProfile,
   createStackProfile,
   getStackProfile,
+  estimateStackProfileCost,
   listPresetsWithCertification,
   listStackProfiles,
   updateStackProfile,
@@ -68,6 +69,22 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
       const stackProfile = await getStackProfile(tenantId, req.params.profile_id);
       if (!stackProfile) return reply.code(404).send({ error: 'NotFound', details: ['stack profile not found'] });
       return reply.code(200).send({ data: { stack_profile: stackProfile } });
+    },
+  );
+
+  // TK-4492 — estimated provider cost per call-minute from catalog prices.
+  app.get<{ Params: { profile_id: string }; Querystring: Record<string, string | undefined> }>(
+    '/api/voice-agent/stack-profiles/:profile_id/estimate', { preHandler: requireAuth }, async (req, reply) => {
+      const { tenant_id, ...usage } = req.query;
+      const tenantId = resolveTenant(req, reply, tenant_id);
+      if (!tenantId) return reply;
+      try {
+        const estimate = await estimateStackProfileCost(tenantId, req.params.profile_id, usage);
+        if (!estimate) return reply.code(404).send({ error: 'NotFound', details: ['stack profile not found'] });
+        return reply.code(200).send({ data: { estimate } });
+      } catch (err) {
+        return sendError(reply, err);
+      }
     },
   );
 

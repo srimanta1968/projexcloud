@@ -1,0 +1,118 @@
+{
+  "name": "POST /api/speech/voices/preview - Preview a TTS voice with the tenant's own key",
+  "endpoint": "/api/speech/voices/preview",
+  "sdk": "sdk-speech",
+  "sourceFile": "packages/sdk-speech/src/server/routes.ts",
+  "method": "POST",
+  "expectedStatus": 200,
+  "requiresAuth": true,
+  "taskId": "4b501be1-e6dc-488b-aff5-51cefe142448",
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "featureId": "7227c780-62bf-4956-b678-56562cd0ed74",
+  "epicId": "71a6f2dc-a04e-4f2f-9e98-0d191e15e80d",
+  "testability": "auto",
+  "priority": 136,
+  "coversCriterion": [
+    "7227c780-62bf-4956-b678-56562cd0ed74#AC3"
+  ],
+  "description": "Speaks up to 300 characters with one of the tenant's own TTS keys so a voice can be heard before it is chosen (7227c780-62bf-4956-b678-56562cd0ed74#AC3 — a tenant can preview a TTS voice with its own key). Body: binding_id (a tenant credential bound for the tts layer: openai, elevenlabs, cartesia or deepgram), text, optional voice, model (default: the provider's certified catalog TTS model) and language (default en). Returns {preview: {provider_id, model, voice, characters, content_type, audio_base64, estimated_cost}} — estimated_cost is the list price for per-character models, else null. The call goes straight to the provider with the tenant's key; nothing is billed by the platform. Provider rejections map to typed errors whose messages never include the key: 422 KeyRejected (401/403), 429 RateLimited, 502 ProviderError, 400 for a refused model/voice. A key bound for another layer is 400; another tenant's binding is 404; a revoked one 409. The API test runner has no genuine TTS key, so testCases[0] is the deterministic not-a-tts-key refusal using the tenant's LLM credential; the audio path is exercised against provider stubs (every provider's request shape, default voices, error mapping).",
+  "dependsOn": [
+    "POST /api/auth/signup-tenant",
+    "POST /api/ai-gateway/tenant-credentials"
+  ],
+  "fieldEnums": {
+    "provider_id": [
+      "openai",
+      "elevenlabs",
+      "cartesia",
+      "deepgram"
+    ]
+  },
+  "testCases": [
+    {
+      "name": "The tenant's LLM credential is not a TTS key",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "payload": {
+        "binding_id": "{{cache:ai-gateway-tenant-credentials.create.response.data.binding.binding_id}}",
+        "text": "{{static:Hi, this is a voice preview.}}"
+      },
+      "expectedStatus": 400,
+      "expectedResponse": {
+        "error": "string",
+        "details": [
+          "string"
+        ]
+      }
+    },
+    {
+      "name": "Unknown binding",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "payload": {
+        "binding_id": "{{dynamic:uuid}}",
+        "text": "{{static:Hello}}"
+      },
+      "expectedStatus": 404
+    },
+    {
+      "name": "Missing text",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "payload": {
+        "binding_id": "{{dynamic:uuid}}"
+      },
+      "expectedStatus": 400
+    }
+  ],
+  "captureResponse": {
+    "speech.voices.preview.response.data.preview.provider_id": "data.preview.provider_id"
+  },
+  "errorCases": [
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "binding <id> is a <layer> key, not a tts key",
+      "when": "the binding is not a tts key, text is missing or over 300 chars, the provider has no preview, a voice is required, or the provider refused model/voice"
+    },
+    {
+      "status": 404,
+      "code": "NotFound",
+      "message": "credential binding not found",
+      "when": "unknown binding or another tenant's"
+    },
+    {
+      "status": 409,
+      "code": "Conflict",
+      "message": "credential binding is revoked",
+      "when": "the binding has been revoked"
+    },
+    {
+      "status": 422,
+      "code": "KeyRejected",
+      "message": "provider rejected the key (HTTP <status>)",
+      "when": "the provider answers 401/403"
+    },
+    {
+      "status": 429,
+      "code": "RateLimited",
+      "message": "provider rate-limited the preview (HTTP 429)",
+      "when": "the provider throttles the tenant key"
+    },
+    {
+      "status": 502,
+      "code": "ProviderError",
+      "message": "provider answered HTTP <status>",
+      "when": "provider 5xx, timeout or unreachable"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "no Authorization header"
+    }
+  ]
+}
