@@ -104,6 +104,9 @@ export type {
 // HTTP surface — mounted by the api-gateway.
 export {
   provisionTwilioTrunk,
+  provisionTrunk,
+  registerCarrierProvisioner,
+  provisionableCarriers,
   listTrunks,
   getTrunk,
   syncTrunkNumbers,
@@ -111,7 +114,7 @@ export {
   originateCall,
   setOutboundNumberSource,
 } from './services/telephonyService';
-export type { SipTrunk, ProvisionResult, OriginationResult, OutboundNumberSource } from './services/telephonyService';
+export type { SipTrunk, ProvisionResult, OriginationResult, OutboundNumberSource, CarrierProvisioner, CarrierProvisionInput, CarrierProvisionResult } from './services/telephonyService';
 export { linkCarrierCall, applyCarrierStatus } from './services/carrierStatusService';
 export type { CarrierStatusInput, CarrierStatusResult } from './services/carrierStatusService';
 export * as server from './server';

@@ -1,22 +1,20 @@
 import type { FastifyInstance } from 'fastify';
 import { requireAuth } from '@projexlight/sdk-identity';
-import { deleteTrunk, getTrunk, listTrunks, provisionTwilioTrunk, syncTrunkNumbers } from '../services/telephonyService';
-import { validationError } from '../models/errors';
+import { deleteTrunk, getTrunk, listTrunks, provisionTrunk, syncTrunkNumbers } from '../services/telephonyService';
 import { resolveTenant } from './tenantScope';
 import { sendError } from './sendError';
 
 const actorOf = (req: { auth?: { primary_persona_id?: string | null; sub?: string } }): string =>
   req.auth?.primary_persona_id ?? req.auth?.sub ?? 'tenant-admin';
 
-/** Tenant SIP trunk routes (VA·E6 · TK-4499), tenant-scoped through resolveTenant. */
+/** Tenant SIP trunk routes (VA·E6 · TK-4499/4501), tenant-scoped through resolveTenant. */
 export function registerTrunkRoutes(app: FastifyInstance): void {
   app.post('/api/voice-agent/trunks', { preHandler: requireAuth }, async (req, reply) => {
-    const body = (req.body ?? {}) as { tenant_id?: string; carrier?: string; credential_binding_id?: unknown; trunk_sid?: unknown };
+    const body = (req.body ?? {}) as { tenant_id?: string; carrier?: unknown; credential_binding_id?: unknown; carrier_trunk_ref?: unknown; trunk_sid?: unknown };
     const tenantId = resolveTenant(req, reply, body.tenant_id);
     if (!tenantId) return reply;
     try {
-      if (body.carrier !== 'twilio') throw validationError('carrier must be twilio (telnyx: TK-4501)');
-      return reply.code(201).send({ data: await provisionTwilioTrunk(tenantId, body, actorOf(req)) });
+      return reply.code(201).send({ data: await provisionTrunk(tenantId, body, actorOf(req)) });
     } catch (err) {
       return sendError(reply, err);
     }

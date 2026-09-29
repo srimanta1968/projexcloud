@@ -14,16 +14,19 @@
   "priority": 140,
   "coversCriterion": [
     "506bbf30-2d83-440b-a853-1a8205f4b3cb#AC1",
-    "506bbf30-2d83-440b-a853-1a8205f4b3cb#AC2"
+    "506bbf30-2d83-440b-a853-1a8205f4b3cb#AC2",
+    "a0b36c83-48b0-4356-a5e7-6e253ac9e822#AC1",
+    "a0b36c83-48b0-4356-a5e7-6e253ac9e822#AC2"
   ],
-  "description": "Wires the tenant's Twilio Elastic SIP trunk to the platform's LiveKit SIP service with the tenant's own Twilio credential (a telephony-layer ai-gateway binding stored as <AccountSid>:<AuthToken>). Twilio: creates a trunk (or attaches trunk_sid), points its origination URL at LIVEKIT_SIP_URI, creates a SIP credential list for termination and attaches the tenant's bound Twilio numbers (looked up in the tenant's own account; others are returned in skipped_numbers). LiveKit: an inbound trunk for those numbers plus a dispatch rule that puts each call in its own room with the voice-runtime agent (506bbf30-2d83-440b-a853-1a8205f4b3cb#AC1 — an inbound call to a tenant's Twilio number is delivered to the voice runtime over the tenant's trunk), and an outbound trunk to the Twilio termination domain with the same SIP credential, over which the dialer originates outbound AI calls as SIP participants (506bbf30-2d83-440b-a853-1a8205f4b3cb#AC2). The SIP password is never stored. One live trunk per tenant and carrier (409). Audited as voice.trunk.provisioned.v1. The API runner has no Twilio account or LiveKit SIP service, so its datasets lead with the deterministic refusals; the provisioning path is exercised against Twilio/LiveKit API stubs that check every request.",
+  "description": "Wires the tenant's Twilio Elastic SIP trunk to the platform's LiveKit SIP service with the tenant's own Twilio credential (a telephony-layer ai-gateway binding stored as <AccountSid>:<AuthToken>). Twilio: creates a trunk (or attaches trunk_sid), points its origination URL at LIVEKIT_SIP_URI, creates a SIP credential list for termination and attaches the tenant's bound Twilio numbers (looked up in the tenant's own account; others are returned in skipped_numbers). LiveKit: an inbound trunk for those numbers plus a dispatch rule that puts each call in its own room with the voice-runtime agent (506bbf30-2d83-440b-a853-1a8205f4b3cb#AC1 — an inbound call to a tenant's Twilio number is delivered to the voice runtime over the tenant's trunk), and an outbound trunk to the Twilio termination domain with the same SIP credential, over which the dialer originates outbound AI calls as SIP participants (506bbf30-2d83-440b-a853-1a8205f4b3cb#AC2). The SIP password is never stored. One live trunk per tenant and carrier (409). Audited as voice.trunk.provisioned.v1. The API runner has no Twilio account or LiveKit SIP service, so its datasets lead with the deterministic refusals; the provisioning path is exercised against Twilio/LiveKit API stubs that check every request. TK-4501: carrier telnyx (registered by connector-telnyx-voice) provisions the tenant's Telnyx account with the tenant's Telnyx API key: an outbound voice profile and an FQDN connection whose inbound FQDN is the LiveKit SIP host (so calls to the tenant's Telnyx numbers reach the voice runtime, a0b36c83-48b0-4356-a5e7-6e253ac9e822#AC1) and whose SIP credentials authenticate the LiveKit outbound trunk to sip.telnyx.com (outbound AI calls go over the tenant's Telnyx connection, a0b36c83-48b0-4356-a5e7-6e253ac9e822#AC2); bound Telnyx numbers are assigned to the connection. carrier_trunk_ref attaches an existing connection (Twilio: TrunkSid, also accepted as trunk_sid). An unregistered carrier is 400 naming the available ones.",
   "dependsOn": [
     "POST /api/auth/signup-tenant",
     "POST /api/ai-gateway/tenant-credentials"
   ],
   "fieldEnums": {
     "carrier": [
-      "twilio"
+      "twilio",
+      "telnyx"
     ],
     "status": [
       "provisioning",
@@ -34,12 +37,12 @@
   },
   "testCases": [
     {
-      "name": "Carrier not supported by this endpoint yet",
+      "name": "Carrier with no registered provisioner",
       "headers": {
         "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
       },
       "payload": {
-        "carrier": "{{static:telnyx}}",
+        "carrier": "{{static:bandwidth}}",
         "credential_binding_id": "{{cache:ai-gateway-tenant-credentials.create.response.data.binding.binding_id}}"
       },
       "expectedStatus": 400,

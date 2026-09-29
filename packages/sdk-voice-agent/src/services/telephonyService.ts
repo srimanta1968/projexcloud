@@ -181,6 +181,62 @@ export function setOutboundNumberSource(fn: OutboundNumberSource): void {
   outboundNumberSource = fn;
 }
 
+/* ------------------------------ carrier provisioners ------------------------------ */
+
+export interface CarrierProvisionInput {
+  tenantId: string;
+  /** The tenant's decrypted carrier credential (never stored or logged). */
+  key: string;
+  /** LIVEKIT_SIP_URI: where the carrier must send inbound calls. */
+  sipUri: string;
+  /** The tenant's active number bindings for this carrier. */
+  numbers: string[];
+  /** An existing carrier trunk/connection to attach instead of creating one. */
+  existingRef?: string;
+  /** Short random suffix for unique carrier-side names. */
+  suffix: string;
+  /** Records the carrier resource as soon as it exists (so a later failure can be cleaned up). */
+  onCreated(ref: string, terminationUri: string): Promise<void>;
+}
+
+export interface CarrierProvisionResult {
+  carrier_trunk_ref: string;
+  /** SIP host LiveKit's outbound trunk dials (the carrier's termination address). */
+  termination_uri: string;
+  credential_list_ref: string | null;
+  sip_username: string;
+  /** Handed to LiveKit's outbound trunk once; never stored. */
+  sip_password: string;
+  attached: string[];
+  skipped: ProvisionResult['skipped_numbers'];
+}
+
+/**
+ * Carrier-specific provisioning (VA·E6). The shared flow (row lifecycle, LiveKit inbound
+ * trunk + dispatch rule, outbound trunk, audit, cleanup) lives here; a provisioner only
+ * talks to its carrier. Twilio is built in; connector-telnyx-voice registers Telnyx.
+ */
+export interface CarrierProvisioner {
+  carrier: 'twilio' | 'telnyx';
+  /** Validates the optional existing trunk/connection id from the request. */
+  parseExistingRef(ref: unknown): string | undefined;
+  provision(input: CarrierProvisionInput): Promise<CarrierProvisionResult>;
+  /** Attaches bound numbers to an existing carrier trunk/connection. */
+  attachNumbers(key: string, carrierTrunkRef: string, numbers: string[]): Promise<{ attached: string[]; skipped: ProvisionResult['skipped_numbers'] }>;
+}
+
+const provisioners = new Map<string, CarrierProvisioner>();
+
+/** Registers a carrier provisioner (connector-telnyx-voice registers 'telnyx' at boot). */
+export function registerCarrierProvisioner(p: CarrierProvisioner): void {
+  provisioners.set(p.carrier, p);
+}
+
+/** Carriers a trunk can currently be provisioned for. */
+export function provisionableCarriers(): string[] {
+  return [...provisioners.keys()];
+}
+
 /** Attaches bound numbers to the Twilio trunk; returns attached and skipped. */
 async function attachTwilioNumbers(creds: TwilioCreds, trunkSid: string, numbers: string[]): Promise<{ attached: string[]; skipped: ProvisionResult['skipped_numbers'] }> {
   const attached: string[] = [];
@@ -198,6 +254,49 @@ async function attachTwilioNumbers(creds: TwilioCreds, trunkSid: string, numbers
   }
   return { attached, skipped };
 }
+
+/** Twilio Elastic SIP Trunking (TK-4499). */
+const twilioProvisioner: CarrierProvisioner = {
+  carrier: 'twilio',
+  parseExistingRef(ref) {
+    if (ref === undefined) return undefined;
+    if (typeof ref !== 'string' || !/^TK[0-9a-fA-F]{32}$/.test(ref)) throw validationError('trunk_sid must be a Twilio TrunkSid (TK + 32 hex)');
+    return ref;
+  },
+  async provision(input) {
+    const creds = twilioCreds(input.key);
+    const t8 = input.tenantId.slice(0, 8);
+    // 1. The trunk: attach the given one, else create one with a unique termination domain.
+    const t = input.existingRef
+      ? await twilio<{ sid: string; domain_name: string }>(creds, 'GET', `${twilioTrunking()}/v1/Trunks/${input.existingRef}`)
+      : await twilio<{ sid: string; domain_name: string }>(creds, 'POST', `${twilioTrunking()}/v1/Trunks`, {
+        FriendlyName: `projex-voice-${t8}`,
+        DomainName: `projex-${t8}-${input.suffix}.pstn.twilio.com`,
+      });
+    await input.onCreated(t.sid, t.domain_name);
+    // 2. Inbound: the carrier sends calls to LiveKit SIP.
+    await twilio(creds, 'POST', `${twilioTrunking()}/v1/Trunks/${t.sid}/OriginationUrls`, {
+      FriendlyName: 'projex-voice-livekit', SipUrl: input.sipUri, Priority: '10', Weight: '10', Enabled: 'true',
+    });
+    // 3. Termination auth: a SIP credential on the tenant account, attached to the trunk.
+    const username = `projex${input.tenantId.replace(/-/g, '').slice(0, 10)}${input.suffix}`;
+    const password = sipPassword();
+    const list = await twilio<{ sid: string }>(creds, 'POST', `${twilioApi()}/2010-04-01/Accounts/${creds.accountSid}/SIP/CredentialLists.json`, {
+      FriendlyName: `projex-voice-${t8}-${input.suffix}`,
+    });
+    await twilio(creds, 'POST', `${twilioApi()}/2010-04-01/Accounts/${creds.accountSid}/SIP/CredentialLists/${list.sid}/Credentials.json`, {
+      Username: username, Password: password,
+    });
+    await twilio(creds, 'POST', `${twilioTrunking()}/v1/Trunks/${t.sid}/CredentialLists`, { CredentialListSid: list.sid });
+    // 4. Numbers.
+    const { attached, skipped } = await attachTwilioNumbers(creds, t.sid, input.numbers);
+    return { carrier_trunk_ref: t.sid, termination_uri: t.domain_name, credential_list_ref: list.sid, sip_username: username, sip_password: password, attached, skipped };
+  },
+  attachNumbers(key, ref, numbers) {
+    return attachTwilioNumbers(twilioCreds(key), ref, numbers);
+  },
+};
+registerCarrierProvisioner(twilioProvisioner);
 
 /** (Re)creates the LiveKit inbound trunk + dispatch rule for the attached numbers. */
 async function wireLiveKitInbound(cfg: LiveKitConfig, trunk: SipTrunk, numbers: string[]): Promise<{ inbound: string; rule: string }> {
@@ -223,35 +322,38 @@ async function wireLiveKitInbound(cfg: LiveKitConfig, trunk: SipTrunk, numbers: 
 }
 
 /**
- * Provisions (or attaches) the tenant's Twilio Elastic SIP trunk and wires it to LiveKit.
+ * Provisions (or attaches) the tenant's carrier trunk and wires it to LiveKit: the carrier
+ * part runs through the registered provisioner, then the LiveKit inbound trunk + dispatch
+ * rule and the outbound trunk (to the carrier's termination address, with the SIP
+ * credential the provisioner created) are created here.
  *
- * @throws VoiceAgentError 400 bad input / not a Twilio telephony key, 404 credential,
- *   409 a live trunk already exists or the key is revoked, 422 Twilio rejected the key,
- *   502 carrier or LiveKit failure (the trunk row keeps status=error and the reason),
- *   503 telephony not configured on this deployment.
+ * @throws VoiceAgentError 400 bad input / unsupported carrier / wrong credential, 404
+ *   credential, 409 a live trunk already exists or the key is revoked, 422 the carrier
+ *   rejected the key, 502 carrier or LiveKit failure (the trunk row keeps status=error and
+ *   the reason), 503 telephony not configured on this deployment.
  */
-export async function provisionTwilioTrunk(
+export async function provisionTrunk(
   tenantId: string,
-  input: { credential_binding_id?: unknown; trunk_sid?: unknown },
+  input: { carrier?: unknown; credential_binding_id?: unknown; carrier_trunk_ref?: unknown; trunk_sid?: unknown },
   actor: string,
 ): Promise<ProvisionResult> {
+  const provisioner = typeof input.carrier === 'string' ? provisioners.get(input.carrier) : undefined;
+  if (!provisioner) throw validationError(`carrier must be one of ${provisionableCarriers().join(', ')}`);
+  const carrier = provisioner.carrier;
   const bindingId = input.credential_binding_id;
   if (typeof bindingId !== 'string' || !UUID_RE.test(bindingId)) throw validationError('credential_binding_id must be a uuid');
-  const trunkSid = input.trunk_sid;
-  if (trunkSid !== undefined && (typeof trunkSid !== 'string' || !/^TK[0-9a-fA-F]{32}$/.test(trunkSid))) {
-    throw validationError('trunk_sid must be a Twilio TrunkSid (TK + 32 hex)');
-  }
+  const existingRef = provisioner.parseExistingRef(input.carrier_trunk_ref ?? input.trunk_sid);
   const { cfg, sipUri } = requireLiveKit();
 
   let row: Row | null;
   try {
     row = await dataService.one<Row>(
       `INSERT INTO voice_agent.sip_trunk (tenant_id, carrier, credential_binding_id, origination_uri, created_by)
-       VALUES ($1, 'twilio', $2, $3, $4) RETURNING ${COLUMNS}`,
-      [tenantId, bindingId, sipUri, actor],
+       VALUES ($1, $2, $3, $4, $5) RETURNING ${COLUMNS}`,
+      [tenantId, carrier, bindingId, sipUri, actor],
     );
   } catch (err) {
-    if ((err as { code?: string }).code === '23505') throw conflict('the tenant already has a live Twilio trunk');
+    if ((err as { code?: string }).code === '23505') throw conflict(`the tenant already has a live ${carrier} trunk`);
     throw err;
   }
   if (!row) throw new Error('trunk insert returned no row');
@@ -259,51 +361,30 @@ export async function provisionTwilioTrunk(
 
   try {
     return await withTenantCredentialKey(tenantId, bindingId, async (key, binding) => {
-      if (binding.layer !== 'telephony' || binding.provider_id !== 'twilio') {
-        throw validationError('credential_binding_id must be a Twilio telephony credential');
+      if (binding.layer !== 'telephony' || binding.provider_id !== carrier) {
+        throw validationError(`credential_binding_id must be a ${carrier} telephony credential`);
       }
-      const creds = twilioCreds(key);
       const suffix = crypto.randomBytes(3).toString('hex');
-
-      // 1. The trunk: attach the given one, else create one with a unique termination domain.
-      const t = trunkSid
-        ? await twilio<{ sid: string; domain_name: string }>(creds, 'GET', `${twilioTrunking()}/v1/Trunks/${trunkSid}`)
-        : await twilio<{ sid: string; domain_name: string }>(creds, 'POST', `${twilioTrunking()}/v1/Trunks`, {
-          FriendlyName: `projex-voice-${tenantId.slice(0, 8)}`,
-          DomainName: `projex-${tenantId.slice(0, 8)}-${suffix}.pstn.twilio.com`,
-        });
-      trunk = await patchTrunk(tenantId, trunk.trunk_id, { carrier_trunk_ref: t.sid, termination_uri: t.domain_name });
-
-      // 2. Inbound: the carrier sends calls to LiveKit SIP.
-      await twilio(creds, 'POST', `${twilioTrunking()}/v1/Trunks/${t.sid}/OriginationUrls`, {
-        FriendlyName: 'projex-voice-livekit', SipUrl: sipUri, Priority: '10', Weight: '10', Enabled: 'true',
+      const c = await provisioner.provision({
+        tenantId, key, sipUri, numbers: await boundNumbers(tenantId, carrier), existingRef, suffix,
+        onCreated: async (ref, terminationUri) => {
+          trunk = await patchTrunk(tenantId, trunk.trunk_id, { carrier_trunk_ref: ref, termination_uri: terminationUri });
+        },
+      });
+      trunk = await patchTrunk(tenantId, trunk.trunk_id, {
+        carrier_trunk_ref: c.carrier_trunk_ref, termination_uri: c.termination_uri, credential_list_ref: c.credential_list_ref, sip_username: c.sip_username,
       });
 
-      // 3. Termination auth: a SIP credential on the tenant account, attached to the trunk.
-      const username = `projex${tenantId.replace(/-/g, '').slice(0, 10)}${suffix}`;
-      const password = sipPassword();
-      const list = await twilio<{ sid: string }>(creds, 'POST', `${twilioApi()}/2010-04-01/Accounts/${creds.accountSid}/SIP/CredentialLists.json`, {
-        FriendlyName: `projex-voice-${tenantId.slice(0, 8)}-${suffix}`,
-      });
-      await twilio(creds, 'POST', `${twilioApi()}/2010-04-01/Accounts/${creds.accountSid}/SIP/CredentialLists/${list.sid}/Credentials.json`, {
-        Username: username, Password: password,
-      });
-      await twilio(creds, 'POST', `${twilioTrunking()}/v1/Trunks/${t.sid}/CredentialLists`, { CredentialListSid: list.sid });
-      trunk = await patchTrunk(tenantId, trunk.trunk_id, { credential_list_ref: list.sid, sip_username: username });
-
-      // 4. Numbers.
-      const { attached, skipped } = await attachTwilioNumbers(creds, t.sid, await boundNumbers(tenantId, 'twilio'));
-
-      // 5. LiveKit: inbound trunk + dispatch rule, outbound trunk to the termination domain.
-      const inbound = await wireLiveKitInbound(cfg, trunk, attached);
-      const outboundNumbers = [...new Set([...attached, ...(await outboundNumberSource(tenantId))])];
+      // LiveKit: inbound trunk + dispatch rule, outbound trunk to the carrier's termination address.
+      const inbound = await wireLiveKitInbound(cfg, trunk, c.attached);
+      const outboundNumbers = [...new Set([...c.attached, ...(await outboundNumberSource(tenantId))])];
       const outbound = await livekit<{ sip_trunk_id: string }>(cfg, 'SIP', 'CreateSIPOutboundTrunk', {
         trunk: {
-          name: `projex-${tenantId.slice(0, 8)}-twilio-out`,
-          address: t.domain_name,
+          name: `projex-${tenantId.slice(0, 8)}-${carrier}-out`,
+          address: c.termination_uri,
           numbers: outboundNumbers,
-          auth_username: username,
-          auth_password: password,
+          auth_username: c.sip_username,
+          auth_password: c.sip_password,
           metadata: JSON.stringify({ tenant_id: tenantId, trunk_id: trunk.trunk_id }),
         },
       });
@@ -311,7 +392,7 @@ export async function provisionTwilioTrunk(
         livekit_inbound_trunk_id: inbound.inbound,
         livekit_dispatch_rule_id: inbound.rule,
         livekit_outbound_trunk_id: outbound.sip_trunk_id,
-        numbers: attached,
+        numbers: c.attached,
         status: 'active',
         last_error: null,
       });
@@ -323,9 +404,9 @@ export async function provisionTwilioTrunk(
         tenant_id: tenantId,
         subject_kind: 'voice_agent.sip_trunk',
         subject_id: trunk.trunk_id,
-        payload: { trunk_id: trunk.trunk_id, carrier: 'twilio', carrier_trunk_ref: t.sid, numbers: attached, skipped: skipped.map((s) => s.phone_number) },
+        payload: { trunk_id: trunk.trunk_id, carrier, carrier_trunk_ref: c.carrier_trunk_ref, numbers: c.attached, skipped: c.skipped.map((x) => x.phone_number) },
       });
-      return { trunk, skipped_numbers: skipped };
+      return { trunk, skipped_numbers: c.skipped };
     });
   } catch (err) {
     const message = err instanceof CredentialUnavailableError
@@ -342,6 +423,15 @@ export async function provisionTwilioTrunk(
     }
     throw err;
   }
+}
+
+/** Twilio shorthand kept for callers of TK-4499. */
+export function provisionTwilioTrunk(
+  tenantId: string,
+  input: { credential_binding_id?: unknown; trunk_sid?: unknown },
+  actor: string,
+): Promise<ProvisionResult> {
+  return provisionTrunk(tenantId, { ...input, carrier: 'twilio' }, actor);
 }
 
 /** The tenant's trunks (deleted ones included, newest first). */
@@ -361,8 +451,9 @@ export async function syncTrunkNumbers(tenantId: string, trunkId: string): Promi
   if (trunk.status !== 'active' || !trunk.carrier_trunk_ref) throw conflict('only an active trunk can sync numbers');
   const { cfg } = requireLiveKit();
   return withTenantCredentialKey(tenantId, trunk.credential_binding_id, async (key) => {
-    const creds = twilioCreds(key);
-    const { attached, skipped } = await attachTwilioNumbers(creds, trunk.carrier_trunk_ref!, await boundNumbers(tenantId, 'twilio'));
+    const provisioner = provisioners.get(trunk.carrier);
+    if (!provisioner) throw conflict(`no provisioner is registered for ${trunk.carrier}`);
+    const { attached, skipped } = await provisioner.attachNumbers(key, trunk.carrier_trunk_ref!, await boundNumbers(tenantId, trunk.carrier));
     const inbound = await wireLiveKitInbound(cfg, trunk, attached);
     const updated = await patchTrunk(tenantId, trunkId, { livekit_inbound_trunk_id: inbound.inbound, livekit_dispatch_rule_id: inbound.rule, numbers: attached });
     return { trunk: updated, skipped_numbers: skipped };

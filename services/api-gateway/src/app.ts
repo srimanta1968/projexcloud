@@ -381,6 +381,7 @@ import {
   setOutboundNumberSource,
   linkCarrierCall,
   applyCarrierStatus,
+  registerCarrierProvisioner,
   completeCall,
   onCallEnded,
   VoiceAgentError,
@@ -456,6 +457,11 @@ import {
   setStatusCallbackForwarder,
   linkMirrorToAiCall,
 } from '@projexlight/connector-twilio-voice';
+// VA·E6 (TK-4501) — Telnyx as a voice-agent carrier.
+import {
+  migrationsDir as telnyxVoiceMigrations,
+  telnyxProvisioner,
+} from '@projexlight/connector-telnyx-voice';
 import { migrationsDir as leadScoringMigrations }         from '@projexlight/sdk-lead-scoring';
 import { migrationsDir as configMigrations, server as configServer, importEnvDefaults } from '@projexlight/sdk-config';
 import {
@@ -751,6 +757,8 @@ app.register(speechServer.registerRoutes);
 // through the dialer's gate chain and queue. Wired here so sdk-voice-agent stays free of a
 // dependency on sdk-dialer.
 setCallDispatcher(async (call) => { await dispatchCall(call); });
+// VA·E6 (TK-4501) — POST /api/voice-agent/trunks accepts carrier telnyx.
+registerCarrierProvisioner(telnyxProvisioner);
 // VA·E6 (TK-4499) — a dispatched outbound call is placed over the tenant's SIP trunk (a
 // LiveKit SIP participant on its outbound trunk). An origination failure fails the call,
 // which frees its slot and applies the retry policy; it never stops the dispatch loop.
@@ -1637,6 +1645,8 @@ const start = async (): Promise<void> => {
       { sdk: 'sdk-dialer',              dir: dialerMigrations },
       // VA·E4 — global speech provider catalog (reference data, no tenant rows).
       { sdk: 'sdk-speech',              dir: speechMigrations },
+      // VA·E6 — Telnyx call mirror (self-contained).
+      { sdk: 'connector-telnyx-voice',  dir: telnyxVoiceMigrations },
       // Self-contained (no cross-schema FKs) — ordering free.
       { sdk: 'sdk-source-record',       dir: sourceRecordMigrations },
       // Self-contained: entity refs are loose (kind, id) pairs, so ordering is free.
