@@ -1,0 +1,52 @@
+{
+  "name": "GET /api/dialer/dispositions - The call disposition taxonomy",
+  "endpoint": "/api/dialer/dispositions",
+  "sdk": "sdk-dialer",
+  "sourceFile": "packages/sdk-dialer/src/server/routes.ts",
+  "method": "GET",
+  "requiresAuth": true,
+  "expectedStatus": 200,
+  "taskId": "79afd60e-57cd-45c6-8e80-6f4625c7841a",
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "featureId": "e6ae5703-37a6-4d27-a7d5-23ec80c4a001",
+  "epicId": "4362a53f-a31a-4166-85be-ad1c383d60b5",
+  "priority": 126,
+  "testability": "auto",
+  "coversCriterion": [
+    "e6ae5703-37a6-4d27-a7d5-23ec80c4a001#AC4"
+  ],
+  "description": "Lists every disposition an AI call can end with and what it means to the dialer: {code, reached, retryable, crm_disposition, description}. Retryable outcomes (no_answer, busy, voicemail, failed) are retried under the campaign retry policy; reached ones close the contact. opt_out is automated (e6ae5703-37a6-4d27-a7d5-23ec80c4a001#AC4 — an opt_out disposition writes suppression and revokes consent): when a call ends with it the number gets a tenant-scoped voice suppression (reason optout) so the DNC gate refuses later calls, the person's ai_voice_outbound consent receipts for this tenant are revoked so the consent gate refuses too, and voice.call.opted_out.v1 is audited; repeating the end-of-call report changes nothing.",
+  "dependsOn": [
+    "POST /api/auth/signup-tenant"
+  ],
+  "testCases": [
+    {
+      "name": "Read the taxonomy",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "data": {
+          "dispositions": [
+            {
+              "code": "string",
+              "reached": "boolean",
+              "retryable": "boolean",
+              "crm_disposition": "string",
+              "description": "string"
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "no Authorization header"
+    }
+  ]
+}

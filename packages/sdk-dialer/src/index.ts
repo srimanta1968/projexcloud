@@ -69,5 +69,8 @@ export type { Attestation, CallerId } from './services/callerIdService';
 export { RETRYABLE_OUTCOMES, applyRetryPolicy } from './services/retryService';
 export type { EndedCall, RetryOutcome } from './services/retryService';
 
+export { DISPOSITIONS, applyDispositionEffects } from './services/dispositionService';
+export type { DispositionInfo, EndedCallForDisposition, OptOutResult } from './services/dispositionService';
+
 // HTTP surface — mounted by the api-gateway.
 export * as server from './server';

@@ -440,6 +440,8 @@ export const EVENT_TYPE_REGISTRY: Record<string, EventTypeMetadata> = {
   // VA·E5 (TK-4483) — every dialer gate-chain outcome (all verdicts), and refusals on their own.
   'voice.call.gated.v1':                      { event_type: 'voice.call.gated.v1',                      retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
   'voice.call.refused.v1':                    { event_type: 'voice.call.refused.v1',                    retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+  // VA·E5 (TK-4488) — a call ended opt_out: number suppressed, AI-call consent revoked.
+  'voice.call.opted_out.v1':                  { event_type: 'voice.call.opted_out.v1',                  retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
 
   /* --- sdk-incident (P15·E3) — exception/incident lifecycle + SLA --- */
   'incident.opened.v1':                       { event_type: 'incident.opened.v1',                       retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },

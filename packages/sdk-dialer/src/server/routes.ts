@@ -15,6 +15,7 @@ import { capacitySnapshot } from '../services/capacityService';
 import { dispatchQueued } from '../services/queueDispatcher';
 import { reportAmd } from '../services/amdService';
 import { addCallerId, deactivateCallerId, listCallerIds } from '../services/callerIdService';
+import { DISPOSITIONS } from '../services/dispositionService';
 import { resolveTenant } from './tenantScope';
 import { sendError } from './sendError';
 
@@ -167,6 +168,11 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
     } catch (err) {
       return sendError(reply, err);
     }
+  });
+
+  // TK-4488 — the disposition taxonomy: what each outcome means to the dialer and the CRM.
+  app.get('/api/dialer/dispositions', { preHandler: requireAuth }, async (_req, reply) => {
+    return reply.code(200).send({ data: { dispositions: DISPOSITIONS } });
   });
 
   // Lifecycle actions — literal paths (not a loop) so route scanners and docs see each one.
