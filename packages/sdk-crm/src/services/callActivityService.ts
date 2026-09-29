@@ -2,8 +2,10 @@ import { dataService } from '@projexlight/db-runtime';
 import { emitEvent } from '@projexlight/sdk-audit';
 import {
   ACTIVITY_KINDS,
+  ACTOR_KINDS,
   CALL_DISPOSITIONS,
   isMissedCall,
+  type ActorKind,
   type CallActivityRecord,
   type CallDirection,
   type CallDisposition,
@@ -29,11 +31,13 @@ import {
 const CRM_AUDIT_POOL = process.env.CRM_AUDIT_POOL || 'admin-default';
 
 const CALL_ACTIVITY_COLS = `
-  activity_id, encounter_id, kind, actor_persona_id, summary, occurred_at,
+  activity_id, encounter_id, kind, actor_persona_id, actor_kind, ai_agent_id,
+  ai_agent_version_id, ai_disposition, summary, occurred_at,
   call_direction, call_disposition, call_duration_seconds, phone_number,
   recording_url, recording_consent, voicemail_transcript, external_call_id`;
 
 const DIRECTIONS: CallDirection[] = ['inbound', 'outbound'];
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /** Thrown when a call/voicemail payload violates the enum or numeric contract. */
 export class InvalidCallActivity extends Error {
@@ -53,8 +57,27 @@ function validate(input: {
   call_direction?: string;
   call_disposition?: string;
   call_duration_seconds?: number | null;
+  actor_kind?: unknown;
+  ai_agent_id?: unknown;
+  ai_agent_version_id?: unknown;
+  ai_disposition?: unknown;
 }): void {
   const details: string[] = [];
+  const actorKind = input.actor_kind ?? 'human';
+  if (!ACTOR_KINDS.includes(actorKind as ActorKind)) {
+    details.push(`actor_kind must be one of ${ACTOR_KINDS.join('|')}`);
+  } else if (actorKind === 'ai_agent') {
+    // The agent and the exact version are what make an AI activity auditable.
+    for (const f of ['ai_agent_id', 'ai_agent_version_id'] as const) {
+      if (typeof input[f] !== 'string' || !UUID_RE.test(input[f] as string)) details.push(`${f} is required (uuid) when actor_kind is ai_agent`);
+    }
+    const d = input.ai_disposition;
+    if (d !== undefined && d !== null && (typeof d !== 'string' || d.trim().length === 0 || d.length > 64)) {
+      details.push('ai_disposition must be a non-empty string of at most 64 characters');
+    }
+  } else if (input.ai_agent_id != null || input.ai_agent_version_id != null || input.ai_disposition != null) {
+    details.push('ai_agent_id, ai_agent_version_id and ai_disposition are only allowed when actor_kind is ai_agent');
+  }
   if (!ACTIVITY_KINDS.includes(input.kind as never)) {
     details.push(`kind must be one of ${ACTIVITY_KINDS.join('|')}`);
   }
@@ -85,6 +108,10 @@ export async function logCall(input: LogCallInput): Promise<CallActivityRecord> 
     call_direction: input.call_direction,
     call_disposition: input.call_disposition,
     call_duration_seconds: input.call_duration_seconds ?? null,
+    actor_kind: input.actor_kind,
+    ai_agent_id: input.ai_agent_id,
+    ai_agent_version_id: input.ai_agent_version_id,
+    ai_disposition: input.ai_disposition,
   });
   return insertCallActivity('call', input, null);
 }
@@ -106,6 +133,10 @@ export async function logVoicemail(input: LogVoicemailInput): Promise<CallActivi
     call_direction: input.call_direction,
     call_disposition: disposition,
     call_duration_seconds: input.call_duration_seconds ?? null,
+    actor_kind: input.actor_kind,
+    ai_agent_id: input.ai_agent_id,
+    ai_agent_version_id: input.ai_agent_version_id,
+    ai_disposition: input.ai_disposition,
   });
   return insertCallActivity(
     'voicemail',
@@ -130,8 +161,10 @@ async function insertCallActivity(
     `INSERT INTO crm.activity
        (encounter_id, kind, actor_persona_id, summary, occurred_at, call_direction,
         call_disposition, call_duration_seconds, phone_number, recording_url,
-        recording_consent, voicemail_transcript, external_call_id)
-     VALUES ($1, $2, $3, $4, COALESCE($5::timestamptz, now()), $6, $7, $8, $9, $10, $11, $12, $13)
+        recording_consent, voicemail_transcript, external_call_id,
+        actor_kind, ai_agent_id, ai_agent_version_id, ai_disposition)
+     VALUES ($1, $2, $3, $4, COALESCE($5::timestamptz, now()), $6, $7, $8, $9, $10, $11, $12, $13,
+             $14, $15, $16, $17)
      ON CONFLICT (external_call_id) WHERE external_call_id IS NOT NULL
      DO UPDATE SET
        kind                  = EXCLUDED.kind,
@@ -140,7 +173,8 @@ async function insertCallActivity(
        call_duration_seconds = COALESCE(EXCLUDED.call_duration_seconds, crm.activity.call_duration_seconds),
        recording_url         = COALESCE(EXCLUDED.recording_url, crm.activity.recording_url),
        recording_consent     = COALESCE(EXCLUDED.recording_consent, crm.activity.recording_consent),
-       voicemail_transcript  = COALESCE(EXCLUDED.voicemail_transcript, crm.activity.voicemail_transcript)
+       voicemail_transcript  = COALESCE(EXCLUDED.voicemail_transcript, crm.activity.voicemail_transcript),
+       ai_disposition        = COALESCE(EXCLUDED.ai_disposition, crm.activity.ai_disposition)
      RETURNING ${CALL_ACTIVITY_COLS}, (xmax = 0) AS was_inserted`,
     [
       input.encounter_id,
@@ -156,6 +190,10 @@ async function insertCallActivity(
       input.recording_consent ?? null,
       transcript,
       input.external_call_id ?? null,
+      input.actor_kind ?? 'human',
+      input.ai_agent_id ?? null,
+      input.ai_agent_version_id ?? null,
+      input.ai_disposition?.trim() || null,
     ],
   );
   if (!rec) throw new Error('[sdk-crm] call activity insert returned no row');
@@ -195,6 +233,10 @@ async function insertCallActivity(
       external_call_id: rec.external_call_id,
       recording_consent: rec.recording_consent,
       has_recording: !!rec.recording_url,
+      actor_kind: rec.actor_kind,
+      ai_agent_id: rec.ai_agent_id,
+      ai_agent_version_id: rec.ai_agent_version_id,
+      ai_disposition: rec.ai_disposition,
     },
   });
   return activity;
@@ -206,7 +248,7 @@ async function insertCallActivity(
  */
 export async function listCallActivities(
   encounter_id: string,
-  opts: { kind?: string; call_disposition?: string; limit?: number; offset?: number } = {},
+  opts: { kind?: string; call_disposition?: string; actor_kind?: string; limit?: number; offset?: number } = {},
 ): Promise<CallActivityRecord[]> {
   return dataService.rows<CallActivityRecord>(
     `SELECT ${CALL_ACTIVITY_COLS}
@@ -215,8 +257,9 @@ export async function listCallActivities(
         AND kind IN ('call','voicemail')
         AND ($2::text IS NULL OR kind = $2)
         AND ($3::text IS NULL OR call_disposition = $3)
+        AND ($6::text IS NULL OR actor_kind = $6)
       ORDER BY occurred_at DESC
       LIMIT $4 OFFSET $5`,
-    [encounter_id, opts.kind ?? null, opts.call_disposition ?? null, opts.limit ?? 50, opts.offset ?? 0],
+    [encounter_id, opts.kind ?? null, opts.call_disposition ?? null, opts.limit ?? 50, opts.offset ?? 0, opts.actor_kind ?? null],
   );
 }

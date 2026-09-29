@@ -77,6 +77,12 @@ export interface ActivityRecord {
  * the generic logActivity path so existing callers are unaffected.
  */
 export interface CallActivityRecord extends ActivityRecord {
+  /** 'ai_agent' when an sdk-voice-agent agent handled the call (migration 009). */
+  actor_kind: ActorKind;
+  ai_agent_id: string | null;
+  ai_agent_version_id: string | null;
+  /** The AI agent's own outcome; call_disposition stays the telephony outcome. */
+  ai_disposition: string | null;
   call_direction: CallDirection | null;
   call_disposition: CallDisposition | null;
   call_duration_seconds: number | null;
@@ -87,9 +93,19 @@ export interface CallActivityRecord extends ActivityRecord {
   external_call_id: string | null;
 }
 
+/** Who performed an activity (migration 009). */
+export type ActorKind = 'human' | 'ai_agent';
+export const ACTOR_KINDS: ActorKind[] = ['human', 'ai_agent'];
+
 export interface LogCallInput {
   encounter_id: string;
+  /** For an AI call: the persona the agent acts for. */
   actor_persona_id: string;
+  /** Defaults to 'human'. 'ai_agent' requires ai_agent_id and ai_agent_version_id. */
+  actor_kind?: ActorKind;
+  ai_agent_id?: string | null;
+  ai_agent_version_id?: string | null;
+  ai_disposition?: string | null;
   call_direction: CallDirection;
   call_disposition: CallDisposition;
   call_duration_seconds?: number | null;

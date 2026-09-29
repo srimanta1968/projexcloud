@@ -305,14 +305,18 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
   });
 
   // Read the call/voicemail timeline for an encounter.
-  app.get<{ Querystring: { encounter_id?: string; kind?: string; call_disposition?: string; limit?: string; offset?: string } }>(
+  app.get<{ Querystring: { encounter_id?: string; kind?: string; call_disposition?: string; actor_kind?: string; limit?: string; offset?: string } }>(
     '/api/crm/activities/calls', { preHandler: requireAuth }, async (req, reply) => {
       if (!req.query.encounter_id) {
         return reply.code(400).send({ error: 'ValidationError', details: ['encounter_id query param required'] });
       }
+      if (req.query.actor_kind && req.query.actor_kind !== 'human' && req.query.actor_kind !== 'ai_agent') {
+        return reply.code(400).send({ error: 'ValidationError', details: ['actor_kind must be one of human|ai_agent'] });
+      }
       const activities = await listCallActivities(req.query.encounter_id, {
         kind: req.query.kind,
         call_disposition: req.query.call_disposition,
+        actor_kind: req.query.actor_kind,
         limit: req.query.limit ? Number(req.query.limit) : undefined,
         offset: req.query.offset ? Number(req.query.offset) : undefined,
       });

@@ -10,7 +10,7 @@
   "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
   "priority": 70,
   "testability": "auto",
-  "description": "Read the call and voicemail entries on one encounter's timeline, newest first, optionally narrowed to a kind (call|voicemail) or a call_disposition. Only telephony activities are returned — note/email/meeting/task entries are excluded even though they share the crm.activity table. Edge cases: 400 when the encounter_id query param is missing; an unknown encounter yields an empty array rather than 404, since this is a filtered read not a record fetch; limit defaults to 50 and offset to 0; entries logged manually (no external_call_id) appear alongside webhook-sourced ones.",
+  "description": "Read the call and voicemail entries on one encounter's timeline, newest first, optionally narrowed to a kind (call|voicemail) or a call_disposition. Only telephony activities are returned — note/email/meeting/task entries are excluded even though they share the crm.activity table. Edge cases: 400 when the encounter_id query param is missing; an unknown encounter yields an empty array rather than 404, since this is a filtered read not a record fetch; limit defaults to 50 and offset to 0; entries logged manually (no external_call_id) appear alongside webhook-sourced ones. actor_kind=human|ai_agent narrows to activities by people or by AI voice agents (anything else is 400); every row carries actor_kind, ai_agent_id, ai_agent_version_id and ai_disposition. AI CALLS (0892cb5b-f0d4-43a5-b3db-770361137b1b#AC2 — CRM call activity records actor ai_agent, agent version, summary and disposition): actor_kind is human (default) or ai_agent. An ai_agent activity must carry ai_agent_id and ai_agent_version_id (uuids — the sdk-voice-agent agent and the exact published version that handled the call, so a later prompt change never rewrites history) and may carry ai_disposition (the agent's own outcome, 1-64 chars, e.g. meeting_booked / callback_requested), kept beside call_disposition which stays the telephony outcome; summary holds the post-call summary. sdk-voice-agent writes these automatically when an AI call linked to a crm_encounter_id ends (external_call_id voice-agent:<call_id>, so a re-report updates rather than duplicates). A human activity must not carry any ai_* field (400). The emitted crm.call.* event payload includes actor_kind, ai_agent_id, ai_agent_version_id and ai_disposition. Enforced in the DB by activity_ai_agent_ref_check (sdk-crm migration 009).",
   "dependsOn": [
     "POST /api/auth/signup-tenant",
     "POST /api/auth/register",
@@ -22,13 +22,29 @@
     "POST /api/crm/activities/call"
   ],
   "fieldEnums": {
-    "kind": ["call", "voicemail"],
-    "call_disposition": ["answered", "no_answer", "busy", "failed", "voicemail", "left_message"]
+    "kind": [
+      "call",
+      "voicemail"
+    ],
+    "call_disposition": [
+      "answered",
+      "no_answer",
+      "busy",
+      "failed",
+      "voicemail",
+      "left_message"
+    ],
+    "actor_kind": [
+      "human",
+      "ai_agent"
+    ]
   },
   "testCases": [
     {
       "name": "Read the call timeline for the encounter",
-      "headers": { "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}" },
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
       "queryParams": {
         "encounter_id": "{{cache:encounters.create.response.data.encounter.encounter_id}}",
         "kind": "call",
@@ -40,14 +56,54 @@
       "expectedResponse": {
         "data": {
           "activities": [
-            { "activity_id": "string", "kind": "string", "call_disposition": "string" }
+            {
+              "activity_id": "string",
+              "kind": "string",
+              "call_disposition": "string"
+            }
           ]
         }
+      }
+    },
+    {
+      "name": "400 - unknown actor_kind filter",
+      "testType": "negative",
+      "coversErrorCase": "400|ValidationError|actor-kind",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "queryParams": {
+        "encounter_id": "{{cache:encounters.create.response.data.encounter.encounter_id}}",
+        "actor_kind": "bot"
+      },
+      "expectedStatus": 400,
+      "expectedError": {
+        "error": "ValidationError"
       }
     }
   ],
   "errorCases": [
-    { "status": 400, "code": "ValidationError", "message": "encounter_id query param required", "when": "encounter_id query param missing" },
-    { "status": 401, "code": "Unauthorized", "message": "Unauthorized", "when": "Authorization bearer token missing or invalid" }
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "encounter_id query param required",
+      "when": "encounter_id query param missing"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Unauthorized",
+      "when": "Authorization bearer token missing or invalid"
+    },
+    {
+      "name": "Unknown actor_kind filter",
+      "status": 400,
+      "code": "ValidationError",
+      "message": "actor_kind must be one of human|ai_agent",
+      "when": "actor_kind query param is neither human nor ai_agent"
+    }
+  ],
+  "coversCriterion": [
+    "0892cb5b-f0d4-43a5-b3db-770361137b1b#AC2"
   ]
 }

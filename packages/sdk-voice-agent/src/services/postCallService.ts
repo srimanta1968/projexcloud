@@ -275,6 +275,8 @@ async function mirrorToCrm(call: CallDetail, actingPersonaId: string | null): Pr
   if (!call.crm_encounter_id) return { skipped: 'no crm_encounter_id on the call' };
   const actor = actingPersonaId ?? (call.requested_by && UUID_RE.test(call.requested_by) ? call.requested_by : null);
   if (!actor) return { skipped: 'agent has no acting_persona_id and the call has no requesting persona' };
+  // An AI timeline entry must pin the agent version (crm activity_ai_agent_ref_check).
+  if (!call.agent_version_id) return { skipped: 'call has no agent version to attribute the activity to' };
   const disposition = crmDisposition(call);
   const input = {
     encounter_id: call.crm_encounter_id,
@@ -287,6 +289,12 @@ async function mirrorToCrm(call: CallDetail, actingPersonaId: string | null): Pr
     external_call_id: `voice-agent:${call.call_id}`,
     summary: call.summary,
     occurred_at: call.started_at ?? call.created_at,
+    // TK-4506 — the timeline says the AI handled it, which published version, and what
+    // the agent concluded (call_disposition below stays the telephony outcome).
+    actor_kind: 'ai_agent' as const,
+    ai_agent_id: call.agent_id,
+    ai_agent_version_id: call.agent_version_id,
+    ai_disposition: call.disposition,
   };
   const activity = disposition === 'voicemail'
     ? await logVoicemail({ ...input, call_disposition: 'voicemail' })
