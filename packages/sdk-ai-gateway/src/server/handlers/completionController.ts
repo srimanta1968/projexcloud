@@ -2,6 +2,22 @@ import { FastifyReply, FastifyRequest } from 'fastify';
 import type { AgentContext, CompletionRequest } from '@projexlight/contracts';
 import { complete, stream } from '../../services/completionService';
 
+/**
+ * Pins the completion to the caller's tenant. context.tenant_id selects whose BYOK key the
+ * provider call uses, so it must be the authenticated tenant: a different one is 403, an
+ * absent one is filled from the token. Replies and returns false when refused.
+ */
+function pinTenant(req: FastifyRequest, reply: FastifyReply, context: AgentContext): boolean {
+  const authTenant = (req as unknown as { auth?: { tenant_id?: string | null } }).auth?.tenant_id ?? null;
+  if (!authTenant) return true;
+  if (context.tenant_id && context.tenant_id !== authTenant) {
+    reply.code(403).send({ success: false, error: 'context.tenant_id does not match the authenticated tenant' });
+    return false;
+  }
+  context.tenant_id = authTenant;
+  return true;
+}
+
 interface CompleteBody {
   request: CompletionRequest;
   context: AgentContext;
@@ -33,6 +49,7 @@ export async function completeHandler(
     });
     return;
   }
+  if (!pinTenant(req, reply, body.context)) return;
   try {
     const response = await complete(body.request, body.context);
     reply.code(200).send({ success: true, data: response });
@@ -72,6 +89,7 @@ export async function streamHandler(
     });
     return;
   }
+  if (!pinTenant(req, reply, body.context)) return;
   reply.raw.setHeader('Content-Type', 'text/event-stream');
   reply.raw.setHeader('Cache-Control', 'no-cache');
   reply.raw.setHeader('Connection', 'keep-alive');

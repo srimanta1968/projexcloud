@@ -4,7 +4,7 @@
   "sourceFile": "packages/sdk-ai-gateway/src/server/handlers/completionController.ts",
   "method": "POST",
   "taskId": "33b1ff5b-534c-4fd3-bc2b-b2ac3e0e7d33",
-  "description": "Streaming LLM completion (SSE). Yields StreamChunk frames as data: <json>\\n\\n; closes with data: [DONE]\\n\\n. Persists ai_gateway.completion on stream close.",
+  "description": "Streaming LLM completion (SSE). Yields StreamChunk frames as data: <json>\\n\\n; closes with data: [DONE]\\n\\n. Persists ai_gateway.completion on stream close. VA·E5 (TK-4493): with a real adapter the provider streams deltas; the final chunk carries tool_calls assembled from argument fragments and usage {tokens_in, tokens_out, provider_cost} from the provider (stream_options.include_usage), and the completion row stores that usage instead of an approximation (f618fd2e-e581-4533-a68d-42882358d3b9#AC3). Works against any configured OpenAI-compatible base URL (f618fd2e-e581-4533-a68d-42882358d3b9#AC2). context.tenant_id must be the caller tenant.",
   "requiresAuth": true,
   "priority": 310,
   "dependsOn": [
@@ -87,6 +87,12 @@
       "when": "the generator throws AFTER the SSE headers have been flushed (provider unavailable, no matching route, kill-switch tripped, provider mid-stream failure). The HTTP status is already committed as 200, so the failure arrives as an SSE error frame followed by stream close — it can never be a 4xx/5xx status, which is the key difference from /complete"
     },
     {
+      "status": 403,
+      "code": "Forbidden",
+      "message": "context.tenant_id does not match the authenticated tenant",
+      "when": "context.tenant_id names a tenant other than the JWT tenant (it selects whose BYOK key is used); an absent tenant_id is filled from the JWT"
+    },
+    {
       "status": 401,
       "code": "Unauthorized",
       "message": "Missing bearer token",
@@ -98,5 +104,9 @@
       "message": "Invalid or expired token",
       "when": "the bearer JWT fails verifyJwt — bad signature, wrong JWT_SECRET, or exp already elapsed (requireAuth preHandler)"
     }
+  ],
+  "coversCriterion": [
+    "f618fd2e-e581-4533-a68d-42882358d3b9#AC2",
+    "f618fd2e-e581-4533-a68d-42882358d3b9#AC3"
   ]
 }

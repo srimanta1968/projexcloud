@@ -172,6 +172,8 @@ export async function withRetry<T>(
     } catch (err) {
       lastErr = err;
       if (attempt === maxAttempts - 1) break;
+      // A provider error that cannot succeed on retry (bad key, bad request) fails fast.
+      if ((err as { retryable?: boolean } | null)?.retryable === false) break;
       const expDelay = Math.min(cap, base * Math.pow(2, attempt));
       const jitter = Math.random() * expDelay * 0.2;
       await new Promise((r) => setTimeout(r, expDelay + jitter));

@@ -117,6 +117,10 @@ export interface StreamChunk {
   finish_reason?: CompletionResponse['finish_reason'];
   /** Optional rolling token counter for client-side progress UIs. */
   tokens_so_far?: number;
+  /** Final chunk only: tool calls the model requested (streamed providers assemble them from deltas). */
+  tool_calls?: ToolCallRecord[];
+  /** Final chunk only: provider-reported usage and the cost derived from it. */
+  usage?: { tokens_in: number; tokens_out: number; provider_cost?: number };
 }
 
 /* ============================================================

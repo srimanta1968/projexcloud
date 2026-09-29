@@ -22,6 +22,18 @@ export {
 } from './services/providerAdapter';
 export type { ProviderAdapter, ProviderCompletionResult } from './services/providerAdapter';
 
+// Real provider adapters (VA·E5) and the list-price hook their costs use.
+export {
+  registerRealProviderAdapters,
+  realProviderAdaptersEnabled,
+  makeOpenAiCompatibleAdapter,
+  OPENAI_COMPATIBLE_BASE_URLS,
+  ProviderHttpError,
+} from './services/adapters';
+export type { OpenAiCompatibleOptions } from './services/adapters';
+export { setModelPriceResolver, providerCost } from './services/modelPricing';
+export type { ModelPrice, ModelPriceResolver } from './services/modelPricing';
+
 // Routing engine + circuit breaker (FR-AGW-2, FR-AGW-9) — TK-3289.
 export {
   resolveRoute,

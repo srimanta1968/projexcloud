@@ -243,6 +243,8 @@ export async function unwrapCredential(envelope: Buffer): Promise<Buffer> {
   // otherwise treat the envelope itself as the plain credential (dev mode).
   try {
     const maybe = JSON.parse(envelope.toString('utf8'));
+    // Platform credentials bootstrapped from env: {"material": "<key>", "source_env": ...}.
+    if (maybe && typeof maybe.material === 'string') return Buffer.from(maybe.material, 'utf8');
     if (maybe && typeof maybe.ref === 'string' && typeof maybe.wrapped === 'string') {
       return envelopeDecrypt({
         ref: maybe.ref,
@@ -256,6 +258,29 @@ export async function unwrapCredential(envelope: Buffer): Promise<Buffer> {
     // not JSON — fall through to plain-bytes mode
   }
   return envelope;
+}
+
+/**
+ * PII-redacts a prompt before it leaves for the provider. A chat history is redacted
+ * message by message so roles, tool calls and tool results keep their structure (the
+ * provider adapters need them); a plain string is redacted as before.
+ */
+async function redactRequestPrompt(
+  prompt: CompletionRequest['prompt'],
+  tenantId: string | null,
+): Promise<{ prompt: CompletionRequest['prompt']; applied: boolean }> {
+  if (typeof prompt === 'string') {
+    const r = await redactPrompt(prompt, tenantId);
+    return { prompt: r.redacted, applied: r.applied };
+  }
+  let applied = false;
+  const messages = [];
+  for (const m of prompt) {
+    const r = await redactPrompt(m.content ?? '', tenantId);
+    applied = applied || r.applied;
+    messages.push({ ...m, content: r.redacted });
+  }
+  return { prompt: messages, applied };
 }
 
 async function persistCompletion(input: {
@@ -355,9 +380,8 @@ export async function complete(
   }
   const credential = await unwrapCredential(providerRow.credential_envelope);
 
-  const prompt = typeof request.prompt === 'string' ? request.prompt : JSON.stringify(request.prompt);
-  const redaction = await redactPrompt(prompt, ctx.tenant_id);
-  const requestForProvider: CompletionRequest = { ...request, prompt: redaction.redacted, model: selected.model };
+  const redaction = await redactRequestPrompt(request.prompt, ctx.tenant_id);
+  const requestForProvider: CompletionRequest = { ...request, prompt: redaction.prompt, model: selected.model };
 
   const adapter = getProvider(selected.provider_id);
   const completionId = crypto.randomUUID();
@@ -437,9 +461,8 @@ export async function* stream(
   }
   const credential = await unwrapCredential(providerRow.credential_envelope);
 
-  const prompt = typeof request.prompt === 'string' ? request.prompt : JSON.stringify(request.prompt);
-  const redaction = await redactPrompt(prompt, ctx.tenant_id);
-  const requestForProvider: CompletionRequest = { ...request, prompt: redaction.redacted, model: selected.model, stream: true };
+  const redaction = await redactRequestPrompt(request.prompt, ctx.tenant_id);
+  const requestForProvider: CompletionRequest = { ...request, prompt: redaction.prompt, model: selected.model, stream: true };
 
   const adapter = getProvider(selected.provider_id);
   const completionId = crypto.randomUUID();
@@ -448,6 +471,8 @@ export async function* stream(
   let tokensSoFar = 0;
   let finishReason: CompletionResponse['finish_reason'] = 'stop';
   let outputAccum = '';
+  let usage: StreamChunk['usage'];
+  let streamToolCalls: NonNullable<StreamChunk['tool_calls']> = [];
 
   try {
     for await (const chunk of adapter.stream(requestForProvider, credential)) {
@@ -455,6 +480,8 @@ export async function* stream(
       tokensSoFar = chunk.tokens_so_far ?? tokensSoFar;
       outputAccum += chunk.delta;
       if (chunk.finish_reason) finishReason = chunk.finish_reason;
+      if (chunk.usage) usage = chunk.usage;
+      if (chunk.tool_calls?.length) streamToolCalls = chunk.tool_calls;
       yield enriched;
     }
     await recordProviderSuccess(selected.provider_id);
@@ -464,9 +491,9 @@ export async function* stream(
   }
 
   const latency_ms = Date.now() - startedAt;
-  // Streaming providers usually report cost out-of-band; approximate from
-  // a static rate per million tokens until a per-stream cost hook lands.
-  const approxProviderCost = (tokensSoFar / 1_000_000) * 1.0; // $1/M tokens default
+  // Real adapters report usage (and its list-price cost) on the final chunk; an adapter
+  // that does not falls back to the old approximation of $1 per 1M streamed tokens.
+  const approxProviderCost = usage?.provider_cost ?? (tokensSoFar / 1_000_000) * 1.0;
   // FR-BYOK-9: zero token markup for BYOK streams; governance SKU only.
   const billed_cost = providerRow.credential_source === 'tenant'
     ? 0
@@ -474,9 +501,9 @@ export async function* stream(
 
   const synthetic: ProviderCompletionResult = {
     output: outputAccum,
-    tool_calls: [],
-    tokens_in: 0,
-    tokens_out: tokensSoFar,
+    tool_calls: streamToolCalls,
+    tokens_in: usage?.tokens_in ?? 0,
+    tokens_out: usage?.tokens_out ?? tokensSoFar,
     provider_cost: approxProviderCost,
     finish_reason: finishReason,
   };

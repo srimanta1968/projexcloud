@@ -281,6 +281,9 @@ import {
   server as aiGatewayServer,
   bootstrapLLMCredentials,
   credentialMaxConcurrency,
+  registerRealProviderAdapters,
+  realProviderAdaptersEnabled,
+  setModelPriceResolver,
 } from '@projexlight/sdk-ai-gateway';
 import {
   migrationsDir as taxonomyMigrations,
@@ -394,6 +397,7 @@ import {
   migrationsDir as speechMigrations,
   server as speechServer,
   updateCatalogEntry,
+  findCatalogEntries,
   SpeechError,
 } from '@projexlight/sdk-speech';
 // P16 · EP-374 — the provenance kernel. Every ingesting SDK lands its rows here.
@@ -1664,6 +1668,18 @@ const start = async (): Promise<void> => {
       throw err;
     }
 
+    // VA·E5 (TK-4493) — real LLM adapters register BEFORE the credential bootstrap, so the
+    // synthetic dev adapter only fills providers with no real adapter. Completion cost
+    // comes from the speech catalog's operator-editable llm list prices.
+    if (realProviderAdaptersEnabled()) {
+      console.log('[api-gateway] real LLM adapters registered:', registerRealProviderAdapters().join(', '));
+    }
+    setModelPriceResolver(async (providerId, model) => {
+      const entry = (await findCatalogEntries([`llm:${providerId}:${model}`])).get(`llm:${providerId}:${model}`);
+      return entry && entry.output_list_price !== null
+        ? { input_per_1m: entry.list_price, output_per_1m: entry.output_list_price }
+        : null;
+    });
     // P6A — bootstrap LLM provider credentials from env into ai_gateway.provider.
     // Production refuses to start when a required provider is missing.
     try {

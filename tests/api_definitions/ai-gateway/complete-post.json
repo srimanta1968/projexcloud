@@ -4,7 +4,7 @@
   "sourceFile": "packages/sdk-ai-gateway/src/server/handlers/completionController.ts",
   "method": "POST",
   "taskId": "33b1ff5b-534c-4fd3-bc2b-b2ac3e0e7d33",
-  "description": "Non-streaming LLM completion. Pipeline: route resolution -> PII redaction -> credential unwrap -> retry-wrapped provider call -> ai_gateway.completion insert + ai-gateway.complete.v1 audit. Closes AC-1.",
+  "description": "Non-streaming LLM completion. Pipeline: route resolution -> PII redaction -> credential unwrap -> retry-wrapped provider call -> ai_gateway.completion insert + ai-gateway.complete.v1 audit. Closes AC-1. VA·E5 (TK-4493): real provider adapters register at boot (AI_GATEWAY_PROVIDER_MODE=real; default real in production, synthetic elsewhere). The openai provider speaks the OpenAI Chat Completions format against any configured base URL (AI_GATEWAY_OPENAI_BASE_URL — OpenAI, Azure-compatible, Groq, Together, vLLM, …) (f618fd2e-e581-4533-a68d-42882358d3b9#AC2). request.tools go out as functions and tool calls come back as tool_calls {tool_call_id, tool_sku, args}; a chat-array prompt keeps its roles, assistant tool_calls and tool_call_id (PII redaction runs per message). tokens_in / tokens_out are the provider-reported usage and are stored on ai_gateway.completion, with provider_cost from the catalog list price (f618fd2e-e581-4533-a68d-42882358d3b9#AC3). A 4xx from the provider (e.g. a rejected key) is not retried. context.tenant_id must be the caller tenant.",
   "requiresAuth": true,
   "priority": 300,
   "dependsOn": [
@@ -60,7 +60,20 @@
       }
     }
   ],
+  "coversCriterion": [
+    "f618fd2e-e581-4533-a68d-42882358d3b9#AC2",
+    "f618fd2e-e581-4533-a68d-42882358d3b9#AC3"
+  ],
+  "captureResponse": {
+    "ai-gateway.complete.response.data.completion_id": "data.completion_id"
+  },
   "errorCases": [
+    {
+      "status": 403,
+      "code": "Forbidden",
+      "message": "context.tenant_id does not match the authenticated tenant",
+      "when": "context.tenant_id names a tenant other than the JWT tenant (it selects whose BYOK key is used); an absent tenant_id is filled from the JWT"
+    },
     {
       "status": 401,
       "code": "Unauthorized",
