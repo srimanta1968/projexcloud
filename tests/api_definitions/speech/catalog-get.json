@@ -1,0 +1,136 @@
+{
+  "sdk": "sdk-speech",
+  "sourceFile": "packages/sdk-speech/src/server/routes.ts",
+  "requiresAuth": true,
+  "taskId": "1f287140-9c71-41e9-accf-874384644d22",
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "featureId": "322b0d69-8fde-47e0-aaf7-8c6420ed492b",
+  "epicId": "71a6f2dc-a04e-4f2f-9e98-0d191e15e80d",
+  "testability": "auto",
+  "name": "GET /api/speech/catalog - The voice provider catalog",
+  "endpoint": "/api/speech/catalog",
+  "method": "GET",
+  "expectedStatus": 200,
+  "priority": 131,
+  "coversCriterion": [
+    "322b0d69-8fde-47e0-aaf7-8c6420ed492b#AC1"
+  ],
+  "description": "Lists the global voice provider catalog (322b0d69-8fde-47e0-aaf7-8c6420ed492b#AC1 — STT, TTS, LLM-for-voice and realtime entries with prices and certification status). Each entry is one provider/model per layer (stt | tts | llm | realtime) with catalog_key (layer:provider:model, the stable reference presets use), display_name, voices, languages, list_price + unit (per_minute | per_1k_chars | per_1m_tokens, with output_list_price for token pricing), currency, price_verified_at (null = seed estimate, not yet re-verified), certification_status (certified | uncertified | revoked), certified flag, certified_at and cert_metrics. The catalog is platform reference data: every tenant reads the same rows. Optional filters: layer, provider, certified=true|false. Telephony is not a catalog layer.",
+  "dependsOn": [
+    "POST /api/auth/signup-tenant"
+  ],
+  "queryParams": {
+    "layer": {
+      "type": "string",
+      "enum": [
+        "stt",
+        "tts",
+        "llm",
+        "realtime"
+      ],
+      "required": false
+    },
+    "provider": {
+      "type": "string",
+      "required": false
+    },
+    "certified": {
+      "type": "string",
+      "enum": [
+        "true",
+        "false"
+      ],
+      "required": false
+    }
+  },
+  "fieldEnums": {
+    "layer": [
+      "stt",
+      "tts",
+      "llm",
+      "realtime"
+    ],
+    "unit": [
+      "per_minute",
+      "per_1k_chars",
+      "per_1m_tokens"
+    ],
+    "certification_status": [
+      "certified",
+      "uncertified",
+      "revoked"
+    ]
+  },
+  "testCases": [
+    {
+      "name": "List the whole catalog",
+      "capturesResponse": true,
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "data": {
+          "entries": [
+            {
+              "entry_id": "string",
+              "catalog_key": "string",
+              "layer": "string",
+              "provider": "string",
+              "model": "string",
+              "display_name": "string",
+              "voices": "array",
+              "languages": "array",
+              "list_price": "number",
+              "unit": "string",
+              "currency": "string",
+              "certification_status": "string",
+              "certified": "boolean",
+              "cert_metrics": "object",
+              "updated_at": "string"
+            }
+          ],
+          "total": "number"
+        }
+      }
+    },
+    {
+      "name": "Certified STT only",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "queryParams": {
+        "layer": "stt",
+        "certified": "true"
+      },
+      "expectedStatus": 200
+    },
+    {
+      "name": "Unknown layer",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "queryParams": {
+        "layer": "telephony"
+      },
+      "expectedStatus": 400
+    }
+  ],
+  "captureResponse": {
+    "speech.catalog.list.response.data.entries.0.entry_id": "data.entries.0.entry_id"
+  },
+  "errorCases": [
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "layer must be one of stt, tts, llm, realtime",
+      "when": "layer, provider or certified is not a valid value"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "no Authorization header"
+    }
+  ]
+}

@@ -1,0 +1,111 @@
+{
+  "sdk": "sdk-speech",
+  "sourceFile": "packages/sdk-speech/src/server/routes.ts",
+  "requiresAuth": true,
+  "taskId": "1f287140-9c71-41e9-accf-874384644d22",
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "featureId": "322b0d69-8fde-47e0-aaf7-8c6420ed492b",
+  "epicId": "71a6f2dc-a04e-4f2f-9e98-0d191e15e80d",
+  "testability": "auto",
+  "name": "GET /api/speech/catalog/:entry_id - One catalog entry",
+  "endpoint": "/api/speech/catalog/:entry_id",
+  "method": "GET",
+  "expectedStatus": 200,
+  "priority": 132,
+  "coversCriterion": [
+    "322b0d69-8fde-47e0-aaf7-8c6420ed492b#AC1"
+  ],
+  "description": "Reads one catalog entry by entry_id with its price and certification status (322b0d69-8fde-47e0-aaf7-8c6420ed492b#AC1). Same shape as an item of GET /api/speech/catalog.",
+  "dependsOn": [
+    "POST /api/auth/signup-tenant",
+    "GET /api/speech/catalog"
+  ],
+  "pathParams": {
+    "entry_id": {
+      "type": "string",
+      "format": "uuid",
+      "required": true
+    }
+  },
+  "fieldEnums": {
+    "layer": [
+      "stt",
+      "tts",
+      "llm",
+      "realtime"
+    ],
+    "unit": [
+      "per_minute",
+      "per_1k_chars",
+      "per_1m_tokens"
+    ],
+    "certification_status": [
+      "certified",
+      "uncertified",
+      "revoked"
+    ]
+  },
+  "testCases": [
+    {
+      "name": "Read an entry",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "pathParams": {
+        "entry_id": "{{cache:speech.catalog.list.response.data.entries.0.entry_id}}"
+      },
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "data": {
+          "entry": {
+            "entry_id": "string",
+            "catalog_key": "string",
+            "layer": "string",
+            "provider": "string",
+            "model": "string",
+            "display_name": "string",
+            "voices": "array",
+            "languages": "array",
+            "list_price": "number",
+            "unit": "string",
+            "currency": "string",
+            "certification_status": "string",
+            "certified": "boolean",
+            "cert_metrics": "object",
+            "updated_at": "string"
+          }
+        }
+      }
+    },
+    {
+      "name": "Unknown entry",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "pathParams": {
+        "entry_id": "{{dynamic:uuid}}"
+      },
+      "expectedStatus": 404
+    }
+  ],
+  "errorCases": [
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "entry_id must be a uuid",
+      "when": "entry_id is not a uuid"
+    },
+    {
+      "status": 404,
+      "code": "NotFound",
+      "message": "catalog entry not found",
+      "when": "no entry has this id"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "no Authorization header"
+    }
+  ]
+}

@@ -387,6 +387,8 @@ import {
   applyDispositionEffects,
   DialerError,
 } from '@projexlight/sdk-dialer';
+// VA·E4 — the voice provider catalog (/api/speech/*).
+import { migrationsDir as speechMigrations, server as speechServer } from '@projexlight/sdk-speech';
 // P16 · EP-374 — the provenance kernel. Every ingesting SDK lands its rows here.
 import {
   migrationsDir as sourceRecordMigrations,
@@ -722,6 +724,7 @@ app.register(incidentServer.registerRoutes);
 // VA·E2 — voice agent control plane (/api/voice-agent/*).
 app.register(voiceAgentServer.registerRoutes);
 app.register(dialerServer.registerRoutes);
+app.register(speechServer.registerRoutes);
 // VA·E5 (TK-4480) — every placed outbound AI call (API or campaign contact) is dispatched
 // through the dialer's gate chain and queue. Wired here so sdk-voice-agent stays free of a
 // dependency on sdk-dialer.
@@ -1538,6 +1541,8 @@ const start = async (): Promise<void> => {
       { sdk: 'sdk-voice-agent',         dir: voiceAgentMigrations },
       // VA·E5 — dialer schema; agent/call ids are loose refs into voice_agent.
       { sdk: 'sdk-dialer',              dir: dialerMigrations },
+      // VA·E4 — global speech provider catalog (reference data, no tenant rows).
+      { sdk: 'sdk-speech',              dir: speechMigrations },
       // Self-contained (no cross-schema FKs) — ordering free.
       { sdk: 'sdk-source-record',       dir: sourceRecordMigrations },
       // Self-contained: entity refs are loose (kind, id) pairs, so ordering is free.
