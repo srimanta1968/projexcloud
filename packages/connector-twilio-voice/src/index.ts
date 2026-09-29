@@ -43,12 +43,17 @@ export {
   applyRecordingCallback,
   normalizeAnsweredBy,
   setVoiceCallEventHandler,
+  setStatusCallbackForwarder,
+  forwardStatusCallback,
+  linkMirrorToAiCall,
 } from './services/webhookService';
 export type {
   StatusCallbackResult,
   RecordingCallbackResult,
   VoiceCallEventHandler,
   VoiceCallEventKind,
+  StatusCallbackForwarder,
+  StatusForwardResult,
 } from './services/webhookService';
 
 // Recording-consent gate (TK-3654) — fails closed when no decision is available.

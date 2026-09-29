@@ -379,6 +379,8 @@ import {
   setCallDispatcher,
   originateCall,
   setOutboundNumberSource,
+  linkCarrierCall,
+  applyCarrierStatus,
   completeCall,
   onCallEnded,
   VoiceAgentError,
@@ -451,6 +453,8 @@ import {
   setRecordingConsentChecker,
   setVoiceCallEventHandler,
   isVoicemailOutcome,
+  setStatusCallbackForwarder,
+  linkMirrorToAiCall,
 } from '@projexlight/connector-twilio-voice';
 import { migrationsDir as leadScoringMigrations }         from '@projexlight/sdk-lead-scoring';
 import { migrationsDir as configMigrations, server as configServer, importEnvDefaults } from '@projexlight/sdk-config';
@@ -1275,6 +1279,31 @@ app.get<{ Params: { phone_number: string } }>('/api/admin/voice-agent/routing/nu
   const route = await resolveInboundNumber(decodeURIComponent(req.params.phone_number));
   if (!route) return reply.code(404).send({ success: false, error: 'NotFound', details: ['number is not bound to an active agent'] });
   return reply.code(200).send({ success: true, data: { route } });
+});
+
+// VA·E6 (TK-4500) — the voice runtime reports the carrier call id of an AI call leg once
+// the SIP leg exists (operator-only, like number routing). Carrier status callbacks are then
+// applied to the AI call, and any Twilio mirror row for the CallSid is linked to it.
+app.post<{ Params: { call_id: string } }>('/api/admin/voice-agent/calls/:call_id/carrier-call', async (req, reply) => {
+  if (!(await checkAdminToken(req, reply))) return;
+  try {
+    const link = await linkCarrierCall(req.params.call_id, (req.body as { carrier_call_sid?: unknown } | undefined)?.carrier_call_sid);
+    const mirrored = await linkMirrorToAiCall(link.carrier_call_sid, link.call_id);
+    return reply.code(200).send({ success: true, data: { ...link, mirror_rows_linked: mirrored } });
+  } catch (err) {
+    if (err instanceof VoiceAgentError) return reply.code(err.status).send({ success: false, error: err.code, details: [err.message] });
+    throw err;
+  }
+});
+setStatusCallbackForwarder(async (params) => {
+  const r = await applyCarrierStatus({
+    carrier_call_sid: params.CallSid || params.callSid,
+    status: params.CallStatus,
+    answered_by: params.AnsweredBy,
+    duration_s: params.CallDuration,
+  });
+  if (r.matched && r.call_id && (params.CallSid || params.callSid)) await linkMirrorToAiCall(params.CallSid || params.callSid, r.call_id);
+  return { matched: r.matched, ai_call_id: r.call_id, status: r.status };
 });
 
 // P12 · E1 — per-asset command delivery stream. An edge agent for a robot

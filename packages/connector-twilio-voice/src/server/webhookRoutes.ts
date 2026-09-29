@@ -2,6 +2,7 @@ import { FastifyInstance } from 'fastify';
 import {
   applyRecordingCallback,
   applyStatusCallback,
+  forwardStatusCallback,
   verifyTwilioSignature,
 } from '../services/webhookService';
 import { callbackBaseUrl } from '../services/numberService';
@@ -19,6 +20,13 @@ import { callbackBaseUrl } from '../services/numberService';
  * rather than 404: retrying would never make the call known.
  */
 export async function registerWebhookRoutes(app: FastifyInstance): Promise<void> {
+  // Twilio posts application/x-www-form-urlencoded. The gateway only parses JSON, so without
+  // this every callback was refused with 415 before reaching the handler. Registered inside
+  // this plugin, so it applies to the webhook routes only.
+  app.addContentTypeParser('application/x-www-form-urlencoded', { parseAs: 'string' }, (_req, body, done) => {
+    done(null, Object.fromEntries(new URLSearchParams(String(body))));
+  });
+
   // Call-progress callback: queued -> initiated -> ringing -> in-progress ->
   // completed, plus AnsweredBy (AMD) which classifies voicemail.
   app.post('/api/voice/webhooks/twilio/status', async (req, reply) => {
@@ -33,17 +41,21 @@ export async function registerWebhookRoutes(app: FastifyInstance): Promise<void>
     }
 
     const result = await applyStatusCallback(params);
-    if (!result.matched) {
+    // TK-4500: an AI call (voice_agent.call) with this CallSid gets the status too, whether or
+    // not a mirror row exists.
+    const ai = await forwardStatusCallback(params);
+    if (!result.matched && !ai.matched) {
       // Acknowledge so Twilio stops retrying a call we cannot resolve.
       return reply.code(202).send({ data: { matched: false, reason: result.ignored_reason } });
     }
     return reply.code(200).send({
       data: {
         matched: true,
-        voice_call_id: result.call!.voice_call_id,
-        status: result.call!.status,
-        is_voicemail: result.call!.is_voicemail,
+        voice_call_id: result.call?.voice_call_id ?? null,
+        status: result.call?.status ?? ai.status ?? null,
+        is_voicemail: result.call?.is_voicemail ?? false,
         voicemail_detected: !!result.voicemail_detected,
+        ai_call_id: ai.ai_call_id ?? null,
       },
     });
   });

@@ -284,3 +284,49 @@ export function normalizeAnsweredBy(value: string | null | undefined): string | 
   if (v === 'machine') return 'machine_start';
   return 'unknown';
 }
+
+/* ------------------------------------------------------ AI-call forwarding (TK-4500) */
+
+/**
+ * What a status forwarder did with a callback: whether the CallSid is an AI call it
+ * knows, and that call's id.
+ */
+export interface StatusForwardResult {
+  matched: boolean;
+  ai_call_id?: string;
+  status?: string;
+}
+
+/**
+ * Receives EVERY verified status callback (matched mirror row or not), so calls placed
+ * by the voice agent over a SIP trunk — which usually have no mirror row — still get their
+ * status. Installed by the api-gateway (the connector does not depend on sdk-voice-agent).
+ */
+export type StatusCallbackForwarder = (params: Record<string, string>) => Promise<StatusForwardResult>;
+
+let statusForwarder: StatusCallbackForwarder | null = null;
+
+export function setStatusCallbackForwarder(fn: StatusCallbackForwarder | null): void {
+  statusForwarder = fn;
+}
+
+/** Runs the installed forwarder; a forwarder failure never fails the webhook. */
+export async function forwardStatusCallback(params: Record<string, string>): Promise<StatusForwardResult> {
+  if (!statusForwarder) return { matched: false };
+  try {
+    return await statusForwarder(params);
+  } catch (err) {
+    console.error('[twilio-voice] status forwarder failed', (err as Error).message);
+    return { matched: false };
+  }
+}
+
+/** Points the mirror row for a CallSid (if any) at the AI call that owns the leg. */
+export async function linkMirrorToAiCall(callSid: string, aiCallId: string): Promise<number> {
+  const r = await dataService.query(
+    `UPDATE connector_twilio_voice.voice_call SET ai_call_id = $2, last_sync_at = now()
+      WHERE external_id = $1 AND (ai_call_id IS NULL OR ai_call_id = $2)`,
+    [callSid, aiCallId],
+  );
+  return r.rowCount ?? 0;
+}

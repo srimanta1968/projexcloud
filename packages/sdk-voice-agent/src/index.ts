@@ -112,4 +112,6 @@ export {
   setOutboundNumberSource,
 } from './services/telephonyService';
 export type { SipTrunk, ProvisionResult, OriginationResult, OutboundNumberSource } from './services/telephonyService';
+export { linkCarrierCall, applyCarrierStatus } from './services/carrierStatusService';
+export type { CarrierStatusInput, CarrierStatusResult } from './services/carrierStatusService';
 export * as server from './server';
