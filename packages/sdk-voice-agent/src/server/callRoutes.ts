@@ -3,6 +3,7 @@ import { requireAuth } from '@projexlight/sdk-identity';
 import { getCall, listCalls, placeCall, type PlaceCallInput } from '../services/callService';
 import { completeCall, type CompleteCallInput } from '../services/postCallService';
 import { startTestSession, type StartTestSessionInput } from '../services/testSessionService';
+import { appendLiveTurns, issueLiveTicket } from '../services/liveService';
 import { resolveTenant } from './tenantScope';
 import { sendError } from './sendError';
 
@@ -80,4 +81,34 @@ export function registerCallRoutes(app: FastifyInstance): void {
       return sendError(reply, err);
     }
   });
+
+  // TK-4477 — the runtime streams turns while the call runs; each is pushed to live viewers.
+  app.post<{ Params: { call_id: string } }>(
+    '/api/voice-agent/calls/:call_id/turns', { preHandler: requireAuth }, async (req, reply) => {
+      const body = (req.body ?? {}) as { turns?: unknown; tenant_id?: string };
+      const tenantId = resolveTenant(req, reply, body.tenant_id);
+      if (!tenantId) return reply;
+      try {
+        return reply.code(200).send({ data: await appendLiveTurns(tenantId, req.params.call_id, body) });
+      } catch (err) {
+        return sendError(reply, err);
+      }
+    },
+  );
+
+  // TK-4477 — a single-use, 60 s ticket that opens WS /api/voice-agent/calls/:call_id/live.
+  // Browsers cannot put a bearer token on a WebSocket, and a JWT in the URL would land in
+  // proxy logs; the ticket is authorized here, at mint time, under the JWT.
+  app.post<{ Params: { call_id: string } }>(
+    '/api/voice-agent/calls/:call_id/live-ticket', { preHandler: requireAuth }, async (req, reply) => {
+      const body = (req.body ?? {}) as { tenant_id?: string };
+      const tenantId = resolveTenant(req, reply, body.tenant_id);
+      if (!tenantId) return reply;
+      try {
+        return reply.code(201).send({ data: { ticket: await issueLiveTicket({ ...req.auth, tenant_id: tenantId }, req.params.call_id) } });
+      } catch (err) {
+        return sendError(reply, err);
+      }
+    },
+  );
 }

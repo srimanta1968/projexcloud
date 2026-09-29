@@ -75,6 +75,10 @@ export { CALL_STATUSES, CALL_DIRECTIONS, placeCall, getCall, listCalls, setCallD
 
 export { VOICE_DISPOSITIONS, completeCall, setCallSummarizer } from './services/postCallService';
 export { startTestSession } from './services/testSessionService';
+export { authorizeLiveView, issueLiveTicket, redeemLiveTicket, appendLiveTurns } from './services/liveService';
+export type { LiveViewer, LiveTicket } from './services/liveService';
+export { getLiveCallBroker } from './services/liveBroker';
+export type { LiveEvent, LiveEventKind, LiveSubscriber } from './services/liveBroker';
 export type { StartTestSessionInput, TestSession } from './services/testSessionService';
 export { liveKitConfig, signParticipantToken } from './services/livekitToken';
 export type { LiveKitConfig, ParticipantTokenInput } from './services/livekitToken';

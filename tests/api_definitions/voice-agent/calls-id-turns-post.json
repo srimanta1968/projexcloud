@@ -1,0 +1,138 @@
+{
+  "name": "POST /api/voice-agent/calls/:call_id/turns - Stream turns of a live call",
+  "endpoint": "/api/voice-agent/calls/:call_id/turns",
+  "sdk": "sdk-voice-agent",
+  "sourceFile": "packages/sdk-voice-agent/src/server/callRoutes.ts",
+  "method": "POST",
+  "requiresAuth": true,
+  "expectedStatus": 200,
+  "taskId": "0dd16c86-192f-42ce-aee3-b0c2fe9eb119",
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "featureId": "381767f5-a64c-4c63-9918-9feab02424ec",
+  "epicId": "9c7a8dc4-3db7-4cd2-9121-7649f143525c",
+  "priority": 100,
+  "testability": "auto",
+  "coversCriterion": [
+    "381767f5-a64c-4c63-9918-9feab02424ec#AC3"
+  ],
+  "description": "The voice runtime appends turns WHILE a call runs: turns [{turn_index, speaker caller|agent|system, text, started_ms, stt_ms, ttft_ms, ttfa_ms, interrupted, tool_calls}]. Each turn is stored (upsert on turn_index, so a resend is harmless) and pushed to every viewer of WS /api/voice-agent/calls/:call_id/live (381767f5-a64c-4c63-9918-9feab02424ec#AC3 — an authorized user receives live turns for a call over WebSocket). The first report moves a queued/dialing/ringing call to in_progress (a status event). A call that already ended is 409.",
+  "dependsOn": [
+    "POST /api/auth/signup-tenant",
+    "POST /api/ai-gateway/tenant-credentials",
+    "POST /api/voice-agent/stack-profiles",
+    "POST /api/voice-agent/agents",
+    "POST /api/voice-agent/agents/:agent_id/versions",
+    "POST /api/voice-agent/test-sessions"
+  ],
+  "fieldEnums": {
+    "speaker": [
+      "caller",
+      "agent",
+      "system"
+    ]
+  },
+  "testCases": [
+    {
+      "name": "Stream the first two turns of a call",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "pathParams": {
+        "call_id": "{{cache:voice-agent.test-sessions.create.response.data.session.call_id}}"
+      },
+      "payload": {
+        "turns": [
+          {
+            "turn_index": 0,
+            "speaker": "agent",
+            "text": "Hello, you are talking to the draft agent.",
+            "started_ms": 0,
+            "ttfa_ms": 640
+          },
+          {
+            "turn_index": 1,
+            "speaker": "caller",
+            "text": "Testing the new greeting.",
+            "started_ms": 2600,
+            "stt_ms": 190
+          }
+        ]
+      },
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "data": {
+          "call_id": "string",
+          "status": "string",
+          "turns_stored": "number"
+        }
+      }
+    },
+    {
+      "name": "Reject an unknown speaker",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "pathParams": {
+        "call_id": "{{cache:voice-agent.test-sessions.create.response.data.session.call_id}}"
+      },
+      "payload": {
+        "turns": [
+          {
+            "turn_index": 2,
+            "speaker": "{{static:robot}}",
+            "text": "x"
+          }
+        ]
+      },
+      "expectedStatus": 400
+    },
+    {
+      "name": "Unknown call is 404",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "pathParams": {
+        "call_id": "{{dynamic:uuid}}"
+      },
+      "payload": {
+        "turns": [
+          {
+            "turn_index": 0,
+            "speaker": "agent",
+            "text": "x"
+          }
+        ]
+      },
+      "expectedStatus": 404
+    }
+  ],
+  "captureResponse": {
+    "voice-agent.calls.turns.response.data.status": "data.status"
+  },
+  "errorCases": [
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "turns must be an array | turns[i].speaker must be caller, agent or system | turns[i].turn_index N is duplicated | turns[i].text must be a string of at most 8000 characters",
+      "when": "invalid turns"
+    },
+    {
+      "status": 404,
+      "code": "NotFound",
+      "message": "call not found",
+      "when": "no such call for the tenant"
+    },
+    {
+      "status": 409,
+      "code": "Conflict",
+      "message": "call already ended as <status>",
+      "when": "the call is completed, failed or refused"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "no Authorization header"
+    }
+  ]
+}

@@ -106,6 +106,10 @@ const SCIM_PREFIX = '/scim/';
  *  Scoped to the /ack leaf only; other /api/commands/* routes stay tenant-JWT gated. */
 const COMMAND_ACK = /^\/api\/commands\/[^/]+\/ack$/;
 
+/** Live call transcript WebSocket — self-guarded in its preValidation (ticket or JWT, then
+ *  authorizeLiveView). A browser cannot send a bearer header on a WebSocket upgrade. */
+const VOICE_LIVE_WS = /^\/api\/voice-agent\/calls\/[^/]+\/live$/;
+
 /**
  * Provider lead-form deliveries: /api/connectors/lead-forms/:tenant_id/:platform.
  *
@@ -140,6 +144,7 @@ export function isSelfGuarded(pathname: string): boolean {
   for (const p of WS_PREFIX) if (pathname.startsWith(p)) return true;
   if (pathname.startsWith(SCIM_PREFIX)) return true; // scimBearerAuth governs
   if (COMMAND_ACK.test(pathname)) return true; // robot-key credential governs
+  if (VOICE_LIVE_WS.test(pathname)) return true; // live ticket / JWT + authorizeLiveView governs
   return false;
 }
 

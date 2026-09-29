@@ -99,7 +99,7 @@ import {
   migrationsDir as resourceRegistryMigrations,
   server as resourceRegistryServer,
 } from '@projexlight/sdk-resource-registry';
-import { requireAuth, provisionFederationConfig, setAddressChecker } from '@projexlight/sdk-identity';
+import { requireAuth, provisionFederationConfig, setAddressChecker, verifyJwt } from '@projexlight/sdk-identity';
 import { adminOpsMigrationsDir } from './admin/migrations';
 import {
   verifyAdminOpsToken,
@@ -362,7 +362,16 @@ import { migrationsDir as offerCatalogMigrations, server as offerCatalogServer }
 import { migrationsDir as handoffMigrations, server as handoffServer, registerHandoffSaga, setHandoffApprovalCreator } from '@projexlight/sdk-handoff';
 import { migrationsDir as incidentMigrations, server as incidentServer } from '@projexlight/sdk-incident';
 // VA·E2 — voice agent control plane (stack profiles, agents, numbers, app tools, calls).
-import { migrationsDir as voiceAgentMigrations, server as voiceAgentServer, resolveInboundNumber } from '@projexlight/sdk-voice-agent';
+import {
+  migrationsDir as voiceAgentMigrations,
+  server as voiceAgentServer,
+  resolveInboundNumber,
+  authorizeLiveView,
+  redeemLiveTicket,
+  getCall as getVoiceCall,
+  getLiveCallBroker,
+  VoiceAgentError,
+} from '@projexlight/sdk-voice-agent';
 // P16 · EP-374 — the provenance kernel. Every ingesting SDK lands its rows here.
 import {
   migrationsDir as sourceRecordMigrations,
@@ -1177,6 +1186,65 @@ app.register(async (instance) => {
     socket.send(
       JSON.stringify({ kind: 'hello', persona_id: personaId, emitted_at: new Date().toISOString() }),
     );
+  });
+});
+
+// VA·E2 (TK-4477) — live transcript of one call. Self-guarded (authGate lets the upgrade
+// through): the upgrade is REFUSED with 401/403/404 in preValidation, before any socket
+// exists, unless the caller presents a single-use ticket from POST .../live-ticket or a
+// Bearer JWT that authorizeLiveView accepts (call owner, supervisor via ReBAC, or an
+// API-key token with voice-agent.call.read).
+app.register(async (instance) => {
+  instance.get<{
+    Params: { call_id: string };
+    Querystring: { ticket?: string };
+  }>('/api/voice-agent/calls/:call_id/live', {
+    websocket: true,
+    preValidation: async (req, reply) => {
+      const callId = req.params.call_id;
+      try {
+        if (req.query.ticket) {
+          const redeemed = await redeemLiveTicket(req.query.ticket, callId);
+          if (!redeemed) return reply.code(401).send({ error: 'Unauthorized', details: ['ticket is invalid, expired or already used'] });
+          (req as unknown as { voiceTenantId: string }).voiceTenantId = redeemed.tenant_id;
+          return;
+        }
+        const bearer = /^Bearer\s+(.+)$/i.exec((req.headers.authorization ?? '').trim());
+        if (!bearer) return reply.code(401).send({ error: 'Unauthorized', details: ['a live ticket or bearer token is required'] });
+        let claims;
+        try {
+          claims = verifyJwt(bearer[1]);
+        } catch {
+          return reply.code(401).send({ error: 'Unauthorized', details: ['Invalid or expired token'] });
+        }
+        await authorizeLiveView(claims, callId);
+        (req as unknown as { voiceTenantId: string }).voiceTenantId = claims.tenant_id as string;
+      } catch (err) {
+        if (err instanceof VoiceAgentError) return reply.code(err.status).send({ error: err.code, details: [err.message] });
+        throw err;
+      }
+    },
+  }, async (socket, req) => {
+    const callId = req.params.call_id;
+    const tenantId = (req as unknown as { voiceTenantId: string }).voiceTenantId;
+    // Subscribe BEFORE reading the snapshot so no turn falls in the gap between them;
+    // a turn seen in both is harmless (clients key turns by turn_index).
+    const unsubscribe = getLiveCallBroker().subscribe(callId, (event) => {
+      try {
+        socket.send(JSON.stringify(event));
+      } catch {
+        // Socket closed mid-send; cleanup happens via close handler.
+      }
+    });
+    socket.on('close', () => unsubscribe());
+    const call = await getVoiceCall(tenantId, callId);
+    socket.send(JSON.stringify({
+      kind: 'snapshot',
+      call_id: callId,
+      status: call?.status ?? null,
+      transcript: call?.transcript ?? [],
+      emitted_at: new Date().toISOString(),
+    }));
   });
 });
 

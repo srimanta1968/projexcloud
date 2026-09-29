@@ -1,0 +1,81 @@
+{
+  "name": "GET (WebSocket) /api/voice-agent/calls/:call_id/live - Live transcript of a call",
+  "endpoint": "/api/voice-agent/calls/:call_id/live",
+  "sdk": "sdk-voice-agent",
+  "sourceFile": "services/api-gateway/src/app.ts",
+  "method": "GET",
+  "requiresAuth": true,
+  "expectedStatus": 101,
+  "taskId": "0dd16c86-192f-42ce-aee3-b0c2fe9eb119",
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "featureId": "381767f5-a64c-4c63-9918-9feab02424ec",
+  "epicId": "9c7a8dc4-3db7-4cd2-9121-7649f143525c",
+  "priority": 102,
+  "testability": "auto",
+  "coversCriterion": [
+    "381767f5-a64c-4c63-9918-9feab02424ec#AC3"
+  ],
+  "description": "WebSocket upgrade streaming one call's transcript as it happens (381767f5-a64c-4c63-9918-9feab02424ec#AC3 — an authorized user receives live turns for a call over WebSocket and an unauthorized user is refused). Credential: ?ticket=<single-use ticket from POST .../live-ticket> (browsers) or an Authorization: Bearer JWT (server-side clients). Authorized viewers: the call's owner (its requester or the agent's acting persona), a persona with a ReBAC edge of kind VOICE_LIVE_REBAC_KIND (default \"supervises\") to an owner, or an API key holding voice-agent.call.read; another tenant's call reads as 404 and anyone else in the tenant is refused 403. Refusals happen BEFORE the upgrade, as plain HTTP 401 (no/invalid/used ticket or token), 403 or 404, so no socket is ever opened for an unauthorized caller. Once open, the server sends {kind:\"snapshot\", status, transcript[]} and then {kind:\"status\"|\"turn\"|\"ended\", call_id, turn?, status?, disposition?, emitted_at} as the runtime reports them. The runner cannot hold a WebSocket open, so testCases[0] exercises the refusal (a plain GET to a call the caller cannot see); the authorized stream is proven end-to-end with a WebSocket client.",
+  "dependsOn": [
+    "POST /api/auth/signup-tenant",
+    "POST /api/ai-gateway/tenant-credentials",
+    "POST /api/voice-agent/stack-profiles",
+    "POST /api/voice-agent/agents",
+    "POST /api/voice-agent/agents/:agent_id/versions",
+    "POST /api/voice-agent/test-sessions",
+    "POST /api/voice-agent/calls/:call_id/live-ticket"
+  ],
+  "fieldEnums": {
+    "kind": [
+      "snapshot",
+      "status",
+      "turn",
+      "ended"
+    ]
+  },
+  "testCases": [
+    {
+      "name": "A call the caller cannot see is refused before any upgrade",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "pathParams": {
+        "call_id": "{{dynamic:uuid}}"
+      },
+      "expectedStatus": 404,
+      "expectedResponse": {
+        "error": "NotFound"
+      }
+    },
+    {
+      "name": "The call owner opens the live stream (WebSocket client; bearer or ?ticket=)",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "pathParams": {
+        "call_id": "{{cache:voice-agent.test-sessions.create.response.data.session.call_id}}"
+      },
+      "expectedStatus": 101
+    }
+  ],
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "a live ticket or bearer token is required | ticket is invalid, expired or already used | Invalid or expired token",
+      "when": "no usable credential"
+    },
+    {
+      "status": 403,
+      "code": "Forbidden",
+      "message": "not authorized to watch this call",
+      "when": "same tenant, not an owner or supervisor"
+    },
+    {
+      "status": 404,
+      "code": "NotFound",
+      "message": "call not found",
+      "when": "unknown call or another tenant's call"
+    }
+  ]
+}

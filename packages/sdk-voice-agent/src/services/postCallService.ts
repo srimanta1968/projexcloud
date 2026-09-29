@@ -6,6 +6,7 @@ import { listThreads, openThread, recordMessage } from '@projexlight/sdk-convers
 import { logCall, logVoicemail } from '@projexlight/sdk-crm';
 import type { types as crmTypes } from '@projexlight/sdk-crm';
 import { conflict, notFound, validationError } from '../models/errors';
+import { getLiveCallBroker } from './liveBroker';
 import { assertLinksOwned, getCall, type CallDetail, type CallTurn } from './callService';
 
 type CrmDisposition = crmTypes.CallDisposition;
@@ -91,7 +92,7 @@ export function setCallSummarizer(next: CallSummarizer | null): void {
 // ---------------------------------------------------------------------------------------------
 // Validation
 
-interface ValidTurn {
+export interface ValidTurn {
   turn_index: number;
   speaker: CallTurn['speaker'];
   text: string;
@@ -115,7 +116,8 @@ const optTime = (v: unknown, field: string): string | null => {
   return new Date(v).toISOString();
 };
 
-function validateTurns(raw: unknown): ValidTurn[] {
+/** Validates runtime-reported turns (shared with the live append in liveService). */
+export function validateTurns(raw: unknown): ValidTurn[] {
   if (raw === undefined || raw === null) return [];
   if (!Array.isArray(raw)) throw validationError('turns must be an array');
   if (raw.length > MAX_TURNS) throw validationError(`turns must hold at most ${MAX_TURNS} entries`);
@@ -431,6 +433,7 @@ export async function completeCall(tenantId: string, callId: string, input: Comp
   call = (await getCall(tenantId, callId)) as CallDetail;
 
   if (transitioned) {
+    getLiveCallBroker().publish({ kind: 'ended', call_id: callId, status: call.status, disposition: call.disposition, emitted_at: new Date().toISOString() });
     await emitEvent({
       event_type: 'voice.call.completed.v1',
       pool_index: VOICE_AUDIT_POOL,

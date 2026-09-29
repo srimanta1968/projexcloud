@@ -1,0 +1,85 @@
+{
+  "name": "POST /api/voice-agent/calls/:call_id/live-ticket - Ticket for the live transcript WebSocket",
+  "endpoint": "/api/voice-agent/calls/:call_id/live-ticket",
+  "sdk": "sdk-voice-agent",
+  "sourceFile": "packages/sdk-voice-agent/src/server/callRoutes.ts",
+  "method": "POST",
+  "requiresAuth": true,
+  "expectedStatus": 201,
+  "taskId": "0dd16c86-192f-42ce-aee3-b0c2fe9eb119",
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "featureId": "381767f5-a64c-4c63-9918-9feab02424ec",
+  "epicId": "9c7a8dc4-3db7-4cd2-9121-7649f143525c",
+  "priority": 101,
+  "testability": "auto",
+  "coversCriterion": [
+    "381767f5-a64c-4c63-9918-9feab02424ec#AC3"
+  ],
+  "description": "Mints a single-use ticket (valid 60 s, bound to this call and the caller) that opens WS /api/voice-agent/calls/:call_id/live?ticket=... — browsers cannot send a bearer header on a WebSocket and a JWT in the URL would be written to proxy logs, so authorization happens here, under the JWT (381767f5-a64c-4c63-9918-9feab02424ec#AC3 — an authorized user receives live turns for a call over WebSocket and an unauthorized user is refused). Authorized viewers: the call's owner (its requester or the agent's acting persona), a persona with a ReBAC edge of kind VOICE_LIVE_REBAC_KIND (default \"supervises\") to an owner, or an API key holding voice-agent.call.read; another tenant's call reads as 404 and anyone else in the tenant is refused 403. Only a sha256 of the ticket is stored.",
+  "dependsOn": [
+    "POST /api/auth/signup-tenant",
+    "POST /api/ai-gateway/tenant-credentials",
+    "POST /api/voice-agent/stack-profiles",
+    "POST /api/voice-agent/agents",
+    "POST /api/voice-agent/agents/:agent_id/versions",
+    "POST /api/voice-agent/test-sessions",
+    "POST /api/voice-agent/calls/:call_id/turns"
+  ],
+  "testCases": [
+    {
+      "name": "The call owner mints a live ticket",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "pathParams": {
+        "call_id": "{{cache:voice-agent.test-sessions.create.response.data.session.call_id}}"
+      },
+      "payload": {},
+      "expectedStatus": 201,
+      "expectedResponse": {
+        "data": {
+          "ticket": {
+            "ticket": "string",
+            "call_id": "string",
+            "expires_at": "string",
+            "ws_path": "string"
+          }
+        }
+      }
+    },
+    {
+      "name": "Unknown call is 404",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "pathParams": {
+        "call_id": "{{dynamic:uuid}}"
+      },
+      "payload": {},
+      "expectedStatus": 404
+    }
+  ],
+  "captureResponse": {
+    "voice-agent.calls.live-ticket.response.data.ticket.ticket": "data.ticket.ticket"
+  },
+  "errorCases": [
+    {
+      "status": 403,
+      "code": "Forbidden",
+      "message": "not authorized to watch this call | API key lacks voice-agent.call.read",
+      "when": "same tenant but neither owner, supervisor nor a key with the read scope"
+    },
+    {
+      "status": 404,
+      "code": "NotFound",
+      "message": "call not found",
+      "when": "unknown call or another tenant's call"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "no Authorization header"
+    }
+  ]
+}
