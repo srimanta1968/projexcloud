@@ -62,6 +62,10 @@ export interface Call {
   requested_by: string | null;
   crm_encounter_id: string | null;
   conversation_thread_id: string | null;
+  /** Person whose consent the dialer checks (sdk-consent person_id). */
+  person_id: string | null;
+  /** Consent jurisdiction, e.g. US, US-CA, GB; null = derived from the number. */
+  jurisdiction: string | null;
   /** What post-call processing did (TK-4475): summary_source, mirror results, errors. */
   post_call: Record<string, unknown>;
   next_attempt_at: string | null;
@@ -87,6 +91,10 @@ export interface PlaceCallInput {
   crm_encounter_id?: unknown;
   /** sdk-conversation thread to mirror the turns onto; resolved from subject_ref when omitted. */
   conversation_thread_id?: unknown;
+  /** sdk-consent person_id whose ai_voice_outbound consent is checked before dialling. */
+  person_id?: unknown;
+  /** Consent jurisdiction (ISO country, optionally -region), e.g. US, US-CA, GB. */
+  jurisdiction?: unknown;
 }
 
 export interface PlaceCallOptions {
@@ -112,6 +120,7 @@ export function setCallDispatcher(next: CallDispatcher | null): void {
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const E164_RE = /^\+[1-9][0-9]{6,14}$/;
+const JURISDICTION_RE = /^[A-Z]{2}(-[A-Z0-9]{1,3})?$/;
 const IDEMPOTENCY_KEY_RE = /^[\x21-\x7e]{1,255}$/;
 const MAX_SUBJECT_REF_LENGTH = 256;
 const MAX_CONTEXT_BYTES = 32 * 1024;
@@ -122,7 +131,7 @@ const CALL_COLUMNS = `
   call_id, tenant_id, agent_id, agent_version_id, direction, subject_ref, from_number, to_number,
   carrier_call_ref, status, answered_by, disposition, summary, context, gate_verdicts,
   recording_consent, recording_ref, cost_breakdown, is_test, idempotency_key, requested_by,
-  crm_encounter_id, conversation_thread_id, post_call, next_attempt_at, started_at, answered_at, ended_at, duration_s, created_at, updated_at`;
+  crm_encounter_id, conversation_thread_id, person_id, jurisdiction, post_call, next_attempt_at, started_at, answered_at, ended_at, duration_s, created_at, updated_at`;
 
 type CallRow = Omit<Call, 'next_attempt_at' | 'started_at' | 'answered_at' | 'ended_at' | 'created_at' | 'updated_at'> & {
   request_hash?: string | null;
@@ -167,6 +176,8 @@ interface ValidCall {
   context: Record<string, unknown>;
   crmEncounterId: string | null;
   threadId: string | null;
+  personId: string | null;
+  jurisdiction: string | null;
 }
 
 function validatePlaceCall(input: PlaceCallInput): ValidCall {
@@ -184,7 +195,11 @@ function validatePlaceCall(input: PlaceCallInput): ValidCall {
   if (Buffer.byteLength(JSON.stringify(context), 'utf8') > MAX_CONTEXT_BYTES) {
     throw validationError(`context must be at most ${MAX_CONTEXT_BYTES} bytes`);
   }
-  for (const f of ['crm_encounter_id', 'conversation_thread_id'] as const) {
+  if (input.jurisdiction !== undefined && input.jurisdiction !== null
+    && (typeof input.jurisdiction !== 'string' || !JURISDICTION_RE.test(input.jurisdiction))) {
+    throw validationError('jurisdiction must be an ISO country code, optionally with a region, e.g. US, US-CA, GB');
+  }
+  for (const f of ['crm_encounter_id', 'conversation_thread_id', 'person_id'] as const) {
     const val = input[f];
     if (val !== undefined && val !== null && (typeof val !== 'string' || !UUID_RE.test(val))) throw validationError(`${f} must be a uuid`);
   }
@@ -196,6 +211,8 @@ function validatePlaceCall(input: PlaceCallInput): ValidCall {
     context: context as Record<string, unknown>,
     crmEncounterId: (input.crm_encounter_id as string | undefined) ?? null,
     threadId: (input.conversation_thread_id as string | undefined) ?? null,
+    personId: (input.person_id as string | undefined) ?? null,
+    jurisdiction: (input.jurisdiction as string | undefined) ?? null,
   };
 }
 
@@ -254,6 +271,8 @@ export async function placeCall(tenantId: string, input: PlaceCallInput, opts: P
       agent_id: v.agentId, to: v.to, from: v.from, subject_ref: v.subjectRef, context: v.context,
       ...(v.crmEncounterId ? { crm_encounter_id: v.crmEncounterId } : {}),
       ...(v.threadId ? { conversation_thread_id: v.threadId } : {}),
+      ...(v.personId ? { person_id: v.personId } : {}),
+      ...(v.jurisdiction ? { jurisdiction: v.jurisdiction } : {}),
     }))
     .digest('hex');
 
@@ -280,12 +299,14 @@ export async function placeCall(tenantId: string, input: PlaceCallInput, opts: P
   const row = await dataService.one<CallRow>(
     `INSERT INTO voice_agent.call
        (tenant_id, agent_id, agent_version_id, direction, subject_ref, from_number, to_number,
-        context, idempotency_key, request_hash, requested_by, crm_encounter_id, conversation_thread_id)
-     VALUES ($1, $2, $3, 'outbound', $4, $5, $6, $7::jsonb, $8, $9, $10, $11, $12)
+        context, idempotency_key, request_hash, requested_by, crm_encounter_id, conversation_thread_id,
+        person_id, jurisdiction)
+     VALUES ($1, $2, $3, 'outbound', $4, $5, $6, $7::jsonb, $8, $9, $10, $11, $12, $13, $14)
      ON CONFLICT (tenant_id, idempotency_key) DO NOTHING
      RETURNING ${CALL_COLUMNS}`,
     [tenantId, v.agentId, agent.published_version_id, v.subjectRef, v.from, v.to,
-      JSON.stringify(v.context), key ?? null, requestHash, opts.requestedBy ?? null, v.crmEncounterId, v.threadId],
+      JSON.stringify(v.context), key ?? null, requestHash, opts.requestedBy ?? null, v.crmEncounterId, v.threadId,
+      v.personId, v.jurisdiction],
   );
   if (!row) {
     // Lost a race with a concurrent request carrying the same key: that one placed it.

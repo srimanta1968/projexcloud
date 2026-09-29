@@ -60,6 +60,8 @@ export async function dispatchCall(call: Call): Promise<ChainOutcome> {
     agent_id: call.agent_id,
     to_number: call.to_number ?? '',
     subject_ref: call.subject_ref,
+    person_id: call.person_id,
+    jurisdiction: call.jurisdiction,
     source: marker ? 'campaign' : 'api',
     campaign_id: marker?.campaign_id ?? null,
     contact_id: marker?.contact_id ?? null,
@@ -116,9 +118,10 @@ const DIALABLE_CONTACT = ['pending', 'deferred'];
 export async function dialContact(tenantId: string, campaignId: string, contactId: string, actorId: string | null): Promise<PlaceCallResult> {
   const row = await dataService.one<{
     agent_id: string; campaign_status: string; status: string; attempts: number; phone_number: string; subject_ref: string | null;
-    crm_encounter_id: string | null; context: Record<string, unknown>; campaign_context: Record<string, unknown>;
+    crm_encounter_id: string | null; person_id: string | null; jurisdiction: string | null;
+    context: Record<string, unknown>; campaign_context: Record<string, unknown>;
   }>(
-    `SELECT c.agent_id, c.status AS campaign_status, k.status, k.attempts, k.phone_number, k.subject_ref, k.crm_encounter_id,
+    `SELECT c.agent_id, c.status AS campaign_status, k.status, k.attempts, k.phone_number, k.subject_ref, k.crm_encounter_id, k.person_id, k.jurisdiction,
             k.context, c.context AS campaign_context
        FROM dialer.campaign_contact k JOIN dialer.campaign c ON c.campaign_id = k.campaign_id AND c.tenant_id = k.tenant_id
       WHERE k.tenant_id = $1 AND k.campaign_id = $2 AND k.contact_id = $3`,
@@ -134,6 +137,8 @@ export async function dialContact(tenantId: string, campaignId: string, contactI
       to: row.phone_number,
       subject_ref: row.subject_ref,
       crm_encounter_id: row.crm_encounter_id,
+      person_id: row.person_id,
+      jurisdiction: row.jurisdiction,
       context: { ...row.campaign_context, ...row.context, [DIALER_CONTEXT_KEY]: { campaign_id: campaignId, contact_id: contactId } },
     },
     { idempotencyKey: `dialer:${contactId}:${row.attempts + 1}`, requestedBy: actorId ?? undefined },

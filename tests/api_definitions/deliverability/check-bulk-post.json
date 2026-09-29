@@ -65,8 +65,15 @@
     "deliverability.check-bulk.response.data.results.0.suppressed": "data.results.0.suppressed"
   },
   "fieldEnums": {
-    "channel": ["email", "sms", "all"],
-    "error_code": ["VALIDATION_ERROR"]
+    "channel": [
+      "email",
+      "sms",
+      "voice",
+      "all"
+    ],
+    "error_code": [
+      "VALIDATION_ERROR"
+    ]
   },
   "description": "Pre-send suppression enforcement for up to 1000 recipients in ONE request and ONE query. Distinct from the addresses[] form of POST /api/deliverability/check, which is kept for compatibility but holds tenant and channel fixed across the list and issues a query per address: here every item carries its own channel, so a mixed email+sms audience is a single call. tenant_id may be omitted per item and falls back to the caller's credential. Addresses are never sent to the database in plaintext - each is normalized (email lowercased/trimmed, sms reduced to +digits) and sha256-hashed with the channel as salt, and the query joins on hashes. A row is suppressed when a tenant-scoped or global entry matches the address for that channel (or channel 'all') and has not expired. Results are order-preserving with an explicit index and echo back the address and channel asked about; a malformed item reports ok=false in its own slot rather than failing the batch. The same address may appear more than once and each occurrence keeps its slot. Read-only, side-effect-free and safely repeatable.",
   "errorCases": [

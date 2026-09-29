@@ -54,7 +54,7 @@ import {
  * opt-out token issue/redeem. All tenant-authed; addresses are hashed server-side
  * (never stored raw). tenant_id is carried in the body/query as in the sibling SDKs.
  */
-const CHANNELS: Channel[] = ['email', 'sms', 'all'];
+const CHANNELS: Channel[] = ['email', 'sms', 'voice', 'all'];
 
 /** Ceiling on one address-verification call. See the note on the route. */
 const MAX_VERIFY_BATCH = 100;
@@ -68,7 +68,7 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
       return reply.code(400).send({ error: 'ValidationError', details: ['tenant_id and channel are required'] });
     }
     if (!CHANNELS.includes(body.channel)) {
-      return reply.code(400).send({ error: 'ValidationError', details: ['channel must be email, sms or all'] });
+      return reply.code(400).send({ error: 'ValidationError', details: ['channel must be email, sms, voice or all'] });
     }
     if (Array.isArray(body.addresses) && body.addresses.length) {
       const results = await Promise.all(body.addresses.map(async (address) => ({
@@ -113,7 +113,7 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
       const errors: string[] = [];
       if (!tenantId) errors.push('tenant_id is required (absent from the item and from the credential)');
       if (!item.channel) errors.push('channel is required');
-      else if (!CHANNELS.includes(item.channel)) errors.push('channel must be email, sms or all');
+      else if (!CHANNELS.includes(item.channel)) errors.push('channel must be email, sms, voice or all');
       if (!item.address) errors.push('address is required');
       if (errors.length) {
         results.push(bulkItemError(index, 'VALIDATION_ERROR', errors.join('; ')));

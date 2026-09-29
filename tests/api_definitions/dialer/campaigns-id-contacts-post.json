@@ -16,7 +16,7 @@
     "95b9060e-9695-45f9-a970-323d68d6a444#AC1",
     "95b9060e-9695-45f9-a970-323d68d6a444#AC2"
   ],
-  "description": "Upserts 1-1000 contacts by external_ref (95b9060e-9695-45f9-a970-323d68d6a444#AC1 — upload contacts in batches). Each: external_ref (the consumer's id, 1-200), phone_number (E.164), optional subject_ref, crm_encounter_id (uuid), timezone (IANA; else the campaign default), context (JSON <= 32 KB). Re-sending a batch refreshes details without duplicating people or resetting a contact already worked. Invalid rows are rejected individually and reported by index with a reason; valid rows land. Returns {inserted, updated, rejected[], progress}. Every status change emits voice.campaign.progressed.v1 {campaign_id, agent_id, status, trigger, total, by_status} (95b9060e-9695-45f9-a970-323d68d6a444#AC2 — campaign progress is emitted as voice.campaign.progressed.v1); contact uploads emit it at most once per DIALER_PROGRESS_THROTTLE_MS (default 5 s) per campaign. A cancelled or completed campaign is 409.",
+  "description": "Upserts 1-1000 contacts by external_ref (95b9060e-9695-45f9-a970-323d68d6a444#AC1 — upload contacts in batches). Each: external_ref (the consumer's id, 1-200), phone_number (E.164), optional subject_ref, crm_encounter_id (uuid), person_id (sdk-consent person whose ai_voice_outbound consent the dialer checks), jurisdiction (US, US-CA, GB …; default = the number's country), timezone (IANA; else the campaign default), context (JSON <= 32 KB). Re-sending a batch refreshes details without duplicating people or resetting a contact already worked. Invalid rows are rejected individually and reported by index with a reason; valid rows land. Returns {inserted, updated, rejected[], progress}. Every status change emits voice.campaign.progressed.v1 {campaign_id, agent_id, status, trigger, total, by_status} (95b9060e-9695-45f9-a970-323d68d6a444#AC2 — campaign progress is emitted as voice.campaign.progressed.v1); contact uploads emit it at most once per DIALER_PROGRESS_THROTTLE_MS (default 5 s) per campaign. A cancelled or completed campaign is 409.",
   "dependsOn": [
     "POST /api/auth/signup-tenant",
     "POST /api/voice-agent/agents",
@@ -37,6 +37,8 @@
             "external_ref": "lead-{{dynamic:slug}}",
             "phone_number": "+14155550201",
             "subject_ref": "lead:201",
+            "person_id": "{{cache:auth.signup-tenant.response.data.userId}}",
+            "jurisdiction": "US",
             "timezone": "America/Los_Angeles",
             "context": {
               "first_name": "Ana"

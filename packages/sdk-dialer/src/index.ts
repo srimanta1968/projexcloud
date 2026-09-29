@@ -40,6 +40,14 @@ export type {
 export { registerGate, listGates, runGateChain } from './services/gateChain';
 export type { Gate, GateContext, GateResult, GateVerdict, ChainOutcome } from './services/gateChain';
 export { dispatchCall, dialContact } from './services/dispatchService';
+// Registers the dnc + consent gates on the shared chain as a side effect of loading.
+export {
+  VOICE_CONSENT_PURPOSE,
+  CALL_RECORDING_PURPOSE,
+  countryOfNumber,
+  consentJurisdiction,
+  ensureVoiceConsentPurposes,
+} from './services/complianceGates';
 
 // HTTP surface — mounted by the api-gateway.
 export * as server from './server';

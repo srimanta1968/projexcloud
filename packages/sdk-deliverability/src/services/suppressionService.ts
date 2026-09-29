@@ -11,7 +11,7 @@ import { dataService } from '@projexlight/db-runtime';
  * suppress / unsuppress / list) lands in TK-3624 on top of this service.
  */
 
-export type Channel = 'email' | 'sms' | 'all';
+export type Channel = 'email' | 'sms' | 'voice' | 'all';
 export type SuppressionScope = 'tenant' | 'global';
 export type SuppressionReason =
   | 'manual' | 'optout' | 'hard_bounce' | 'soft_bounce'
@@ -57,10 +57,10 @@ export interface IssueTokenParams {
   ttlSeconds?: number;
 }
 
-/** Normalize an address so hashing is stable: email lowercased/trimmed; phone digits (+ leading +). */
+/** Normalize an address so hashing is stable: email lowercased/trimmed; phone (sms/voice) digits (+ leading +). */
 export function normalizeAddress(channel: Channel, address: string): string {
   const trimmed = address.trim();
-  if (channel === 'sms') {
+  if (channel === 'sms' || channel === 'voice') {
     const digits = trimmed.replace(/[^\d+]/g, '');
     return digits.startsWith('+') ? digits : `+${digits}`;
   }

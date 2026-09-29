@@ -373,7 +373,12 @@ import {
   setCallDispatcher,
   VoiceAgentError,
 } from '@projexlight/sdk-voice-agent';
-import { migrationsDir as dialerMigrations, server as dialerServer, dispatchCall } from '@projexlight/sdk-dialer';
+import {
+  migrationsDir as dialerMigrations,
+  server as dialerServer,
+  dispatchCall,
+  ensureVoiceConsentPurposes,
+} from '@projexlight/sdk-dialer';
 // P16 · EP-374 — the provenance kernel. Every ingesting SDK lands its rows here.
 import {
   migrationsDir as sourceRecordMigrations,
@@ -1499,6 +1504,12 @@ const start = async (): Promise<void> => {
       // store (config.config_value); references no other schema, ordering free.
       { sdk: 'sdk-config',              dir: configMigrations },
     ]);
+
+    // VA·E5 (TK-4481) — the dialer's consent gate checks sdk-consent receipts for these
+    // purposes, and a receipt cannot be recorded until its purpose exists (FK). Registered
+    // here, idempotently, so every environment has them without a manual step.
+    const voicePurposes = await ensureVoiceConsentPurposes();
+    if (voicePurposes.length > 0) console.log(`[api-gateway] registered voice consent purposes: ${voicePurposes.join(', ')}`);
 
     // MIGRATE_ONLY=1 — apply every SDK migration, then exit 0 without starting the server.
     //
