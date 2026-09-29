@@ -47,14 +47,17 @@ export function parseArgs(raw: unknown): unknown {
 
 const timeoutMs = (): number => Number(process.env.AI_GATEWAY_PROVIDER_TIMEOUT_MS ?? 60000);
 
-/** POSTs JSON to a provider; throws ProviderHttpError on a non-2xx or a network failure. */
+/**
+ * POSTs JSON to a provider; throws ProviderHttpError on a non-2xx or a network failure.
+ * A string body is sent as-is (a signed request must send exactly the bytes it signed).
+ */
 export async function postJson(provider: string, url: string, headers: Record<string, string>, body: unknown): Promise<Response> {
   let res: Response;
   try {
     res = await fetch(url, {
       method: 'POST',
       headers: { 'content-type': 'application/json', ...headers },
-      body: JSON.stringify(body),
+      body: typeof body === 'string' ? body : JSON.stringify(body),
       signal: AbortSignal.timeout(timeoutMs()),
     });
   } catch (err) {

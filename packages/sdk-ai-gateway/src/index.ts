@@ -28,6 +28,10 @@ export {
   realProviderAdaptersEnabled,
   makeOpenAiCompatibleAdapter,
   OPENAI_COMPATIBLE_BASE_URLS,
+  makeAnthropicAdapter,
+  makeGeminiAdapter,
+  makeBedrockAdapter,
+  signV4,
   ProviderHttpError,
 } from './services/adapters';
 export type { OpenAiCompatibleOptions } from './services/adapters';
