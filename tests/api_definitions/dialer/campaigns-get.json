@@ -1,0 +1,85 @@
+{
+  "name": "GET /api/dialer/campaigns - List the tenant's campaigns",
+  "endpoint": "/api/dialer/campaigns",
+  "sdk": "sdk-dialer",
+  "sourceFile": "packages/sdk-dialer/src/server/routes.ts",
+  "method": "GET",
+  "requiresAuth": true,
+  "expectedStatus": 200,
+  "taskId": "b8510062-49b7-4f14-8142-0fbca69c8ba4",
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "featureId": "95b9060e-9695-45f9-a970-323d68d6a444",
+  "epicId": "4362a53f-a31a-4166-85be-ad1c383d60b5",
+  "priority": 111,
+  "testability": "auto",
+  "coversCriterion": [
+    "95b9060e-9695-45f9-a970-323d68d6a444#AC1"
+  ],
+  "description": "Lists campaigns newest first, filtered by status and agent_id, paged by limit (1-200, default 50) and offset (95b9060e-9695-45f9-a970-323d68d6a444#AC1).",
+  "dependsOn": [
+    "POST /api/auth/signup-tenant",
+    "POST /api/voice-agent/agents",
+    "POST /api/dialer/campaigns"
+  ],
+  "fieldEnums": {
+    "status": [
+      "draft",
+      "running",
+      "paused",
+      "cancelled",
+      "completed"
+    ]
+  },
+  "testCases": [
+    {
+      "name": "List the tenant's draft campaigns",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "queryParams": {
+        "status": "{{static:draft}}"
+      },
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "data": {
+          "campaigns": [
+            {
+              "campaign_id": "string",
+              "agent_id": "string",
+              "name": "string",
+              "status": "string",
+              "window_start": "string",
+              "window_end": "string"
+            }
+          ],
+          "limit": "number",
+          "offset": "number"
+        }
+      }
+    },
+    {
+      "name": "Reject an unknown status filter",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "queryParams": {
+        "status": "{{static:exploded}}"
+      },
+      "expectedStatus": 400
+    }
+  ],
+  "errorCases": [
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "status must be one of draft, running, paused, cancelled, completed | agent_id must be a uuid",
+      "when": "invalid filter"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "no Authorization header"
+    }
+  ]
+}

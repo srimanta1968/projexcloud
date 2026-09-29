@@ -1,0 +1,133 @@
+{
+  "name": "POST /api/dialer/campaigns - Create an outbound AI-call campaign",
+  "endpoint": "/api/dialer/campaigns",
+  "sdk": "sdk-dialer",
+  "sourceFile": "packages/sdk-dialer/src/server/routes.ts",
+  "method": "POST",
+  "requiresAuth": true,
+  "expectedStatus": 201,
+  "taskId": "b8510062-49b7-4f14-8142-0fbca69c8ba4",
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "featureId": "95b9060e-9695-45f9-a970-323d68d6a444",
+  "epicId": "4362a53f-a31a-4166-85be-ad1c383d60b5",
+  "priority": 110,
+  "testability": "auto",
+  "coversCriterion": [
+    "95b9060e-9695-45f9-a970-323d68d6a444#AC1"
+  ],
+  "description": "Creates a DRAFT campaign (95b9060e-9695-45f9-a970-323d68d6a444#AC1 — a tenant can create a campaign, upload contacts in batches and pause, resume or cancel it). Body: agent_id (the tenant's voice agent; it must be outbound/both and published only when the campaign STARTS), name (unique per tenant, 1-120), optional marketing_campaign_id (soft link to an sdk-campaign marketing campaign), default_timezone (IANA, default UTC — used for contacts without their own), window_start/window_end (HH:MM recipient-local calling window, default 08:00-21:00), max_concurrency (1-1000, default 5), max_attempts (1-10, default 3), retry_spacing_minutes (1-10 values of 1-10080, default [60,240,1440]), voicemail_policy (hang_up | drop_tts | drop_recording; drop_* needs voicemail_message), caller_id_pool (up to 100 E.164 numbers), context (JSON object <= 32 KB).",
+  "dependsOn": [
+    "POST /api/auth/signup-tenant",
+    "POST /api/voice-agent/agents"
+  ],
+  "fieldEnums": {
+    "status": [
+      "draft",
+      "running",
+      "paused",
+      "cancelled",
+      "completed"
+    ],
+    "voicemail_policy": [
+      "hang_up",
+      "drop_tts",
+      "drop_recording"
+    ]
+  },
+  "testCases": [
+    {
+      "name": "Create a draft campaign for the agent",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "payload": {
+        "agent_id": "{{cache:voice-agent.agents.create.response.data.agent.agent_id}}",
+        "name": "Solar Q4 {{dynamic:slug}}",
+        "default_timezone": "America/New_York",
+        "window_start": "09:00",
+        "window_end": "20:00",
+        "max_concurrency": 10,
+        "max_attempts": 3,
+        "retry_spacing_minutes": [
+          30,
+          120
+        ],
+        "voicemail_policy": "drop_tts",
+        "voicemail_message": "Hi, this is Sunny Solar, please call us back.",
+        "caller_id_pool": [
+          "+14155550100"
+        ],
+        "context": {
+          "product": "solar"
+        }
+      },
+      "expectedStatus": 201,
+      "expectedResponse": {
+        "data": {
+          "campaign": {
+            "campaign_id": "string",
+            "agent_id": "string",
+            "name": "string",
+            "status": "string",
+            "window_start": "string",
+            "window_end": "string"
+          }
+        }
+      }
+    },
+    {
+      "name": "Reject a calling window that ends before it starts",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "payload": {
+        "agent_id": "{{cache:voice-agent.agents.create.response.data.agent.agent_id}}",
+        "name": "Bad window {{dynamic:slug}}",
+        "window_start": "21:00",
+        "window_end": "08:00"
+      },
+      "expectedStatus": 400
+    },
+    {
+      "name": "Reject an unknown timezone",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "payload": {
+        "agent_id": "{{cache:voice-agent.agents.create.response.data.agent.agent_id}}",
+        "name": "Bad tz {{dynamic:slug}}",
+        "default_timezone": "{{static:Mars/Olympus}}"
+      },
+      "expectedStatus": 400
+    }
+  ],
+  "captureResponse": {
+    "dialer.campaigns.create.response.data.campaign.campaign_id": "data.campaign.campaign_id"
+  },
+  "errorCases": [
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "agent_id must be a uuid | name is required (1-120 characters) | default_timezone must be an IANA timezone, e.g. America/New_York | window_start and window_end must be HH:MM | window_start must be before window_end | max_concurrency must be an integer between 1 and 1000 | retry_spacing_minutes must be 1-10 integers between 1 and 10080 | voicemail_message is required when voicemail_policy is drop_tts | caller_id_pool must be up to 100 E.164 numbers",
+      "when": "invalid body"
+    },
+    {
+      "status": 404,
+      "code": "NotFound",
+      "message": "agent not found",
+      "when": "agent_id is not the tenant's"
+    },
+    {
+      "status": 409,
+      "code": "Conflict",
+      "message": "a campaign with this name already exists",
+      "when": "duplicate name in the tenant"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "no Authorization header"
+    }
+  ]
+}

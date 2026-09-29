@@ -1,0 +1,77 @@
+{
+  "name": "GET /api/dialer/campaigns/:campaign_id - One campaign with its progress",
+  "endpoint": "/api/dialer/campaigns/:campaign_id",
+  "sdk": "sdk-dialer",
+  "sourceFile": "packages/sdk-dialer/src/server/routes.ts",
+  "method": "GET",
+  "requiresAuth": true,
+  "expectedStatus": 200,
+  "taskId": "b8510062-49b7-4f14-8142-0fbca69c8ba4",
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "featureId": "95b9060e-9695-45f9-a970-323d68d6a444",
+  "epicId": "4362a53f-a31a-4166-85be-ad1c383d60b5",
+  "priority": 112,
+  "testability": "auto",
+  "coversCriterion": [
+    "95b9060e-9695-45f9-a970-323d68d6a444#AC1",
+    "95b9060e-9695-45f9-a970-323d68d6a444#AC2"
+  ],
+  "description": "Returns the campaign with progress {total, by_status: {pending, queued, in_progress, deferred, done, failed, refused, cancelled}} — the same counts voice.campaign.progressed.v1 carries (95b9060e-9695-45f9-a970-323d68d6a444#AC1; 95b9060e-9695-45f9-a970-323d68d6a444#AC2). Another tenant's campaign reads as 404.",
+  "dependsOn": [
+    "POST /api/auth/signup-tenant",
+    "POST /api/voice-agent/agents",
+    "POST /api/dialer/campaigns"
+  ],
+  "testCases": [
+    {
+      "name": "Get the campaign with progress counts",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "pathParams": {
+        "campaign_id": "{{cache:dialer.campaigns.create.response.data.campaign.campaign_id}}"
+      },
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "data": {
+          "campaign": {
+            "campaign_id": "string",
+            "agent_id": "string",
+            "name": "string",
+            "status": "string",
+            "window_start": "string",
+            "window_end": "string",
+            "progress": {
+              "total": "number",
+              "by_status": {}
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "Unknown campaign is 404",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "pathParams": {
+        "campaign_id": "{{dynamic:uuid}}"
+      },
+      "expectedStatus": 404
+    }
+  ],
+  "errorCases": [
+    {
+      "status": 404,
+      "code": "NotFound",
+      "message": "campaign not found",
+      "when": "unknown campaign or another tenant's"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "no Authorization header"
+    }
+  ]
+}

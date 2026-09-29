@@ -1,0 +1,117 @@
+{
+  "name": "POST /api/dialer/campaigns/:campaign_id/contacts - Upload a batch of contacts",
+  "endpoint": "/api/dialer/campaigns/:campaign_id/contacts",
+  "sdk": "sdk-dialer",
+  "sourceFile": "packages/sdk-dialer/src/server/routes.ts",
+  "method": "POST",
+  "requiresAuth": true,
+  "expectedStatus": 200,
+  "taskId": "b8510062-49b7-4f14-8142-0fbca69c8ba4",
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "featureId": "95b9060e-9695-45f9-a970-323d68d6a444",
+  "epicId": "4362a53f-a31a-4166-85be-ad1c383d60b5",
+  "priority": 113,
+  "testability": "auto",
+  "coversCriterion": [
+    "95b9060e-9695-45f9-a970-323d68d6a444#AC1",
+    "95b9060e-9695-45f9-a970-323d68d6a444#AC2"
+  ],
+  "description": "Upserts 1-1000 contacts by external_ref (95b9060e-9695-45f9-a970-323d68d6a444#AC1 — upload contacts in batches). Each: external_ref (the consumer's id, 1-200), phone_number (E.164), optional subject_ref, crm_encounter_id (uuid), timezone (IANA; else the campaign default), context (JSON <= 32 KB). Re-sending a batch refreshes details without duplicating people or resetting a contact already worked. Invalid rows are rejected individually and reported by index with a reason; valid rows land. Returns {inserted, updated, rejected[], progress}. Every status change emits voice.campaign.progressed.v1 {campaign_id, agent_id, status, trigger, total, by_status} (95b9060e-9695-45f9-a970-323d68d6a444#AC2 — campaign progress is emitted as voice.campaign.progressed.v1); contact uploads emit it at most once per DIALER_PROGRESS_THROTTLE_MS (default 5 s) per campaign. A cancelled or completed campaign is 409.",
+  "dependsOn": [
+    "POST /api/auth/signup-tenant",
+    "POST /api/voice-agent/agents",
+    "POST /api/dialer/campaigns"
+  ],
+  "testCases": [
+    {
+      "name": "Upload a batch with one invalid row",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "pathParams": {
+        "campaign_id": "{{cache:dialer.campaigns.create.response.data.campaign.campaign_id}}"
+      },
+      "payload": {
+        "contacts": [
+          {
+            "external_ref": "lead-{{dynamic:slug}}",
+            "phone_number": "+14155550201",
+            "subject_ref": "lead:201",
+            "timezone": "America/Los_Angeles",
+            "context": {
+              "first_name": "Ana"
+            }
+          },
+          {
+            "external_ref": "lead-b-{{dynamic:slug}}",
+            "phone_number": "+14155550202",
+            "subject_ref": "lead:202"
+          },
+          {
+            "external_ref": "lead-c-{{dynamic:slug}}",
+            "phone_number": "{{static:not-a-number}}"
+          }
+        ]
+      },
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "data": {
+          "inserted": "number",
+          "updated": "number",
+          "rejected": [
+            {
+              "index": "number",
+              "reason": "string"
+            }
+          ],
+          "progress": {
+            "total": "number",
+            "by_status": {}
+          }
+        }
+      }
+    },
+    {
+      "name": "Reject an empty batch",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "pathParams": {
+        "campaign_id": "{{cache:dialer.campaigns.create.response.data.campaign.campaign_id}}"
+      },
+      "payload": {
+        "contacts": []
+      },
+      "expectedStatus": 400
+    }
+  ],
+  "captureResponse": {
+    "dialer.campaigns.contacts.upsert.response.data.progress.total": "data.progress.total"
+  },
+  "errorCases": [
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "contacts must be an array of 1-1000 entries",
+      "when": "batch missing, empty or too large"
+    },
+    {
+      "status": 404,
+      "code": "NotFound",
+      "message": "campaign not found",
+      "when": "unknown campaign or another tenant's"
+    },
+    {
+      "status": 409,
+      "code": "Conflict",
+      "message": "campaign is cancelled; contacts can no longer be added",
+      "when": "campaign cancelled or completed"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "no Authorization header"
+    }
+  ]
+}

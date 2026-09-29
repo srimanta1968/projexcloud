@@ -1,0 +1,90 @@
+{
+  "name": "POST /api/dialer/campaigns/:campaign_id/cancel - Cancel a campaign",
+  "endpoint": "/api/dialer/campaigns/:campaign_id/cancel",
+  "sdk": "sdk-dialer",
+  "sourceFile": "packages/sdk-dialer/src/server/routes.ts",
+  "method": "POST",
+  "requiresAuth": true,
+  "expectedStatus": 200,
+  "taskId": "b8510062-49b7-4f14-8142-0fbca69c8ba4",
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "featureId": "95b9060e-9695-45f9-a970-323d68d6a444",
+  "epicId": "4362a53f-a31a-4166-85be-ad1c383d60b5",
+  "priority": 118,
+  "testability": "auto",
+  "coversCriterion": [
+    "95b9060e-9695-45f9-a970-323d68d6a444#AC1",
+    "95b9060e-9695-45f9-a970-323d68d6a444#AC2"
+  ],
+  "description": "Cancels a draft, running or paused campaign for good: contacts not yet reached (pending, queued, deferred) become cancelled and their queued dispatches are withdrawn; calls already under way finish. (95b9060e-9695-45f9-a970-323d68d6a444#AC1). Lifecycle: draft -start-> running <-pause/resume-> paused; draft|running|paused -cancel-> cancelled (terminal). Repeating the action that produced the current status is a no-op.  Every status change emits voice.campaign.progressed.v1 {campaign_id, agent_id, status, trigger, total, by_status} (95b9060e-9695-45f9-a970-323d68d6a444#AC2 — campaign progress is emitted as voice.campaign.progressed.v1); contact uploads emit it at most once per DIALER_PROGRESS_THROTTLE_MS (default 5 s) per campaign.",
+  "dependsOn": [
+    "POST /api/auth/signup-tenant",
+    "POST /api/voice-agent/agents",
+    "POST /api/dialer/campaigns",
+    "POST /api/dialer/campaigns/:campaign_id/contacts",
+    "GET /api/dialer/campaigns/:campaign_id/contacts",
+    "POST /api/dialer/campaigns/:campaign_id/start",
+    "POST /api/dialer/campaigns/:campaign_id/pause",
+    "POST /api/dialer/campaigns/:campaign_id/resume",
+    "GET /api/dialer/campaigns/:campaign_id"
+  ],
+  "testCases": [
+    {
+      "name": "Cancel the campaign; its pending contacts are cancelled",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "pathParams": {
+        "campaign_id": "{{cache:dialer.campaigns.create.response.data.campaign.campaign_id}}"
+      },
+      "payload": {},
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "data": {
+          "campaign": {
+            "status": "string",
+            "finished_at": "string",
+            "progress": {
+              "total": "number",
+              "by_status": {}
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "Unknown campaign is 404",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "pathParams": {
+        "campaign_id": "{{dynamic:uuid}}"
+      },
+      "payload": {},
+      "expectedStatus": 404
+    }
+  ],
+  "captureResponse": {
+    "dialer.campaigns.cancel.response.data.campaign.status": "data.campaign.status"
+  },
+  "errorCases": [
+    {
+      "status": 409,
+      "code": "InvalidTransition",
+      "message": "cannot cancel a campaign that is <status>",
+      "when": "the campaign is completed"
+    },
+    {
+      "status": 404,
+      "code": "NotFound",
+      "message": "campaign not found",
+      "when": "unknown campaign or another tenant's"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "no Authorization header"
+    }
+  ]
+}

@@ -8,3 +8,34 @@
  * See docs/v3.1/voiceagent/VoiceAgent-Architecture-v3.1.html.
  */
 export { migrationsDir } from './db';
+
+export { DialerError } from './models/errors';
+
+export {
+  CAMPAIGN_STATUSES,
+  CONTACT_STATUSES,
+  VOICEMAIL_POLICIES,
+  createCampaign,
+  getCampaign,
+  listCampaigns,
+  transitionCampaign,
+  upsertContacts,
+  listContacts,
+  publishProgress,
+  isValidTimezone,
+} from './services/campaignService';
+export type {
+  Campaign,
+  CampaignAction,
+  CampaignContact,
+  CampaignProgress,
+  CampaignStatus,
+  ContactInput,
+  ContactStatus,
+  CreateCampaignInput,
+  UpsertContactsResult,
+  VoicemailPolicy,
+} from './services/campaignService';
+
+// HTTP surface — mounted by the api-gateway.
+export * as server from './server';

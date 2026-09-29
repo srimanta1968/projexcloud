@@ -1,0 +1,97 @@
+{
+  "name": "GET /api/dialer/campaigns/:campaign_id/contacts - A campaign's contacts",
+  "endpoint": "/api/dialer/campaigns/:campaign_id/contacts",
+  "sdk": "sdk-dialer",
+  "sourceFile": "packages/sdk-dialer/src/server/routes.ts",
+  "method": "GET",
+  "requiresAuth": true,
+  "expectedStatus": 200,
+  "taskId": "b8510062-49b7-4f14-8142-0fbca69c8ba4",
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "featureId": "95b9060e-9695-45f9-a970-323d68d6a444",
+  "epicId": "4362a53f-a31a-4166-85be-ad1c383d60b5",
+  "priority": 114,
+  "testability": "auto",
+  "coversCriterion": [
+    "95b9060e-9695-45f9-a970-323d68d6a444#AC1"
+  ],
+  "description": "Lists a campaign's contacts (oldest first) with status, attempts, next_attempt_at, last_outcome and last_call_id, filtered by status and paged by limit (1-200, default 100) and offset (95b9060e-9695-45f9-a970-323d68d6a444#AC1).",
+  "dependsOn": [
+    "POST /api/auth/signup-tenant",
+    "POST /api/voice-agent/agents",
+    "POST /api/dialer/campaigns",
+    "POST /api/dialer/campaigns/:campaign_id/contacts"
+  ],
+  "fieldEnums": {
+    "status": [
+      "pending",
+      "queued",
+      "in_progress",
+      "deferred",
+      "done",
+      "failed",
+      "refused",
+      "cancelled"
+    ]
+  },
+  "testCases": [
+    {
+      "name": "List the pending contacts",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "pathParams": {
+        "campaign_id": "{{cache:dialer.campaigns.create.response.data.campaign.campaign_id}}"
+      },
+      "queryParams": {
+        "status": "{{static:pending}}"
+      },
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "data": {
+          "contacts": [
+            {
+              "contact_id": "string",
+              "external_ref": "string",
+              "phone_number": "string",
+              "status": "string",
+              "attempts": "number"
+            }
+          ],
+          "limit": "number",
+          "offset": "number"
+        }
+      }
+    },
+    {
+      "name": "Unknown campaign is 404",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "pathParams": {
+        "campaign_id": "{{dynamic:uuid}}"
+      },
+      "expectedStatus": 404
+    }
+  ],
+  "errorCases": [
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "status must be one of pending, queued, in_progress, deferred, done, failed, refused, cancelled",
+      "when": "invalid filter"
+    },
+    {
+      "status": 404,
+      "code": "NotFound",
+      "message": "campaign not found",
+      "when": "unknown campaign or another tenant's"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "no Authorization header"
+    }
+  ]
+}

@@ -1,0 +1,89 @@
+{
+  "name": "POST /api/dialer/campaigns/:campaign_id/resume - Resume a paused campaign",
+  "endpoint": "/api/dialer/campaigns/:campaign_id/resume",
+  "sdk": "sdk-dialer",
+  "sourceFile": "packages/sdk-dialer/src/server/routes.ts",
+  "method": "POST",
+  "requiresAuth": true,
+  "expectedStatus": 200,
+  "taskId": "b8510062-49b7-4f14-8142-0fbca69c8ba4",
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "featureId": "95b9060e-9695-45f9-a970-323d68d6a444",
+  "epicId": "4362a53f-a31a-4166-85be-ad1c383d60b5",
+  "priority": 117,
+  "testability": "auto",
+  "coversCriterion": [
+    "95b9060e-9695-45f9-a970-323d68d6a444#AC1",
+    "95b9060e-9695-45f9-a970-323d68d6a444#AC2"
+  ],
+  "description": "Moves a paused campaign back to running. (95b9060e-9695-45f9-a970-323d68d6a444#AC1). Lifecycle: draft -start-> running <-pause/resume-> paused; draft|running|paused -cancel-> cancelled (terminal). Repeating the action that produced the current status is a no-op. The agent is re-checked, so a campaign cannot resume onto an agent that was since unpublished or kill-switched. Every status change emits voice.campaign.progressed.v1 {campaign_id, agent_id, status, trigger, total, by_status} (95b9060e-9695-45f9-a970-323d68d6a444#AC2 — campaign progress is emitted as voice.campaign.progressed.v1); contact uploads emit it at most once per DIALER_PROGRESS_THROTTLE_MS (default 5 s) per campaign.",
+  "dependsOn": [
+    "POST /api/auth/signup-tenant",
+    "POST /api/voice-agent/agents",
+    "POST /api/dialer/campaigns",
+    "POST /api/dialer/campaigns/:campaign_id/pause"
+  ],
+  "testCases": [
+    {
+      "name": "Refuse to resume a campaign that was never paused",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "pathParams": {
+        "campaign_id": "{{cache:dialer.campaigns.create.response.data.campaign.campaign_id}}"
+      },
+      "payload": {},
+      "expectedStatus": 409,
+      "expectedResponse": {
+        "error": "InvalidTransition"
+      }
+    },
+    {
+      "name": "Resume a paused campaign",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "pathParams": {
+        "campaign_id": "{{cache:dialer.campaigns.create.response.data.campaign.campaign_id}}"
+      },
+      "payload": {},
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "data": {
+          "campaign": {
+            "status": "string"
+          }
+        }
+      }
+    }
+  ],
+  "captureResponse": {
+    "dialer.campaigns.resume.response.data.campaign.status": "data.campaign.status"
+  },
+  "errorCases": [
+    {
+      "status": 409,
+      "code": "InvalidTransition",
+      "message": "cannot resume a campaign that is <status>",
+      "when": "the campaign is draft, cancelled or completed"
+    },
+    {
+      "status": 409,
+      "code": "Conflict",
+      "message": "the agent is inbound-only and cannot place outbound calls | the agent has no published version | the agent's kill switch is engaged",
+      "when": "the campaign's agent cannot place calls"
+    },
+    {
+      "status": 404,
+      "code": "NotFound",
+      "message": "campaign not found",
+      "when": "unknown campaign or another tenant's"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "no Authorization header"
+    }
+  ]
+}
