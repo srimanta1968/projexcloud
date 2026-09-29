@@ -66,6 +66,7 @@ import {
   startSloAlarms,
   getRobotUsage,
   report as meterReport,
+  meterVoiceCall,
 } from '@projexlight/sdk-meter';
 import {
   server as secretsServer,
@@ -799,6 +800,9 @@ setKeyCapacityResolver(async (tenantId, keyRef) => {
 onCallEnded(async (call) => { await releaseSlot(call.call_id); });
 // VA·E5 (TK-4487) — a campaign call that ends schedules the contact's retry (or closes it).
 onCallEnded(async (call) => { await applyRetryPolicy(call); });
+// VA·E7 (TK-4503) — every ended AI call is metered once as voice minutes (6-second blocks);
+// test sessions are skipped.
+onCallEnded(async (call) => { await meterVoiceCall(call); });
 // VA·E5 (TK-4488) — an opt_out disposition suppresses the number and revokes AI-call consent.
 onCallEnded(async (call) => { await applyDispositionEffects(call); });
 

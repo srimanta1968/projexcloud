@@ -43,6 +43,10 @@ export {
   ROBOT_SKU,
 } from './services/robotMeter';
 export type { RobotUsageInput, RobotUsageRow } from './services/robotMeter';
+
+// VA·E7 (TK-4503) — AI voice minutes, 6-second blocks, test sessions excluded.
+export { VOICE_SKU, VOICE_BILLING_BLOCK_S, billableSeconds, meterVoiceCall, voiceUsageForPeriod } from './services/voiceMeter';
+export type { VoiceCallForMetering, VoiceMeterResult, VoiceUsageSummary } from './services/voiceMeter';
 export { applyHardCapOverride } from './services/hardCapOverride';
 export type { ApplyHardCapOverrideInput, HardCapOverrideResult } from './services/hardCapOverride';
 export {
