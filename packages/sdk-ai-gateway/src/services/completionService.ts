@@ -99,7 +99,8 @@ interface TenantCredentialRow {
  * Resolve the credential to use for a given (tenant, provider, model) tuple.
  *
  * Resolution order per docs/v3.1/prd/Tenant-BYOK-AI-Keys.md FR-BYOK-2:
- *   1. Active row in ai_gateway.tenant_provider_credential for (tenant, provider).
+ *   1. Active llm row in ai_gateway.tenant_provider_credential for (tenant, provider),
+ *      the primary before a secondary (voice-layer keys are never used here).
  *      If model_allowlist is non-null and the requested model is not in it,
  *      treat as no tenant credential and fall through (FR-BYOK-6).
  *   2. Platform row in ai_gateway.provider for the provider.
@@ -133,7 +134,9 @@ async function loadProviderRow(
     const tenantRow = await dataService.one<TenantCredentialRow>(
       `SELECT binding_id, credential_envelope, model_allowlist
          FROM ai_gateway.tenant_provider_credential
-         WHERE tenant_id = $1 AND provider_id = $2 AND status = 'active'`,
+         WHERE tenant_id = $1 AND provider_id = $2 AND status = 'active' AND layer = 'llm'
+         ORDER BY (priority = 'primary') DESC, bound_at DESC
+         LIMIT 1`,
       [tenant_id, provider_id],
     );
     if (tenantRow) {

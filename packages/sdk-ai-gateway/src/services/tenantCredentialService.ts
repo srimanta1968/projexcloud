@@ -16,6 +16,9 @@ import { invalidateProviderCache } from './completionService';
  * Best-effort: a mirror failure never blocks a bind/rotate/revoke.
  */
 async function mirrorCredentialToConfig(binding: TenantCredentialBinding): Promise<void> {
+  // The config-plane key answers "is this LLM provider configured?"; voice-layer and
+  // secondary keys are not part of that question.
+  if (binding.layer !== 'llm' || binding.priority !== 'primary') return;
   const key = `ai-gateway.${binding.provider_id}.credential`;
   try {
     if (binding.status === 'revoked') {
@@ -51,7 +54,29 @@ async function mirrorCredentialToConfig(binding: TenantCredentialBinding): Promi
  * so the credential lifecycle is auditor-replayable.
  */
 
-const SUPPORTED_PROVIDERS: readonly ProviderId[] = ['anthropic', 'openai', 'bedrock', 'gemini'];
+/**
+ * Voice layers a tenant key can serve (VA·E3, TK-4497). llm keys also drive the completion
+ * gateway; the others are used by the voice runtime only.
+ */
+export const CREDENTIAL_LAYERS = ['llm', 'stt', 'tts', 'realtime', 'telephony'] as const;
+export type CredentialLayer = (typeof CREDENTIAL_LAYERS)[number];
+export const CREDENTIAL_PRIORITIES = ['primary', 'secondary'] as const;
+export type CredentialPriority = (typeof CREDENTIAL_PRIORITIES)[number];
+export type ValidationStatus =
+  | 'unvalidated' | 'ok' | 'invalid_key' | 'insufficient_permissions' | 'rate_limited' | 'provider_error' | 'unsupported';
+
+/**
+ * Providers a key may be bound for, per layer. The llm set is the four platform providers
+ * the completion gateway serves plus the OpenAI-compatible hosts the voice runtime calls
+ * directly (docs/v3.1/voiceagent/VoiceAgent-Architecture-v3.1.html §8).
+ */
+export const LAYER_PROVIDERS: Record<CredentialLayer, readonly string[]> = {
+  llm: ['anthropic', 'openai', 'bedrock', 'gemini', 'groq', 'cerebras', 'together', 'fireworks', 'deepinfra', 'mistral', 'xai'],
+  stt: ['deepgram', 'assemblyai', 'openai'],
+  tts: ['cartesia', 'elevenlabs', 'deepgram', 'openai'],
+  realtime: ['openai', 'gemini', 'bedrock'],
+  telephony: ['twilio', 'telnyx'],
+};
 const MIN_REVOKE_REASON_LEN = 6;
 const AUDIT_POOL = process.env.AI_GATEWAY_AUDIT_POOL || 'admin-default';
 // Must be a well-formed secret://{app|pool|tenant}/{id} ref (id: [A-Za-z0-9._-],
@@ -74,8 +99,18 @@ async function ensureVaultRef(): Promise<void> {
 export interface TenantCredentialBinding {
   binding_id: string;
   tenant_id: string;
-  provider_id: ProviderId;
+  /** A ProviderId for llm bindings; a speech or telephony provider key (LAYER_PROVIDERS) otherwise. */
+  provider_id: string;
+  layer: CredentialLayer;
+  priority: CredentialPriority;
   status: 'active' | 'revoked';
+  /** Result of the last key validation / capacity probe (TK-4491). */
+  validation_status: ValidationStatus;
+  rate_limit_tier: string | null;
+  /** Max safe concurrent calls for this key; null when the provider does not say. */
+  max_concurrency: number | null;
+  validated_at: string | null;
+  validation_error: string | null;
   model_allowlist: string[] | null;
   last_4: string;
   fallback_on_error: boolean;
@@ -87,7 +122,11 @@ export interface TenantCredentialBinding {
 
 export interface BindInput {
   tenant_id: string;
-  provider_id: ProviderId;
+  provider_id: string;
+  /** Defaults to llm, so existing LLM callers are unchanged. */
+  layer?: CredentialLayer;
+  /** Defaults to primary. */
+  priority?: CredentialPriority;
   raw_key: string;
   model_allowlist?: string[];
   fallback_on_error?: boolean;
@@ -106,11 +145,44 @@ export interface RevokeInput {
   actor_id: string;
 }
 
-function assertProvider(provider_id: ProviderId): void {
-  if (!SUPPORTED_PROVIDERS.includes(provider_id)) {
-    throw new Error(`unsupported provider: ${provider_id}`);
+function assertLayerProvider(layer: string, priority: string, provider_id: string): void {
+  if (!(CREDENTIAL_LAYERS as readonly string[]).includes(layer)) {
+    throw new Error(`unsupported layer: ${layer}`);
+  }
+  if (!(CREDENTIAL_PRIORITIES as readonly string[]).includes(priority)) {
+    throw new Error(`unsupported priority: ${priority}`);
+  }
+  if (!LAYER_PROVIDERS[layer as CredentialLayer].includes(provider_id)) {
+    throw new Error(`unsupported provider: ${provider_id} for layer ${layer}`);
   }
 }
+
+const BINDING_COLUMNS = `binding_id, tenant_id, provider_id, layer, priority, status, model_allowlist,
+                 last_4, fallback_on_error, bound_at, revoked_at, bound_by, revoked_by,
+                 validation_status, rate_limit_tier, max_concurrency, validated_at, validation_error`;
+
+interface BindingRow {
+  binding_id: string;
+  tenant_id: string;
+  provider_id: string;
+  layer: CredentialLayer;
+  priority: CredentialPriority;
+  status: 'active' | 'revoked';
+  model_allowlist: string[] | null;
+  last_4: string;
+  fallback_on_error: boolean;
+  bound_at: Date | string;
+  revoked_at: Date | string | null;
+  bound_by: string;
+  revoked_by: string | null;
+  validation_status: ValidationStatus;
+  rate_limit_tier: string | null;
+  max_concurrency: number | null;
+  validated_at: Date | string | null;
+  validation_error: string | null;
+}
+
+const iso = (v: Date | string | null): string | null => (v === null ? null : v instanceof Date ? v.toISOString() : String(v));
 
 function computeLast4(raw_key: string): string {
   if (!raw_key || raw_key.length < 4) {
@@ -137,24 +209,19 @@ async function wrapEnvelope(raw_key: string): Promise<Buffer> {
   );
 }
 
-function rowToBinding(row: {
-  binding_id: string;
-  tenant_id: string;
-  provider_id: ProviderId;
-  status: 'active' | 'revoked';
-  model_allowlist: string[] | null;
-  last_4: string;
-  fallback_on_error: boolean;
-  bound_at: Date | string;
-  revoked_at: Date | string | null;
-  bound_by: string;
-  revoked_by: string | null;
-}): TenantCredentialBinding {
+function rowToBinding(row: BindingRow): TenantCredentialBinding {
   return {
     binding_id: row.binding_id,
     tenant_id: row.tenant_id,
     provider_id: row.provider_id,
+    layer: row.layer,
+    priority: row.priority,
     status: row.status,
+    validation_status: row.validation_status,
+    rate_limit_tier: row.rate_limit_tier,
+    max_concurrency: row.max_concurrency,
+    validated_at: iso(row.validated_at),
+    validation_error: row.validation_error,
     model_allowlist: row.model_allowlist,
     last_4: row.last_4,
     fallback_on_error: row.fallback_on_error,
@@ -175,7 +242,9 @@ function rowToBinding(row: {
  * Emits ai_gateway.tenant_credential.bound.v1.
  */
 export async function bindTenantCredential(input: BindInput): Promise<TenantCredentialBinding> {
-  assertProvider(input.provider_id);
+  const layer = input.layer ?? 'llm';
+  const priority = input.priority ?? 'primary';
+  assertLayerProvider(layer, priority, input.provider_id);
   const last_4 = computeLast4(input.raw_key);
   const envelope = await wrapEnvelope(input.raw_key);
   const allowlist = input.model_allowlist && input.model_allowlist.length > 0
@@ -190,29 +259,16 @@ export async function bindTenantCredential(input: BindInput): Promise<TenantCred
               revoked_at = now(),
               revoked_by = $3,
               updated_at = now()
-        WHERE tenant_id = $1 AND provider_id = $2 AND status = 'active'`,
-      [input.tenant_id, input.provider_id, input.actor_id],
+        WHERE tenant_id = $1 AND provider_id = $2 AND layer = $4 AND priority = $5 AND status = 'active'`,
+      [input.tenant_id, input.provider_id, input.actor_id, layer, priority],
     );
-    const result = await q<{
-      binding_id: string;
-      tenant_id: string;
-      provider_id: ProviderId;
-      status: 'active' | 'revoked';
-      model_allowlist: string[] | null;
-      last_4: string;
-      fallback_on_error: boolean;
-      bound_at: Date;
-      revoked_at: Date | null;
-      bound_by: string;
-      revoked_by: string | null;
-    }>(
+    const result = await q<BindingRow>(
       `INSERT INTO ai_gateway.tenant_provider_credential
          (tenant_id, provider_id, credential_envelope, status, model_allowlist,
-          last_4, fallback_on_error, bound_by)
-       VALUES ($1::uuid, $2, $3, 'active', $4, $5, $6, $7)
-       RETURNING binding_id, tenant_id, provider_id, status, model_allowlist,
-                 last_4, fallback_on_error, bound_at, revoked_at, bound_by, revoked_by`,
-      [input.tenant_id, input.provider_id, envelope, allowlist, last_4, fallback, input.actor_id],
+          last_4, fallback_on_error, bound_by, layer, priority)
+       VALUES ($1::uuid, $2, $3, 'active', $4, $5, $6, $7, $8, $9)
+       RETURNING ${BINDING_COLUMNS}`,
+      [input.tenant_id, input.provider_id, envelope, allowlist, last_4, fallback, input.actor_id, layer, priority],
     );
     const row = result.rows[0];
     if (!row) {
@@ -221,7 +277,8 @@ export async function bindTenantCredential(input: BindInput): Promise<TenantCred
     return rowToBinding(row);
   });
 
-  invalidateProviderCache(input.tenant_id, input.provider_id);
+  // The completion gateway caches only llm credentials.
+  if (layer === 'llm') invalidateProviderCache(input.tenant_id, input.provider_id as ProviderId);
   await mirrorCredentialToConfig(inserted);
 
   try {
@@ -238,6 +295,8 @@ export async function bindTenantCredential(input: BindInput): Promise<TenantCred
         binding_id: inserted.binding_id,
         tenant_id: inserted.tenant_id,
         provider_id: inserted.provider_id,
+        layer: inserted.layer,
+        priority: inserted.priority,
         last_4: inserted.last_4,
         actor_id: input.actor_id,
         bound_at: inserted.bound_at,
@@ -264,26 +323,13 @@ export async function rotateTenantCredential(input: RotateInput): Promise<Tenant
   const last_4 = computeLast4(input.raw_key);
   const envelope = await wrapEnvelope(input.raw_key);
 
-  const row = await dataService.one<{
-    binding_id: string;
-    tenant_id: string;
-    provider_id: ProviderId;
-    status: 'active' | 'revoked';
-    model_allowlist: string[] | null;
-    last_4: string;
-    fallback_on_error: boolean;
-    bound_at: Date;
-    revoked_at: Date | null;
-    bound_by: string;
-    revoked_by: string | null;
-  }>(
+  const row = await dataService.one<BindingRow>(
     `UPDATE ai_gateway.tenant_provider_credential
         SET credential_envelope = $2,
             last_4 = $3,
             updated_at = now()
       WHERE binding_id = $1 AND status = 'active'
-      RETURNING binding_id, tenant_id, provider_id, status, model_allowlist,
-                last_4, fallback_on_error, bound_at, revoked_at, bound_by, revoked_by`,
+      RETURNING ${BINDING_COLUMNS}`,
     [input.binding_id, envelope, last_4],
   );
   if (!row) {
@@ -291,7 +337,7 @@ export async function rotateTenantCredential(input: RotateInput): Promise<Tenant
   }
   const binding = rowToBinding(row);
 
-  invalidateProviderCache(binding.tenant_id, binding.provider_id);
+  if (binding.layer === 'llm') invalidateProviderCache(binding.tenant_id, binding.provider_id as ProviderId);
   await mirrorCredentialToConfig(binding);
 
   try {
@@ -333,27 +379,14 @@ export async function revokeTenantCredential(input: RevokeInput): Promise<Tenant
     throw new Error(`revoke reason must be at least ${MIN_REVOKE_REASON_LEN} characters`);
   }
 
-  const row = await dataService.one<{
-    binding_id: string;
-    tenant_id: string;
-    provider_id: ProviderId;
-    status: 'active' | 'revoked';
-    model_allowlist: string[] | null;
-    last_4: string;
-    fallback_on_error: boolean;
-    bound_at: Date;
-    revoked_at: Date | null;
-    bound_by: string;
-    revoked_by: string | null;
-  }>(
+  const row = await dataService.one<BindingRow>(
     `UPDATE ai_gateway.tenant_provider_credential
         SET status = 'revoked',
             revoked_at = now(),
             revoked_by = $2,
             updated_at = now()
       WHERE binding_id = $1 AND status = 'active'
-      RETURNING binding_id, tenant_id, provider_id, status, model_allowlist,
-                last_4, fallback_on_error, bound_at, revoked_at, bound_by, revoked_by`,
+      RETURNING ${BINDING_COLUMNS}`,
     [input.binding_id, input.actor_id],
   );
   if (!row) {
@@ -361,7 +394,7 @@ export async function revokeTenantCredential(input: RevokeInput): Promise<Tenant
   }
   const binding = rowToBinding(row);
 
-  invalidateProviderCache(binding.tenant_id, binding.provider_id);
+  if (binding.layer === 'llm') invalidateProviderCache(binding.tenant_id, binding.provider_id as ProviderId);
   await mirrorCredentialToConfig(binding);
 
   try {
@@ -401,21 +434,8 @@ export async function revokeTenantCredential(input: RevokeInput): Promise<Tenant
 export async function listTenantCredentials(input: {
   tenant_id: string;
 }): Promise<TenantCredentialBinding[]> {
-  const rows = await dataService.rows<{
-    binding_id: string;
-    tenant_id: string;
-    provider_id: ProviderId;
-    status: 'active' | 'revoked';
-    model_allowlist: string[] | null;
-    last_4: string;
-    fallback_on_error: boolean;
-    bound_at: Date;
-    revoked_at: Date | null;
-    bound_by: string;
-    revoked_by: string | null;
-  }>(
-    `SELECT binding_id, tenant_id, provider_id, status, model_allowlist,
-            last_4, fallback_on_error, bound_at, revoked_at, bound_by, revoked_by
+  const rows = await dataService.rows<BindingRow>(
+    `SELECT ${BINDING_COLUMNS}
        FROM ai_gateway.tenant_provider_credential
       WHERE tenant_id = $1::uuid
       ORDER BY bound_at DESC`,
