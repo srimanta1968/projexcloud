@@ -1,4 +1,4 @@
-import type { FastifyInstance } from 'fastify';
+import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { requireAuth } from '@projexlight/sdk-identity';
 import {
   createCampaign,
@@ -86,18 +86,22 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
     },
   );
 
-  for (const action of ['start', 'pause', 'resume', 'cancel'] as CampaignAction[]) {
-    app.post<{ Params: { campaign_id: string } }>(
-      `/api/dialer/campaigns/:campaign_id/${action}`, { preHandler: requireAuth }, async (req, reply) => {
-        const body = (req.body ?? {}) as { tenant_id?: string };
-        const tenantId = resolveTenant(req, reply, body.tenant_id);
-        if (!tenantId) return reply;
-        try {
-          return reply.code(200).send({ data: { campaign: await transitionCampaign(tenantId, req.params.campaign_id, action, actorOf(req)) } });
-        } catch (err) {
-          return sendError(reply, err);
-        }
-      },
-    );
-  }
+  // Lifecycle actions — literal paths (not a loop) so route scanners and docs see each one.
+  const transition = (action: CampaignAction) => async (
+    req: FastifyRequest<{ Params: { campaign_id: string } }>,
+    reply: FastifyReply,
+  ): Promise<FastifyReply> => {
+    const body = (req.body ?? {}) as { tenant_id?: string };
+    const tenantId = resolveTenant(req, reply, body.tenant_id);
+    if (!tenantId) return reply;
+    try {
+      return reply.code(200).send({ data: { campaign: await transitionCampaign(tenantId, req.params.campaign_id, action, actorOf(req)) } });
+    } catch (err) {
+      return sendError(reply, err);
+    }
+  };
+  app.post<{ Params: { campaign_id: string } }>('/api/dialer/campaigns/:campaign_id/start', { preHandler: requireAuth }, transition('start'));
+  app.post<{ Params: { campaign_id: string } }>('/api/dialer/campaigns/:campaign_id/pause', { preHandler: requireAuth }, transition('pause'));
+  app.post<{ Params: { campaign_id: string } }>('/api/dialer/campaigns/:campaign_id/resume', { preHandler: requireAuth }, transition('resume'));
+  app.post<{ Params: { campaign_id: string } }>('/api/dialer/campaigns/:campaign_id/cancel', { preHandler: requireAuth }, transition('cancel'));
 }
