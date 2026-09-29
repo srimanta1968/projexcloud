@@ -48,6 +48,9 @@ export {
   consentJurisdiction,
   ensureVoiceConsentPurposes,
 } from './services/complianceGates';
+// Registers the calling_window + recording gates as a side effect of loading.
+export { localHHMM, nextWindowOpening, recordingRuleFor } from './services/windowRecordingGates';
+export type { RecordingRule } from './services/windowRecordingGates';
 
 // HTTP surface — mounted by the api-gateway.
 export * as server from './server';

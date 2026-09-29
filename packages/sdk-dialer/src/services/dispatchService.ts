@@ -62,6 +62,7 @@ export async function dispatchCall(call: Call): Promise<ChainOutcome> {
     subject_ref: call.subject_ref,
     person_id: call.person_id,
     jurisdiction: call.jurisdiction,
+    timezone: call.recipient_timezone,
     source: marker ? 'campaign' : 'api',
     campaign_id: marker?.campaign_id ?? null,
     contact_id: marker?.contact_id ?? null,
@@ -71,12 +72,18 @@ export async function dispatchCall(call: Call): Promise<ChainOutcome> {
   const status = STATUS_FOR[outcome.decision];
   const queueState = outcome.decision === 'allow' ? 'queued' : outcome.decision === 'defer' ? 'deferred' : 'refused';
 
+  // The recording gate decides whether the runtime may record; store it where the
+  // runtime reads it. Only set when the gate ran (a refused/deferred call leaves it null).
+  const rec = outcome.verdicts.recording?.detail as { recording_permitted?: boolean } | undefined;
+  const recordingConsent = typeof rec?.recording_permitted === 'boolean' ? rec.recording_permitted : null;
+
   await dataService.tx(async (q) => {
     await q(
       `UPDATE voice_agent.call
-          SET gate_verdicts = $3::jsonb, status = $4, next_attempt_at = $5::timestamptz, updated_at = now()
+          SET gate_verdicts = $3::jsonb, status = $4, next_attempt_at = $5::timestamptz,
+              recording_consent = COALESCE($6, recording_consent), updated_at = now()
         WHERE tenant_id = $1 AND call_id = $2`,
-      [call.tenant_id, call.call_id, JSON.stringify(outcome.verdicts), status, outcome.next_attempt_at],
+      [call.tenant_id, call.call_id, JSON.stringify(outcome.verdicts), status, outcome.next_attempt_at, recordingConsent],
     );
     await q(
       `INSERT INTO dialer.dispatch_queue
@@ -118,10 +125,10 @@ const DIALABLE_CONTACT = ['pending', 'deferred'];
 export async function dialContact(tenantId: string, campaignId: string, contactId: string, actorId: string | null): Promise<PlaceCallResult> {
   const row = await dataService.one<{
     agent_id: string; campaign_status: string; status: string; attempts: number; phone_number: string; subject_ref: string | null;
-    crm_encounter_id: string | null; person_id: string | null; jurisdiction: string | null;
+    crm_encounter_id: string | null; person_id: string | null; jurisdiction: string | null; timezone: string | null;
     context: Record<string, unknown>; campaign_context: Record<string, unknown>;
   }>(
-    `SELECT c.agent_id, c.status AS campaign_status, k.status, k.attempts, k.phone_number, k.subject_ref, k.crm_encounter_id, k.person_id, k.jurisdiction,
+    `SELECT c.agent_id, c.status AS campaign_status, k.status, k.attempts, k.phone_number, k.subject_ref, k.crm_encounter_id, k.person_id, k.jurisdiction, k.timezone,
             k.context, c.context AS campaign_context
        FROM dialer.campaign_contact k JOIN dialer.campaign c ON c.campaign_id = k.campaign_id AND c.tenant_id = k.tenant_id
       WHERE k.tenant_id = $1 AND k.campaign_id = $2 AND k.contact_id = $3`,
@@ -139,6 +146,7 @@ export async function dialContact(tenantId: string, campaignId: string, contactI
       crm_encounter_id: row.crm_encounter_id,
       person_id: row.person_id,
       jurisdiction: row.jurisdiction,
+      timezone: row.timezone,
       context: { ...row.campaign_context, ...row.context, [DIALER_CONTEXT_KEY]: { campaign_id: campaignId, contact_id: contactId } },
     },
     { idempotencyKey: `dialer:${contactId}:${row.attempts + 1}`, requestedBy: actorId ?? undefined },

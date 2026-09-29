@@ -66,6 +66,8 @@ export interface Call {
   person_id: string | null;
   /** Consent jurisdiction, e.g. US, US-CA, GB; null = derived from the number. */
   jurisdiction: string | null;
+  /** Recipient's IANA timezone for the calling window; null = strict per country. */
+  recipient_timezone: string | null;
   /** What post-call processing did (TK-4475): summary_source, mirror results, errors. */
   post_call: Record<string, unknown>;
   next_attempt_at: string | null;
@@ -95,6 +97,8 @@ export interface PlaceCallInput {
   person_id?: unknown;
   /** Consent jurisdiction (ISO country, optionally -region), e.g. US, US-CA, GB. */
   jurisdiction?: unknown;
+  /** Recipient's IANA timezone (e.g. America/Chicago) for the calling-window gate. */
+  timezone?: unknown;
 }
 
 export interface PlaceCallOptions {
@@ -120,6 +124,14 @@ export function setCallDispatcher(next: CallDispatcher | null): void {
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const E164_RE = /^\+[1-9][0-9]{6,14}$/;
+const isIanaTimezone = (tz: string): boolean => {
+  try {
+    new Intl.DateTimeFormat('en-US', { timeZone: tz });
+    return true;
+  } catch {
+    return false;
+  }
+};
 const JURISDICTION_RE = /^[A-Z]{2}(-[A-Z0-9]{1,3})?$/;
 const IDEMPOTENCY_KEY_RE = /^[\x21-\x7e]{1,255}$/;
 const MAX_SUBJECT_REF_LENGTH = 256;
@@ -131,7 +143,7 @@ const CALL_COLUMNS = `
   call_id, tenant_id, agent_id, agent_version_id, direction, subject_ref, from_number, to_number,
   carrier_call_ref, status, answered_by, disposition, summary, context, gate_verdicts,
   recording_consent, recording_ref, cost_breakdown, is_test, idempotency_key, requested_by,
-  crm_encounter_id, conversation_thread_id, person_id, jurisdiction, post_call, next_attempt_at, started_at, answered_at, ended_at, duration_s, created_at, updated_at`;
+  crm_encounter_id, conversation_thread_id, person_id, jurisdiction, recipient_timezone, post_call, next_attempt_at, started_at, answered_at, ended_at, duration_s, created_at, updated_at`;
 
 type CallRow = Omit<Call, 'next_attempt_at' | 'started_at' | 'answered_at' | 'ended_at' | 'created_at' | 'updated_at'> & {
   request_hash?: string | null;
@@ -178,6 +190,7 @@ interface ValidCall {
   threadId: string | null;
   personId: string | null;
   jurisdiction: string | null;
+  timezone: string | null;
 }
 
 function validatePlaceCall(input: PlaceCallInput): ValidCall {
@@ -199,6 +212,9 @@ function validatePlaceCall(input: PlaceCallInput): ValidCall {
     && (typeof input.jurisdiction !== 'string' || !JURISDICTION_RE.test(input.jurisdiction))) {
     throw validationError('jurisdiction must be an ISO country code, optionally with a region, e.g. US, US-CA, GB');
   }
+  if (input.timezone !== undefined && input.timezone !== null && (typeof input.timezone !== 'string' || !isIanaTimezone(input.timezone))) {
+    throw validationError('timezone must be an IANA timezone, e.g. America/Chicago');
+  }
   for (const f of ['crm_encounter_id', 'conversation_thread_id', 'person_id'] as const) {
     const val = input[f];
     if (val !== undefined && val !== null && (typeof val !== 'string' || !UUID_RE.test(val))) throw validationError(`${f} must be a uuid`);
@@ -213,6 +229,7 @@ function validatePlaceCall(input: PlaceCallInput): ValidCall {
     threadId: (input.conversation_thread_id as string | undefined) ?? null,
     personId: (input.person_id as string | undefined) ?? null,
     jurisdiction: (input.jurisdiction as string | undefined) ?? null,
+    timezone: (input.timezone as string | undefined) ?? null,
   };
 }
 
@@ -273,6 +290,7 @@ export async function placeCall(tenantId: string, input: PlaceCallInput, opts: P
       ...(v.threadId ? { conversation_thread_id: v.threadId } : {}),
       ...(v.personId ? { person_id: v.personId } : {}),
       ...(v.jurisdiction ? { jurisdiction: v.jurisdiction } : {}),
+      ...(v.timezone ? { timezone: v.timezone } : {}),
     }))
     .digest('hex');
 
@@ -300,13 +318,13 @@ export async function placeCall(tenantId: string, input: PlaceCallInput, opts: P
     `INSERT INTO voice_agent.call
        (tenant_id, agent_id, agent_version_id, direction, subject_ref, from_number, to_number,
         context, idempotency_key, request_hash, requested_by, crm_encounter_id, conversation_thread_id,
-        person_id, jurisdiction)
-     VALUES ($1, $2, $3, 'outbound', $4, $5, $6, $7::jsonb, $8, $9, $10, $11, $12, $13, $14)
+        person_id, jurisdiction, recipient_timezone)
+     VALUES ($1, $2, $3, 'outbound', $4, $5, $6, $7::jsonb, $8, $9, $10, $11, $12, $13, $14, $15)
      ON CONFLICT (tenant_id, idempotency_key) DO NOTHING
      RETURNING ${CALL_COLUMNS}`,
     [tenantId, v.agentId, agent.published_version_id, v.subjectRef, v.from, v.to,
       JSON.stringify(v.context), key ?? null, requestHash, opts.requestedBy ?? null, v.crmEncounterId, v.threadId,
-      v.personId, v.jurisdiction],
+      v.personId, v.jurisdiction, v.timezone],
   );
   if (!row) {
     // Lost a race with a concurrent request carrying the same key: that one placed it.

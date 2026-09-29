@@ -34,6 +34,8 @@ export interface GateContext {
   person_id: string | null;
   /** Explicit consent jurisdiction on the call; null = derive from the number. */
   jurisdiction: string | null;
+  /** Recipient's IANA timezone when known (call's own, or the contact's). */
+  timezone: string | null;
   source: 'api' | 'campaign';
   campaign_id: string | null;
   contact_id: string | null;
