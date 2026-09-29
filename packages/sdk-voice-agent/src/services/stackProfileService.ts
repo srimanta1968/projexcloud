@@ -1,5 +1,5 @@
 import { dataService } from '@projexlight/db-runtime';
-import { listTenantCredentials } from '@projexlight/sdk-ai-gateway';
+import { listTenantCredentials, type CredentialLayer } from '@projexlight/sdk-ai-gateway';
 import { catalogKey, findCatalogEntries, type CatalogLayer, type CatalogEntry } from '@projexlight/sdk-speech';
 import {
   VOICE_LAYERS,
@@ -171,11 +171,21 @@ export type CredentialChecker = (
   refs: { layer: VoiceLayer; binding_id: string }[],
 ) => Promise<InvalidCredentialRef[]>;
 
+/** The credential layer (TK-4497) a key must be bound for to serve each voice layer. */
+const CREDENTIAL_LAYER_FOR: Record<VoiceLayer, CredentialLayer> = {
+  telephony: 'telephony',
+  stt: 'stt',
+  llm_fast: 'llm',
+  llm_complex: 'llm',
+  tts: 'tts',
+};
+
 const defaultCredentialChecker: CredentialChecker = async (tenantId, refs) => {
   if (refs.length === 0) return [];
-  const bindings = await listTenantCredentials({ tenant_id: tenantId });
-  const active = new Set(bindings.filter((b) => b.status === 'active').map((b) => b.binding_id));
-  return refs.filter((r) => !active.has(r.binding_id));
+  const bindings = await listTenantCredentials({ tenant_id: tenantId, status: 'active' });
+  const layerOf = new Map(bindings.map((b) => [b.binding_id, b.layer]));
+  // Invalid when the binding is not the tenant's, is revoked, or was bound for another layer.
+  return refs.filter((r) => layerOf.get(r.binding_id) !== CREDENTIAL_LAYER_FOR[r.layer]);
 };
 
 let credentialChecker: CredentialChecker = defaultCredentialChecker;
@@ -268,7 +278,7 @@ async function assertCredentialsUsable(tenantId: string, refs: CredentialRefs): 
     throw new VoiceAgentError(
       422,
       'CredentialInvalid',
-      `credential ${first.binding_id} for layer ${first.layer} is missing or revoked`,
+      `credential ${first.binding_id} for layer ${first.layer} is missing, revoked or bound for another layer`,
     );
   }
 }

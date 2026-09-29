@@ -444,6 +444,8 @@ export const EVENT_TYPE_REGISTRY: Record<string, EventTypeMetadata> = {
   'voice.call.opted_out.v1':                  { event_type: 'voice.call.opted_out.v1',                  retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
   // VA·E4 (TK-4490) — an operator changed a speech catalog entry's price or certification.
   'speech.catalog_entry.updated.v1':          { event_type: 'speech.catalog_entry.updated.v1',          retention_class: 'operational', conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+  // VA·E3 (TK-4498) — a tenant voice/LLM key was revoked; failover_available says whether the layer still has a key.
+  'voice.credential.degraded.v1':             { event_type: 'voice.credential.degraded.v1',             retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
 
   /* --- sdk-incident (P15·E3) — exception/incident lifecycle + SLA --- */
   'incident.opened.v1':                       { event_type: 'incident.opened.v1',                       retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },

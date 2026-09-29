@@ -134,12 +134,16 @@ export interface BindInput {
 }
 
 export interface RotateInput {
+  /** The owning tenant: a binding of any other tenant is "not found". */
+  tenant_id: string;
   binding_id: string;
   raw_key: string;
   actor_id: string;
 }
 
 export interface RevokeInput {
+  /** The owning tenant: a binding of any other tenant is "not found". */
+  tenant_id: string;
   binding_id: string;
   reason: string;
   actor_id: string;
@@ -328,9 +332,9 @@ export async function rotateTenantCredential(input: RotateInput): Promise<Tenant
         SET credential_envelope = $2,
             last_4 = $3,
             updated_at = now()
-      WHERE binding_id = $1 AND status = 'active'
+      WHERE binding_id = $1 AND tenant_id = $4::uuid AND status = 'active'
       RETURNING ${BINDING_COLUMNS}`,
-    [input.binding_id, envelope, last_4],
+    [input.binding_id, envelope, last_4, input.tenant_id],
   );
   if (!row) {
     throw new Error(`active binding not found: ${input.binding_id}`);
@@ -385,9 +389,9 @@ export async function revokeTenantCredential(input: RevokeInput): Promise<Tenant
             revoked_at = now(),
             revoked_by = $2,
             updated_at = now()
-      WHERE binding_id = $1 AND status = 'active'
+      WHERE binding_id = $1 AND tenant_id = $3::uuid AND status = 'active'
       RETURNING ${BINDING_COLUMNS}`,
-    [input.binding_id, input.actor_id],
+    [input.binding_id, input.actor_id, input.tenant_id],
   );
   if (!row) {
     throw new Error(`active binding not found: ${input.binding_id}`);
@@ -424,7 +428,45 @@ export async function revokeTenantCredential(input: RevokeInput): Promise<Tenant
     );
   }
 
+  await emitCredentialDegraded(binding, input.reason.trim());
   return binding;
+}
+
+/**
+ * Revoking a key degrades every voice agent whose stack uses it (VA·E3, TK-4498): emits
+ * voice.credential.degraded.v1 naming the layer and whether another active key for that
+ * layer remains to fail over to. The payload carries identifiers only — never key
+ * material or its last 4 characters.
+ */
+async function emitCredentialDegraded(binding: TenantCredentialBinding, reason: string): Promise<void> {
+  try {
+    const remaining = await dataService.one<{ n: number }>(
+      `SELECT count(*)::int AS n FROM ai_gateway.tenant_provider_credential
+        WHERE tenant_id = $1::uuid AND layer = $2 AND status = 'active'`,
+      [binding.tenant_id, binding.layer],
+    );
+    await appendAuditEntry({
+      pool_index: AUDIT_POOL,
+      event_type: 'voice.credential.degraded.v1',
+      actor_kind: 'human',
+      actor_id: binding.revoked_by ?? 'unknown',
+      tenant_id: binding.tenant_id,
+      subject_kind: 'ai_gateway.tenant_provider_credential',
+      subject_id: binding.binding_id,
+      retention_class: 'regulated',
+      payload: {
+        binding_id: binding.binding_id,
+        provider_id: binding.provider_id,
+        layer: binding.layer,
+        priority: binding.priority,
+        reason,
+        failover_available: (remaining?.n ?? 0) > 0,
+        revoked_at: binding.revoked_at ?? new Date().toISOString(),
+      },
+    });
+  } catch (err) {
+    console.error('[ai-gateway.byok] voice.credential.degraded emit failed', binding.binding_id, (err as Error).message);
+  }
 }
 
 /**
@@ -433,13 +475,17 @@ export async function revokeTenantCredential(input: RevokeInput): Promise<Tenant
  */
 export async function listTenantCredentials(input: {
   tenant_id: string;
+  layer?: CredentialLayer;
+  status?: 'active' | 'revoked';
 }): Promise<TenantCredentialBinding[]> {
   const rows = await dataService.rows<BindingRow>(
     `SELECT ${BINDING_COLUMNS}
        FROM ai_gateway.tenant_provider_credential
       WHERE tenant_id = $1::uuid
+        AND ($2::text IS NULL OR layer = $2)
+        AND ($3::text IS NULL OR status = $3)
       ORDER BY bound_at DESC`,
-    [input.tenant_id],
+    [input.tenant_id, input.layer ?? null, input.status ?? null],
   );
   return rows.map(rowToBinding);
 }
