@@ -3,6 +3,7 @@ import { requireAuth } from '@projexlight/sdk-identity';
 import {
   createCampaign,
   getCampaign,
+  isValidTimezone,
   listCampaigns,
   listContacts,
   transitionCampaign,
@@ -16,6 +17,7 @@ import { dispatchQueued } from '../services/queueDispatcher';
 import { reportAmd } from '../services/amdService';
 import { addCallerId, deactivateCallerId, listCallerIds } from '../services/callerIdService';
 import { DISPOSITIONS } from '../services/dispositionService';
+import { checkCallingWindow } from '../services/windowRecordingGates';
 import { resolveTenant } from './tenantScope';
 import { sendError } from './sendError';
 
@@ -106,6 +108,38 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
       }
     },
   );
+
+  // TK-4507 — may this recipient be called now? The calling_window gate's own verdict: the
+  // campaign's window (or the default 08:00-21:00) in the recipient's local time zone(s).
+  app.post('/api/dialer/calling-window/check', { preHandler: requireAuth }, async (req, reply) => {
+    const body = (req.body ?? {}) as { tenant_id?: string; to_number?: unknown; recipient_timezone?: unknown; campaign_id?: unknown; at?: unknown };
+    const tenantId = resolveTenant(req, reply, body.tenant_id);
+    if (!tenantId) return reply;
+    const details: string[] = [];
+    if (typeof body.to_number !== 'string' || !/^\+[1-9][0-9]{6,14}$/.test(body.to_number)) details.push('to_number must be E.164, e.g. +14155550100');
+    if (body.recipient_timezone !== undefined && body.recipient_timezone !== null
+      && (typeof body.recipient_timezone !== 'string' || !isValidTimezone(body.recipient_timezone))) {
+      details.push('recipient_timezone must be an IANA timezone, e.g. America/Chicago');
+    }
+    if (body.campaign_id !== undefined && body.campaign_id !== null
+      && (typeof body.campaign_id !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(body.campaign_id))) {
+      details.push('campaign_id must be a uuid');
+    }
+    const at = body.at === undefined || body.at === null ? new Date() : new Date(String(body.at));
+    if (Number.isNaN(at.getTime())) details.push('at must be an ISO-8601 timestamp');
+    if (details.length) return reply.code(400).send({ error: 'ValidationError', details });
+    if (typeof body.campaign_id === 'string' && !(await getCampaign(tenantId, body.campaign_id))) {
+      return reply.code(404).send({ error: 'NotFound', details: ['campaign not found'] });
+    }
+    const check = await checkCallingWindow({
+      tenant_id: tenantId,
+      to_number: body.to_number as string,
+      timezone: (body.recipient_timezone as string | undefined) ?? null,
+      campaign_id: (body.campaign_id as string | undefined) ?? null,
+      at,
+    });
+    return reply.code(200).send({ data: { check } });
+  });
 
   // TK-4484 — concurrency in use vs. caps, and an on-demand drain of the tenant's queue.
   app.get<{ Querystring: { tenant_id?: string } }>('/api/dialer/capacity', { preHandler: requireAuth }, async (req, reply) => {

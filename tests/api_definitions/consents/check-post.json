@@ -29,7 +29,8 @@
         "processor": "tenant",
         "jurisdiction": "US-CA"
       },
-      "expectedStatus": 200
+      "expectedStatus": 200,
+      "capturesResponse": true
     }
   ],
   "expectedResponse": {
@@ -41,7 +42,7 @@
   "captureResponse": {
     "consents.check.response.data.receipt_id": "data.receipt_id"
   },
-  "description": "Returns the current consent state for a (person_id, purpose_id, processor, jurisdiction) tuple. This is the hot-path gate every downstream SDK calls before processing PII (FR-CNS-1, FR-CNS-5). Always returns 200 with the evaluated result - a tuple with no receipt, an expired receipt or a revoked receipt is reported as not-allowed in the payload rather than as a 404 or 403. All four fields are mandatory non-empty strings and are trimmed. Edge cases: whitespace-only values count as missing; an unknown person_id or purpose_id yields a negative result, not an error; the call is read-only, side-effect-free and safely repeatable; requires a valid JWT.",
+  "description": "Returns the current consent state for a (person_id, purpose_id, processor, jurisdiction) tuple. This is the hot-path gate every downstream SDK calls before processing PII (FR-CNS-1, FR-CNS-5). Always returns 200 with the evaluated result - a tuple with no receipt, an expired receipt or a revoked receipt is reported as not-allowed in the payload rather than as a 404 or 403. All four fields are mandatory non-empty strings and are trimmed. Edge cases: whitespace-only values count as missing; an unknown person_id or purpose_id yields a negative result, not an error; the call is read-only, side-effect-free and safely repeatable; requires a valid JWT. VOICE PURPOSES (0892cb5b-f0d4-43a5-b3db-770361137b1b#AC3 — consent can be granted and checked for ai_voice_outbound and call_recording): sdk-consent migration 003 seeds the platform purposes ai_voice_outbound (receive outbound calls placed by an AI voice agent; the sdk-dialer consent gate refuses an outbound AI call without an active receipt) and call_recording (have AI calls recorded; the dialer recording gate requires it where the all-party rule applies). Both are legal_basis consent and are granted and checked through this endpoint exactly like any other purpose — pass purpose_id ai_voice_outbound or call_recording.",
   "errorCases": [
     {
       "status": 401,
@@ -73,5 +74,8 @@
       "message": "InternalError",
       "when": "checkConsent throws (database unavailable or query error)"
     }
+  ],
+  "coversCriterion": [
+    "0892cb5b-f0d4-43a5-b3db-770361137b1b#AC3"
   ]
 }

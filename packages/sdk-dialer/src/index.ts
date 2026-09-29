@@ -49,7 +49,8 @@ export {
   ensureVoiceConsentPurposes,
 } from './services/complianceGates';
 // Registers the calling_window + recording gates as a side effect of loading.
-export { localHHMM, nextWindowOpening, recordingRuleFor } from './services/windowRecordingGates';
+export { localHHMM, nextWindowOpening, recordingRuleFor, callingWindowState, checkCallingWindow, recipientZones } from './services/windowRecordingGates';
+export type { CallingWindowState, CallingWindowCheck } from './services/windowRecordingGates';
 export type { RecordingRule } from './services/windowRecordingGates';
 
 export { acquireSlot, releaseSlot, capacitySnapshot, setPlanCapResolver, setKeyCapacityResolver } from './services/capacityService';

@@ -1,0 +1,164 @@
+{
+  "name": "POST /api/dialer/calling-window/check - May this recipient be called now (recipient-local calling window)",
+  "endpoint": "/api/dialer/calling-window/check",
+  "method": "POST",
+  "sdk": "sdk-dialer",
+  "sourceFile": "packages/sdk-dialer/src/server/routes.ts",
+  "requiresAuth": true,
+  "expectedStatus": 200,
+  "taskId": "34340bd5-0244-4431-b312-8ebb2bceeadd",
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "featureId": "0892cb5b-f0d4-43a5-b3db-770361137b1b",
+  "priority": 121,
+  "testability": "auto",
+  "coversCriterion": [
+    "0892cb5b-f0d4-43a5-b3db-770361137b1b#AC4"
+  ],
+  "description": "Returns the calling_window gate's own verdict for a recipient (0892cb5b-f0d4-43a5-b3db-770361137b1b#AC4 — the calling-window check uses the recipient's local time zone). The window is the campaign's window_start-window_end when campaign_id is given, else DIALER_DEFAULT_WINDOW 08:00-21:00, evaluated in the RECIPIENT's local time: recipient_timezone when given; else the campaign's default_timezone; else STRICTLY in every time zone of the number's country (a US number with no timezone is callable only when it is inside the window from New York to Honolulu); else DIALER_DEFAULT_TIMEZONE. It is computed with sdk-notification's quiet-hours engine (the window's complement is the recipient's quiet hours on every weekday), so DST and half-hour offsets follow the tz database. Response: allowed, reason (inside_calling_window | outside_calling_window | calling_window_unreachable), window_start, window_end, timezones, timezone_source (recipient | country:<CC> | default), local_times per zone, closed_timezones, and next_open_at — the first instant the window is open in every zone (null when allowed now, or when the zones never share the window within 8 days). at (ISO-8601, default now) evaluates another instant. The same function drives the gate, so an outbound call dispatched outside the window is deferred to next_open_at. Edge cases: to_number must be E.164 (400); recipient_timezone must be an IANA zone (400); campaign_id must be a uuid (400) of this tenant (404); tenant_id, when given, must be the authenticated tenant (403).",
+  "dependsOn": [
+    "POST /api/auth/signup-tenant"
+  ],
+  "fieldEnums": {
+    "reason": [
+      "inside_calling_window",
+      "outside_calling_window",
+      "calling_window_unreachable"
+    ],
+    "timezone_source": [
+      "recipient",
+      "country:<CC>",
+      "default"
+    ]
+  },
+  "testCases": [
+    {
+      "name": "Recipient in Chicago at 07:00 local is outside the window",
+      "coversCriterion": [
+        "0892cb5b-f0d4-43a5-b3db-770361137b1b#AC4"
+      ],
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "payload": {
+        "to_number": "{{static:+13125550100}}",
+        "recipient_timezone": "America/Chicago",
+        "at": "{{static:2026-09-29T12:00:00Z}}"
+      },
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "data": {
+          "check": {
+            "allowed": "boolean",
+            "reason": "string",
+            "window_start": "string",
+            "window_end": "string",
+            "timezones": [],
+            "timezone_source": "string",
+            "local_times": {},
+            "closed_timezones": [],
+            "next_open_at": "string|null"
+          }
+        }
+      },
+      "capturesResponse": true
+    },
+    {
+      "name": "400 - to_number not E.164",
+      "testType": "negative",
+      "coversErrorCase": "400|ValidationError|to-number",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "payload": {
+        "to_number": "3125550100"
+      },
+      "expectedStatus": 400,
+      "expectedError": {
+        "error": "ValidationError"
+      }
+    },
+    {
+      "name": "400 - recipient_timezone not an IANA zone",
+      "testType": "negative",
+      "coversErrorCase": "400|ValidationError|timezone",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "payload": {
+        "to_number": "{{static:+13125550100}}",
+        "recipient_timezone": "Mars/Olympus"
+      },
+      "expectedStatus": 400,
+      "expectedError": {
+        "error": "ValidationError"
+      }
+    },
+    {
+      "name": "404 - campaign of no such id in this tenant",
+      "testType": "negative",
+      "coversErrorCase": "404|NotFound",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "payload": {
+        "to_number": "{{static:+13125550100}}",
+        "campaign_id": "00000000-0000-4000-8000-000000000000"
+      },
+      "expectedStatus": 404,
+      "expectedError": {
+        "error": "NotFound"
+      }
+    },
+    {
+      "name": "401 - no bearer token",
+      "testType": "negative",
+      "coversErrorCase": "401|Unauthorized",
+      "headers": {},
+      "payload": {
+        "to_number": "{{static:+13125550100}}"
+      },
+      "expectedStatus": 401
+    }
+  ],
+  "errorCases": [
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "to_number must be E.164, e.g. +14155550100",
+      "when": "to_number missing or not E.164"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "recipient_timezone must be an IANA timezone, e.g. America/Chicago",
+      "when": "recipient_timezone is not a valid IANA zone"
+    },
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "at must be an ISO-8601 timestamp",
+      "when": "at is not a parseable timestamp"
+    },
+    {
+      "status": 403,
+      "code": "Forbidden",
+      "message": "tenant_id does not match the authenticated tenant",
+      "when": "tenant_id names another tenant"
+    },
+    {
+      "status": 404,
+      "code": "NotFound",
+      "message": "campaign not found",
+      "when": "campaign_id is not a campaign of this tenant"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "Missing bearer token",
+      "when": "no Authorization header"
+    }
+  ],
+  "captureResponse": {
+    "dialer.calling-window.check.response.data.check.next_open_at": "data.check.next_open_at"
+  }
+}

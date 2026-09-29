@@ -33,7 +33,8 @@
         "source_tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
         "target_tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}"
       },
-      "expectedStatus": 201
+      "expectedStatus": 201,
+      "capturesResponse": true
     }
   ],
   "statusTransitions": {
@@ -68,7 +69,7 @@
   "captureResponse": {
     "consents.create.response.data.receipt.receipt_id": "data.receipt.receipt_id"
   },
-  "description": "Grants a new consent receipt for the (person, purpose, processor, jurisdiction) tuple (FR-CNS-1) and returns 201 with the receipt. person_id, purpose_id, processor, app_id, jurisdiction and granted_by_actor are all mandatory non-empty strings; expires_at is optional but must parse as ISO-8601 when supplied; source_tenant_id and target_tenant_id are optional and drive the cross-border check. Edge cases: a cross-border transfer refused on jurisdictional grounds returns HTTP 451 CrossBorderViolation (FR-CNS-5), not a 403; an existing active receipt for the same tuple is a 409, so granting twice is not idempotent - revoke first; a purpose_id that is not in the registry trips a foreign-key violation that is mapped to a 400 rather than a 404; an expires_at in the past is accepted (only parseability is validated); requires a valid JWT.",
+  "description": "Grants a new consent receipt for the (person, purpose, processor, jurisdiction) tuple (FR-CNS-1) and returns 201 with the receipt. person_id, purpose_id, processor, app_id, jurisdiction and granted_by_actor are all mandatory non-empty strings; expires_at is optional but must parse as ISO-8601 when supplied; source_tenant_id and target_tenant_id are optional and drive the cross-border check. Edge cases: a cross-border transfer refused on jurisdictional grounds returns HTTP 451 CrossBorderViolation (FR-CNS-5), not a 403; an existing active receipt for the same tuple is a 409, so granting twice is not idempotent - revoke first; a purpose_id that is not in the registry trips a foreign-key violation that is mapped to a 400 rather than a 404; an expires_at in the past is accepted (only parseability is validated); requires a valid JWT. VOICE PURPOSES (0892cb5b-f0d4-43a5-b3db-770361137b1b#AC3 — consent can be granted and checked for ai_voice_outbound and call_recording): sdk-consent migration 003 seeds the platform purposes ai_voice_outbound (receive outbound calls placed by an AI voice agent; the sdk-dialer consent gate refuses an outbound AI call without an active receipt) and call_recording (have AI calls recorded; the dialer recording gate requires it where the all-party rule applies). Both are legal_basis consent and are granted and checked through this endpoint exactly like any other purpose — pass purpose_id ai_voice_outbound or call_recording.",
   "errorCases": [
     {
       "status": 401,
@@ -124,5 +125,8 @@
       "message": "InternalError",
       "when": "Any other grantConsent failure (database error, event-emit failure)"
     }
+  ],
+  "coversCriterion": [
+    "0892cb5b-f0d4-43a5-b3db-770361137b1b#AC3"
   ]
 }
