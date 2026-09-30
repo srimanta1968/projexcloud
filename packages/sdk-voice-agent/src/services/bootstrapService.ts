@@ -1,6 +1,6 @@
 import { dataService } from '@projexlight/db-runtime';
 import { emitEvent } from '@projexlight/sdk-audit';
-import { CredentialUnavailableError, withTenantCredentialKey } from '@projexlight/sdk-ai-gateway';
+import { CredentialUnavailableError, listTenantCredentials, resolveTaggedRoute, withTenantCredentialKey } from '@projexlight/sdk-ai-gateway';
 import { VoiceAgentError, conflict, notFound, validationError } from '../models/errors';
 import type { LayerConfig, VoiceLayer } from '../models/presets';
 import { getVersion } from './agentService';
@@ -63,6 +63,18 @@ export interface RuntimeTool {
   signing_secret: string;
 }
 
+/** How a voice LLM tier resolved for this call (TK-4460). */
+export interface TierRoute {
+  /** Stack layer the tier runs on. */
+  layer: 'llm_fast' | 'llm_complex';
+  provider: string;
+  model: string | null;
+  /** The ai-gateway route rule that re-pointed the tier, or null for the stack default. */
+  rule_id: string | null;
+  /** Set when a matching rule could not be applied (e.g. no active key for its provider). */
+  note?: string;
+}
+
 export interface SessionTokenGrant {
   token: string;
   token_id: string;
@@ -105,6 +117,8 @@ export interface RuntimeBootstrap {
     layers: Record<RuntimeLayer, RuntimeLayerConfig>;
   };
   tools: RuntimeTool[];
+  /** voice.fast / voice.complex, resolved once per call from the tenant's route rules. */
+  routing: Record<'voice.fast' | 'voice.complex', TierRoute>;
   session_token: SessionTokenGrant;
   /** Nothing in this payload is valid past this instant (the session token's expiry). */
   expires_at: string;
@@ -212,6 +226,50 @@ async function keyHandle(tenantId: string, bindingId: string, priority: 'primary
   }));
 }
 
+const TIERS = [['voice.fast', 'llm_fast'], ['voice.complex', 'llm_complex']] as const;
+
+/**
+ * Two-tier LLM routing (VA·E1 · TK-4460): the tenant's ai-gateway route rules for the
+ * dedicated tags voice.fast / voice.complex re-point the stack's llm_fast / llm_complex
+ * layer to another provider/model, resolved here once per call so no turn reads Postgres.
+ * The routed provider's key is the tenant's active llm binding for it (primary first); the
+ * stack's own model becomes the failover when the layer had no secondary. A rule whose
+ * provider has no active key is reported and ignored.
+ */
+async function applyTierRoutes(tenantId: string, layers: Record<RuntimeLayer, RuntimeLayerConfig>): Promise<Record<'voice.fast' | 'voice.complex', TierRoute>> {
+  const out = {} as Record<'voice.fast' | 'voice.complex', TierRoute>;
+  let llmBindings: Awaited<ReturnType<typeof listTenantCredentials>> | null = null;
+  for (const [tag, layerName] of TIERS) {
+    const layer = layers[layerName];
+    const base: TierRoute = { layer: layerName, provider: layer.provider, model: layer.model ?? null, rule_id: null };
+    const d = await resolveTaggedRoute(tenantId, tag);
+    if (!d || (d.provider_id === layer.provider && d.model === layer.model)) {
+      out[tag] = d ? { ...base, rule_id: d.rule_id } : base;
+      continue;
+    }
+    let handle: KeyHandle | null = d.provider_id === layer.primary.provider ? layer.primary : null;
+    if (!handle) {
+      llmBindings ??= await listTenantCredentials({ tenant_id: tenantId, layer: 'llm', status: 'active' });
+      const b = llmBindings.filter((x) => x.provider_id === d.provider_id).sort((a, z) => (a.priority === 'primary' ? -1 : 0) - (z.priority === 'primary' ? -1 : 0))[0];
+      if (b) handle = await keyHandle(tenantId, b.binding_id, 'primary').catch(() => null);
+    }
+    if (!handle) {
+      out[tag] = { ...base, note: `route rule ${d.rule_id} targets ${d.provider_id}, which has no active key; kept the stack model` };
+      continue;
+    }
+    const { primary, secondary, ...config } = layer;
+    layers[layerName] = {
+      ...config,
+      provider: d.provider_id,
+      model: d.model,
+      primary: handle,
+      secondary: secondary ?? { ...primary, priority: 'secondary', config },
+    };
+    out[tag] = { layer: layerName, provider: d.provider_id, model: d.model, rule_id: d.rule_id };
+  }
+  return out;
+}
+
 /**
  * Bootstraps one runtime session. See the module comment for the payload.
  *
@@ -273,6 +331,8 @@ export async function bootstrapRuntimeSession(input: BootstrapInput): Promise<Ru
     }
     layers[layer] = { ...profile[layer], primary, secondary };
   }
+
+  const routing = await applyTierRoutes(call.tenant_id, layers);
 
   const tools: RuntimeTool[] = (await effectiveTools(call.tenant_id, call.agent_version_id)).map((t) => ({
     tool_id: t.tool_id,
@@ -355,6 +415,7 @@ export async function bootstrapRuntimeSession(input: BootstrapInput): Promise<Ru
     },
     stack: { profile_id: profile.profile_id, preset_key: profile.preset_key, certified: profile.certified, layers },
     tools,
+    routing,
     session_token,
     expires_at: session_token.expires_at,
     first_bootstrap: first,

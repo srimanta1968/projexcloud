@@ -69,6 +69,8 @@ export interface Bootstrap {
   };
   stack: { profile_id: string; preset_key: string; certified: boolean; layers: Record<RuntimeLayer, RuntimeLayerConfig> };
   tools: RuntimeTool[];
+  /** voice.fast / voice.complex as resolved from the tenant's route rules (TK-4460). */
+  routing?: Record<'voice.fast' | 'voice.complex', { layer: 'llm_fast' | 'llm_complex'; provider: string; model: string | null; rule_id: string | null; note?: string }>;
   session_token: { token: string; token_id: string; expires_at: string; allowed_tools: string[] };
   expires_at: string;
   first_bootstrap: boolean;

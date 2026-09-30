@@ -24,6 +24,7 @@ import type { SessionContext, SessionStore, TurnRecord } from '../session/sessio
 import { ClauseChunker } from './chunker';
 import { Speaker, type TtsBinding } from './speaker';
 import { soundsIncomplete, turnConfig, type TurnConfig } from './turnDetector';
+import { classifyTurn, routerConfig } from './turnRouter';
 import { EnergyVad, vadConfig } from './vad';
 
 /**
@@ -75,6 +76,7 @@ export class VoiceSession {
   private turnAbort: AbortController | null = null;
   /** The agent line currently being spoken (greeting or reply), to mark on barge-in. */
   private speakingRec: TurnRecord | null = null;
+  private readonly router: ReturnType<typeof routerConfig>;
 
   constructor(
     protected readonly room: Room,
@@ -90,6 +92,7 @@ export class VoiceSession {
     this.turnCfg = turnConfig(sttOpts);
     const td = ((sttOpts?.turn_detection ?? {}) as Record<string, unknown>);
     this.vad = new EnergyVad(vadConfig(td.sensitivity, { minSpeechMs: td.min_interruption_ms, minSilenceMs: td.min_silence_ms }, IN_RATE));
+    this.router = routerConfig(b.agent.escalation_rules);
   }
 
   protected ttsOpts(l: RuntimeLayerConfig) {
@@ -282,15 +285,20 @@ export class VoiceSession {
     return { role: 'user', content: `${context}\n${text}` };
   }
 
-  /** Which LLM layer answers this turn (TK-4460 routes fast/complex). */
-  protected pickLlm(_text: string): { layer: RuntimeLayerConfig; tier: 'fast' | 'complex' } {
-    return { layer: this.session.boot.stack.layers.llm_fast, tier: 'fast' };
+  /**
+   * Which LLM answers this turn (TK-4460): the router tags it fast or complex; the tier's
+   * layer already points at the tenant's routed provider/model (bootstrap routing).
+   */
+  protected pickLlm(text: string): { layer: RuntimeLayerConfig; tier: 'fast' | 'complex'; reason: string } {
+    const v = classifyTurn(text, this.router);
+    const layers = this.session.boot.stack.layers;
+    return { layer: v.tier === 'complex' ? layers.llm_complex : layers.llm_fast, tier: v.tier, reason: v.reason };
   }
 
   protected async respond(text: string, endedAt: number): Promise<void> {
     if (this.ended) return;
     this.history.push(this.userMessage(text));
-    const { layer, tier } = this.pickLlm(text);
+    const { layer, tier, reason } = this.pickLlm(text);
     const req: CompletionRequest = {
       model: layer.model ?? '',
       prompt: [{ role: 'system', content: this.systemPrompt }, ...this.history],
@@ -351,6 +359,8 @@ export class VoiceSession {
       callId: this.session.callId,
       turn: rec.turn_index,
       tier,
+      route_reason: reason,
+      model: rec.model,
       ttft_ms: rec.ttft_ms,
       ttfa_ms: rec.ttfa_ms,
       llm_ms: llmDoneAt - requestedAt,

@@ -161,6 +161,23 @@ export async function resolveRoute(
   return null;
 }
 
+/**
+ * The tenant's route for a dedicated task tag (VA·E1 · TK-4460 — voice.fast / voice.complex):
+ * only rules whose predicate is EXACTLY { task_tag } count, so a tenant's catch-all rule for
+ * ordinary completions never re-routes voice turns. Skips providers whose circuit is open.
+ * The voice runtime resolves both tiers once per call (in the bootstrap), not per turn.
+ */
+export async function resolveTaggedRoute(tenant_id: string, task_tag: string): Promise<RouteDecision | null> {
+  const rows = await loadRules(tenant_id);
+  for (const row of rows) {
+    const keys = Object.keys(row.predicate ?? {});
+    if (keys.length !== 1 || keys[0] !== 'task_tag' || row.predicate.task_tag !== task_tag) continue;
+    if (await isCircuitOpen(row.provider_id)) continue;
+    return { rule_id: row.rule_id, provider_id: row.provider_id, model: row.model, priority: row.priority };
+  }
+  return null;
+}
+
 /* ----------------------------- circuit breaker ----------------------------- */
 
 interface CircuitRow {

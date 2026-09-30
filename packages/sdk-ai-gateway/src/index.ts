@@ -41,6 +41,7 @@ export type { ModelPrice, ModelPriceResolver } from './services/modelPricing';
 // Routing engine + circuit breaker (FR-AGW-2, FR-AGW-9) — TK-3289.
 export {
   resolveRoute,
+  resolveTaggedRoute,
   isCircuitOpen,
   recordProviderSuccess,
   recordProviderFailure,

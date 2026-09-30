@@ -74,7 +74,7 @@ export type { Carrier, Fallback, NumberBinding, BindNumberInput, InboundRoute, K
 
 export { registerTool, listTools, getTool, updateTool, effectiveTools, callSessionContext, toolSigningSecret } from './services/toolService';
 export { RUNTIME_LAYERS, bootstrapRuntimeSession, setSessionTokenMinter } from './services/bootstrapService';
-export type { BootstrapInput, RuntimeBootstrap, RuntimeFallback, RuntimeLayer, RuntimeLayerConfig, RuntimeTool, KeyHandle, SessionTokenGrant, SessionTokenMinter } from './services/bootstrapService';
+export type { BootstrapInput, RuntimeBootstrap, RuntimeFallback, RuntimeLayer, RuntimeLayerConfig, RuntimeTool, KeyHandle, SessionTokenGrant, SessionTokenMinter, TierRoute } from './services/bootstrapService';
 export type { CallSessionContext } from './services/toolService';
 export type { AppTool, RegisterToolInput, UpdateToolInput } from './services/toolService';
 

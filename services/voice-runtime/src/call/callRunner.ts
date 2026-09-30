@@ -112,6 +112,9 @@ export function callRunner(deps: CallRunnerDeps): CallHandler {
       direction: boot.call.direction,
       test: boot.call.is_test,
       tools: boot.tools.length,
+      routing: boot.routing
+        ? Object.fromEntries(Object.entries(boot.routing).map(([tier, r]) => [tier, `${r.provider}/${r.model ?? ''}${r.rule_id ? ` (rule ${r.rule_id})` : ''}${r.note ? ` [${r.note}]` : ''}`]))
+        : undefined,
     });
     try {
       await conversation(room, session, ctx);
