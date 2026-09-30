@@ -1,6 +1,7 @@
 import { dataService } from '@projexlight/db-runtime';
 import { appendAuditEntry } from '@projexlight/sdk-audit';
-import { envelopeEncrypt, storeSecret, retrieveSecret } from '@projexlight/sdk-secrets';
+import { envelopeEncrypt } from '@projexlight/sdk-secrets';
+import { ensureVaultRef, VAULT_REF } from './vaultRef';
 import { setConfig, revokeConfig } from '@projexlight/sdk-config';
 import type { ProviderId } from '@projexlight/contracts';
 import { invalidateProviderCache, unwrapCredential } from './completionService';
@@ -82,19 +83,10 @@ const AUDIT_POOL = process.env.AI_GATEWAY_AUDIT_POOL || 'admin-default';
 // Must be a well-formed secret://{app|pool|tenant}/{id} ref (id: [A-Za-z0-9._-],
 // no slashes) — the previous 'platform/ai-gateway/tenant-byok' failed sdk-secrets
 // validation, 500ing every bind. The platform BYOK-wrapping key is pool-scoped.
-const VAULT_REF = process.env.AI_GATEWAY_BYOK_VAULT_REF || 'secret://pool/ai-gateway-tenant-byok';
-const VAULT_KMS_KEY_ID = process.env.AI_GATEWAY_BYOK_KMS_KEY_ID || 'ai-gateway-tenant-byok';
-
-// The sdk-secrets catalog is in-process; register the wrapping ref on first use
-// so envelopeEncrypt's requireRef() finds it (idempotent).
-let _vaultRefReady = false;
-async function ensureVaultRef(): Promise<void> {
-  if (_vaultRefReady) return;
-  if (!(await retrieveSecret(VAULT_REF))) {
-    await storeSecret({ ref: VAULT_REF, scope: 'pool', kms_key_id: VAULT_KMS_KEY_ID });
-  }
-  _vaultRefReady = true;
-}
+// VAULT_REF must be a well-formed secret://{app|pool|tenant}/{id} ref (id: [A-Za-z0-9._-],
+// no slashes) — the previous 'platform/ai-gateway/tenant-byok' failed sdk-secrets
+// validation, 500ing every bind. The platform BYOK-wrapping key is pool-scoped.
+// Registered in-process on first use by ensureVaultRef (vaultRef.ts).
 
 export interface TenantCredentialBinding {
   binding_id: string;

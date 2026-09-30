@@ -2,6 +2,7 @@ import crypto from 'crypto';
 import { dataService } from '@projexlight/db-runtime';
 import { appendAuditEntry } from '@projexlight/sdk-audit';
 import { envelopeDecrypt } from '@projexlight/sdk-secrets';
+import { ensureVaultRef, VAULT_REF } from './vaultRef';
 import type {
   AgentContext,
   CompletionRequest,
@@ -246,6 +247,8 @@ export async function unwrapCredential(envelope: Buffer): Promise<Buffer> {
     // Platform credentials bootstrapped from env: {"material": "<key>", "source_env": ...}.
     if (maybe && typeof maybe.material === 'string') return Buffer.from(maybe.material, 'utf8');
     if (maybe && typeof maybe.ref === 'string' && typeof maybe.wrapped === 'string') {
+      // The wrapping ref must be registered in THIS process before it can decrypt.
+      if (maybe.ref === VAULT_REF) await ensureVaultRef();
       return envelopeDecrypt({
         ref: maybe.ref,
         wrapped_dek_b64: maybe.wrapped,
