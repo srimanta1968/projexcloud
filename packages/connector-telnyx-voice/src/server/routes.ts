@@ -8,6 +8,10 @@ import { applyTelnyxEvent, verifyTelnyxSignature, type TelnyxEnvelope } from '..
  * Any 2xx stops Telnyx retrying, so an event is acknowledged once it is recorded.
  */
 export async function registerRoutes(app: FastifyInstance): Promise<void> {
+  // The gateway registers an explicit root JSON parser; re-adding the type in this (child)
+  // scope raises FST_ERR_CTP_ALREADY_PRESENT and takes the gateway down at boot. Remove it
+  // here first — raw bytes in this plugin, ordinary JSON everywhere else (as sdk-payment).
+  app.removeContentTypeParser('application/json');
   app.addContentTypeParser('application/json', { parseAs: 'string' }, (_req, body, done) => {
     done(null, { raw: String(body ?? '') });
   });
