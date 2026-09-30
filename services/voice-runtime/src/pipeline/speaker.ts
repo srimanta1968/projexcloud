@@ -1,4 +1,5 @@
-import { AudioFrame, type AudioSource } from '@livekit/rtc-node';
+import { AudioFrame } from '@livekit/rtc-node';
+import type { AudioSink } from './media';
 import { log } from '../log';
 import type { TtsOptions, TtsProvider } from '../providers/types';
 
@@ -65,7 +66,7 @@ export class Speaker {
   private generation = 0;
   private errorCb: ((err: Error, provider: string | null) => boolean) | null = null;
 
-  constructor(private readonly source: AudioSource, private readonly outRate: number) {
+  constructor(private readonly source: AudioSink, private readonly outRate: number) {
     this.frameSamples = Math.round(outRate / 50);
   }
 

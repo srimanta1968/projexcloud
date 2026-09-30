@@ -94,6 +94,16 @@ export type BootstrapRequest =
   | { call_id: string }
   | { inbound: { to: string; from?: string; room: string; sip_call_id?: string } };
 
+/** A queued evaluation run as the control plane hands it to a worker (sdk-voice-agent EvalRunJob). */
+export interface EvalRunJob {
+  eval_run_id: string;
+  tenant_id: string;
+  agent_id: string;
+  version_id: string;
+  mode: 'sandbox' | 'evaluation';
+  scenarios: import('./sim/scenarioRunner').Scenario[];
+}
+
 /** What the runtime reports when a call ends (sdk-voice-agent CompleteCallInput). */
 export interface CallCloseOut {
   status: 'completed' | 'failed';
@@ -190,6 +200,21 @@ export class ControlPlane {
    */
   completeCall(callId: string, body: CallCloseOut): Promise<{ call_id: string; status: string; turns: number }> {
     return this.post(`/api/admin/voice-agent/calls/${encodeURIComponent(callId)}/complete`, body, 0);
+  }
+
+  // Evaluation runs (TK-4517/4518): claim a queued run, open a test call per scenario, finish it.
+  claimEvalRun(worker: string): Promise<{ eval_run: EvalRunJob | null }> {
+    return this.post('/api/admin/voice-agent/eval-runs/claim', { worker });
+  }
+
+  createEvalCall(evalRunId: string, worker: string, scenarioIndex: number): Promise<{ call_id: string; tenant_id: string }> {
+    return this.post(`/api/admin/voice-agent/eval-runs/${encodeURIComponent(evalRunId)}/calls`, { worker, scenario_index: scenarioIndex });
+  }
+
+  finishEvalRun(evalRunId: string, body: {
+    worker: string; status: 'completed' | 'error'; passed?: boolean; score?: number; metrics?: Record<string, unknown>; results?: unknown[]; error?: string;
+  }): Promise<{ eval_run: EvalRunJob }> {
+    return this.post(`/api/admin/voice-agent/eval-runs/${encodeURIComponent(evalRunId)}/finish`, body);
   }
 
   /** Batch form: the tool calls of one model turn in one request, so they can start together. */

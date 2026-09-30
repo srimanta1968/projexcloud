@@ -393,9 +393,19 @@ export async function bootstrapRuntimeSession(input: BootstrapInput): Promise<Ru
   const profile = await getStackProfile(call.tenant_id, version.stack_profile_id);
   if (!profile) throw conflict('the agent version\'s stack profile no longer exists');
 
+  // A sandbox evaluation call (TK-4517) runs on fake providers and never uses a key, so none
+  // is decrypted for it: every layer gets an empty placeholder. A tenant without keys can still
+  // exercise its app tools in CI, and no key leaves the vault for a call that cannot use it.
+  // Only the eval harness creates such calls (is_test + context.sandbox), and the runtime runs
+  // fake providers only on them.
+  const sandbox = call.is_test && (call.context as Record<string, unknown> | null)?.sandbox === true;
   const layers = {} as Record<RuntimeLayer, RuntimeLayerConfig>;
   for (const layer of RUNTIME_LAYERS) {
     const ref = profile.credential_refs[layer];
+    if (sandbox) {
+      layers[layer] = { ...profile[layer], primary: { binding_id: 'sandbox', provider: 'sandbox', priority: 'primary', key: '' }, secondary: null };
+      continue;
+    }
     if (!ref?.primary) throw new VoiceAgentError(409, 'StackIncomplete', `the stack profile has no ${layer} credential`);
     let primary: KeyHandle;
     try {

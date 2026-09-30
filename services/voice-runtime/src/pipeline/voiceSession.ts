@@ -1,25 +1,13 @@
-import {
-  AudioSource,
-  AudioStream,
-  LocalAudioTrack,
-  ParticipantKind,
-  RoomEvent,
-  TrackKind,
-  TrackPublishOptions,
-  TrackSource,
-  type RemoteParticipant,
-  type RemoteTrack,
-  type Room,
-} from '@livekit/rtc-node';
 import type { ChatMessage, CompletionRequest, ToolCallRecord } from '@projexlight/contracts';
 import type { Conversation } from '../call/callRunner';
-import type { ControlPlane, RuntimeLayerConfig } from '../controlPlane';
-import type { JobContext } from '../livekit/worker';
+import type { ControlPlane } from '../controlPlane';
 import { log } from '../log';
 import { llmAdapter } from '../providers/llm';
 import { sttProvider } from '../providers/stt';
 import { ttsProvider } from '../providers/tts';
-import type { SttStream, Transcript } from '../providers/types';
+import type { SttProvider, SttStream, Transcript, TtsProvider } from '../providers/types';
+import type { ProviderAdapter } from '@projexlight/llm-adapters';
+import { LiveKitMedia, type AudioSink, type CallMedia } from './media';
 import type { SessionContext, SessionStore, TurnRecord } from '../session/sessionStore';
 import { ToolExecutor, toolMessage } from '../tools/toolExecutor';
 import { TRANSFER_TOOL, summarizeForHandoff, transferAvailable, transferToolManifest } from '../call/transfer';
@@ -66,22 +54,40 @@ const TOOL_FALLBACK_LINE = "Sorry, I couldn't get that information right now. Ca
 /** Model rounds with tools offered per caller turn (a final round never offers tools). */
 const MAX_TOOL_ROUNDS = 3;
 
+/** Where a session gets its speech and LLM providers: the real registries, or fakes (sim/). */
+export interface SessionProviders {
+  stt(id: string): SttProvider;
+  tts(id: string): TtsProvider;
+  llm(id: string): ProviderAdapter;
+}
+export const realProviders: SessionProviders = { stt: sttProvider, tts: ttsProvider, llm: llmAdapter };
+
+/** Hooks for the evaluation harness (TK-4518); a live call has none. */
+export interface SessionObserver {
+  onBargeIn?(stopMs: number, heard: string): void;
+}
+
+export interface VoiceSessionOptions {
+  turnEvents?: TurnEventSink;
+  providers?: SessionProviders;
+  observer?: SessionObserver;
+}
+
 export class VoiceSession {
   readonly history: ChatMessage[] = [];
-  private source!: AudioSource;
+  private source!: AudioSink;
   protected speaker!: Speaker;
   protected stt: SttStream | null = null;
   private pendingUser: string[] = [];
   private turnChain: Promise<void> = Promise.resolve();
   protected ended = false;
-  private callerStream: AudioStream | null = null;
   protected readonly systemPrompt: string;
   /** Which key each layer is on right now (TK-4465). */
   protected readonly failover: LayerFailover;
   /** The TTS binding for a clause, resolved when it is synthesized (follows TTS failover). */
   protected readonly tts = (): TtsBinding => {
     const a = this.failover.active('tts');
-    return { provider: ttsProvider(a.provider), opts: { key: a.handle.key, model: a.model, voice: a.voice, language: this.session.boot.agent.language, options: a.options } };
+    return { provider: this.providers.tts(a.provider), opts: { key: a.handle.key, model: a.model, voice: a.voice, language: this.session.boot.agent.language, options: a.options } };
   };
   // Turn-taking (TK-4459).
   protected readonly turnCfg: TurnConfig;
@@ -99,19 +105,24 @@ export class VoiceSession {
   private readonly controlPlane: ControlPlane;
   /** The agent version can escalate to a human (escalation_rules.transfer). */
   private readonly canTransfer: boolean;
-  /** Ends the session while others stay in the room (bridge transfer). */
-  private endNow: (() => void) | null = null;
   /** True while the mandatory disclosure plays: barge-in cannot cut it short. */
   private protectedLine = false;
 
+  protected readonly turnEvents: TurnEventSink;
+  protected readonly providers: SessionProviders;
+  private readonly observer: SessionObserver;
+
   constructor(
-    protected readonly room: Room,
+    protected readonly media: CallMedia,
     protected readonly session: SessionContext,
-    protected readonly ctx: JobContext,
+    protected readonly signal: AbortSignal,
     protected readonly store: SessionStore,
     controlPlane: ControlPlane,
-    protected readonly turnEvents: TurnEventSink = noopTurnSink,
+    opts: VoiceSessionOptions = {},
   ) {
+    this.turnEvents = opts.turnEvents ?? noopTurnSink;
+    this.providers = opts.providers ?? realProviders;
+    this.observer = opts.observer ?? {};
     const b = session.boot;
     this.systemPrompt = `${VOICE_RULES}\n\n${b.agent.system_prompt}`;
     this.failover = new LayerFailover(b.stack.layers);
@@ -141,11 +152,7 @@ export class VoiceSession {
     const b = this.session.boot;
     // 200 ms queue: frames are captured close to real time, so 'heard' on barge-in and
     // speaker idle() track what the caller actually heard (the default queue is 1 s).
-    this.source = new AudioSource(OUT_RATE, 1, 200);
-    const track = LocalAudioTrack.createAudioTrack('agent-voice', this.source);
-    const opts = new TrackPublishOptions();
-    opts.source = TrackSource.SOURCE_MICROPHONE;
-    await this.room.localParticipant!.publishTrack(track, opts);
+    this.source = await this.media.openAgentAudio(OUT_RATE, 200);
     this.speaker = new Speaker(this.source, OUT_RATE);
 
     this.speaker.onError((err) => {
@@ -162,8 +169,19 @@ export class VoiceSession {
 
     await this.greet();
     void this.pumpCallerAudio();
-    await this.untilCallEnds();
+    await this.media.untilEnds();
     await this.cleanup();
+  }
+
+  /** The harness: resolves once every queued turn is answered and the agent has stopped talking. */
+  async settled(): Promise<void> {
+    await this.turnChain;
+    await this.speaker.idle();
+  }
+
+  /** The harness: the agent is talking (or about to) right now. */
+  get agentBusy(): boolean {
+    return this.speaker.busy || this.turnAbort !== null;
   }
 
   /**
@@ -175,7 +193,7 @@ export class VoiceSession {
     for (let attempt = 0; attempt < 2; attempt++) {
       const a = this.failover.active('stt');
       try {
-        const stt = await sttProvider(a.provider).connect({
+        const stt = await this.providers.stt(a.provider).connect({
           key: a.handle.key, model: a.model, language: this.session.boot.agent.language, sampleRate: IN_RATE, options: a.options,
         });
         this.stt = stt;
@@ -270,46 +288,17 @@ export class VoiceSession {
     return played;
   }
 
-  private findCallerTrack(): RemoteTrack | null {
-    for (const p of this.room.remoteParticipants.values()) {
-      if (p.kind === ParticipantKind.AGENT) continue;
-      for (const pub of p.trackPublications.values()) {
-        if (pub.kind === TrackKind.KIND_AUDIO && pub.track) return pub.track as RemoteTrack;
-      }
-    }
-    return null;
-  }
-
-  private waitForCallerTrack(): Promise<RemoteTrack | null> {
-    const now = this.findCallerTrack();
-    if (now) return Promise.resolve(now);
-    return new Promise((resolve) => {
-      const on = (track: RemoteTrack, _pub: unknown, p: RemoteParticipant): void => {
-        if (track.kind !== TrackKind.KIND_AUDIO || p.kind === ParticipantKind.AGENT) return;
-        this.room.off(RoomEvent.TrackSubscribed, on);
-        resolve(track);
-      };
-      this.room.on(RoomEvent.TrackSubscribed, on);
-      this.ctx.signal.addEventListener('abort', () => { this.room.off(RoomEvent.TrackSubscribed, on); resolve(null); }, { once: true });
-    });
-  }
-
   /** Caller audio -> STT, as 16 kHz mono PCM, until the call ends. */
   private async pumpCallerAudio(): Promise<void> {
-    const track = await this.waitForCallerTrack();
-    if (!track || this.ended) return;
-    this.callerStream = new AudioStream(track, IN_RATE, 1);
-    const reader = this.callerStream.getReader();
+    const audio = await this.media.callerAudio(IN_RATE);
+    if (!audio || this.ended) return;
     try {
-      for (;;) {
-        const { value, done } = await reader.read();
-        if (done || this.ended) break;
-        this.onCallerAudio(value.data);
+      for await (const pcm of audio) {
+        if (this.ended) break;
+        this.onCallerAudio(pcm);
       }
     } catch (err) {
       if (!this.ended) log.warn('caller audio stream ended', { callId: this.session.callId, error: (err as Error).message });
-    } finally {
-      reader.releaseLock();
     }
   }
 
@@ -359,6 +348,7 @@ export class VoiceSession {
       this.speakingRec = null;
     }
     log.info('barge_in', { callId: this.session.callId, stop_ms: stoppedAt - speechStartAt, heard_words: heard ? heard.split(/\s+/).length : 0 });
+    this.observer.onBargeIn?.(stoppedAt - speechStartAt, heard);
   }
 
   protected onTranscript(t: Transcript): void {
@@ -488,7 +478,7 @@ export class VoiceSession {
       const chunker = new ClauseChunker();
       let calls: ToolCallRecord[] = [];
       try {
-        for await (const chunk of llmAdapter(layer.provider).stream(req, Buffer.from(layer.handle.key), { signal: abort.signal })) {
+        for await (const chunk of this.providers.llm(layer.provider).stream(req, Buffer.from(layer.handle.key), { signal: abort.signal })) {
           if (this.ended || abort.signal.aborted) break;
           if (chunk.delta) {
             if (firstTokenAt === null) firstTokenAt = Date.now();
@@ -593,18 +583,16 @@ export class VoiceSession {
     const say = (line: string): Promise<void> => { said.push(line); return this.speaker.say(line, this.tts); };
     void say("Of course. I'm connecting you with a colleague now. One moment, please.");
     const fast = this.failover.active('llm_fast');
-    const summary = await summarizeForHandoff({ provider: fast.provider, model: fast.model, key: fast.handle.key }, this.session.turns, reason);
-    const others = [...this.room.remoteParticipants.values()].filter((p) => p.kind !== ParticipantKind.AGENT);
-    const sip = others.find((p) => p.kind === ParticipantKind.SIP);
-    const caller = sip ?? others[0];
+    const summary = await summarizeForHandoff({ provider: fast.provider, model: fast.model, key: fast.handle.key }, this.session.turns, reason, 4000, this.providers.llm);
+    const caller = this.media.caller();
     let result: Awaited<ReturnType<ControlPlane['transfer']>>;
     try {
       result = await this.controlPlane.transfer(this.session.callId, {
         reason,
         summary,
-        room: this.room.name ?? this.session.room,
-        caller_identity: caller?.identity ?? null,
-        caller_is_sip: !!sip,
+        room: this.media.roomName || this.session.room,
+        caller_identity: caller.identity,
+        caller_is_sip: caller.isSip,
         transcript: this.session.turns.filter((t) => t.text).map((t) => ({ speaker: t.speaker, text: t.text })),
       });
     } catch (err) {
@@ -625,46 +613,15 @@ export class VoiceSession {
     }
     // bridge: wait for the human to join the room, brief them, then leave the two of them.
     const humanId = `human-${this.session.callId}`;
-    const joined = await new Promise<boolean>((resolve) => {
-      if (this.room.remoteParticipants.has(humanId)) return resolve(true);
-      const t = setTimeout(() => { this.room.off(RoomEvent.ParticipantConnected, on); resolve(false); }, Number(process.env.VOICE_TRANSFER_ANSWER_MS ?? 45_000));
-      const on = (p: RemoteParticipant): void => {
-        if (p.identity !== humanId) return;
-        clearTimeout(t);
-        this.room.off(RoomEvent.ParticipantConnected, on);
-        resolve(true);
-      };
-      this.room.on(RoomEvent.ParticipantConnected, on);
-      signal.addEventListener('abort', () => { clearTimeout(t); resolve(false); }, { once: true });
-    });
+    const joined = await this.media.waitForParticipant(humanId, Number(process.env.VOICE_TRANSFER_ANSWER_MS ?? 45_000), signal);
     if (!joined) {
       await say("I'm sorry, my colleague isn't available right now. They will call you back shortly.");
       return said.join(' ');
     }
     await say(`Hi, this is the AI assistant handing over a call. ${summary} I'll leave you two to it.`);
     await this.speaker.idle();
-    this.endNow?.();
+    this.media.end();
     return said.join(' ');
-  }
-
-  private untilCallEnds(): Promise<void> {
-    return new Promise((resolve) => {
-      const done = (): void => {
-        this.room.off(RoomEvent.ParticipantDisconnected, onLeft);
-        this.room.off(RoomEvent.Disconnected, done);
-        resolve();
-      };
-      const onLeft = (p: RemoteParticipant): void => {
-        if (p.kind === ParticipantKind.AGENT) return;
-        const callers = [...this.room.remoteParticipants.values()].filter((x) => x.kind !== ParticipantKind.AGENT);
-        if (callers.length === 0) done();
-      };
-      this.room.on(RoomEvent.ParticipantDisconnected, onLeft);
-      this.room.on(RoomEvent.Disconnected, done);
-      this.ctx.signal.addEventListener('abort', done, { once: true });
-      this.endNow = done;
-      if ([...this.room.remoteParticipants.values()].every((x) => x.kind === ParticipantKind.AGENT)) done();
-    });
   }
 
   protected async cleanup(): Promise<void> {
@@ -673,11 +630,11 @@ export class VoiceSession {
     this.turnAbort?.abort();
     this.stt?.close();
     try { this.speaker?.interrupt(); } catch { /* source closed */ }
-    await this.callerStream?.cancel().catch(() => undefined);
+    await this.media.close().catch(() => undefined);
     await this.source?.close().catch(() => undefined);
   }
 }
 
 export function streamingConversation(store: SessionStore, controlPlane: ControlPlane, turnEvents: TurnEventSink = noopTurnSink): Conversation {
-  return (room, session, ctx) => new VoiceSession(room, session, ctx, store, controlPlane, turnEvents).run();
+  return (room, session, ctx) => new VoiceSession(new LiveKitMedia(room, ctx.signal, session.room), session, ctx.signal, store, controlPlane, { turnEvents }).run();
 }

@@ -247,3 +247,64 @@ export interface CatalogEntry {
   entry_id: string;
   [key: string]: unknown;
 }
+
+// ---- evaluation runs (VA·E10 · TK-4517/4518) -------------------------------------------------
+
+/** One simulated-caller scenario. Sandbox mode needs `turns`; `agent` scripts are sandbox-only. */
+export interface EvalScenario {
+  name: string;
+  /** Evaluation mode without `turns`: an LLM plays the caller. */
+  caller?: { persona?: string; goal?: string };
+  turns?: {
+    say: string;
+    /** Say it while the agent is still talking (barge-in probe). */
+    interrupt?: boolean;
+    /** Sandbox: the scripted agent's tool calls and reply for this line. Args may reference an
+     *  earlier tool's result: "{{tool:capture_lead.lead_id}}". */
+    agent?: { reply?: string; tool_calls?: { name: string; args?: Record<string, unknown> }[] };
+  }[];
+  max_turns?: number;
+  expect?: { tools_called?: string[]; tools_not_called?: string[]; transfer?: boolean; says_any?: string[]; says_none?: string[] };
+}
+
+export interface StartEvalRunInput {
+  /** sandbox: fake providers + scripted agent, free, never unlocks publish. evaluation (default): real LLM, gates publish. */
+  mode?: 'sandbox' | 'evaluation';
+  /** Omitted: the default suite for the mode. */
+  scenarios?: EvalScenario[];
+  suite?: string;
+}
+
+export interface EvalCheck { name: string; passed: boolean; detail?: string }
+
+export interface EvalScenarioResult {
+  name: string;
+  call_id: string;
+  passed: boolean;
+  checks: EvalCheck[];
+  error: string | null;
+  tools: { name: string; ok: boolean; error: string | null; ms: number }[];
+  transfer_requested: boolean;
+  ttft_ms: number[];
+  barge_in_stop_ms: number[];
+  transcript: { speaker: string; text: string; interrupted: boolean }[];
+  duration_ms: number;
+}
+
+export interface EvalRun {
+  eval_run_id: string;
+  agent_id: string;
+  version_id: string;
+  suite: string;
+  mode: 'reported' | 'sandbox' | 'evaluation';
+  status: 'queued' | 'running' | 'completed' | 'error';
+  passed: boolean | null;
+  score: number | null;
+  scenarios: EvalScenario[];
+  results: EvalScenarioResult[];
+  metrics: Record<string, unknown>;
+  error: string | null;
+  started_at: string | null;
+  finished_at: string | null;
+  created_at: string;
+}

@@ -18,6 +18,8 @@ import type {
   PlaceCallResult,
   StartTestSessionInput,
   TestSession,
+  EvalRun,
+  StartEvalRunInput,
 } from './types';
 
 export interface VoiceClientOptions {
@@ -130,6 +132,56 @@ export class VoiceClient {
 
   async listAgentVersions(agentId: string, page: { limit?: number; offset?: number } = {}): Promise<{ versions: AgentVersion[]; limit: number; offset: number }> {
     return (await this.request<{ data: { versions: AgentVersion[]; limit: number; offset: number } }>('GET', `/api/voice-agent/agents/${encodeURIComponent(agentId)}/versions`, { query: page })).data;
+  }
+
+  // ---- evaluation & publish (TK-4517/4518) --------------------------------------------------
+
+  /**
+   * Starts a simulated-caller run against a version. `mode: 'sandbox'` runs on fake providers
+   * with a scripted agent — no provider keys, nothing billed — and exercises your app tools for
+   * real (use it in CI). `mode: 'evaluation'` uses the tenant's real LLM and is what publish
+   * requires. The run is queued; poll it with getEvalRun or waitForEvalRun.
+   */
+  async startEvalRun(agentId: string, versionId: string, input: StartEvalRunInput = {}): Promise<EvalRun> {
+    return (await this.request<{ data: { eval_run: EvalRun } }>(
+      'POST', `/api/voice-agent/agents/${encodeURIComponent(agentId)}/versions/${encodeURIComponent(versionId)}/eval-runs/start`, { body: input },
+    )).data.eval_run;
+  }
+
+  async getEvalRun(evalRunId: string): Promise<EvalRun | null> {
+    return this.orNull(async () => (await this.request<{ data: { eval_run: EvalRun } }>('GET', `/api/voice-agent/eval-runs/${encodeURIComponent(evalRunId)}`)).data.eval_run);
+  }
+
+  async listEvalRuns(agentId: string, versionId: string, page: { limit?: number; offset?: number } = {}): Promise<{ eval_runs: EvalRun[]; total: number; limit: number; offset: number }> {
+    return (await this.request<{ data: { eval_runs: EvalRun[]; total: number; limit: number; offset: number } }>(
+      'GET', `/api/voice-agent/agents/${encodeURIComponent(agentId)}/versions/${encodeURIComponent(versionId)}/eval-runs`, { query: page },
+    )).data;
+  }
+
+  /** Polls until the run completes or errors (or `timeoutMs` passes, which throws). */
+  async waitForEvalRun(evalRunId: string, opts: { timeoutMs?: number; intervalMs?: number } = {}): Promise<EvalRun> {
+    const deadline = Date.now() + (opts.timeoutMs ?? 10 * 60_000);
+    for (;;) {
+      const run = await this.getEvalRun(evalRunId);
+      if (!run) throw new VoiceClientError(404, 'NotFound', ['evaluation run not found'], null);
+      if (run.status === 'completed' || run.status === 'error') return run;
+      if (Date.now() > deadline) throw new VoiceClientError(408, 'Timeout', [`evaluation run still ${run.status}`], null);
+      await new Promise((r) => setTimeout(r, opts.intervalMs ?? 3000));
+    }
+  }
+
+  /** Opens (or returns the open) approval request for publishing a version. */
+  async requestPublish(agentId: string, versionId: string, input: { route_id: string; initiator_persona_id?: string; reason?: string }): Promise<Record<string, unknown>> {
+    return (await this.request<{ data: Record<string, unknown> }>(
+      'POST', `/api/voice-agent/agents/${encodeURIComponent(agentId)}/versions/${encodeURIComponent(versionId)}/publish-request`, { body: input },
+    )).data;
+  }
+
+  /** Puts a version live: needs a passing evaluation run (not sandbox) and an approved request. 409 PublishBlocked names the unmet gate. */
+  async publishAgent(agentId: string, versionId: string): Promise<{ agent: Agent; version: AgentVersion }> {
+    return (await this.request<{ data: { agent: Agent; version: AgentVersion } }>(
+      'POST', `/api/voice-agent/agents/${encodeURIComponent(agentId)}/versions/${encodeURIComponent(versionId)}/publish`, { body: {} },
+    )).data;
   }
 
   /** Registers an app tool: an https endpoint the agent may call mid-conversation. */

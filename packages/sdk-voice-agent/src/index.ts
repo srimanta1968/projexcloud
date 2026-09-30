@@ -75,6 +75,8 @@ export type { Carrier, Fallback, NumberBinding, BindNumberInput, InboundRoute, K
 export { registerTool, listTools, getTool, updateTool, effectiveTools, callSessionContext, toolSigningSecret, revealToolSigningSecret, TOOL_SIGNATURE_SCHEME } from './services/toolService';
 export { transferCall, transferConfig } from './services/transferService';
 export { reportCredentialDegraded } from './services/credentialHealthService';
+export { EVAL_MODES, defaultScenarios, validateScenarios, startEvalRun, getEvalRun, listEvalRuns, claimEvalRun, createEvalCall, finishEvalRun } from './services/evalRunService';
+export type { EvalMode, EvalScenario, ScenarioTurn, ScenarioToolCall, EvalRunJob } from './services/evalRunService';
 export type { DegradationInput, DegradationRecord } from './services/credentialHealthService';
 export type { TransferConfig, TransferInput, TransferResult } from './services/transferService';
 export { RUNTIME_LAYERS, bootstrapRuntimeSession, setSessionTokenMinter, setRecordingRuleResolver, setInboundAdmitter } from './services/bootstrapService';

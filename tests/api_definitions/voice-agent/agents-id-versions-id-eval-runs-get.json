@@ -1,0 +1,90 @@
+{
+  "name": "GET /api/voice-agent/agents/:agent_id/versions/:version_id/eval-runs - List a version's evaluation runs, newest first",
+  "endpoint": "/api/voice-agent/agents/:agent_id/versions/:version_id/eval-runs",
+  "method": "GET",
+  "sdk": "sdk-voice-agent",
+  "sourceFile": "packages/sdk-voice-agent/src/server/agentRoutes.ts",
+  "requiresAuth": true,
+  "expectedStatus": 200,
+  "taskId": "abacde8b-7ba1-4c0c-ac4d-f9972f2f51b3",
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "featureId": "c1171be1-c7ce-4c6d-acbc-98ffe825bc53",
+  "epicId": "c32d0251-37f1-40d1-88b1-e4004028bfa5",
+  "testability": "auto",
+  "coversCriterion": [
+    "c1171be1-c7ce-4c6d-acbc-98ffe825bc53#AC1"
+  ],
+  "dependsOn": [
+    "POST /api/auth/signup-tenant",
+    "POST /api/ai-gateway/tenant-credentials",
+    "POST /api/voice-agent/stack-profiles",
+    "POST /api/voice-agent/agents",
+    "POST /api/voice-agent/agents/:agent_id/versions",
+    "POST /api/voice-agent/agents/:agent_id/versions/:version_id/eval-runs/start"
+  ],
+  "priority": 157,
+  "description": "Tenant route (Bearer JWT). A version's runs — reported, sandbox and evaluation — newest first, with status, pass/fail, score, per-scenario results (checks, transcript, tool outcomes) and metrics (ttft p50/p95, barge-in stop time, tool errors, thresholds) (c1171be1-c7ce-4c6d-acbc-98ffe825bc53#AC1). Query: limit (1-100, default 20), offset. 200 { eval_runs, total, limit, offset }. Errors: unknown agent/version 404; no token 401.",
+  "testCases": [
+    {
+      "name": "List the version's runs",
+      "coversCriterion": [
+        "c1171be1-c7ce-4c6d-acbc-98ffe825bc53#AC1"
+      ],
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "pathParams": {
+        "agent_id": "{{cache:voice-agent.agents.create.response.data.agent.agent_id}}",
+        "version_id": "{{cache:voice-agent.agents.versions.create.response.data.version.version_id}}"
+      },
+      "queryParams": {
+        "limit": 10
+      },
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "data": {
+          "eval_runs": "array",
+          "total": "number"
+        }
+      }
+    },
+    {
+      "name": "404 - unknown version",
+      "testType": "negative",
+      "coversErrorCase": "404|NotFound",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "pathParams": {
+        "agent_id": "{{cache:voice-agent.agents.create.response.data.agent.agent_id}}",
+        "version_id": "{{dynamic:uuid}}"
+      },
+      "expectedStatus": 404
+    },
+    {
+      "name": "401 - no token",
+      "testType": "negative",
+      "coversErrorCase": "401|Unauthorized",
+      "headers": {},
+      "pathParams": {
+        "agent_id": "{{cache:voice-agent.agents.create.response.data.agent.agent_id}}",
+        "version_id": "{{cache:voice-agent.agents.versions.create.response.data.version.version_id}}"
+      },
+      "expectedStatus": 401
+    }
+  ],
+  "errorCases": [
+    {
+      "status": 404,
+      "code": "NotFound",
+      "message": "agent version not found",
+      "when": "unknown agent or version"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "authentication required",
+      "when": "missing token"
+    }
+  ]
+}

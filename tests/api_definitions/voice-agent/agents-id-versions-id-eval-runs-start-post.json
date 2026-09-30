@@ -1,0 +1,188 @@
+{
+  "name": "POST /api/voice-agent/agents/:agent_id/versions/:version_id/eval-runs/start - Start a simulated-caller run (sandbox or evaluation) against a version",
+  "endpoint": "/api/voice-agent/agents/:agent_id/versions/:version_id/eval-runs/start",
+  "method": "POST",
+  "sdk": "sdk-voice-agent",
+  "sourceFile": "packages/sdk-voice-agent/src/server/agentRoutes.ts",
+  "requiresAuth": true,
+  "expectedStatus": 202,
+  "taskId": "abacde8b-7ba1-4c0c-ac4d-f9972f2f51b3",
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "featureId": "c1171be1-c7ce-4c6d-acbc-98ffe825bc53",
+  "epicId": "c32d0251-37f1-40d1-88b1-e4004028bfa5",
+  "testability": "auto",
+  "coversCriterion": [
+    "c1171be1-c7ce-4c6d-acbc-98ffe825bc53#AC1",
+    "693c5fa2-ec40-4c78-92e5-ce5fa8e3c05e#AC1",
+    "693c5fa2-ec40-4c78-92e5-ce5fa8e3c05e#AC2"
+  ],
+  "dependsOn": [
+    "POST /api/auth/signup-tenant",
+    "POST /api/ai-gateway/tenant-credentials",
+    "POST /api/voice-agent/stack-profiles",
+    "POST /api/voice-agent/agents",
+    "POST /api/voice-agent/agents/:agent_id/versions"
+  ],
+  "priority": 157,
+  "description": "Tenant route (Bearer JWT). Queues a simulated-caller run against the version; a voice-runtime worker claims it, plays each scenario as a simulated caller over loopback media (no phone line, no LiveKit room) and records the outcome — an evaluation run scores the version on task success, latency and barge-in and records pass or fail (c1171be1-c7ce-4c6d-acbc-98ffe825bc53#AC1). mode: sandbox — fake providers (loopback telephony, scripted STT, scripted agent LLM, silent TTS), no provider keys needed, the agent's real app tools are called (693c5fa2-ec40-4c78-92e5-ce5fa8e3c05e#AC1); a sandbox run NEVER unlocks publish and fake providers run only on the harness's own test calls, never a real one (693c5fa2-ec40-4c78-92e5-ce5fa8e3c05e#AC2). mode: evaluation (default) — the tenant's real LLM keys and tools, gates publish. Body: mode, scenarios (1-10; each: name, turns [{ say, interrupt?, agent? (sandbox only: reply, tool_calls [{ name, args }], args may reference an earlier result as {{tool:<name>.<path>}}) }] or caller { persona, goal } + max_turns for an LLM-driven caller (evaluation only), expect { tools_called, tools_not_called, transfer, says_any, says_none }), suite. Omitted scenarios: the default suite for the mode. 202 { eval_run: { eval_run_id, mode, status: queued, scenarios, ... } }. Errors: bad mode or scenarios 400; unknown agent/version 404; the version's stack profile is not active 409; no/invalid token 401.",
+  "fieldEnums": {
+    "mode": [
+      "sandbox",
+      "evaluation"
+    ]
+  },
+  "testCases": [
+    {
+      "name": "Start a sandbox run with a scripted caller",
+      "coversCriterion": [
+        "693c5fa2-ec40-4c78-92e5-ce5fa8e3c05e#AC1",
+        "c1171be1-c7ce-4c6d-acbc-98ffe825bc53#AC1"
+      ],
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "pathParams": {
+        "agent_id": "{{cache:voice-agent.agents.create.response.data.agent.agent_id}}",
+        "version_id": "{{cache:voice-agent.agents.versions.create.response.data.version.version_id}}"
+      },
+      "payload": {
+        "mode": "sandbox",
+        "scenarios": [
+          {
+            "name": "{{static:smoke}}",
+            "turns": [
+              {
+                "say": "{{static:Hello, is anyone there?}}",
+                "agent": {
+                  "reply": "{{static:Yes, I am here. How can I help?}}"
+                }
+              },
+              {
+                "say": "{{static:Thanks, goodbye.}}"
+              }
+            ]
+          }
+        ]
+      },
+      "expectedStatus": 202,
+      "expectedResponse": {
+        "data": {
+          "eval_run": {
+            "eval_run_id": "string",
+            "mode": "sandbox",
+            "status": "queued"
+          }
+        }
+      }
+    },
+    {
+      "name": "400 - a sandbox scenario needs a scripted caller",
+      "testType": "negative",
+      "coversErrorCase": "400|ValidationError",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "pathParams": {
+        "agent_id": "{{cache:voice-agent.agents.create.response.data.agent.agent_id}}",
+        "version_id": "{{cache:voice-agent.agents.versions.create.response.data.version.version_id}}"
+      },
+      "payload": {
+        "mode": "sandbox",
+        "scenarios": [
+          {
+            "name": "{{static:llm-caller}}",
+            "caller": {
+              "goal": "{{static:book a demo}}"
+            }
+          }
+        ]
+      },
+      "expectedStatus": 400
+    },
+    {
+      "name": "400 - agent scripts are sandbox-only",
+      "testType": "negative",
+      "coversErrorCase": "400|ValidationError",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "pathParams": {
+        "agent_id": "{{cache:voice-agent.agents.create.response.data.agent.agent_id}}",
+        "version_id": "{{cache:voice-agent.agents.versions.create.response.data.version.version_id}}"
+      },
+      "payload": {
+        "mode": "evaluation",
+        "scenarios": [
+          {
+            "name": "{{static:x}}",
+            "turns": [
+              {
+                "say": "{{static:hi}}",
+                "agent": {
+                  "reply": "{{static:hello}}"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "expectedStatus": 400
+    },
+    {
+      "name": "404 - unknown version",
+      "testType": "negative",
+      "coversErrorCase": "404|NotFound",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "pathParams": {
+        "agent_id": "{{cache:voice-agent.agents.create.response.data.agent.agent_id}}",
+        "version_id": "{{dynamic:uuid}}"
+      },
+      "payload": {
+        "mode": "sandbox"
+      },
+      "expectedStatus": 404
+    },
+    {
+      "name": "401 - no token",
+      "testType": "negative",
+      "coversErrorCase": "401|Unauthorized",
+      "headers": {},
+      "pathParams": {
+        "agent_id": "{{cache:voice-agent.agents.create.response.data.agent.agent_id}}",
+        "version_id": "{{cache:voice-agent.agents.versions.create.response.data.version.version_id}}"
+      },
+      "payload": {
+        "mode": "sandbox"
+      },
+      "expectedStatus": 401
+    }
+  ],
+  "errorCases": [
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "scenarios[0].turns is required in sandbox mode (a scripted caller)",
+      "when": "bad mode or scenarios"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "authentication required",
+      "when": "missing/invalid bearer token"
+    },
+    {
+      "status": 404,
+      "code": "NotFound",
+      "message": "agent version not found",
+      "when": "unknown agent or version"
+    },
+    {
+      "status": 409,
+      "code": "Conflict",
+      "message": "the version's stack profile is not active",
+      "when": "archived stack profile"
+    }
+  ]
+}

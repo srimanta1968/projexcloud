@@ -1,0 +1,72 @@
+{
+  "name": "POST /api/admin/voice-agent/eval-runs/claim - The voice runtime claims the oldest queued evaluation run",
+  "endpoint": "/api/admin/voice-agent/eval-runs/claim",
+  "method": "POST",
+  "sdk": "sdk-voice-agent",
+  "sourceFile": "services/api-gateway/src/app.ts",
+  "requiresAuth": false,
+  "expectedStatus": 200,
+  "taskId": "abacde8b-7ba1-4c0c-ac4d-f9972f2f51b3",
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "featureId": "c1171be1-c7ce-4c6d-acbc-98ffe825bc53",
+  "epicId": "c32d0251-37f1-40d1-88b1-e4004028bfa5",
+  "testability": "auto",
+  "coversCriterion": [
+    "c1171be1-c7ce-4c6d-acbc-98ffe825bc53#AC1"
+  ],
+  "dependsOn": [],
+  "priority": 157,
+  "description": "OPERATOR route (x-admin-ops-token = ADMIN_OPS_TOKEN) — the voice runtime's evaluation-run job API, not for apps. Leases the oldest queued run (or a running one whose worker's lease lapsed, VOICE_EVAL_LEASE_MS default 10 min) to `worker` across all tenants, so the worker can play it and record pass or fail (c1171be1-c7ce-4c6d-acbc-98ffe825bc53#AC1). Body: worker (required). 200 { eval_run } — null when nothing is queued. Errors: missing worker 400; missing/wrong ops token 401/403.",
+  "testCases": [
+    {
+      "name": "Claim (a run, or null when the queue is empty)",
+      "coversCriterion": [
+        "c1171be1-c7ce-4c6d-acbc-98ffe825bc53#AC1"
+      ],
+      "headers": {
+        "x-admin-ops-token": "{{var:ADMIN_OPS_TOKEN}}"
+      },
+      "payload": {
+        "worker": "{{static:api-test-worker}}"
+      },
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "success": true
+      }
+    },
+    {
+      "name": "400 - worker is required",
+      "testType": "negative",
+      "coversErrorCase": "400|ValidationError",
+      "headers": {
+        "x-admin-ops-token": "{{var:ADMIN_OPS_TOKEN}}"
+      },
+      "payload": {},
+      "expectedStatus": 400
+    },
+    {
+      "name": "401 - no ops token",
+      "testType": "negative",
+      "coversErrorCase": "401|Unauthorized",
+      "headers": {},
+      "payload": {
+        "worker": "{{static:w}}"
+      },
+      "expectedStatus": 401
+    }
+  ],
+  "errorCases": [
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "worker must be a non-empty string of at most 200 characters",
+      "when": "missing worker"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "admin token required",
+      "when": "missing/wrong ops token"
+    }
+  ]
+}

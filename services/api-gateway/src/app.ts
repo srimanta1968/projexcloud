@@ -398,6 +398,9 @@ import {
   transferCall,
   reportCredentialDegraded,
   completeCallFromRuntime,
+  claimEvalRun,
+  createEvalCall,
+  finishEvalRun,
   type BootstrapInput,
   applyCarrierStatus,
   registerCarrierProvisioner,
@@ -1516,6 +1519,37 @@ app.post<{ Params: { call_id: string } }>('/api/admin/voice-agent/calls/:call_id
   } catch (err) {
     if (err instanceof VoiceAgentError) return reply.code(err.status).send({ success: false, error: err.code, details: [err.message] });
     throw err;
+  }
+});
+// VA·E10 (TK-4517/4518) — the voice runtime's evaluation-run job API: claim the oldest queued
+// run (leased to the worker), open one test call per scenario (sandbox ones may run keyless on
+// fake providers), and record the outcome (voice.eval_run.completed.v1). Operator-only.
+const sendVoiceError = (reply: FastifyReply, err: unknown) => {
+  if (err instanceof VoiceAgentError) return reply.code(err.status).send({ success: false, error: err.code, details: [err.message] });
+  throw err;
+};
+app.post('/api/admin/voice-agent/eval-runs/claim', async (req, reply) => {
+  if (!(await checkAdminToken(req, reply))) return;
+  try {
+    return reply.code(200).send({ success: true, data: { eval_run: await claimEvalRun(((req.body ?? {}) as { worker?: unknown }).worker) } });
+  } catch (err) {
+    return sendVoiceError(reply, err);
+  }
+});
+app.post<{ Params: { eval_run_id: string } }>('/api/admin/voice-agent/eval-runs/:eval_run_id/calls', async (req, reply) => {
+  if (!(await checkAdminToken(req, reply))) return;
+  try {
+    return reply.code(201).send({ success: true, data: await createEvalCall(req.params.eval_run_id, (req.body ?? {}) as Record<string, unknown>) });
+  } catch (err) {
+    return sendVoiceError(reply, err);
+  }
+});
+app.post<{ Params: { eval_run_id: string } }>('/api/admin/voice-agent/eval-runs/:eval_run_id/finish', async (req, reply) => {
+  if (!(await checkAdminToken(req, reply))) return;
+  try {
+    return reply.code(200).send({ success: true, data: { eval_run: await finishEvalRun(req.params.eval_run_id, (req.body ?? {}) as Record<string, unknown>) } });
+  } catch (err) {
+    return sendVoiceError(reply, err);
   }
 });
 app.post<{ Params: { call_id: string } }>('/api/admin/voice-agent/calls/:call_id/session-token/validate', async (req, reply) => {

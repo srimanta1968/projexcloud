@@ -15,6 +15,7 @@ import {
   type RecordEvalRunInput,
 } from '../services/agentService';
 import { bindNumber, listNumbers, setKillSwitch, unbindNumber, type BindNumberInput } from '../services/numberService';
+import { getEvalRun, listEvalRuns, startEvalRun } from '../services/evalRunService';
 import { resolveTenant } from './tenantScope';
 import { sendError } from './sendError';
 
@@ -101,6 +102,49 @@ export function registerAgentRoutes(app: FastifyInstance): void {
       try {
         const evalRun = await recordEvalRun(tenantId, req.params.agent_id, req.params.version_id, body as RecordEvalRunInput);
         return reply.code(201).send({ data: { eval_run: evalRun } });
+      } catch (err) {
+        return sendError(reply, err);
+      }
+    },
+  );
+
+  // TK-4517/4518 — start a simulated-caller run (sandbox: fake providers + scripted agent,
+  // never unlocks publish; evaluation: the tenant's real LLM + tools, gates publish). Queued;
+  // a voice-runtime worker runs it. 202 Accepted: the result comes later (GET the run).
+  app.post<{ Params: VersionParams }>(
+    '/api/voice-agent/agents/:agent_id/versions/:version_id/eval-runs/start', { preHandler: requireAuth }, async (req, reply) => {
+      const body = (req.body ?? {}) as { tenant_id?: string; mode?: unknown; scenarios?: unknown; suite?: unknown };
+      const tenantId = resolveTenant(req, reply, body.tenant_id);
+      if (!tenantId) return reply;
+      try {
+        const actor = req.auth?.primary_persona_id ?? req.auth?.sub ?? 'unknown';
+        const evalRun = await startEvalRun(tenantId, req.params.agent_id, req.params.version_id, body, actor);
+        return reply.code(202).send({ data: { eval_run: evalRun } });
+      } catch (err) {
+        return sendError(reply, err);
+      }
+    },
+  );
+
+  app.get<{ Params: VersionParams; Querystring: { tenant_id?: string; limit?: string; offset?: string } }>(
+    '/api/voice-agent/agents/:agent_id/versions/:version_id/eval-runs', { preHandler: requireAuth }, async (req, reply) => {
+      const tenantId = resolveTenant(req, reply, req.query.tenant_id);
+      if (!tenantId) return reply;
+      try {
+        const page = await listEvalRuns(tenantId, req.params.agent_id, req.params.version_id, { limit: num(req.query.limit), offset: num(req.query.offset) });
+        return reply.code(200).send({ data: page });
+      } catch (err) {
+        return sendError(reply, err);
+      }
+    },
+  );
+
+  app.get<{ Params: { eval_run_id: string }; Querystring: { tenant_id?: string } }>(
+    '/api/voice-agent/eval-runs/:eval_run_id', { preHandler: requireAuth }, async (req, reply) => {
+      const tenantId = resolveTenant(req, reply, req.query.tenant_id);
+      if (!tenantId) return reply;
+      try {
+        return reply.code(200).send({ data: { eval_run: await getEvalRun(tenantId, req.params.eval_run_id) } });
       } catch (err) {
         return sendError(reply, err);
       }

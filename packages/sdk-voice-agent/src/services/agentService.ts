@@ -386,7 +386,7 @@ export async function createVersion(tenantId: string, agentId: string, input: Cr
   }
 }
 
-async function requireVersion(tenantId: string, agentId: string, versionId: string): Promise<AgentVersion> {
+export async function requireVersion(tenantId: string, agentId: string, versionId: string): Promise<AgentVersion> {
   const version = await getVersion(tenantId, agentId, versionId);
   if (!version) throw notFound('agent version not found');
   return version;
@@ -496,9 +496,12 @@ export async function publishVersion(tenantId: string, agentId: string, versionI
   const version = await requireVersion(tenantId, agentId, versionId);
   if (version.is_live) return { agent, version };
 
+  // Only finished runs that can vouch for the version count: a sandbox run (fake providers,
+  // scripted agent) proves the plumbing, not the agent, so it never unlocks publish (TK-4517).
   const latestRun = await dataService.one<{ eval_run_id: string; passed: boolean }>(
     `SELECT eval_run_id, passed FROM voice_agent.eval_run
-      WHERE tenant_id = $1 AND version_id = $2 ORDER BY created_at DESC LIMIT 1`,
+      WHERE tenant_id = $1 AND version_id = $2 AND status = 'completed' AND mode <> 'sandbox'
+      ORDER BY created_at DESC LIMIT 1`,
     [tenantId, versionId],
   );
   if (!latestRun) throw new VoiceAgentError(409, 'PublishBlocked', 'no evaluation run recorded for this version');

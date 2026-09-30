@@ -1,0 +1,86 @@
+{
+  "name": "GET /api/voice-agent/eval-runs/:eval_run_id - One evaluation run with its results",
+  "endpoint": "/api/voice-agent/eval-runs/:eval_run_id",
+  "method": "GET",
+  "sdk": "sdk-voice-agent",
+  "sourceFile": "packages/sdk-voice-agent/src/server/agentRoutes.ts",
+  "requiresAuth": true,
+  "expectedStatus": 200,
+  "taskId": "abacde8b-7ba1-4c0c-ac4d-f9972f2f51b3",
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "featureId": "c1171be1-c7ce-4c6d-acbc-98ffe825bc53",
+  "epicId": "c32d0251-37f1-40d1-88b1-e4004028bfa5",
+  "testability": "auto",
+  "coversCriterion": [
+    "c1171be1-c7ce-4c6d-acbc-98ffe825bc53#AC1"
+  ],
+  "dependsOn": [
+    "POST /api/auth/signup-tenant",
+    "POST /api/ai-gateway/tenant-credentials",
+    "POST /api/voice-agent/stack-profiles",
+    "POST /api/voice-agent/agents",
+    "POST /api/voice-agent/agents/:agent_id/versions",
+    "POST /api/voice-agent/agents/:agent_id/versions/:version_id/eval-runs/start"
+  ],
+  "priority": 157,
+  "description": "Tenant route (Bearer JWT). Poll a run started with POST .../eval-runs/start until status is completed or error: passed, score, per-scenario results and metrics — the run's record of pass or fail (c1171be1-c7ce-4c6d-acbc-98ffe825bc53#AC1). 200 { eval_run }. Errors: unknown run (or another tenant's) 404; no token 401.",
+  "testCases": [
+    {
+      "name": "Read the started run",
+      "coversCriterion": [
+        "c1171be1-c7ce-4c6d-acbc-98ffe825bc53#AC1"
+      ],
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "pathParams": {
+        "eval_run_id": "{{cache:voice-agent.agents.versions.eval-runs.start.response.data.eval_run.eval_run_id}}"
+      },
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "data": {
+          "eval_run": {
+            "eval_run_id": "string",
+            "mode": "sandbox"
+          }
+        }
+      }
+    },
+    {
+      "name": "404 - unknown run",
+      "testType": "negative",
+      "coversErrorCase": "404|NotFound",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "pathParams": {
+        "eval_run_id": "{{dynamic:uuid}}"
+      },
+      "expectedStatus": 404
+    },
+    {
+      "name": "401 - no token",
+      "testType": "negative",
+      "coversErrorCase": "401|Unauthorized",
+      "headers": {},
+      "pathParams": {
+        "eval_run_id": "{{cache:voice-agent.agents.versions.eval-runs.start.response.data.eval_run.eval_run_id}}"
+      },
+      "expectedStatus": 401
+    }
+  ],
+  "errorCases": [
+    {
+      "status": 404,
+      "code": "NotFound",
+      "message": "evaluation run not found",
+      "when": "unknown run"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "authentication required",
+      "when": "missing token"
+    }
+  ]
+}

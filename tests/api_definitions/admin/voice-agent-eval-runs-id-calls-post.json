@@ -1,0 +1,104 @@
+{
+  "name": "POST /api/admin/voice-agent/eval-runs/:eval_run_id/calls - Open the test call for one scenario of a claimed run",
+  "endpoint": "/api/admin/voice-agent/eval-runs/:eval_run_id/calls",
+  "method": "POST",
+  "sdk": "sdk-voice-agent",
+  "sourceFile": "services/api-gateway/src/app.ts",
+  "requiresAuth": false,
+  "expectedStatus": 409,
+  "taskId": "93b511a0-7edc-4509-b7cc-494cf5475927",
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "featureId": "693c5fa2-ec40-4c78-92e5-ce5fa8e3c05e",
+  "epicId": "c32d0251-37f1-40d1-88b1-e4004028bfa5",
+  "testability": "auto",
+  "coversCriterion": [
+    "693c5fa2-ec40-4c78-92e5-ce5fa8e3c05e#AC2",
+    "c1171be1-c7ce-4c6d-acbc-98ffe825bc53#AC1"
+  ],
+  "dependsOn": [
+    "POST /api/auth/signup-tenant",
+    "POST /api/ai-gateway/tenant-credentials",
+    "POST /api/voice-agent/stack-profiles",
+    "POST /api/voice-agent/agents",
+    "POST /api/voice-agent/agents/:agent_id/versions",
+    "POST /api/voice-agent/agents/:agent_id/versions/:version_id/eval-runs/start"
+  ],
+  "priority": 157,
+  "description": "OPERATOR route (x-admin-ops-token = ADMIN_OPS_TOKEN) — the voice runtime's evaluation-run job API, not for apps. Creates the is_test inbound call a scenario runs on, with context { eval_run_id, eval_mode, scenario, sandbox }. Only such a call may run on fake providers: bootstrap gives a sandbox call key placeholders instead of decrypting keys, and the runtime refuses fake providers on any call that is not the harness's own test call — fake mode cannot reach a real call (693c5fa2-ec40-4c78-92e5-ce5fa8e3c05e#AC2). Renews the lease. Body: worker, scenario_index. 201 { call_id, tenant_id }. Errors: bad scenario_index 400; unknown run 404; the worker does not hold the run 409; missing ops token 401. The API runner holds no claimed run, so its call reaches 409.",
+  "testCases": [
+    {
+      "name": "A worker that did not claim the run is refused -> 409",
+      "coversCriterion": [
+        "693c5fa2-ec40-4c78-92e5-ce5fa8e3c05e#AC2"
+      ],
+      "coversErrorCase": "409|Conflict",
+      "headers": {
+        "x-admin-ops-token": "{{var:ADMIN_OPS_TOKEN}}"
+      },
+      "pathParams": {
+        "eval_run_id": "{{cache:voice-agent.agents.versions.eval-runs.start.response.data.eval_run.eval_run_id}}"
+      },
+      "payload": {
+        "worker": "{{static:not-the-claimer}}",
+        "scenario_index": 0
+      },
+      "expectedStatus": 409
+    },
+    {
+      "name": "404 - unknown run",
+      "testType": "negative",
+      "coversErrorCase": "404|NotFound",
+      "headers": {
+        "x-admin-ops-token": "{{var:ADMIN_OPS_TOKEN}}"
+      },
+      "pathParams": {
+        "eval_run_id": "{{dynamic:uuid}}"
+      },
+      "payload": {
+        "worker": "{{static:w}}",
+        "scenario_index": 0
+      },
+      "expectedStatus": 404
+    },
+    {
+      "name": "401 - no ops token",
+      "testType": "negative",
+      "coversErrorCase": "401|Unauthorized",
+      "headers": {},
+      "pathParams": {
+        "eval_run_id": "{{cache:voice-agent.agents.versions.eval-runs.start.response.data.eval_run.eval_run_id}}"
+      },
+      "payload": {
+        "worker": "{{static:w}}",
+        "scenario_index": 0
+      },
+      "expectedStatus": 401
+    }
+  ],
+  "errorCases": [
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "scenario_index is out of range",
+      "when": "bad scenario_index or worker"
+    },
+    {
+      "status": 404,
+      "code": "NotFound",
+      "message": "evaluation run not found",
+      "when": "unknown run"
+    },
+    {
+      "status": 409,
+      "code": "Conflict",
+      "message": "this worker does not hold the evaluation run",
+      "when": "not claimed by this worker"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "admin token required",
+      "when": "missing ops token"
+    }
+  ]
+}

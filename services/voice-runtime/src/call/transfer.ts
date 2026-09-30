@@ -38,11 +38,14 @@ export function extractiveSummary(turns: TurnRecord[], reason: string): string {
  * Two or three sentences for the human taking the call, written by the fast model from the
  * transcript; falls back to the extractive summary when the model fails or is slow.
  */
-export async function summarizeForHandoff(layer: { provider: string; model?: string; key: string }, turns: TurnRecord[], reason: string, timeoutMs = 4000): Promise<string> {
+export async function summarizeForHandoff(
+  layer: { provider: string; model?: string; key: string }, turns: TurnRecord[], reason: string, timeoutMs = 4000,
+  llm: (provider: string) => Pick<ReturnType<typeof llmAdapter>, 'complete'> = llmAdapter,
+): Promise<string> {
   const transcript = turns.filter((t) => t.text).map((t) => `${t.speaker === 'caller' ? 'Caller' : 'Agent'}: ${t.text}`).join('\n').slice(-6000);
   try {
     const r = await Promise.race([
-      llmAdapter(layer.provider).complete({
+      llm(layer.provider).complete({
         model: layer.model ?? '',
         prompt: [
           { role: 'system', content: 'You write handoff notes for a human colleague taking over a phone call. Two or three plain sentences: who is calling, what they want, what has been done, what is still open. No preamble.' },

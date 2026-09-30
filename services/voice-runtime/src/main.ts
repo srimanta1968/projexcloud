@@ -1,6 +1,7 @@
 import { initRedis } from '@projexlight/redis-runtime';
 import { callRunner } from './call/callRunner';
 import { CloseOutBuffer } from './call/closeOut';
+import { EvalWorker } from './sim/evaluator';
 import { ConfigError, loadConfig } from './config';
 import { ControlPlane } from './controlPlane';
 import { startHealthServer } from './health';
@@ -36,8 +37,11 @@ async function main(): Promise<void> {
   const turnEvents = kafkaTurnSink();
   const worker = new AgentWorker(cfg, roomJobRunner(callRunner({ controlPlane, store, closeOut, conversation: streamingConversation(store, controlPlane, turnEvents) })));
   const health = await startHealthServer(worker, cfg.healthPort);
+  // Evaluation runs (TK-4517/4518): simulated calls over loopback media, one at a time.
+  const evalWorker = new EvalWorker({ controlPlane, store, worker: cfg.workerName });
   log.info('voice-runtime starting', { agentName: cfg.agentName, maxJobs: cfg.maxJobs, healthPort: cfg.healthPort, worker: cfg.workerName, closeOutDir: cfg.closeOutDir, bufferedCloseOuts: replaying });
   worker.start();
+  evalWorker.start();
 
   let shuttingDown = false;
   const shutdown = async (sig: string): Promise<void> => {
@@ -51,7 +55,10 @@ async function main(): Promise<void> {
     }
     shuttingDown = true;
     log.info('shutdown requested, draining', { signal: sig, activeCalls: worker.state().activeJobs });
+    const evalDone = evalWorker.stop();
     const left = await worker.drain(cfg.drainTimeoutMs);
+    // An unfinished run's lease lapses and another worker re-runs it; give it the drain window.
+    await Promise.race([evalDone, new Promise((r) => setTimeout(r, cfg.drainTimeoutMs))]);
     if (left > 0) log.warn('drain timeout reached, ending remaining calls', { remaining: left });
     worker.stop(true);
     // Last try for anything buffered; what is still pending stays on the volume for the next boot.
