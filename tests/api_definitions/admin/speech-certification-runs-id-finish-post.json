@@ -1,0 +1,72 @@
+{
+  "name": "POST /api/admin/speech/certification-runs/:run_id/finish - Record a certification run's outcome",
+  "endpoint": "/api/admin/speech/certification-runs/:run_id/finish",
+  "method": "POST",
+  "sdk": "sdk-speech",
+  "sourceFile": "services/api-gateway/src/app.ts",
+  "requiresAuth": false,
+  "expectedStatus": 404,
+  "taskId": "d13249fe-21af-457d-9779-f99135627ffd",
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "featureId": "c1171be1-c7ce-4c6d-acbc-98ffe825bc53",
+  "epicId": "c32d0251-37f1-40d1-88b1-e4004028bfa5",
+  "testability": "auto",
+  "coversCriterion": [
+    "c1171be1-c7ce-4c6d-acbc-98ffe825bc53#AC2"
+  ],
+  "dependsOn": [],
+  "priority": 158,
+  "description": "OPERATOR route (x-admin-ops-token), the voice runtime's only. Records completed (passed + metrics) or error and releases the run; a PASS certifies — platform scope: the catalog entry for everyone; tenant scope: that tenant only (c1171be1-c7ce-4c6d-acbc-98ffe825bc53#AC2); emits speech.certification_run.completed.v1. 200 { run }. Errors: bad body 400; unknown run 404; the worker does not hold the run 409; missing ops token 401.",
+  "testCases": [
+    {
+      "name": "Unknown run -> 404",
+      "coversCriterion": [
+        "c1171be1-c7ce-4c6d-acbc-98ffe825bc53#AC2"
+      ],
+      "coversErrorCase": "404|NotFound",
+      "headers": {
+        "x-admin-ops-token": "{{var:ADMIN_OPS_TOKEN}}"
+      },
+      "pathParams": {
+        "run_id": "{{dynamic:uuid}}"
+      },
+      "payload": {
+        "worker": "{{static:w}}",
+        "status": "completed",
+        "passed": true
+      },
+      "expectedStatus": 404
+    },
+    {
+      "name": "401 - no ops token",
+      "testType": "negative",
+      "coversErrorCase": "401|Unauthorized",
+      "headers": {},
+      "pathParams": {
+        "run_id": "{{dynamic:uuid}}"
+      },
+      "payload": {},
+      "expectedStatus": 401
+    }
+  ],
+  "errorCases": [
+    {
+      "status": 404,
+      "code": "NotFound",
+      "message": "certification run not found",
+      "when": "unknown run"
+    },
+    {
+      "status": 409,
+      "code": "Conflict",
+      "message": "this worker does not hold the certification run",
+      "when": "not claimed by this worker"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "admin token required",
+      "when": "missing/wrong ops token"
+    }
+  ]
+}

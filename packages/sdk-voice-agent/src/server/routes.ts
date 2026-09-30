@@ -25,8 +25,8 @@ import { sendError } from './sendError';
 export async function registerRoutes(app: FastifyInstance): Promise<void> {
   // TK-4469 — preset catalogue; TK-4490 — each preset flagged with its live catalog
   // certification (available=false when a layer's catalog entry is not certified).
-  app.get('/api/voice-agent/presets', { preHandler: requireAuth }, async (_req, reply) => {
-    return reply.code(200).send({ data: { presets: await listPresetsWithCertification() } });
+  app.get('/api/voice-agent/presets', { preHandler: requireAuth }, async (req, reply) => {
+    return reply.code(200).send({ data: { presets: await listPresetsWithCertification(req.auth?.tenant_id ?? undefined) } });
   });
 
   registerAgentRoutes(app);

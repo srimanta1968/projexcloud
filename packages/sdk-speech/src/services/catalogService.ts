@@ -1,5 +1,5 @@
 import { dataService } from '@projexlight/db-runtime';
-import { notFound, validationError } from '../models/errors';
+import { notFound, validationError, SpeechError } from '../models/errors';
 
 /**
  * The voice provider catalog (VA·E4 · TK-4489): every STT, TTS, LLM-for-voice and
@@ -165,7 +165,8 @@ export interface CatalogEntryChange {
 
 /**
  * Applies an operator edit to a catalog entry: price, certification and descriptive
- * fields change at runtime, no deploy. Certifying stamps certified_at; any other status
+ * fields change at runtime, no deploy. Certifying is not an edit (a certification run does it,
+ * TK-4519); any other status
  * clears it, so a revoked entry immediately stops being selectable in a stack profile.
  * The caller (an admin-guarded route) audits the returned changes.
  */
@@ -204,9 +205,14 @@ export async function updateCatalogEntry(entryId: string, patch: unknown, actor:
     if (!(CERTIFICATION_STATUSES as readonly string[]).includes(p.certification_status)) {
       throw validationError(`certification_status must be one of ${CERTIFICATION_STATUSES.join(', ')}`);
     }
+    // TK-4519: certified is earned by a passing certification run, never set by hand.
+    // Operators can still withdraw it (uncertified / revoked).
+    if (p.certification_status === 'certified') {
+      throw new SpeechError(409, 'CertificationRequiresRun', 'an entry is certified only by a passing certification run: POST /api/admin/speech/catalog/:entry_id/certification-runs');
+    }
     set('certification_status', p.certification_status);
-    // Keep the original certified_at when re-certifying an already certified entry.
-    sets.push(p.certification_status === 'certified' ? `certified_at = COALESCE(certified_at, now())` : `certified_at = NULL`);
+    // Withdrawn: stops being selectable in a stack profile immediately.
+    sets.push(`certified_at = NULL`);
   }
   if (p.cert_metrics !== undefined) {
     if (!isPlainObject(p.cert_metrics)) throw validationError('cert_metrics must be an object');

@@ -217,6 +217,15 @@ export class ControlPlane {
     return this.post(`/api/admin/voice-agent/eval-runs/${encodeURIComponent(evalRunId)}/finish`, body);
   }
 
+  // Catalog certification runs (TK-4519): claim one (with its vault keys), report it.
+  claimCertificationRun(worker: string): Promise<{ job: import('./sim/certify').CertificationJob | null }> {
+    return this.post('/api/admin/speech/certification-runs/claim', { worker });
+  }
+
+  finishCertificationRun(runId: string, body: { worker: string; status: 'completed' | 'error'; passed?: boolean; metrics?: Record<string, unknown>; error?: string }): Promise<unknown> {
+    return this.post(`/api/admin/speech/certification-runs/${encodeURIComponent(runId)}/finish`, body);
+  }
+
   /** Batch form: the tool calls of one model turn in one request, so they can start together. */
   async validateTools(callId: string, token: string, tools: string[]): Promise<Map<string, { valid: boolean; reason?: string }>> {
     const r = await this.post<{ results: { tool: string; valid: boolean; reason?: string }[] }>(

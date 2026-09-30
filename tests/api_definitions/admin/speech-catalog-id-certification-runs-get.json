@@ -1,0 +1,59 @@
+{
+  "name": "GET /api/admin/speech/catalog/:entry_id/certification-runs - Every certification run of an entry (operator)",
+  "endpoint": "/api/admin/speech/catalog/:entry_id/certification-runs",
+  "method": "GET",
+  "sdk": "sdk-speech",
+  "sourceFile": "services/api-gateway/src/app.ts",
+  "requiresAuth": false,
+  "expectedStatus": 200,
+  "taskId": "d13249fe-21af-457d-9779-f99135627ffd",
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "featureId": "c1171be1-c7ce-4c6d-acbc-98ffe825bc53",
+  "epicId": "c32d0251-37f1-40d1-88b1-e4004028bfa5",
+  "testability": "auto",
+  "coversCriterion": [
+    "c1171be1-c7ce-4c6d-acbc-98ffe825bc53#AC2"
+  ],
+  "dependsOn": [
+    "POST /api/auth/signup-tenant",
+    "GET /api/speech/catalog"
+  ],
+  "priority": 158,
+  "description": "OPERATOR route (x-admin-ops-token). All runs of the entry across tenants and scopes, newest first. A catalog entry is certified only after its certification run passes the thresholds (c1171be1-c7ce-4c6d-acbc-98ffe825bc53#AC2): llm — tool-call accuracy, p95 time to first token, barge-in stop; stt — word error rate of phone-band (8 kHz) audio a reference TTS synthesised, and time to the final transcript; tts — time to first audio, real-time factor, intelligibility through a reference STT. Keys come from the tenant key vault; ProjexCloud holds none. An operator can no longer set certified by PATCH (409 CertificationRequiresRun). 200 { runs }. Errors: missing ops token 401.",
+  "testCases": [
+    {
+      "name": "List the entry's runs",
+      "coversCriterion": [
+        "c1171be1-c7ce-4c6d-acbc-98ffe825bc53#AC2"
+      ],
+      "headers": {
+        "x-admin-ops-token": "{{var:ADMIN_OPS_TOKEN}}"
+      },
+      "pathParams": {
+        "entry_id": "{{cache:speech.catalog.list.response.data.entries.0.entry_id}}"
+      },
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "success": true
+      }
+    },
+    {
+      "name": "401 - no ops token",
+      "testType": "negative",
+      "coversErrorCase": "401|Unauthorized",
+      "headers": {},
+      "pathParams": {
+        "entry_id": "{{cache:speech.catalog.list.response.data.entries.0.entry_id}}"
+      },
+      "expectedStatus": 401
+    }
+  ],
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "admin token required",
+      "when": "missing/wrong ops token"
+    }
+  ]
+}

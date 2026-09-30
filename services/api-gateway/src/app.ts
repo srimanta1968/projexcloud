@@ -437,6 +437,10 @@ import {
   findCatalogEntries,
   listCatalog as listSpeechCatalog,
   SpeechError,
+  startCertificationRun,
+  listCertificationRuns,
+  claimCertificationRun,
+  finishCertificationRun,
 } from '@projexlight/sdk-speech';
 // P16 · EP-374 — the provenance kernel. Every ingesting SDK lands its rows here.
 import {
@@ -927,6 +931,53 @@ app.patch('/api/admin/speech/catalog/:entry_id', async (req, reply) => {
   } catch (err) {
     if (err instanceof SpeechError) return reply.code(err.status).send({ success: false, error: err.code, details: [err.message] });
     throw err;
+  }
+});
+// VA·E10 (TK-4519) — platform certification: an operator certifies an entry for EVERY tenant
+// with a key the operator's own tenant keeps in the vault (body: tenant_id, binding_id,
+// reference_binding_id for stt/tts). Only a passing run certifies; the PATCH above cannot.
+const speechError = (reply: FastifyReply, err: unknown) => {
+  if (err instanceof SpeechError) return reply.code(err.status).send({ success: false, error: err.code, details: [err.message] });
+  throw err;
+};
+app.post('/api/admin/speech/catalog/:entry_id/certification-runs', async (req, reply) => {
+  if (!(await checkAdminToken(req, reply))) return;
+  const { entry_id } = req.params as { entry_id: string };
+  const body = (req.body ?? {}) as { tenant_id?: unknown; binding_id?: unknown; reference_binding_id?: unknown; reference_model?: unknown; reference_voice?: unknown };
+  try {
+    if (typeof body.tenant_id !== 'string' || !/^[0-9a-f-]{36}$/i.test(body.tenant_id)) {
+      return reply.code(400).send({ success: false, error: 'ValidationError', details: ['tenant_id (the tenant whose vault holds the key) is required'] });
+    }
+    return reply.code(202).send({ success: true, data: { run: await startCertificationRun('platform', body.tenant_id, entry_id, body, 'admin-ops') } });
+  } catch (err) {
+    return speechError(reply, err);
+  }
+});
+app.get('/api/admin/speech/catalog/:entry_id/certification-runs', async (req, reply) => {
+  if (!(await checkAdminToken(req, reply))) return;
+  const { entry_id } = req.params as { entry_id: string };
+  try {
+    return reply.code(200).send({ success: true, data: { runs: await listCertificationRuns(entry_id, null) } });
+  } catch (err) {
+    return speechError(reply, err);
+  }
+});
+// The voice runtime's side: claim a queued run (with the keys it needs) and report it.
+app.post('/api/admin/speech/certification-runs/claim', async (req, reply) => {
+  if (!(await checkAdminToken(req, reply))) return;
+  try {
+    return reply.code(200).send({ success: true, data: { job: await claimCertificationRun(((req.body ?? {}) as { worker?: unknown }).worker) } });
+  } catch (err) {
+    return speechError(reply, err);
+  }
+});
+app.post('/api/admin/speech/certification-runs/:run_id/finish', async (req, reply) => {
+  if (!(await checkAdminToken(req, reply))) return;
+  const { run_id } = req.params as { run_id: string };
+  try {
+    return reply.code(200).send({ success: true, data: { run: await finishCertificationRun(run_id, (req.body ?? {}) as Record<string, unknown>) } });
+  } catch (err) {
+    return speechError(reply, err);
   }
 });
 // VA·E9 (TK-4516) — the operator console's catalog view: every entry in every certification

@@ -1,0 +1,68 @@
+{
+  "name": "GET /api/speech/catalog/:entry_id/certification-runs - This tenant's certification runs of an entry",
+  "endpoint": "/api/speech/catalog/:entry_id/certification-runs",
+  "method": "GET",
+  "sdk": "sdk-speech",
+  "sourceFile": "packages/sdk-speech/src/server/routes.ts",
+  "requiresAuth": true,
+  "expectedStatus": 200,
+  "taskId": "d13249fe-21af-457d-9779-f99135627ffd",
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "featureId": "c1171be1-c7ce-4c6d-acbc-98ffe825bc53",
+  "epicId": "c32d0251-37f1-40d1-88b1-e4004028bfa5",
+  "testability": "auto",
+  "coversCriterion": [
+    "c1171be1-c7ce-4c6d-acbc-98ffe825bc53#AC2"
+  ],
+  "dependsOn": [
+    "POST /api/auth/signup-tenant",
+    "POST /api/ai-gateway/tenant-credentials",
+    "GET /api/speech/catalog"
+  ],
+  "priority": 158,
+  "description": "Tenant route (Bearer JWT). This tenant's runs of the entry, newest first: status, passed, metrics against the thresholds recorded at start. A catalog entry is certified only after its certification run passes the thresholds (c1171be1-c7ce-4c6d-acbc-98ffe825bc53#AC2): llm — tool-call accuracy, p95 time to first token, barge-in stop; stt — word error rate of phone-band (8 kHz) audio a reference TTS synthesised, and time to the final transcript; tts — time to first audio, real-time factor, intelligibility through a reference STT. Keys come from the tenant key vault; ProjexCloud holds none. An operator can no longer set certified by PATCH (409 CertificationRequiresRun). 200 { runs }. Errors: unknown entry id format 404; no token 401.",
+  "testCases": [
+    {
+      "name": "List this tenant's runs of the entry",
+      "coversCriterion": [
+        "c1171be1-c7ce-4c6d-acbc-98ffe825bc53#AC2"
+      ],
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "pathParams": {
+        "entry_id": "{{cache:speech.catalog.list.response.data.entries.0.entry_id}}"
+      },
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "data": {
+          "runs": "array"
+        }
+      }
+    },
+    {
+      "name": "401 - no token",
+      "testType": "negative",
+      "coversErrorCase": "401|Unauthorized",
+      "headers": {},
+      "pathParams": {
+        "entry_id": "{{cache:speech.catalog.list.response.data.entries.0.entry_id}}"
+      },
+      "expectedStatus": 401
+    }
+  ],
+  "errorCases": [
+    {
+      "status": 404,
+      "code": "NotFound",
+      "message": "catalog entry not found",
+      "when": "unknown entry"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "authentication required",
+      "when": "missing token"
+    }
+  ]
+}

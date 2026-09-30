@@ -1,0 +1,95 @@
+{
+  "name": "POST /api/speech/catalog/:entry_id/certification-runs - Certify a catalog entry for this tenant with its own key",
+  "endpoint": "/api/speech/catalog/:entry_id/certification-runs",
+  "method": "POST",
+  "sdk": "sdk-speech",
+  "sourceFile": "packages/sdk-speech/src/server/routes.ts",
+  "requiresAuth": true,
+  "expectedStatus": 400,
+  "taskId": "d13249fe-21af-457d-9779-f99135627ffd",
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "featureId": "c1171be1-c7ce-4c6d-acbc-98ffe825bc53",
+  "epicId": "c32d0251-37f1-40d1-88b1-e4004028bfa5",
+  "testability": "auto",
+  "coversCriterion": [
+    "c1171be1-c7ce-4c6d-acbc-98ffe825bc53#AC2"
+  ],
+  "dependsOn": [
+    "POST /api/auth/signup-tenant",
+    "POST /api/ai-gateway/tenant-credentials",
+    "GET /api/speech/catalog"
+  ],
+  "priority": 158,
+  "description": "Tenant route (Bearer JWT). Queues a TENANT-scope certification run: a pass certifies the entry for this tenant only (its stack profiles then treat the layer as tenant_certified), a fail withdraws the tenant's earlier certification. Body: binding_id (the tenant's key for the entry's provider and layer), reference_binding_id (required for stt — a tts key — and tts — an stt key), reference_model?, reference_voice?. 202 { run }. A catalog entry is certified only after its certification run passes the thresholds (c1171be1-c7ce-4c6d-acbc-98ffe825bc53#AC2): llm — tool-call accuracy, p95 time to first token, barge-in stop; stt — word error rate of phone-band (8 kHz) audio a reference TTS synthesised, and time to the final transcript; tts — time to first audio, real-time factor, intelligibility through a reference STT. Keys come from the tenant key vault; ProjexCloud holds none. An operator can no longer set certified by PATCH (409 CertificationRequiresRun). Errors: wrong/missing key 400; unknown entry 404; a run of the entry already in progress 409; no token 401. The chain's key is an OpenAI llm key and the catalog lists stt entries first, so certifying entries.0 with it is refused (400 'binding_id is a llm key; this entry needs a stt key') — a real run needs the tenant's own key for the entry's provider and, for stt/tts, a reference key of the other layer; runs are executed by the voice runtime.",
+  "testCases": [
+    {
+      "name": "The chain's llm key cannot certify an stt entry -> 400",
+      "coversCriterion": [
+        "c1171be1-c7ce-4c6d-acbc-98ffe825bc53#AC2"
+      ],
+      "coversErrorCase": "400|ValidationError",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "pathParams": {
+        "entry_id": "{{cache:speech.catalog.list.response.data.entries.0.entry_id}}"
+      },
+      "payload": {
+        "binding_id": "{{cache:ai-gateway-tenant-credentials.create.response.data.binding.binding_id}}"
+      },
+      "expectedStatus": 400
+    },
+    {
+      "name": "404 - unknown entry",
+      "testType": "negative",
+      "coversErrorCase": "404|NotFound",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "pathParams": {
+        "entry_id": "{{dynamic:uuid}}"
+      },
+      "payload": {
+        "binding_id": "{{cache:ai-gateway-tenant-credentials.create.response.data.binding.binding_id}}"
+      },
+      "expectedStatus": 404
+    },
+    {
+      "name": "401 - no token",
+      "testType": "negative",
+      "coversErrorCase": "401|Unauthorized",
+      "headers": {},
+      "pathParams": {
+        "entry_id": "{{cache:speech.catalog.list.response.data.entries.0.entry_id}}"
+      },
+      "payload": {},
+      "expectedStatus": 401
+    }
+  ],
+  "errorCases": [
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "binding_id is a llm key; this entry needs a stt key",
+      "when": "the key does not fit the entry, or a reference key is missing"
+    },
+    {
+      "status": 404,
+      "code": "NotFound",
+      "message": "catalog entry not found",
+      "when": "unknown entry"
+    },
+    {
+      "status": 409,
+      "code": "Conflict",
+      "message": "a certification run of this entry is already in progress",
+      "when": "run in progress"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "authentication required",
+      "when": "missing token"
+    }
+  ]
+}

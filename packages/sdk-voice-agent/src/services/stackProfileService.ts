@@ -4,6 +4,7 @@ import {
   catalogKey,
   estimateCostPerMinute,
   findCatalogEntries,
+  findTenantCertifications,
   parseUsageProfile,
   type CatalogLayer,
   type CatalogEntry,
@@ -87,8 +88,12 @@ export interface UpdateStackProfileInput {
 export interface LayerCertification {
   layer: VoiceLayer;
   catalog_key: string | null;
-  /** The entry's status, or not_in_catalog when the provider/model has no entry. */
-  certification_status: 'certified' | 'uncertified' | 'revoked' | 'not_in_catalog';
+  /**
+   * The entry's status, or not_in_catalog when the provider/model has no entry;
+   * tenant_certified when not certified platform-wide but THIS tenant certified it with its
+   * own key through a certification run (TK-4519) — usable by this tenant only.
+   */
+  certification_status: 'certified' | 'tenant_certified' | 'uncertified' | 'revoked' | 'not_in_catalog';
   certified: boolean;
 }
 
@@ -113,31 +118,38 @@ function layerKeys(layers: LayerSet): { layer: VoiceLayer; key: string | null }[
   return out;
 }
 
-function certificationOf(layers: LayerSet, entries: Map<string, CatalogEntry>): LayerCertification[] {
+function certificationOf(layers: LayerSet, entries: Map<string, CatalogEntry>, tenantCertified: Set<string>): LayerCertification[] {
   return layerKeys(layers).map(({ layer, key }) => {
     const entry = key ? entries.get(key) : undefined;
-    const status = entry?.certification_status ?? 'not_in_catalog';
-    return { layer, catalog_key: key, certification_status: status, certified: status === 'certified' };
+    let status: LayerCertification['certification_status'] = entry?.certification_status ?? 'not_in_catalog';
+    if (status !== 'certified' && entry && key && tenantCertified.has(key)) status = 'tenant_certified';
+    return { layer, catalog_key: key, certification_status: status, certified: status === 'certified' || status === 'tenant_certified' };
   });
 }
 
-/** Catalog certification of each layer of several stacks, with one catalog read. */
-async function certifyMany(stacks: LayerSet[]): Promise<LayerCertification[][]> {
+/**
+ * Catalog certification of each layer of several stacks, with one catalog read. With a
+ * tenant, the tenant's own certifications count too (for that tenant only).
+ */
+async function certifyMany(stacks: LayerSet[], tenantId?: string): Promise<LayerCertification[][]> {
   const keys = new Set<string>();
   for (const st of stacks) for (const { key } of layerKeys(st)) if (key) keys.add(key);
-  const entries = await findCatalogEntries([...keys]);
-  return stacks.map((st) => certificationOf(st, entries));
+  const [entries, tenantCertified] = await Promise.all([
+    findCatalogEntries([...keys]),
+    tenantId ? findTenantCertifications(tenantId, [...keys]) : Promise.resolve(new Set<string>()),
+  ]);
+  return stacks.map((st) => certificationOf(st, entries, tenantCertified));
 }
 
 /**
  * Refuses layers whose catalog entry is not certified (422 UncertifiedProvider), unless
  * the caller explicitly opted in with allow_uncertified. Returns the certification.
  */
-async function assertLayersCertified(layers: LayerSet, allowUncertified: unknown): Promise<LayerCertification[]> {
+async function assertLayersCertified(tenantId: string, layers: LayerSet, allowUncertified: unknown): Promise<LayerCertification[]> {
   if (allowUncertified !== undefined && typeof allowUncertified !== 'boolean') {
     throw validationError('allow_uncertified must be a boolean');
   }
-  const [cert] = await certifyMany([layers]);
+  const [cert] = await certifyMany([layers], tenantId);
   const bad = cert.filter((c) => !c.certified);
   if (bad.length > 0 && allowUncertified !== true) {
     const list = bad.map((c) => `${c.layer} (${c.catalog_key ?? 'no model'}: ${c.certification_status})`).join(', ');
@@ -158,8 +170,8 @@ export interface PresetWithCertification extends VoicePreset {
 }
 
 /** The offered presets, each flagged with its layers' live catalog certification. */
-export async function listPresetsWithCertification(): Promise<PresetWithCertification[]> {
-  const certs = await certifyMany(VOICE_PRESETS.map((p) => p.layers));
+export async function listPresetsWithCertification(tenantId?: string): Promise<PresetWithCertification[]> {
+  const certs = await certifyMany(VOICE_PRESETS.map((p) => p.layers), tenantId);
   return VOICE_PRESETS.map((p, i) => ({ ...p, layer_certification: certs[i], available: certs[i].every((c) => c.certified) }));
 }
 
@@ -302,7 +314,8 @@ function mergeLayers(base: LayerMap, overrides: LayerOverrides | undefined): Lay
 
 /** Rows to models, with each profile's certification read live from the catalog (one query). */
 async function toModels(rows: StackProfileRow[]): Promise<StackProfile[]> {
-  const certs = await certifyMany(rows);
+  // Rows of one listing share a tenant; its own certifications count for it.
+  const certs = await certifyMany(rows, rows[0]?.tenant_id);
   return rows.map((r, i) => toModel(r, certs[i]));
 }
 
@@ -330,7 +343,7 @@ export async function createStackProfile(tenantId: string, input: CreateStackPro
   const credentialRefs = input.credential_refs ?? {};
   await assertCredentialsUsable(tenantId, credentialRefs);
   const layers = mergeLayers(preset.layers, input.overrides);
-  const cert = await assertLayersCertified(layers, input.allow_uncertified);
+  const cert = await assertLayersCertified(tenantId, layers, input.allow_uncertified);
 
   try {
     const row = await dataService.one<StackProfileRow>(
@@ -410,7 +423,7 @@ export async function updateStackProfile(
     { telephony: current.telephony, stt: current.stt, llm_fast: current.llm_fast, llm_complex: current.llm_complex, tts: current.tts },
     input.overrides,
   );
-  const cert = await assertLayersCertified(layers, input.allow_uncertified);
+  const cert = await assertLayersCertified(tenantId, layers, input.allow_uncertified);
 
   try {
     const row = await dataService.one<StackProfileRow>(

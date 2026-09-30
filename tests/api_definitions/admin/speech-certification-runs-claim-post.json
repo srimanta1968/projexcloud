@@ -1,0 +1,58 @@
+{
+  "name": "POST /api/admin/speech/certification-runs/claim - The voice runtime claims a queued certification run",
+  "endpoint": "/api/admin/speech/certification-runs/claim",
+  "method": "POST",
+  "sdk": "sdk-speech",
+  "sourceFile": "services/api-gateway/src/app.ts",
+  "requiresAuth": false,
+  "expectedStatus": 400,
+  "taskId": "d13249fe-21af-457d-9779-f99135627ffd",
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "featureId": "c1171be1-c7ce-4c6d-acbc-98ffe825bc53",
+  "epicId": "c32d0251-37f1-40d1-88b1-e4004028bfa5",
+  "testability": "auto",
+  "coversCriterion": [
+    "c1171be1-c7ce-4c6d-acbc-98ffe825bc53#AC2"
+  ],
+  "dependsOn": [],
+  "priority": 158,
+  "description": "OPERATOR route (x-admin-ops-token), the voice runtime's only. Leases the oldest queued run to `worker` and returns the job WITH THE DECRYPTED KEYS it needs (as a call bootstrap does) — so the definition deliberately exercises only its refusals: a successful claim would hand provider keys to the test runner and hold a real run's lease. A catalog entry is certified only after its certification run passes the thresholds (c1171be1-c7ce-4c6d-acbc-98ffe825bc53#AC2): llm — tool-call accuracy, p95 time to first token, barge-in stop; stt — word error rate of phone-band (8 kHz) audio a reference TTS synthesised, and time to the final transcript; tts — time to first audio, real-time factor, intelligibility through a reference STT. Keys come from the tenant key vault; ProjexCloud holds none. An operator can no longer set certified by PATCH (409 CertificationRequiresRun). 200 { job | null }. Errors: missing worker 400; missing ops token 401.",
+  "testCases": [
+    {
+      "name": "400 - worker is required",
+      "coversCriterion": [
+        "c1171be1-c7ce-4c6d-acbc-98ffe825bc53#AC2"
+      ],
+      "coversErrorCase": "400|ValidationError",
+      "headers": {
+        "x-admin-ops-token": "{{var:ADMIN_OPS_TOKEN}}"
+      },
+      "payload": {},
+      "expectedStatus": 400
+    },
+    {
+      "name": "401 - no ops token",
+      "testType": "negative",
+      "coversErrorCase": "401|Unauthorized",
+      "headers": {},
+      "payload": {
+        "worker": "{{static:w}}"
+      },
+      "expectedStatus": 401
+    }
+  ],
+  "errorCases": [
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "worker is required",
+      "when": "missing worker"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "admin token required",
+      "when": "missing/wrong ops token"
+    }
+  ]
+}

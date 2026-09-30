@@ -1,0 +1,62 @@
+{
+  "name": "GET /api/speech/certification-runs/:run_id - One of this tenant's certification runs",
+  "endpoint": "/api/speech/certification-runs/:run_id",
+  "method": "GET",
+  "sdk": "sdk-speech",
+  "sourceFile": "packages/sdk-speech/src/server/routes.ts",
+  "requiresAuth": true,
+  "expectedStatus": 404,
+  "taskId": "d13249fe-21af-457d-9779-f99135627ffd",
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "featureId": "c1171be1-c7ce-4c6d-acbc-98ffe825bc53",
+  "epicId": "c32d0251-37f1-40d1-88b1-e4004028bfa5",
+  "testability": "auto",
+  "coversCriterion": [
+    "c1171be1-c7ce-4c6d-acbc-98ffe825bc53#AC2"
+  ],
+  "dependsOn": [
+    "POST /api/auth/signup-tenant"
+  ],
+  "priority": 158,
+  "description": "Tenant route (Bearer JWT). Poll a run until status is completed (passed true/false, metrics) or error. A catalog entry is certified only after its certification run passes the thresholds (c1171be1-c7ce-4c6d-acbc-98ffe825bc53#AC2): llm — tool-call accuracy, p95 time to first token, barge-in stop; stt — word error rate of phone-band (8 kHz) audio a reference TTS synthesised, and time to the final transcript; tts — time to first audio, real-time factor, intelligibility through a reference STT. Keys come from the tenant key vault; ProjexCloud holds none. An operator can no longer set certified by PATCH (409 CertificationRequiresRun). 200 { run }. Errors: unknown run or another tenant's 404; no token 401. The fixture chain never starts a runnable run (see POST .../certification-runs), so the runner reaches 404.",
+  "testCases": [
+    {
+      "name": "Unknown run -> 404",
+      "coversCriterion": [
+        "c1171be1-c7ce-4c6d-acbc-98ffe825bc53#AC2"
+      ],
+      "coversErrorCase": "404|NotFound",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "pathParams": {
+        "run_id": "{{dynamic:uuid}}"
+      },
+      "expectedStatus": 404
+    },
+    {
+      "name": "401 - no token",
+      "testType": "negative",
+      "coversErrorCase": "401|Unauthorized",
+      "headers": {},
+      "pathParams": {
+        "run_id": "{{dynamic:uuid}}"
+      },
+      "expectedStatus": 401
+    }
+  ],
+  "errorCases": [
+    {
+      "status": 404,
+      "code": "NotFound",
+      "message": "certification run not found",
+      "when": "unknown run"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "authentication required",
+      "when": "missing token"
+    }
+  ]
+}

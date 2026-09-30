@@ -40,3 +40,15 @@ export { MAX_PREVIEW_CHARS, previewVoice } from './services/voicePreviewService'
 export type { PreviewInput, VoicePreview } from './services/voicePreviewService';
 
 export * as server from './server';
+
+export {
+  CERT_SCOPES,
+  certificationThresholds,
+  startCertificationRun,
+  getCertificationRun,
+  listCertificationRuns,
+  findTenantCertifications,
+  claimCertificationRun,
+  finishCertificationRun,
+} from './services/certificationService';
+export type { CertScope, CertificationRun, CertificationJob, StartCertificationInput } from './services/certificationService';

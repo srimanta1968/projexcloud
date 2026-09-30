@@ -2,6 +2,7 @@ import type { Bootstrap, ControlPlane, EvalRunJob } from '../controlPlane';
 import { log } from '../log';
 import type { SessionStore, TurnRecord } from '../session/sessionStore';
 import { runScenario, type ScenarioResult } from './scenarioRunner';
+import { runCertification, type CertificationJob } from './certify';
 
 /**
  * Runs one evaluation run end to end (VA·E10 · TK-4518): for each scenario the control plane
@@ -141,13 +142,17 @@ export class EvalWorker {
   private async tick(): Promise<void> {
     if (this.stopped) return;
     let job: EvalRunJob | null = null;
+    let cert: CertificationJob | null = null;
     try {
       job = (await this.deps.controlPlane.claimEvalRun(this.deps.worker)).eval_run;
+      // Nothing to evaluate: take a catalog certification run (TK-4519), if any.
+      if (!job) cert = (await this.deps.controlPlane.claimCertificationRun(this.deps.worker)).job;
     } catch (err) {
-      log.warn('could not poll for evaluation runs', { error: (err as Error).message });
+      log.warn('could not poll for evaluation or certification runs', { error: (err as Error).message });
     }
-    if (job) {
-      this.current = runEvaluation(job, this.deps).finally(() => { this.current = null; });
+    if (job || cert) {
+      const work = job ? runEvaluation(job, this.deps) : runCertification(cert!, this.deps.controlPlane, this.deps.worker);
+      this.current = work.finally(() => { this.current = null; });
       await this.current;
       this.schedule(0);
     } else {
