@@ -7,6 +7,7 @@
  * control plane once per call; see docs/v3.1/voiceagent/VoiceAgent-Architecture-v3.1.html.
  */
 export { migrationsDir } from './db';
+export { bootstrapVoiceClickHouseSchema } from './db/chBootstrap';
 
 export { VOICE_LAYERS, PRESET_KEYS, VOICE_PRESETS, findPreset, isVoiceLayer } from './models/presets';
 export type { VoiceLayer, PresetKey, LayerConfig, LayerMap, VoicePreset } from './models/presets';
@@ -128,3 +129,16 @@ export type { SipTrunk, ProvisionResult, OriginationResult, OutboundNumberSource
 export { linkCarrierCall, applyCarrierStatus } from './services/carrierStatusService';
 export type { CarrierStatusInput, CarrierStatusResult } from './services/carrierStatusService';
 export * as server from './server';
+
+export {
+  recordCallFact,
+  startTurnMetricsConsumer,
+  queryVoiceAnalytics,
+  checkP95Regressions,
+  startP95RegressionJob,
+  regressionConfig,
+  judgeRegression,
+  callFactRow,
+  REGRESSION_INCIDENT_TYPE,
+} from './services/analyticsService';
+export type { AnalyticsFilter, RegressionConfig, RegressionVerdict } from './services/analyticsService';

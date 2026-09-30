@@ -406,6 +406,11 @@ import {
   registerCarrierProvisioner,
   completeCall,
   onCallEnded,
+  bootstrapVoiceClickHouseSchema,
+  recordCallFact,
+  startTurnMetricsConsumer,
+  startP95RegressionJob,
+  queryVoiceAnalytics,
   VoiceAgentError,
 } from '@projexlight/sdk-voice-agent';
 import {
@@ -978,6 +983,19 @@ app.post('/api/admin/speech/certification-runs/:run_id/finish', async (req, repl
     return reply.code(200).send({ success: true, data: { run: await finishCertificationRun(run_id, (req.body ?? {}) as Record<string, unknown>) } });
   } catch (err) {
     return speechError(reply, err);
+  }
+});
+// VA·E10 (TK-4520) — operator view of voice analytics: one tenant (tenant_id) or all tenants.
+app.get('/api/admin/voice-agent/analytics', async (req, reply) => {
+  if (!(await checkAdminToken(req, reply))) return;
+  const q = (req.query ?? {}) as { tenant_id?: string; from?: string; to?: string; agent_id?: string; include_tests?: string };
+  if (q.tenant_id && !/^[0-9a-f-]{36}$/i.test(q.tenant_id)) return reply.code(400).send({ success: false, error: 'ValidationError', details: ['tenant_id must be a uuid'] });
+  try {
+    return reply.code(200).send({ success: true, data: { analytics: await queryVoiceAnalytics(q.tenant_id ?? null, q) } });
+  } catch (err) {
+    if (err instanceof VoiceAgentError) return reply.code(err.status).send({ success: false, error: err.code, details: [err.message] });
+    if (/not initialized|ECONNREFUSED/i.test((err as Error).message)) return reply.code(503).send({ success: false, error: 'AnalyticsUnavailable', details: ['voice analytics (ClickHouse) is not available on this deployment'] });
+    throw err;
   }
 });
 // VA·E9 (TK-4516) — the operator console's catalog view: every entry in every certification
@@ -4874,6 +4892,20 @@ const start = async (): Promise<void> => {
             '[api-gateway] sdk-asset ClickHouse bootstrap failed:',
             (err as Error).message,
           );
+        }
+
+        // VA·E10 (TK-4520) — voice analytics: call facts on every call end, turn metrics from
+        // the runtime's Kafka topic, and a p95 latency-regression check that opens incidents.
+        try {
+          await bootstrapVoiceClickHouseSchema();
+          onCallEnded(recordCallFact);
+          startP95RegressionJob();
+          if (config.kafka.enabled) {
+            startTurnMetricsConsumer().catch((err) => console.warn('[api-gateway] voice turn-metrics consumer failed:', (err as Error).message));
+          }
+          console.log('[api-gateway] ClickHouse schema bootstrapped (voice analytics active)');
+        } catch (err) {
+          console.warn('[api-gateway] voice analytics ClickHouse bootstrap failed:', (err as Error).message);
         }
       } catch (err) {
         console.warn(

@@ -16,6 +16,7 @@ import {
 } from '../services/agentService';
 import { bindNumber, listNumbers, setKillSwitch, unbindNumber, type BindNumberInput } from '../services/numberService';
 import { getEvalRun, listEvalRuns, startEvalRun } from '../services/evalRunService';
+import { queryVoiceAnalytics, type AnalyticsFilter } from '../services/analyticsService';
 import { resolveTenant } from './tenantScope';
 import { sendError } from './sendError';
 
@@ -146,6 +147,24 @@ export function registerAgentRoutes(app: FastifyInstance): void {
       try {
         return reply.code(200).send({ data: { eval_run: await getEvalRun(tenantId, req.params.eval_run_id) } });
       } catch (err) {
+        return sendError(reply, err);
+      }
+    },
+  );
+
+  // TK-4520 — the tenant's voice analytics from ClickHouse: per-stage latency (stt, ttft, llm,
+  // voice-to-voice), provider failovers / LLM / tool errors, and cost per call. Query: from, to
+  // (ISO; default last 7 days), agent_id, include_tests. 503 when ClickHouse is not enabled.
+  app.get<{ Querystring: AnalyticsFilter & { tenant_id?: string } }>(
+    '/api/voice-agent/analytics', { preHandler: requireAuth }, async (req, reply) => {
+      const tenantId = resolveTenant(req, reply, req.query.tenant_id);
+      if (!tenantId) return reply;
+      try {
+        return reply.code(200).send({ data: { analytics: await queryVoiceAnalytics(tenantId, req.query) } });
+      } catch (err) {
+        if (/getClickHouse|not initialized|ECONNREFUSED/i.test((err as Error).message)) {
+          return reply.code(503).send({ error: 'AnalyticsUnavailable', details: ['voice analytics (ClickHouse) is not available on this deployment'] });
+        }
         return sendError(reply, err);
       }
     },

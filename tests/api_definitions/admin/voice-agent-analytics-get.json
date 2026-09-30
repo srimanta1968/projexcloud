@@ -1,0 +1,74 @@
+{
+  "name": "GET /api/admin/voice-agent/analytics - Voice analytics across tenants (operator)",
+  "endpoint": "/api/admin/voice-agent/analytics",
+  "method": "GET",
+  "sourceFile": "services/api-gateway/src/app.ts",
+  "requiresAuth": false,
+  "expectedStatus": 200,
+  "dependsOn": [],
+  "description": "OPERATOR route (x-admin-ops-token). Same shape as the tenant route, for one tenant (tenant_id) or every tenant. Per-stage latency, provider errors and cost per call are queryable per tenant (f1505157-f83f-43e5-91db-3018d0ad56f1#AC3): latency_ms { turns, stt, ttft, llm, voice_to_voice: { p50, p95 } } from voice.turn_metrics (the runtime's Kafka topic voice.turn.metrics.v1); errors { provider_failovers, llm_failed_turns, tool_errors, by_provider[] }; cost { calls, minutes, costed_calls, total_usd, per_call_usd, basis } from voice.call_facts (written at every call end; cost = the runtime's cost_breakdown.total_usd, else the speech-catalog list price x duration); daily[]. A p95 voice-to-voice regression (last VOICE_P95_WINDOW_MIN=60 min vs a VOICE_P95_BASELINE_DAYS=7 baseline, +VOICE_P95_REGRESSION_PCT=25%, >= 50 turns each) opens ONE sdk-incident voice.latency.p95_regression per tenant (checked every 15 min). Query: from, to (ISO, default the last 7 days, at most 400 days), agent_id, include_tests=true. 503 AnalyticsUnavailable when ClickHouse is not enabled on the deployment. Errors: bad tenant_id or window 400; missing ops token 401.",
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "featureId": "f1505157-f83f-43e5-91db-3018d0ad56f1",
+  "epicId": "c32d0251-37f1-40d1-88b1-e4004028bfa5",
+  "taskId": "874320c9-c8b3-4ad3-8bea-c468a081a41d",
+  "testability": "auto",
+  "coversCriterion": [
+    "f1505157-f83f-43e5-91db-3018d0ad56f1#AC3"
+  ],
+  "priority": 159,
+  "sdk": "sdk-voice-agent",
+  "testCases": [
+    {
+      "name": "All tenants, last 7 days",
+      "coversCriterion": [
+        "f1505157-f83f-43e5-91db-3018d0ad56f1#AC3"
+      ],
+      "headers": {
+        "x-admin-ops-token": "{{var:ADMIN_OPS_TOKEN}}"
+      },
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "success": true
+      }
+    },
+    {
+      "name": "400 - tenant_id must be a uuid",
+      "testType": "negative",
+      "coversErrorCase": "400|ValidationError",
+      "headers": {
+        "x-admin-ops-token": "{{var:ADMIN_OPS_TOKEN}}"
+      },
+      "queryParams": {
+        "tenant_id": "{{static:not-a-uuid}}"
+      },
+      "expectedStatus": 400
+    },
+    {
+      "name": "401 - no ops token",
+      "testType": "negative",
+      "coversErrorCase": "401|Unauthorized",
+      "headers": {},
+      "expectedStatus": 401
+    }
+  ],
+  "errorCases": [
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "tenant_id must be a uuid",
+      "when": "bad tenant_id or window"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "admin token required",
+      "when": "missing ops token"
+    },
+    {
+      "status": 503,
+      "code": "AnalyticsUnavailable",
+      "message": "voice analytics (ClickHouse) is not available on this deployment",
+      "when": "ClickHouse disabled"
+    }
+  ]
+}
