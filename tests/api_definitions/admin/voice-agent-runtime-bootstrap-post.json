@@ -1,0 +1,168 @@
+{
+  "name": "POST /api/admin/voice-agent/runtime/bootstrap - One control-plane request per voice call",
+  "endpoint": "/api/admin/voice-agent/runtime/bootstrap",
+  "method": "POST",
+  "sdk": "sdk-voice-agent",
+  "sourceFile": "services/api-gateway/src/app.ts",
+  "requiresAuth": false,
+  "expectedStatus": 200,
+  "taskId": "96744ccc-08f1-4681-860b-dfaa37b07e92",
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "featureId": "0b67f69e-f84c-4478-89b5-46df70beff6f",
+  "testability": "auto",
+  "coversCriterion": [
+    "0b67f69e-f84c-4478-89b5-46df70beff6f#AC1"
+  ],
+  "dependsOn": [
+    "POST /api/auth/signup-tenant",
+    "POST /api/ai-gateway/tenant-credentials",
+    "POST /api/voice-agent/stack-profiles",
+    "POST /api/voice-agent/agents",
+    "POST /api/voice-agent/agents/:agent_id/versions",
+    "POST /api/voice-agent/agents/:agent_id/numbers",
+    "POST /api/voice-agent/test-sessions"
+  ],
+  "priority": 152,
+  "description": "OPERATOR route (x-admin-ops-token = ADMIN_OPS_TOKEN; the voice runtime's only control-plane call per call, VA-ADR-8). Bootstraps a new call with ONE request that returns agent version, stack, key handles, tools and a session token (0b67f69e-f84c-4478-89b5-46df70beff6f#AC1). Body: exactly one of { call_id } (browser test sessions and outbound calls carry it in their LiveKit dispatch metadata) or { inbound: { to, from?, room, sip_call_id? } } for an inbound SIP call. action=agent returns: call (created for inbound: direction inbound, status in_progress, one call per LiveKit room so a retry reuses it), agent (version_id, version_no, system_prompt, greeting, language, escalation_rules, business_hours, kb_corpus_ids), stack.layers for stt / llm_fast / llm_complex / tts with provider, model, voice, options and DECRYPTED key handles primary { binding_id, provider, key } and secondary (the failover target, with its fallback config; null when unset or revoked) — telephony keys are never released — tools (the version's enabled app tools: name, json_schema, url, timeout_ms, idempotent and the HMAC signing_secret the runtime signs requests with), session_token (the call's capability token, always re-issued so a restarted runtime gets a fresh bearer and the lost one is revoked), expires_at, first_bootstrap. The first bootstrap stamps context.runtime, marks a test call in_progress and emits voice.call.started.v1 listing the released key binding ids (never values). An inbound number whose agent is unpublished, paused, archived or kill-switched answers 200 action=fallback with reason, fallback, fallback_target and kill_message. Response is Cache-Control: no-store. Errors: neither/both of call_id and inbound, malformed call_id, inbound without to/room 400; unknown call or unbound number 404; ended call, no agent version, or a stack whose required key is missing/revoked 409 (StackIncomplete); session tokens not wired 503; missing/wrong ops token 401/403. The fixture chain binds only an llm_fast key, so bootstrapping its test-session call answers 409 StackIncomplete — the fully keyed action=agent path is proven by the voice-runtime e2e.",
+  "fieldEnums": {
+    "action": [
+      "agent",
+      "fallback"
+    ],
+    "reason": [
+      "not_published",
+      "paused",
+      "archived",
+      "kill_switch"
+    ],
+    "fallback": [
+      "voicemail",
+      "forward",
+      "ivr"
+    ]
+  },
+  "testCases": [
+    {
+      "name": "Inbound call to the tenant's number while its agent is unpublished -> fallback",
+      "coversCriterion": [
+        "0b67f69e-f84c-4478-89b5-46df70beff6f#AC1"
+      ],
+      "capturesResponse": true,
+      "headers": {
+        "x-admin-ops-token": "{{var:ADMIN_OPS_TOKEN}}"
+      },
+      "payload": {
+        "inbound": {
+          "to": "{{cache:voice-agent.agents.numbers.create.response.data.binding.phone_number}}",
+          "from": "{{static:+15005550006}}",
+          "room": "{{dynamic:slug}}"
+        }
+      },
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "success": true,
+        "data": {
+          "action": "fallback",
+          "phone_number": "string",
+          "tenant_id": "string",
+          "agent_id": "string",
+          "fallback": "string"
+        }
+      }
+    },
+    {
+      "name": "409 - the test-session call's stack has no stt key",
+      "testType": "negative",
+      "coversErrorCase": "409|StackIncomplete",
+      "headers": {
+        "x-admin-ops-token": "{{var:ADMIN_OPS_TOKEN}}"
+      },
+      "payload": {
+        "call_id": "{{cache:voice-agent.test-sessions.create.response.data.session.call_id}}"
+      },
+      "expectedStatus": 409,
+      "expectedError": {
+        "code": "StackIncomplete"
+      }
+    },
+    {
+      "name": "400 - both call_id and inbound",
+      "testType": "negative",
+      "coversErrorCase": "400|ValidationError",
+      "headers": {
+        "x-admin-ops-token": "{{var:ADMIN_OPS_TOKEN}}"
+      },
+      "payload": {
+        "call_id": "{{cache:voice-agent.test-sessions.create.response.data.session.call_id}}",
+        "inbound": {
+          "to": "{{static:+14155550100}}",
+          "room": "{{static:call-in-x}}"
+        }
+      },
+      "expectedStatus": 400
+    },
+    {
+      "name": "404 - unknown call",
+      "testType": "negative",
+      "coversErrorCase": "404|NotFound",
+      "headers": {
+        "x-admin-ops-token": "{{var:ADMIN_OPS_TOKEN}}"
+      },
+      "payload": {
+        "call_id": "{{static:00000000-0000-4000-8000-000000000000}}"
+      },
+      "expectedStatus": 404
+    },
+    {
+      "name": "401 - no ops token",
+      "testType": "negative",
+      "coversErrorCase": "401|Unauthorized",
+      "headers": {},
+      "payload": {
+        "call_id": "{{cache:voice-agent.test-sessions.create.response.data.session.call_id}}"
+      },
+      "expectedStatus": 401
+    }
+  ],
+  "captureResponse": {
+    "admin.voice-agent.runtime-bootstrap.response.data.action": "data.action"
+  },
+  "errorCases": [
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "send exactly one of call_id or inbound",
+      "when": "neither or both of call_id / inbound, malformed call_id, inbound without to or room"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "admin ops token required",
+      "when": "x-admin-ops-token missing or wrong"
+    },
+    {
+      "status": 404,
+      "code": "NotFound",
+      "message": "call not found",
+      "when": "unknown call_id, or no agent is bound to the dialled number"
+    },
+    {
+      "status": 409,
+      "code": "StackIncomplete",
+      "message": "the stack profile has no stt credential",
+      "when": "a runtime layer (stt, llm_fast, llm_complex, tts) has no active primary key"
+    },
+    {
+      "status": 409,
+      "code": "Conflict",
+      "message": "call is completed; a session token is only issued for a call that has not ended",
+      "when": "the call has ended or has no agent version"
+    },
+    {
+      "status": 503,
+      "code": "VoiceRuntimeUnavailable",
+      "message": "session capability tokens are not wired on this deployment",
+      "when": "the gateway has not wired the session token minter"
+    }
+  ]
+}

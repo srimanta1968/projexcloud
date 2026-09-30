@@ -391,6 +391,9 @@ import {
   setOutboundNumberSource,
   linkCarrierCall,
   callSessionContext,
+  bootstrapRuntimeSession,
+  setSessionTokenMinter,
+  type BootstrapInput,
   applyCarrierStatus,
   registerCarrierProvisioner,
   completeCall,
@@ -1428,6 +1431,36 @@ app.post<{ Params: { call_id: string } }>('/api/admin/voice-agent/calls/:call_id
       actor_id: 'voice-runtime',
     });
     return reply.code(token.minted ? 201 : 200).send({ success: true, data: { call_id: ctx.call_id, ...token } });
+  } catch (err) {
+    return sessionTokenError(reply, err);
+  }
+});
+// VA·E1 (TK-4456) — the voice runtime's single control-plane request per call: agent
+// version, stack with decrypted key handles, tools with signing secrets and the session
+// capability token (always re-issued, so a restarted runtime gets a fresh bearer and the
+// lost one is revoked). Operator-only; the payload carries provider keys, so never cached.
+setSessionTokenMinter(async (ctx) => {
+  const t = await mintSessionToken({
+    tier: 'voice',
+    tenant_id: ctx.tenant_id,
+    session_ref: ctx.session_ref,
+    agent_ref: ctx.agent_id,
+    agent_version_ref: ctx.agent_version_id,
+    acting_persona_id: ctx.acting_persona_id,
+    allowed_tools: ctx.allowed_tools,
+    ttl_seconds: VOICE_SESSION_TOKEN_TTL_S,
+    reissue: true,
+    actor_id: 'voice-runtime',
+  });
+  if (!t.token) throw new Error('session token mint returned no bearer');
+  return { token: t.token, token_id: t.token_id, expires_at: t.expires_at, allowed_tools: t.allowed_tools };
+});
+app.post('/api/admin/voice-agent/runtime/bootstrap', async (req, reply) => {
+  if (!(await checkAdminToken(req, reply))) return;
+  reply.header('cache-control', 'no-store');
+  try {
+    const session = await bootstrapRuntimeSession((req.body ?? {}) as BootstrapInput);
+    return reply.code(200).send({ success: true, data: session });
   } catch (err) {
     return sessionTokenError(reply, err);
   }

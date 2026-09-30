@@ -1,6 +1,7 @@
+import crypto from 'node:crypto';
 import { dataService } from '@projexlight/db-runtime';
 import { parseRef } from '@projexlight/sdk-secrets';
-import { conflict, notFound, validationError } from '../models/errors';
+import { VoiceAgentError, conflict, notFound, validationError } from '../models/errors';
 
 /**
  * App-registered tools (VA·E2 · TK-4473).
@@ -295,4 +296,33 @@ export async function callSessionContext(callId: string): Promise<CallSessionCon
     allowed_tools: tools.map((t) => t.name),
     session_ref: `voice_agent.call:${callId}`,
   };
+}
+
+/* ------------------------- tool request signing (VA·E1) ------------------------- */
+
+const DEV_TOOL_SIGNING_KEY = 'projex-dev-voice-tool-signing-key';
+
+/**
+ * The HMAC key the runtime signs a tool's requests with and the app verifies them with.
+ *
+ * sdk-secrets keeps only reference metadata, never a secret's value, so the key is derived
+ * on the platform: HMAC-SHA256(VOICE_TOOL_SIGNING_KEY, "voice-tool:v1:{tenant}:{tool}:{ref}").
+ * The tool's signing_secret_ref names the key version — changing the ref (PATCH the tool)
+ * rotates it. The runtime receives it in the call bootstrap; the tenant's app gets it from
+ * the tool executor task's reveal route (TK-4462).
+ *
+ * @throws VoiceAgentError 503 in production when VOICE_TOOL_SIGNING_KEY is unset.
+ */
+export function toolSigningSecret(tool: Pick<AppTool, 'tenant_id' | 'tool_id' | 'signing_secret_ref'>): string {
+  let master = process.env.VOICE_TOOL_SIGNING_KEY;
+  if (!master) {
+    if (process.env.NODE_ENV === 'production') {
+      throw new VoiceAgentError(503, 'ToolSigningNotConfigured', 'VOICE_TOOL_SIGNING_KEY is not set on this deployment');
+    }
+    master = DEV_TOOL_SIGNING_KEY;
+  }
+  return crypto
+    .createHmac('sha256', master)
+    .update(`voice-tool:v1:${tool.tenant_id}:${tool.tool_id}:${tool.signing_secret_ref}`)
+    .digest('base64url');
 }
