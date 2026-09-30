@@ -395,6 +395,7 @@ import {
   setSessionTokenMinter,
   setRecordingRuleResolver,
   setInboundAdmitter,
+  transferCall,
   type BootstrapInput,
   applyCarrierStatus,
   registerCarrierProvisioner,
@@ -1476,6 +1477,18 @@ app.post('/api/admin/voice-agent/runtime/bootstrap', async (req, reply) => {
     return reply.code(200).send({ success: true, data: session });
   } catch (err) {
     return sessionTokenError(reply, err);
+  }
+});
+// VA·E1 (TK-4464) — the voice runtime escalates a live call to the human named in the agent
+// version's escalation_rules.transfer: an sdk-handoff (summary + transcript + call link) for
+// the human, then SIP REFER / bridge / callback. Operator-only, like the other runtime routes.
+app.post<{ Params: { call_id: string } }>('/api/admin/voice-agent/calls/:call_id/transfer', async (req, reply) => {
+  if (!(await checkAdminToken(req, reply))) return;
+  try {
+    return reply.code(200).send({ success: true, data: await transferCall(req.params.call_id, (req.body ?? {}) as Record<string, unknown>) });
+  } catch (err) {
+    if (err instanceof VoiceAgentError) return reply.code(err.status).send({ success: false, error: err.code, details: [err.message] });
+    throw err;
   }
 });
 app.post<{ Params: { call_id: string } }>('/api/admin/voice-agent/calls/:call_id/session-token/validate', async (req, reply) => {

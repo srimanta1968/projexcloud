@@ -554,3 +554,60 @@ export async function originateCall(tenantId: string, callId: string): Promise<O
   );
   return { originated: true, sip_call_id: ref ?? undefined, room_name: room };
 }
+
+export interface TransferLegInput {
+  call_id: string;
+  room: string;
+  /** The caller's LiveKit identity; for a SIP caller the leg LiveKit REFERs. */
+  caller_identity: string | null;
+  caller_is_sip: boolean;
+  to_number: string;
+  /** refer: hand the SIP caller's leg to the human (carrier REFER); bridge: dial the human into the room. */
+  mode: 'refer' | 'bridge';
+}
+
+export interface TransferLegResult {
+  mode: 'refer' | 'bridge' | 'callback';
+  ref: string | null;
+  reason?: string;
+}
+
+/**
+ * Moves a live AI call to a human (VA·E1 · TK-4464) on the platform LiveKit:
+ *   refer   a SIP caller's leg is transferred with SIP REFER (SIP.TransferSIPParticipant) — the
+ *           caller leaves the AI room and rings the human directly;
+ *   bridge  the human's number is dialled INTO the call's room over the tenant's outbound
+ *           trunk (a caller on WebRTC, or mode=bridge), so the agent can introduce the call
+ *           before leaving;
+ *   callback when neither is possible (no SIP leg to refer and no outbound trunk): nothing is
+ *           dialled — the handoff record tells the human to call back.
+ */
+export async function transferCallLeg(tenantId: string, input: TransferLegInput): Promise<TransferLegResult> {
+  const cfg = liveKitConfig();
+  if (!cfg) return { mode: 'callback', ref: null, reason: 'voice media not configured' };
+  if (input.caller_is_sip && input.mode === 'refer' && input.caller_identity) {
+    await livekit(cfg, 'SIP', 'TransferSIPParticipant', {
+      participant_identity: input.caller_identity,
+      room_name: input.room,
+      transfer_to: `tel:${input.to_number}`,
+      play_dialtone: false,
+    });
+    return { mode: 'refer', ref: input.caller_identity };
+  }
+  const trunk = await dataService.one<Row>(
+    `SELECT ${COLUMNS} FROM voice_agent.sip_trunk
+      WHERE tenant_id = $1 AND status = 'active' AND livekit_outbound_trunk_id IS NOT NULL
+      ORDER BY created_at DESC LIMIT 1`,
+    [tenantId],
+  );
+  if (!trunk) return { mode: 'callback', ref: null, reason: 'no outbound trunk to dial the human' };
+  const p = await livekit<{ participant_id?: string; sip_call_id?: string }>(cfg, 'SIP', 'CreateSIPParticipant', {
+    sip_trunk_id: trunk.livekit_outbound_trunk_id,
+    sip_call_to: input.to_number,
+    room_name: input.room,
+    participant_identity: `human-${input.call_id}`,
+    participant_name: 'Transfer target',
+    participant_metadata: JSON.stringify({ tenant_id: tenantId, call_id: input.call_id, role: 'transfer_target' }),
+  });
+  return { mode: 'bridge', ref: p.sip_call_id ?? p.participant_id ?? null };
+}

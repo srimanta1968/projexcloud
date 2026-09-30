@@ -1,0 +1,148 @@
+{
+  "name": "POST /api/admin/voice-agent/calls/:call_id/transfer - Escalate a live AI call to a human with the summary attached",
+  "endpoint": "/api/admin/voice-agent/calls/:call_id/transfer",
+  "method": "POST",
+  "sdk": "sdk-voice-agent",
+  "sourceFile": "services/api-gateway/src/app.ts",
+  "requiresAuth": false,
+  "expectedStatus": 200,
+  "taskId": "75117cab-a62a-4544-9715-7a514955b6c1",
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "featureId": "1bdbfb86-09c3-410e-bcee-be79df98074d",
+  "testability": "auto",
+  "coversCriterion": [
+    "1bdbfb86-09c3-410e-bcee-be79df98074d#AC4"
+  ],
+  "dependsOn": [
+    "POST /api/auth/signup-tenant",
+    "POST /api/ai-gateway/tenant-credentials",
+    "POST /api/voice-agent/stack-profiles",
+    "POST /api/voice-agent/agents",
+    "POST /api/voice-agent/agents/:agent_id/versions",
+    "POST /api/voice-agent/test-sessions"
+  ],
+  "priority": 153,
+  "description": "OPERATOR route (x-admin-ops-token = ADMIN_OPS_TOKEN), called by the voice runtime when its agent escalates (built-in transfer_to_human tool): an escalation transfers the caller to a human with the call summary attached (1bdbfb86-09c3-410e-bcee-be79df98074d#AC4). The human is the agent version's escalation_rules.transfer { number (E.164), persona_id?, mode?: refer | bridge }. Body: summary (required, <= 2000 chars, written by the runtime), reason, room (the call's LiveKit room, required), caller_identity, caller_is_sip, transcript ([{ speaker, text }], last 40 lines kept). It creates an sdk-handoff (pending, cs_owner = the human persona, metadata { kind: voice_transfer, call_id, agent_id, caller_number, reason, summary, transcript, transcript_url, target_number, transfer_mode }), then moves the caller: SIP REFER of the SIP caller's leg (LiveKit SIP.TransferSIPParticipant tel:number), else dials the human into the room over the tenant's outbound trunk (bridge), else no media change (callback — the handoff asks the human to call back). The call becomes transferred (not for callback), context.transfer records { handoff_id, mode, target_number, ref }, and voice.call.transferred.v1 is emitted. 200 { call_id, handoff_id, mode (refer | bridge | callback), target_number, note? }. Errors: missing summary or room 400; unknown call 404; call ended or already transferred 409 Conflict; the version has no transfer target 409 TransferNotConfigured; LiveKit failure 502 MediaError (the handoff stays pending with the error); missing/wrong ops token 401/403. The fixture chain's agent version has no escalation_rules.transfer, so the runner reaches 409 TransferNotConfigured on its test-session call — the refer / bridge / callback paths are proven by the voice-runtime e2e.",
+  "fieldEnums": {
+    "mode": [
+      "refer",
+      "bridge",
+      "callback"
+    ]
+  },
+  "testCases": [
+    {
+      "name": "The fixture agent has no transfer target -> 409 TransferNotConfigured",
+      "coversCriterion": [
+        "1bdbfb86-09c3-410e-bcee-be79df98074d#AC4"
+      ],
+      "coversErrorCase": "409|TransferNotConfigured",
+      "headers": {
+        "x-admin-ops-token": "{{var:ADMIN_OPS_TOKEN}}"
+      },
+      "pathParams": {
+        "call_id": "{{cache:voice-agent.test-sessions.create.response.data.session.call_id}}"
+      },
+      "payload": {
+        "reason": "{{static:caller asked for a manager}}",
+        "summary": "{{static:Caller wants to change a group booking for Friday.}}",
+        "room": "{{cache:voice-agent.test-sessions.create.response.data.session.room}}",
+        "caller_identity": "{{static:tester}}",
+        "caller_is_sip": false,
+        "transcript": [
+          {
+            "speaker": "caller",
+            "text": "{{static:Can I speak with someone?}}"
+          }
+        ]
+      },
+      "expectedStatus": 409,
+      "expectedError": {
+        "code": "TransferNotConfigured"
+      }
+    },
+    {
+      "name": "400 - summary is required",
+      "testType": "negative",
+      "coversErrorCase": "400|ValidationError",
+      "headers": {
+        "x-admin-ops-token": "{{var:ADMIN_OPS_TOKEN}}"
+      },
+      "pathParams": {
+        "call_id": "{{cache:voice-agent.test-sessions.create.response.data.session.call_id}}"
+      },
+      "payload": {
+        "room": "{{static:call-x}}"
+      },
+      "expectedStatus": 400
+    },
+    {
+      "name": "404 - unknown call",
+      "testType": "negative",
+      "coversErrorCase": "404|NotFound",
+      "headers": {
+        "x-admin-ops-token": "{{var:ADMIN_OPS_TOKEN}}"
+      },
+      "pathParams": {
+        "call_id": "{{dynamic:uuid}}"
+      },
+      "payload": {
+        "summary": "{{static:x}}",
+        "room": "{{static:call-x}}"
+      },
+      "expectedStatus": 404
+    },
+    {
+      "name": "401 - no ops token",
+      "testType": "negative",
+      "coversErrorCase": "401|Unauthorized",
+      "headers": {},
+      "pathParams": {
+        "call_id": "{{cache:voice-agent.test-sessions.create.response.data.session.call_id}}"
+      },
+      "payload": {
+        "summary": "{{static:x}}",
+        "room": "{{static:call-x}}"
+      },
+      "expectedStatus": 401
+    }
+  ],
+  "errorCases": [
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "summary is required (at most 2000 characters)",
+      "when": "missing/oversized summary or missing room"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "admin ops token required",
+      "when": "x-admin-ops-token missing or wrong"
+    },
+    {
+      "status": 404,
+      "code": "NotFound",
+      "message": "call not found",
+      "when": "unknown call id"
+    },
+    {
+      "status": 409,
+      "code": "TransferNotConfigured",
+      "message": "the agent version has no transfer target (escalation_rules.transfer.number)",
+      "when": "the call's agent version has no valid escalation_rules.transfer"
+    },
+    {
+      "status": 409,
+      "code": "Conflict",
+      "message": "the call was already transferred",
+      "when": "the call ended or was already transferred"
+    },
+    {
+      "status": 502,
+      "code": "MediaError",
+      "message": "could not transfer the call",
+      "when": "LiveKit refused the REFER or the dial-out"
+    }
+  ]
+}

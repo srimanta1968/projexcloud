@@ -158,6 +158,14 @@ export class ControlPlane {
     return this.post(`/api/admin/voice-agent/calls/${encodeURIComponent(callId)}/session-token/validate`, { token, tool });
   }
 
+  /** Escalates the call to the agent's human (TK-4464): handoff + REFER / bridge / callback. */
+  transfer(callId: string, body: {
+    reason: string; summary: string; room: string; caller_identity: string | null; caller_is_sip: boolean;
+    transcript: { speaker: string; text: string }[];
+  }): Promise<{ handoff_id: string; mode: 'refer' | 'bridge' | 'callback'; target_number: string; note?: string }> {
+    return this.post(`/api/admin/voice-agent/calls/${encodeURIComponent(callId)}/transfer`, body);
+  }
+
   /** Batch form: the tool calls of one model turn in one request, so they can start together. */
   async validateTools(callId: string, token: string, tools: string[]): Promise<Map<string, { valid: boolean; reason?: string }>> {
     const r = await this.post<{ results: { tool: string; valid: boolean; reason?: string }[] }>(

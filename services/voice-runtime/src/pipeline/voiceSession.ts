@@ -22,6 +22,7 @@ import { ttsProvider } from '../providers/tts';
 import type { SttStream, Transcript } from '../providers/types';
 import type { SessionContext, SessionStore, TurnRecord } from '../session/sessionStore';
 import { ToolExecutor, toolMessage } from '../tools/toolExecutor';
+import { TRANSFER_TOOL, summarizeForHandoff, transferAvailable, transferToolManifest } from '../call/transfer';
 import { ClauseChunker } from './chunker';
 import { openingDisclosure } from './disclosure';
 import { FILLER_THRESHOLD_MS, FillerPolicy } from './fillers';
@@ -86,6 +87,11 @@ export class VoiceSession {
   private readonly router: ReturnType<typeof routerConfig>;
   protected readonly tools: ToolExecutor;
   private readonly fillers: FillerPolicy;
+  private readonly controlPlane: ControlPlane;
+  /** The agent version can escalate to a human (escalation_rules.transfer). */
+  private readonly canTransfer: boolean;
+  /** Ends the session while others stay in the room (bridge transfer). */
+  private endNow: (() => void) | null = null;
   /** True while the mandatory disclosure plays: barge-in cannot cut it short. */
   private protectedLine = false;
 
@@ -107,6 +113,8 @@ export class VoiceSession {
     this.router = routerConfig(b.agent.escalation_rules);
     this.tools = new ToolExecutor(session, controlPlane);
     this.fillers = new FillerPolicy(b.agent.language);
+    this.controlPlane = controlPlane;
+    this.canTransfer = transferAvailable(b.agent.escalation_rules);
   }
 
   protected ttsOpts(l: RuntimeLayerConfig) {
@@ -386,14 +394,14 @@ export class VoiceSession {
     this.speaker.onFirstAudio((at) => { firstAudioAt = at; });
 
     for (let round = 0; round <= MAX_TOOL_ROUNDS && !abort.signal.aborted && !this.ended; round++) {
-      const offerTools = this.tools.size > 0 && round < MAX_TOOL_ROUNDS;
+      const offerTools = (this.tools.size > 0 || this.canTransfer) && round < MAX_TOOL_ROUNDS;
       const req: CompletionRequest = {
         model: layer.model ?? '',
         prompt: [{ role: 'system', content: this.systemPrompt }, ...this.history],
         max_tokens: 400,
         temperature: 0.5,
         stream: true,
-        ...(offerTools ? { tools: this.tools.manifest() } : {}),
+        ...(offerTools ? { tools: [...this.tools.manifest(), ...(this.canTransfer ? [transferToolManifest] : [])] } : {}),
       };
       // The round's assistant message goes in first, so a barge-in rewrites THIS message.
       const msg: ChatMessage = { role: 'assistant', content: '' };
@@ -422,6 +430,15 @@ export class VoiceSession {
       spoken += (spoken && msg.content ? ' ' : '') + msg.content;
       if (!failed && calls.length === 0 && msg.content.trim()) answered = true;
       if (failed || calls.length === 0) break;
+
+      const escalate = calls.find((c) => c.tool_sku === TRANSFER_TOOL);
+      if (escalate && this.canTransfer) {
+        msg.tool_calls = [escalate];
+        const said = await this.transferToHuman(escalate, abort.signal);
+        spoken += (spoken ? ' ' : '') + said;
+        answered = true;
+        break;
+      }
 
       msg.tool_calls = calls;
       const names = calls.map((c) => c.tool_sku);
@@ -480,6 +497,72 @@ export class VoiceSession {
     });
   }
 
+  /**
+   * Warm transfer (TK-4464): acknowledge, write the handoff summary, ask the control plane to
+   * transfer, then follow the mode — refer: the caller's leg moves to the human and leaves the
+   * room; bridge: brief the human once they join, then leave them with the caller; callback
+   * (or failure): tell the caller a colleague will follow up and carry on. Returns what was said.
+   */
+  private async transferToHuman(call: ToolCallRecord, signal: AbortSignal): Promise<string> {
+    const args = (call.args ?? {}) as { reason?: unknown };
+    const reason = typeof args.reason === 'string' && args.reason.trim() ? args.reason.trim().slice(0, 300) : 'caller asked for a person';
+    const said: string[] = [];
+    const say = (line: string): Promise<void> => { said.push(line); return this.speaker.say(line, this.tts); };
+    void say("Of course. I'm connecting you with a colleague now. One moment, please.");
+    const summary = await summarizeForHandoff(this.session.boot.stack.layers.llm_fast, this.session.turns, reason);
+    const others = [...this.room.remoteParticipants.values()].filter((p) => p.kind !== ParticipantKind.AGENT);
+    const sip = others.find((p) => p.kind === ParticipantKind.SIP);
+    const caller = sip ?? others[0];
+    let result: Awaited<ReturnType<ControlPlane['transfer']>>;
+    try {
+      result = await this.controlPlane.transfer(this.session.callId, {
+        reason,
+        summary,
+        room: this.room.name ?? this.session.room,
+        caller_identity: caller?.identity ?? null,
+        caller_is_sip: !!sip,
+        transcript: this.session.turns.filter((t) => t.text).map((t) => ({ speaker: t.speaker, text: t.text })),
+      });
+    } catch (err) {
+      log.warn('transfer failed', { callId: this.session.callId, error: (err as Error).message });
+      this.history.push({ role: 'tool', tool_call_id: call.tool_call_id, content: JSON.stringify({ ok: false, error: 'transfer_failed' }) });
+      await say("I'm sorry, I can't connect you right now. A colleague will follow up with you shortly. Is there anything else I can help with?");
+      return said.join(' ');
+    }
+    this.history.push({ role: 'tool', tool_call_id: call.tool_call_id, content: JSON.stringify({ ok: true, mode: result.mode }) });
+    log.info('transfer', { callId: this.session.callId, mode: result.mode, handoff_id: result.handoff_id, reason, summary_chars: summary.length });
+    if (result.mode === 'callback') {
+      await say('A colleague will call you back shortly. Is there anything else I can help with in the meantime?');
+      return said.join(' ');
+    }
+    if (result.mode === 'refer') {
+      await this.speaker.idle();
+      return said.join(' ');
+    }
+    // bridge: wait for the human to join the room, brief them, then leave the two of them.
+    const humanId = `human-${this.session.callId}`;
+    const joined = await new Promise<boolean>((resolve) => {
+      if (this.room.remoteParticipants.has(humanId)) return resolve(true);
+      const t = setTimeout(() => { this.room.off(RoomEvent.ParticipantConnected, on); resolve(false); }, Number(process.env.VOICE_TRANSFER_ANSWER_MS ?? 45_000));
+      const on = (p: RemoteParticipant): void => {
+        if (p.identity !== humanId) return;
+        clearTimeout(t);
+        this.room.off(RoomEvent.ParticipantConnected, on);
+        resolve(true);
+      };
+      this.room.on(RoomEvent.ParticipantConnected, on);
+      signal.addEventListener('abort', () => { clearTimeout(t); resolve(false); }, { once: true });
+    });
+    if (!joined) {
+      await say("I'm sorry, my colleague isn't available right now. They will call you back shortly.");
+      return said.join(' ');
+    }
+    await say(`Hi, this is the AI assistant handing over a call. ${summary} I'll leave you two to it.`);
+    await this.speaker.idle();
+    this.endNow?.();
+    return said.join(' ');
+  }
+
   private untilCallEnds(): Promise<void> {
     return new Promise((resolve) => {
       const done = (): void => {
@@ -495,6 +578,7 @@ export class VoiceSession {
       this.room.on(RoomEvent.ParticipantDisconnected, onLeft);
       this.room.on(RoomEvent.Disconnected, done);
       this.ctx.signal.addEventListener('abort', done, { once: true });
+      this.endNow = done;
       if ([...this.room.remoteParticipants.values()].every((x) => x.kind === ParticipantKind.AGENT)) done();
     });
   }
