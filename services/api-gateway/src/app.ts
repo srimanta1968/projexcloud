@@ -394,6 +394,7 @@ import {
   bootstrapRuntimeSession,
   setSessionTokenMinter,
   setRecordingRuleResolver,
+  setInboundAdmitter,
   type BootstrapInput,
   applyCarrierStatus,
   registerCarrierProvisioner,
@@ -1461,6 +1462,12 @@ setSessionTokenMinter(async (ctx) => {
 // TK-4461 — an inbound call's recording rule is the caller's jurisdiction's (sdk-dialer
 // registry): prohibited = no recording; otherwise record WITH the spoken notice.
 setRecordingRuleResolver((callerNumber) => recordingRuleFor(callerNumber ? countryOfNumber(callerNumber) : null));
+// An inbound call opened by the bootstrap takes its concurrency slot in the same request;
+// no slot -> the caller gets the number's fallback (reason at_capacity).
+setInboundAdmitter(async (tenantId, callId) => {
+  const d = await admitInbound(tenantId, callId);
+  return { granted: d.granted, blocked_by: d.blocked_by };
+});
 app.post('/api/admin/voice-agent/runtime/bootstrap', async (req, reply) => {
   if (!(await checkAdminToken(req, reply))) return;
   reply.header('cache-control', 'no-store');

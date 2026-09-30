@@ -154,6 +154,8 @@ export interface RuntimeBootstrap {
 
 export interface RuntimeFallback {
   action: 'fallback';
+  /** Set when a call row was opened and then refused (at_capacity). */
+  call_id?: string;
   phone_number: string;
   tenant_id: string;
   agent_id: string;
@@ -164,6 +166,19 @@ export interface RuntimeFallback {
 }
 
 export type SessionTokenMinter = (ctx: CallSessionContext) => Promise<SessionTokenGrant>;
+
+/** Takes a concurrency slot for a new inbound call (sdk-dialer admitInbound). */
+export type InboundAdmitter = (tenantId: string, callId: string) => Promise<{ granted: boolean; blocked_by: string | null }>;
+
+let inboundAdmitter: InboundAdmitter | null = null;
+/**
+ * The gateway wires sdk-dialer's admitInbound here so an inbound call is admitted against
+ * the tenant's plan/key/agent caps in the SAME bootstrap request (one control-plane call per
+ * call); without a slot the caller gets the number's fallback instead of the agent.
+ */
+export function setInboundAdmitter(fn: InboundAdmitter | null): void {
+  inboundAdmitter = fn;
+}
 
 let sessionTokenMinter: SessionTokenMinter | null = null;
 /** The gateway wires sdk-agent-runtime's mintSessionToken here (voice tier). */
@@ -234,12 +249,47 @@ async function inboundCall(inbound: Record<string, unknown>): Promise<CallRow | 
     [route.tenant_id, route.agent_id, route.version_id, from, route.phone_number, idem,
       JSON.stringify({ room, sip_call_id: sipCallId, carrier: route.carrier, binding_id: route.binding_id })],
   );
-  if (inserted) return inserted;
+  const atCapacity = (callId: string): RuntimeFallback => ({
+    action: 'fallback',
+    call_id: callId,
+    phone_number: route.phone_number,
+    tenant_id: route.tenant_id,
+    agent_id: route.agent_id,
+    reason: 'at_capacity',
+    fallback: route.fallback,
+    fallback_target: route.fallback_target,
+    kill_message: null,
+  });
+  if (inserted) {
+    if (!inboundAdmitter) return inserted;
+    const slot = await inboundAdmitter(inserted.tenant_id, inserted.call_id);
+    if (slot.granted) return inserted;
+    await dataService.query(
+      `UPDATE voice_agent.call
+          SET status = 'refused', ended_at = now(), updated_at = now(),
+              context = COALESCE(context, '{}'::jsonb) || jsonb_build_object('refused', jsonb_build_object('reason', 'at_capacity', 'blocked_by', $3::text))
+        WHERE tenant_id = $1 AND call_id = $2`,
+      [inserted.tenant_id, inserted.call_id, slot.blocked_by],
+    );
+    await emitEvent({
+      event_type: 'voice.call.refused.v1',
+      pool_index: AUDIT_POOL,
+      actor_kind: 'agent',
+      actor_id: 'voice-runtime',
+      tenant_id: inserted.tenant_id,
+      subject_kind: 'voice_agent.call',
+      subject_id: inserted.call_id,
+      payload: { call_id: inserted.call_id, direction: 'inbound', reason: 'at_capacity', blocked_by: slot.blocked_by, fallback: route.fallback },
+    });
+    return atCapacity(inserted.call_id);
+  }
   const existing = await dataService.one<CallRow>(
     `SELECT ${CALL_COLS} FROM voice_agent.call WHERE tenant_id = $1 AND idempotency_key = $2`,
     [route.tenant_id, idem],
   );
   if (!existing) throw new Error('[sdk-voice-agent] inbound call vanished after conflict');
+  // A retried bootstrap for a room that was refused gets the same answer.
+  if (existing.status === 'refused') return atCapacity(existing.call_id);
   return existing;
 }
 
