@@ -109,8 +109,8 @@ export function makeAnthropicAdapter(opts: AnthropicOptions): ProviderAdapter {
       };
     },
 
-    async *stream(request, credential): AsyncIterable<StreamChunk> {
-      const res = await postJson('anthropic', `${root}/messages`, headers(credentialKey(credential)), requestBody(request, true));
+    async *stream(request, credential, opts): AsyncIterable<StreamChunk> {
+      const res = await postJson('anthropic', `${root}/messages`, headers(credentialKey(credential)), requestBody(request, true), opts?.signal);
       let index = 0;
       let usage: AnthropicUsage = {};
       let stop: string | undefined;

@@ -23,6 +23,8 @@ import type { SttStream, Transcript } from '../providers/types';
 import type { SessionContext, SessionStore, TurnRecord } from '../session/sessionStore';
 import { ClauseChunker } from './chunker';
 import { Speaker, type TtsBinding } from './speaker';
+import { soundsIncomplete, turnConfig, type TurnConfig } from './turnDetector';
+import { EnergyVad, vadConfig } from './vad';
 
 /**
  * One live voice conversation (VA·E1 · TK-4458): caller audio -> streaming STT -> end of
@@ -63,6 +65,16 @@ export class VoiceSession {
   private callerStream: AudioStream | null = null;
   protected readonly systemPrompt: string;
   protected readonly tts: TtsBinding;
+  // Turn-taking (TK-4459).
+  protected readonly turnCfg: TurnConfig;
+  private readonly vad: EnergyVad;
+  private holdTimer: NodeJS.Timeout | null = null;
+  private vadEndTimer: NodeJS.Timeout | null = null;
+  private lastSpeechEndAt: number | null = null;
+  /** Aborts the in-flight LLM stream of the turn being answered. */
+  private turnAbort: AbortController | null = null;
+  /** The agent line currently being spoken (greeting or reply), to mark on barge-in. */
+  private speakingRec: TurnRecord | null = null;
 
   constructor(
     protected readonly room: Room,
@@ -74,6 +86,10 @@ export class VoiceSession {
     this.systemPrompt = `${VOICE_RULES}\n\n${b.agent.system_prompt}`;
     const t = b.stack.layers.tts;
     this.tts = { provider: ttsProvider(t.provider), opts: this.ttsOpts(t) };
+    const sttOpts = b.stack.layers.stt.options;
+    this.turnCfg = turnConfig(sttOpts);
+    const td = ((sttOpts?.turn_detection ?? {}) as Record<string, unknown>);
+    this.vad = new EnergyVad(vadConfig(td.sensitivity, { minSpeechMs: td.min_interruption_ms, minSilenceMs: td.min_silence_ms }, IN_RATE));
   }
 
   protected ttsOpts(l: RuntimeLayerConfig) {
@@ -92,7 +108,9 @@ export class VoiceSession {
 
   async run(): Promise<void> {
     const b = this.session.boot;
-    this.source = new AudioSource(OUT_RATE, 1);
+    // 200 ms queue: frames are captured close to real time, so 'heard' on barge-in and
+    // speaker idle() track what the caller actually heard (the default queue is 1 s).
+    this.source = new AudioSource(OUT_RATE, 1, 200);
     const track = LocalAudioTrack.createAudioTrack('agent-voice', this.source);
     const opts = new TrackPublishOptions();
     opts.source = TrackSource.SOURCE_MICROPHONE;
@@ -126,9 +144,11 @@ export class VoiceSession {
   }
 
   protected speakAgentLine(text: string): void {
-    this.record({ speaker: 'agent', text, started_ms: this.elapsed(), interrupted: false });
+    const rec = this.record({ speaker: 'agent', text, started_ms: this.elapsed(), interrupted: false });
     this.history.push({ role: 'assistant', content: text });
+    this.speakingRec = rec;
     this.speaker.say(text, this.tts);
+    void this.speaker.idle().then(() => { if (this.speakingRec === rec) this.speakingRec = null; });
   }
 
   private findCallerTrack(): RemoteTrack | null {
@@ -174,23 +194,81 @@ export class VoiceSession {
     }
   }
 
-  /** Hook for VAD (TK-4459); feeds STT. */
+  /** Every caller audio chunk: VAD first (barge-in must not wait for STT), then STT. */
   protected onCallerAudio(pcm: Int16Array): void {
+    for (const ev of this.vad.push(pcm, Date.now())) {
+      if (ev.type === 'speech_start') this.onSpeechStart(ev.at);
+      else this.onSpeechEnd(ev.at);
+    }
     this.stt?.write(pcm);
+  }
+
+  private clearTurnTimers(): void {
+    if (this.holdTimer) { clearTimeout(this.holdTimer); this.holdTimer = null; }
+    if (this.vadEndTimer) { clearTimeout(this.vadEndTimer); this.vadEndTimer = null; }
+  }
+
+  /** The caller started talking: they are not done yet, and may be talking over the agent. */
+  protected onSpeechStart(at: number): void {
+    this.clearTurnTimers();
+    if (this.turnCfg.bargeIn && (this.speaker.busy || this.turnAbort !== null)) this.bargeIn(at);
+  }
+
+  protected onSpeechEnd(at: number): void {
+    this.lastSpeechEndAt = at;
+    // Fallback end-of-turn when the provider's endpointing is late or missing.
+    if (this.pendingUser.length > 0 && !this.vadEndTimer) {
+      this.vadEndTimer = setTimeout(() => { this.vadEndTimer = null; this.maybeCommit(); }, this.turnCfg.vadEndpointMs);
+    }
+  }
+
+  /**
+   * Barge-in: the caller talks over the agent. Audio stops now (queued frames dropped),
+   * the in-flight LLM stream is aborted, and the agent line is recorded as interrupted with
+   * the words the caller actually heard.
+   */
+  protected bargeIn(speechStartAt: number): void {
+    const { heard } = this.speaker.interrupt();
+    this.turnAbort?.abort();
+    const stoppedAt = Date.now();
+    if (this.speakingRec) {
+      this.speakingRec.interrupted = true;
+      this.speakingRec.text = heard;
+      const last = [...this.history].reverse().find((m) => m.role === 'assistant');
+      if (last) last.content = heard ? `${heard} —` : '—';
+      this.speakingRec = null;
+    }
+    log.info('barge_in', { callId: this.session.callId, stop_ms: stoppedAt - speechStartAt, heard_words: heard ? heard.split(/\s+/).length : 0 });
   }
 
   protected onTranscript(t: Transcript): void {
     if (t.final && t.text) this.pendingUser.push(t.text);
-    if (t.endOfTurn && this.pendingUser.length > 0) {
-      const text = this.pendingUser.join(' ');
-      this.pendingUser = [];
-      this.endOfCallerTurn(text, Date.now());
+    if (t.endOfTurn) this.maybeCommit();
+  }
+
+  /** The provider (or VAD silence) says the caller paused: answer now, or hold if it sounds unfinished. */
+  private maybeCommit(): void {
+    if (this.pendingUser.length === 0 || this.vad.isSpeaking) return;
+    const text = this.pendingUser.join(' ');
+    if (soundsIncomplete(text)) {
+      if (!this.holdTimer) this.holdTimer = setTimeout(() => { this.holdTimer = null; this.commitTurn(); }, this.turnCfg.holdMs);
+      return;
     }
+    this.commitTurn();
+  }
+
+  private commitTurn(): void {
+    this.clearTurnTimers();
+    if (this.pendingUser.length === 0) return;
+    const text = this.pendingUser.join(' ');
+    this.pendingUser = [];
+    const now = Date.now();
+    this.endOfCallerTurn(text, now, this.lastSpeechEndAt !== null ? now - this.lastSpeechEndAt : null);
   }
 
   /** A complete caller utterance. Turns are answered in order. */
-  protected endOfCallerTurn(text: string, endedAt: number): void {
-    this.record({ speaker: 'caller', text, started_ms: this.elapsed(endedAt), stt_ms: null, interrupted: false });
+  protected endOfCallerTurn(text: string, endedAt: number, sttMs: number | null = null): void {
+    this.record({ speaker: 'caller', text, started_ms: this.elapsed(endedAt), stt_ms: sttMs, interrupted: false });
     this.turnChain = this.turnChain.then(() => this.respond(text, endedAt)).catch((err) => {
       log.error('turn failed', { callId: this.session.callId, error: (err as Error).message });
     });
@@ -226,10 +304,19 @@ export class VoiceSession {
     let firstTokenAt: number | null = null;
     let firstAudioAt: number | null = null;
     const requestedAt = Date.now();
+    const abort = new AbortController();
+    this.turnAbort = abort;
+    // Recorded up front so a barge-in during this reply can mark it interrupted.
+    const rec = this.record({
+      speaker: 'agent', text: '', started_ms: this.elapsed(requestedAt), interrupted: false, model: `${layer.provider}/${layer.model ?? ''}`,
+      ttft_ms: null, ttfa_ms: null,
+    });
+    this.history.push({ role: 'assistant', content: '' });
+    this.speakingRec = rec;
     this.speaker.onFirstAudio((at) => { firstAudioAt = at; });
     try {
-      for await (const chunk of llmAdapter(layer.provider).stream(req, Buffer.from(layer.primary.key))) {
-        if (this.ended) break;
+      for await (const chunk of llmAdapter(layer.provider).stream(req, Buffer.from(layer.primary.key), { signal: abort.signal })) {
+        if (this.ended || abort.signal.aborted) break;
         if (chunk.delta) {
           if (firstTokenAt === null) firstTokenAt = Date.now();
           reply += chunk.delta;
@@ -237,23 +324,28 @@ export class VoiceSession {
         }
       }
     } catch (err) {
-      failed = true;
-      log.warn('llm turn failed', { callId: this.session.callId, provider: layer.provider, error: (err as Error).message });
+      if (!abort.signal.aborted) {
+        failed = true;
+        log.warn('llm turn failed', { callId: this.session.callId, provider: layer.provider, error: (err as Error).message });
+      }
     }
     const llmDoneAt = Date.now();
-    for (const clause of chunker.flush()) this.speaker.say(clause, this.tts);
-    if (failed && !reply) {
-      reply = FALLBACK_LINE;
-      this.speaker.say(reply, this.tts);
+    const interruptedDuringLlm = abort.signal.aborted;
+    if (!interruptedDuringLlm) {
+      for (const clause of chunker.flush()) this.speaker.say(clause, this.tts);
+      if (failed && !reply) {
+        reply = FALLBACK_LINE;
+        this.speaker.say(reply, this.tts);
+      }
+      rec.text = reply;
+      this.history[this.history.length - 1].content = reply;
     }
-    this.history.push({ role: 'assistant', content: reply });
-    const rec = this.record({
-      speaker: 'agent', text: reply, started_ms: this.elapsed(requestedAt), interrupted: false, model: `${layer.provider}/${layer.model ?? ''}`,
-      ttft_ms: firstTokenAt !== null ? firstTokenAt - requestedAt : null,
-      ttfa_ms: null,
-    });
+    rec.ttft_ms = firstTokenAt !== null ? firstTokenAt - requestedAt : null;
     await this.speaker.idle();
+    if (this.turnAbort === abort) this.turnAbort = null;
+    if (this.speakingRec === rec) this.speakingRec = null;
     rec.ttfa_ms = firstAudioAt !== null ? firstAudioAt - endedAt : null;
+    // bargeIn() already rewrote rec.text / history to what the caller heard.
     this.store.touch(this.session.callId);
     log.info('turn', {
       callId: this.session.callId,
@@ -265,6 +357,8 @@ export class VoiceSession {
       first_audio_at: firstAudioAt,
       llm_done_at: llmDoneAt,
       first_audio_before_llm_done: firstAudioAt !== null && firstAudioAt < llmDoneAt,
+      interrupted: rec.interrupted,
+      llm_aborted: interruptedDuringLlm,
       chars: reply.length,
     });
   }
@@ -290,6 +384,8 @@ export class VoiceSession {
 
   protected async cleanup(): Promise<void> {
     this.ended = true;
+    this.clearTurnTimers();
+    this.turnAbort?.abort();
     this.stt?.close();
     try { this.speaker?.interrupt(); } catch { /* source closed */ }
     await this.callerStream?.cancel().catch(() => undefined);

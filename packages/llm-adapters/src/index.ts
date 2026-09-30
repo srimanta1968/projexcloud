@@ -6,7 +6,7 @@
  * calls them directly with the key handles from the call bootstrap, so the voice hot path
  * never touches Postgres (VA-ADR-8).
  */
-export type { ProviderAdapter, ProviderCompletionResult } from './providerAdapter';
+export type { ProviderAdapter, ProviderCompletionResult, StreamOptions } from './providerAdapter';
 export { setModelPriceResolver, providerCost } from './modelPricing';
 export type { ModelPrice, ModelPriceResolver } from './modelPricing';
 export { makeOpenAiCompatibleAdapter, OPENAI_COMPATIBLE_BASE_URLS } from './adapters/openaiCompatible';

@@ -127,8 +127,8 @@ export function makeOpenAiCompatibleAdapter(opts: OpenAiCompatibleOptions): Prov
       };
     },
 
-    async *stream(request, credential): AsyncIterable<StreamChunk> {
-      const res = await postJson(provider, `${root}/chat/completions`, authHeaders(credentialKey(credential)), requestBody(request, true));
+    async *stream(request, credential, opts): AsyncIterable<StreamChunk> {
+      const res = await postJson(provider, `${root}/chat/completions`, authHeaders(credentialKey(credential)), requestBody(request, true), opts?.signal);
       let index = 0;
       let finish: CompletionResponse['finish_reason'] | undefined;
       let usage: OaiUsage | undefined;

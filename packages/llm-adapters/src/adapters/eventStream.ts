@@ -47,6 +47,7 @@ export async function* eventStreamMessages(res: Response): AsyncIterable<EventSt
   if (!res.body) return;
   const reader = res.body.getReader();
   let buffer = Buffer.alloc(0);
+  try {
   for (;;) {
     const { value, done } = await reader.read();
     if (value) buffer = Buffer.concat([buffer, Buffer.from(value)]);
@@ -62,6 +63,9 @@ export async function* eventStreamMessages(res: Response): AsyncIterable<EventSt
       buffer = buffer.subarray(total);
     }
     if (done) break;
+  }
+  } finally {
+    reader.cancel().catch(() => undefined);
   }
 }
 

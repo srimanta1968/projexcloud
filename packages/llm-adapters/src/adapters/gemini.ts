@@ -119,8 +119,8 @@ export function makeGeminiAdapter(opts: GeminiOptions): ProviderAdapter {
       };
     },
 
-    async *stream(request, credential): AsyncIterable<StreamChunk> {
-      const res = await postJson('gemini', `${url(request.model, 'streamGenerateContent')}?alt=sse`, headers(credentialKey(credential)), requestBody(request));
+    async *stream(request, credential, opts): AsyncIterable<StreamChunk> {
+      const res = await postJson('gemini', `${url(request.model, 'streamGenerateContent')}?alt=sse`, headers(credentialKey(credential)), requestBody(request), opts?.signal);
       let index = 0;
       let usage: UsageMetadata | undefined;
       let finish: string | undefined;

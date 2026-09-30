@@ -100,7 +100,7 @@ export interface BedrockOptions {
 export function makeBedrockAdapter(opts: BedrockOptions): ProviderAdapter {
   const root = (opts.base_url || `https://bedrock-runtime.${opts.region}.amazonaws.com`).replace(/\/+$/, '');
 
-  async function send(request: CompletionRequest, credential: Buffer, action: 'converse' | 'converse-stream'): Promise<Response> {
+  async function send(request: CompletionRequest, credential: Buffer, action: 'converse' | 'converse-stream', signal?: AbortSignal): Promise<Response> {
     const url = new URL(`${root}/model/${encodeURIComponent(request.model)}/${action}`);
     const body = JSON.stringify(requestBody(request));
     const auth = bedrockAuth(credentialKey(credential));
@@ -110,7 +110,7 @@ export function makeBedrockAdapter(opts: BedrockOptions): ProviderAdapter {
       : { ...headers, Authorization: `Bearer ${auth.bearer}` };
     // host is set by fetch itself; sending it explicitly is harmless but redundant.
     delete signed.host;
-    return postJson('bedrock', url.toString(), signed, body);
+    return postJson('bedrock', url.toString(), signed, body, signal);
   }
 
   return {
@@ -136,8 +136,8 @@ export function makeBedrockAdapter(opts: BedrockOptions): ProviderAdapter {
       };
     },
 
-    async *stream(request, credential): AsyncIterable<StreamChunk> {
-      const res = await send(request, credential, 'converse-stream');
+    async *stream(request, credential, opts): AsyncIterable<StreamChunk> {
+      const res = await send(request, credential, 'converse-stream', opts?.signal);
       let index = 0;
       let usage: BedrockUsage | undefined;
       let stop: string | undefined;

@@ -14,7 +14,12 @@ export interface ProviderAdapter {
    * early from the iteration (break / return()) cancels the HTTP response body, so the
    * provider stops generating — the voice runtime relies on this for barge-in.
    */
-  stream(request: CompletionRequest, credential: Buffer): AsyncIterable<StreamChunk>;
+  stream(request: CompletionRequest, credential: Buffer, opts?: StreamOptions): AsyncIterable<StreamChunk>;
+}
+
+export interface StreamOptions {
+  /** Aborts the HTTP request mid-stream (voice barge-in); the stream then throws a 499. */
+  signal?: AbortSignal;
 }
 
 export interface ProviderCompletionResult {

@@ -51,16 +51,17 @@ const timeoutMs = (): number => Number(process.env.AI_GATEWAY_PROVIDER_TIMEOUT_M
  * POSTs JSON to a provider; throws ProviderHttpError on a non-2xx or a network failure.
  * A string body is sent as-is (a signed request must send exactly the bytes it signed).
  */
-export async function postJson(provider: string, url: string, headers: Record<string, string>, body: unknown): Promise<Response> {
+export async function postJson(provider: string, url: string, headers: Record<string, string>, body: unknown, signal?: AbortSignal): Promise<Response> {
   let res: Response;
   try {
     res = await fetch(url, {
       method: 'POST',
       headers: { 'content-type': 'application/json', ...headers },
       body: typeof body === 'string' ? body : JSON.stringify(body),
-      signal: AbortSignal.timeout(timeoutMs()),
+      signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(timeoutMs())]) : AbortSignal.timeout(timeoutMs()),
     });
   } catch (err) {
+    if (signal?.aborted) throw new ProviderHttpError(provider, 499, `${provider} request cancelled by the caller`, false);
     const timedOut = (err as Error)?.name === 'TimeoutError';
     throw new ProviderHttpError(provider, 504, timedOut ? `${provider} did not answer in time` : `could not reach ${provider}`, true);
   }
@@ -81,6 +82,7 @@ export async function* sseData(res: Response): AsyncIterable<{ event: string | n
   if (!res.body) return;
   const reader = res.body.getReader();
   const decoder = new TextDecoder();
+  try {
   let buffer = '';
   let event: string | null = null;
   let data: string[] = [];
@@ -105,4 +107,9 @@ export async function* sseData(res: Response): AsyncIterable<{ event: string | n
   }
   if (buffer.trim().startsWith('data:')) data.push(buffer.trim().slice(5).replace(/^ /, ''));
   yield* flush();
+  } finally {
+    // A consumer that stops early (break / return(), e.g. voice barge-in) closes the HTTP
+    // body, so the provider stops generating instead of streaming into the void.
+    reader.cancel().catch(() => undefined);
+  }
 }

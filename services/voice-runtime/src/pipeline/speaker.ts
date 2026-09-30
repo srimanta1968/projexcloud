@@ -133,7 +133,11 @@ export class Speaker {
       this.playing = null;
     }
     await this.flushCarry();
-    await this.source.waitForPlayout().catch(() => undefined);
+    // Bounded: after clearQueue() (barge-in) a playout wait may never be signalled.
+    await Promise.race([
+      this.source.waitForPlayout().catch(() => undefined),
+      new Promise((r) => setTimeout(r, this.source.queuedDuration + 250)),
+    ]);
     const w = this.idleWaiters;
     this.idleWaiters = [];
     for (const r of w) r();
@@ -152,7 +156,9 @@ export class Speaker {
         this.firstAudioCb = null;
         cb(Date.now());
       }
-      await this.source.captureFrame(new AudioFrame(frame, this.outRate, 1, this.frameSamples));
+      // A capture blocked on a full queue must not outlive a barge-in's clearQueue().
+      await untilAborted(this.source.captureFrame(new AudioFrame(frame, this.outRate, 1, this.frameSamples)), item.abort.signal);
+      if (item.abort.signal.aborted) return;
       item.samplesPlayed += this.frameSamples;
     }
     buf = buf.slice(off);
@@ -196,6 +202,16 @@ export class Speaker {
     const dropped = [current?.text.slice(heard.length) ?? '', ...pending.map((p) => p.text)].join(' ').trim();
     return { heard, dropped };
   }
+}
+
+/** Resolves with `p`, or as soon as `signal` aborts (the pending promise is abandoned). */
+function untilAborted(p: Promise<void>, signal: AbortSignal): Promise<void> {
+  if (signal.aborted) return Promise.resolve();
+  return new Promise((resolve) => {
+    const onAbort = (): void => resolve();
+    signal.addEventListener('abort', onAbort, { once: true });
+    p.then(resolve, resolve).finally(() => signal.removeEventListener('abort', onAbort));
+  });
 }
 
 function concat(a: Int16Array, b: Int16Array): Int16Array {
