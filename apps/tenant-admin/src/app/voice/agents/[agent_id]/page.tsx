@@ -3,13 +3,14 @@ import { Alert, Badge, Button, Card, Field, Input, Select, Table, TableBody, Tab
 import { gateway, GatewayError } from '../../../../lib/gateway';
 import { TalkPanel } from '../../test/TalkPanel';
 import { VoicePreview } from './VoicePreview';
+import { AutoRefresh, EvalStatus, type EvalRunSummary } from '../EvalBits';
 import {
   createStackProfileAction,
   createVersionAction,
   publishAction,
-  recordTestResultAction,
   requestApprovalAction,
   rollbackAction,
+  startEvalRunAction,
 } from '../actions';
 
 /**
@@ -20,8 +21,12 @@ import {
  *   2. Version — prompt, greeting, language and stack; versions are immutable.
  *   3. Preview — hear a voice with one of the tenant's TTS keys.
  *   4. Test    — talk to the latest version (a draft) with the TalkToAgent widget.
- *   5. Publish — two gates, enforced by the gateway: a recorded passing test AND an approval
- *                on one of the tenant's approval routes (decided by an approver, not here).
+ *   5. Evaluate — simulated callers (TK-4518): an evaluation run on the tenant's own models
+ *                scores the version (task success, latency, barge-in); a sandbox check runs on
+ *                fake providers for free and never counts toward publishing.
+ *   6. Publish — two gates, enforced by the gateway: a PASSING EVALUATION RUN (not a sandbox
+ *                check, not a self-reported result) AND an approval on one of the tenant's
+ *                approval routes (decided by an approver, not here).
  *                A previously published version can be rolled back to.
  */
 
@@ -57,6 +62,14 @@ async function load(agentId: string) {
     safe(gateway.get<{ bindings: Binding[] }>('/api/ai-gateway/tenant-credentials'), { bindings: [] }),
     safe(gateway.get<Route[]>('/api/approvals/routes'), [] as Route[]),
   ]);
+  // Recent runs of the newest versions: the table shows each one's latest verdict.
+  const runs = new Map<string, EvalRunSummary[]>();
+  await Promise.all(versions.versions.slice().sort((a, b) => b.version_no - a.version_no).slice(0, 10).map(async (v) => {
+    const page = await safe(gateway.get<{ eval_runs: EvalRunSummary[] }>(
+      `/api/voice-agent/agents/${id}/versions/${encodeURIComponent(v.version_id)}/eval-runs?limit=10`,
+    ), { eval_runs: [] });
+    runs.set(v.version_id, page.eval_runs);
+  }));
   const approvals = new Map<string, string>();
   await Promise.all(versions.versions.filter((v) => v.approval_id).map(async (v) => {
     const r = await safe(gateway.get<{ request?: { status: string }; status?: string }>(`/api/approvals/requests/${encodeURIComponent(v.approval_id as string)}`), {});
@@ -70,14 +83,27 @@ async function load(agentId: string) {
     keys: creds.bindings.filter((b) => b.status === 'active' && b.validation_status === 'ok'),
     routes: (Array.isArray(routes) ? routes : []).filter((r) => r.status === 'active'),
     approvals,
+    runs,
   };
 }
+
+const EXAMPLE_SCENARIOS = JSON.stringify([
+  {
+    name: 'books-a-demo',
+    caller: { persona: 'a busy founder', goal: 'book a demo for next week' },
+    max_turns: 5,
+    expect: { tools_called: ['book_meeting'], says_none: ['I cannot help'] },
+  },
+  {
+    name: 'interrupts',
+    turns: [{ say: 'Tell me everything you can do.' }, { say: 'Sorry, quick question.', interrupt: true }],
+  },
+], null, 2);
 
 const NOTICES: Record<string, string> = {
   created: 'Agent created. Start with a stack, then a first version.',
   profile: 'Stack profile created.',
   version: 'Version saved.',
-  tested: 'Test result recorded.',
   requested: 'Approval requested. An approver decides it under Approvals.',
   published: 'Version published — it is now live.',
   rolled_back: 'Rolled back — the selected version is live again.',
@@ -90,7 +116,9 @@ export default async function AgentBuilderPage({ params, searchParams }: { param
   } catch (err) {
     return <Alert variant="destructive" data-testid="agent-error">{err instanceof GatewayError ? err.message : 'Could not load the agent'}</Alert>;
   }
-  const { agent, versions, profiles, presets, keys, routes, approvals } = data;
+  const { agent, versions, profiles, presets, keys, routes, approvals, runs } = data;
+  const latestOf = (versionId: string, sandbox: boolean) => (runs.get(versionId) ?? []).find((r) => (r.mode === 'sandbox') === sandbox);
+  const anyActive = [...runs.values()].some((rs) => rs.some((r) => r.status === 'queued' || r.status === 'running'));
   const latest = versions[0];
   const notice = Object.keys(NOTICES).find((k) => searchParams[k]);
   const keyOptions = (layer: string) => keys.filter((k) => k.layer === layer);
@@ -105,7 +133,8 @@ export default async function AgentBuilderPage({ params, searchParams }: { param
         </p>
       </div>
       {searchParams.error ? <Alert variant="destructive" data-testid="agent-action-error">{searchParams.error}</Alert> : null}
-      {notice ? <Alert variant="success" data-testid="agent-notice">{searchParams.tested === 'failed' ? 'Test recorded as failed — this version cannot be published.' : NOTICES[notice]}</Alert> : null}
+      {notice ? <Alert variant="success" data-testid="agent-notice">{NOTICES[notice]}</Alert> : null}
+      <AutoRefresh active={anyActive} />
 
       {/* 1. Stack */}
       <Card className="grid gap-3 p-4" data-testid="agent-stack">
@@ -180,16 +209,49 @@ export default async function AgentBuilderPage({ params, searchParams }: { param
         {latest ? <TalkPanel agentId={agent.agent_id} agentName={`${agent.name} v${latest.version_no}`} /> : <p className="text-muted-foreground">Save a version to test it.</p>}
       </Card>
 
-      {/* 5. Versions & publish */}
+      {/* 5. Evaluate */}
+      <Card className="grid gap-3 p-4" data-testid="agent-evaluate">
+        <h2 className="text-lg font-semibold">5. Evaluate with simulated callers</h2>
+        <p className="text-sm text-muted-foreground">
+          An <strong>evaluation</strong> plays simulated callers against a version on your own models and tools, and scores
+          task success, response latency and how quickly it stops when interrupted — a passing evaluation is required to
+          publish. A <strong>sandbox check</strong> uses fake speech and a scripted agent: it is free, needs no keys, and
+          checks your app tools end to end, but it never counts toward publishing.
+        </p>
+        {versions.length === 0 ? <p className="text-muted-foreground">Save a version to evaluate it.</p> : (
+          <form action={startEvalRunAction} className="grid gap-3">
+            <input type="hidden" name="agent_id" value={agent.agent_id} />
+            <div className="flex flex-wrap items-end gap-3">
+              <Field label="Version" htmlFor="eval_version_id">
+                <Select id="eval_version_id" name="version_id" defaultValue={latest?.version_id} data-testid="eval-version">
+                  {versions.map((v) => <option key={v.version_id} value={v.version_id}>v{v.version_no}{v.is_live ? ' (live)' : ''}</option>)}
+                </Select>
+              </Field>
+              <Field label="Mode" htmlFor="eval_mode">
+                <Select id="eval_mode" name="mode" defaultValue="evaluation" data-testid="eval-mode">
+                  <option value="evaluation">Evaluation (counts toward publishing)</option>
+                  <option value="sandbox">Sandbox check (free, fake providers)</option>
+                </Select>
+              </Field>
+            </div>
+            <Field label="Scenarios (optional JSON — leave empty for the default suite)" htmlFor="eval_scenarios">
+              <Textarea id="eval_scenarios" name="scenarios" rows={6} placeholder={EXAMPLE_SCENARIOS} data-testid="eval-scenarios" />
+            </Field>
+            <div><Button type="submit" data-testid="eval-start">Start run</Button></div>
+          </form>
+        )}
+      </Card>
+
+      {/* 6. Versions & publish */}
       <Card className="grid gap-3 p-4" data-testid="agent-versions">
-        <h2 className="text-lg font-semibold">5. Versions &amp; publish</h2>
+        <h2 className="text-lg font-semibold">6. Versions &amp; publish</h2>
         {versions.length === 0 ? <p className="text-muted-foreground">No versions yet.</p> : (
           <Table>
             <TableHeader>
               <TableRow>
                 <TableHead>Version</TableHead>
                 <TableHead>Status</TableHead>
-                <TableHead>Test</TableHead>
+                <TableHead>Evaluation</TableHead>
                 <TableHead>Approval</TableHead>
                 <TableHead>Actions</TableHead>
               </TableRow>
@@ -202,23 +264,38 @@ export default async function AgentBuilderPage({ params, searchParams }: { param
                     {v.is_live ? <Badge variant="success">live</Badge> : v.published_at ? <Badge variant="outline">previously published</Badge> : <Badge variant="secondary">draft</Badge>}
                   </TableCell>
                   <TableCell>
-                    {v.eval_run_id ? 'recorded' : 'not tested'}
-                    {!v.published_at ? (
-                      <div className="mt-1 flex gap-1">
-                        <form action={recordTestResultAction}>
-                          <input type="hidden" name="agent_id" value={agent.agent_id} />
-                          <input type="hidden" name="version_id" value={v.version_id} />
-                          <input type="hidden" name="passed" value="true" />
-                          <Button type="submit" size="sm" variant="secondary">Test passed</Button>
-                        </form>
-                        <form action={recordTestResultAction}>
-                          <input type="hidden" name="agent_id" value={agent.agent_id} />
-                          <input type="hidden" name="version_id" value={v.version_id} />
-                          <input type="hidden" name="passed" value="false" />
-                          <Button type="submit" size="sm" variant="ghost">Test failed</Button>
-                        </form>
-                      </div>
-                    ) : null}
+                    {(() => {
+                      const real = latestOf(v.version_id, false);
+                      const sandbox = latestOf(v.version_id, true);
+                      return (
+                        <div className="grid gap-1">
+                          <div className="flex items-center gap-2">
+                            <EvalStatus run={real} testId={`eval-status-${v.version_no}`} />
+                            {real ? <Link className="text-xs underline" href={`/voice/agents/${agent.agent_id}/evaluations/${real.eval_run_id}`}>results</Link> : null}
+                          </div>
+                          {sandbox ? (
+                            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                              sandbox <EvalStatus run={sandbox} testId={`sandbox-status-${v.version_no}`} />
+                              <Link className="underline" href={`/voice/agents/${agent.agent_id}/evaluations/${sandbox.eval_run_id}`}>results</Link>
+                            </div>
+                          ) : null}
+                          <div className="flex gap-1">
+                            <form action={startEvalRunAction}>
+                              <input type="hidden" name="agent_id" value={agent.agent_id} />
+                              <input type="hidden" name="version_id" value={v.version_id} />
+                              <input type="hidden" name="mode" value="evaluation" />
+                              <Button type="submit" size="sm" variant="secondary" data-testid={`evaluate-${v.version_no}`}>Run evaluation</Button>
+                            </form>
+                            <form action={startEvalRunAction}>
+                              <input type="hidden" name="agent_id" value={agent.agent_id} />
+                              <input type="hidden" name="version_id" value={v.version_id} />
+                              <input type="hidden" name="mode" value="sandbox" />
+                              <Button type="submit" size="sm" variant="ghost" data-testid={`sandbox-${v.version_no}`}>Sandbox check</Button>
+                            </form>
+                          </div>
+                        </div>
+                      );
+                    })()}
                   </TableCell>
                   <TableCell>
                     {v.approval_id ? <span data-testid={`approval-${v.version_no}`}>{approvals.get(v.version_id) ?? 'requested'}</span> : 'none'}

@@ -2,8 +2,9 @@
 Feature: Voice agent builder — build, preview, test and publish
   A tenant admin builds an AI voice agent in the tenant portal: creates the agent, clones a
   preset stack with a validated key per slot, saves an immutable version, previews a voice
-  with their own TTS key, talks to the draft with the TalkToAgent widget, records the test
-  result, requests approval, and publishes once an approver has approved. A previously
+  with their own TTS key, talks to the draft with the TalkToAgent widget, evaluates it with
+  simulated callers (a passing evaluation run gates publishing; a free sandbox check never
+  does), requests approval, and publishes once an approver has approved. A previously
   published version can be rolled back to.
 
   @scenario_type:UI
@@ -20,7 +21,8 @@ Feature: Voice agent builder — build, preview, test and publish
     And I should see "1. Stack from a preset"
     And I should see "3. Preview a voice"
     And I should see "4. Test the latest version"
-    And I should see "5. Versions & publish"
+    And I should see "5. Evaluate with simulated callers"
+    And I should see "6. Versions & publish"
 
   @scenario_type:UI
   @ui_test
@@ -39,3 +41,21 @@ Feature: Voice agent builder — build, preview, test and publish
     And I should see "draft"
     When I click "Publish"
     Then I should see "no evaluation run recorded for this version"
+
+  @scenario_type:UI
+  @ui_test
+  @portal:tenantAdmin
+  @login:user
+  Scenario: 3. A sandbox check runs simulated callers but never unlocks publishing
+    Given I navigate to "/voice/agents"
+    When I fill "name" with "Sandbox agent ${timestamp}"
+    And I click "Create agent"
+    And I click "Create stack"
+    Then I should see "Stack profile created."
+    When I fill "system_prompt" with "You are the front desk. Book appointments."
+    And I click "Save version"
+    Then I should see "Version saved."
+    And I should see "not evaluated"
+    When I click "Sandbox check"
+    Then I should see "Sandbox checks run on fake speech providers with a scripted agent"
+    And I should see "never count toward publishing"

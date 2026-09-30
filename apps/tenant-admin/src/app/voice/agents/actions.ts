@@ -74,22 +74,38 @@ export async function createVersionAction(form: FormData): Promise<void> {
 }
 
 /** Records the result of the admin's own test of a version (suite "manual") — one of the two publish gates. */
-export async function recordTestResultAction(form: FormData): Promise<void> {
+/**
+ * Starts a simulated-caller run against a version (TK-4518) and opens its result page.
+ *   evaluation — the tenant's own LLM keys and tools; a passing one is the first publish gate.
+ *   sandbox    — fake providers and a scripted agent: free, checks the plumbing and the app
+ *                tools, never unlocks publish.
+ * Scenarios are optional JSON (an array); without them the default suite for the mode runs.
+ */
+export async function startEvalRunAction(form: FormData): Promise<void> {
   const agentId = str(form, 'agent_id');
   const versionId = str(form, 'version_id');
-  const passed = str(form, 'passed') === 'true';
+  const mode = str(form, 'mode') === 'sandbox' ? 'sandbox' : 'evaluation';
+  const raw = str(form, 'scenarios');
+  let scenarios: unknown;
+  if (raw) {
+    try {
+      scenarios = JSON.parse(raw);
+    } catch {
+      detail(agentId, { error: 'Scenarios must be valid JSON (an array of scenarios).' });
+    }
+  }
+  let runId = '';
   try {
-    await gateway.post(`/api/voice-agent/agents/${encodeURIComponent(agentId)}/versions/${encodeURIComponent(versionId)}/eval-runs`, {
-      passed,
-      score: passed ? 1 : 0,
-      suite: 'manual',
-      metrics: { source: 'tenant-admin manual test' },
-    });
+    const { eval_run } = await gateway.post<{ eval_run: { eval_run_id: string } }>(
+      `/api/voice-agent/agents/${encodeURIComponent(agentId)}/versions/${encodeURIComponent(versionId)}/eval-runs/start`,
+      { mode, ...(scenarios !== undefined ? { scenarios } : {}) },
+    );
+    runId = eval_run.eval_run_id;
   } catch (err) {
-    detail(agentId, { error: msg(err, 'Could not record the test result') });
+    detail(agentId, { error: msg(err, 'Could not start the evaluation') });
   }
   revalidatePath(`/voice/agents/${agentId}`);
-  detail(agentId, { tested: passed ? 'passed' : 'failed' });
+  redirect(`/voice/agents/${encodeURIComponent(agentId)}/evaluations/${encodeURIComponent(runId)}`);
 }
 
 /** Opens the approval request for a version on one of the tenant's approval routes — the second gate. */
