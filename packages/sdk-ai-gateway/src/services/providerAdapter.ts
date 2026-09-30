@@ -1,39 +1,15 @@
-import type { ProviderId, CompletionRequest, CompletionResponse, StreamChunk } from '@projexlight/contracts';
+import type { ProviderId } from '@projexlight/contracts';
+import type { ProviderAdapter } from '@projexlight/llm-adapters';
 
 /**
- * Provider adapter abstraction (FR-AGW-1).
+ * Provider adapter registry (FR-AGW-1).
  *
- * Each upstream LLM provider ships an adapter implementing this interface.
- * Adapters are registered at boot (api-gateway) similarly to sdk-payment's
- * Stripe adapter — the runtime is provider-agnostic and treats every
- * adapter the same way.
- *
- * Real Anthropic / OpenAI / Gemini / Bedrock adapters live in their own
- * subpackages (sdk-ai-gateway-anthropic, etc.) and are registered via
- * {@link registerProvider}. The runtime here is pure dispatch + bookkeeping.
+ * The adapter contract and the real Anthropic / OpenAI / Gemini / Bedrock adapters live in
+ * @projexlight/llm-adapters (stateless, no DB — the voice runtime uses them too). They are
+ * registered here at boot (api-gateway) via {@link registerProvider}; the gateway is pure
+ * dispatch + bookkeeping and treats every adapter the same way.
  */
-
-export interface ProviderAdapter {
-  readonly provider_id: ProviderId;
-  /** Stateless completion call. Throws on network/4xx/5xx; caller does retry/circuit. */
-  complete(request: CompletionRequest, credential: Buffer): Promise<ProviderCompletionResult>;
-  /** Streaming variant; yields token deltas until the provider closes the stream. */
-  stream(request: CompletionRequest, credential: Buffer): AsyncIterable<StreamChunk>;
-}
-
-export interface ProviderCompletionResult {
-  /** Final assistant output text. */
-  output: string;
-  /** Any tool calls the model wants the runtime to dispatch. */
-  tool_calls: NonNullable<CompletionResponse['tool_calls']>;
-  tokens_in: number;
-  tokens_out: number;
-  /** Vendor cost in USD (eight decimal places). */
-  provider_cost: number;
-  /** Optional Langfuse trace id when the adapter calls Langfuse directly. */
-  langfuse_trace_id?: string;
-  finish_reason: CompletionResponse['finish_reason'];
-}
+export type { ProviderAdapter, ProviderCompletionResult } from '@projexlight/llm-adapters';
 
 const adapters = new Map<ProviderId, ProviderAdapter>();
 

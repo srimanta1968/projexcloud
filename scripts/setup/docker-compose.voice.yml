@@ -139,9 +139,15 @@ services:
       # Straight to LiveKit on the compose network (LIVEKIT_URL is the public wss:// one).
       LIVEKIT_WORKER_URL: ws://livekit:7880
       VOICE_RUNTIME_HEALTH_PORT: "8081"
+      # Control plane (bootstrap, one request per call) and the session mirror.
+      VOICE_CONTROL_PLANE_URL: http://api-gateway:3000
+      REDIS_HOST: ${REDIS_HOST:-redis}
     depends_on:
       livekit:
         condition: service_started
+      redis:
+        condition: service_healthy
+        required: false
     # Drain on deploy: SIGTERM stops new calls and waits for live ones; compose must not
     # SIGKILL before the drain window (VOICE_RUNTIME_DRAIN_TIMEOUT_MS, default 2 h) ends.
     stop_grace_period: ${VOICE_RUNTIME_STOP_GRACE:-2h5m}

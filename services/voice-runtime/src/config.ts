@@ -24,6 +24,14 @@ export interface RuntimeConfig {
   /** How long a SIGTERM waits for live calls to end before exiting anyway. */
   drainTimeoutMs: number;
   pingIntervalMs: number;
+  /** api-gateway root the runtime bootstraps calls from (operator route). */
+  controlPlaneUrl: string;
+  /** ADMIN_OPS_TOKEN — the runtime's credential for the operator routes. */
+  opsToken: string;
+  /** Redis for the session mirror; null = memory only (dev). */
+  redis: { host: string; port: number; password?: string } | null;
+  /** Sliding TTL of a session's Redis mirror; refreshed every turn. */
+  sessionTtlSeconds: number;
 }
 
 export class ConfigError extends Error {}
@@ -44,6 +52,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): RuntimeConfig 
     ['LIVEKIT_URL (or LIVEKIT_WORKER_URL)', livekitUrl],
     ['LIVEKIT_API_KEY', env.LIVEKIT_API_KEY],
     ['LIVEKIT_API_SECRET', env.LIVEKIT_API_SECRET],
+    ['ADMIN_OPS_TOKEN', env.ADMIN_OPS_TOKEN],
   ].filter(([, v]) => !v).map(([k]) => k);
   if (missing.length > 0) throw new ConfigError(`voice-runtime needs ${missing.join(', ')}`);
   if (!/^(wss?|https?):\/\//.test(livekitUrl)) throw new ConfigError('LIVEKIT_URL must start with ws://, wss://, http:// or https://');
@@ -58,5 +67,11 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): RuntimeConfig 
     healthPort: int(env, 'VOICE_RUNTIME_HEALTH_PORT', 8081, 0),
     drainTimeoutMs: int(env, 'VOICE_RUNTIME_DRAIN_TIMEOUT_MS', 2 * 60 * 60 * 1000, 0),
     pingIntervalMs: int(env, 'VOICE_RUNTIME_PING_INTERVAL_MS', 10_000, 1000),
+    controlPlaneUrl: (env.VOICE_CONTROL_PLANE_URL || 'http://api-gateway:3000').replace(/\/+$/, ''),
+    opsToken: env.ADMIN_OPS_TOKEN!,
+    redis: env.VOICE_RUNTIME_REDIS === 'off' || !env.REDIS_HOST
+      ? null
+      : { host: env.REDIS_HOST, port: int(env, 'REDIS_PORT', 6379, 1), password: env.REDIS_PASSWORD || undefined },
+    sessionTtlSeconds: int(env, 'VOICE_SESSION_TTL_S', 900, 30),
   };
 }

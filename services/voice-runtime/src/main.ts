@@ -1,8 +1,12 @@
+import { initRedis } from '@projexlight/redis-runtime';
+import { callRunner } from './call/callRunner';
 import { ConfigError, loadConfig } from './config';
+import { ControlPlane } from './controlPlane';
 import { startHealthServer } from './health';
 import { roomJobRunner } from './livekit/roomJob';
 import { AgentWorker } from './livekit/worker';
 import { log } from './log';
+import { SessionStore } from './session/sessionStore';
 
 /**
  * voice-runtime entry point (VA·E1). Registers one LiveKit agent worker under
@@ -20,7 +24,11 @@ async function main(): Promise<void> {
     }
     throw err;
   }
-  const worker = new AgentWorker(cfg, roomJobRunner());
+  const redis = cfg.redis ? initRedis({ ...cfg.redis, maxRetriesPerRequest: 1, lazyConnect: false }) : null;
+  if (!redis) log.warn('no REDIS_HOST: session state is kept in memory only');
+  const store = new SessionStore(redis, cfg.workerName, cfg.sessionTtlSeconds);
+  const controlPlane = new ControlPlane({ baseUrl: cfg.controlPlaneUrl, opsToken: cfg.opsToken });
+  const worker = new AgentWorker(cfg, roomJobRunner(callRunner({ controlPlane, store })));
   const health = await startHealthServer(worker, cfg.healthPort);
   log.info('voice-runtime starting', { agentName: cfg.agentName, maxJobs: cfg.maxJobs, healthPort: cfg.healthPort, worker: cfg.workerName });
   worker.start();

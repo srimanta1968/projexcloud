@@ -1,12 +1,17 @@
+import {
+  makeAnthropicAdapter,
+  makeBedrockAdapter,
+  makeGeminiAdapter,
+  makeOpenAiCompatibleAdapter,
+  OPENAI_COMPATIBLE_BASE_URLS,
+} from '@projexlight/llm-adapters';
 import { registerProvider } from '../providerAdapter';
-import { makeOpenAiCompatibleAdapter, OPENAI_COMPATIBLE_BASE_URLS } from './openaiCompatible';
-import { makeAnthropicAdapter } from './anthropic';
-import { makeGeminiAdapter } from './gemini';
-import { makeBedrockAdapter } from './bedrock';
 
 /**
- * Real provider adapters (VA·E5). Registered at boot, BEFORE bootstrapLLMCredentials, so
- * the synthetic dev adapter is only installed where no real one exists.
+ * Real provider adapters (VA·E5). The adapters themselves live in @projexlight/llm-adapters
+ * (shared with services/voice-runtime); this registers them at boot, BEFORE
+ * bootstrapLLMCredentials, so the synthetic dev adapter is only installed where no real one
+ * exists.
  *
  * AI_GATEWAY_PROVIDER_MODE = real | synthetic. Default: real in production, synthetic
  * elsewhere, so a local stack never calls a vendor unless asked to.
@@ -39,15 +44,16 @@ export function registerRealProviderAdapters(): string[] {
   return ['openai', 'anthropic', 'gemini', 'bedrock'];
 }
 
-export { makeOpenAiCompatibleAdapter, OPENAI_COMPATIBLE_BASE_URLS } from './openaiCompatible';
-export type { OpenAiCompatibleOptions } from './openaiCompatible';
-export { makeAnthropicAdapter } from './anthropic';
-export type { AnthropicOptions } from './anthropic';
-export { makeGeminiAdapter } from './gemini';
-export type { GeminiOptions } from './gemini';
-export { makeBedrockAdapter, bedrockAuth } from './bedrock';
-export type { BedrockOptions } from './bedrock';
-export { signV4 } from './sigv4';
-export type { AwsCredentials } from './sigv4';
-export { eventStreamMessages, encodeEventStreamMessage } from './eventStream';
-export { ProviderHttpError } from './http';
+export {
+  makeOpenAiCompatibleAdapter,
+  OPENAI_COMPATIBLE_BASE_URLS,
+  makeAnthropicAdapter,
+  makeGeminiAdapter,
+  makeBedrockAdapter,
+  bedrockAuth,
+  signV4,
+  eventStreamMessages,
+  encodeEventStreamMessage,
+  ProviderHttpError,
+} from '@projexlight/llm-adapters';
+export type { OpenAiCompatibleOptions, AnthropicOptions, GeminiOptions, BedrockOptions, AwsCredentials } from '@projexlight/llm-adapters';
