@@ -1,0 +1,68 @@
+{
+  "name": "GET /api/admin/voice/capacity - Per-tenant voice load against plan caps",
+  "endpoint": "/api/admin/voice/capacity",
+  "method": "GET",
+  "sdk": "sdk-dialer",
+  "sourceFile": "services/api-gateway/src/app.ts",
+  "requiresAuth": false,
+  "expectedStatus": 200,
+  "taskId": "5b6b57be-daa7-4b91-8407-5499e8727c77",
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "featureId": "095f8479-500d-4e1e-8243-578b788fb8aa",
+  "epicId": "71a6f2dc-a04e-4f2f-9e98-0d191e15e80d",
+  "testability": "auto",
+  "coversCriterion": [
+    "095f8479-500d-4e1e-8243-578b788fb8aa#AC2"
+  ],
+  "dependsOn": [],
+  "priority": 161,
+  "description": "OPERATOR route (x-admin-ops-token). Platform-wide voice load for the console capacity dashboard (095f8479-500d-4e1e-8243-578b788fb8aa#AC2): one row per tenant that has an active AI call (dialing, ringing, in_progress, transferred) or a running/paused campaign, busiest first, with active_calls, by_status, test_calls, slots_in_use (the dialer's concurrency slots), plan_cap and alert_at (the tenant's voice.concurrent_calls quota policy; alert_at = its soft cap or 80 %), at_alert / at_cap flags, the slot backend (redis | postgres) and running/paused campaign counts; plus totals (tenants, active_calls, at_alert, at_cap). The same snapshot the dialer enforces when admitting calls. Missing/wrong ops token -> 401/403.",
+  "fieldEnums": {
+    "backend": [
+      "redis",
+      "postgres"
+    ]
+  },
+  "testCases": [
+    {
+      "name": "Read platform voice capacity",
+      "coversCriterion": [
+        "095f8479-500d-4e1e-8243-578b788fb8aa#AC2"
+      ],
+      "capturesResponse": true,
+      "headers": {
+        "x-admin-ops-token": "{{var:ADMIN_OPS_TOKEN}}"
+      },
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "data": {
+          "totals": {
+            "tenants": "number",
+            "active_calls": "number",
+            "at_alert": "number",
+            "at_cap": "number"
+          },
+          "tenants": "array"
+        }
+      }
+    },
+    {
+      "name": "401 - no ops token",
+      "testType": "negative",
+      "coversErrorCase": "401|Unauthorized",
+      "headers": {},
+      "expectedStatus": 401
+    }
+  ],
+  "captureResponse": {
+    "admin.voice.capacity.response.data.totals.active_calls": "data.totals.active_calls"
+  },
+  "errorCases": [
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "admin ops token required",
+      "when": "x-admin-ops-token missing or wrong"
+    }
+  ]
+}

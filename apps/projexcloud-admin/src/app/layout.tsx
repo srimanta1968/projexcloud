@@ -14,6 +14,8 @@ const NAV = [
   { href: '/tenants', label: 'Tenants' },
   { href: '/pools', label: 'Pools' },
   { href: '/pricing-catalogs', label: 'Pricing' },
+  { href: '/voice/catalog', label: 'Voice catalog' },
+  { href: '/voice/capacity', label: 'Voice capacity' },
   { href: '/invoices', label: 'Invoices' },
   { href: '/webhooks', label: 'Webhooks' },
   { href: '/approvals', label: 'Approvals' },

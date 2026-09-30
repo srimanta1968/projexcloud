@@ -1,0 +1,107 @@
+{
+  "name": "GET /api/admin/speech/catalog - Operator view of the voice catalog",
+  "endpoint": "/api/admin/speech/catalog",
+  "method": "GET",
+  "sdk": "sdk-speech",
+  "sourceFile": "services/api-gateway/src/app.ts",
+  "requiresAuth": false,
+  "expectedStatus": 200,
+  "taskId": "5b6b57be-daa7-4b91-8407-5499e8727c77",
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "featureId": "095f8479-500d-4e1e-8243-578b788fb8aa",
+  "epicId": "71a6f2dc-a04e-4f2f-9e98-0d191e15e80d",
+  "testability": "auto",
+  "coversCriterion": [
+    "095f8479-500d-4e1e-8243-578b788fb8aa#AC2"
+  ],
+  "dependsOn": [],
+  "priority": 160,
+  "description": "OPERATOR route (x-admin-ops-token = ADMIN_OPS_TOKEN). Every speech/LLM catalog entry in every certification state (certified, uncertified, revoked), for the console catalog editor (095f8479-500d-4e1e-8243-578b788fb8aa#AC2 — an operator can edit catalog entries and see per-tenant active calls and capacity in the console). Optional filters: layer (stt|tts|llm|realtime), provider, certified (true|false). Edits go through PATCH /api/admin/speech/catalog/:entry_id. Missing/wrong ops token -> 401/403.",
+  "fieldEnums": {
+    "layer": [
+      "stt",
+      "tts",
+      "llm",
+      "realtime"
+    ],
+    "certification_status": [
+      "certified",
+      "uncertified",
+      "revoked"
+    ]
+  },
+  "testCases": [
+    {
+      "name": "List the whole catalog",
+      "coversCriterion": [
+        "095f8479-500d-4e1e-8243-578b788fb8aa#AC2"
+      ],
+      "capturesResponse": true,
+      "headers": {
+        "x-admin-ops-token": "{{var:ADMIN_OPS_TOKEN}}"
+      },
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "data": {
+          "entries": [
+            {
+              "entry_id": "string",
+              "catalog_key": "string",
+              "layer": "string",
+              "provider": "string",
+              "model": "string",
+              "list_price": "number",
+              "certification_status": "string"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "Only TTS entries",
+      "headers": {
+        "x-admin-ops-token": "{{var:ADMIN_OPS_TOKEN}}"
+      },
+      "queryParams": {
+        "layer": "tts"
+      },
+      "expectedStatus": 200
+    },
+    {
+      "name": "400 - unknown layer",
+      "testType": "negative",
+      "coversErrorCase": "400|ValidationError",
+      "headers": {
+        "x-admin-ops-token": "{{var:ADMIN_OPS_TOKEN}}"
+      },
+      "queryParams": {
+        "layer": "video"
+      },
+      "expectedStatus": 400
+    },
+    {
+      "name": "401 - no ops token",
+      "testType": "negative",
+      "coversErrorCase": "401|Unauthorized",
+      "headers": {},
+      "expectedStatus": 401
+    }
+  ],
+  "captureResponse": {
+    "admin.speech.catalog.list.response.data.entries.0.entry_id": "data.entries.0.entry_id"
+  },
+  "errorCases": [
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "layer must be one of stt, tts, llm, realtime",
+      "when": "an unknown layer / malformed provider / certified not true|false"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "admin ops token required",
+      "when": "x-admin-ops-token missing or wrong"
+    }
+  ]
+}

@@ -281,3 +281,75 @@ export async function capacitySnapshot(tenantId: string): Promise<CapacitySnapsh
     by_campaign: campaigns.map((c) => ({ campaign_id: c.campaign_id, cap: c.max_concurrency, active: rows.find((r) => r.campaign_id === c.campaign_id)?.n ?? 0 })),
   };
 }
+
+export interface TenantCapacity {
+  tenant_id: string;
+  active_calls: number;
+  by_status: { dialing: number; ringing: number; in_progress: number; transferred: number };
+  test_calls: number;
+  slots_in_use: number;
+  plan_cap: number | null;
+  alert_at: number | null;
+  at_alert: boolean;
+  at_cap: boolean;
+  backend: 'redis' | 'postgres';
+  campaigns: { running: number; paused: number };
+}
+
+export interface CapacityOverview {
+  totals: { tenants: number; active_calls: number; at_alert: number; at_cap: number };
+  tenants: TenantCapacity[];
+}
+
+/**
+ * Platform-wide voice load for operators (VA·E9 · TK-4516): per tenant with an active call or
+ * a running/paused campaign, its calls in each active status and its standing against the
+ * plan concurrency cap — the same snapshot acquireSlot enforces. Busiest tenants first.
+ */
+export async function capacityOverview(): Promise<CapacityOverview> {
+  const rows = await dataService.rows<{ tenant_id: string; dialing: number; ringing: number; in_progress: number; transferred: number; test_calls: number }>(
+    `SELECT tenant_id,
+            count(*) FILTER (WHERE status = 'dialing')::int     AS dialing,
+            count(*) FILTER (WHERE status = 'ringing')::int     AS ringing,
+            count(*) FILTER (WHERE status = 'in_progress')::int AS in_progress,
+            count(*) FILTER (WHERE status = 'transferred')::int AS transferred,
+            count(*) FILTER (WHERE is_test)::int                AS test_calls
+       FROM voice_agent.call
+      WHERE status IN ('dialing','ringing','in_progress','transferred')
+      GROUP BY tenant_id`,
+  );
+  const campaigns = await dataService.rows<{ tenant_id: string; running: number; paused: number }>(
+    `SELECT tenant_id, count(*) FILTER (WHERE status = 'running')::int AS running, count(*) FILTER (WHERE status = 'paused')::int AS paused
+       FROM dialer.campaign WHERE status IN ('running','paused') GROUP BY tenant_id`,
+  );
+  const tenantIds = [...new Set([...rows.map((r) => r.tenant_id), ...campaigns.map((c) => c.tenant_id)])];
+  const tenants = await Promise.all(tenantIds.map(async (tenant_id): Promise<TenantCapacity> => {
+    const calls = rows.find((r) => r.tenant_id === tenant_id);
+    const camp = campaigns.find((c) => c.tenant_id === tenant_id);
+    const cap = await capacitySnapshot(tenant_id);
+    const by_status = { dialing: calls?.dialing ?? 0, ringing: calls?.ringing ?? 0, in_progress: calls?.in_progress ?? 0, transferred: calls?.transferred ?? 0 };
+    return {
+      tenant_id,
+      active_calls: by_status.dialing + by_status.ringing + by_status.in_progress + by_status.transferred,
+      by_status,
+      test_calls: calls?.test_calls ?? 0,
+      slots_in_use: cap.active,
+      plan_cap: cap.plan_cap,
+      alert_at: cap.alert_at,
+      at_alert: cap.alert_at !== null && cap.active >= cap.alert_at,
+      at_cap: cap.plan_cap !== null && cap.active >= cap.plan_cap,
+      backend: cap.backend,
+      campaigns: { running: camp?.running ?? 0, paused: camp?.paused ?? 0 },
+    };
+  }));
+  tenants.sort((a, b) => b.active_calls - a.active_calls);
+  return {
+    totals: {
+      tenants: tenants.length,
+      active_calls: tenants.reduce((n, t) => n + t.active_calls, 0),
+      at_alert: tenants.filter((t) => t.at_alert).length,
+      at_cap: tenants.filter((t) => t.at_cap).length,
+    },
+    tenants,
+  };
+}

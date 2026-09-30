@@ -411,6 +411,7 @@ import {
   setKeyCapacityResolver,
   setPlanCapResolver,
   setPlanAlertResolver,
+  capacityOverview,
   setCallOriginator,
   listCallerIds,
   DialerError,
@@ -421,6 +422,7 @@ import {
   server as speechServer,
   updateCatalogEntry,
   findCatalogEntries,
+  listCatalog as listSpeechCatalog,
   SpeechError,
 } from '@projexlight/sdk-speech';
 // P16 · EP-374 — the provenance kernel. Every ingesting SDK lands its rows here.
@@ -913,6 +915,26 @@ app.patch('/api/admin/speech/catalog/:entry_id', async (req, reply) => {
     if (err instanceof SpeechError) return reply.code(err.status).send({ success: false, error: err.code, details: [err.message] });
     throw err;
   }
+});
+// VA·E9 (TK-4516) — the operator console's catalog view: every entry in every certification
+// state (the tenant route serves the same list; operators need it without a tenant token).
+app.get('/api/admin/speech/catalog', async (req, reply) => {
+  if (!(await checkAdminToken(req, reply))) return;
+  try {
+    const q = req.query as { layer?: string; provider?: string; certified?: string };
+    return reply.code(200).send({ data: { entries: await listSpeechCatalog(q) } });
+  } catch (err) {
+    if (err instanceof SpeechError) return reply.code(err.status).send({ success: false, error: err.code, details: [err.message] });
+    throw err;
+  }
+});
+// VA·E9 (TK-4516) — per-tenant voice load for the operator console: calls in each active
+// status per tenant, and that tenant's plan concurrency cap / alert point / active slot count
+// from the dialer (the same numbers the dialer enforces). Tenants appear while they have an
+// active call or a running/paused campaign.
+app.get('/api/admin/voice/capacity', async (req, reply) => {
+  if (!(await checkAdminToken(req, reply))) return;
+  return reply.code(200).send({ data: await capacityOverview() });
 });
 if (process.env.DIALER_SCHEDULER_ENABLED === 'true') {
   startDispatchScheduler();

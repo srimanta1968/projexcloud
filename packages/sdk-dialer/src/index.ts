@@ -53,7 +53,8 @@ export { localHHMM, nextWindowOpening, recordingRuleFor, callingWindowState, che
 export type { CallingWindowState, CallingWindowCheck } from './services/windowRecordingGates';
 export type { RecordingRule } from './services/windowRecordingGates';
 
-export { acquireSlot, releaseSlot, capacitySnapshot, setPlanCapResolver, setKeyCapacityResolver } from './services/capacityService';
+export { acquireSlot, releaseSlot, capacitySnapshot, capacityOverview, setPlanCapResolver, setKeyCapacityResolver } from './services/capacityService';
+export type { TenantCapacity, CapacityOverview } from './services/capacityService';
 export type { CapDimension, SlotRequest, SlotDecision, PlanCapResolver, KeyCapacityResolver, CapacitySnapshot } from './services/capacityService';
 export { dispatchQueued, setCallOriginator } from './services/queueDispatcher';
 export type { CallOriginator, DispatchSummary } from './services/queueDispatcher';
