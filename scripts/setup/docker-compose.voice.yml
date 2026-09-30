@@ -122,6 +122,32 @@ services:
     restart: unless-stopped
     networks: [projex]
 
+  # Agent workers (VA·E1 · TK-4455): register with LiveKit as VOICE_AGENT_DISPATCH_NAME and
+  # run one voice session per dispatched call. No published ports — /livez /readyz /status
+  # on 8081 are internal. Scale out with `--scale voice-runtime=N` (or more hosts); LiveKit
+  # spreads jobs across every registered worker.
+  voice-runtime:
+    build:
+      context: ../..
+      dockerfile: services/voice-runtime/Dockerfile
+    image: ${IMAGE_PREFIX:-projexcloud}/voice-runtime:${IMAGE_TAG:-local}
+    profiles: ["voice"]
+    env_file:
+      - ${ENV_FILE:-../../.env.prod}
+    environment:
+      NODE_ENV: production
+      # Straight to LiveKit on the compose network (LIVEKIT_URL is the public wss:// one).
+      LIVEKIT_WORKER_URL: ws://livekit:7880
+      VOICE_RUNTIME_HEALTH_PORT: "8081"
+    depends_on:
+      livekit:
+        condition: service_started
+    # Drain on deploy: SIGTERM stops new calls and waits for live ones; compose must not
+    # SIGKILL before the drain window (VOICE_RUNTIME_DRAIN_TIMEOUT_MS, default 2 h) ends.
+    stop_grace_period: ${VOICE_RUNTIME_STOP_GRACE:-2h5m}
+    restart: unless-stopped
+    networks: [projex]
+
 networks:
   projex:
     driver: bridge
