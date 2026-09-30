@@ -48,6 +48,9 @@ export interface JobContext {
 
 export type JobRunner = (ctx: JobContext) => Promise<void>;
 
+/** How long an "available" answer holds capacity while LiveKit decides on the assignment. */
+const PENDING_ASSIGNMENT_MS = 15_000;
+
 interface ActiveJob { job: Job; startedAt: number; abort: AbortController }
 
 export interface WorkerState {
@@ -74,7 +77,8 @@ export class AgentWorker extends EventEmitter {
   private statusTimer: NodeJS.Timeout | null = null;
   private lastPongAt: number | null = null;
   private readonly jobs = new Map<string, ActiveJob>();
-  private readonly pending = new Set<string>();
+  /** Jobs we told LiveKit we would take, until their assignment arrives (or it never does). */
+  private readonly pending = new Map<string, NodeJS.Timeout>();
   private counts = { accepted: 0, completed: 0, failed: 0 };
 
   constructor(private readonly cfg: RuntimeConfig, private readonly runner: JobRunner) {
@@ -177,7 +181,7 @@ export class AgentWorker extends EventEmitter {
         const job = msg.message.value.job;
         if (!job) return;
         const available = this.canAccept();
-        if (available) this.pending.add(job.id);
+        if (available) this.holdPending(job.id);
         log.info('job offered', { jobId: job.id, room: job.room?.name, available });
         this.send(new WorkerMessage({
           message: {
@@ -197,8 +201,9 @@ export class AgentWorker extends EventEmitter {
       case 'assignment': {
         const { job, url, token } = msg.message.value;
         if (!job) return;
-        this.pending.delete(job.id);
+        // Running first, then released: never a moment with neither, which would end a drain.
         this.runJob(job, url || this.cfg.livekitUrl, token);
+        this.releasePending(job.id);
         return;
       }
       case 'termination': {
@@ -213,6 +218,30 @@ export class AgentWorker extends EventEmitter {
       default:
         return;
     }
+  }
+
+  /**
+   * A job we answered "available" for counts against capacity — and holds a drain open —
+   * until LiveKit assigns it. LiveKit may give it to another worker instead, so the hold
+   * lapses after PENDING_ASSIGNMENT_MS.
+   */
+  private holdPending(jobId: string): void {
+    const t = setTimeout(() => this.releasePending(jobId), PENDING_ASSIGNMENT_MS);
+    t.unref();
+    this.pending.set(jobId, t);
+  }
+
+  private releasePending(jobId: string): void {
+    const t = this.pending.get(jobId);
+    if (!t) return;
+    clearTimeout(t);
+    this.pending.delete(jobId);
+    this.emitIfIdle();
+  }
+
+  /** Nothing running and nothing promised: a drain may finish. */
+  private emitIfIdle(): void {
+    if (this.jobs.size === 0 && this.pending.size === 0) this.emit('idle');
   }
 
   private canAccept(): boolean {
@@ -242,7 +271,7 @@ export class AgentWorker extends EventEmitter {
         this.jobs.delete(job.id);
         this.sendStatus();
         this.emit('jobEnded', job);
-        if (this.jobs.size === 0) this.emit('idle');
+        this.emitIfIdle();
       });
   }
 
@@ -288,15 +317,16 @@ export class AgentWorker extends EventEmitter {
 
   /**
    * Stops taking calls (LiveKit sees the worker FULL, so no new job is offered) and resolves
-   * once every live call has ended, or when `timeoutMs` passes — whichever is first.
+   * once every live call has ended — including a call LiveKit was already promised and is
+   * still assigning (TK-4466) — or when `timeoutMs` passes, whichever is first.
    * Returns the number of calls still running at that point.
    */
   drain(timeoutMs: number): Promise<number> {
     this.draining = true;
     this.sendStatus();
     this.emit('draining');
-    log.info('draining', { activeJobs: this.jobs.size, timeoutMs });
-    if (this.jobs.size === 0) return Promise.resolve(0);
+    log.info('draining', { activeJobs: this.jobs.size, pendingJobs: this.pending.size, timeoutMs });
+    if (this.jobs.size === 0 && this.pending.size === 0) return Promise.resolve(0);
     return new Promise((resolve) => {
       const timer = setTimeout(() => {
         this.off('idle', onIdle);

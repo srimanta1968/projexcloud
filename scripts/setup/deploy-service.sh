@@ -20,6 +20,8 @@
 #   main stack (projexcloud-prod):  api-gateway, postgres, redis, clickhouse,
 #                                   registry-mcp  (anything not a portal)
 #   portals   (projexcloud-portals): portal-workspace, portal-tenant, portal-console
+#   voice-runtime is ROLLED, not recreated: new workers start and turn ready before the old
+#   ones are sent SIGTERM and drain their live calls (scripts/setup/roll-voice-runtime.sh).
 set -euo pipefail
 cd "$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 
@@ -65,6 +67,14 @@ for svc in "$@"; do
   if is_portal "$svc"; then compose() { portal_compose "$@"; }; else compose() { main_compose "$@"; }; fi
   echo "== build $svc =="
   compose build "$svc"
+  if [ "$svc" = "voice-runtime" ]; then
+    # Workers carry live calls: start the new ones first, then drain the old (TK-4466).
+    echo "== rolling $svc (new workers first, old ones drain) =="
+    # shellcheck source=roll-voice-runtime.sh
+    . scripts/setup/roll-voice-runtime.sh
+    roll_voice_runtime
+    continue
+  fi
   echo "== up -d $svc (recreate container) =="
   compose up -d "$svc"
 done

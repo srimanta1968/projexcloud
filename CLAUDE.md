@@ -31,6 +31,10 @@ scripts/setup/deploy-service.sh api-gateway
 # skip the git pull: NO_PULL=1 scripts/setup/deploy-service.sh api-gateway
 ```
 
+`voice-runtime` is **rolled**, not recreated (`scripts/setup/roll-voice-runtime.sh`): new
+workers start and pass `/readyz`, then the old ones get SIGTERM and drain their live calls
+(up to `VOICE_RUNTIME_DRAIN_TIMEOUT_MS`, 2 h) and exit on their own — never SIGKILLed.
+
 It `git pull --ff-only origin main`, then rebuilds only the named service
 image(s) and recreates just those containers, then health-gates the gateway.
 Builds are **turbo/BuildKit-incremental**: the pnpm store and `.turbo` cache are
