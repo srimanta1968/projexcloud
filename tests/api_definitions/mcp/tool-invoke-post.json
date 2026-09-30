@@ -4,11 +4,11 @@
   "sdk": "sdk-mcp-bridge",
   "sourceFile": "packages/sdk-mcp-bridge/src/server/handlers/mcpController.ts",
   "method": "POST",
-  "taskId": "ff367642-034d-47f7-b5de-d90f6e395376",
-  "description": "Capability-token-gated MCP tool invocation. Validates token against args, marks single-use, opens transport, calls /tools/call, persists mcp.tool_invocation + mcp.tool.invoked.v1. AC-12, FR-MCP-3.",
+  "taskId": "b9343862-9503-42d7-9576-5468cad615b5",
+  "description": "Capability-token-gated MCP tool invocation. Validates token against args, marks single-use, opens transport, calls /tools/call, persists mcp.tool_invocation + mcp.tool.invoked.v1. AC-12, FR-MCP-3. Binding (TK-3480): only the tenant that registered the server may invoke its tools (another tenant's tool_id answers 404 — it carries that tenant's stored credential), and the capability token must have been minted for THIS tool (tool_sku mcp.<server-slug>.<tool-slug>, e.g. mcp.slack-mcp.post-message) and THIS run; otherwise 403 { outcome: denied, response.reason: token_not_for_this_tool | token_not_for_this_run }. The fixture chain's token is minted for crm.contact.create, so it reaches the token_not_for_this_tool refusal. Registration probes the MCP server (tools/list): the chain needs an MCP server reachable from the gateway (a mock at localhost:9401 in dev); on an environment without one, registration answers 502 and this definition's dependents skip.",
   "requiresAuth": true,
   "priority": 410,
-  "expectedStatus": 200,
+  "expectedStatus": 403,
   "testability": "auto",
   "dependsOn": [
     "POST /api/auth/signup-tenant",
@@ -18,7 +18,7 @@
   ],
   "testCases": [
     {
-      "name": "Invoke an MCP tool via capability token",
+      "name": "A capability token minted for another tool is refused (403 denied, token_not_for_this_tool)",
       "headers": {
         "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
       },
@@ -34,7 +34,16 @@
         },
         "trace_id": "{{var:trace_id}}"
       },
-      "expectedStatus": 200
+      "expectedStatus": 403,
+      "expectedResponse": {
+        "success": false,
+        "data": {
+          "outcome": "denied",
+          "response": {
+            "reason": "token_not_for_this_tool"
+          }
+        }
+      }
     }
   ],
   "expectedResponse": {
@@ -96,6 +105,18 @@
       "code": "Invoke failed",
       "message": "Invoke failed",
       "when": "Any other invocation failure (transport error, database error)"
+    },
+    {
+      "status": 403,
+      "code": "denied",
+      "message": "token_not_for_this_tool",
+      "when": "the capability token was minted for a different tool_sku or run"
+    },
+    {
+      "status": 404,
+      "code": "NotFound",
+      "message": "tool not found",
+      "when": "unknown tool, or another tenant's tool"
     }
   ]
 }

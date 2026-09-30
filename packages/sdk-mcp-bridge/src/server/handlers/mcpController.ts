@@ -149,8 +149,14 @@ export async function invokeToolHandler(
     });
     return;
   }
+  const tenantId = (req as { auth?: { tenant_id?: string } }).auth?.tenant_id;
+  if (!tenantId) {
+    reply.code(403).send({ success: false, error: 'this token carries no tenant' });
+    return;
+  }
   try {
     const result = await invokeMcpTool({
+      tenant_id: tenantId,
       tool_id: req.params.tool_id,
       agent_run_id: body.agent_run_id,
       capability_token_id: body.capability_token_id,

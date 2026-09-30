@@ -49,7 +49,7 @@ interface RegisteredToolRow {
 }
 
 /** Map an mcp.tool row to the SKU used in capability_graph_edge + meter. */
-function mcpToolSku(displayName: string, toolName: string): string {
+export function mcpToolSku(displayName: string, toolName: string): string {
   // e.g. "Slack" + "post-message" → mcp.slack.post-message
   const serverSlug = displayName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
   const toolSlug = toolName.toLowerCase().replace(/[^a-z0-9.-]+/g, '-');

@@ -1,4 +1,5 @@
 import crypto from 'crypto';
+import { mcpToolSku } from './mcpRegistration';
 import { dataService } from '@projexlight/db-runtime';
 import { appendAuditEntry } from '@projexlight/sdk-audit';
 import {
@@ -27,6 +28,8 @@ import { openTransport } from './mcpTransport';
 const MCP_AUDIT_POOL = process.env.MCP_AUDIT_POOL || 'admin-default';
 
 export interface InvokeMcpToolInput {
+  /** The caller's tenant: only the tenant that registered the server may invoke its tools. */
+  tenant_id?: string;
   tool_id: string;
   agent_run_id: string;
   capability_token_id: string;
@@ -53,6 +56,7 @@ interface ToolJoinRow {
   credential_envelope: Buffer;
   server_status: 'active' | 'disabled' | 'degraded';
   server_tenant_id: string;
+  display_name: string;
 }
 
 async function loadTool(tool_id: string): Promise<ToolJoinRow | null> {
@@ -60,7 +64,7 @@ async function loadTool(tool_id: string): Promise<ToolJoinRow | null> {
     `SELECT t.tool_id, t.tool_name, t.opt_out,
             s.registration_id, s.transport, s.endpoint_url,
             s.credential_envelope, s.status AS server_status,
-            s.tenant_id::text AS server_tenant_id
+            s.tenant_id::text AS server_tenant_id, s.display_name
        FROM mcp.tool t
        JOIN mcp.server_registration s ON s.registration_id = t.registration_id
       WHERE t.tool_id = $1`,
@@ -148,7 +152,9 @@ async function emitInvocationEvent(input: {
 
 export async function invokeMcpTool(input: InvokeMcpToolInput): Promise<InvokeMcpToolResult> {
   const tool = await loadTool(input.tool_id);
-  if (!tool) {
+  // Only the tenant that registered the server may invoke its tools — they carry that
+  // tenant's stored credential. Another tenant's tool answers 'not found' (never 'forbidden').
+  if (!tool || (input.tenant_id !== undefined && tool.server_tenant_id !== input.tenant_id)) {
     throw new Error(`[mcp-invocation] tool ${input.tool_id} not found`);
   }
   if (tool.opt_out) {
@@ -162,7 +168,16 @@ export async function invokeMcpTool(input: InvokeMcpToolInput): Promise<InvokeMc
   // to send. validateToken returns reason on failure; we record outcome
   // 'denied' and persist a row so the audit + meter trail is intact.
   const invocationId = crypto.randomUUID();
-  const validation = await validateToken(input.capability_token_id, input.args);
+  const checked = await validateToken(input.capability_token_id, input.args);
+  // The token must be for THIS tool and THIS run: a token only bound to the args hash could be
+  // spent on any tool that happens to accept the same arguments.
+  const validation: { valid: true } | { valid: false; reason: string } = !checked.valid
+    ? checked
+    : checked.token.tool_sku !== mcpToolSku(tool.display_name, tool.tool_name)
+      ? { valid: false, reason: 'token_not_for_this_tool' }
+      : String(checked.token.run_id) !== input.agent_run_id
+        ? { valid: false, reason: 'token_not_for_this_run' }
+        : { valid: true };
   if (!validation.valid) {
     await persistInvocation({
       invocation_id: invocationId,
