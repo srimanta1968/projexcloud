@@ -36,6 +36,11 @@ MAIN_FILES=(-f scripts/setup/docker-compose.prod.yml -f scripts/setup/docker-com
 # discovery container needs. Include iff present — matches deploy.sh.
 [ -f scripts/setup/docker-compose.local-artifacts.yml ] && MAIN_FILES+=(-f scripts/setup/docker-compose.local-artifacts.yml)
 MAIN_PROFILES=(--profile selfhosted --profile discovery)
+# Voice media plane — same VOICE_ENABLED rule as deploy.sh.
+if [ -f .env.prod ] && grep -Eq '^VOICE_ENABLED=(true|1)[[:space:]]*$' .env.prod; then
+  MAIN_FILES+=(-f scripts/setup/docker-compose.voice.yml)
+  MAIN_PROFILES+=(--profile voice)
+fi
 main_compose() { docker compose --env-file .env.prod "${MAIN_FILES[@]}" "${MAIN_PROFILES[@]}" "$@"; }
 
 # --- portals stack (projexcloud-portals) -------------------------------------

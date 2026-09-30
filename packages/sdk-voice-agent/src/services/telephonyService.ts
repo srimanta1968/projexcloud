@@ -4,6 +4,7 @@ import { emitEvent } from '@projexlight/sdk-audit';
 import { CredentialUnavailableError, withTenantCredentialKey } from '@projexlight/sdk-ai-gateway';
 import { VoiceAgentError, conflict, notFound, validationError } from '../models/errors';
 import { liveKitApiUrl, liveKitConfig, signServiceToken, type LiveKitConfig } from './livekitToken';
+import { carrierSignalingAddresses } from './carrierAllowlist';
 
 /**
  * Tenant SIP trunks and outbound origination (VA·E6 · TK-4499).
@@ -307,8 +308,15 @@ async function wireLiveKitInbound(cfg: LiveKitConfig, trunk: SipTrunk, numbers: 
     await livekit(cfg, 'SIP', 'DeleteSIPTrunk', { sip_trunk_id: trunk.livekit_inbound_trunk_id }).catch(() => undefined);
   }
   const meta = JSON.stringify({ tenant_id: trunk.tenant_id, trunk_id: trunk.trunk_id, carrier: trunk.carrier });
+  // TK-4454: LiveKit SIP only accepts INVITEs for these numbers from the carrier's own
+  // signaling addresses; without allowed_addresses any source could reach the agent.
   const inbound = await livekit<{ sip_trunk_id: string }>(cfg, 'SIP', 'CreateSIPInboundTrunk', {
-    trunk: { name: `projex-${trunk.tenant_id.slice(0, 8)}-${trunk.carrier}-in`, numbers, metadata: meta },
+    trunk: {
+      name: `projex-${trunk.tenant_id.slice(0, 8)}-${trunk.carrier}-in`,
+      numbers,
+      allowed_addresses: carrierSignalingAddresses(trunk.carrier),
+      metadata: meta,
+    },
   });
   const rule = await livekit<{ sip_dispatch_rule_id: string }>(cfg, 'SIP', 'CreateSIPDispatchRule', {
     name: `projex-${trunk.tenant_id.slice(0, 8)}-${trunk.carrier}`,
@@ -344,6 +352,7 @@ export async function provisionTrunk(
   if (typeof bindingId !== 'string' || !UUID_RE.test(bindingId)) throw validationError('credential_binding_id must be a uuid');
   const existingRef = provisioner.parseExistingRef(input.carrier_trunk_ref ?? input.trunk_sid);
   const { cfg, sipUri } = requireLiveKit();
+  carrierSignalingAddresses(carrier); // fail before touching the carrier when there is no allow-list
 
   let row: Row | null;
   try {

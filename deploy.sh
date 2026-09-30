@@ -33,6 +33,12 @@ fi
 # Postgres 5432 to the host for pgAdmin and is applied on-demand only, not part of
 # the steady-state stack.
 PROFILES=(--profile selfhosted --profile discovery)
+# Voice media plane (LiveKit SFU + SIP, VA·E1). Opt-in so a deployment without voice
+# never publishes SIP/RTP ports: VOICE_ENABLED=true in .env.prod adds the file + profile.
+if [ -f "$ENV_FILE" ] && grep -Eq '^VOICE_ENABLED=(true|1)[[:space:]]*$' "$ENV_FILE"; then
+  MAIN_FILES+=(-f scripts/setup/docker-compose.voice.yml)
+  PROFILES+=(--profile voice)
+fi
 
 PORTAL_ENV="scripts/setup/.env"
 PORTAL_FILES=(-f scripts/setup/docker-compose.portals.yml)

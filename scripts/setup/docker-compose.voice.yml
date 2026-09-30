@@ -1,0 +1,127 @@
+# ProjexCloud — voice media plane (VA·E1 · TK-4454): LiveKit SFU + LiveKit SIP.
+#
+# Layered onto the main stack (same project `projexcloud-prod`, same `projex` network and
+# `redis`) by deploy.sh when VOICE_ENABLED=true in .env.prod:
+#
+#   docker compose --env-file .env.prod -f scripts/setup/docker-compose.prod.yml \
+#     -f scripts/setup/docker-compose.clickhouse.yml -f scripts/setup/docker-compose.voice.yml \
+#     --profile selfhosted --profile discovery --profile voice up -d
+#
+# Transport security
+#   * LiveKit signaling (7880) is bound to 127.0.0.1 only; nginx terminates TLS for it on
+#     wss://${VOICE_PUBLIC_HOST} (scripts/setup/nginx-voice.conf). WebRTC media is DTLS-SRTP.
+#   * SIP: UDP/TCP 5060 and SIP-over-TLS 5061 (cert from VOICE_SIP_TLS_DIR). Trunks use TLS
+#     where the carrier supports it (Twilio/Telnyx both do: sip:...;transport=tls).
+#
+# Who can reach SIP
+#   * Network: scripts/setup/voice-security-group.sh opens 5060/5061 and the RTP range on
+#     the security group ONLY to the carriers' published ranges
+#     (packages/sdk-voice-agent/carrier-signaling.json).
+#   * Application: every LiveKit inbound trunk carries allowed_addresses from the same file
+#     (sdk-voice-agent provisionTrunk), so an INVITE from any other source is refused.
+#
+# Ports (publish ranges are kept small; widen with the *_PORT_* vars for more concurrency —
+# LiveKit SIP uses 2 RTP ports per call, the SFU ~1 UDP port per participant):
+#   7880/tcp  127.0.0.1 only (nginx -> wss)     7881/tcp  WebRTC ICE-TCP fallback
+#   ${LIVEKIT_UDP_PORT_START}-${LIVEKIT_UDP_PORT_END}/udp  WebRTC media
+#   5060/udp+tcp, 5061/tcp  SIP                 ${SIP_RTP_PORT_START}-${SIP_RTP_PORT_END}/udp  SIP RTP
+#
+# Required env (.env.prod): LIVEKIT_API_KEY, LIVEKIT_API_SECRET (>= 32 chars), VOICE_PUBLIC_HOST.
+# The gateway uses LIVEKIT_URL=wss://${VOICE_PUBLIC_HOST}, LIVEKIT_API_URL=http://livekit:7880
+# and LIVEKIT_SIP_URI=sip:${VOICE_PUBLIC_HOST}:5061;transport=tls (see .env.prod.example).
+#
+# Multi-AZ: this file is the single-host shape. For scale, run the same two images as
+# separate ECS services/EKS deployments per AZ sharing one Redis (LiveKit's multi-node
+# routing is Redis-based), each node with its own public IP; nothing in the config changes
+# except rtc.node_ip / use_external_ip.
+
+name: projexcloud-prod
+
+services:
+  livekit:
+    image: livekit/livekit-server:${LIVEKIT_VERSION:-v1.9}
+    container_name: projexcloud_livekit
+    profiles: ["voice"]
+    depends_on:
+      redis:
+        condition: service_healthy
+    environment:
+      LIVEKIT_KEYS: "${LIVEKIT_API_KEY:?LIVEKIT_API_KEY is required for the voice profile}: ${LIVEKIT_API_SECRET:?LIVEKIT_API_SECRET is required for the voice profile}"
+      LIVEKIT_CONFIG: |
+        port: 7880
+        bind_addresses: ["0.0.0.0"]
+        log_level: info
+        rtc:
+          tcp_port: 7881
+          port_range_start: ${LIVEKIT_UDP_PORT_START:-50000}
+          port_range_end: ${LIVEKIT_UDP_PORT_END:-50199}
+          use_external_ip: ${LIVEKIT_USE_EXTERNAL_IP:-true}
+          node_ip: "${LIVEKIT_NODE_IP:-}"
+        redis:
+          address: ${VOICE_REDIS_ADDRESS:-redis:6379}
+          password: "${REDIS_PASSWORD:-}"
+        room:
+          empty_timeout: 60
+          departure_timeout: 20
+        limit:
+          num_tracks: 8
+    ports:
+      - "127.0.0.1:7880:7880"
+      - "7881:7881/tcp"
+      - "${LIVEKIT_UDP_PORT_START:-50000}-${LIVEKIT_UDP_PORT_END:-50199}:${LIVEKIT_UDP_PORT_START:-50000}-${LIVEKIT_UDP_PORT_END:-50199}/udp"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O- http://127.0.0.1:7880/ >/dev/null 2>&1 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+    restart: unless-stopped
+    networks: [projex]
+
+  livekit-sip:
+    image: livekit/sip:${LIVEKIT_SIP_VERSION:-latest}
+    container_name: projexcloud_livekit_sip
+    profiles: ["voice"]
+    depends_on:
+      redis:
+        condition: service_healthy
+      livekit:
+        condition: service_started
+    environment:
+      SIP_CONFIG_BODY: |
+        api_key: ${LIVEKIT_API_KEY}
+        api_secret: ${LIVEKIT_API_SECRET}
+        ws_url: ws://livekit:7880
+        redis:
+          address: ${VOICE_REDIS_ADDRESS:-redis:6379}
+          password: "${REDIS_PASSWORD:-}"
+        sip_port: 5060
+        rtp_port: ${SIP_RTP_PORT_START:-10000}-${SIP_RTP_PORT_END:-10199}
+        use_external_ip: ${LIVEKIT_USE_EXTERNAL_IP:-true}
+        nat_1_to_1_ip: "${LIVEKIT_NODE_IP:-}"
+        health_port: 8080
+        logging:
+          level: info
+        tls:
+          port: 5061
+          certs:
+            - cert_file: /sip/tls/fullchain.pem
+              key_file: /sip/tls/privkey.pem
+    volumes:
+      - ${VOICE_SIP_TLS_DIR:-/etc/projexcloud/sip-tls}:/sip/tls:ro
+    ports:
+      - "5060:5060/udp"
+      - "5060:5060/tcp"
+      - "5061:5061/tcp"
+      - "${SIP_RTP_PORT_START:-10000}-${SIP_RTP_PORT_END:-10199}:${SIP_RTP_PORT_START:-10000}-${SIP_RTP_PORT_END:-10199}/udp"
+    healthcheck:
+      # Debian image without wget/curl: a TCP connect to the health port.
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/8080"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+    restart: unless-stopped
+    networks: [projex]
+
+networks:
+  projex:
+    driver: bridge

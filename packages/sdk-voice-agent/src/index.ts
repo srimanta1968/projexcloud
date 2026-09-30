@@ -87,6 +87,7 @@ export { getLiveCallBroker } from './services/liveBroker';
 export type { LiveEvent, LiveEventKind, LiveSubscriber } from './services/liveBroker';
 export type { StartTestSessionInput, TestSession } from './services/testSessionService';
 export { liveKitConfig, signParticipantToken } from './services/livekitToken';
+export { carrierSignalingAddresses, isAddressOrCidr } from './services/carrierAllowlist';
 export type { LiveKitConfig, ParticipantTokenInput } from './services/livekitToken';
 export type { VoiceDisposition, CompleteCallInput, TurnInput, CallSummary, CallSummarizer } from './services/postCallService';
 export type {
