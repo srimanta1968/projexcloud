@@ -547,6 +547,18 @@ export async function rotateCmk(input: RotateCmkInput): Promise<CmkRotationRef> 
   };
 }
 
+/** A binding's CMK rotations, newest first (the BYOK screen shows them, TK-4184). */
+export async function listCmkRotations(bindingId: string, limit = 20): Promise<{
+  rotation_id: string; previous_tenant_key_id: string; new_tenant_key_id: string; started_at: string; completed_at: string | null;
+}[]> {
+  const { rows } = await getPool().query<{ rotation_id: string; previous_tenant_key_id: string; new_tenant_key_id: string; started_at: Date; completed_at: Date | null }>(
+    `SELECT rotation_id, previous_tenant_key_id, new_tenant_key_id, started_at, completed_at
+       FROM vault.cmk_rotation WHERE binding_id = $1 ORDER BY started_at DESC LIMIT $2`,
+    [bindingId, Math.min(Math.max(limit, 1), 100)],
+  );
+  return rows.map((r) => ({ ...r, started_at: new Date(r.started_at).toISOString(), completed_at: r.completed_at ? new Date(r.completed_at).toISOString() : null }));
+}
+
 export async function revokeCmk(input: RevokeCmkInput): Promise<ByokBindingRef | null> {
   const pool = getPool();
   // Look up the tenant_id so we can wipe the cache as early as possible.

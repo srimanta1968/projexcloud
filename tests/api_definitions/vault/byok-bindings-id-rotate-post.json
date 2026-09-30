@@ -1,0 +1,82 @@
+{
+  "name": "POST /api/vault/byok/bindings/:binding_id/rotate - Rotate the tenant key under the same CMK",
+  "endpoint": "/api/vault/byok/bindings/:binding_id/rotate",
+  "method": "POST",
+  "sdk": "sdk-vault",
+  "sourceFile": "services/api-gateway/src/app.ts",
+  "requiresAuth": true,
+  "expectedStatus": 200,
+  "taskId": "9afaa39d-5249-44fe-a797-f7bdfba98ffe",
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "testability": "auto",
+  "coversCriterion": [],
+  "dependsOn": [
+    "POST /api/auth/signup-tenant",
+    "POST /api/vault/byok/bindings"
+  ],
+  "priority": 30,
+  "description": "Tenant route (Bearer JWT): the tenant comes from the token, and only that tenant's binding and keys are ever touched. The tenant portal used to drive BYOK through the /admin routes with the platform ADMIN_OPS_TOKEN for a tenant fixed in its environment (TK-4184). One step: the current tenant key is rotated, the new one is taken, and it is re-wrapped under the SAME customer CMK — data stays readable; a vault.cmk_rotation entry is recorded and listed by GET /api/vault/byok/binding. 200 { data: rotation }. Errors: unknown or another tenant's binding 404; binding not active 409; no token 401.",
+  "testCases": [
+    {
+      "name": "Rotate: a new rotation entry is recorded",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "pathParams": {
+        "binding_id": "{{cache:vault.byok.bindings.create.response.data.binding_id}}"
+      },
+      "payload": {},
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "success": true,
+        "data": {
+          "rotation_id": "string"
+        }
+      }
+    },
+    {
+      "name": "404 - unknown binding",
+      "testType": "negative",
+      "coversErrorCase": "404|NotFound",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "pathParams": {
+        "binding_id": "{{dynamic:uuid}}"
+      },
+      "payload": {},
+      "expectedStatus": 404
+    },
+    {
+      "name": "401 - no token",
+      "testType": "negative",
+      "coversErrorCase": "401|Unauthorized",
+      "headers": {},
+      "pathParams": {
+        "binding_id": "{{cache:vault.byok.bindings.create.response.data.binding_id}}"
+      },
+      "payload": {},
+      "expectedStatus": 401
+    }
+  ],
+  "errorCases": [
+    {
+      "status": 404,
+      "code": "NotFound",
+      "message": "binding not found",
+      "when": "unknown binding or another tenant's"
+    },
+    {
+      "status": 409,
+      "code": "Conflict",
+      "message": "binding is not active",
+      "when": "revoked or revoking"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "authentication required",
+      "when": "missing token"
+    }
+  ]
+}

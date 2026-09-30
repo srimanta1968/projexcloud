@@ -1,6 +1,15 @@
 import { revalidatePath } from 'next/cache';
+import { redirect } from 'next/navigation';
 import { Alert, Button, Card, Field, Input, PageHeader, Select } from '@projexlight/design-system';
 import { StatusBadge } from '../../components/StatusBadge';
+import { gateway, GatewayError } from '../../lib/gateway';
+
+/**
+ * BYOK / CMEK (P8 Variant A; TK-4184). Every call goes out as the SIGNED-IN admin to the
+ * tenant routes (/api/vault/byok/*), which take the tenant from the token. This screen used to
+ * call the /admin routes with the platform ADMIN_OPS_TOKEN for a tenant id fixed in the app's
+ * environment — every tenant admin acting with operator power on one hard-coded tenant.
+ */
 
 interface BindingRow {
   binding_id: string;
@@ -15,107 +24,83 @@ interface BindingRow {
   siem_forwarder_endpoint: string | null;
 }
 
-const TENANT_ID = process.env.TENANT_ADMIN_TENANT_ID ?? '';
+interface RotationRow {
+  rotation_id: string;
+  previous_tenant_key_id: string;
+  new_tenant_key_id: string;
+  started_at: string;
+  completed_at: string | null;
+}
 
-async function fetchBinding(): Promise<BindingRow | null> {
-  if (!TENANT_ID) return null;
+type Loaded =
+  | { kind: 'bound'; binding: BindingRow; rotations: RotationRow[] }
+  | { kind: 'none' }
+  | { kind: 'error'; message: string };
+
+async function load(): Promise<Loaded> {
   try {
-    const res = await fetch(
-      `${process.env.NEXT_PUBLIC_GATEWAY_URL}/admin/byok/bindings/tenant/${encodeURIComponent(TENANT_ID)}`,
-      {
-        cache: 'no-store',
-        headers: { 'x-admin-ops-token': process.env.ADMIN_OPS_TOKEN ?? '' },
-      },
-    );
-    if (!res.ok) return null;
-    const body = await res.json();
-    return body.data ?? null;
-  } catch {
-    return null;
+    const data = await gateway.get<{ binding: BindingRow; rotations: RotationRow[] }>('/api/vault/byok/binding');
+    return { kind: 'bound', binding: data.binding, rotations: data.rotations ?? [] };
+  } catch (err) {
+    if (err instanceof GatewayError && err.status === 404) return { kind: 'none' };
+    return { kind: 'error', message: err instanceof GatewayError ? err.message : 'the gateway could not be reached' };
   }
 }
 
+const done = (params: Record<string, string>): never => redirect(`/byok?${new URLSearchParams(params).toString()}`);
+const failed = (err: unknown, fallback: string): string => (err instanceof GatewayError ? err.message : fallback);
+
 async function bindCmkAction(formData: FormData): Promise<void> {
   'use server';
-  const provider = String(formData.get('provider') ?? '');
-  const customer_kms_key_arn = String(formData.get('customer_kms_key_arn') ?? '');
-  const tenant_key_id = String(formData.get('tenant_key_id') ?? '');
-  const siem_forwarder_endpoint = String(formData.get('siem_forwarder_endpoint') ?? '').trim() || null;
-  await fetch(`${process.env.NEXT_PUBLIC_GATEWAY_URL}/admin/byok/bindings`, {
-    method: 'POST',
-    headers: {
-      'content-type': 'application/json',
-      'x-admin-ops-token': process.env.ADMIN_OPS_TOKEN ?? '',
-    },
-    body: JSON.stringify({
-      tenant_id: TENANT_ID,
-      provider,
-      customer_kms_key_arn,
-      tenant_key_id,
-      siem_forwarder_endpoint,
-      operator_id: 'tenant-admin-ui',
-    }),
-  });
+  let error = '';
+  try {
+    await gateway.post('/api/vault/byok/bindings', {
+      provider: String(formData.get('provider') ?? ''),
+      customer_kms_key_arn: String(formData.get('customer_kms_key_arn') ?? '').trim(),
+      siem_forwarder_endpoint: String(formData.get('siem_forwarder_endpoint') ?? '').trim() || null,
+    });
+  } catch (err) {
+    error = failed(err, 'Could not bind the CMK');
+  }
   revalidatePath('/byok');
+  done(error ? { error } : { notice: 'CMK bound. It now wraps this tenant’s key.' });
 }
 
 async function rotateAction(formData: FormData): Promise<void> {
   'use server';
-  // ROTATION IS THE ROUTINE OPERATION, and it was the one this screen could not do.
-  //
-  // Bind and Revoke were here from the start; rotate was not, although
-  // /admin/byok/bindings/:id/rotate has always existed and vault.cmk_rotation was
-  // accumulating rows. So an operator could set a key up and could destroy access in
-  // an emergency, but the thing you actually do on a schedule — roll the tenant key
-  // under the same customer CMK — had no path outside curl.
-  //
-  // It is deliberately NOT in the danger zone: rotating keeps data readable (the new
-  // tenant key is wrapped by the same CMK, and the old one is superseded rather than
-  // shredded). Presenting it beside Revoke in red would teach operators to hesitate
-  // over the safe operation and habituate them to the destructive one.
+  // Rotation is the routine operation and deliberately NOT in the danger zone: the tenant key
+  // is replaced and the new one is wrapped by the SAME customer CMK, so data stays readable
+  // and the previous key is superseded, not destroyed. One click; no key id to type.
   const binding_id = String(formData.get('binding_id') ?? '');
-  const previous_tenant_key_id = String(formData.get('previous_tenant_key_id') ?? '');
-  const new_tenant_key_id = String(formData.get('new_tenant_key_id') ?? '').trim();
-  if (!binding_id || !new_tenant_key_id) return;
-  await fetch(
-    `${process.env.NEXT_PUBLIC_GATEWAY_URL}/admin/byok/bindings/${encodeURIComponent(binding_id)}/rotate`,
-    {
-      method: 'POST',
-      headers: {
-        'content-type': 'application/json',
-        'x-admin-ops-token': process.env.ADMIN_OPS_TOKEN ?? '',
-      },
-      body: JSON.stringify({
-        previous_tenant_key_id,
-        new_tenant_key_id,
-        operator_id: 'tenant-admin-ui',
-      }),
-    },
-  );
+  let error = '';
+  try {
+    await gateway.post(`/api/vault/byok/bindings/${encodeURIComponent(binding_id)}/rotate`, {});
+  } catch (err) {
+    error = failed(err, 'Could not rotate');
+  }
   revalidatePath('/byok');
+  done(error ? { error } : { notice: 'Rotated. A new tenant key is wrapped by the same CMK; the rotation is listed below.' });
 }
 
 async function revokeAction(formData: FormData): Promise<void> {
   'use server';
   const binding_id = String(formData.get('binding_id') ?? '');
   const reason = String(formData.get('reason') ?? '').trim();
-  if (!reason) return;
-  await fetch(
-    `${process.env.NEXT_PUBLIC_GATEWAY_URL}/admin/byok/bindings/${encodeURIComponent(binding_id)}/revoke`,
-    {
-      method: 'POST',
-      headers: {
-        'content-type': 'application/json',
-        'x-admin-ops-token': process.env.ADMIN_OPS_TOKEN ?? '',
-      },
-      body: JSON.stringify({ reason, operator_id: 'tenant-admin-ui' }),
-    },
-  );
+  if (formData.get('confirm_undecryptable') !== 'yes') done({ error: 'Confirm that you understand the data becomes undecryptable.' });
+  let error = '';
+  try {
+    await gateway.post(`/api/vault/byok/bindings/${encodeURIComponent(binding_id)}/revoke`, { reason });
+  } catch (err) {
+    error = failed(err, 'Could not revoke');
+  }
   revalidatePath('/byok');
+  done(error ? { error } : { notice: 'Revoke started. The tenant’s data becomes undecryptable within the SLA shown.' });
 }
 
-export default async function ByokPage(): Promise<JSX.Element> {
-  const binding = await fetchBinding();
+export default async function ByokPage({ searchParams }: { searchParams: { error?: string; notice?: string } }): Promise<JSX.Element> {
+  const state = await load();
+  const binding = state.kind === 'bound' ? state.binding : null;
+  const sla = binding?.sla_revoke_propagation_seconds ?? 30;
   return (
     <div>
       <PageHeader
@@ -124,20 +109,23 @@ export default async function ByokPage(): Promise<JSX.Element> {
           <>
             Bring-your-own-key (P8 Variant A). Your CMK wraps the Tenant Key.
             Revoking the grant on your CMK renders this tenant&apos;s data undecryptable
-            within {binding?.sla_revoke_propagation_seconds ?? 30}s — this is intentional and
-            cannot be undone without re-binding.
+            within {sla}s — this is intentional and cannot be undone without re-binding.
           </>
         }
       />
 
-      {!TENANT_ID && (
-        <Alert variant="warning">
-          Set <code>TENANT_ADMIN_TENANT_ID</code> in this app&apos;s env to view your binding.
+      {searchParams.error ? <Alert variant="destructive" data-testid="byok-error">{searchParams.error}</Alert> : null}
+      {searchParams.notice ? <Alert variant="success" data-testid="byok-notice">{searchParams.notice}</Alert> : null}
+
+      {state.kind === 'error' && (
+        <Alert variant="warning" data-testid="byok-unreachable">
+          Could not read your CMK binding: {state.message}. This is not the same as having no binding — the gateway may be
+          unreachable, or no KMS provider is configured in this environment.
         </Alert>
       )}
 
-      {binding && (
-        <Card className="p-5">
+      {state.kind === 'bound' && binding && (
+        <Card className="p-5" data-testid="byok-binding">
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-semibold">Active binding</h2>
             <StatusBadge status={binding.grant_status} />
@@ -155,30 +143,43 @@ export default async function ByokPage(): Promise<JSX.Element> {
           {binding.grant_status === 'active' && (
             <form action={rotateAction} className="mt-4 rounded-md border border-border p-3">
               <input type="hidden" name="binding_id" value={binding.binding_id} />
-              <input type="hidden" name="previous_tenant_key_id" value={binding.tenant_key_id} />
               <p className="mb-2 text-sm text-muted-foreground">
                 <strong className="text-foreground">Rotate the tenant key.</strong> Routine
-                maintenance — the new key is wrapped by the same customer CMK, so data stays
+                maintenance — a new tenant key is wrapped by the same customer CMK, so data stays
                 readable throughout and the previous key is superseded, not destroyed.
               </p>
-              <div className="flex gap-2">
-                <Input
-                  name="new_tenant_key_id"
-                  placeholder="new tenant key id"
-                  required
-                  className="flex-1"
-                />
-                <Button type="submit">Rotate CMK</Button>
-              </div>
+              <Button type="submit" data-testid="byok-rotate">Rotate CMK</Button>
             </form>
           )}
+
+          <div className="mt-4" data-testid="byok-rotations">
+            <h3 className="mb-1 text-sm font-semibold">Rotations</h3>
+            {state.rotations.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No rotations yet.</p>
+            ) : (
+              <ul className="grid gap-1 text-xs">
+                {state.rotations.map((r) => (
+                  <li key={r.rotation_id} className="font-mono">
+                    {new Date(r.started_at).toLocaleString()} · {r.previous_tenant_key_id.slice(0, 8)} → {r.new_tenant_key_id.slice(0, 8)}
+                    {r.completed_at ? ' · completed' : ' · in progress'}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
 
           {binding.grant_status === 'active' && (
             <form action={revokeAction} className="mt-4 rounded-md border border-destructive/40 bg-destructive/5 p-3">
               <input type="hidden" name="binding_id" value={binding.binding_id} />
               <p className="mb-2 text-destructive">
-                <strong>Danger zone.</strong> Revoking will render all tenant data undecryptable. Confirm by typing a reason:
+                <strong>Danger zone.</strong> Revoking the CMK grant renders ALL of this tenant&apos;s data undecryptable
+                within <strong data-testid="byok-revoke-sla">{binding.sla_revoke_propagation_seconds} seconds</strong>, and it
+                cannot be undone without re-binding.
               </p>
+              <label className="mb-2 flex items-center gap-2 text-sm">
+                <input type="checkbox" name="confirm_undecryptable" value="yes" required />
+                I understand this tenant&apos;s data becomes undecryptable within {binding.sla_revoke_propagation_seconds} seconds.
+              </label>
               <div className="flex gap-2">
                 <Input name="reason" placeholder="reason (required)" required minLength={6} className="flex-1" />
                 <Button type="submit" variant="danger">Revoke CMK binding</Button>
@@ -188,7 +189,7 @@ export default async function ByokPage(): Promise<JSX.Element> {
         </Card>
       )}
 
-      {!binding && TENANT_ID && (
+      {state.kind === 'none' && (
         <Card className="max-w-2xl p-5">
           <h2 className="mb-4 text-lg font-semibold">Bind a customer-managed key</h2>
           <form action={bindCmkAction} className="flex flex-col gap-3.5">
@@ -202,9 +203,7 @@ export default async function ByokPage(): Promise<JSX.Element> {
             <Field label="Customer KMS key ARN / handle" htmlFor="customer_kms_key_arn">
               <Input id="customer_kms_key_arn" name="customer_kms_key_arn" required />
             </Field>
-            <Field label="Tenant Key ID (existing platform key to wrap)" htmlFor="tenant_key_id">
-              <Input id="tenant_key_id" name="tenant_key_id" required />
-            </Field>
+            <p className="text-sm text-muted-foreground">Your CMK will wrap this tenant&apos;s own tenant key.</p>
             <Field label="SIEM forwarder endpoint (optional)" htmlFor="siem_forwarder_endpoint">
               <Input id="siem_forwarder_endpoint" name="siem_forwarder_endpoint" placeholder="https://siem.example.com/ingest" />
             </Field>

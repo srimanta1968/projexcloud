@@ -1,4 +1,6 @@
 import { revalidatePath } from 'next/cache';
+import { redirect } from 'next/navigation';
+import { gateway, GatewayError } from '../../lib/gateway';
 import { Alert, Button, Card, Input, PageHeader } from '@projexlight/design-system';
 
 /**
@@ -37,22 +39,20 @@ interface KeyRow {
   region: string;
 }
 
-const GATEWAY = process.env.NEXT_PUBLIC_GATEWAY_URL ?? '';
-const TENANT_TOKEN = process.env.TENANT_ADMIN_TOKEN ?? '';
+/**
+ * Every call goes out with the SIGNED-IN admin's session (lib/gateway), so the gateway scopes
+ * the keys to that admin's tenant. It used to use one server-wide TENANT_ADMIN_TOKEN: every
+ * admin of every tenant then saw — and could rotate or SHRED — the keys of whichever tenant
+ * that env token belonged to.
+ */
 
-/** null = the call failed; [] = the tenant genuinely has no keys at that tier. */
-async function fetchKeys(tier: string): Promise<KeyRow[] | null> {
-  if (!TENANT_TOKEN) return null;
+/** null = the call failed (with the gateway's reason); [] = genuinely no keys at that tier. */
+async function fetchKeys(tier: string): Promise<{ rows: KeyRow[] | null; error: string | null }> {
   try {
-    const res = await fetch(`${GATEWAY}/api/vault/keys?tier=${encodeURIComponent(tier)}&limit=200`, {
-      cache: 'no-store',
-      headers: { Authorization: `Bearer ${TENANT_TOKEN}` },
-    });
-    if (!res.ok) return null;
-    const body = await res.json();
-    return (body.data ?? []) as KeyRow[];
-  } catch {
-    return null;
+    const rows = await gateway.get<KeyRow[]>(`/api/vault/keys?tier=${encodeURIComponent(tier)}&limit=200`);
+    return { rows: Array.isArray(rows) ? rows : [], error: null };
+  } catch (err) {
+    return { rows: null, error: err instanceof GatewayError ? err.message : 'the gateway could not be reached' };
   }
 }
 
@@ -65,15 +65,14 @@ async function shredKeyAction(formData: FormData): Promise<void> {
   // cannot be undone by any later action — there is no re-issue that recovers the data,
   // because the material is gone rather than revoked.
   if (!key_id || !reason || confirm !== 'SHRED') return;
-  await fetch(`${GATEWAY}/api/vault/keys/${encodeURIComponent(key_id)}/shred`, {
-    method: 'POST',
-    headers: {
-      'content-type': 'application/json',
-      Authorization: `Bearer ${TENANT_TOKEN}`,
-    },
-    body: JSON.stringify({ reason }),
-  });
+  let error = '';
+  try {
+    await gateway.post(`/api/vault/keys/${encodeURIComponent(key_id)}/shred`, { reason });
+  } catch (err) {
+    error = err instanceof GatewayError ? err.message : 'Could not shred the key';
+  }
   revalidatePath('/keys');
+  redirect(error ? `/keys?error=${encodeURIComponent(error)}` : '/keys?done=shredded');
 }
 
 async function rotateKeyAction(formData: FormData): Promise<void> {
@@ -81,15 +80,14 @@ async function rotateKeyAction(formData: FormData): Promise<void> {
   const key_id = String(formData.get('key_id') ?? '');
   const reason = String(formData.get('reason') ?? '').trim();
   if (!key_id || !reason) return;
-  await fetch(`${GATEWAY}/api/vault/keys/${encodeURIComponent(key_id)}/rotate`, {
-    method: 'POST',
-    headers: {
-      'content-type': 'application/json',
-      Authorization: `Bearer ${TENANT_TOKEN}`,
-    },
-    body: JSON.stringify({ reason }),
-  });
+  let error = '';
+  try {
+    await gateway.post(`/api/vault/keys/${encodeURIComponent(key_id)}/rotate`, { reason });
+  } catch (err) {
+    error = err instanceof GatewayError ? err.message : 'Could not rotate the key';
+  }
   revalidatePath('/keys');
+  redirect(error ? `/keys?error=${encodeURIComponent(error)}` : '/keys?done=rotated');
 }
 
 function StateBadge({ state }: { state: KeyRow['state'] }): JSX.Element {
@@ -161,13 +159,13 @@ function KeySection({ title, blurb, rows }: { title: string; blurb: string; rows
   );
 }
 
-export default async function TenantKeysPage(): Promise<JSX.Element> {
-  const [person, device, encounter] = await Promise.all([
-    fetchKeys('person'),
-    fetchKeys('device'),
-    fetchKeys('encounter'),
-  ]);
+export default async function TenantKeysPage({ searchParams }: { searchParams: { error?: string; done?: string } }): Promise<JSX.Element> {
+  const [p, d, e] = await Promise.all([fetchKeys('person'), fetchKeys('device'), fetchKeys('encounter')]);
+  const person = p.rows;
+  const device = d.rows;
+  const encounter = e.rows;
   const unreachable = person === null && device === null && encounter === null;
+  const cause = p.error ?? d.error ?? e.error;
 
   return (
     <div>
@@ -183,22 +181,18 @@ export default async function TenantKeysPage(): Promise<JSX.Element> {
         }
       />
 
-      {!TENANT_TOKEN && (
-        <Alert variant="warning">
-          Set <code>TENANT_ADMIN_TOKEN</code> in this app&apos;s env to read this
-          tenant&apos;s keys.
-        </Alert>
-      )}
+      {searchParams.error ? <Alert variant="destructive">{searchParams.error}</Alert> : null}
+      {searchParams.done ? <Alert variant="success">Key {searchParams.done}.</Alert> : null}
 
-      {TENANT_TOKEN && unreachable && (
+      {unreachable && (
         <Alert variant="warning">
-          Could not read keys. Either the gateway is unreachable, or no KMS provider is
+          Could not read keys{cause ? <>: {cause}</> : null}. Either the gateway is unreachable, or no KMS provider is
           configured in this environment — <code>/api/vault/*</code> then fails rather than
           returning an empty list, so this is not the same as &quot;you have no keys&quot;.
         </Alert>
       )}
 
-      {TENANT_TOKEN && !unreachable && (
+      {!unreachable && (
         <div className="grid gap-4">
           <KeySection
             title="Person"

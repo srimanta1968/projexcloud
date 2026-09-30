@@ -20,6 +20,7 @@ export {
   UndecryptableError,
   _resetByokCache,
   getBinding as getByokBinding,
+  listCmkRotations,
   getBindingForTenant as getByokBindingForTenant,
   listBindings as listByokBindings,
   recordCmkUse,
@@ -63,3 +64,6 @@ export {
   detectSiemKind,
 } from './services/byok/siemForwarders';
 export type { SiemKind } from './services/byok/siemForwarders';
+
+// Operator issue/rotate (TK-4184): mounted by the gateway behind the admin ops token.
+export { operatorIssueHandler, operatorRotateHandler } from './server/handlers/keyController';

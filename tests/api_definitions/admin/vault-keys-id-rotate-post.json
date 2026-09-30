@@ -1,0 +1,96 @@
+{
+  "name": "POST /admin/vault/keys/:key_id/rotate - An operator rotates any vault key (platform keys included)",
+  "endpoint": "/admin/vault/keys/:key_id/rotate",
+  "method": "POST",
+  "sdk": "sdk-vault",
+  "sourceFile": "services/api-gateway/src/app.ts",
+  "requiresAuth": false,
+  "expectedStatus": 200,
+  "taskId": "d16623c0-a671-4f32-b8a1-6970f0773d76",
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "testability": "auto",
+  "dependsOn": [
+    "POST /admin/vault/keys"
+  ],
+  "priority": 21,
+  "description": "OPERATOR route (x-admin-ops-token). Rotates any key - the platform console rotates root/app/pool keys here, since the tenant route only rotates the caller's own tenant keys. There is deliberately no operator shred. Body: reason (required). 200 { data: key }. Errors: missing reason 400; unknown or non-rotatable key 404; missing ops token 401.",
+  "testCases": [
+    {
+      "name": "Rotate the root key",
+      "headers": {
+        "x-admin-ops-token": "{{var:ADMIN_OPS_TOKEN}}"
+      },
+      "pathParams": {
+        "key_id": "{{cache:admin.vault.keys.create.response.data.key_id}}"
+      },
+      "payload": {
+        "reason": "{{static:scheduled rotation}}"
+      },
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "success": true
+      }
+    },
+    {
+      "name": "400 - reason is required",
+      "testType": "negative",
+      "coversErrorCase": "400|ValidationError",
+      "headers": {
+        "x-admin-ops-token": "{{var:ADMIN_OPS_TOKEN}}"
+      },
+      "pathParams": {
+        "key_id": "{{cache:admin.vault.keys.create.response.data.key_id}}"
+      },
+      "payload": {},
+      "expectedStatus": 400
+    },
+    {
+      "name": "404 - unknown key",
+      "testType": "negative",
+      "coversErrorCase": "404|NotFound",
+      "headers": {
+        "x-admin-ops-token": "{{var:ADMIN_OPS_TOKEN}}"
+      },
+      "pathParams": {
+        "key_id": "{{dynamic:uuid}}"
+      },
+      "payload": {
+        "reason": "{{static:x}}"
+      },
+      "expectedStatus": 404
+    },
+    {
+      "name": "401 - no ops token",
+      "testType": "negative",
+      "coversErrorCase": "401|Unauthorized",
+      "headers": {},
+      "pathParams": {
+        "key_id": "{{cache:admin.vault.keys.create.response.data.key_id}}"
+      },
+      "payload": {
+        "reason": "{{static:x}}"
+      },
+      "expectedStatus": 401
+    }
+  ],
+  "errorCases": [
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "reason is required",
+      "when": "no reason"
+    },
+    {
+      "status": 404,
+      "code": "NotFound",
+      "message": "Key not found",
+      "when": "unknown key"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "admin token required",
+      "when": "missing ops token"
+    }
+  ]
+}

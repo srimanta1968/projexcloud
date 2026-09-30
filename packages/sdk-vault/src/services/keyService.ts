@@ -322,6 +322,19 @@ export async function getKeyForTenant(key_id: string, tenant_id: string): Promis
   return rows[0] ?? null;
 }
 
+/** The platform-owned tiers: they wrap every tenant, carry tenant_id NULL, and only an operator issues or rotates them. */
+export const PLATFORM_TIERS = ['root', 'app', 'pool'] as const;
+
+/**
+ * Operator point read (any tenant, any tier). Used by the operator routes and to check a
+ * tenant's requested parent key — never exposed on a tenant route.
+ */
+export async function getKeyForOperator(key_id: string): Promise<KeyRecord | null> {
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(key_id)) return null;
+  const rows = await dataService.rows<KeyRecord>(`SELECT ${KEY_PUBLIC_COLS} FROM vault.key WHERE key_id = $1::uuid LIMIT 1`, [key_id]);
+  return rows[0] ?? null;
+}
+
 /**
  * Operator view: keys at any tier, including the tenant-less ones (root/app/pool).
  *

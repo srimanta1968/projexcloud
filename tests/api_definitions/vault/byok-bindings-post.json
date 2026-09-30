@@ -1,0 +1,99 @@
+{
+  "name": "POST /api/vault/byok/bindings - Bind a customer-managed key (CMK) to this tenant",
+  "endpoint": "/api/vault/byok/bindings",
+  "method": "POST",
+  "sdk": "sdk-vault",
+  "sourceFile": "services/api-gateway/src/app.ts",
+  "requiresAuth": true,
+  "expectedStatus": 201,
+  "taskId": "9afaa39d-5249-44fe-a797-f7bdfba98ffe",
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "testability": "auto",
+  "coversCriterion": [],
+  "dependsOn": [
+    "POST /api/auth/signup-tenant"
+  ],
+  "priority": 30,
+  "description": "Tenant route (Bearer JWT): the tenant comes from the token, and only that tenant's binding and keys are ever touched. The tenant portal used to drive BYOK through the /admin routes with the platform ADMIN_OPS_TOKEN for a tenant fixed in its environment (TK-4184). Body: provider (aws-kms | gcp-kms | hsm-pkcs11), customer_kms_key_arn, tenant_key_id? (must be the tenant's own tenant-tier key; defaults to it, created on demand), siem_forwarder_endpoint?. 201 { data: binding }. Errors: bad provider/arn 400; tenant_key_id not the tenant's 404; a CMK already bound 409; no token 401.",
+  "testCases": [
+    {
+      "name": "Bind a CMK (wraps the tenant's own key)",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "payload": {
+        "provider": "aws-kms",
+        "customer_kms_key_arn": "{{static:arn:aws:kms:us-east-1:111122223333:key/api-test}}"
+      },
+      "expectedStatus": 201,
+      "expectedResponse": {
+        "success": true,
+        "data": {
+          "binding_id": "string",
+          "grant_status": "active"
+        }
+      }
+    },
+    {
+      "name": "400 - provider must be aws-kms, gcp-kms or hsm-pkcs11",
+      "testType": "negative",
+      "coversErrorCase": "400|ValidationError",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "payload": {
+        "provider": "{{static:vault-x}}",
+        "customer_kms_key_arn": "{{static:arn}}"
+      },
+      "expectedStatus": 400
+    },
+    {
+      "name": "404 - tenant_key_id must be this tenant's own key",
+      "testType": "negative",
+      "coversErrorCase": "404|NotFound",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "payload": {
+        "provider": "aws-kms",
+        "customer_kms_key_arn": "{{static:arn}}",
+        "tenant_key_id": "{{dynamic:uuid}}"
+      },
+      "expectedStatus": 404
+    },
+    {
+      "name": "401 - no token",
+      "testType": "negative",
+      "coversErrorCase": "401|Unauthorized",
+      "headers": {},
+      "payload": {},
+      "expectedStatus": 401
+    }
+  ],
+  "errorCases": [
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "provider (aws-kms | gcp-kms | hsm-pkcs11) and customer_kms_key_arn are required",
+      "when": "bad body"
+    },
+    {
+      "status": 404,
+      "code": "NotFound",
+      "message": "tenant key not found",
+      "when": "tenant_key_id is not the tenant's"
+    },
+    {
+      "status": 409,
+      "code": "Conflict",
+      "message": "a CMK is already bound for this tenant; revoke it first",
+      "when": "already bound"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "authentication required",
+      "when": "missing token"
+    }
+  ]
+}

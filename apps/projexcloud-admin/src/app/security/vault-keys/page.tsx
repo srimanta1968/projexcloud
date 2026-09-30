@@ -56,7 +56,8 @@ async function rotateKeyAction(formData: FormData): Promise<void> {
   const key_id = String(formData.get('key_id') ?? '');
   const reason = String(formData.get('reason') ?? '').trim();
   if (!key_id || !reason) return;
-  await fetch(`${GATEWAY}/api/vault/keys/${encodeURIComponent(key_id)}/rotate`, {
+  // The operator route: the tenant route only rotates the caller's own tenant keys (TK-4184).
+  await fetch(`${GATEWAY}/admin/vault/keys/${encodeURIComponent(key_id)}/rotate`, {
     method: 'POST',
     headers: {
       'content-type': 'application/json',

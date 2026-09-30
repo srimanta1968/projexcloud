@@ -18,8 +18,14 @@ import {
   revokeCmk,
   getByokBinding,
   getByokBindingForTenant,
+  listCmkRotations,
+  getKeyForTenant as getVaultKeyForTenant,
+  rotateKey as rotateVaultKey,
+  ensureTenantKey as ensureVaultTenantKey,
   listByokBindings,
   listKeysForOperator as listVaultKeysForOperator,
+  operatorIssueHandler as vaultOperatorIssue,
+  operatorRotateHandler as vaultOperatorRotate,
   registerSyntheticProvidersForDev,
   registerRealKmsProvidersFromEnv,
   kmsProviderStatus,
@@ -2773,6 +2779,20 @@ const start = async (): Promise<void> => {
       },
     );
 
+    // TK-4184 — operator issue and rotate. Platform-tier keys (root/app/pool) wrap every tenant,
+    // so they are issued and rotated ONLY here; the tenant routes refuse them. No operator
+    // shred: shredding a root key would make every tenant beneath it unreadable.
+    app.post('/admin/vault/keys', async (req, reply) => {
+      const err = await requireAdmin(req as unknown as { headers: Record<string, unknown> });
+      if (err) return reply.code(401).send({ success: false, error: err });
+      return vaultOperatorIssue(req, reply);
+    });
+    app.post<{ Params: { key_id: string }; Body: { reason?: string } }>('/admin/vault/keys/:key_id/rotate', async (req, reply) => {
+      const err = await requireAdmin(req as unknown as { headers: Record<string, unknown> });
+      if (err) return reply.code(401).send({ success: false, error: err });
+      return vaultOperatorRotate(req, reply);
+    });
+
     // Operator list across ALL tenants — the platform console's view. The per-tenant
     // GET below answers "does THIS tenant have a binding"; this answers "which tenants
     // have brought their own key, and is any of them degraded or mid-revoke", which is
@@ -2850,6 +2870,89 @@ const start = async (): Promise<void> => {
         });
         if (!binding) return reply.code(404).send({ success: false, error: 'binding not found' });
         return { success: true, data: binding };
+      } catch (e) {
+        return reply.code(500).send({ success: false, error: (e as Error).message });
+      }
+    });
+
+    // --- Variant A · BYOK, the TENANT's own surface (TK-4184) ---
+    // The tenant portal used to drive BYOK through the /admin routes above with the platform
+    // ADMIN_OPS_TOKEN, for a tenant id fixed in the portal's environment — every tenant admin
+    // acting with operator power on one hard-coded tenant. These routes take the tenant from
+    // the caller's token and only ever touch that tenant's binding and keys.
+    const tenantOf = (req: FastifyRequest): string | null => (req.auth as { tenant_id?: string } | undefined)?.tenant_id ?? null;
+    const actorOf = (req: FastifyRequest): string => (req.auth as { primary_persona_id?: string; sub?: string } | undefined)?.primary_persona_id
+      ?? (req.auth as { sub?: string } | undefined)?.sub ?? 'tenant-admin';
+    const ownBinding = async (req: FastifyRequest, bindingId: string) => {
+      const t = tenantOf(req);
+      const b = t && /^[0-9a-z_-]{1,80}$/i.test(bindingId) ? await getByokBinding(bindingId).catch(() => null) : null;
+      return b && b.tenant_id === t ? b : null;
+    };
+
+    app.get('/api/vault/byok/binding', { preHandler: requireAuth }, async (req, reply) => {
+      const t = tenantOf(req);
+      if (!t) return reply.code(403).send({ success: false, error: 'this token carries no tenant' });
+      const binding = await getByokBindingForTenant(t);
+      if (!binding) return reply.code(404).send({ success: false, error: 'NotFound', details: ['no CMK is bound for this tenant'] });
+      return { success: true, data: { binding, rotations: await listCmkRotations(binding.binding_id) } };
+    });
+
+    app.post<{ Body: { provider?: 'aws-kms' | 'gcp-kms' | 'hsm-pkcs11'; customer_kms_key_arn?: string; tenant_key_id?: string; siem_forwarder_endpoint?: string | null } }>(
+      '/api/vault/byok/bindings', { preHandler: requireAuth }, async (req, reply) => {
+        const t = tenantOf(req);
+        if (!t) return reply.code(403).send({ success: false, error: 'this token carries no tenant' });
+        const b = req.body ?? {};
+        if (!b.provider || !['aws-kms', 'gcp-kms', 'hsm-pkcs11'].includes(b.provider) || !b.customer_kms_key_arn) {
+          return reply.code(400).send({ success: false, error: 'ValidationError', details: ['provider (aws-kms | gcp-kms | hsm-pkcs11) and customer_kms_key_arn are required'] });
+        }
+        // The key the CMK wraps must be THIS tenant's own tenant-tier key; default to it.
+        let tenantKeyId = b.tenant_key_id;
+        if (tenantKeyId) {
+          const k = await getVaultKeyForTenant(tenantKeyId, t).catch(() => null);
+          if (!k || k.tier !== 'tenant') return reply.code(404).send({ success: false, error: 'NotFound', details: ['tenant key not found'] });
+        } else {
+          tenantKeyId = (await ensureVaultTenantKey(t, process.env.DEFAULT_REGION || 'us-east-1')).key_id;
+        }
+        if (await getByokBindingForTenant(t)) return reply.code(409).send({ success: false, error: 'Conflict', details: ['a CMK is already bound for this tenant; revoke it first'] });
+        try {
+          const binding = await bindCmk({
+            tenant_id: t, provider: b.provider, customer_kms_key_arn: b.customer_kms_key_arn, tenant_key_id: tenantKeyId,
+            siem_forwarder_endpoint: b.siem_forwarder_endpoint ?? null, operator_id: actorOf(req),
+          });
+          return reply.code(201).send({ success: true, data: binding });
+        } catch (e) {
+          return reply.code(500).send({ success: false, error: (e as Error).message });
+        }
+      },
+    );
+
+    // One step for the tenant: retire the current tenant key, take the new one, and re-wrap it
+    // under the SAME customer CMK — data stays readable; no key id to type.
+    app.post<{ Params: { binding_id: string } }>('/api/vault/byok/bindings/:binding_id/rotate', { preHandler: requireAuth }, async (req, reply) => {
+      const binding = await ownBinding(req, req.params.binding_id);
+      if (!binding) return reply.code(404).send({ success: false, error: 'NotFound', details: ['binding not found'] });
+      const t = binding.tenant_id;
+      try {
+        const previous = await getVaultKeyForTenant(binding.tenant_key_id, t).catch(() => null);
+        if (previous && (previous.state === 'active' || previous.state === 'issued')) {
+          await rotateVaultKey(previous.key_id, { kind: 'human', id: actorOf(req) }, 'CMK rotation');
+        }
+        const next = await ensureVaultTenantKey(t, previous?.region ?? (process.env.DEFAULT_REGION || 'us-east-1'));
+        const rot = await rotateCmk({ binding_id: binding.binding_id, previous_tenant_key_id: binding.tenant_key_id, new_tenant_key_id: next.key_id, operator_id: actorOf(req) });
+        return { success: true, data: rot };
+      } catch (e) {
+        if (e instanceof UndecryptableError) return reply.code(e.status_code ?? 409).send({ success: false, error: (e as Error).message });
+        return reply.code(500).send({ success: false, error: (e as Error).message });
+      }
+    });
+
+    app.post<{ Params: { binding_id: string }; Body: { reason?: string } }>('/api/vault/byok/bindings/:binding_id/revoke', { preHandler: requireAuth }, async (req, reply) => {
+      const binding = await ownBinding(req, req.params.binding_id);
+      if (!binding) return reply.code(404).send({ success: false, error: 'NotFound', details: ['binding not found'] });
+      const reason = typeof req.body?.reason === 'string' ? req.body.reason.trim() : '';
+      if (reason.length < 6) return reply.code(400).send({ success: false, error: 'ValidationError', details: ['a reason of at least 6 characters is required'] });
+      try {
+        return { success: true, data: await revokeCmk({ binding_id: binding.binding_id, reason, operator_id: actorOf(req) }) };
       } catch (e) {
         return reply.code(500).send({ success: false, error: (e as Error).message });
       }

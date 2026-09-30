@@ -1,0 +1,92 @@
+{
+  "name": "POST /admin/vault/keys - An operator issues a platform-tier (root/app/pool) vault key",
+  "endpoint": "/admin/vault/keys",
+  "method": "POST",
+  "sdk": "sdk-vault",
+  "sourceFile": "services/api-gateway/src/app.ts",
+  "requiresAuth": false,
+  "expectedStatus": 201,
+  "taskId": "d16623c0-a671-4f32-b8a1-6970f0773d76",
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "testability": "auto",
+  "dependsOn": [],
+  "priority": 20,
+  "description": "OPERATOR route (x-admin-ops-token). Issues a vault key at any tier; root/app/pool keys wrap every tenant, carry no tenant_id, and can ONLY be issued here - the tenant route POST /api/vault/keys refuses them (403 PlatformTier). Below the platform tiers tenant_id is required. Body: tier, kms_ref, algorithm (AES-256-GCM | ChaCha20-Poly1305), region, parent_key_id (required below root, strictly higher tier), scope_id?, tenant_id? (non-platform tiers). 201 { data: key }. This is the parent producer of the tenant-key chain (POST /api/vault/keys), replacing tests/setup_scripts/media_seed_tenant_vault_key.sql. Errors: bad body or tenant_id on a platform tier 400; missing ops token 401.",
+  "fieldEnums": {
+    "tier": [
+      "root",
+      "app",
+      "pool",
+      "tenant",
+      "person",
+      "device",
+      "encounter"
+    ],
+    "algorithm": [
+      "AES-256-GCM",
+      "ChaCha20-Poly1305"
+    ]
+  },
+  "testCases": [
+    {
+      "name": "Issue a root key (parent of the run's tenant key)",
+      "headers": {
+        "x-admin-ops-token": "{{var:ADMIN_OPS_TOKEN}}"
+      },
+      "payload": {
+        "tier": "root",
+        "kms_ref": "{{static:kms-root-api-test}}",
+        "algorithm": "AES-256-GCM",
+        "region": "us-east-1"
+      },
+      "expectedStatus": 201,
+      "expectedResponse": {
+        "success": true,
+        "data": {
+          "key_id": "string",
+          "tier": "root"
+        }
+      }
+    },
+    {
+      "name": "400 - a platform key belongs to no tenant",
+      "testType": "negative",
+      "coversErrorCase": "400|ValidationError",
+      "headers": {
+        "x-admin-ops-token": "{{var:ADMIN_OPS_TOKEN}}"
+      },
+      "payload": {
+        "tier": "root",
+        "kms_ref": "{{static:kms-x}}",
+        "algorithm": "AES-256-GCM",
+        "region": "us-east-1",
+        "tenant_id": "{{dynamic:uuid}}"
+      },
+      "expectedStatus": 400
+    },
+    {
+      "name": "401 - no ops token",
+      "testType": "negative",
+      "coversErrorCase": "401|Unauthorized",
+      "headers": {},
+      "payload": {
+        "tier": "root"
+      },
+      "expectedStatus": 401
+    }
+  ],
+  "errorCases": [
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "root keys belong to no tenant; omit tenant_id",
+      "when": "bad body"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "admin token required",
+      "when": "missing ops token"
+    }
+  ]
+}

@@ -1,0 +1,101 @@
+{
+  "name": "POST /api/vault/byok/bindings/:binding_id/revoke - Revoke this tenant's CMK binding",
+  "endpoint": "/api/vault/byok/bindings/:binding_id/revoke",
+  "method": "POST",
+  "sdk": "sdk-vault",
+  "sourceFile": "services/api-gateway/src/app.ts",
+  "requiresAuth": true,
+  "expectedStatus": 200,
+  "taskId": "9afaa39d-5249-44fe-a797-f7bdfba98ffe",
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "testability": "auto",
+  "coversCriterion": [],
+  "dependsOn": [
+    "POST /api/auth/signup-tenant",
+    "POST /api/vault/byok/bindings",
+    "POST /api/vault/byok/bindings/:binding_id/rotate"
+  ],
+  "priority": 30,
+  "description": "Tenant route (Bearer JWT): the tenant comes from the token, and only that tenant's binding and keys are ever touched. The tenant portal used to drive BYOK through the /admin routes with the platform ADMIN_OPS_TOKEN for a tenant fixed in its environment (TK-4184). Revoking renders the tenant's data undecryptable within the binding's sla_revoke_propagation_seconds; the portal requires an explicit confirmation stating that SLA before it calls this. Body: reason (>= 6 characters). 200 { data: binding (grant_status revoking/revoked) }. Errors: short reason 400; unknown or another tenant's binding 404; no token 401.",
+  "testCases": [
+    {
+      "name": "400 - a reason of at least 6 characters is required",
+      "testType": "negative",
+      "coversErrorCase": "400|ValidationError",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "pathParams": {
+        "binding_id": "{{cache:vault.byok.bindings.create.response.data.binding_id}}"
+      },
+      "payload": {
+        "reason": "{{static:no}}"
+      },
+      "expectedStatus": 400
+    },
+    {
+      "name": "Revoke the binding",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "pathParams": {
+        "binding_id": "{{cache:vault.byok.bindings.create.response.data.binding_id}}"
+      },
+      "payload": {
+        "reason": "{{static:customer offboarding}}"
+      },
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "success": true
+      }
+    },
+    {
+      "name": "404 - unknown binding",
+      "testType": "negative",
+      "coversErrorCase": "404|NotFound",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "pathParams": {
+        "binding_id": "{{dynamic:uuid}}"
+      },
+      "payload": {
+        "reason": "{{static:customer offboarding}}"
+      },
+      "expectedStatus": 404
+    },
+    {
+      "name": "401 - no token",
+      "testType": "negative",
+      "coversErrorCase": "401|Unauthorized",
+      "headers": {},
+      "pathParams": {
+        "binding_id": "{{cache:vault.byok.bindings.create.response.data.binding_id}}"
+      },
+      "payload": {
+        "reason": "{{static:customer offboarding}}"
+      },
+      "expectedStatus": 401
+    }
+  ],
+  "errorCases": [
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "a reason of at least 6 characters is required",
+      "when": "short reason"
+    },
+    {
+      "status": 404,
+      "code": "NotFound",
+      "message": "binding not found",
+      "when": "unknown binding or another tenant's"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "authentication required",
+      "when": "missing token"
+    }
+  ]
+}
