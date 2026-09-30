@@ -33,7 +33,7 @@ export interface TurnRecord {
   /** Agent turns: end of the caller's turn -> first agent audio. */
   ttfa_ms?: number | null;
   interrupted: boolean;
-  tool_calls?: unknown[];
+  tool_calls?: { name: string; ok: boolean; error: string | null; status: number | null; ms: number }[];
   model?: string;
 }
 

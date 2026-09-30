@@ -72,7 +72,7 @@ export {
 } from './services/numberService';
 export type { Carrier, Fallback, NumberBinding, BindNumberInput, InboundRoute, KillSwitchState } from './services/numberService';
 
-export { registerTool, listTools, getTool, updateTool, effectiveTools, callSessionContext, toolSigningSecret } from './services/toolService';
+export { registerTool, listTools, getTool, updateTool, effectiveTools, callSessionContext, toolSigningSecret, revealToolSigningSecret, TOOL_SIGNATURE_SCHEME } from './services/toolService';
 export { RUNTIME_LAYERS, bootstrapRuntimeSession, setSessionTokenMinter, setRecordingRuleResolver, setInboundAdmitter } from './services/bootstrapService';
 export type { BootstrapInput, RuntimeBootstrap, RuntimeFallback, RuntimeLayer, RuntimeLayerConfig, RuntimeTool, KeyHandle, SessionTokenGrant, SessionTokenMinter, TierRoute, RecordingDecision, RecordingRuleResolver, InboundAdmitter } from './services/bootstrapService';
 export type { CallSessionContext } from './services/toolService';

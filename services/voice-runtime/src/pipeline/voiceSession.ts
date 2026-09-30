@@ -11,9 +11,9 @@ import {
   type RemoteTrack,
   type Room,
 } from '@livekit/rtc-node';
-import type { ChatMessage, CompletionRequest } from '@projexlight/contracts';
+import type { ChatMessage, CompletionRequest, ToolCallRecord } from '@projexlight/contracts';
 import type { Conversation } from '../call/callRunner';
-import type { RuntimeLayerConfig } from '../controlPlane';
+import type { ControlPlane, RuntimeLayerConfig } from '../controlPlane';
 import type { JobContext } from '../livekit/worker';
 import { log } from '../log';
 import { llmAdapter } from '../providers/llm';
@@ -21,6 +21,7 @@ import { sttProvider } from '../providers/stt';
 import { ttsProvider } from '../providers/tts';
 import type { SttStream, Transcript } from '../providers/types';
 import type { SessionContext, SessionStore, TurnRecord } from '../session/sessionStore';
+import { ToolExecutor, toolMessage } from '../tools/toolExecutor';
 import { ClauseChunker } from './chunker';
 import { openingDisclosure } from './disclosure';
 import { Speaker, type TtsBinding } from './speaker';
@@ -55,6 +56,10 @@ export const VOICE_RULES = [
 ].join(' ');
 
 const FALLBACK_LINE = "Sorry, I'm having trouble on my end. Could you say that again?";
+/** Spoken when a turn that used tools produced no answer (e.g. the model failed after a tool timeout). */
+const TOOL_FALLBACK_LINE = "Sorry, I couldn't get that information right now. Can I help you with something else, or arrange a call back?";
+/** Model rounds with tools offered per caller turn (a final round never offers tools). */
+const MAX_TOOL_ROUNDS = 3;
 
 export class VoiceSession {
   readonly history: ChatMessage[] = [];
@@ -78,6 +83,7 @@ export class VoiceSession {
   /** The agent line currently being spoken (greeting or reply), to mark on barge-in. */
   private speakingRec: TurnRecord | null = null;
   private readonly router: ReturnType<typeof routerConfig>;
+  protected readonly tools: ToolExecutor;
   /** True while the mandatory disclosure plays: barge-in cannot cut it short. */
   private protectedLine = false;
 
@@ -86,6 +92,7 @@ export class VoiceSession {
     protected readonly session: SessionContext,
     protected readonly ctx: JobContext,
     protected readonly store: SessionStore,
+    controlPlane: ControlPlane,
   ) {
     const b = session.boot;
     this.systemPrompt = `${VOICE_RULES}\n\n${b.agent.system_prompt}`;
@@ -96,6 +103,7 @@ export class VoiceSession {
     const td = ((sttOpts?.turn_detection ?? {}) as Record<string, unknown>);
     this.vad = new EnergyVad(vadConfig(td.sensitivity, { minSpeechMs: td.min_interruption_ms, minSilenceMs: td.min_silence_ms }, IN_RATE));
     this.router = routerConfig(b.agent.escalation_rules);
+    this.tools = new ToolExecutor(session, controlPlane);
   }
 
   protected ttsOpts(l: RuntimeLayerConfig) {
@@ -314,60 +322,105 @@ export class VoiceSession {
     return { layer: v.tier === 'complex' ? layers.llm_complex : layers.llm_fast, tier: v.tier, reason: v.reason };
   }
 
+  /** Hook before tools run (TK-4463 speaks a latency-masking filler here). */
+  protected async beforeTools(_names: string[], _signal: AbortSignal): Promise<void> {
+    /* no filler by default */
+  }
+
+  /**
+   * Answers one caller turn: stream the model's reply, speaking each clause as it forms; if
+   * the model calls tools, run them (TK-4462) and stream its follow-up, up to
+   * MAX_TOOL_ROUNDS. A barge-in aborts whatever is in flight.
+   */
   protected async respond(text: string, endedAt: number): Promise<void> {
     if (this.ended) return;
     this.history.push(this.userMessage(text));
     const { layer, tier, reason } = this.pickLlm(text);
-    const req: CompletionRequest = {
-      model: layer.model ?? '',
-      prompt: [{ role: 'system', content: this.systemPrompt }, ...this.history],
-      max_tokens: 400,
-      temperature: 0.5,
-      stream: true,
-    };
-    const chunker = new ClauseChunker();
-    let reply = '';
-    let failed = false;
-    let firstTokenAt: number | null = null;
-    let firstAudioAt: number | null = null;
-    const requestedAt = Date.now();
     const abort = new AbortController();
     this.turnAbort = abort;
-    // Recorded up front so a barge-in during this reply can mark it interrupted.
+    const requestedAt = Date.now();
     const rec = this.record({
       speaker: 'agent', text: '', started_ms: this.elapsed(requestedAt), interrupted: false, model: `${layer.provider}/${layer.model ?? ''}`,
       ttft_ms: null, ttfa_ms: null,
     });
-    this.history.push({ role: 'assistant', content: '' });
     this.speakingRec = rec;
+    let firstTokenAt: number | null = null;
+    let firstAudioAt: number | null = null;
+    let llmDoneAt = requestedAt;
+    let spoken = '';
+    let failed = false;
+    /** The model's answer: text from a round that ended without further tool calls. */
+    let answered = false;
+    const toolLog: NonNullable<TurnRecord['tool_calls']> = [];
     this.speaker.onFirstAudio((at) => { firstAudioAt = at; });
-    try {
-      for await (const chunk of llmAdapter(layer.provider).stream(req, Buffer.from(layer.primary.key), { signal: abort.signal })) {
-        if (this.ended || abort.signal.aborted) break;
-        if (chunk.delta) {
-          if (firstTokenAt === null) firstTokenAt = Date.now();
-          reply += chunk.delta;
-          for (const clause of chunker.push(chunk.delta)) this.speaker.say(clause, this.tts);
+
+    for (let round = 0; round <= MAX_TOOL_ROUNDS && !abort.signal.aborted && !this.ended; round++) {
+      const offerTools = this.tools.size > 0 && round < MAX_TOOL_ROUNDS;
+      const req: CompletionRequest = {
+        model: layer.model ?? '',
+        prompt: [{ role: 'system', content: this.systemPrompt }, ...this.history],
+        max_tokens: 400,
+        temperature: 0.5,
+        stream: true,
+        ...(offerTools ? { tools: this.tools.manifest() } : {}),
+      };
+      // The round's assistant message goes in first, so a barge-in rewrites THIS message.
+      const msg: ChatMessage = { role: 'assistant', content: '' };
+      this.history.push(msg);
+      const chunker = new ClauseChunker();
+      let calls: ToolCallRecord[] = [];
+      try {
+        for await (const chunk of llmAdapter(layer.provider).stream(req, Buffer.from(layer.primary.key), { signal: abort.signal })) {
+          if (this.ended || abort.signal.aborted) break;
+          if (chunk.delta) {
+            if (firstTokenAt === null) firstTokenAt = Date.now();
+            msg.content += chunk.delta;
+            for (const clause of chunker.push(chunk.delta)) this.speaker.say(clause, this.tts);
+          }
+          if (chunk.tool_calls?.length) calls = chunk.tool_calls;
+        }
+      } catch (err) {
+        if (!abort.signal.aborted) {
+          failed = true;
+          log.warn('llm turn failed', { callId: this.session.callId, provider: layer.provider, round, error: (err as Error).message });
         }
       }
-    } catch (err) {
-      if (!abort.signal.aborted) {
-        failed = true;
-        log.warn('llm turn failed', { callId: this.session.callId, provider: layer.provider, error: (err as Error).message });
-      }
-    }
-    const llmDoneAt = Date.now();
-    const interruptedDuringLlm = abort.signal.aborted;
-    if (!interruptedDuringLlm) {
+      llmDoneAt = Date.now();
+      if (abort.signal.aborted) break;
       for (const clause of chunker.flush()) this.speaker.say(clause, this.tts);
-      if (failed && !reply) {
-        reply = FALLBACK_LINE;
-        this.speaker.say(reply, this.tts);
+      spoken += (spoken && msg.content ? ' ' : '') + msg.content;
+      if (!failed && calls.length === 0 && msg.content.trim()) answered = true;
+      if (failed || calls.length === 0) break;
+
+      msg.tool_calls = calls;
+      const names = calls.map((c) => c.tool_sku);
+      await this.beforeTools(names, abort.signal);
+      const outcomes = await this.tools.run(calls.map((c) => ({ tool_call_id: c.tool_call_id, name: c.tool_sku, args: c.args })), rec.turn_index, abort.signal);
+      for (const o of outcomes) {
+        this.history.push({ role: 'tool', tool_call_id: o.tool_call_id, content: toolMessage(o) });
+        toolLog.push({ name: o.name, ok: o.ok, error: o.error ?? null, status: o.status ?? null, ms: o.ms });
       }
-      rec.text = reply;
-      this.history[this.history.length - 1].content = reply;
     }
+
+    // Never leave the caller without an answer: the model produced none (it failed — before
+    // or after a tool — or returned nothing) and nobody interrupted -> say the graceful line.
+    // A pre-tool "let me check" does not count as the answer.
+    if (!abort.signal.aborted && !this.ended && !answered) {
+      const line = toolLog.length > 0 ? TOOL_FALLBACK_LINE : FALLBACK_LINE;
+      spoken += (spoken ? ' ' : '') + line;
+      const last = this.history[this.history.length - 1];
+      if (last.role === 'assistant' && !last.tool_calls?.length) last.content = line;
+      else this.history.push({ role: 'assistant', content: line });
+      this.speaker.say(line, this.tts);
+    }
+    // Drop empty placeholder messages the model never filled (e.g. aborted before a token).
+    for (let i = this.history.length - 1; i >= 0; i--) {
+      const m = this.history[i];
+      if (m.role === 'assistant' && !m.content && !m.tool_calls?.length) this.history.splice(i, 1);
+    }
+    if (!rec.interrupted) rec.text = spoken;
     rec.ttft_ms = firstTokenAt !== null ? firstTokenAt - requestedAt : null;
+    if (toolLog.length) rec.tool_calls = toolLog;
     await this.speaker.idle();
     if (this.turnAbort === abort) this.turnAbort = null;
     if (this.speakingRec === rec) this.speakingRec = null;
@@ -387,8 +440,9 @@ export class VoiceSession {
       llm_done_at: llmDoneAt,
       first_audio_before_llm_done: firstAudioAt !== null && firstAudioAt < llmDoneAt,
       interrupted: rec.interrupted,
-      llm_aborted: interruptedDuringLlm,
-      chars: reply.length,
+      llm_aborted: abort.signal.aborted,
+      tools: toolLog.length ? toolLog.map((t) => `${t.name}:${t.ok ? 'ok' : t.error}`) : undefined,
+      chars: spoken.length,
     });
   }
 
@@ -422,6 +476,6 @@ export class VoiceSession {
   }
 }
 
-export function streamingConversation(store: SessionStore): Conversation {
-  return (room, session, ctx) => new VoiceSession(room, session, ctx, store).run();
+export function streamingConversation(store: SessionStore, controlPlane: ControlPlane): Conversation {
+  return (room, session, ctx) => new VoiceSession(room, session, ctx, store, controlPlane).run();
 }

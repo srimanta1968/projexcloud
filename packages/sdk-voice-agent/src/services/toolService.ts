@@ -1,5 +1,6 @@
 import crypto from 'node:crypto';
 import { dataService } from '@projexlight/db-runtime';
+import { emitEvent } from '@projexlight/sdk-audit';
 import { parseRef } from '@projexlight/sdk-secrets';
 import { VoiceAgentError, conflict, notFound, validationError } from '../models/errors';
 
@@ -309,7 +310,7 @@ const DEV_TOOL_SIGNING_KEY = 'projex-dev-voice-tool-signing-key';
  * on the platform: HMAC-SHA256(VOICE_TOOL_SIGNING_KEY, "voice-tool:v1:{tenant}:{tool}:{ref}").
  * The tool's signing_secret_ref names the key version — changing the ref (PATCH the tool)
  * rotates it. The runtime receives it in the call bootstrap; the tenant's app gets it from
- * the tool executor task's reveal route (TK-4462).
+ * POST /api/voice-agent/tools/:tool_id/signing-secret (revealToolSigningSecret).
  *
  * @throws VoiceAgentError 503 in production when VOICE_TOOL_SIGNING_KEY is unset.
  */
@@ -325,4 +326,44 @@ export function toolSigningSecret(tool: Pick<AppTool, 'tenant_id' | 'tool_id' | 
     .createHmac('sha256', master)
     .update(`voice-tool:v1:${tool.tenant_id}:${tool.tool_id}:${tool.signing_secret_ref}`)
     .digest('base64url');
+}
+
+/** How the voice runtime signs every app-tool request (verify with @projexlight/voice-client verifyToolRequest). */
+export const TOOL_SIGNATURE_SCHEME = {
+  algorithm: 'hmac-sha256',
+  signature_header: 'X-Projexcloud-Signature',
+  signature_format: 't=<unix seconds>,v1=<hex HMAC>',
+  signed_payload: '<t>.<Idempotency-Key>.<raw request body>',
+  idempotency_key: '<call_id>:<turn_index>:<tool name>',
+  tolerance_seconds: 300,
+} as const;
+
+/**
+ * The tool's current request-signing secret, for the tenant to configure its tool endpoint
+ * with (VA·E1 · TK-4462). Tenant-scoped; audited as voice.tool.secret_revealed.v1 (who and
+ * which tool — never the value).
+ *
+ * @throws VoiceAgentError 404 unknown tool (or another tenant's), 503 no signing key in production.
+ */
+export async function revealToolSigningSecret(tenantId: string, toolId: string, actor: string): Promise<{
+  tool_id: string;
+  name: string;
+  signing_secret_ref: string;
+  signing_secret: string;
+  scheme: typeof TOOL_SIGNATURE_SCHEME;
+}> {
+  const tool = await getTool(tenantId, toolId);
+  if (!tool) throw notFound('tool not found');
+  const secret = toolSigningSecret(tool);
+  await emitEvent({
+    event_type: 'voice.tool.secret_revealed.v1',
+    pool_index: process.env.VOICE_AGENT_AUDIT_POOL || 'admin-default',
+    actor_kind: 'human',
+    actor_id: actor,
+    tenant_id: tenantId,
+    subject_kind: 'voice_agent.app_tool',
+    subject_id: tool.tool_id,
+    payload: { tool_id: tool.tool_id, name: tool.name, signing_secret_ref: tool.signing_secret_ref },
+  });
+  return { tool_id: tool.tool_id, name: tool.name, signing_secret_ref: tool.signing_secret_ref, signing_secret: secret, scheme: TOOL_SIGNATURE_SCHEME };
 }

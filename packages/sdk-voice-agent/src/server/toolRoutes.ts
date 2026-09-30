@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import { requireAuth } from '@projexlight/sdk-identity';
-import { effectiveTools, getTool, listTools, registerTool, updateTool, type RegisterToolInput, type UpdateToolInput } from '../services/toolService';
+import { effectiveTools, getTool, listTools, registerTool, revealToolSigningSecret, updateTool, type RegisterToolInput, type UpdateToolInput } from '../services/toolService';
 import { getVersion } from '../services/agentService';
 import { resolveTenant } from './tenantScope';
 import { sendError } from './sendError';
@@ -52,6 +52,22 @@ export function registerToolRoutes(app: FastifyInstance): void {
       if (!tenantId) return reply;
       try {
         return reply.code(200).send({ data: { tool: await updateTool(tenantId, req.params.tool_id, body) } });
+      } catch (err) {
+        return sendError(reply, err);
+      }
+    },
+  );
+
+  // VA·E1 (TK-4462) — the secret the voice runtime signs this tool's requests with, so the
+  // tenant's endpoint can verify them. POST: it returns a secret and is audited.
+  app.post<{ Params: { tool_id: string } }>(
+    '/api/voice-agent/tools/:tool_id/signing-secret', { preHandler: requireAuth }, async (req, reply) => {
+      const tenantId = resolveTenant(req, reply, (req.body as { tenant_id?: string } | undefined)?.tenant_id);
+      if (!tenantId) return reply;
+      reply.header('cache-control', 'no-store');
+      try {
+        const actor = req.auth?.primary_persona_id ?? req.auth?.sub ?? 'tenant-admin';
+        return reply.code(200).send({ data: await revealToolSigningSecret(tenantId, req.params.tool_id, actor) });
       } catch (err) {
         return sendError(reply, err);
       }

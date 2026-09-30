@@ -29,7 +29,7 @@ async function main(): Promise<void> {
   if (!redis) log.warn('no REDIS_HOST: session state is kept in memory only');
   const store = new SessionStore(redis, cfg.workerName, cfg.sessionTtlSeconds);
   const controlPlane = new ControlPlane({ baseUrl: cfg.controlPlaneUrl, opsToken: cfg.opsToken });
-  const worker = new AgentWorker(cfg, roomJobRunner(callRunner({ controlPlane, store, conversation: streamingConversation(store) })));
+  const worker = new AgentWorker(cfg, roomJobRunner(callRunner({ controlPlane, store, conversation: streamingConversation(store, controlPlane) })));
   const health = await startHealthServer(worker, cfg.healthPort);
   log.info('voice-runtime starting', { agentName: cfg.agentName, maxJobs: cfg.maxJobs, healthPort: cfg.healthPort, worker: cfg.workerName });
   worker.start();

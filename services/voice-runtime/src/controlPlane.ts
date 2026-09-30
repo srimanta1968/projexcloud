@@ -148,4 +148,13 @@ export class ControlPlane {
   bootstrap(req: BootstrapRequest): Promise<Bootstrap | Fallback> {
     return this.post<Bootstrap | Fallback>('/api/admin/voice-agent/runtime/bootstrap', req);
   }
+
+  /**
+   * Checks the call's session capability token authorizes `tool` right before it runs
+   * (TK-4508/4462); the control plane audits an authorized check as voice.tool.invoked.v1.
+   * One quick request per TOOL CALL, never per turn.
+   */
+  validateTool(callId: string, token: string, tool: string): Promise<{ valid: boolean; reason?: string }> {
+    return this.post(`/api/admin/voice-agent/calls/${encodeURIComponent(callId)}/session-token/validate`, { token, tool });
+  }
 }

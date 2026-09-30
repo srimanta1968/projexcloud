@@ -464,6 +464,8 @@ export const EVENT_TYPE_REGISTRY: Record<string, EventTypeMetadata> = {
   'voice.call.transferred.v1':                 { event_type: 'voice.call.transferred.v1',                retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
   // VA·E7 (TK-4509) — an app tool was authorized for an AI call by its session capability token.
   'voice.tool.invoked.v1':                     { event_type: 'voice.tool.invoked.v1',                    retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
+  // VA·E1 (TK-4462) — a tenant retrieved an app tool's request-signing secret (who, which tool; never the value).
+  'voice.tool.secret_revealed.v1':             { event_type: 'voice.tool.secret_revealed.v1',            retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },
 
   /* --- sdk-incident (P15·E3) — exception/incident lifecycle + SLA --- */
   'incident.opened.v1':                       { event_type: 'incident.opened.v1',                       retention_class: 'regulated',   conflict_policy: 'event-sourcing', schema_state: 'active', compaction_policy: 'none', schema_version: 1 },

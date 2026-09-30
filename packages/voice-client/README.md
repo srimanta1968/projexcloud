@@ -48,3 +48,24 @@ const { event_type, data } = result.event;
 
 A delivery older than `toleranceSeconds` (default 300) is rejected as `expired`, so a
 captured delivery cannot be replayed later.
+
+## App tools
+
+When an agent calls one of your registered tools mid-call, the voice runtime POSTs to the
+tool's HTTPS URL, signed with the tool's secret (get it once with
+`POST /api/voice-agent/tools/:tool_id/signing-secret`; changing the tool's
+`signing_secret_ref` rotates it):
+
+```ts
+import { verifyToolRequest } from '@projexlight/voice-client';
+
+const v = verifyToolRequest({ rawBody, headers: req.headers, secret: toolSigningSecret });
+if (!v.valid) return res.status(401).end(v.reason);
+const { call_id, turn_index, tool, arguments: args } = v.body;
+// v.idempotency_key = `${call_id}:${turn_index}:${tool}` — a retry carries the same key:
+// return the stored result instead of acting twice.
+res.json({ summary: '...' });   // whatever JSON you return is given to the model
+```
+
+Answer within the tool's `timeout_ms`; a slower answer is treated as a timeout and the agent
+tells the caller it could not get the information, instead of going silent.
