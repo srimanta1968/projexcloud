@@ -4,7 +4,8 @@
   "method": "POST",
   "requiresAuth": true,
   "dependsOn": [
-    "POST /api/auth/signup-tenant"
+    "POST /api/auth/signup-tenant",
+    "POST /admin/vault/keys"
   ],
   "expectedStatus": 201,
   "sdk": "sdk-vault",
@@ -28,77 +29,100 @@
   },
   "testCases": [
     {
-      "name": "Issue a root-tier vault key",
+      "name": "Issue the run tenant's tenant-tier key under the operator's root",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "payload": {
+        "tier": "tenant",
+        "parent_key_id": "{{cache:admin.vault.keys.create.response.data.key_id}}",
+        "kms_ref": "{{static:kms-tenant-api-test}}",
+        "algorithm": "AES-256-GCM",
+        "region": "us-east-1"
+      },
+      "expectedStatus": 201,
+      "expectedResponse": {
+        "data": {
+          "key_id": "string",
+          "tier": "tenant"
+        }
+      }
+    },
+    {
+      "name": "403 - a tenant cannot mint a platform (root) key",
+      "testType": "negative",
+      "coversErrorCase": "403|PlatformTier",
       "headers": {
         "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
       },
       "payload": {
         "tier": "root",
-        "kms_ref": "kms-root-001",
+        "kms_ref": "{{static:kms-root-x}}",
         "algorithm": "AES-256-GCM",
         "region": "us-east-1"
       },
-      "expectedStatus": 201
+      "expectedStatus": 403,
+      "expectedError": {
+        "code": "PlatformTier"
+      }
+    },
+    {
+      "name": "404 - the parent must be the tenant's own (or a platform key for the tenant tier)",
+      "testType": "negative",
+      "coversErrorCase": "404|NotFound",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "payload": {
+        "tier": "person",
+        "parent_key_id": "{{dynamic:uuid}}",
+        "kms_ref": "{{static:kms-p}}",
+        "algorithm": "AES-256-GCM",
+        "region": "us-east-1"
+      },
+      "expectedStatus": 404
+    },
+    {
+      "name": "401 - no token",
+      "testType": "negative",
+      "coversErrorCase": "401|Unauthorized",
+      "headers": {},
+      "payload": {
+        "tier": "tenant"
+      },
+      "expectedStatus": 401
     }
   ],
   "captureResponse": {
     "vault.keys.create.response.data.key_id": "data.key_id"
   },
-  "description": "Issues a new vault key at the requested tier of the key hierarchy and returns 201 with the key record. tier, kms_ref and region are mandatory; every non-root tier additionally requires parent_key_id, which is re-checked by a database trigger. algorithm is optional and silently defaults to AES-256-GCM - any value other than ChaCha20-Poly1305 is coerced rather than rejected. Edge cases: a tier outside the canonical list is rejected with the valid values echoed back; a non-root tier without parent_key_id is rejected before the database is touched; a parent_key_id whose tier is not the legal parent of the requested tier, or which does not exist, is surfaced as a 400 from the service layer rather than a 404; kms_ref and region are trimmed, so whitespace-only values count as missing; requires a valid JWT.",
+  "description": "Tenant route (Bearer JWT). A tenant issues a key in ITS OWN hierarchy: tenant_id comes from the token (a body tenant_id must match), platform tiers (root/app/pool) are refused with 403 PlatformTier (operators use POST /admin/vault/keys), and the parent must be the tenant's own key - or, for the tenant tier itself, a platform key. A tenant-tier key's scope_id is the tenant. The chain: the operator issues a root key, then this issues the run tenant's tenant-tier key under it - which is what POST /api/media/upload-url resolves (tier=tenant, scope=tenant, active), so no SQL seed is needed. 201 { data: key }. Errors: bad body 400; platform tier or another tenant 403; parent not the tenant's 404; no token 401.",
   "errorCases": [
-    {
-      "status": 401,
-      "code": "Unauthorized",
-      "message": "Missing bearer token",
-      "when": "Authorization header absent or not in Bearer form (requireAuth / gateway default-deny authGate)"
-    },
-    {
-      "status": 401,
-      "code": "Unauthorized",
-      "message": "Invalid or expired token",
-      "when": "Bearer token fails JWT verification or is expired (requireAuth / gateway default-deny authGate)"
-    },
-    {
-      "status": 400,
-      "code": "ValidationError",
-      "message": "body must be an object",
-      "when": "Request body is absent or not a JSON object"
-    },
-    {
-      "status": 400,
-      "code": "ValidationError",
-      "message": "tier is required / tier must be one of <KEY_TIERS>",
-      "when": "tier is missing or is not one of the canonical key tiers"
-    },
-    {
-      "status": 400,
-      "code": "ValidationError",
-      "message": "kms_ref is required",
-      "when": "kms_ref is absent or whitespace-only"
-    },
-    {
-      "status": 400,
-      "code": "ValidationError",
-      "message": "region is required",
-      "when": "region is absent or whitespace-only"
-    },
     {
       "status": 400,
       "code": "ValidationError",
       "message": "parent_key_id is required for non-root tiers",
-      "when": "tier is not \"root\" and parent_key_id is not a string"
+      "when": "bad body"
     },
     {
-      "status": 400,
-      "code": "ValidationError",
-      "message": "Invalid parent tier ... / Parent key ...",
-      "when": "issueKey rejects the parent - the parent key does not exist, or its tier is not the legal parent of the requested tier"
+      "status": 403,
+      "code": "PlatformTier",
+      "message": "root keys wrap every tenant and are issued by an operator (POST /admin/vault/keys)",
+      "when": "root/app/pool tier"
     },
     {
-      "status": 500,
-      "code": "InternalError",
-      "message": "InternalError",
-      "when": "Any other issueKey failure (KMS unavailable, database error, hierarchy trigger failure)"
+      "status": 404,
+      "code": "NotFound",
+      "message": "parent key not found",
+      "when": "parent is another tenant's key or unknown"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "authentication required",
+      "when": "missing token"
     }
-  ]
+  ],
+  "taskId": "d16623c0-a671-4f32-b8a1-6970f0773d76",
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9"
 }

@@ -24,19 +24,12 @@ If yes it is not a fixture, and it belongs in the product.
 These create rows a real tenant genuinely needs. They are in this directory because nothing
 in the product creates them, which is a gap, not a test requirement. Tracked on **TK-4156**.
 
-### `media_seed_tenant_vault_key.sql` — the clearest case
+### `media_seed_tenant_vault_key.sql` — removed (TK-4137)
 
-Its own header says it: *"signup-tenant does NOT provision this key."*
-
-`resolveVaultKeyRef()` requires `vault.key WHERE tier='tenant' AND scope_id=<tenant> AND
-state='active'`. Every tenant that stores media needs one, and tenant creation does not
-issue it. In production this is a real `400 VaultKeyMissing` for every tenant ever created.
-
-**Correct fix:** issue a tenant-tier key as part of tenant creation. Note this needs a
-decision first — `sdk-identity` has no `sdk-vault` dependency today, so provisioning inside
-`signup-tenant` adds an edge between two foundation SDKs. The alternative is a tenant
-lifecycle hook that vault subscribes to, which keeps identity unaware of vault. **Do not add
-the dependency without making that call deliberately.**
+Deleted. `POST /api/media/upload-url` creates the tenant's vault key on demand
+(`sdk-vault ensureTenantKey`), so a fresh tenant no longer hits `400 VaultKeyMissing` and needs no
+fixture. A definition that needs an explicit tenant-tier key uses the API chain instead:
+`POST /admin/vault/keys` (operator, root) then `POST /api/vault/keys` (tenant, `tier: tenant` under it).
 
 ### `taxonomy_seed_prompt_template.sql`
 
