@@ -46,6 +46,7 @@ Feature: Voice agent builder — build, preview, test and publish
   @ui_test
   @portal:tenantAdmin
   @login:user
+  @scenario_id:30eb51db-0654-4753-b33f-addeef67c192
   Scenario: 3. A sandbox check runs simulated callers but never unlocks publishing
     Given I navigate to "/voice/agents"
     When I fill "name" with "Sandbox agent ${timestamp}"
