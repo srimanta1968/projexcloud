@@ -28,6 +28,7 @@ const NAV = [
   { href: '/consent', label: 'Consent' },
   { href: '/ai/mcp-servers', label: 'AI' },
   { href: '/ai/providers', label: 'AI Providers' },
+  { href: '/voice/agents', label: 'Voice agents' },
   { href: '/voice/keys', label: 'Voice keys' },
   { href: '/voice/test', label: 'Voice' },
   { href: '/byok', label: 'BYOK' },

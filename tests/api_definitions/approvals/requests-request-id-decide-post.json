@@ -33,6 +33,38 @@
       "headers": {
         "Authorization": "Bearer {{cache:auth.register.response.data.token}}"
       }
+    },
+    {
+      "name": "403 - no pending step of this request is assigned to the caller",
+      "testType": "negative",
+      "coversErrorCase": "403|Forbidden",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.register.response.data.token}}"
+      },
+      "pathParams": {
+        "request_id": "{{dynamic:uuid}}"
+      },
+      "payload": {
+        "decision": "approved",
+        "comment": "not mine to decide"
+      },
+      "expectedStatus": 403
+    },
+    {
+      "name": "400 - decision must be approved or rejected",
+      "testType": "negative",
+      "coversErrorCase": "400|ValidationError",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.register.response.data.token}}"
+      },
+      "pathParams": {
+        "request_id": "{{cache:approvals.requests.create.response.data.request.request_id}}"
+      },
+      "payload": {
+        "decision": "maybe",
+        "comment": "x"
+      },
+      "expectedStatus": 400
     }
   ],
   "expectedResponse": {
@@ -68,31 +100,31 @@
   "captureResponse": {
     "approvals.requests.decide.response.success": "success"
   },
-  "description": "Gateway request-level decision shortcut: stamps approval.request with status, final_decision, resolved_at and a reason of the form '[decided by <persona>] <comment>'. Distinct from the step-level decide route — it resolves the whole request in one write. Edge cases: decision, comment AND decider_persona_id are all mandatory (one 400 covers all three); the UPDATE is guarded by status='pending', so deciding an already-resolved request updates zero rows yet STILL returns {success:true} — the same holds for an unknown :request_id, so this endpoint can never report 404 or 409; decider_persona_id is only recorded in free text and is not checked against the step's assigned approver.",
+  "description": "Gateway request-level decision shortcut: decides the CALLER'S OWN pending step on the request through sdk-approval (so route semantics — multi-step, quorum, SLA — apply) and returns {success:true, data:<decide result>}. The request must belong to the caller's tenant and have a pending step whose approver is one of the caller's personas; otherwise 403 (\"no pending step of this request is assigned to you\") — an unknown or foreign request id is also 403, never confirming it exists. decision is approved|rejected and comment is required (400). decider_persona_id is optional and, when given, must be one of the caller's personas (403). A step already decided is 409. This route previously UPDATEd approval.request directly for any request id with a self-declared decider_persona_id, so anyone could approve anything.",
   "errorCases": [
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "decision (approved|rejected) + comment required",
+      "when": "decision is not approved/rejected or comment is missing"
+    },
+    {
+      "status": 403,
+      "code": "Forbidden",
+      "message": "no pending step of this request is assigned to you",
+      "when": "the request is not the caller tenant's, is not pending, or has no pending step for one of the caller's personas; or decider_persona_id is not the caller's"
+    },
+    {
+      "status": 409,
+      "code": "StepAlreadyDecided",
+      "message": "step already decided",
+      "when": "the caller's step was decided concurrently"
+    },
     {
       "status": 401,
       "code": "Unauthorized",
       "message": "Missing bearer token",
-      "when": "Gateway default-deny authGate (AUTH_GATE_MODE=enforce): path is not on the public allowlist and no bearer token was sent"
-    },
-    {
-      "status": 401,
-      "code": "Unauthorized",
-      "message": "Invalid or expired token",
-      "when": "authGate ran requireAuth and the JWT failed verification or had expired"
-    },
-    {
-      "status": 400,
-      "code": "ValidationError",
-      "message": "decision + comment + decider_persona_id required",
-      "when": "any of decision, comment or decider_persona_id is absent/empty"
-    },
-    {
-      "status": 500,
-      "code": "InternalError",
-      "message": "<postgres error text>",
-      "when": ":request_id is not a valid UUID, or decision is not an accepted approval.request status value"
+      "when": "no Authorization header"
     }
   ]
 }

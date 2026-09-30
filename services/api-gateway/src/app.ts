@@ -188,6 +188,9 @@ import {
   server as approvalServer,
   startSlaTimer,
   submitRequest as submitApprovalRequest,
+  decide as decideApprovalStep,
+  NotYourStepError,
+  StepAlreadyDecidedError,
 } from '@projexlight/sdk-approval';
 import {
   migrationsDir as tenantLifecycleMigrationsDir,
@@ -4207,10 +4210,26 @@ const start = async (): Promise<void> => {
       }
     });
 
-    // Approvals (tenant-scoped)
-    app.get<{ Querystring: { tenant_id?: string } }>('/api/approvals/routes', async (req, reply) => {
-      const tenant_id = req.query.tenant_id;
-      if (!tenant_id) return reply.code(400).send({ success: false, error: 'tenant_id required' });
+    // Approvals (tenant-scoped). The tenant is the authenticated one: a tenant_id in the query
+    // is accepted only when it matches (it used to be trusted as-is, so any tenant's token could
+    // list another tenant's approval routes and pending requests). Omitting it defaults to the
+    // token's tenant, which is what the tenant portal relies on.
+    const approvalsTenant = (req: FastifyRequest, reply: FastifyReply, named?: string): string | null => {
+      const authTenant = (req as FastifyRequest & { auth?: { tenant_id?: string | null } }).auth?.tenant_id ?? null;
+      if (named && authTenant && named !== authTenant) {
+        void reply.code(403).send({ success: false, error: 'Forbidden', details: ['tenant_id does not match the authenticated tenant'] });
+        return null;
+      }
+      const tenant = named || authTenant;
+      if (!tenant) {
+        void reply.code(400).send({ success: false, error: 'tenant_id required' });
+        return null;
+      }
+      return tenant;
+    };
+    app.get<{ Querystring: { tenant_id?: string } }>('/api/approvals/routes', { preHandler: requireAuth }, async (req, reply) => {
+      const tenant_id = approvalsTenant(req, reply, req.query.tenant_id);
+      if (!tenant_id) return reply;
       try {
         const { rows } = await dataService.query(
           `SELECT route_id, name, status, created_at,
@@ -4228,9 +4247,9 @@ const start = async (): Promise<void> => {
 
     app.get<{
       Querystring: { tenant_id?: string; assignee_persona_id?: string };
-    }>('/api/approvals/requests', async (req, reply) => {
-      const tenant_id = req.query.tenant_id;
-      if (!tenant_id) return reply.code(400).send({ success: false, error: 'tenant_id required' });
+    }>('/api/approvals/requests', { preHandler: requireAuth }, async (req, reply) => {
+      const tenant_id = approvalsTenant(req, reply, req.query.tenant_id);
+      if (!tenant_id) return reply;
       try {
         const params: unknown[] = [tenant_id];
         let assigneeFilter = '';
@@ -4261,26 +4280,43 @@ const start = async (): Promise<void> => {
     app.post<{
       Params: { request_id: string };
       Body: { decision?: 'approved' | 'rejected'; comment?: string; decider_persona_id?: string };
-    }>('/api/approvals/requests/:request_id/decide', async (req, reply) => {
+    }>('/api/approvals/requests/:request_id/decide', { preHandler: requireAuth }, async (req, reply) => {
+      // Decides the caller's OWN pending step on the request through sdk-approval, so route
+      // semantics (multi-step, quorum, SLA) apply. This used to UPDATE approval.request directly
+      // for any request id with a self-declared decider_persona_id, so anyone could approve
+      // anything — their own voice-agent publish requests included.
       const b = req.body ?? {};
-      if (!b.decision || !b.comment || !b.decider_persona_id) {
-        return reply.code(400).send({ success: false, error: 'decision + comment + decider_persona_id required' });
+      if ((b.decision !== 'approved' && b.decision !== 'rejected') || !b.comment) {
+        return reply.code(400).send({ success: false, error: 'decision (approved|rejected) + comment required' });
+      }
+      const auth = (req as FastifyRequest & {
+        auth?: { tenant_id?: string | null; sub?: string; primary_persona_id?: string | null; all_persona_ids?: string[] };
+      }).auth;
+      const mine = [auth?.primary_persona_id, auth?.sub, ...(auth?.all_persona_ids ?? [])]
+        .filter((x): x is string => typeof x === 'string' && x.length > 0);
+      if (b.decider_persona_id && !mine.includes(b.decider_persona_id)) {
+        return reply.code(403).send({ success: false, error: 'decider_persona_id is not a persona of the authenticated caller' });
       }
       try {
-        await dataService.query(
-          `UPDATE approval.request
-              SET status = $2, final_decision = $3, resolved_at = now(),
-                  reason = $4
-            WHERE request_id = $1 AND status = 'pending'`,
-          [
-            req.params.request_id,
-            b.decision,
-            b.decision === 'approved' ? 'approve' : 'reject',
-            `[decided by ${b.decider_persona_id}] ${b.comment}`,
-          ],
+        const step = await dataService.one<{ step_id: string; approver_persona_id: string }>(
+          `SELECT s.step_id, s.approver_persona_id
+             FROM approval.step s JOIN approval.request r ON r.request_id = s.request_id
+            WHERE r.request_id = $1::uuid AND r.tenant_id = $2::uuid AND r.status = 'pending'
+              AND s.decision IS NULL AND s.approver_persona_id::text = ANY($3::text[])
+            ORDER BY s.step_index LIMIT 1`,
+          [req.params.request_id, auth?.tenant_id ?? null, mine],
         );
-        return { success: true };
+        if (!step) return reply.code(403).send({ success: false, error: 'no pending step of this request is assigned to you' });
+        const result = await decideApprovalStep({
+          step_id: step.step_id,
+          decision: b.decision === 'approved' ? 'approve' : 'reject',
+          acting_persona_id: step.approver_persona_id,
+          reason: b.comment,
+        });
+        return { success: true, data: result };
       } catch (e) {
+        if (e instanceof NotYourStepError) return reply.code(403).send({ success: false, error: e.message });
+        if (e instanceof StepAlreadyDecidedError) return reply.code(409).send({ success: false, error: e.message });
         return reply.code(500).send({ success: false, error: (e as Error).message });
       }
     });

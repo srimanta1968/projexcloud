@@ -1,4 +1,5 @@
 import { revalidatePath } from 'next/cache';
+import { gateway } from '../../lib/gateway';
 import {
   Alert,
   Button,
@@ -25,56 +26,50 @@ interface RequestRow {
   route_id: string;
   subject_ref: string;
   status: string;
-  created_at: string;
+  /** The gateway returns requested_at for requests. */
+  requested_at: string;
 }
 
-const TENANT_ID = process.env.TENANT_ADMIN_TENANT_ID ?? '';
-const SELF_PERSONA = process.env.TENANT_ADMIN_PERSONA_ID ?? '';
+/*
+ * Every call goes through the authenticated gateway helper: the tenant and the approver are
+ * the signed-in admin's own (the gateway pins both). These calls used to be bare fetches with
+ * no Authorization header and a tenant / persona from env vars — every one 401'd against the
+ * default-deny gate, so the page showed nothing and nobody could decide a request here.
+ */
+
+async function myPersona(): Promise<string | null> {
+  try {
+    const me = await gateway.get<{ primary_persona_id?: string | null; sub?: string }>('/api/userinfo');
+    return me.primary_persona_id ?? me.sub ?? null;
+  } catch { return null; }
+}
 
 async function fetchRoutes(): Promise<RouteRow[]> {
-  if (!TENANT_ID) return [];
-  try {
-    const res = await fetch(
-      `${process.env.NEXT_PUBLIC_GATEWAY_URL}/api/approvals/routes?tenant_id=${encodeURIComponent(TENANT_ID)}`,
-      { cache: 'no-store' },
-    );
-    if (!res.ok) return [];
-    return (await res.json()).data ?? [];
-  } catch { return []; }
+  try { return await gateway.get<RouteRow[]>('/api/approvals/routes'); } catch { return []; }
 }
 
-async function fetchMyPending(): Promise<RequestRow[]> {
-  if (!TENANT_ID || !SELF_PERSONA) return [];
+async function fetchMyPending(persona: string | null): Promise<RequestRow[]> {
+  if (!persona) return [];
   try {
-    const res = await fetch(
-      `${process.env.NEXT_PUBLIC_GATEWAY_URL}/api/approvals/requests?tenant_id=${encodeURIComponent(TENANT_ID)}&assignee_persona_id=${encodeURIComponent(SELF_PERSONA)}`,
-      { cache: 'no-store' },
-    );
-    if (!res.ok) return [];
-    return (await res.json()).data ?? [];
+    return await gateway.get<RequestRow[]>(`/api/approvals/requests?assignee_persona_id=${encodeURIComponent(persona)}`);
   } catch { return []; }
 }
 
 async function decideAction(formData: FormData): Promise<void> {
   'use server';
   const request_id = String(formData.get('request_id') ?? '');
-  await fetch(
-    `${process.env.NEXT_PUBLIC_GATEWAY_URL}/api/approvals/requests/${encodeURIComponent(request_id)}/decide`,
-    {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({
-        decision: String(formData.get('decision') ?? 'rejected'),
-        comment: String(formData.get('comment') ?? ''),
-        decider_persona_id: SELF_PERSONA,
-      }),
-    },
-  );
+  // The gateway decides the caller's own pending step on the request (403 when there is none).
+  await gateway.post(`/api/approvals/requests/${encodeURIComponent(request_id)}/decide`, {
+    decision: String(formData.get('decision') ?? 'rejected'),
+    comment: String(formData.get('comment') ?? ''),
+  }).catch(() => undefined);
   revalidatePath('/approvals');
 }
 
 export default async function ApprovalsPage(): Promise<JSX.Element> {
-  const [routes, pending] = await Promise.all([fetchRoutes(), fetchMyPending()]);
+  const persona = await myPersona();
+  const [routes, pending] = await Promise.all([fetchRoutes(), fetchMyPending(persona)]);
+  const SELF_PERSONA = persona;
   return (
     <div>
       <PageHeader title="Approvals" description="Decisions assigned to you and the approval routes configured for this tenant." />
@@ -82,7 +77,7 @@ export default async function ApprovalsPage(): Promise<JSX.Element> {
       <h2 className="mb-3 text-lg font-semibold">My pending decisions</h2>
       {!SELF_PERSONA && (
         <Alert variant="warning" className="mb-3">
-          Set <code>TENANT_ADMIN_PERSONA_ID</code> to see decisions assigned to you.
+          Your session has no persona, so no decisions can be assigned to you.
         </Alert>
       )}
       <div className="mb-6 rounded-lg border">
@@ -103,7 +98,7 @@ export default async function ApprovalsPage(): Promise<JSX.Element> {
               <TableRow key={r.request_id}>
                 <TableCell className="font-mono text-[11px]">{r.request_id}</TableCell>
                 <TableCell className="font-mono text-xs">{r.subject_ref}</TableCell>
-                <TableCell className="text-xs text-muted-foreground">{new Date(r.created_at).toLocaleString()}</TableCell>
+                <TableCell className="text-xs text-muted-foreground">{new Date(r.requested_at).toLocaleString()}</TableCell>
                 <TableCell>
                   <form action={decideAction} className="flex items-center gap-2">
                     <input type="hidden" name="request_id" value={r.request_id} />

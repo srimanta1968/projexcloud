@@ -52,12 +52,36 @@ export async function submitRequestHandler(req: FastifyRequest, reply: FastifyRe
   } catch (err) { fail(req, reply, err); }
 }
 
-/** POST /api/approvals/steps/:step_id/decide */
+/** The personas the authenticated caller may act as (primary, any other, and its subject). */
+function callerPersonas(req: FastifyRequest): Set<string> {
+  const auth = (req as FastifyRequest & { auth?: { sub?: string; primary_persona_id?: string | null; all_persona_ids?: string[] } }).auth;
+  const ids = [auth?.primary_persona_id, auth?.sub, ...(auth?.all_persona_ids ?? [])].filter((x): x is string => typeof x === 'string' && x.length > 0);
+  return new Set(ids);
+}
+
+/**
+ * POST /api/approvals/steps/:step_id/decide
+ *
+ * The acting persona is the CALLER's: omitted, it defaults to the caller's primary persona;
+ * given, it must be one of the caller's own personas (403 otherwise). It used to be taken
+ * from the body as-is, so anyone could decide a step by naming its approver — which made
+ * every approval gate (voice agent publish included) self-approvable.
+ */
 export async function decideHandler(
   req: FastifyRequest<{ Params: { step_id: string } }>,
   reply: FastifyReply,
 ): Promise<void> {
-  const v = validateDecide(req.body, req.params.step_id);
+  const mine = callerPersonas(req);
+  const body = { ...((req.body ?? {}) as Record<string, unknown>) };
+  const primary = (req as FastifyRequest & { auth?: { primary_persona_id?: string | null; sub?: string } }).auth;
+  if (body.acting_persona_id === undefined || body.acting_persona_id === null || body.acting_persona_id === '') {
+    body.acting_persona_id = primary?.primary_persona_id ?? primary?.sub;
+  }
+  if (typeof body.acting_persona_id === 'string' && mine.size > 0 && !mine.has(body.acting_persona_id)) {
+    reply.code(403).send({ error: 'NotYourPersona', details: ['acting_persona_id is not a persona of the authenticated caller'] });
+    return;
+  }
+  const v = validateDecide(body, req.params.step_id);
   if (!v.ok) { reply.code(400).send({ error: 'ValidationError', details: v.errors }); return; }
   try {
     const result = await decide(v.value);

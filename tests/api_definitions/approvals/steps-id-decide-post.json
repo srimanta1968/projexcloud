@@ -32,6 +32,26 @@
         "reason": "LGTM after review"
       },
       "expectedStatus": 200
+    },
+    {
+      "name": "403 NotYourPersona - acting_persona_id is not the caller",
+      "testType": "negative",
+      "coversErrorCase": "403|NotYourPersona",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "pathParams": {
+        "step_id": "{{cache:approvals.requests.create.response.data.pending_steps.0.step_id}}"
+      },
+      "payload": {
+        "decision": "approve",
+        "acting_persona_id": "{{dynamic:uuid}}",
+        "reason": "forged"
+      },
+      "expectedStatus": 403,
+      "expectedError": {
+        "error": "NotYourPersona"
+      }
     }
   ],
   "expectedResponse": {
@@ -77,7 +97,7 @@
     "approvals.steps.decide.response.data.step.step_id": "data.step.step_id",
     "approvals.steps.decide.response.data.request.status": "data.request.status"
   },
-  "description": "Records an approve/reject decision on one approval step and advances the request. Edge cases: :step_id must be a UUID and decision must be exactly 'approve' or 'reject' (anything else, including 'approved'/'rejected', is a 400); acting_persona_id must be a UUID and must MATCH the step's assigned approver — a different persona gets 403 NotYourStep, the key authorisation case here; a step that already carries a decision returns 409 StepAlreadyDecided, so this endpoint is explicitly NOT idempotent on retry; an unknown step_id returns 404 StepNotFound; reason is optional even on reject.",
+  "description": "Records an approve/reject decision on one approval step and advances the request. Edge cases: :step_id must be a UUID and decision must be exactly 'approve' or 'reject' (anything else, including 'approved'/'rejected', is a 400); acting_persona_id must be a UUID and must MATCH the step's assigned approver — a different persona gets 403 NotYourStep, the key authorisation case here; a step that already carries a decision returns 409 StepAlreadyDecided, so this endpoint is explicitly NOT idempotent on retry; an unknown step_id returns 404 StepNotFound; reason is optional even on reject. CALLER-BOUND: acting_persona_id is the caller's own — omitted, it defaults to the token's primary persona; given, it must be one of the token's personas (403 NotYourPersona otherwise). It was previously trusted from the body, so anyone could decide a step by naming its approver (self-approving e.g. a voice agent publish).",
   "errorCases": [
     {
       "status": 401,
@@ -120,6 +140,12 @@
       "code": "InternalError",
       "message": "InternalError",
       "when": "Unexpected service/DB failure (connection loss, or a constraint the handler does not map)"
+    },
+    {
+      "status": 403,
+      "code": "NotYourPersona",
+      "message": "acting_persona_id is not a persona of the authenticated caller",
+      "when": "acting_persona_id is given and is not one of the bearer token's personas"
     }
   ]
 }
