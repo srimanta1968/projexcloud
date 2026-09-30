@@ -25,6 +25,10 @@ const API_BASE =
   (typeof window !== 'undefined'
     ? `${window.location.protocol}//${window.location.hostname}:${GATEWAY_PORT}`
     : `http://localhost:${GATEWAY_PORT}`);
+/** WebSocket origin of the gateway (ws:// or wss://), for live streams such as call transcripts. */
+export function gatewayWsBase(): string {
+  return API_BASE.replace(/^http/, 'ws');
+}
 const TOKEN_KEY = 'projexlight.auth.token';
 // Mirrors the token into a cookie so Next middleware (edge, no localStorage)
 // can gate authenticated routes. Must match SESSION_COOKIE in

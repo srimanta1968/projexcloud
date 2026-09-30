@@ -34,6 +34,7 @@ function decode(token: string): DecodedClaims | null {
 
 const TILES = [
   { href: '/build', label: 'Build with AI', desc: 'Compose a vertical app from blueprints via chat' },
+  { href: '/voice/monitor', label: 'Live calls', desc: 'Active AI calls with live transcripts; completed transcripts' },
   { href: '/dashboard/config', label: 'Configuration', desc: 'App settings & your personal keys' },
   { href: '/admin/audit', label: 'Audit ledger', desc: 'Append + verify the tamper-evident chain' },
   { href: '/admin/keys', label: 'Key hierarchy', desc: 'Vault key tiers + status' },
