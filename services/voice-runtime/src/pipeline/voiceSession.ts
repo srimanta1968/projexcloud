@@ -22,6 +22,7 @@ import { ttsProvider } from '../providers/tts';
 import type { SttStream, Transcript } from '../providers/types';
 import type { SessionContext, SessionStore, TurnRecord } from '../session/sessionStore';
 import { ClauseChunker } from './chunker';
+import { openingDisclosure } from './disclosure';
 import { Speaker, type TtsBinding } from './speaker';
 import { soundsIncomplete, turnConfig, type TurnConfig } from './turnDetector';
 import { classifyTurn, routerConfig } from './turnRouter';
@@ -77,6 +78,8 @@ export class VoiceSession {
   /** The agent line currently being spoken (greeting or reply), to mark on barge-in. */
   private speakingRec: TurnRecord | null = null;
   private readonly router: ReturnType<typeof routerConfig>;
+  /** True while the mandatory disclosure plays: barge-in cannot cut it short. */
+  private protectedLine = false;
 
   constructor(
     protected readonly room: Room,
@@ -140,18 +143,33 @@ export class VoiceSession {
     await this.cleanup();
   }
 
-  /** Opening line. TK-4461 prepends the mandatory AI disclosure here. */
+  /**
+   * Opening (TK-4461): the platform's AI disclosure — plus the recording notice when the
+   * bootstrap says the call may be recorded — ALWAYS comes first and plays to the end even
+   * if the caller talks over it; then the agent's greeting (interruptible as usual).
+   */
   protected async greet(): Promise<void> {
-    const g = this.session.boot.agent.greeting;
+    const b = this.session.boot;
+    const disclosure = openingDisclosure(b.agent.language, b.recording?.notice === true);
+    this.protectedLine = true;
+    const played = this.speakAgentLine(disclosure, true);
+    void played.then(() => {
+      this.protectedLine = false;
+      // The caller spoke over the disclosure and is still talking: yield now.
+      if (this.turnCfg.bargeIn && this.vad.isSpeaking && this.speaker.busy) this.bargeIn(Date.now());
+    });
+    log.info('opening disclosure', { callId: this.session.callId, recording_notice: b.recording?.notice === true, basis: b.recording?.basis ?? null });
+    const g = b.agent.greeting;
     if (g) this.speakAgentLine(g);
   }
 
-  protected speakAgentLine(text: string): void {
+  protected speakAgentLine(text: string, isProtected = false): Promise<void> {
     const rec = this.record({ speaker: 'agent', text, started_ms: this.elapsed(), interrupted: false });
     this.history.push({ role: 'assistant', content: text });
-    this.speakingRec = rec;
-    this.speaker.say(text, this.tts);
-    void this.speaker.idle().then(() => { if (this.speakingRec === rec) this.speakingRec = null; });
+    if (!isProtected) this.speakingRec = rec;
+    const played = this.speaker.say(text, this.tts);
+    void played.then(() => { if (this.speakingRec === rec) this.speakingRec = null; });
+    return played;
   }
 
   private findCallerTrack(): RemoteTrack | null {
@@ -214,6 +232,7 @@ export class VoiceSession {
   /** The caller started talking: they are not done yet, and may be talking over the agent. */
   protected onSpeechStart(at: number): void {
     this.clearTurnTimers();
+    if (this.protectedLine) return;
     if (this.turnCfg.bargeIn && (this.speaker.busy || this.turnAbort !== null)) this.bargeIn(at);
   }
 

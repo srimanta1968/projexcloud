@@ -31,6 +31,8 @@ interface Item {
   started: boolean;
   samplesTotal: number;
   samplesPlayed: number;
+  /** Resolves when this clause has finished playing (or was dropped). */
+  settle: () => void;
 }
 
 /** Linear resampler for PCM16 mono (TTS rate -> output rate). */
@@ -72,16 +74,20 @@ export class Speaker {
     return this.playing !== null || this.queue.length > 0;
   }
 
-  say(text: string, tts: TtsBinding): void {
+  /** Queues a clause; the promise resolves when it has played out (or was interrupted). */
+  say(text: string, tts: TtsBinding): Promise<void> {
     const clean = text.trim();
-    if (!clean) return;
+    if (!clean) return Promise.resolve();
+    let settle!: () => void;
+    const played = new Promise<void>((r) => { settle = r; });
     const item: Item = {
       text: clean, tts, abort: new AbortController(), chunks: [], rate: tts.provider.sampleRate(tts.opts),
-      done: false, error: null, wake: null, started: false, samplesTotal: 0, samplesPlayed: 0,
+      done: false, error: null, wake: null, started: false, samplesTotal: 0, samplesPlayed: 0, settle,
     };
     this.queue.push(item);
     this.prefetch();
     if (!this.loop) this.loop = this.run().finally(() => { this.loop = null; });
+    return played;
   }
 
   /** Starts synthesis for the playing item and the one after it. */
@@ -131,6 +137,10 @@ export class Speaker {
         log.warn('tts failed for a clause', { provider: item.tts.provider.id, error: item.error.message });
       }
       this.playing = null;
+      // The clause's last frames are still in the source queue: it has been HEARD only once
+      // they play out. An interrupted clause settles at once (its queue was cleared).
+      if (item.abort.signal.aborted) item.settle();
+      else setTimeout(item.settle, this.source.queuedDuration);
     }
     await this.flushCarry();
     // Bounded: after clearQueue() (barge-in) a playout wait may never be signalled.
@@ -196,7 +206,7 @@ export class Speaker {
       const w = current.text.split(/\s+/);
       heard = w.slice(0, Math.round(w.length * frac)).join(' ');
     }
-    for (const p of pending) p.abort.abort();
+    for (const p of pending) { p.abort.abort(); p.settle(); }
     this.carry = new Int16Array(0);
     this.source.clearQueue();
     const dropped = [current?.text.slice(heard.length) ?? '', ...pending.map((p) => p.text)].join(' ').trim();

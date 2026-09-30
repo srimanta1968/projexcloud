@@ -73,8 +73,8 @@ export {
 export type { Carrier, Fallback, NumberBinding, BindNumberInput, InboundRoute, KillSwitchState } from './services/numberService';
 
 export { registerTool, listTools, getTool, updateTool, effectiveTools, callSessionContext, toolSigningSecret } from './services/toolService';
-export { RUNTIME_LAYERS, bootstrapRuntimeSession, setSessionTokenMinter } from './services/bootstrapService';
-export type { BootstrapInput, RuntimeBootstrap, RuntimeFallback, RuntimeLayer, RuntimeLayerConfig, RuntimeTool, KeyHandle, SessionTokenGrant, SessionTokenMinter, TierRoute } from './services/bootstrapService';
+export { RUNTIME_LAYERS, bootstrapRuntimeSession, setSessionTokenMinter, setRecordingRuleResolver } from './services/bootstrapService';
+export type { BootstrapInput, RuntimeBootstrap, RuntimeFallback, RuntimeLayer, RuntimeLayerConfig, RuntimeTool, KeyHandle, SessionTokenGrant, SessionTokenMinter, TierRoute, RecordingDecision, RecordingRuleResolver } from './services/bootstrapService';
 export type { CallSessionContext } from './services/toolService';
 export type { AppTool, RegisterToolInput, UpdateToolInput } from './services/toolService';
 

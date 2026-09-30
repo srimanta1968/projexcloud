@@ -393,6 +393,7 @@ import {
   callSessionContext,
   bootstrapRuntimeSession,
   setSessionTokenMinter,
+  setRecordingRuleResolver,
   type BootstrapInput,
   applyCarrierStatus,
   registerCarrierProvisioner,
@@ -415,6 +416,8 @@ import {
   setPlanCapResolver,
   setPlanAlertResolver,
   capacityOverview,
+  recordingRuleFor,
+  countryOfNumber,
   setCallOriginator,
   listCallerIds,
   DialerError,
@@ -1455,6 +1458,9 @@ setSessionTokenMinter(async (ctx) => {
   if (!t.token) throw new Error('session token mint returned no bearer');
   return { token: t.token, token_id: t.token_id, expires_at: t.expires_at, allowed_tools: t.allowed_tools };
 });
+// TK-4461 — an inbound call's recording rule is the caller's jurisdiction's (sdk-dialer
+// registry): prohibited = no recording; otherwise record WITH the spoken notice.
+setRecordingRuleResolver((callerNumber) => recordingRuleFor(callerNumber ? countryOfNumber(callerNumber) : null));
 app.post('/api/admin/voice-agent/runtime/bootstrap', async (req, reply) => {
   if (!(await checkAdminToken(req, reply))) return;
   reply.header('cache-control', 'no-store');

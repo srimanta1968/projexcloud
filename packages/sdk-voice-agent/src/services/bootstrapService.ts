@@ -75,6 +75,30 @@ export interface TierRoute {
   note?: string;
 }
 
+/**
+ * Whether this call may be recorded, and so whether the agent must say so (TK-4461).
+ * Outbound: the dialer's recording gate verdict stored on the call. Inbound: the caller's
+ * jurisdiction rule — prohibited means no recording; one-party and all-party mean recording
+ * WITH a spoken notice (for all-party, the notice before any recording is what makes it
+ * lawful). Test calls: the call's own recording_consent (unset = not recorded).
+ */
+export interface RecordingDecision {
+  permitted: boolean;
+  /** Speak the recording notice at the start of the call. */
+  notice: boolean;
+  basis: string;
+  rule: 'one_party' | 'all_party' | 'prohibited' | null;
+  jurisdiction: string | null;
+}
+
+export type RecordingRuleResolver = (callerNumber: string | null) => Promise<{ rule: 'one_party' | 'all_party' | 'prohibited'; basis: string; jurisdiction: string | null }>;
+
+let recordingRuleResolver: RecordingRuleResolver | null = null;
+/** The gateway wires sdk-dialer's recordingRuleFor (by the caller's country). */
+export function setRecordingRuleResolver(fn: RecordingRuleResolver | null): void {
+  recordingRuleResolver = fn;
+}
+
 export interface SessionTokenGrant {
   token: string;
   token_id: string;
@@ -119,6 +143,8 @@ export interface RuntimeBootstrap {
   tools: RuntimeTool[];
   /** voice.fast / voice.complex, resolved once per call from the tenant's route rules. */
   routing: Record<'voice.fast' | 'voice.complex', TierRoute>;
+  /** Recording permission and whether the opening must include the recording notice. */
+  recording: RecordingDecision;
   session_token: SessionTokenGrant;
   /** Nothing in this payload is valid past this instant (the session token's expiry). */
   expires_at: string;
@@ -224,6 +250,17 @@ async function keyHandle(tenantId: string, bindingId: string, priority: 'primary
     priority,
     key,
   }));
+}
+
+async function recordingDecision(call: CallRow): Promise<RecordingDecision> {
+  if (call.direction === 'outbound' || call.is_test) {
+    const permitted = call.recording_consent === true;
+    return { permitted, notice: permitted, basis: call.is_test ? 'test_call' : 'dialer_gate', rule: null, jurisdiction: call.jurisdiction };
+  }
+  if (!recordingRuleResolver) return { permitted: false, notice: false, basis: 'no_recording_policy', rule: null, jurisdiction: null };
+  const r = await recordingRuleResolver(call.from_number);
+  const permitted = r.rule !== 'prohibited';
+  return { permitted, notice: permitted, basis: r.basis, rule: r.rule, jurisdiction: r.jurisdiction };
 }
 
 const TIERS = [['voice.fast', 'llm_fast'], ['voice.complex', 'llm_complex']] as const;
@@ -333,6 +370,7 @@ export async function bootstrapRuntimeSession(input: BootstrapInput): Promise<Ru
   }
 
   const routing = await applyTierRoutes(call.tenant_id, layers);
+  const recording = await recordingDecision(call);
 
   const tools: RuntimeTool[] = (await effectiveTools(call.tenant_id, call.agent_version_id)).map((t) => ({
     tool_id: t.tool_id,
@@ -348,15 +386,16 @@ export async function bootstrapRuntimeSession(input: BootstrapInput): Promise<Ru
   const session_token = await sessionTokenMinter(ctx);
 
   // First bootstrap of this call: stamp it, mark a test call live, emit voice.call.started.
-  const stamped = await dataService.one<{ status: string; context: Record<string, unknown> }>(
+  const stamped = await dataService.one<{ status: string; context: Record<string, unknown>; recording_consent: boolean | null }>(
     `UPDATE voice_agent.call
         SET context = COALESCE(context, '{}'::jsonb) || jsonb_build_object('runtime', jsonb_build_object('bootstrapped_at', now(), 'token_id', $3::text)),
             status = CASE WHEN is_test AND status = 'queued' THEN 'in_progress' ELSE status END,
             started_at = CASE WHEN is_test OR direction = 'inbound' THEN COALESCE(started_at, now()) ELSE started_at END,
+            recording_consent = CASE WHEN direction = 'inbound' AND NOT is_test THEN COALESCE(recording_consent, $4::boolean) ELSE recording_consent END,
             updated_at = now()
       WHERE tenant_id = $1 AND call_id = $2 AND NOT (COALESCE(context, '{}'::jsonb) ? 'runtime')
-      RETURNING status, context`,
-    [call.tenant_id, call.call_id, session_token.token_id],
+      RETURNING status, context, recording_consent`,
+    [call.tenant_id, call.call_id, session_token.token_id, recording.permitted],
   );
   const first = !!stamped;
   if (first) {
@@ -397,7 +436,7 @@ export async function bootstrapRuntimeSession(input: BootstrapInput): Promise<Ru
       to_number: call.to_number,
       subject_ref: call.subject_ref,
       jurisdiction: call.jurisdiction,
-      recording_consent: call.recording_consent,
+      recording_consent: stamped ? stamped.recording_consent : call.recording_consent,
       gate_verdicts: call.gate_verdicts,
       context: stamped?.context ?? call.context ?? {},
     },
@@ -416,6 +455,7 @@ export async function bootstrapRuntimeSession(input: BootstrapInput): Promise<Ru
     stack: { profile_id: profile.profile_id, preset_key: profile.preset_key, certified: profile.certified, layers },
     tools,
     routing,
+    recording,
     session_token,
     expires_at: session_token.expires_at,
     first_bootstrap: first,

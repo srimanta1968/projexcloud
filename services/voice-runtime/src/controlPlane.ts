@@ -71,6 +71,8 @@ export interface Bootstrap {
   tools: RuntimeTool[];
   /** voice.fast / voice.complex as resolved from the tenant's route rules (TK-4460). */
   routing?: Record<'voice.fast' | 'voice.complex', { layer: 'llm_fast' | 'llm_complex'; provider: string; model: string | null; rule_id: string | null; note?: string }>;
+  /** Recording permission; `notice` means the opening must include the recording notice (TK-4461). */
+  recording?: { permitted: boolean; notice: boolean; basis: string; rule: string | null; jurisdiction: string | null };
   session_token: { token: string; token_id: string; expires_at: string; allowed_tools: string[] };
   expires_at: string;
   first_bootstrap: boolean;
