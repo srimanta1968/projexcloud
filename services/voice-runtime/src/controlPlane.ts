@@ -1,3 +1,4 @@
+import type { TurnRecord } from './session/sessionStore';
 import { log } from './log';
 
 /**
@@ -93,6 +94,15 @@ export type BootstrapRequest =
   | { call_id: string }
   | { inbound: { to: string; from?: string; room: string; sip_call_id?: string } };
 
+/** What the runtime reports when a call ends (sdk-voice-agent CompleteCallInput). */
+export interface CallCloseOut {
+  status: 'completed' | 'failed';
+  turns: TurnRecord[];
+  started_at: string;
+  ended_at: string;
+  duration_s: number;
+}
+
 export class ControlPlaneError extends Error {
   constructor(public readonly status: number, public readonly code: string, message: string) {
     super(message);
@@ -113,8 +123,8 @@ export class ControlPlane {
 
   constructor(private readonly opts: ControlPlaneOptions) {}
 
-  private async post<T>(path: string, body: unknown): Promise<T> {
-    const retries = this.opts.retries ?? 2;
+  private async post<T>(path: string, body: unknown, retriesOverride?: number): Promise<T> {
+    const retries = retriesOverride ?? this.opts.retries ?? 2;
     let lastErr: Error | null = null;
     for (let attempt = 0; attempt <= retries; attempt++) {
       this.requests += 1;
@@ -172,6 +182,14 @@ export class ControlPlane {
     switched_to_binding_id: string | null; switched_to_provider: string | null;
   }): Promise<unknown> {
     return this.post(`/api/admin/voice-agent/calls/${encodeURIComponent(callId)}/credential-degraded`, body);
+  }
+
+  /**
+   * End-of-call report (TK-4467): the whole transcript + outcome in one write. No in-request
+   * retries — the close-out buffer owns retrying, durably.
+   */
+  completeCall(callId: string, body: CallCloseOut): Promise<{ call_id: string; status: string; turns: number }> {
+    return this.post(`/api/admin/voice-agent/calls/${encodeURIComponent(callId)}/complete`, body, 0);
   }
 
   /** Batch form: the tool calls of one model turn in one request, so they can start together. */

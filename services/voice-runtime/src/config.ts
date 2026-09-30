@@ -1,4 +1,5 @@
 import os from 'os';
+import path from 'path';
 
 /**
  * voice-runtime configuration (VA·E1). Everything comes from the environment so the same
@@ -32,6 +33,8 @@ export interface RuntimeConfig {
   redis: { host: string; port: number; password?: string } | null;
   /** Sliding TTL of a session's Redis mirror; refreshed every turn. */
   sessionTtlSeconds: number;
+  /** Local retry buffer for end-of-call reports (TK-4467); a volume in production. */
+  closeOutDir: string;
 }
 
 export class ConfigError extends Error {}
@@ -73,5 +76,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): RuntimeConfig 
       ? null
       : { host: env.REDIS_HOST, port: int(env, 'REDIS_PORT', 6379, 1), password: env.REDIS_PASSWORD || undefined },
     sessionTtlSeconds: int(env, 'VOICE_SESSION_TTL_S', 900, 30),
+    closeOutDir: env.VOICE_RUNTIME_CLOSEOUT_DIR || path.join(os.tmpdir(), 'voice-runtime-closeout'),
   };
 }

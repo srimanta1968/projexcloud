@@ -1,0 +1,155 @@
+{
+  "name": "POST /api/admin/voice-agent/calls/:call_id/complete - The voice runtime's end-of-call report: transcript + outcome written once, then summary and mirrors",
+  "endpoint": "/api/admin/voice-agent/calls/:call_id/complete",
+  "method": "POST",
+  "sdk": "sdk-voice-agent",
+  "sourceFile": "services/api-gateway/src/app.ts",
+  "requiresAuth": false,
+  "expectedStatus": 200,
+  "taskId": "3407683e-212b-4483-aa28-b063f98f950f",
+  "sprintId": "d4876947-8d18-4538-8e9f-51ba3e0735a9",
+  "featureId": "3a853d10-54c6-4c94-9715-3655646d2a33",
+  "epicId": "038de27d-eb77-4514-801b-6dd0d75dc165",
+  "testability": "auto",
+  "coversCriterion": [
+    "3a853d10-54c6-4c94-9715-3655646d2a33#AC3"
+  ],
+  "dependsOn": [
+    "POST /api/auth/signup-tenant",
+    "POST /api/ai-gateway/tenant-credentials",
+    "POST /api/voice-agent/stack-profiles",
+    "POST /api/voice-agent/agents",
+    "POST /api/voice-agent/agents/:agent_id/versions",
+    "POST /api/voice-agent/test-sessions"
+  ],
+  "priority": 155,
+  "description": "OPERATOR route (x-admin-ops-token = ADMIN_OPS_TOKEN), called by the voice runtime once when a call ends, and re-sent from its local retry buffer when the control plane was unavailable — so the completed call's transcript and summary are persisted even if the control plane was briefly unavailable (3a853d10-54c6-4c94-9715-3655646d2a33#AC3). The tenant is resolved from the call. Body (sdk-voice-agent CompleteCallInput): status (completed | failed, default completed), turns ([{ turn_index, speaker: caller | agent | system, text, started_ms?, stt_ms?, ttft_ms?, ttfa_ms?, interrupted?, tool_calls? }], at most 2000), started_at, ended_at, duration_s, disposition?. Turns upsert on (call_id, turn_index); the summary is written once (the tenant's llm_complex via sdk-ai-gateway, extractive fallback); the call is mirrored to sdk-conversation and sdk-crm (not for test sessions); voice.call.completed.v1 is emitted once, on the transition to a terminal status. Repeating the same report is harmless. 200 { call_id, status, disposition, summary, turns }. Errors: invalid status / turns 400; unknown call 404; ended with another terminal status 409 Conflict; missing/wrong ops token 401/403.",
+  "fieldEnums": {
+    "status": [
+      "completed",
+      "failed"
+    ],
+    "speaker": [
+      "caller",
+      "agent",
+      "system"
+    ]
+  },
+  "testCases": [
+    {
+      "name": "The runtime reports the finished call -> turns stored, summary written, completed",
+      "coversCriterion": [
+        "3a853d10-54c6-4c94-9715-3655646d2a33#AC3"
+      ],
+      "headers": {
+        "x-admin-ops-token": "{{var:ADMIN_OPS_TOKEN}}"
+      },
+      "pathParams": {
+        "call_id": "{{cache:voice-agent.test-sessions.create.response.data.session.call_id}}"
+      },
+      "payload": {
+        "status": "completed",
+        "started_at": "{{dynamic:pastdatetime-2m}}",
+        "ended_at": "{{dynamic:pastdatetime-1m}}",
+        "duration_s": 60,
+        "turns": [
+          {
+            "turn_index": 0,
+            "speaker": "agent",
+            "text": "{{static:Hi, this is the booking assistant. This call uses AI.}}",
+            "started_ms": 0,
+            "interrupted": false
+          },
+          {
+            "turn_index": 1,
+            "speaker": "caller",
+            "text": "{{static:Please move my Friday booking to Saturday.}}",
+            "started_ms": 4000,
+            "stt_ms": 180,
+            "interrupted": false
+          }
+        ]
+      },
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "success": true,
+        "data": {
+          "status": "completed",
+          "turns": 2
+        }
+      }
+    },
+    {
+      "name": "400 - turns must be an array",
+      "testType": "negative",
+      "coversErrorCase": "400|ValidationError",
+      "headers": {
+        "x-admin-ops-token": "{{var:ADMIN_OPS_TOKEN}}"
+      },
+      "pathParams": {
+        "call_id": "{{cache:voice-agent.test-sessions.create.response.data.session.call_id}}"
+      },
+      "payload": {
+        "status": "completed",
+        "turns": "{{static:not-an-array}}"
+      },
+      "expectedStatus": 400
+    },
+    {
+      "name": "404 - unknown call",
+      "testType": "negative",
+      "coversErrorCase": "404|NotFound",
+      "headers": {
+        "x-admin-ops-token": "{{var:ADMIN_OPS_TOKEN}}"
+      },
+      "pathParams": {
+        "call_id": "{{dynamic:uuid}}"
+      },
+      "payload": {
+        "status": "completed",
+        "turns": []
+      },
+      "expectedStatus": 404
+    },
+    {
+      "name": "401 - no ops token",
+      "testType": "negative",
+      "coversErrorCase": "401|Unauthorized",
+      "headers": {},
+      "pathParams": {
+        "call_id": "{{cache:voice-agent.test-sessions.create.response.data.session.call_id}}"
+      },
+      "payload": {
+        "status": "completed",
+        "turns": []
+      },
+      "expectedStatus": 401
+    }
+  ],
+  "errorCases": [
+    {
+      "status": 400,
+      "code": "ValidationError",
+      "message": "turns must be an array",
+      "when": "invalid status, turns, timestamps or disposition"
+    },
+    {
+      "status": 401,
+      "code": "Unauthorized",
+      "message": "admin ops token required",
+      "when": "x-admin-ops-token missing or wrong"
+    },
+    {
+      "status": 404,
+      "code": "NotFound",
+      "message": "call not found",
+      "when": "unknown call id"
+    },
+    {
+      "status": 409,
+      "code": "Conflict",
+      "message": "call already ended as failed",
+      "when": "the call already ended with a different terminal status"
+    }
+  ]
+}

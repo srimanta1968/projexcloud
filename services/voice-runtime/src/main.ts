@@ -1,5 +1,6 @@
 import { initRedis } from '@projexlight/redis-runtime';
 import { callRunner } from './call/callRunner';
+import { CloseOutBuffer } from './call/closeOut';
 import { ConfigError, loadConfig } from './config';
 import { ControlPlane } from './controlPlane';
 import { startHealthServer } from './health';
@@ -8,6 +9,7 @@ import { AgentWorker } from './livekit/worker';
 import { log } from './log';
 import { streamingConversation } from './pipeline/voiceSession';
 import { SessionStore } from './session/sessionStore';
+import { kafkaTurnSink } from './session/turnEvents';
 
 /**
  * voice-runtime entry point (VA·E1). Registers one LiveKit agent worker under
@@ -29,9 +31,12 @@ async function main(): Promise<void> {
   if (!redis) log.warn('no REDIS_HOST: session state is kept in memory only');
   const store = new SessionStore(redis, cfg.workerName, cfg.sessionTtlSeconds);
   const controlPlane = new ControlPlane({ baseUrl: cfg.controlPlaneUrl, opsToken: cfg.opsToken });
-  const worker = new AgentWorker(cfg, roomJobRunner(callRunner({ controlPlane, store, conversation: streamingConversation(store, controlPlane) })));
+  const closeOut = new CloseOutBuffer(controlPlane, { dir: cfg.closeOutDir });
+  const replaying = await closeOut.start();
+  const turnEvents = kafkaTurnSink();
+  const worker = new AgentWorker(cfg, roomJobRunner(callRunner({ controlPlane, store, closeOut, conversation: streamingConversation(store, controlPlane, turnEvents) })));
   const health = await startHealthServer(worker, cfg.healthPort);
-  log.info('voice-runtime starting', { agentName: cfg.agentName, maxJobs: cfg.maxJobs, healthPort: cfg.healthPort, worker: cfg.workerName });
+  log.info('voice-runtime starting', { agentName: cfg.agentName, maxJobs: cfg.maxJobs, healthPort: cfg.healthPort, worker: cfg.workerName, closeOutDir: cfg.closeOutDir, bufferedCloseOuts: replaying });
   worker.start();
 
   let shuttingDown = false;
@@ -49,6 +54,11 @@ async function main(): Promise<void> {
     const left = await worker.drain(cfg.drainTimeoutMs);
     if (left > 0) log.warn('drain timeout reached, ending remaining calls', { remaining: left });
     worker.stop(true);
+    // Last try for anything buffered; what is still pending stays on the volume for the next boot.
+    await Promise.race([closeOut.flush(), new Promise((r) => setTimeout(r, 10_000))]);
+    const pending = await closeOut.pendingCount();
+    if (pending > 0) log.warn('call close-outs left buffered for the next start', { pending });
+    closeOut.stop();
     health.close();
     process.exit(0);
   };

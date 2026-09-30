@@ -1,6 +1,7 @@
 import { ParticipantKind, RoomEvent, type RemoteParticipant, type Room } from '@livekit/rtc-node';
 import { ControlPlaneError, type BootstrapRequest, type ControlPlane, type Fallback } from '../controlPlane';
 import type { CallHandler } from '../livekit/roomJob';
+import type { CloseOutBuffer } from './closeOut';
 import { holdUntilCallerLeaves } from '../livekit/roomJob';
 import type { JobContext } from '../livekit/worker';
 import { log } from '../log';
@@ -78,6 +79,8 @@ async function bootstrapRequest(room: Room, ctx: JobContext): Promise<BootstrapR
 export interface CallRunnerDeps {
   controlPlane: ControlPlane;
   store: SessionStore;
+  /** End-of-call report with a durable retry buffer (TK-4467); without it nothing is reported. */
+  closeOut?: CloseOutBuffer;
   conversation?: Conversation;
   onFallback?: FallbackHandler;
 }
@@ -121,6 +124,17 @@ export function callRunner(deps: CallRunnerDeps): CallHandler {
     } finally {
       deps.store.close(session.callId);
       log.info('call session closed', { callId: session.callId, turns: session.turn });
+      if (deps.closeOut) {
+        const endedAt = Date.now();
+        const outcome = await deps.closeOut.submit(session.callId, {
+          status: 'completed',
+          turns: session.turns,
+          started_at: new Date(session.openedAt).toISOString(),
+          ended_at: new Date(endedAt).toISOString(),
+          duration_s: Math.max(0, Math.round((endedAt - session.openedAt) / 1000)),
+        });
+        log.info('call close-out', { callId: session.callId, outcome, turns: session.turns.length });
+      }
     }
   };
 }

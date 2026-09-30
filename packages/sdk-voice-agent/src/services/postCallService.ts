@@ -489,3 +489,18 @@ export async function completeCall(tenantId: string, callId: string, input: Comp
   }
   return call;
 }
+
+/**
+ * The voice runtime's end-of-call report (VA·E1 · TK-4467): transcript + outcome, sent once
+ * when the call ends — and re-sent from the runtime's local retry buffer if the control plane
+ * was unavailable, which completeCall's idempotency makes harmless. The runtime knows the call,
+ * not the tenant, so the tenant is resolved from the call itself.
+ *
+ * @throws VoiceAgentError 400 invalid input, 404 unknown call, 409 ended with another status.
+ */
+export async function completeCallFromRuntime(callId: string, input: CompleteCallInput): Promise<CallDetail> {
+  if (!UUID_RE.test(callId)) throw notFound('call not found');
+  const row = await dataService.one<{ tenant_id: string }>(`SELECT tenant_id FROM voice_agent.call WHERE call_id = $1`, [callId]);
+  if (!row) throw notFound('call not found');
+  return completeCall(row.tenant_id, callId, input, 'voice-runtime');
+}

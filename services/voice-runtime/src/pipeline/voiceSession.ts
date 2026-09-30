@@ -31,6 +31,7 @@ import { soundsIncomplete, turnConfig, type TurnConfig } from './turnDetector';
 import { classifyTurn, routerConfig } from './turnRouter';
 import { EnergyVad, vadConfig } from './vad';
 import { LayerFailover, type ActiveLayer, type Degradation } from './failover';
+import { noopTurnSink, type TurnEventSink } from '../session/turnEvents';
 import type { RuntimeLayer } from '../controlPlane';
 
 /**
@@ -109,6 +110,7 @@ export class VoiceSession {
     protected readonly ctx: JobContext,
     protected readonly store: SessionStore,
     controlPlane: ControlPlane,
+    protected readonly turnEvents: TurnEventSink = noopTurnSink,
   ) {
     const b = session.boot;
     this.systemPrompt = `${VOICE_RULES}\n\n${b.agent.system_prompt}`;
@@ -196,6 +198,33 @@ export class VoiceSession {
       }
     }
     return false;
+  }
+
+  /** Turn metrics to Kafka (TK-4467) — never the text. */
+  private publishTurn(rec: TurnRecord, tier: 'fast' | 'complex', llmMs: number, llmFailed: boolean): void {
+    const b = this.session.boot;
+    const caller = this.session.turns.slice(0, rec.turn_index).reverse().find((t) => t.speaker === 'caller');
+    const tools = rec.tool_calls ?? [];
+    this.turnEvents.publish({
+      call_id: this.session.callId,
+      tenant_id: this.session.tenantId,
+      agent_id: b.agent.agent_id,
+      agent_version_id: b.agent.version_id,
+      is_test: b.call.is_test,
+      turn_index: rec.turn_index,
+      tier,
+      model: rec.model ?? null,
+      stt_ms: caller?.stt_ms ?? null,
+      ttft_ms: rec.ttft_ms ?? null,
+      ttfa_ms: rec.ttfa_ms ?? null,
+      llm_ms: llmMs,
+      interrupted: rec.interrupted,
+      tool_calls: tools.length,
+      tool_errors: tools.filter((t) => !t.ok).length,
+      llm_failed: llmFailed,
+      failed_over: (['stt', 'llm_fast', 'llm_complex', 'tts'] as const).filter((l) => this.failover.isTripped(l)),
+      at: new Date().toISOString(),
+    });
   }
 
   /** Tells the control plane a layer's primary failed (voice.credential.degraded.v1). Never throws. */
@@ -531,6 +560,7 @@ export class VoiceSession {
     rec.ttfa_ms = firstAudioAt !== null ? firstAudioAt - endedAt : null;
     // bargeIn() already rewrote rec.text / history to what the caller heard.
     this.store.touch(this.session.callId);
+    this.publishTurn(rec, tier, llmDoneAt - requestedAt, failed);
     log.info('turn', {
       callId: this.session.callId,
       turn: rec.turn_index,
@@ -648,6 +678,6 @@ export class VoiceSession {
   }
 }
 
-export function streamingConversation(store: SessionStore, controlPlane: ControlPlane): Conversation {
-  return (room, session, ctx) => new VoiceSession(room, session, ctx, store, controlPlane).run();
+export function streamingConversation(store: SessionStore, controlPlane: ControlPlane, turnEvents: TurnEventSink = noopTurnSink): Conversation {
+  return (room, session, ctx) => new VoiceSession(room, session, ctx, store, controlPlane, turnEvents).run();
 }
