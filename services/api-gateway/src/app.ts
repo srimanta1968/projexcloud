@@ -1480,26 +1480,34 @@ app.post('/api/admin/voice-agent/runtime/bootstrap', async (req, reply) => {
 });
 app.post<{ Params: { call_id: string } }>('/api/admin/voice-agent/calls/:call_id/session-token/validate', async (req, reply) => {
   if (!(await checkAdminToken(req, reply))) return;
-  const body = (req.body ?? {}) as { token?: unknown; tool?: unknown };
-  if (typeof body.token !== 'string' || typeof body.tool !== 'string' || !body.tool) {
-    return reply.code(400).send({ success: false, error: 'ValidationError', details: ['token and tool are required strings'] });
+  const body = (req.body ?? {}) as { token?: unknown; tool?: unknown; tools?: unknown };
+  // TK-4462 — batch form { token, tools: [...] }: the tool calls of one model turn are
+  // authorized in ONE request so they can start together (each is still checked and audited).
+  const batch = Array.isArray(body.tools);
+  const tools = batch ? (body.tools as unknown[]) : [body.tool];
+  if (typeof body.token !== 'string' || tools.length === 0 || tools.length > 10 || !tools.every((t) => typeof t === 'string' && t)) {
+    return reply.code(400).send({ success: false, error: 'ValidationError', details: ['token and tool (or tools: 1-10 names) are required strings'] });
   }
-  const check = await validateSessionToken(body.token, body.tool, { session_ref: `voice_agent.call:${req.params.call_id}` });
-  // TK-4509 — the runtime validates right before it calls the tool, so an authorized check is
-  // the platform's record that the tool was invoked on this call.
-  if (check.valid) {
-    await emitEvent({
-      event_type: 'voice.tool.invoked.v1',
-      pool_index: process.env.VOICE_AGENT_AUDIT_POOL || 'admin-default',
-      actor_kind: 'agent',
-      actor_id: 'voice-runtime',
-      tenant_id: check.tenant_id,
-      subject_kind: 'voice_agent.call',
-      subject_id: req.params.call_id,
-      payload: { call_id: req.params.call_id, tool: check.tool, token_id: check.token_id, use_count: check.use_count },
-    });
+  const results = [];
+  for (const tool of tools as string[]) {
+    const check = await validateSessionToken(body.token, tool, { session_ref: `voice_agent.call:${req.params.call_id}` });
+    // TK-4509 — the runtime validates right before it calls the tool, so an authorized check is
+    // the platform's record that the tool was invoked on this call.
+    if (check.valid) {
+      await emitEvent({
+        event_type: 'voice.tool.invoked.v1',
+        pool_index: process.env.VOICE_AGENT_AUDIT_POOL || 'admin-default',
+        actor_kind: 'agent',
+        actor_id: 'voice-runtime',
+        tenant_id: check.tenant_id,
+        subject_kind: 'voice_agent.call',
+        subject_id: req.params.call_id,
+        payload: { call_id: req.params.call_id, tool: check.tool, token_id: check.token_id, use_count: check.use_count },
+      });
+    }
+    results.push({ tool, ...check });
   }
-  return reply.code(200).send({ success: true, data: check });
+  return reply.code(200).send({ success: true, data: batch ? { results } : results[0] });
 });
 setStatusCallbackForwarder(async (params) => {
   const r = await applyCarrierStatus({

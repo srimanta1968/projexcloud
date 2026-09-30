@@ -9,9 +9,10 @@ import type { SessionContext } from '../session/sessionStore';
  *
  * The agent version's app-registered tools (from the call bootstrap) are offered to the LLM.
  * When the model calls them:
- *   1. The call's session capability token is validated for that tool (control plane; an
- *      authorized check is audited as voice.tool.invoked.v1). A token the platform no
- *      longer honours — call ended, tool disabled — stops the tool.
+ *   1. The call's session capability token is validated for the turn's tools in ONE control-
+ *      plane request (each authorized check is audited as voice.tool.invoked.v1), so the
+ *      calls then start together. A token the platform no longer honours — call ended, tool
+ *      disabled — stops the tool.
  *   2. The tenant's endpoint is called over HTTPS, signed with the tool's secret:
  *        X-Projexcloud-Signature: t=<unix s>,v1=HMAC-SHA256(secret, "<t>.<Idempotency-Key>.<body>")
  *        Idempotency-Key:         <call_id>:<turn_index>:<tool>
@@ -70,18 +71,40 @@ export class ToolExecutor {
     }));
   }
 
-  /** How long these calls are expected to take: recent latency, else the configured timeout. */
-  expectedMs(names: string[]): number {
-    return Math.max(0, ...names.map((n) => this.latency.get(n) ?? this.tools.get(n)?.timeout_ms ?? 0));
+  /**
+   * How long these calls took recently (EWMA of this call's observations; a timeout counts
+   * as the full timeout), or null when none of them has run yet on this call.
+   */
+  observedMs(names: string[]): number | null {
+    const known = names.map((n) => this.latency.get(n)).filter((v): v is number => v !== undefined);
+    return known.length ? Math.max(...known) : null;
   }
 
-  /** Runs the model's tool calls for one turn, in parallel. Never throws. */
-  run(calls: ToolCallRequest[], turnIndex: number, signal: AbortSignal): Promise<ToolOutcome[]> {
-    return Promise.all(calls.map((c) => this.runOne(c, turnIndex, signal)));
-  }
-
-  private async runOne(call: ToolCallRequest, turnIndex: number, signal: AbortSignal): Promise<ToolOutcome> {
+  /** Runs the model's tool calls for one turn: authorized together, then all in parallel. Never throws. */
+  async run(calls: ToolCallRequest[], turnIndex: number, signal: AbortSignal): Promise<ToolOutcome[]> {
     const started = Date.now();
+    const eligible = [...new Set(calls.map((c) => c.name))].filter((n) => {
+      const br = this.breakers.get(n);
+      return this.tools.has(n) && !(br && br.openUntil > Date.now());
+    });
+    let auth: Map<string, { valid: boolean; reason?: string }> | Error = new Map();
+    if (eligible.length) {
+      try {
+        auth = await this.controlPlane.validateTools(this.session.callId, this.session.boot.session_token.token, eligible);
+      } catch (err) {
+        auth = err as Error;
+      }
+    }
+    return Promise.all(calls.map((c) => this.runOne(c, turnIndex, signal, auth, started)));
+  }
+
+  private async runOne(
+    call: ToolCallRequest,
+    turnIndex: number,
+    signal: AbortSignal,
+    auth: Map<string, { valid: boolean; reason?: string }> | Error,
+    started: number,
+  ): Promise<ToolOutcome> {
     const done = (o: Omit<ToolOutcome, 'tool_call_id' | 'name' | 'ms'>): ToolOutcome => {
       const out = { tool_call_id: call.tool_call_id, name: call.name, ms: Date.now() - started, ...o };
       log.info('tool call', { callId: this.session.callId, turn: turnIndex, tool: call.name, ok: out.ok, error: out.error, status: out.status, ms: out.ms });
@@ -92,12 +115,11 @@ export class ToolExecutor {
     const br = this.breakers.get(tool.name) ?? { failures: 0, openUntil: 0 };
     if (br.openUntil > Date.now()) return done({ ok: false, error: 'unavailable', message: 'the tool is temporarily unavailable' });
 
-    try {
-      const check = await this.controlPlane.validateTool(this.session.callId, this.session.boot.session_token.token, tool.name);
-      if (!check.valid) return done({ ok: false, error: 'not_authorized', message: check.reason ?? 'not authorized' });
-    } catch (err) {
-      return this.fail(tool, done({ ok: false, error: 'unavailable', message: `could not authorize the tool: ${(err as Error).message}` }));
+    if (auth instanceof Error) {
+      return this.fail(tool, done({ ok: false, error: 'unavailable', message: `could not authorize the tool: ${auth.message}` }));
     }
+    const check = auth.get(tool.name);
+    if (!check?.valid) return done({ ok: false, error: 'not_authorized', message: check?.reason ?? 'not authorized' });
 
     const body = JSON.stringify({
       call_id: this.session.callId,

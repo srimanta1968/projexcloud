@@ -157,4 +157,12 @@ export class ControlPlane {
   validateTool(callId: string, token: string, tool: string): Promise<{ valid: boolean; reason?: string }> {
     return this.post(`/api/admin/voice-agent/calls/${encodeURIComponent(callId)}/session-token/validate`, { token, tool });
   }
+
+  /** Batch form: the tool calls of one model turn in one request, so they can start together. */
+  async validateTools(callId: string, token: string, tools: string[]): Promise<Map<string, { valid: boolean; reason?: string }>> {
+    const r = await this.post<{ results: { tool: string; valid: boolean; reason?: string }[] }>(
+      `/api/admin/voice-agent/calls/${encodeURIComponent(callId)}/session-token/validate`, { token, tools },
+    );
+    return new Map(r.results.map((x) => [x.tool, { valid: x.valid, reason: x.reason }]));
+  }
 }

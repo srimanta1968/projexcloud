@@ -24,6 +24,7 @@ import type { SessionContext, SessionStore, TurnRecord } from '../session/sessio
 import { ToolExecutor, toolMessage } from '../tools/toolExecutor';
 import { ClauseChunker } from './chunker';
 import { openingDisclosure } from './disclosure';
+import { FILLER_THRESHOLD_MS, FillerPolicy } from './fillers';
 import { Speaker, type TtsBinding } from './speaker';
 import { soundsIncomplete, turnConfig, type TurnConfig } from './turnDetector';
 import { classifyTurn, routerConfig } from './turnRouter';
@@ -84,6 +85,7 @@ export class VoiceSession {
   private speakingRec: TurnRecord | null = null;
   private readonly router: ReturnType<typeof routerConfig>;
   protected readonly tools: ToolExecutor;
+  private readonly fillers: FillerPolicy;
   /** True while the mandatory disclosure plays: barge-in cannot cut it short. */
   private protectedLine = false;
 
@@ -104,6 +106,7 @@ export class VoiceSession {
     this.vad = new EnergyVad(vadConfig(td.sensitivity, { minSpeechMs: td.min_interruption_ms, minSilenceMs: td.min_silence_ms }, IN_RATE));
     this.router = routerConfig(b.agent.escalation_rules);
     this.tools = new ToolExecutor(session, controlPlane);
+    this.fillers = new FillerPolicy(b.agent.language);
   }
 
   protected ttsOpts(l: RuntimeLayerConfig) {
@@ -322,9 +325,37 @@ export class VoiceSession {
     return { layer: v.tier === 'complex' ? layers.llm_complex : layers.llm_fast, tier: v.tier, reason: v.reason };
   }
 
-  /** Hook before tools run (TK-4463 speaks a latency-masking filler here). */
-  protected async beforeTools(_names: string[], _signal: AbortSignal): Promise<void> {
-    /* no filler by default */
+  /**
+   * Latency masking (TK-4463), run alongside the tools: speak a short acknowledgement when
+   * they are known to be slow, or when they are still running at FILLER_THRESHOLD_MS —
+   * unless the model already acknowledged this round, or the call's filler budget says no.
+   * Returns the phrase spoken (for the transcript) or null.
+   */
+  protected async maskLatency(names: string[], running: Promise<unknown>, signal: AbortSignal, acknowledged: boolean): Promise<string | null> {
+    if (acknowledged) return null;
+    const speak = (why: string, expectedMs: number | null): string | null => {
+      if (signal.aborted || this.ended) return null;
+      const blocked = this.fillers.blocked();
+      if (blocked) {
+        log.info('filler suppressed', { callId: this.session.callId, reason: blocked, tools: names });
+        return null;
+      }
+      const phrase = this.fillers.take();
+      this.speaker.say(phrase, this.tts);
+      log.info('filler', { callId: this.session.callId, phrase, why, expected_ms: expectedMs, tools: names });
+      return phrase;
+    };
+    const observed = this.tools.observedMs(names);
+    if (observed !== null && observed > FILLER_THRESHOLD_MS) return speak('expected_slow', observed);
+    let settled = false;
+    void running.then(() => { settled = true; }, () => { settled = true; });
+    const outcome = await Promise.race([
+      running.then(() => 'done', () => 'done'),
+      new Promise<string>((r) => setTimeout(() => r('slow'), FILLER_THRESHOLD_MS)),
+      new Promise<string>((r) => signal.addEventListener('abort', () => r('aborted'), { once: true })),
+    ]);
+    if (outcome === 'slow' && !settled) return speak('still_running', observed);
+    return null;
   }
 
   /**
@@ -394,8 +425,11 @@ export class VoiceSession {
 
       msg.tool_calls = calls;
       const names = calls.map((c) => c.tool_sku);
-      await this.beforeTools(names, abort.signal);
-      const outcomes = await this.tools.run(calls.map((c) => ({ tool_call_id: c.tool_call_id, name: c.tool_sku, args: c.args })), rec.turn_index, abort.signal);
+      const running = this.tools.run(calls.map((c) => ({ tool_call_id: c.tool_call_id, name: c.tool_sku, args: c.args })), rec.turn_index, abort.signal);
+      // The filler is transcript-only: tool results must directly follow the tool-call message.
+      const filler = await this.maskLatency(names, running, abort.signal, msg.content.trim().length > 0);
+      if (filler) spoken += (spoken ? ' ' : '') + filler;
+      const outcomes = await running;
       for (const o of outcomes) {
         this.history.push({ role: 'tool', tool_call_id: o.tool_call_id, content: toolMessage(o) });
         toolLog.push({ name: o.name, ok: o.ok, error: o.error ?? null, status: o.status ?? null, ms: o.ms });
