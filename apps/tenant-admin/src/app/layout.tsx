@@ -30,6 +30,8 @@ const NAV = [
   { href: '/ai/providers', label: 'AI Providers' },
   { href: '/voice/agents', label: 'Voice agents' },
   { href: '/voice/keys', label: 'Voice keys' },
+  { href: '/voice/numbers', label: 'Numbers' },
+  { href: '/voice/campaigns', label: 'Campaigns' },
   { href: '/voice/test', label: 'Voice' },
   { href: '/byok', label: 'BYOK' },
   // Sits beside BYOK deliberately: BYOK is WHOSE key wraps this tenant, /keys is

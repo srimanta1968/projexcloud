@@ -41,7 +41,9 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     ...init,
     cache: 'no-store',
     headers: {
-      'content-type': 'application/json',
+      // Only when there IS a body: Fastify answers a bodyless request that claims
+      // application/json with 400 FST_ERR_CTP_EMPTY_JSON_BODY (a DELETE, an empty POST).
+      ...(init?.body !== undefined ? { 'content-type': 'application/json' } : {}),
       ...authHeaders(),
       ...(init?.headers as Record<string, string> | undefined),
     },
@@ -69,6 +71,7 @@ export const gateway = {
     request<T>(path, { method: 'POST', body: body ? JSON.stringify(body) : undefined }),
   patch: <T>(path: string, body?: unknown): Promise<T> =>
     request<T>(path, { method: 'PATCH', body: body ? JSON.stringify(body) : undefined }),
+  del: <T>(path: string): Promise<T> => request<T>(path, { method: 'DELETE' }),
 };
 
 export interface ApplicationRow {
