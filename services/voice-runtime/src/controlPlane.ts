@@ -166,6 +166,14 @@ export class ControlPlane {
     return this.post(`/api/admin/voice-agent/calls/${encodeURIComponent(callId)}/transfer`, body);
   }
 
+  /** A layer's primary failed mid-call (TK-4465): recorded + voice.credential.degraded.v1. */
+  credentialDegraded(callId: string, body: {
+    layer: string; binding_id: string; provider: string; status: number; error: string;
+    switched_to_binding_id: string | null; switched_to_provider: string | null;
+  }): Promise<unknown> {
+    return this.post(`/api/admin/voice-agent/calls/${encodeURIComponent(callId)}/credential-degraded`, body);
+  }
+
   /** Batch form: the tool calls of one model turn in one request, so they can start together. */
   async validateTools(callId: string, token: string, tools: string[]): Promise<Map<string, { valid: boolean; reason?: string }>> {
     const r = await this.post<{ results: { tool: string; valid: boolean; reason?: string }[] }>(

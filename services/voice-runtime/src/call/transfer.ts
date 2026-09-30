@@ -1,5 +1,4 @@
 import type { ToolManifest } from '@projexlight/contracts';
-import type { RuntimeLayerConfig } from '../controlPlane';
 import { llmAdapter } from '../providers/llm';
 import type { TurnRecord } from '../session/sessionStore';
 
@@ -39,7 +38,7 @@ export function extractiveSummary(turns: TurnRecord[], reason: string): string {
  * Two or three sentences for the human taking the call, written by the fast model from the
  * transcript; falls back to the extractive summary when the model fails or is slow.
  */
-export async function summarizeForHandoff(layer: RuntimeLayerConfig, turns: TurnRecord[], reason: string, timeoutMs = 4000): Promise<string> {
+export async function summarizeForHandoff(layer: { provider: string; model?: string; key: string }, turns: TurnRecord[], reason: string, timeoutMs = 4000): Promise<string> {
   const transcript = turns.filter((t) => t.text).map((t) => `${t.speaker === 'caller' ? 'Caller' : 'Agent'}: ${t.text}`).join('\n').slice(-6000);
   try {
     const r = await Promise.race([
@@ -51,7 +50,7 @@ export async function summarizeForHandoff(layer: RuntimeLayerConfig, turns: Turn
         ],
         max_tokens: 160,
         temperature: 0.2,
-      }, Buffer.from(layer.primary.key)),
+      }, Buffer.from(layer.key)),
       new Promise<null>((resolve) => setTimeout(() => resolve(null), timeoutMs)),
     ]);
     const text = r && 'output' in r ? r.output.trim() : '';

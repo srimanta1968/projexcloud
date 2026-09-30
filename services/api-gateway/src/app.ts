@@ -396,6 +396,7 @@ import {
   setRecordingRuleResolver,
   setInboundAdmitter,
   transferCall,
+  reportCredentialDegraded,
   type BootstrapInput,
   applyCarrierStatus,
   registerCarrierProvisioner,
@@ -1486,6 +1487,18 @@ app.post<{ Params: { call_id: string } }>('/api/admin/voice-agent/calls/:call_id
   if (!(await checkAdminToken(req, reply))) return;
   try {
     return reply.code(200).send({ success: true, data: await transferCall(req.params.call_id, (req.body ?? {}) as Record<string, unknown>) });
+  } catch (err) {
+    if (err instanceof VoiceAgentError) return reply.code(err.status).send({ success: false, error: err.code, details: [err.message] });
+    throw err;
+  }
+});
+// VA·E1 (TK-4465) — the voice runtime reports a layer whose primary provider failed (429 /
+// 5xx / unreachable) and whether it switched to the secondary: recorded on the call and
+// emitted as voice.credential.degraded.v1. Operator-only; once per degradation.
+app.post<{ Params: { call_id: string } }>('/api/admin/voice-agent/calls/:call_id/credential-degraded', async (req, reply) => {
+  if (!(await checkAdminToken(req, reply))) return;
+  try {
+    return reply.code(200).send({ success: true, data: await reportCredentialDegraded(req.params.call_id, (req.body ?? {}) as Record<string, unknown>) });
   } catch (err) {
     if (err instanceof VoiceAgentError) return reply.code(err.status).send({ success: false, error: err.code, details: [err.message] });
     throw err;

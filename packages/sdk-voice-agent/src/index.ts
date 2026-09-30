@@ -74,6 +74,8 @@ export type { Carrier, Fallback, NumberBinding, BindNumberInput, InboundRoute, K
 
 export { registerTool, listTools, getTool, updateTool, effectiveTools, callSessionContext, toolSigningSecret, revealToolSigningSecret, TOOL_SIGNATURE_SCHEME } from './services/toolService';
 export { transferCall, transferConfig } from './services/transferService';
+export { reportCredentialDegraded } from './services/credentialHealthService';
+export type { DegradationInput, DegradationRecord } from './services/credentialHealthService';
 export type { TransferConfig, TransferInput, TransferResult } from './services/transferService';
 export { RUNTIME_LAYERS, bootstrapRuntimeSession, setSessionTokenMinter, setRecordingRuleResolver, setInboundAdmitter } from './services/bootstrapService';
 export type { BootstrapInput, RuntimeBootstrap, RuntimeFallback, RuntimeLayer, RuntimeLayerConfig, RuntimeTool, KeyHandle, SessionTokenGrant, SessionTokenMinter, TierRoute, RecordingDecision, RecordingRuleResolver, InboundAdmitter } from './services/bootstrapService';

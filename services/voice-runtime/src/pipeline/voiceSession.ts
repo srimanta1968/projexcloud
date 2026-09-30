@@ -30,6 +30,8 @@ import { Speaker, type TtsBinding } from './speaker';
 import { soundsIncomplete, turnConfig, type TurnConfig } from './turnDetector';
 import { classifyTurn, routerConfig } from './turnRouter';
 import { EnergyVad, vadConfig } from './vad';
+import { LayerFailover, type ActiveLayer, type Degradation } from './failover';
+import type { RuntimeLayer } from '../controlPlane';
 
 /**
  * One live voice conversation (VA·E1 · TK-4458): caller audio -> streaming STT -> end of
@@ -73,7 +75,13 @@ export class VoiceSession {
   protected ended = false;
   private callerStream: AudioStream | null = null;
   protected readonly systemPrompt: string;
-  protected readonly tts: TtsBinding;
+  /** Which key each layer is on right now (TK-4465). */
+  protected readonly failover: LayerFailover;
+  /** The TTS binding for a clause, resolved when it is synthesized (follows TTS failover). */
+  protected readonly tts = (): TtsBinding => {
+    const a = this.failover.active('tts');
+    return { provider: ttsProvider(a.provider), opts: { key: a.handle.key, model: a.model, voice: a.voice, language: this.session.boot.agent.language, options: a.options } };
+  };
   // Turn-taking (TK-4459).
   protected readonly turnCfg: TurnConfig;
   private readonly vad: EnergyVad;
@@ -104,8 +112,7 @@ export class VoiceSession {
   ) {
     const b = session.boot;
     this.systemPrompt = `${VOICE_RULES}\n\n${b.agent.system_prompt}`;
-    const t = b.stack.layers.tts;
-    this.tts = { provider: ttsProvider(t.provider), opts: this.ttsOpts(t) };
+    this.failover = new LayerFailover(b.stack.layers);
     const sttOpts = b.stack.layers.stt.options;
     this.turnCfg = turnConfig(sttOpts);
     const td = ((sttOpts?.turn_detection ?? {}) as Record<string, unknown>);
@@ -117,9 +124,6 @@ export class VoiceSession {
     this.canTransfer = transferAvailable(b.agent.escalation_rules);
   }
 
-  protected ttsOpts(l: RuntimeLayerConfig) {
-    return { key: l.primary.key, model: l.model, voice: l.voice, language: this.session.boot.agent.language, options: l.options };
-  }
 
   protected elapsed(at = Date.now()): number {
     return at - this.session.openedAt;
@@ -142,24 +146,70 @@ export class VoiceSession {
     await this.room.localParticipant!.publishTrack(track, opts);
     this.speaker = new Speaker(this.source, OUT_RATE);
 
-    const sttLayer = b.stack.layers.stt;
-    try {
-      this.stt = await sttProvider(sttLayer.provider).connect({
-        key: sttLayer.primary.key, model: sttLayer.model, language: b.agent.language, sampleRate: IN_RATE, options: sttLayer.options,
-      });
-    } catch (err) {
-      log.error('speech-to-text unavailable, ending call', { callId: this.session.callId, error: (err as Error).message });
+    this.speaker.onError((err) => {
+      const d = this.failover.report('tts', (err as { status?: number }).status, err.message);
+      if (d) this.reportDegraded(d);
+      return d !== null && d.to !== null;
+    });
+    if (!(await this.connectStt())) {
+      log.error('speech-to-text unavailable, ending call', { callId: this.session.callId });
       this.speaker.say("Sorry, I'm having trouble on my end. Please call back in a moment.", this.tts);
       await this.speaker.idle();
       return this.cleanup();
     }
-    this.stt.onTranscript((t) => this.onTranscript(t));
-    this.stt.onError((err) => log.warn('stt error mid-call', { callId: this.session.callId, error: err.message }));
 
     await this.greet();
     void this.pumpCallerAudio();
     await this.untilCallEnds();
     await this.cleanup();
+  }
+
+  /**
+   * Connects speech-to-text on the layer's current key. A retryable failure — at connect or
+   * mid-call — trips STT to its secondary and reconnects at once (TK-4465). Returns false
+   * when no STT could be connected.
+   */
+  private async connectStt(): Promise<boolean> {
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const a = this.failover.active('stt');
+      try {
+        const stt = await sttProvider(a.provider).connect({
+          key: a.handle.key, model: a.model, language: this.session.boot.agent.language, sampleRate: IN_RATE, options: a.options,
+        });
+        this.stt = stt;
+        stt.onTranscript((t) => { if (this.stt === stt) this.onTranscript(t); });
+        stt.onError((err) => {
+          if (this.stt !== stt || this.ended) return;
+          log.warn('stt error mid-call', { callId: this.session.callId, provider: a.provider, error: err.message });
+          const d = this.failover.report('stt', (err as { status?: number }).status, err.message);
+          if (!d) return;
+          this.reportDegraded(d);
+          if (!d.to) return;
+          stt.close();
+          void this.connectStt().then((ok) => { if (!ok) log.error('stt failover could not connect', { callId: this.session.callId }); });
+        });
+        return true;
+      } catch (err) {
+        const d = this.failover.report('stt', (err as { status?: number }).status, (err as Error).message);
+        if (d) this.reportDegraded(d);
+        if (!d?.to) return false;
+      }
+    }
+    return false;
+  }
+
+  /** Tells the control plane a layer's primary failed (voice.credential.degraded.v1). Never throws. */
+  protected reportDegraded(d: Degradation): void {
+    log.warn('provider degraded', { callId: this.session.callId, layer: d.layer, provider: d.from.provider, status: d.status, switched_to: d.toProvider });
+    this.controlPlane.credentialDegraded(this.session.callId, {
+      layer: d.layer,
+      binding_id: d.from.binding_id,
+      provider: d.from.provider,
+      status: d.status,
+      error: d.error,
+      switched_to_binding_id: d.to?.binding_id ?? null,
+      switched_to_provider: d.toProvider,
+    }).catch((err: Error) => log.warn('could not report degradation', { callId: this.session.callId, error: err.message }));
   }
 
   /**
@@ -327,10 +377,10 @@ export class VoiceSession {
    * Which LLM answers this turn (TK-4460): the router tags it fast or complex; the tier's
    * layer already points at the tenant's routed provider/model (bootstrap routing).
    */
-  protected pickLlm(text: string): { layer: RuntimeLayerConfig; tier: 'fast' | 'complex'; reason: string } {
+  protected pickLlm(text: string): { layer: ActiveLayer; layerName: RuntimeLayer; tier: 'fast' | 'complex'; reason: string } {
     const v = classifyTurn(text, this.router);
-    const layers = this.session.boot.stack.layers;
-    return { layer: v.tier === 'complex' ? layers.llm_complex : layers.llm_fast, tier: v.tier, reason: v.reason };
+    const layerName: RuntimeLayer = v.tier === 'complex' ? 'llm_complex' : 'llm_fast';
+    return { layer: this.failover.active(layerName), layerName, tier: v.tier, reason: v.reason };
   }
 
   /**
@@ -374,7 +424,7 @@ export class VoiceSession {
   protected async respond(text: string, endedAt: number): Promise<void> {
     if (this.ended) return;
     this.history.push(this.userMessage(text));
-    const { layer, tier, reason } = this.pickLlm(text);
+    const { layer, layerName, tier, reason } = this.pickLlm(text);
     const abort = new AbortController();
     this.turnAbort = abort;
     const requestedAt = Date.now();
@@ -409,7 +459,7 @@ export class VoiceSession {
       const chunker = new ClauseChunker();
       let calls: ToolCallRecord[] = [];
       try {
-        for await (const chunk of llmAdapter(layer.provider).stream(req, Buffer.from(layer.primary.key), { signal: abort.signal })) {
+        for await (const chunk of llmAdapter(layer.provider).stream(req, Buffer.from(layer.handle.key), { signal: abort.signal })) {
           if (this.ended || abort.signal.aborted) break;
           if (chunk.delta) {
             if (firstTokenAt === null) firstTokenAt = Date.now();
@@ -422,6 +472,9 @@ export class VoiceSession {
         if (!abort.signal.aborted) {
           failed = true;
           log.warn('llm turn failed', { callId: this.session.callId, provider: layer.provider, round, error: (err as Error).message });
+          // 429 / 5xx: this tier runs on its secondary from the next turn (TK-4465).
+          const d = this.failover.report(layerName, (err as { status?: number }).status, (err as Error).message);
+          if (d) this.reportDegraded(d);
         }
       }
       llmDoneAt = Date.now();
@@ -509,7 +562,8 @@ export class VoiceSession {
     const said: string[] = [];
     const say = (line: string): Promise<void> => { said.push(line); return this.speaker.say(line, this.tts); };
     void say("Of course. I'm connecting you with a colleague now. One moment, please.");
-    const summary = await summarizeForHandoff(this.session.boot.stack.layers.llm_fast, this.session.turns, reason);
+    const fast = this.failover.active('llm_fast');
+    const summary = await summarizeForHandoff({ provider: fast.provider, model: fast.model, key: fast.handle.key }, this.session.turns, reason);
     const others = [...this.room.remoteParticipants.values()].filter((p) => p.kind !== ParticipantKind.AGENT);
     const sip = others.find((p) => p.kind === ParticipantKind.SIP);
     const caller = sip ?? others[0];

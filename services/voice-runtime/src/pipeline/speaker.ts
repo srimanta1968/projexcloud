@@ -21,7 +21,10 @@ export interface TtsBinding {
 
 interface Item {
   text: string;
-  tts: TtsBinding;
+  /** Resolved when synthesis starts, so a clause queued before a failover uses the new binding. */
+  resolveTts: () => TtsBinding;
+  tts: TtsBinding | null;
+  retried: boolean;
   abort: AbortController;
   chunks: Int16Array[];
   rate: number;
@@ -60,6 +63,7 @@ export class Speaker {
   private readonly frameSamples: number;
   private carry: Int16Array = new Int16Array(0);
   private generation = 0;
+  private errorCb: ((err: Error, provider: string | null) => boolean) | null = null;
 
   constructor(private readonly source: AudioSource, private readonly outRate: number) {
     this.frameSamples = Math.round(outRate / 50);
@@ -70,18 +74,27 @@ export class Speaker {
     this.firstAudioCb = cb;
   }
 
+  /**
+   * Called when a clause fails to synthesize. Return true to retry it once (only when none of
+   * its audio was played) — e.g. the TTS layer just failed over to its secondary (TK-4465).
+   */
+  onError(cb: (err: Error, provider: string | null) => boolean): void {
+    this.errorCb = cb;
+  }
+
   get busy(): boolean {
     return this.playing !== null || this.queue.length > 0;
   }
 
   /** Queues a clause; the promise resolves when it has played out (or was interrupted). */
-  say(text: string, tts: TtsBinding): Promise<void> {
+  say(text: string, tts: TtsBinding | (() => TtsBinding)): Promise<void> {
     const clean = text.trim();
     if (!clean) return Promise.resolve();
     let settle!: () => void;
     const played = new Promise<void>((r) => { settle = r; });
     const item: Item = {
-      text: clean, tts, abort: new AbortController(), chunks: [], rate: tts.provider.sampleRate(tts.opts),
+      text: clean, resolveTts: typeof tts === 'function' ? tts : () => tts, tts: null, retried: false,
+      abort: new AbortController(), chunks: [], rate: this.outRate,
       done: false, error: null, wake: null, started: false, samplesTotal: 0, samplesPlayed: 0, settle,
     };
     this.queue.push(item);
@@ -102,7 +115,10 @@ export class Speaker {
 
   private async synthesize(item: Item): Promise<void> {
     try {
-      for await (const pcm of item.tts.provider.synthesize(item.text, item.tts.opts, item.abort.signal)) {
+      const tts = item.resolveTts();
+      item.tts = tts;
+      item.rate = tts.provider.sampleRate(tts.opts);
+      for await (const pcm of tts.provider.synthesize(item.text, tts.opts, item.abort.signal)) {
         if (item.abort.signal.aborted) break;
         item.chunks.push(pcm);
         item.samplesTotal += pcm.length;
@@ -123,18 +139,28 @@ export class Speaker {
       this.prefetch();
       const gen = this.generation;
       for (;;) {
-        if (item.abort.signal.aborted || gen !== this.generation) break;
-        const pcm = item.chunks.shift();
-        if (pcm) {
-          await this.play(resample(pcm, item.rate, this.outRate), item);
-          continue;
+        for (;;) {
+          if (item.abort.signal.aborted || gen !== this.generation) break;
+          const pcm = item.chunks.shift();
+          if (pcm) {
+            await this.play(resample(pcm, item.rate, this.outRate), item);
+            continue;
+          }
+          if (item.done) break;
+          await new Promise<void>((r) => { item.wake = r; });
+          item.wake = null;
         }
-        if (item.done) break;
-        await new Promise<void>((r) => { item.wake = r; });
-        item.wake = null;
-      }
-      if (item.error && !item.abort.signal.aborted) {
-        log.warn('tts failed for a clause', { provider: item.tts.provider.id, error: item.error.message });
+        if (!item.error || item.abort.signal.aborted) break;
+        const provider = item.tts?.provider.id ?? null;
+        log.warn('tts failed for a clause', { provider, error: item.error.message });
+        const retry = this.errorCb?.(item.error, provider) === true;
+        // Retry once, on whatever binding is current now, if the caller heard none of it.
+        if (!retry || item.retried || item.samplesTotal > 0) break;
+        item.retried = true;
+        item.error = null;
+        item.done = false;
+        item.chunks = [];
+        void this.synthesize(item);
       }
       this.playing = null;
       // The clause's last frames are still in the source queue: it has been HEARD only once
