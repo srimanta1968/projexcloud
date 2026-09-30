@@ -25,7 +25,13 @@ const page = await voice.listCalls({ status: 'completed', limit: 20 });
 The tenant is always the credential's own (the gateway pins it). Non-2xx responses throw
 `VoiceClientError` with `status`, `code` and `details`.
 
-Also: `startTestSession`, `issueLiveTicket`, `checkCallingWindow`, `getCapacity`.
+Also:
+- **Agents & tools:** `createAgent`, `listAgents`, `getAgent`, `createAgentVersion`, `listAgentVersions`, `registerTool`, `listTools`, `getTool`, `updateTool`.
+- **Campaigns:** `createCampaign`, `listCampaigns`, `getCampaign`, `addCampaignContacts`, `listCampaignContacts`, `transitionCampaign` (start, pause, resume, cancel).
+- **Speech catalog:** `listCatalog`, `getCatalogEntry`.
+- **Sessions & dialer:** `startTestSession`, `issueLiveTicket`, `checkCallingWindow`, `getCapacity`.
+
+`get*` methods return `null` for an unknown id.
 
 ## Webhooks
 

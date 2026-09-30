@@ -177,3 +177,73 @@ export interface VoiceWebhookEvent<T = Record<string, unknown>> {
   subject_id: string | null;
   data: T;
 }
+
+// ---- agents, tools, campaigns, catalog --------------------------------------------------
+// Core fields are typed; the gateway returns more, which stay reachable through the index
+// signature so a server-side addition never breaks a consumer build.
+
+export interface Agent {
+  agent_id: string;
+  tenant_id: string;
+  name: string;
+  direction: 'inbound' | 'outbound' | 'both';
+  status: string;
+  published_version_id: string | null;
+  [key: string]: unknown;
+}
+
+export interface AgentVersion {
+  version_id: string;
+  agent_id: string;
+  version_no: number;
+  system_prompt: string;
+  stack_profile_id: string;
+  tool_ids: string[];
+  published_at: string | null;
+  [key: string]: unknown;
+}
+
+export interface AppTool {
+  tool_id: string;
+  name: string;
+  description: string | null;
+  json_schema: Record<string, unknown>;
+  url: string;
+  signing_secret_ref: string;
+  timeout_ms: number;
+  idempotent: boolean;
+  enabled: boolean;
+  [key: string]: unknown;
+}
+
+export interface RegisterToolInput {
+  name: string;
+  description?: string;
+  json_schema: Record<string, unknown>;
+  /** https:// endpoint the agent calls. */
+  url: string;
+  /** sdk-secrets reference, e.g. secret://app/my-tools (never the secret itself). */
+  signing_secret_ref: string;
+  timeout_ms?: number;
+  idempotent?: boolean;
+  app_id?: string;
+}
+
+export interface Campaign {
+  campaign_id: string;
+  agent_id: string;
+  name: string;
+  status: string;
+  window_start: string;
+  window_end: string;
+  default_timezone: string;
+  max_concurrency: number;
+  [key: string]: unknown;
+}
+
+export type CampaignAction = 'start' | 'pause' | 'resume' | 'cancel';
+
+export interface CatalogEntry {
+  entry_id: string;
+  [key: string]: unknown;
+}

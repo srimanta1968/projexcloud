@@ -1,4 +1,11 @@
 import type {
+  Agent,
+  AgentVersion,
+  AppTool,
+  Campaign,
+  CampaignAction,
+  CatalogEntry,
+  RegisterToolInput,
   CallDetail,
   CallingWindowCheck,
   CallingWindowInput,
@@ -102,6 +109,85 @@ export class VoiceClient {
     return res.data.ticket;
   }
 
+  // ---- agents & tools ----------------------------------------------------------------------
+
+  async createAgent(input: Record<string, unknown>): Promise<Agent> {
+    return (await this.request<{ data: { agent: Agent } }>('POST', '/api/voice-agent/agents', { body: input })).data.agent;
+  }
+
+  async listAgents(filter: { status?: string; direction?: string; limit?: number; offset?: number } = {}): Promise<{ agents: Agent[]; limit: number; offset: number }> {
+    return (await this.request<{ data: { agents: Agent[]; limit: number; offset: number } }>('GET', '/api/voice-agent/agents', { query: filter })).data;
+  }
+
+  async getAgent(agentId: string): Promise<Agent | null> {
+    return this.orNull(async () => (await this.request<{ data: { agent: Agent } }>('GET', `/api/voice-agent/agents/${encodeURIComponent(agentId)}`)).data.agent);
+  }
+
+  /** A new draft version (prompt, stack profile, tools); publishing goes through approval. */
+  async createAgentVersion(agentId: string, input: Record<string, unknown>): Promise<AgentVersion> {
+    return (await this.request<{ data: { version: AgentVersion } }>('POST', `/api/voice-agent/agents/${encodeURIComponent(agentId)}/versions`, { body: input })).data.version;
+  }
+
+  async listAgentVersions(agentId: string, page: { limit?: number; offset?: number } = {}): Promise<{ versions: AgentVersion[]; limit: number; offset: number }> {
+    return (await this.request<{ data: { versions: AgentVersion[]; limit: number; offset: number } }>('GET', `/api/voice-agent/agents/${encodeURIComponent(agentId)}/versions`, { query: page })).data;
+  }
+
+  /** Registers an app tool: an https endpoint the agent may call mid-conversation. */
+  async registerTool(input: RegisterToolInput): Promise<AppTool> {
+    return (await this.request<{ data: { tool: AppTool } }>('POST', '/api/voice-agent/tools', { body: input })).data.tool;
+  }
+
+  async listTools(filter: { app_id?: string; enabled?: boolean; limit?: number; offset?: number } = {}): Promise<{ tools: AppTool[]; limit: number; offset: number }> {
+    return (await this.request<{ data: { tools: AppTool[]; limit: number; offset: number } }>('GET', '/api/voice-agent/tools', { query: filter })).data;
+  }
+
+  async getTool(toolId: string): Promise<AppTool | null> {
+    return this.orNull(async () => (await this.request<{ data: { tool: AppTool } }>('GET', `/api/voice-agent/tools/${encodeURIComponent(toolId)}`)).data.tool);
+  }
+
+  /** Updates a tool; enabled:false withdraws it from new calls without a new agent version. */
+  async updateTool(toolId: string, patch: Partial<Omit<RegisterToolInput, 'name' | 'app_id'>> & { enabled?: boolean }): Promise<AppTool> {
+    return (await this.request<{ data: { tool: AppTool } }>('PATCH', `/api/voice-agent/tools/${encodeURIComponent(toolId)}`, { body: patch })).data.tool;
+  }
+
+  // ---- campaigns ---------------------------------------------------------------------------
+
+  async createCampaign(input: Record<string, unknown>): Promise<Campaign> {
+    return (await this.request<{ data: { campaign: Campaign } }>('POST', '/api/dialer/campaigns', { body: input })).data.campaign;
+  }
+
+  async listCampaigns(filter: { status?: string; agent_id?: string; limit?: number; offset?: number } = {}): Promise<{ campaigns: Campaign[]; [key: string]: unknown }> {
+    return (await this.request<{ data: { campaigns: Campaign[] } }>('GET', '/api/dialer/campaigns', { query: filter })).data;
+  }
+
+  async getCampaign(campaignId: string): Promise<Campaign | null> {
+    return this.orNull(async () => (await this.request<{ data: { campaign: Campaign } }>('GET', `/api/dialer/campaigns/${encodeURIComponent(campaignId)}`)).data.campaign);
+  }
+
+  /** Adds or updates contacts on a campaign. */
+  async addCampaignContacts(campaignId: string, body: { contacts: Record<string, unknown>[] }): Promise<Record<string, unknown>> {
+    return (await this.request<{ data: Record<string, unknown> }>('POST', `/api/dialer/campaigns/${encodeURIComponent(campaignId)}/contacts`, { body })).data;
+  }
+
+  async listCampaignContacts(campaignId: string, filter: { status?: string; limit?: number; offset?: number } = {}): Promise<Record<string, unknown>> {
+    return (await this.request<{ data: Record<string, unknown> }>('GET', `/api/dialer/campaigns/${encodeURIComponent(campaignId)}/contacts`, { query: filter })).data;
+  }
+
+  /** start | pause | resume | cancel. */
+  async transitionCampaign(campaignId: string, action: CampaignAction): Promise<Campaign> {
+    return (await this.request<{ data: { campaign: Campaign } }>('POST', `/api/dialer/campaigns/${encodeURIComponent(campaignId)}/${action}`, { body: {} })).data.campaign;
+  }
+
+  // ---- speech catalog ----------------------------------------------------------------------
+
+  async listCatalog(filter: Record<string, string | boolean | undefined> = {}): Promise<CatalogEntry[]> {
+    return (await this.request<{ data: { entries: CatalogEntry[] } }>('GET', '/api/speech/catalog', { query: filter })).data.entries;
+  }
+
+  async getCatalogEntry(entryId: string): Promise<CatalogEntry | null> {
+    return this.orNull(async () => (await this.request<{ data: { entry: CatalogEntry } }>('GET', `/api/speech/catalog/${encodeURIComponent(entryId)}`)).data.entry);
+  }
+
   // ---- dialer ------------------------------------------------------------------------------
 
   /** Whether a recipient may be called now, in their local time zone(s), and when they next may. */
@@ -119,7 +205,16 @@ export class VoiceClient {
 
   // ---- transport ---------------------------------------------------------------------------
 
-  private async request<T>(method: 'GET' | 'POST', path: string, init: { body?: unknown; query?: Query; headers?: Record<string, string> } = {}): Promise<T> {
+  private async orNull<T>(fn: () => Promise<T>): Promise<T | null> {
+    try {
+      return await fn();
+    } catch (err) {
+      if (err instanceof VoiceClientError && err.status === 404) return null;
+      throw err;
+    }
+  }
+
+  private async request<T>(method: 'GET' | 'POST' | 'PATCH', path: string, init: { body?: unknown; query?: Query; headers?: Record<string, string> } = {}): Promise<T> {
     const url = new URL(this.baseUrl + path);
     for (const [k, v] of Object.entries(init.query ?? {})) {
       if (v !== undefined && v !== null) url.searchParams.set(k, String(v));
