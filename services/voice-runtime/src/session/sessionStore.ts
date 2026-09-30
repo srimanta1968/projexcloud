@@ -19,6 +19,24 @@ import { log } from '../log';
  * a call.
  */
 
+/** One line of the call transcript, with its latency breakdown (voice_agent.call_turn shape). */
+export interface TurnRecord {
+  turn_index: number;
+  speaker: 'caller' | 'agent';
+  text: string;
+  /** ms since the session opened. */
+  started_ms: number;
+  /** Caller turns: end of speech -> final transcript. */
+  stt_ms?: number | null;
+  /** Agent turns: LLM request -> first token. */
+  ttft_ms?: number | null;
+  /** Agent turns: end of the caller's turn -> first agent audio. */
+  ttfa_ms?: number | null;
+  interrupted: boolean;
+  tool_calls?: unknown[];
+  model?: string;
+}
+
 export interface SessionContext {
   callId: string;
   tenantId: string;
@@ -27,6 +45,8 @@ export interface SessionContext {
   boot: Bootstrap;
   turn: number;
   lastTurnAt: number | null;
+  /** The transcript, kept in memory and written once at call end (TK-4467). */
+  turns: TurnRecord[];
 }
 
 export const sessionKey = (callId: string): string => `voice:session:${callId}`;
@@ -63,6 +83,7 @@ export class SessionStore {
       boot,
       turn: 0,
       lastTurnAt: null,
+      turns: [],
     };
     this.sessions.set(ctx.callId, ctx);
     const key = sessionKey(ctx.callId);
