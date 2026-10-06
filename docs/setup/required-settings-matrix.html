@@ -1,0 +1,95 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Required Settings Matrix · ProjexCloud</title><style>
+:root{--bg:#0d1117;--panel:#161b22;--ink:#e6edf3;--muted:#8b949e;--line:#30363d;--accent:#58a6ff;--ok:#3fb950}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.65 -apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif}
+a{color:var(--accent);text-decoration:none}a:hover{text-decoration:underline}
+.layout{display:grid;grid-template-columns:280px 1fr;min-height:100vh}
+aside{position:sticky;top:0;align-self:start;height:100vh;overflow:auto;background:var(--panel);border-right:1px solid var(--line);padding:20px 16px}
+aside h1{font-size:15px;margin:0 0 2px}aside .sub{color:var(--muted);font-size:12px;margin-bottom:16px}
+aside h2{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin:16px 0 6px}
+aside a{display:block;padding:6px 10px;border-radius:6px;color:var(--ink);font-size:13px}
+aside a:hover{background:#21262d;text-decoration:none}
+aside a.active{background:#1f6feb;color:#fff}
+main{padding:30px 42px;max-width:960px}
+h1,h2,h3,h4{line-height:1.3}
+h1{font-size:26px;margin:0 0 18px;padding-bottom:10px;border-bottom:1px solid var(--line)}
+h2{font-size:20px;margin:30px 0 10px;padding-bottom:6px;border-bottom:1px solid var(--line)}
+h3{font-size:16px;margin:22px 0 8px}h4{font-size:14px;margin:18px 0 6px;color:var(--muted)}
+p{margin:10px 0}
+code{background:#0b0f14;border:1px solid var(--line);border-radius:5px;padding:1px 5px;font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:.88em}
+pre{background:#0b0f14;border:1px solid var(--line);border-radius:8px;padding:12px 14px;overflow:auto;margin:12px 0}
+pre code{background:none;border:0;padding:0;font-size:12.5px;line-height:1.55;color:#c9d1d9}
+table{border-collapse:collapse;width:100%;margin:14px 0;font-size:13.5px}
+th,td{border:1px solid var(--line);padding:8px 11px;text-align:left;vertical-align:top}
+th{background:#1c2330;color:var(--muted);font-weight:600}
+tr:nth-child(even) td{background:#11161d}
+blockquote{margin:12px 0;padding:8px 16px;border-left:3px solid var(--accent);background:#11161d;border-radius:0 8px 8px 0;color:#c9d1d9}
+ul{margin:10px 0;padding-left:22px}li{margin:4px 0}
+ul.task{list-style:none;padding-left:4px}ul.task li::before{content:"☐ ";color:var(--muted)}
+hr{border:0;border-top:1px solid var(--line);margin:24px 0}
+.crumb{color:var(--muted);font-size:12px;margin-bottom:14px}
+</style></head><body>
+<div class="layout">
+<aside><h1>ProjexCloud</h1><div class="sub">Setup &amp; Deployment</div>
+<h2>Guides</h2>
+<a class="" href="README.html">Overview / Index</a>
+<a class="" href="on-premise-install.html">On-premise Install</a>
+<a class="active" href="required-settings-matrix.html">Required Settings</a>
+<a class="" href="dev-environment.html">Developer Environment</a>
+<a class="" href="production-overview.html">Production — Overview</a>
+<a class="" href="production-aws-ec2.html">Production — AWS (EC2)</a>
+<a class="" href="production-digitalocean.html">Production — DigitalOcean</a>
+<a class="" href="local-llm-and-discovery.html">Local LLM &amp; Discovery</a>
+<a class="" href="sdk-api-access.html">SDK API Access</a>
+<h2>Reference</h2>
+<a href="../v3.1/api_docs/index.html">API Reference ↗</a>
+<a href="../v3.1/api_docs/test-plan.html">QA Test Plan ↗</a>
+</aside>
+<main>
+<div class="crumb">docs / setup / required-settings-matrix.html</div>
+<h1>Required settings — what you must supply, and what we generate</h1>
+<p>Applies to every deployed environment (staging, production, on-premise). Read this before an install, not after the first 500.</p>
+<h2>Why this document exists</h2>
+<p>Several SDKs behave differently under <code>NODE_ENV=production</code>. Below that threshold they fall back to synthetic implementations and hardcoded dev key material; at it, they refuse to start the operation and say so. That is deliberate — a fabricated key must never encrypt a customer&#x27;s PII — but it has a consequence worth stating plainly:</p>
+<blockquote><strong>A green local test run does not prove a working install.</strong></blockquote>
+<p><code>sdk-search</code> locally serves an in-process <code>Map</code>. <code>sdk-source-record</code> locally encrypts with <code>Buffer.alloc(32, 11)</code> — a constant, published in this repository. Both pass their tests. Neither is doing the thing its test appears to prove. Measured on 2026-08-06: a suite that scored 695/695 locally scored 660/695 against production, and <strong>every one of the 35 differences was configuration, not code</strong> — zero routing failures on either side.</p>
+<p>So: work through this matrix before declaring an install healthy.</p>
+<hr>
+<h2>Class A — secrets generated for you on first boot</h2>
+<p>No external party is involved, so the gateway generates each one itself (TK-4156). At <code>NODE_ENV=production</code>, any of these that is absent on boot is generated from 32 CSPRNG bytes, stored envelope-encrypted in <code>vault.bootstrap_secret</code> under the secrets KMS, and read back on every later boot and by every replica. The boot log reports each as <code>present</code> (you supplied it) or <code>generated</code>.</p>
+<p>The one thing you must supply is the KMS root the keyring is sealed under: <code>SECRETS_MASTER_KEY</code> (generated into <code>.env.prod</code> by <code>prod-setup.sh</code> if absent), or <code>SECRETS_KMS_PROVIDER</code> with a cloud KMS or HSM. Generation is skipped, and the boot fails as before, when the KMS is the in-memory mock or <code>BOOTSTRAP_SECRETS=off</code>.</p>
+<p>To supply a value yourself instead:</p>
+<pre><code>openssl rand -hex 32     # 64 hex characters (the two *_WRAP_KEYs take: openssl rand -base64 32)</code></pre>
+<table><thead><tr><th>Variable</th><th>SDK</th><th>Protects</th></tr></thead><tbody><tr><td><code>SOURCE_RECORD_MASTER_KEY</code></td><td>sdk-source-record</td><td>AES-256-GCM envelope over PII assertion values</td></tr><tr><td><code>SOURCE_RECORD_ATTESTATION_KEY</code></td><td>sdk-source-record</td><td>HMAC signature on rights attestations</td></tr><tr><td><code>EVIDENCE_LEGAL_EXPORT_SIGNING_KEY</code></td><td>sdk-evidence</td><td>Signature on legal evidence exports</td></tr><tr><td><code>NOTIFICATION_MASTER_KEY</code></td><td>sdk-notification</td><td>Destination (email/phone) envelope</td></tr><tr><td><code>NOTIFICATION_PROVIDER_WRAP_KEY</code></td><td>sdk-notification</td><td>Provider credential wrapping</td></tr><tr><td><code>PRINCIPAL_TOKEN_WRAP_KEY</code></td><td>sdk-principal-token</td><td>Principal token wrapping</td></tr><tr><td><code>CAPABILITY_TOKEN_SIGNING_KEY</code></td><td>sdk-agent-runtime</td><td>Agent capability token signatures</td></tr><tr><td><code>API_KEY_PEPPER</code></td><td>sdk-api-keys</td><td>Pepper for API key hashing</td></tr><tr><td><code>JWT_SECRET</code></td><td>sdk-identity</td><td>Session token signatures. Generated too: only the gateway verifies these tokens, and the shared persistent keyring means sessions survive a restart. Absent below production, sdk-identity falls back to the published <code>change-me-in-prod</code></td></tr></tbody></table>
+<h3>These are not casually rotatable</h3>
+<p><code>SOURCE_RECORD_MASTER_KEY</code> is the HKDF input for envelopes stored in the database, and the stored <code>key_ref</code> records the *scheme* (<code>local:hkdf/sdk-source-record/assertion/v1</code>), <strong>not which key produced it</strong>. Change the key after data exists and every prior envelope becomes undecryptable, with nothing on the row to distinguish old from new. The same applies to <code>NOTIFICATION_MASTER_KEY</code> and <code>PRINCIPAL_TOKEN_WRAP_KEY</code>.</p>
+<p><strong>Set these before the system writes its first record — or let the gateway generate them.</strong> The keyring records the fingerprint of every key you supply, so a later boot refuses when one <strong>changes</strong> (<code>BOOTSTRAP_SECRETS_ACCEPT_CHANGE=&lt;NAME&gt;</code> acknowledges an intended change) or <strong>disappears</strong> (it is never regenerated over). Rotating <code>JWT_SECRET</code> is milder — it only invalidates live sessions.</p>
+<h3>Placeholder values are refused</h3>
+<p>Any of these keys containing <code>change-me</code>, <code>change_me</code> or <code>do-not-use-in-prod</code> (any case) aborts startup. The case-insensitive match matters: <code>.env.prod.example</code> once shipped <code>JWT_SECRET=CHANGE_ME_…</code>, which a lowercase-only check accepted as a real signing key. That guard exists because a placeholder copied from an example file is worse than an absent value: it looks configured.</p>
+<hr>
+<h2>Class B — synthetic-mode flags</h2>
+<p>Each flag lets an SDK run a fake implementation under <code>NODE_ENV=production</code>. They exist for sandboxes. <strong>Every one of them is a decision, and the default for a real install is &quot;do not set&quot;.</strong></p>
+<table><thead><tr><th>Flag</th><th>If <code>true</code> in production</th></tr></thead><tbody><tr><td><code>ALLOW_SYNTHETIC_SEARCH_CLIENT</code></td><td>Search runs on an in-process <code>Map</code>. Indexes vanish on every restart — <strong>silent data loss</strong>. Never set this.</td></tr><tr><td><code>ALLOW_SYNTHETIC_BYOK</code></td><td>Customer-managed keys are simulated. The BYOK guarantee — customer revoke makes tenant data undecryptable — is <strong>not actually delivered</strong>.</td></tr><tr><td><code>ALLOW_SYNTHETIC_AI_PROVIDERS</code></td><td>Model calls are stubbed; no real inference.</td></tr><tr><td><code>ALLOW_SYNTHETIC_STORM</code></td><td>Weather/storm data is fabricated.</td></tr><tr><td><code>ALLOW_SYNTHETIC_LEAK_DETECTOR</code></td><td>Sovereign egress leak detection is not enforced.</td></tr><tr><td><code>ALLOW_SYNTHETIC_S3_SIGNER</code></td><td>Presigned upload URLs do not point at real storage — uploads <strong>appear to succeed and go nowhere</strong>.</td></tr><tr><td><code>ALLOW_SYNTHETIC_PAYMENT_PROVIDERS</code></td><td>Payments are simulated. Nothing is charged, captured or settled.</td></tr><tr><td><code>ALLOW_SYNTHETIC_NOTIFICATION_PROVIDERS</code></td><td>Email and SMS are swallowed. Recipients are never contacted.</td></tr></tbody></table>
+<p>That is the complete set — eight flags, confirmed by sweeping <code>ALLOW_*</code> across every SDK. Three of them (<code>S3_SIGNER</code>, <code>PAYMENT_PROVIDERS</code>, <code>NOTIFICATION_PROVIDERS</code>) were missed by an earlier pass that searched only for <code>NODE_ENV === &#x27;production&#x27;</code> guards, because they are structured differently. If you are auditing this yourself, grep the flag names, not the guard shape.</p>
+<p>If you set one, record why and when it will be removed. A synthetic flag left on in production is indistinguishable, from the outside, from a working feature.</p>
+<hr>
+<h2>Class C — third-party services you must provide</h2>
+<p>These cannot be generated. Each one is absent by default and the affected endpoints fail loudly rather than degrade quietly.</p>
+<table><thead><tr><th>Service</th><th>Wire-up</th><th>Absent behaviour</th></tr></thead><tbody><tr><td><strong>OpenSearch</strong> (or compatible)</td><td><code>OPENSEARCH_NODE</code> (registered automatically at boot)</td><td><code>GET/POST /api/search</code>, <code>POST /api/search/index</code> return 500</td></tr><tr><td><strong>Webhook HMAC resolver</strong></td><td><code>registerHmacKeyResolver(...)</code> to a vault-backed resolver</td><td>Outbound webhook delivery worker fails on every tick</td></tr><tr><td><strong>SMTP or SendGrid</strong></td><td><code>SMTP_*</code> or <code>SENDGRID_API_KEY</code></td><td>Notification delivery unavailable</td></tr><tr><td><strong>LLM provider</strong></td><td><code>ANTHROPIC_API_KEY</code> / <code>OPENAI_API_KEY</code> / <code>GEMINI_API_KEY</code>, or a local Ollama/vLLM endpoint</td><td>AI gateway unavailable unless synthetic is enabled</td></tr><tr><td><strong>S3-compatible storage</strong></td><td><code>MEDIA_S3_BUCKET</code> + <code>AWS_REGION</code> + credentials; <code>S3_ENDPOINT</code> for MinIO / non-AWS (path-style)</td><td><code>POST /api/media/upload-url</code> cannot issue presigned URLs</td></tr><tr><td><strong>KMS or HSM</strong></td><td>AWS KMS / GCP KMS / PKCS#11</td><td>Required for real BYOK (Variant A)</td></tr><tr><td><strong>ClickHouse</strong></td><td><code>CLICKHOUSE_URL</code> + credentials</td><td>Analytics and trace OLAP degraded</td></tr></tbody></table>
+<h3>Air-gapped installs</h3>
+<p>An air-gapped deployment cannot reach any hosted third party. Substitute in-cluster: OpenSearch in-cluster, Ollama or vLLM for the LLM provider, MinIO for S3, an in-cluster SMTP relay, and a PKCS#11 HSM for KMS. See <code>FT-1081 (Variant C)</code> for the bundle and update-signing model.</p>
+<hr>
+<h2>Class D — per-tenant configuration</h2>
+<p>Not environment variables in the usual sense; these are set per tenant after install.</p>
+<table><thead><tr><th>Setting</th><th>Effect if absent</th></tr></thead><tbody><tr><td><code>LEAD_FORM_SECRET</code> / <code>LEAD_FORM_SECRET_&lt;PLATFORM&gt;</code></td><td>Inbound lead-form webhooks return <code>500 SIGNING_SECRET_NOT_CONFIGURED</code>. The 5xx is deliberate: no signing secret is *our* misconfiguration, and a 4xx would send the provider hunting for a fault in a request that was already correct.</td></tr><tr><td>Vault tenant key</td><td>Created on demand at the tenant&#x27;s first upload (<code>sdk-vault ensureTenantKey</code>) — nothing to set. Before that existed, <code>POST /api/media/upload-url</code> returned <code>400 VaultKeyMissing</code> and every media/evidence endpoint downstream of a blob id became unreachable.</td></tr></tbody></table>
+<hr>
+<h2>Class E — test fixtures, deliberately absent</h2>
+<p>Files under <code>tests/setup_scripts/</code> are QA fixtures and <strong>do not run on a customer install</strong> (a QA target opts in with <code>scripts/setup/apply-qa-seeds.sh --yes</code>). If an endpoint only passes because a fixture row exists, it will not pass in production, and that is correct. Known cases: the webhook DLQ deliveries and the smoke widget ids.</p>
+<hr>
+<h2>Verifying an install</h2>
+<p>1. <code>GET /health</code> returns 200. 2. Read the boot log&#x27;s <code>[preflight]</code> block: it reports every Class A secret as <code>present</code> or    <code>generated</code>, every Class B flag that is on, and every Class C service as <code>MISSING</code> with    the variable that fixes it. Any <code>no … registered for production</code> line also names a Class C    gap. 3. Do not look for the Class A variables in the container environment — generated ones exist    only in the gateway process and, sealed, in <code>vault.bootstrap_secret</code>. The preflight block    is the authority; <code>SELECT name, origin FROM vault.bootstrap_secret</code> shows which were    generated and which you supplied. 4. Exercise one endpoint per class-A SDK. For <code>sdk-source-record</code>, <code>POST /api/source-assertions</code>    with <code>is_pii: true</code> should return 201 and a <code>value</code> beginning <code>v1.</code> — that prefix is the    envelope, and it is the only proof the real key is in use rather than the dev constant. 5. Do <strong>not</strong> treat a passing local suite as a substitute for steps 2–4.</p>
+<h3>A caution about cascading skips</h3>
+<p>A failing producer suppresses everything downstream of it, and a suppressed endpoint reports as skipped rather than failed. During the 2026-08-06 audit a missing <code>EVIDENCE_LEGAL_EXPORT_SIGNING_KEY</code> was invisible to the whole suite because the evidence endpoints were already being skipped for an unrelated reason — a missing vault key three steps upstream. <strong>A skip is not a pass.</strong> Read the skip reasons, not just the failure count.</p>
+</main></div></body></html>

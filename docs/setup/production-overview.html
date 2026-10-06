@@ -35,11 +35,14 @@ hr{border:0;border-top:1px solid var(--line);margin:24px 0}
 <aside><h1>ProjexCloud</h1><div class="sub">Setup &amp; Deployment</div>
 <h2>Guides</h2>
 <a class="" href="README.html">Overview / Index</a>
+<a class="" href="on-premise-install.html">On-premise Install</a>
+<a class="" href="required-settings-matrix.html">Required Settings</a>
 <a class="" href="dev-environment.html">Developer Environment</a>
 <a class="active" href="production-overview.html">Production — Overview</a>
 <a class="" href="production-aws-ec2.html">Production — AWS (EC2)</a>
 <a class="" href="production-digitalocean.html">Production — DigitalOcean</a>
 <a class="" href="local-llm-and-discovery.html">Local LLM &amp; Discovery</a>
+<a class="" href="sdk-api-access.html">SDK API Access</a>
 <h2>Reference</h2>
 <a href="../v3.1/api_docs/index.html">API Reference ↗</a>
 <a href="../v3.1/api_docs/test-plan.html">QA Test Plan ↗</a>
@@ -81,8 +84,9 @@ hr{border:0;border-top:1px solid var(--line);margin:24px 0}
 <h2>4. Environment &amp; secrets</h2>
 <p>Copy the template and fill it in on the host (never commit it):</p>
 <pre><code>cp scripts/setup/.env.prod.example .env.prod</code></pre>
-<p>Must-set before <code>prod-setup.sh</code> will start (it refuses on <code>CHANGE_ME</code>/empty):</p>
-<table><thead><tr><th>Variable</th><th>Notes</th></tr></thead><tbody><tr><td><code>DB_PASSWORD</code></td><td>Managed DB password</td></tr><tr><td><code>ADMIN_OPS_TOKEN</code></td><td>Shared secret for <code>/admin/*</code> operator endpoints + seeding. <code>openssl rand -hex 32</code></td></tr><tr><td><code>JWT_SECRET</code></td><td>Long random string. <code>openssl rand -hex 32</code></td></tr></tbody></table>
+<p>Must-set before <code>prod-setup.sh</code> will start (it refuses on <code>CHANGE_ME</code>/empty, and on a <code>CHANGE_ME</code> placeholder left in ANY secret):</p>
+<table><thead><tr><th>Variable</th><th>Notes</th></tr></thead><tbody><tr><td><code>DB_PASSWORD</code></td><td>Managed DB password</td></tr><tr><td><code>ADMIN_OPS_TOKEN</code></td><td>Shared secret for <code>/admin/*</code> operator endpoints + seeding. <code>openssl rand -hex 32</code></td></tr><tr><td>Secrets KMS root</td><td><code>SECRETS_MASTER_KEY</code>, or <code>SECRETS_KMS_PROVIDER=aws-kms</code> / <code>gcp-kms</code> / <code>hsm-pkcs11</code>. <code>prod-setup.sh</code> generates <code>SECRETS_MASTER_KEY</code> into <code>.env.prod</code> when none is set — <strong>back it up, apart from the DB backups</strong></td></tr></tbody></table>
+<p><strong>Generated on first boot — leave unset:</strong> <code>JWT_SECRET</code>, <code>API_KEY_PEPPER</code>, <code>CAPABILITY_TOKEN_SIGNING_KEY</code>, <code>SOURCE_RECORD_*</code>, <code>EVIDENCE_LEGAL_EXPORT_SIGNING_KEY</code>, <code>NOTIFICATION_*</code> and <code>PRINCIPAL_TOKEN_WRAP_KEY</code>. The gateway generates each, stores it envelope-encrypted in <code>vault.bootstrap_secret</code> under the KMS root, and reads it back on every restart and replica. Supplying one yourself is fine <strong>before</strong> the first boot; after that, a changed or removed supplied key stops the boot (data is encrypted under it). Details: <a href="./on-premise-install.html">on-premise-install.md</a> §2.</p>
 <p>Key others: <code>DB_HOST</code>/<code>DB_PORT</code>/<code>DB_NAME</code>/<code>DB_USER</code>, <code>DB_SSL=true</code> for managed Postgres, <code>REDIS_HOST</code>/<code>REDIS_PASSWORD</code>, <code>CORS_ORIGIN</code> (your app domain), <code>GATEWAY_PORT</code>. Full list with comments is in <code>.env.prod.example</code>. In a mature setup, inject these from the cloud&#x27;s secret store (AWS Secrets Manager, DO secrets, Vault) rather than a file on disk.</p>
 <h2>5. Deploy procedure (cloud-agnostic)</h2>
 <p>On the target Linux host, as the deploy user, from the repo root:</p>
@@ -111,8 +115,12 @@ docker compose --env-file .env.prod -f scripts/setup/docker-compose.prod.yml up 
 <ul><li>Multi-pool database topology (admin/app/evidence) and PgBouncer are covered in</li></ul>
 <p>  <code>docs/v3.1/SCALING-RUNBOOK.md</code>.</p>
 <h2>8. Production hardening checklist</h2>
-<ul class="task"><li>Managed Postgres with automated backups + PITR; <code>DB_SSL=true</code>.</li><li>Snapshot the DB immediately <strong>before</strong> every deploy (migration rollback path).</li><li>TLS terminated at the LB/reverse proxy; gateway port <strong>not</strong> public.</li><li>Firewall: only the LB reaches <code>:3000</code>; only the gateway reaches DB/Redis.</li><li>Strong <code>ADMIN_OPS_TOKEN</code>/<code>JWT_SECRET</code>/<code>DB_PASSWORD</code> from a secret store.</li><li><code>CORS_ORIGIN</code> pinned to your real front-end origin(s).</li><li><code>NODE_ENV=production</code> (synthetic vendor stubs refuse to run unless</li></ul>
-<p>      <code>ALLOW_SYNTHETIC_*=true</code>; wire real adapters via their env vars).</p>
+<ul class="task"><li>Managed Postgres with automated backups + PITR; <code>DB_SSL=true</code>.</li><li>Snapshot the DB immediately <strong>before</strong> every deploy (migration rollback path).</li><li>TLS terminated at the LB/reverse proxy; gateway port <strong>not</strong> public.</li><li>Firewall: only the LB reaches <code>:3000</code>; only the gateway reaches DB/Redis.</li><li>Strong <code>ADMIN_OPS_TOKEN</code>/<code>DB_PASSWORD</code> from a secret store; the secrets KMS root</li></ul>
+<p>      (<code>SECRETS_MASTER_KEY</code> or a cloud KMS) backed up <strong>separately</strong> from the database.</p>
+<ul class="task"><li>Boot log <code>[preflight]</code> block shows <code>9/9 required secrets usable</code> and no unexpected</li></ul>
+<p>      <code>MISSING</code> third party.</p>
+<ul class="task"><li><code>CORS_ORIGIN</code> pinned to your real front-end origin(s).</li><li><code>NODE_ENV=production</code> (synthetic vendor stubs refuse to run unless</li></ul>
+<p>      <code>ALLOW_SYNTHETIC_*=true</code>; wire real adapters via their env vars). Below it the SDKs use       published dev key material, so a green local run proves nothing about this install —       run the checks in <a href="./on-premise-install.html">on-premise-install.md</a> §6 against it.</p>
 <ul class="task"><li>Centralized logs/metrics: gateway logs JSON to stdout; Prometheus scrape +</li></ul>
 <p>      Grafana dashboard in <code>infrastructure/</code>.</p>
 <ul class="task"><li>Health/uptime check hitting <code>GET /health</code>.</li></ul>

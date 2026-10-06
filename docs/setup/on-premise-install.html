@@ -1,0 +1,112 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>On-premise Installation — Licensee Guide · ProjexCloud</title><style>
+:root{--bg:#0d1117;--panel:#161b22;--ink:#e6edf3;--muted:#8b949e;--line:#30363d;--accent:#58a6ff;--ok:#3fb950}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.65 -apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif}
+a{color:var(--accent);text-decoration:none}a:hover{text-decoration:underline}
+.layout{display:grid;grid-template-columns:280px 1fr;min-height:100vh}
+aside{position:sticky;top:0;align-self:start;height:100vh;overflow:auto;background:var(--panel);border-right:1px solid var(--line);padding:20px 16px}
+aside h1{font-size:15px;margin:0 0 2px}aside .sub{color:var(--muted);font-size:12px;margin-bottom:16px}
+aside h2{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin:16px 0 6px}
+aside a{display:block;padding:6px 10px;border-radius:6px;color:var(--ink);font-size:13px}
+aside a:hover{background:#21262d;text-decoration:none}
+aside a.active{background:#1f6feb;color:#fff}
+main{padding:30px 42px;max-width:960px}
+h1,h2,h3,h4{line-height:1.3}
+h1{font-size:26px;margin:0 0 18px;padding-bottom:10px;border-bottom:1px solid var(--line)}
+h2{font-size:20px;margin:30px 0 10px;padding-bottom:6px;border-bottom:1px solid var(--line)}
+h3{font-size:16px;margin:22px 0 8px}h4{font-size:14px;margin:18px 0 6px;color:var(--muted)}
+p{margin:10px 0}
+code{background:#0b0f14;border:1px solid var(--line);border-radius:5px;padding:1px 5px;font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:.88em}
+pre{background:#0b0f14;border:1px solid var(--line);border-radius:8px;padding:12px 14px;overflow:auto;margin:12px 0}
+pre code{background:none;border:0;padding:0;font-size:12.5px;line-height:1.55;color:#c9d1d9}
+table{border-collapse:collapse;width:100%;margin:14px 0;font-size:13.5px}
+th,td{border:1px solid var(--line);padding:8px 11px;text-align:left;vertical-align:top}
+th{background:#1c2330;color:var(--muted);font-weight:600}
+tr:nth-child(even) td{background:#11161d}
+blockquote{margin:12px 0;padding:8px 16px;border-left:3px solid var(--accent);background:#11161d;border-radius:0 8px 8px 0;color:#c9d1d9}
+ul{margin:10px 0;padding-left:22px}li{margin:4px 0}
+ul.task{list-style:none;padding-left:4px}ul.task li::before{content:"☐ ";color:var(--muted)}
+hr{border:0;border-top:1px solid var(--line);margin:24px 0}
+.crumb{color:var(--muted);font-size:12px;margin-bottom:14px}
+</style></head><body>
+<div class="layout">
+<aside><h1>ProjexCloud</h1><div class="sub">Setup &amp; Deployment</div>
+<h2>Guides</h2>
+<a class="" href="README.html">Overview / Index</a>
+<a class="active" href="on-premise-install.html">On-premise Install</a>
+<a class="" href="required-settings-matrix.html">Required Settings</a>
+<a class="" href="dev-environment.html">Developer Environment</a>
+<a class="" href="production-overview.html">Production — Overview</a>
+<a class="" href="production-aws-ec2.html">Production — AWS (EC2)</a>
+<a class="" href="production-digitalocean.html">Production — DigitalOcean</a>
+<a class="" href="local-llm-and-discovery.html">Local LLM &amp; Discovery</a>
+<a class="" href="sdk-api-access.html">SDK API Access</a>
+<h2>Reference</h2>
+<a href="../v3.1/api_docs/index.html">API Reference ↗</a>
+<a href="../v3.1/api_docs/test-plan.html">QA Test Plan ↗</a>
+</aside>
+<main>
+<div class="crumb">docs / setup / on-premise-install.html</div>
+<h1>On-premise installation — licensee guide</h1>
+<p>For a customer who licenses ProjexCloud and runs it on their own infrastructure. It takes you from an empty host to a verified install, and tells you up front everything you must supply, so you never have to learn a requirement from a stack trace.</p>
+<p>Read <a href="./required-settings-matrix.html">required-settings-matrix.md</a> alongside this; it is the reference for every individual setting. This guide is the order to do things in.</p>
+<hr>
+<h2>1. What you are installing</h2>
+<table><thead><tr><th>Component</th><th>Required</th><th>Notes</th></tr></thead><tbody><tr><td><code>api-gateway</code></td><td><strong>Yes</strong></td><td>One Fastify service that mounts ~90 SDKs. Applies every SDK&#x27;s database migration and provisions platform secrets on boot.</td></tr><tr><td>PostgreSQL 16 with <strong>pgvector</strong> and <strong>PostGIS</strong></td><td><strong>Yes</strong></td><td>The gateway aborts on boot without both extensions. The bundled image <code>scripts/setup/postgres.Dockerfile</code> has them. The database must be empty or a previous ProjexCloud database.</td></tr><tr><td>Redis 7</td><td>Recommended</td><td>Without it the route cache and soft-cap counters are per-process.</td></tr><tr><td>ClickHouse 24</td><td>Recommended</td><td>Analytics, trace OLAP, meter rollups and billing showback splits. Without it, billing reads the Postgres day ledger (no app / BU / persona splits). Tuned for a 1.4 GB container in <code>infra/clickhouse/config.d/</code> — do not run it on defaults.</td></tr><tr><td>Kafka</td><td>Optional</td><td>Falls back to an in-process emitter on a single host.</td></tr><tr><td>Portals (workspace / tenant / console)</td><td>Optional</td><td>Next.js apps in front of the gateway.</td></tr></tbody></table>
+<h3>Sizing — a starting point, not a measurement</h3>
+<ul><li><strong>Single host:</strong> 2 vCPU / 4 GB RAM minimum to run, more to build. The image build compiles</li></ul>
+<p>  ~90 packages; build in CI and pull the image if the host is small.</p>
+<ul><li><strong>Postgres:</strong> start at 2 GB / 1 vCPU and size to your data.</li><li><strong>ClickHouse:</strong> the shipped tuning assumes a 1.4 GB container.</li></ul>
+<p>Measure under your own load before you commit to hardware. For pool-based scale-out, see <code>docs/v3.1/SCALING-RUNBOOK.md</code>.</p>
+<hr>
+<h2>2. Secrets: what is generated for you, what you supply</h2>
+<h3>You supply exactly one root: the secrets KMS</h3>
+<p>Everything the platform generates is sealed under it, so it has to live <strong>outside</strong> the database. Choose one:</p>
+<table><thead><tr><th>Option</th><th>Set</th><th>When</th></tr></thead><tbody><tr><td>Software master key</td><td><code>SECRETS_MASTER_KEY</code> (32 random bytes, hex or base64)</td><td>Single host, no KMS. <code>prod-setup.sh</code> generates it into <code>.env.prod</code> on first run.</td></tr><tr><td>AWS KMS</td><td><code>SECRETS_KMS_PROVIDER=aws-kms</code> + an instance role or <code>AWS_ROLE_ARN</code></td><td>AWS</td></tr><tr><td>GCP KMS</td><td><code>SECRETS_KMS_PROVIDER=gcp-kms</code> + <code>GOOGLE_APPLICATION_CREDENTIALS</code></td><td>GCP</td></tr><tr><td>HSM</td><td><code>SECRETS_KMS_PROVIDER=hsm-pkcs11</code> + <code>HSM_PKCS11_LIB</code>, <code>HSM_PKCS11_PIN</code></td><td>Air-gapped, regulated</td></tr></tbody></table>
+<blockquote>**Back up <code>SECRETS_MASTER_KEY</code> with the same care as the database, but separately from it.** Lose it and every generated secret, and so every PII envelope, is unrecoverable. Store it in the same backup as the database and anyone holding that backup can decrypt it.</blockquote>
+<p>With none of these set, a production gateway refuses to boot. It will not fall back to the in-memory mock KMS, because every secret sealed under the mock is lost on the next restart.</p>
+<h3>Generated on first boot — leave these unset</h3>
+<p>On its first boot the gateway generates each of these from 32 CSPRNG bytes. It stores each one envelope-encrypted in <code>vault.bootstrap_secret</code> and reads the same value back on every restart, redeploy and replica:</p>
+<p><code>JWT_SECRET</code>, <code>API_KEY_PEPPER</code>, <code>CAPABILITY_TOKEN_SIGNING_KEY</code>, <code>SOURCE_RECORD_MASTER_KEY</code>, <code>SOURCE_RECORD_ATTESTATION_KEY</code>, <code>EVIDENCE_LEGAL_EXPORT_SIGNING_KEY</code>, <code>NOTIFICATION_MASTER_KEY</code>, <code>NOTIFICATION_PROVIDER_WRAP_KEY</code>, <code>PRINCIPAL_TOKEN_WRAP_KEY</code>.</p>
+<p>These are safe to generate because none has an external counterparty: nothing outside the gateway has to hold the same value. <code>JWT_SECRET</code> qualifies too. Only the gateway verifies session tokens, and because the keyring is shared and persistent, sessions survive a restart.</p>
+<p><strong>To supply one yourself</strong> (for example, from your secret manager), set it <strong>before the first boot</strong>, then never change or remove it. Data is encrypted under it, and the gateway refuses to boot when:</p>
+<ul><li>a supplied key <strong>changes</strong>. Rows written under the old value would be unreadable. If the</li></ul>
+<p>  change is intended, set <code>BOOTSTRAP_SECRETS_ACCEPT_CHANGE=&lt;NAME&gt;</code>.</p>
+<ul><li>a supplied key <strong>disappears</strong>. The gateway will not generate a replacement over it. Put</li></ul>
+<p>  the same value back.</p>
+<p><code>BOOTSTRAP_SECRETS=off</code> turns generation off. You then supply all nine, and the boot fails on any that are missing.</p>
+<h3>You must still supply</h3>
+<table><thead><tr><th>Variable</th><th>Why it cannot be generated</th></tr></thead><tbody><tr><td><code>DB_PASSWORD</code> (and <code>DB_HOST</code>, <code>DB_USER</code>, …)</td><td>Your database&#x27;s credential</td></tr><tr><td><code>ADMIN_OPS_TOKEN</code></td><td>The operator break-glass credential. You need to know it to call <code>/admin/*</code>.</td></tr><tr><td><code>CORS_ORIGIN</code></td><td>Your front-end origin</td></tr><tr><td>Third-party credentials (§3)</td><td>Each belongs to an account you hold with that provider</td></tr></tbody></table>
+<p>A value containing <code>change-me</code> / <code>CHANGE_ME</code> / <code>do-not-use-in-prod</code> is treated as a placeholder and refused. A placeholder is worse than an absent value: it looks configured.</p>
+<hr>
+<h2>3. Third-party services</h2>
+<p>None of these can be generated. When one is absent the gateway still boots, because leaving some of them out is a legitimate install choice. The boot log prints each one as <code>MISSING</code> with what stops working, and the affected endpoints fail loudly instead of degrading quietly.</p>
+<table><thead><tr><th>Service</th><th>Configure with</th><th>If absent</th><th>Air-gapped substitute</th></tr></thead><tbody><tr><td><strong>OpenSearch</strong></td><td><code>OPENSEARCH_NODE</code> (+ <code>OPENSEARCH_USERNAME</code> / <code>OPENSEARCH_PASSWORD</code>)</td><td><code>/api/search</code> and indexing return 500. There is no Postgres fallback.</td><td>OpenSearch in-cluster</td></tr><tr><td><strong>Email</strong></td><td><code>SMTP_HOST</code> / <code>SMTP_PORT</code> / <code>SMTP_USER</code> / <code>SMTP_PASSWORD</code>, or <code>SENDGRID_API_KEY</code></td><td>Notification email is not delivered</td><td>An in-cluster SMTP relay</td></tr><tr><td><strong>LLM provider</strong></td><td><code>ANTHROPIC_API_KEY</code> / <code>OPENAI_API_KEY</code> / <code>GEMINI_API_KEY</code></td><td>No platform model. Tenants can still bring their own key.</td><td>Ollama or vLLM, registered in <code>onprem.local_llm_model</code> (<a href="./local-llm-and-discovery.html">local-llm-and-discovery.md</a> §5)</td></tr><tr><td><strong>Object storage</strong></td><td><code>MEDIA_S3_BUCKET</code>, <code>AWS_REGION</code>, credentials; <code>S3_ENDPOINT</code> for a non-AWS store</td><td><code>POST /api/media/upload-url</code> cannot issue URLs, and every media and evidence flow behind it stops</td><td>MinIO (<code>S3_ENDPOINT=http://minio:9000</code>; path-style addressing is used automatically)</td></tr><tr><td><strong>Secrets KMS</strong></td><td>§2</td><td>The gateway does not boot</td><td>PKCS#11 HSM or <code>SECRETS_MASTER_KEY</code></td></tr><tr><td><strong>BYOK KMS</strong></td><td>AWS KMS / GCP KMS / PKCS#11</td><td>Tenants cannot bind a customer-managed key</td><td>PKCS#11 HSM</td></tr><tr><td><strong>Payments</strong></td><td><code>STRIPE_SECRET_KEY</code></td><td>Payments and invoice push are unavailable</td><td>None: payments need the processor</td></tr></tbody></table>
+<p>An air-gapped install cannot reach any hosted provider. Use the substitute column, and see FT-1081 (P8 Variant C) for the offline bundle and update-signing model.</p>
+<h3>Synthetic flags</h3>
+<p><code>ALLOW_SYNTHETIC_*=true</code> lets an SDK run a <strong>fake</strong> implementation in production. Search on an in-memory map, uploads that go nowhere, emails that are swallowed. They exist for sandboxes. Do not set any of them on a real install. The boot log prints each one that is on as an error. The full list is in <a href="./required-settings-matrix.html">required-settings-matrix.md</a> Class B.</p>
+<hr>
+<h2>4. <code>NODE_ENV=production</code> — and why a green local run proves nothing</h2>
+<p>Below <code>NODE_ENV=production</code>, several SDKs quietly use dev key material (constants published in this repository) and synthetic backends, so that a developer laptop works with no setup. At <code>production</code> they refuse instead. That is why:</p>
+<ul><li>a local test suite can pass 100% against an install that cannot encrypt a single PII value;</li><li>the only way to know an install works is to run §6 <strong>on the install itself</strong>.</li></ul>
+<p>Always run deployed environments, staging included, with <code>NODE_ENV=production</code>. Secret generation is on by default only there. Elsewhere it is off, because local data may already be written under the dev constants. <code>BOOTSTRAP_SECRETS=on</code> enables it in any environment.</p>
+<hr>
+<h2>5. Install</h2>
+<p>On the host, from a checkout of the release:</p>
+<pre><code>cp scripts/setup/.env.prod.example .env.prod
+$EDITOR .env.prod                 # DB_*, ADMIN_OPS_TOKEN, CORS_ORIGIN, third parties (§3)
+scripts/setup/prod-setup.sh --mode selfhosted   # or --mode managed for an external Postgres/Redis</code></pre>
+<p><code>prod-setup.sh</code> refuses to continue on any <code>CHANGE_ME</code> placeholder. It generates <code>SECRETS_MASTER_KEY</code> into <code>.env.prod</code> if no KMS is configured (<strong>back it up now</strong>), builds and starts the stack, and waits for <code>GET /health</code>.</p>
+<p>On the first boot the gateway, in order:</p>
+<p>1. applies every SDK migration (<code>[migrator] applied …</code> lines); 2. selects the secrets KMS (<code>secrets KMS provider: …</code>); 3. generates the platform secrets and prints <strong>one preflight block</strong>. Every required secret    shows as <code>present</code> or <code>generated</code>, and every third party not configured shows as <code>MISSING</code>.</p>
+<p>A new tenant gets its vault key on demand, at its first upload. No seed script is involved. Never run anything under <code>tests/setup_scripts/</code> on a customer install. Those files are QA fixtures (see that directory&#x27;s README).</p>
+<hr>
+<h2>6. Verify the install yourself</h2>
+<p>Run these against the installed gateway, not a local copy.</p>
+<p>1. <strong>Health:</strong> <code>curl -s https://&lt;host&gt;/health</code> returns <code>{&quot;status&quot;:&quot;ok&quot;,…}</code>. 2. <strong>Preflight block:</strong> <code>docker compose … logs api-gateway | grep &#x27;\[preflight\]&#x27;</code>. Expect    <code>9/9 required secrets usable</code>, and <strong>no</strong> <code>MISSING</code> line for a service you meant to    configure. Every <code>MISSING</code> line names the variable that fixes it. 3. <strong>Sign up a tenant:</strong> <code>POST /api/auth/signup-tenant</code> returns <code>201</code> and a token. 4. <strong>PII is really encrypted:</strong> with that token, <code>POST /api/source-records</code>, then    <code>POST /api/source-assertions</code> with <code>is_pii: true</code>. The response <code>value</code> must begin with    <code>v1.</code>. That prefix is the envelope, and it is the proof that a real key is in use rather    than a dev constant. In production, a missing key makes this a 500, never a silent pass. 5. <strong>Uploads (if object storage is configured):</strong> <code>POST /api/media/upload-url</code> for the new    tenant returns <code>201</code> with an <code>upload_url</code> on your bucket or endpoint. 6. <strong>Survives a restart:</strong> restart the gateway. The preflight now shows each secret as    <code>generated — read back from vault.bootstrap_secret</code>, not <code>new on this boot</code>. The token from    step 3 still works, and step 4&#x27;s assertion is still readable.</p>
+<p>If step 6 shows <code>new on this boot</code> a second time, the keyring is not persisting. Stop and check that the database is the same one, before any customer data is written.</p>
+<h3>Backups</h3>
+<p>Back up <strong>both</strong> the database and the KMS root (<code>.env.prod</code>&#x27;s <code>SECRETS_MASTER_KEY</code>, or your cloud KMS key policy), and keep them apart. Restoring the database without its KMS root gives you rows you cannot decrypt.</p>
+</main></div></body></html>

@@ -35,11 +35,14 @@ hr{border:0;border-top:1px solid var(--line);margin:24px 0}
 <aside><h1>ProjexCloud</h1><div class="sub">Setup &amp; Deployment</div>
 <h2>Guides</h2>
 <a class="" href="README.html">Overview / Index</a>
+<a class="" href="on-premise-install.html">On-premise Install</a>
+<a class="" href="required-settings-matrix.html">Required Settings</a>
 <a class="" href="dev-environment.html">Developer Environment</a>
 <a class="" href="production-overview.html">Production — Overview</a>
 <a class="" href="production-aws-ec2.html">Production — AWS (EC2)</a>
 <a class="" href="production-digitalocean.html">Production — DigitalOcean</a>
 <a class="active" href="local-llm-and-discovery.html">Local LLM &amp; Discovery</a>
+<a class="" href="sdk-api-access.html">SDK API Access</a>
 <h2>Reference</h2>
 <a href="../v3.1/api_docs/index.html">API Reference ↗</a>
 <a href="../v3.1/api_docs/test-plan.html">QA Test Plan ↗</a>
@@ -96,6 +99,7 @@ curl -fsS http://localhost:3600/healthz</code></pre>
 <p>  the Ollama/vLLM deployment and endpoint. It is <strong>not</strong> part of the default   <code>docker-compose.prod.yml</code>. To experiment locally:</p>
 <p>  ``<code>bash   docker run -d --name ollama -p 11434:11434 ollama/ollama   docker exec -it ollama ollama pull llama3.1   # then register the endpoint via the on-prem admin flow (sdk-onprem)   </code>``</p>
 <p>Cloud (non-sovereign) deployments skip this entirely and use the configured cloud provider keys via <code>sdk-ai-gateway</code>.</p>
+<p>The boot preflight checks only the cloud provider variables (<code>ANTHROPIC_API_KEY</code>, <code>OPENAI_API_KEY</code>, <code>GEMINI_API_KEY</code>), so an air-gapped install that uses a registered local model will still show <code>LLM provider</code> as <code>MISSING</code> at boot. That line is expected there. There is no <code>OLLAMA_*</code> environment variable. The registration in <code>onprem.local_llm_model</code> *is* the configuration.</p>
 <h2>6. So, did the Docker setup miss anything?</h2>
 <p>No model server was missing — discovery is in-process. What this update adds:</p>
 <ul><li><code>services/registry-mcp/Dockerfile</code> (the discovery service had none).</li><li>A <code>discovery</code> profile + persistent <code>hf_cache</code> volume in</li></ul>

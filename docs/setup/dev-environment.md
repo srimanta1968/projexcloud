@@ -167,3 +167,19 @@ docker compose down -v        # stop + wipe the database volume (fresh start)
 | `pnpm: command not found` | `corepack enable`, or `npm i -g pnpm@9` |
 | Port 3000 already in use | Set `PORT=3001` in `.env` (and pass `--gateway http://localhost:3001` to the seeder) |
 | Want a totally clean DB | `docker compose down -v && docker compose up -d postgres` then restart the gateway |
+
+## Secrets and `NODE_ENV` locally
+
+Locally you do not set any platform secret. Below `NODE_ENV=production` the SDKs fall back to
+dev key material — constants published in this repository — and synthetic backends, so the
+stack runs with no configuration. That is also why **a green local run does not prove a
+deployed install works**: the same calls refuse at `production` when a real key or backend is
+missing.
+
+Boot-time secret generation (TK-4156) is **off** locally. Your local database may already
+hold rows encrypted under the dev constants, and generating real keys would make them
+unreadable. To rehearse a production install, point the gateway at an **empty** database
+with `NODE_ENV=production`, a `SECRETS_MASTER_KEY` and nothing else: the boot log shows all
+nine secrets as `generated`, and a restart shows them read back. See
+[on-premise-install.md](./on-premise-install.md) §6. `BOOTSTRAP_SECRETS=on` enables
+generation without `NODE_ENV=production`.

@@ -226,3 +226,13 @@ a worthwhile future change.
 for this integration, but the stronger pattern is exchanging a key for a
 short-lived token at the gateway edge so the key never travels further in.
 Additive, and invisible to callers when it lands.
+
+## API keys and the pepper (deployed installs)
+
+API keys are stored as a hash under `API_KEY_PEPPER`. On a deployed install
+(`NODE_ENV=production`) the gateway generates the pepper on first boot and keeps it sealed
+in `vault.bootstrap_secret`, so it is the same on every replica and after every restart, and
+issued keys keep working. Do not set or change `API_KEY_PEPPER` after keys exist: every key
+issued under the old pepper stops authenticating. The boot refuses a changed pepper unless
+`BOOTSTRAP_SECRETS_ACCEPT_CHANGE=API_KEY_PEPPER` is set. Locally a dev pepper is used, so a
+key minted against your laptop never works against a deployed install, and vice versa.

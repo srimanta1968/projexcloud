@@ -9,6 +9,7 @@ import { randomUUID } from 'crypto';
 import { closeClickHouse, initClickHouse, insert as chInsert, query as chQuery, pingClickHouse, describeError } from '@projexlight/clickhouse-runtime';
 import { runMigrations } from '@projexlight/migration-runner';
 import { runSettingsPreflight } from './boot/settingsPreflight';
+import { provisionBootSecrets } from './boot/secretProvisioner';
 import {
   migrationsDir as vaultMigrations,
   server as vaultServer,
@@ -1845,17 +1846,13 @@ const start = async (): Promise<void> => {
       }
     }
 
-    // Settings preflight BEFORE the migrations. A missing production secret is going to
-    // stop the SDK that needs it either way; reporting it here costs one line at boot
-    // instead of a 500 on whichever request first touches that SDK — and the API suite
-    // demonstrably cannot be relied on to find these, since a cascade of skips upstream
-    // hides them entirely. Placed ahead of runMigrations so a misconfigured install fails
-    // in seconds rather than after a full migration pass.
-    runSettingsPreflight();
-
     // Auto-apply each SDK's migrations on startup in dependency order.
     // P1: foundations · P2: identity & access · P3: canonical + privacy + HDK.
     await runMigrations([
+      // sdk-tenant FIRST: it is self-contained, and sdk-vault/004 backfills a key per
+      // tenant.tenant row — with vault first, a fresh database failed that migration and
+      // the gateway never booted (found by a clean-install run, TK-4156).
+      { sdk: 'sdk-tenant', dir: tenantMigrations },
       // P1
       { sdk: 'sdk-vault', dir: vaultMigrations },
       { sdk: 'sdk-identity', dir: identityMigrations },
@@ -1863,7 +1860,6 @@ const start = async (): Promise<void> => {
       { sdk: 'sdk-audit', dir: auditMigrations },
       { sdk: 'sdk-meter', dir: meterMigrations },
       // P2
-      { sdk: 'sdk-tenant', dir: tenantMigrations },
       { sdk: 'sdk-consent', dir: consentMigrations },
       // P12 — physical-AI fleet
       { sdk: 'sdk-asset', dir: assetMigrations },
@@ -2430,6 +2426,13 @@ const start = async (): Promise<void> => {
       console.error('[api-gateway] secrets KMS provider selection FAILED:', (err as Error).message);
       throw err;
     }
+
+    // TK-4156 — generate the platform secrets that have no external counterparty, then report
+    // every setting in one block. Needs the migrations (vault.bootstrap_secret) and the KMS
+    // above, so it runs here, before anything listens. A missing production secret would stop
+    // the SDK that needs it either way; this moves that refusal to boot, where an operator is
+    // watching, instead of a 500 on whichever request first touches the SDK.
+    runSettingsPreflight(process.env, await provisionBootSecrets());
 
     const siemForwarder = installAutoSiemForwarder();
     setSiemForwarder(siemForwarder);

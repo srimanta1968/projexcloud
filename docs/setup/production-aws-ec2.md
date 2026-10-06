@@ -78,7 +78,10 @@ REDIS_HOST=projex-redis.xxxx.cache.amazonaws.com
 REDIS_PASSWORD=<elasticache auth token>
 KAFKA_ENABLED=false              # or true + KAFKA_BROKERS=<msk brokers>
 ADMIN_OPS_TOKEN=<openssl rand -hex 32>
-JWT_SECRET=<openssl rand -hex 32>
+# On AWS prefer KMS for the secrets root: SECRETS_KMS_PROVIDER=aws-kms (instance role).
+# Otherwise SECRETS_MASTER_KEY is generated into .env.prod by prod-setup.sh if no KMS is set —
+# back it up apart from the DB. JWT_SECRET and the other platform secrets are generated
+# on first boot and stored sealed in the DB: leave them unset (on-premise-install.md §2).
 CORS_ORIGIN=https://app.yourdomain.com
 GATEWAY_PORT=3000
 ```

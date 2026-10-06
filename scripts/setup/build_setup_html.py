@@ -18,14 +18,20 @@ DOCS = os.path.abspath(os.path.join(HERE, "..", "..", "docs", "setup"))
 # Sidebar order + titles (file stem -> nav label).
 NAV = [
     ("README", "Overview / Index"),
+    ("on-premise-install", "On-premise Install"),
+    ("required-settings-matrix", "Required Settings"),
     ("dev-environment", "Developer Environment"),
     ("production-overview", "Production — Overview"),
     ("production-aws-ec2", "Production — AWS (EC2)"),
     ("production-digitalocean", "Production — DigitalOcean"),
     ("local-llm-and-discovery", "Local LLM & Discovery"),
+    ("sdk-api-access", "SDK API Access"),
 ]
 TITLES = {
     "README": "ProjexCloud Setup — Index",
+    "on-premise-install": "On-premise Installation — Licensee Guide",
+    "required-settings-matrix": "Required Settings Matrix",
+    "sdk-api-access": "SDK API Access",
     "dev-environment": "Developer Environment Setup",
     "production-overview": "Production Setup — Overview",
     "production-aws-ec2": "Production Setup — AWS (EC2)",

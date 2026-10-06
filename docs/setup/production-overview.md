@@ -75,13 +75,20 @@ Copy the template and fill it in on the host (never commit it):
 cp scripts/setup/.env.prod.example .env.prod
 ```
 
-Must-set before `prod-setup.sh` will start (it refuses on `CHANGE_ME`/empty):
+Must-set before `prod-setup.sh` will start (it refuses on `CHANGE_ME`/empty, and on a
+`CHANGE_ME` placeholder left in ANY secret):
 
 | Variable | Notes |
 |----------|-------|
 | `DB_PASSWORD` | Managed DB password |
 | `ADMIN_OPS_TOKEN` | Shared secret for `/admin/*` operator endpoints + seeding. `openssl rand -hex 32` |
-| `JWT_SECRET` | Long random string. `openssl rand -hex 32` |
+| Secrets KMS root | `SECRETS_MASTER_KEY`, or `SECRETS_KMS_PROVIDER=aws-kms` / `gcp-kms` / `hsm-pkcs11`. `prod-setup.sh` generates `SECRETS_MASTER_KEY` into `.env.prod` when none is set — **back it up, apart from the DB backups** |
+
+**Generated on first boot — leave unset:** `JWT_SECRET`, `API_KEY_PEPPER`, `CAPABILITY_TOKEN_SIGNING_KEY`, `SOURCE_RECORD_*`, `EVIDENCE_LEGAL_EXPORT_SIGNING_KEY`, `NOTIFICATION_*` and `PRINCIPAL_TOKEN_WRAP_KEY`. The gateway generates each,
+stores it envelope-encrypted in `vault.bootstrap_secret` under the KMS root, and reads it back
+on every restart and replica. Supplying one yourself is fine **before** the first boot; after
+that, a changed or removed supplied key stops the boot (data is encrypted under it). Details:
+[on-premise-install.md](./on-premise-install.md) §2.
 
 Key others: `DB_HOST`/`DB_PORT`/`DB_NAME`/`DB_USER`, `DB_SSL=true` for managed
 Postgres, `REDIS_HOST`/`REDIS_PASSWORD`, `CORS_ORIGIN` (your app domain),
@@ -146,10 +153,15 @@ creates a first tenant. For production you typically:
 - [ ] Snapshot the DB immediately **before** every deploy (migration rollback path).
 - [ ] TLS terminated at the LB/reverse proxy; gateway port **not** public.
 - [ ] Firewall: only the LB reaches `:3000`; only the gateway reaches DB/Redis.
-- [ ] Strong `ADMIN_OPS_TOKEN`/`JWT_SECRET`/`DB_PASSWORD` from a secret store.
+- [ ] Strong `ADMIN_OPS_TOKEN`/`DB_PASSWORD` from a secret store; the secrets KMS root
+      (`SECRETS_MASTER_KEY` or a cloud KMS) backed up **separately** from the database.
+- [ ] Boot log `[preflight]` block shows `9/9 required secrets usable` and no unexpected
+      `MISSING` third party.
 - [ ] `CORS_ORIGIN` pinned to your real front-end origin(s).
 - [ ] `NODE_ENV=production` (synthetic vendor stubs refuse to run unless
-      `ALLOW_SYNTHETIC_*=true`; wire real adapters via their env vars).
+      `ALLOW_SYNTHETIC_*=true`; wire real adapters via their env vars). Below it the SDKs use
+      published dev key material, so a green local run proves nothing about this install —
+      run the checks in [on-premise-install.md](./on-premise-install.md) §6 against it.
 - [ ] Centralized logs/metrics: gateway logs JSON to stdout; Prometheus scrape +
       Grafana dashboard in `infrastructure/`.
 - [ ] Health/uptime check hitting `GET /health`.

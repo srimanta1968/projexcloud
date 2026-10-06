@@ -82,7 +82,9 @@ REDIS_PORT=25061                    # DO managed Redis port
 REDIS_PASSWORD=<managed redis password>
 KAFKA_ENABLED=false
 ADMIN_OPS_TOKEN=<openssl rand -hex 32>
-JWT_SECRET=<openssl rand -hex 32>
+# SECRETS_MASTER_KEY is generated into .env.prod by prod-setup.sh if no KMS is set —
+# back it up apart from the DB. JWT_SECRET and the other platform secrets are generated
+# on first boot and stored sealed in the DB: leave them unset (on-premise-install.md §2).
 CORS_ORIGIN=https://app.yourdomain.com
 GATEWAY_PORT=3000
 ```

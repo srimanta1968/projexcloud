@@ -1,0 +1,142 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>SDK API Access · ProjexCloud</title><style>
+:root{--bg:#0d1117;--panel:#161b22;--ink:#e6edf3;--muted:#8b949e;--line:#30363d;--accent:#58a6ff;--ok:#3fb950}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.65 -apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif}
+a{color:var(--accent);text-decoration:none}a:hover{text-decoration:underline}
+.layout{display:grid;grid-template-columns:280px 1fr;min-height:100vh}
+aside{position:sticky;top:0;align-self:start;height:100vh;overflow:auto;background:var(--panel);border-right:1px solid var(--line);padding:20px 16px}
+aside h1{font-size:15px;margin:0 0 2px}aside .sub{color:var(--muted);font-size:12px;margin-bottom:16px}
+aside h2{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin:16px 0 6px}
+aside a{display:block;padding:6px 10px;border-radius:6px;color:var(--ink);font-size:13px}
+aside a:hover{background:#21262d;text-decoration:none}
+aside a.active{background:#1f6feb;color:#fff}
+main{padding:30px 42px;max-width:960px}
+h1,h2,h3,h4{line-height:1.3}
+h1{font-size:26px;margin:0 0 18px;padding-bottom:10px;border-bottom:1px solid var(--line)}
+h2{font-size:20px;margin:30px 0 10px;padding-bottom:6px;border-bottom:1px solid var(--line)}
+h3{font-size:16px;margin:22px 0 8px}h4{font-size:14px;margin:18px 0 6px;color:var(--muted)}
+p{margin:10px 0}
+code{background:#0b0f14;border:1px solid var(--line);border-radius:5px;padding:1px 5px;font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:.88em}
+pre{background:#0b0f14;border:1px solid var(--line);border-radius:8px;padding:12px 14px;overflow:auto;margin:12px 0}
+pre code{background:none;border:0;padding:0;font-size:12.5px;line-height:1.55;color:#c9d1d9}
+table{border-collapse:collapse;width:100%;margin:14px 0;font-size:13.5px}
+th,td{border:1px solid var(--line);padding:8px 11px;text-align:left;vertical-align:top}
+th{background:#1c2330;color:var(--muted);font-weight:600}
+tr:nth-child(even) td{background:#11161d}
+blockquote{margin:12px 0;padding:8px 16px;border-left:3px solid var(--accent);background:#11161d;border-radius:0 8px 8px 0;color:#c9d1d9}
+ul{margin:10px 0;padding-left:22px}li{margin:4px 0}
+ul.task{list-style:none;padding-left:4px}ul.task li::before{content:"☐ ";color:var(--muted)}
+hr{border:0;border-top:1px solid var(--line);margin:24px 0}
+.crumb{color:var(--muted);font-size:12px;margin-bottom:14px}
+</style></head><body>
+<div class="layout">
+<aside><h1>ProjexCloud</h1><div class="sub">Setup &amp; Deployment</div>
+<h2>Guides</h2>
+<a class="" href="README.html">Overview / Index</a>
+<a class="" href="on-premise-install.html">On-premise Install</a>
+<a class="" href="required-settings-matrix.html">Required Settings</a>
+<a class="" href="dev-environment.html">Developer Environment</a>
+<a class="" href="production-overview.html">Production — Overview</a>
+<a class="" href="production-aws-ec2.html">Production — AWS (EC2)</a>
+<a class="" href="production-digitalocean.html">Production — DigitalOcean</a>
+<a class="" href="local-llm-and-discovery.html">Local LLM &amp; Discovery</a>
+<a class="active" href="sdk-api-access.html">SDK API Access</a>
+<h2>Reference</h2>
+<a href="../v3.1/api_docs/index.html">API Reference ↗</a>
+<a href="../v3.1/api_docs/test-plan.html">QA Test Plan ↗</a>
+</aside>
+<main>
+<div class="crumb">docs / setup / sdk-api-access.html</div>
+<h1>Calling ProjexCloud from Another Project (API Keys)</h1>
+<p>How a separate application — a ProjexLight-generated vertical, or anything you write yourself — authenticates against the gateway&#x27;s tenant-callable SDK routes.</p>
+<p>The Developer Hub carries the same material in a browsable form: [<code>docs/v3.1/developer-hub/api-keys-and-project-setup.html</code>](../v3.1/developer-hub/api-keys-and-project-setup.html). This page is the terminal-friendly version, plus the operator detail that hub readers do not need.</p>
+<h2>1. Which credential</h2>
+<table><thead><tr><th>Caller</th><th>Credential</th><th>Obtained from</th></tr></thead><tbody><tr><td><strong>Your backend, server-to-server</strong></td><td>API key (<code>pk_live_…</code> / <code>pk_test_…</code>)</td><td><code>POST /api/api-keys</code></td></tr><tr><td>A signed-in human in a portal or your UI</td><td>Six-layer JWT</td><td><code>POST /api/auth/login</code></td></tr></tbody></table>
+<p>Both are accepted on the SDK routes listed in §5, and both normalise to the same <code>req.auth</code> claim set, so handlers never branch on which one arrived.</p>
+<blockquote><strong>Do not put a person&#x27;s email and password in a service&#x27;s environment.</strong> It inherits every privilege that human holds, makes their audit trail indistinguishable from the service&#x27;s, breaks as soon as MFA is enabled (<code>/api/mfa/challenge</code> exists), and dies at the next password rotation. This was the only option before API-key auth was wired up; it no longer is.</blockquote>
+<h2>2. Issue a key</h2>
+<pre><code>GATEWAY=http://localhost:3000          # or https://cloud.projexlight.com
+
+# a) a JWT, purely to authorise the issuance
+JWT=$(curl -sX POST &quot;$GATEWAY/api/auth/login&quot; \
+  -H &#x27;Content-Type: application/json&#x27; \
+  -d &#x27;{&quot;email&quot;:&quot;you@example.com&quot;,&quot;password&quot;:&quot;…&quot;}&#x27; | jq -r &#x27;.data.token&#x27;)
+
+# b) the tenant the key will belong to
+curl -s &quot;$GATEWAY/api/tenants&quot; -H &quot;Authorization: Bearer $JWT&quot; | jq &#x27;.data&#x27;
+
+# c) the key itself
+curl -sX POST &quot;$GATEWAY/api/api-keys&quot; \
+  -H &quot;Authorization: Bearer $JWT&quot; -H &#x27;Content-Type: application/json&#x27; \
+  -d &#x27;{
+    &quot;tenant_id&quot;: &quot;&lt;tenant-uuid&gt;&quot;,
+    &quot;scopes&quot;: [&quot;sla.clock.write&quot;,&quot;sla.clock.read&quot;,&quot;assignment.assign-by-task.write&quot;],
+    &quot;rate_limit_rpm&quot;: 600,
+    &quot;expires_at&quot;: &quot;2027-01-01T00:00:00Z&quot;
+  }&#x27; | jq &#x27;.data&#x27;</code></pre>
+<p><code>201</code> returns <code>{ key, plaintext }</code>.</p>
+<blockquote>**<code>plaintext</code> is shown exactly once and is not recoverable.** Only a PBKDF2-SHA256 (310,000-iteration) hash and a display prefix are stored. Copy it straight into your secret store. If it is lost, rotate — there is no read path.</blockquote>
+<p>No tenant yet? <code>POST /api/auth/signup-tenant</code> creates one. A dev environment bootstrapped with <code>dev-setup --seed</code> already has a development tenant from <code>scripts/setup/seed-dev-data.mjs</code>.</p>
+<p>Issue <strong>one key per integration</strong> so revoking one cannot take down another, and set <code>expires_at</code> — a never-expiring key is a standing liability.</p>
+<h2>3. Scopes</h2>
+<p>Scopes follow the platform convention <code>&lt;domain&gt;.&lt;resource&gt;.&lt;action&gt;</code> (as in <code>crm.contact.read</code>, <code>rebac.relationship.write</code>). For the SDKs in §5 the required scope is <strong>derived from the route</strong>, so no lookup table is needed:</p>
+<table><thead><tr><th>Part</th><th>Rule</th></tr></thead><tbody><tr><td><code>domain</code></td><td>The SDK namespace — <code>sla</code>, <code>assignment</code>, <code>notification</code></td></tr><tr><td><code>resource</code></td><td>Path segment after the domain, singularised (<code>clocks</code>→<code>clock</code>, <code>policies</code>→<code>policy</code>); path params skipped</td></tr><tr><td><code>action</code></td><td><code>read</code> for GET/HEAD, <code>write</code> otherwise</td></tr></tbody></table>
+<pre><code>POST /api/sla/clocks                      → sla.clock.write
+GET  /api/sla/policies                    → sla.policy.read
+POST /api/sla/policies/:policy_id/rungs   → sla.policy.write
+POST /api/assignment/assign-by-task       → assignment.assign-by-task.write
+POST /api/notifications/send              → notification.send.write</code></pre>
+<p>A <code>403</code> names the missing scope <strong>and</strong> lists what the key holds, so calling the endpoint is the quickest way to discover the scope set you need.</p>
+<p>Scopes apply to keys only. A JWT caller&#x27;s authority comes from their persona and ReBAC grants, so opting a route into key auth changes nothing for human traffic.</p>
+<h2>4. Configure the calling project</h2>
+<pre><code># in YOUR app&#x27;s .env — never commit the key
+PROJEXCLOUD_GATEWAY_URL=https://cloud.projexlight.com
+PROJEXCLOUD_API_KEY=pk_live_…
+PROJEXCLOUD_TENANT_ID=&lt;tenant-uuid&gt;
+PROJEXCLOUD_TIMEOUT_MS=8000</code></pre>
+<p>Request contract:</p>
+<pre><code>POST {PROJEXCLOUD_GATEWAY_URL}/api/sla/clocks
+Authorization:    Bearer {PROJEXCLOUD_API_KEY}
+Content-Type:     application/json
+Idempotency-Key:  &lt;stable per logical operation&gt;
+x-correlation-id: &lt;uuid&gt;
+
+{ &quot;tenant_id&quot;: &quot;…&quot;, &quot;policy_id&quot;: &quot;…&quot;, &quot;subject_ref&quot;: &quot;lead:…&quot; }</code></pre>
+<p>Three mistakes that account for most lost time:</p>
+<table><thead><tr><th>Wrong</th><th>Right</th></tr></thead><tbody><tr><td><code>x-api-key: &lt;key&gt;</code></td><td>The key goes in <code>Authorization: Bearer</code></td></tr><tr><td><code>x-tenant-id: &lt;id&gt;</code></td><td><code>tenant_id</code> goes in the body or query string</td></tr><tr><td><code>/{sdk}/v1/…</code> URLs</td><td>There is <strong>no</strong> per-SDK path prefix — each SDK registers real <code>/api/&lt;domain&gt;/…</code> routes on the one gateway. Confirm paths in [<code>docs/api_docs/</code>](../api_docs/)</td></tr></tbody></table>
+<p>Because handlers read <code>tenant_id</code> from the payload, the guard cross-checks it against the key&#x27;s own tenant and answers <code>403</code> on a mismatch — so a leaked key cannot be aimed at another tenant, and the <code>tenant_id</code> you send must be the one the key was issued for.</p>
+<h3>Local and hosted from one codebase</h3>
+<p>Read the base URL from the environment, keep a separate key per target, and let a run-time value override the committed default (dotenv does not overwrite an existing <code>process.env</code> entry, so a shell value wins):</p>
+<pre><code>PROJEXCLOUD_GATEWAY_URL=http://localhost:3000 npm run dev          # local gateway
+PROJEXCLOUD_GATEWAY_URL=https://cloud.projexlight.com npm run dev  # hosted</code></pre>
+<p>Use <code>pk_test_</code> keys locally and <code>pk_live_</code> in production so a leaked dev key can never reach live data.</p>
+<p>Treat &quot;no key configured&quot; as a <strong>different state</strong> from &quot;key rejected&quot;. A client that degrades deliberately — falling back and recording which path produced the result — is far easier to operate than one that 502s. A wall-clock SLA verdict and a business-calendar one are not the same measurement and must not be conflated.</p>
+<h2>5. Which routes accept a key</h2>
+<p>Wired via <code>requireAuthOrApiKeyForDomain()</code> from <code>@projexlight/sdk-api-keys</code>:</p>
+<table><thead><tr><th>SDK</th><th>Domain</th><th>Routes</th></tr></thead><tbody><tr><td><code>sdk-sla</code></td><td><code>sla</code></td><td>30</td></tr><tr><td><code>sdk-notification</code></td><td><code>notification</code></td><td>14</td></tr><tr><td><code>sdk-assignment</code></td><td><code>assignment</code></td><td>2</td></tr></tbody></table>
+<p>Everything else remains JWT-only by design. <code>requireAuth</code> itself was deliberately <strong>not</strong> extended: doing so needs zero route edits but would make every route on the platform accept keys, including admin and break-glass surfaces that must stay human-only.</p>
+<h3>Opting another SDK in</h3>
+<p>One line in that SDK&#x27;s <code>registerRoutes</code>, plus a dependency:</p>
+<pre><code>// packages/sdk-&lt;name&gt;/src/server/routes.ts
+import { requireAuthOrApiKeyForDomain } from &#x27;@projexlight/sdk-api-keys&#x27;;
+const requireAuth = requireAuthOrApiKeyForDomain(&#x27;&lt;domain&gt;&#x27;);</code></pre>
+<pre><code>// packages/sdk-&lt;name&gt;/package.json
+&quot;@projexlight/sdk-api-keys&quot;: &quot;workspace:*&quot;</code></pre>
+<p>Deriving the scope from the route pattern means a <strong>newly added route is covered the moment it exists</strong> — no per-route scope string to forget, and no silent JWT-only default.</p>
+<p>If that SDK&#x27;s handlers read <code>req.auth</code>, keep the type available by importing <code>SixLayerJwtClaims</code> from <code>@projexlight/sdk-api-keys</code> (it re-exports it precisely so the <code>FastifyRequest.auth</code> module augmentation travels with the guard that populates it). Dropping the direct <code>sdk-identity</code> import without this produces <code>Property &#x27;auth&#x27; does not exist</code>.</p>
+<p>The middleware lives in <code>sdk-api-keys</code> rather than <code>sdk-identity</code> because <code>sdk-api-keys</code> already depends on <code>sdk-identity</code>; the reverse would be circular.</p>
+<h2>6. Rotate and revoke</h2>
+<table><thead><tr><th>Operation</th><th>Call</th><th>Behaviour</th></tr></thead><tbody><tr><td>List</td><td><code>GET /api/api-keys?tenant_id=…</code></td><td>Display prefix only, never the key</td></tr><tr><td>Rotate</td><td><code>POST /api/api-keys/:key_id/rotate</code></td><td><code>201</code> with a new plaintext; the old key stays valid for a 24h grace window</td></tr><tr><td>Revoke</td><td><code>POST /api/api-keys/:key_id/revoke</code></td><td>Immediate, broadcast over Redis to every gateway replica within ~1s</td></tr></tbody></table>
+<p>Zero-downtime rotation: rotate → deploy the new key → confirm traffic on the new prefix via <code>last_used_at</code> → <strong>revoke the old key</strong>. Skipping that last step leaves a live credential in the wild once the grace window lapses.</p>
+<p>Issuance, rotation and revocation each emit an audit event (<code>api-key.issued.v1</code> / <code>.rotated.v1</code> / <code>.revoked.v1</code>), so custody is reviewable.</p>
+<h2>7. Troubleshooting</h2>
+<table><thead><tr><th>Symptom</th><th>Cause</th><th>Fix</th></tr></thead><tbody><tr><td><code>401 Missing bearer token</code></td><td>No <code>Authorization</code>, or key sent as <code>x-api-key</code></td><td>Send <code>Authorization: Bearer pk_live_…</code></td></tr><tr><td><code>401 API key invalid, revoked, or expired</code></td><td>Wrong/revoked/expired key, or a key from the other environment</td><td><code>GET /api/api-keys?tenant_id=…</code>; confirm the gateway you are pointed at</td></tr><tr><td><code>403 …missing required scope(s)</code></td><td>Key lacks the derived scope</td><td>Response lists <code>required_scopes</code> and <code>granted_scopes</code>; re-issue or rotate with it</td></tr><tr><td><code>403 …issued for a different tenant</code></td><td>Payload <code>tenant_id</code> ≠ key&#x27;s tenant</td><td>Send the key&#x27;s own tenant id</td></tr><tr><td><code>404</code> on a plausible path</td><td><code>/{sdk}/v1/…</code> style URL</td><td>Use the real <code>/api/&lt;domain&gt;/…</code> route</td></tr><tr><td>Works locally, <code>401</code> in cloud</td><td>Dev key against the hosted gateway</td><td>One key per environment</td></tr></tbody></table>
+<h2>8. Hardening notes</h2>
+<p>Two conscious trade-offs, recorded so nobody has to rediscover them:</p>
+<p><strong>Static salt.</strong> <code>hashKey()</code> uses a fixed salt, which is what lets <code>verifyKey()</code> do an indexed <code>WHERE key_hash = $1</code>. A per-key random salt would force a table scan per request. With 192 bits of key entropy, precomputation is infeasible, so this is defensible. The textbook upgrade is to split the key into a public <code>key_id</code> and a secret half — look up by <code>key_id</code>, verify the secret against a per-key salted hash — which keeps O(1) lookup. That is the Stripe/GitHub shape and a worthwhile future change.</p>
+<p><strong>Long-lived bearer secret.</strong> Scoped, hashed, rotatable keys are the right tier for this integration, but the stronger pattern is exchanging a key for a short-lived token at the gateway edge so the key never travels further in. Additive, and invisible to callers when it lands.</p>
+<h2>API keys and the pepper (deployed installs)</h2>
+<p>API keys are stored as a hash under <code>API_KEY_PEPPER</code>. On a deployed install (<code>NODE_ENV=production</code>) the gateway generates the pepper on first boot and keeps it sealed in <code>vault.bootstrap_secret</code>, so it is the same on every replica and after every restart, and issued keys keep working. Do not set or change <code>API_KEY_PEPPER</code> after keys exist: every key issued under the old pepper stops authenticating. The boot refuses a changed pepper unless <code>BOOTSTRAP_SECRETS_ACCEPT_CHANGE=API_KEY_PEPPER</code> is set. Locally a dev pepper is used, so a key minted against your laptop never works against a deployed install, and vice versa.</p>
+</main></div></body></html>

@@ -18,12 +18,16 @@ function getClient(): S3Client {
   const region = process.env.AWS_REGION || 'us-east-1';
   const accessKeyId = process.env.AWS_ACCESS_KEY_ID;
   const secretAccessKey = process.env.AWS_SECRET_ACCESS_KEY;
+  // S3-compatible stores (MinIO — the air-gapped substitute — Ceph RGW, R2) are addressed by
+  // S3_ENDPOINT and need path-style URLs; without this the signer could only target AWS.
+  const endpoint = process.env.S3_ENDPOINT?.trim() || undefined;
+  const base = { region, ...(endpoint ? { endpoint, forcePathStyle: true } : {}) };
   // Default credential chain (IRSA / EC2 instance role / shared config) when
   // explicit keys are not provided.
   cachedClient =
     accessKeyId && secretAccessKey
-      ? new S3Client({ region, credentials: { accessKeyId, secretAccessKey } })
-      : new S3Client({ region });
+      ? new S3Client({ ...base, credentials: { accessKeyId, secretAccessKey } })
+      : new S3Client(base);
   return cachedClient;
 }
 

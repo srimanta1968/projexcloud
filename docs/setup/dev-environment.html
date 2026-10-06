@@ -35,11 +35,14 @@ hr{border:0;border-top:1px solid var(--line);margin:24px 0}
 <aside><h1>ProjexCloud</h1><div class="sub">Setup &amp; Deployment</div>
 <h2>Guides</h2>
 <a class="" href="README.html">Overview / Index</a>
+<a class="" href="on-premise-install.html">On-premise Install</a>
+<a class="" href="required-settings-matrix.html">Required Settings</a>
 <a class="active" href="dev-environment.html">Developer Environment</a>
 <a class="" href="production-overview.html">Production — Overview</a>
 <a class="" href="production-aws-ec2.html">Production — AWS (EC2)</a>
 <a class="" href="production-digitalocean.html">Production — DigitalOcean</a>
 <a class="" href="local-llm-and-discovery.html">Local LLM &amp; Discovery</a>
+<a class="" href="sdk-api-access.html">SDK API Access</a>
 <h2>Reference</h2>
 <a href="../v3.1/api_docs/index.html">API Reference ↗</a>
 <a href="../v3.1/api_docs/test-plan.html">QA Test Plan ↗</a>
@@ -109,4 +112,7 @@ docker compose down           # stop Postgres (keeps the volume)
 docker compose down -v        # stop + wipe the database volume (fresh start)</code></pre>
 <h2>8. Troubleshooting</h2>
 <table><thead><tr><th>Symptom</th><th>Fix</th></tr></thead><tbody><tr><td><code>extension &quot;vector&quot; is not available</code></td><td>Postgres lacks pgvector — run <code>scripts/setup/ensure-pg-extensions.sh</code> (or use the bundled image)</td></tr><tr><td><code>sdk-geo requires PostGIS</code></td><td>Postgres lacks PostGIS — same fix as above</td></tr><tr><td><code>column &quot;email&quot; does not exist</code> during <code>sdk-identity</code> migration</td><td>DB was pre-seeded by the ProjexLight export (<code>init-scripts</code>); use a fresh/empty database for the platform</td></tr><tr><td><code>ECONNREFUSED 127.0.0.1:5432</code></td><td>Postgres container not up — <code>docker compose up -d postgres</code></td></tr><tr><td>Gateway exits during migrations</td><td>Check Postgres is reachable and <code>DB_*</code> in <code>.env</code> match the container; <code>docker compose logs postgres</code></td></tr><tr><td><code>401</code> from <code>/admin/tenants</code> while seeding</td><td><code>ADMIN_OPS_TOKEN</code> in <code>.env</code> must equal what the gateway booted with; restart the gateway after editing <code>.env</code></td></tr><tr><td><code>pnpm: command not found</code></td><td><code>corepack enable</code>, or <code>npm i -g pnpm@9</code></td></tr><tr><td>Port 3000 already in use</td><td>Set <code>PORT=3001</code> in <code>.env</code> (and pass <code>--gateway http://localhost:3001</code> to the seeder)</td></tr><tr><td>Want a totally clean DB</td><td><code>docker compose down -v &amp;&amp; docker compose up -d postgres</code> then restart the gateway</td></tr></tbody></table>
+<h2>Secrets and <code>NODE_ENV</code> locally</h2>
+<p>Locally you do not set any platform secret. Below <code>NODE_ENV=production</code> the SDKs fall back to dev key material — constants published in this repository — and synthetic backends, so the stack runs with no configuration. That is also why <strong>a green local run does not prove a deployed install works</strong>: the same calls refuse at <code>production</code> when a real key or backend is missing.</p>
+<p>Boot-time secret generation (TK-4156) is <strong>off</strong> locally. Your local database may already hold rows encrypted under the dev constants, and generating real keys would make them unreadable. To rehearse a production install, point the gateway at an <strong>empty</strong> database with <code>NODE_ENV=production</code>, a <code>SECRETS_MASTER_KEY</code> and nothing else: the boot log shows all nine secrets as <code>generated</code>, and a restart shows them read back. See <a href="./on-premise-install.html">on-premise-install.md</a> §6. <code>BOOTSTRAP_SECRETS=on</code> enables generation without <code>NODE_ENV=production</code>.</p>
 </main></div></body></html>

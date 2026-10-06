@@ -43,8 +43,10 @@ const SPECS: EnvDefaultSpec[] = [
   {
     key: 'search.provider',
     provider: 'opensearch',
-    present: ['OPENSEARCH_URL', 'ELASTICSEARCH_URL', 'SEARCH_URL'],
-    hints: { endpoint: 'OPENSEARCH_URL' },
+    // OPENSEARCH_NODE is what sdk-search actually reads (createOpenSearchClientFromEnv); the
+    // others are kept for installs configured before that name was settled.
+    present: ['OPENSEARCH_NODE', 'OPENSEARCH_URL', 'ELASTICSEARCH_URL', 'SEARCH_URL'],
+    hints: { endpoint: 'OPENSEARCH_NODE' },
   },
   {
     key: 'notification.email.credential',

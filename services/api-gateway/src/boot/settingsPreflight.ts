@@ -1,3 +1,5 @@
+import type { ProvisionReport } from './secretProvisioner';
+
 /**
  * Startup preflight for deployment settings.
  *
@@ -14,19 +16,20 @@
  * vault key three steps upstream. A skip reads like a pass. Only a direct check of the
  * settings themselves catches that class.
  *
- * So this runs ONCE at boot, before the work, and reports every setting in one block.
+ * So this runs ONCE at boot and reports every setting in one block: each required secret as
+ * present / generated / MISSING, each synthetic flag that is on, and each third-party
+ * service an operator has to supply.
  *
- * WHAT IT DOES NOT DO. It does not generate anything. Generating a key here would be worse
- * than the problem: `key_ref` on an envelope records the SCHEME
- * (`local:hkdf/sdk-source-record/assertion/v1`), not WHICH key produced it, so a key
- * regenerated on a restart silently orphans every record written under the previous one,
- * with nothing on the row to tell them apart. Auto-generation is only safe with durable
- * persistence and is tracked separately (TK-4156).
+ * GENERATION is not done here but by ./secretProvisioner (TK-4156), which runs first and
+ * hands its report in. It persists what it generates (vault.bootstrap_secret), because
+ * `key_ref` on an envelope records the SCHEME (`local:hkdf/sdk-source-record/assertion/v1`),
+ * not WHICH key produced it - a key regenerated on a restart would silently orphan every
+ * record written under the previous one.
  */
 
 export type SettingClass = 'secret' | 'synthetic-flag';
 
-interface SettingSpec {
+export interface SettingSpec {
   /** Environment variable name. */
   key: string;
   /** Which SDK refuses to operate without it. */
@@ -34,24 +37,45 @@ interface SettingSpec {
   /** What it protects, in the terms an operator cares about. */
   purpose: string;
   kind: SettingClass;
+  /** How the SDK parses the value; decides the format the provisioner generates. Default hex. */
+  encoding?: 'hex' | 'base64';
 }
 
 /**
- * Secrets with NO external counterparty — the operator generates each with a CSPRNG.
+ * Secrets with NO external counterparty - generated on boot when absent (./secretProvisioner),
+ * or supplied by the operator.
  *
- * Every entry here is guarded by a `NODE_ENV === 'production'` check inside its SDK, so a
- * missing one is a guaranteed runtime failure in production rather than a possibility.
- * Reported here so it surfaces at boot instead.
+ * Every entry except JWT_SECRET is guarded by a `NODE_ENV === 'production'` check inside its
+ * SDK, so a missing one is a guaranteed runtime failure in production. JWT_SECRET is worse:
+ * sdk-identity falls back to the published 'change-me-in-prod' and every token is forgeable.
+ * It is safe to generate because the keyring is persistent and shared by every replica, so
+ * sessions survive a restart; nothing outside the gateway verifies these tokens.
  */
-const REQUIRED_SECRETS: SettingSpec[] = [
+export const REQUIRED_SECRETS: SettingSpec[] = [
   { key: 'SOURCE_RECORD_MASTER_KEY',          sdk: 'sdk-source-record',  purpose: 'AES-256-GCM envelope over PII assertion values', kind: 'secret' },
   { key: 'SOURCE_RECORD_ATTESTATION_KEY',     sdk: 'sdk-source-record',  purpose: 'HMAC signature on rights attestations',          kind: 'secret' },
   { key: 'EVIDENCE_LEGAL_EXPORT_SIGNING_KEY', sdk: 'sdk-evidence',       purpose: 'signature on legal evidence exports',            kind: 'secret' },
   { key: 'NOTIFICATION_MASTER_KEY',           sdk: 'sdk-notification',   purpose: 'envelope over destinations (email / phone)',     kind: 'secret' },
-  { key: 'NOTIFICATION_PROVIDER_WRAP_KEY',    sdk: 'sdk-notification',   purpose: 'wrapping of provider credentials',               kind: 'secret' },
-  { key: 'PRINCIPAL_TOKEN_WRAP_KEY',          sdk: 'sdk-principal-token',purpose: 'wrapping of principal tokens',                   kind: 'secret' },
+  { key: 'NOTIFICATION_PROVIDER_WRAP_KEY',    sdk: 'sdk-notification',   purpose: 'wrapping of provider credentials',               kind: 'secret', encoding: 'base64' },
+  { key: 'PRINCIPAL_TOKEN_WRAP_KEY',          sdk: 'sdk-principal-token',purpose: 'wrapping of principal tokens',                   kind: 'secret', encoding: 'base64' },
   { key: 'CAPABILITY_TOKEN_SIGNING_KEY',      sdk: 'sdk-agent-runtime',  purpose: 'agent capability token signatures',              kind: 'secret' },
   { key: 'API_KEY_PEPPER',                    sdk: 'sdk-api-keys',       purpose: 'pepper for API key hashing',                     kind: 'secret' },
+  { key: 'JWT_SECRET',                        sdk: 'sdk-identity',       purpose: 'session token signatures',                       kind: 'secret' },
+];
+
+/**
+ * Third parties only the operator can supply. Absent is a legitimate install choice for some
+ * (payments, for one), so these never abort the boot - but each absent one is printed as
+ * MISSING with what stops working, in production as an error, so the decision is visible at
+ * install time instead of as a 500 later. `any` lists the variables any one of which counts.
+ */
+export const THIRD_PARTIES: { name: string; any: string[]; absent: string; airGapped: string }[] = [
+  { name: 'OpenSearch', any: ['OPENSEARCH_NODE'], absent: '/api/search and indexing fail', airGapped: 'OpenSearch in-cluster' },
+  { name: 'Email (SMTP or SendGrid)', any: ['SMTP_HOST', 'SENDGRID_API_KEY'], absent: 'notification email is not delivered', airGapped: 'an in-cluster SMTP relay' },
+  { name: 'LLM provider', any: ['ANTHROPIC_API_KEY', 'OPENAI_API_KEY', 'GEMINI_API_KEY', 'AI_GATEWAY_API_KEY'], absent: 'the AI gateway has no platform cloud model (tenants may still bring their own key; an in-cluster Ollama/vLLM is registered in onprem.local_llm_model instead)', airGapped: 'Ollama or vLLM registered in onprem.local_llm_model' },
+  { name: 'Object storage (S3-compatible)', any: ['MEDIA_S3_BUCKET', 'AWS_S3_BUCKET', 'S3_BUCKET'], absent: 'media upload URLs cannot be issued', airGapped: 'MinIO' },
+  { name: 'Secrets KMS (KMS / HSM / master key)', any: ['SECRETS_MASTER_KEY', 'SECRETS_MASTER_KEY_V1', 'AWS_ROLE_ARN', 'GOOGLE_APPLICATION_CREDENTIALS', 'HSM_PKCS11_LIB'], absent: 'secrets cannot be sealed durably and generated keys cannot be stored', airGapped: 'a PKCS#11 HSM or SECRETS_MASTER_KEY' },
+  { name: 'Payments (Stripe)', any: ['STRIPE_SECRET_KEY'], absent: 'payments and invoice push are unavailable', airGapped: 'none - payments need the processor' },
 ];
 
 /**
@@ -109,11 +133,16 @@ const SYNTHETIC_FLAGS: (SettingSpec & { consequence: string })[] = [
  * the INSECURE_DEFAULT_MARKERS each SDK already refuses to start on, checked here so the
  * complaint arrives at boot rather than on first use.
  */
-const INSECURE_MARKERS = ['change-me', 'do-not-use-in-prod'];
+const INSECURE_MARKERS = ['change-me', 'change_me', 'do-not-use-in-prod'];
 
 export interface PreflightResult {
   isProduction: boolean;
+  /** Absent, or supplied before and now removed (never regenerated: data may be under it). */
   missing: SettingSpec[];
+  /** Supplied, but not the value recorded before - data written under the old one is unreadable. */
+  changed: SettingSpec[];
+  generated: SettingSpec[];
+  thirdPartyMissing: typeof THIRD_PARTIES;
   insecure: { spec: SettingSpec; marker: string }[];
   syntheticEnabled: (SettingSpec & { consequence: string })[];
 }
@@ -122,24 +151,36 @@ function isEnabled(raw: string | undefined): boolean {
   return (raw ?? '').trim().toLowerCase() === 'true';
 }
 
-/** Inspects the environment and reports. Pure apart from reading process.env. */
-export function inspectSettings(env: NodeJS.ProcessEnv = process.env): PreflightResult {
+/**
+ * Inspects the environment (after the provisioner has exported what it generated) and reports.
+ * Pure apart from reading `env`.
+ */
+export function inspectSettings(env: NodeJS.ProcessEnv = process.env, provision?: ProvisionReport): PreflightResult {
   const isProduction = env.NODE_ENV === 'production';
   const missing: SettingSpec[] = [];
+  const changed: SettingSpec[] = [];
+  const generated: SettingSpec[] = [];
   const insecure: { spec: SettingSpec; marker: string }[] = [];
 
   for (const spec of REQUIRED_SECRETS) {
+    const status = provision?.statuses[spec.key];
+    if (status === 'removed') { missing.push(spec); continue; }
+    if (status === 'changed') { changed.push(spec); continue; }
+    if (status === 'generated' || status === 'loaded') generated.push(spec);
     const raw = (env[spec.key] ?? '').trim();
     if (!raw) {
       missing.push(spec);
       continue;
     }
-    const marker = INSECURE_MARKERS.find((m) => raw.includes(m));
+    // Case-insensitive: the shipped .env.prod.example used CHANGE_ME_..., which a
+    // lowercase-only match let through as a real JWT signing secret.
+    const marker = INSECURE_MARKERS.find((m) => raw.toLowerCase().includes(m));
     if (marker) insecure.push({ spec, marker });
   }
 
   const syntheticEnabled = SYNTHETIC_FLAGS.filter((f) => isEnabled(env[f.key]));
-  return { isProduction, missing, insecure, syntheticEnabled };
+  const thirdPartyMissing = THIRD_PARTIES.filter((t) => !t.any.some((k) => (env[k] ?? '').trim()));
+  return { isProduction, missing, changed, generated, thirdPartyMissing, insecure, syntheticEnabled };
 }
 
 /**
@@ -156,8 +197,8 @@ export function inspectSettings(env: NodeJS.ProcessEnv = process.env): Preflight
  *
  * @throws when running in production with a missing or placeholder secret.
  */
-export function runSettingsPreflight(env: NodeJS.ProcessEnv = process.env): PreflightResult {
-  const result = inspectSettings(env);
+export function runSettingsPreflight(env: NodeJS.ProcessEnv = process.env, provision?: ProvisionReport): PreflightResult {
+  const result = inspectSettings(env, provision);
   // Report what the environment actually DECLARES, not the fallback we assume.
   // An unset NODE_ENV is not the same as NODE_ENV=development: sdk-secrets and
   // sdk-vault treat an undeclared environment as a developer machine and fall back
@@ -168,14 +209,39 @@ export function runSettingsPreflight(env: NodeJS.ProcessEnv = process.env): Pref
     ? 'production'
     : declared || 'UNDECLARED (assuming development)';
   const checked = REQUIRED_SECRETS.length;
-  const present = checked - result.missing.length;
+  const usable = checked - result.missing.length - result.changed.length;
 
-  console.log(`[preflight] settings check — env=${mode}, ${present}/${checked} required secrets present`);
+  console.log(
+    `[preflight] settings check - env=${mode}, ${usable}/${checked} required secrets usable ` +
+      `(${result.generated.length} generated on boot), ` +
+      `${THIRD_PARTIES.length - result.thirdPartyMissing.length}/${THIRD_PARTIES.length} third parties configured`,
+  );
+  if (provision && !provision.enabled && provision.reason) {
+    console.log(`[preflight] secret generation not active: ${provision.reason}`);
+  }
+  for (const spec of REQUIRED_SECRETS) {
+    const st = provision?.statuses[spec.key];
+    if (st === 'generated') console.log(`[preflight] generated ${spec.key} - new on this boot, stored in vault.bootstrap_secret`);
+    else if (st === 'loaded') console.log(`[preflight] generated ${spec.key} - read back from vault.bootstrap_secret`);
+    else if (st === 'present') console.log(`[preflight] present   ${spec.key}`);
+  }
+  for (const spec of result.changed) {
+    console.error(
+      `[preflight] CHANGED   ${spec.key} - differs from the value recorded at an earlier boot; data ${spec.sdk} wrote under ` +
+        `the old one is unreadable. Restore it, or set BOOTSTRAP_SECRETS_ACCEPT_CHANGE=${spec.key} if the change is intended.`,
+    );
+  }
+  for (const spec of result.missing.filter((m) => provision?.statuses[m.key] === 'removed')) {
+    console.error(
+      `[preflight] REMOVED   ${spec.key} - supplied at an earlier boot and NOT regenerated, because data may be ` +
+        'encrypted under it. Put the same value back in the environment.',
+    );
+  }
 
   for (const { spec, marker } of result.insecure) {
     console.error(`[preflight] INSECURE  ${spec.key} contains "${marker}" — ${spec.sdk} will refuse to start`);
   }
-  for (const spec of result.missing) {
+  for (const spec of result.missing.filter((m) => provision?.statuses[m.key] !== 'removed')) {
     const how = result.isProduction ? 'MISSING ' : 'absent  ';
     const effect = result.isProduction
       ? `${spec.sdk} will FAIL — ${spec.purpose}`
@@ -188,14 +254,24 @@ export function runSettingsPreflight(env: NodeJS.ProcessEnv = process.env): Pref
     console[level](`[preflight] SYNTHETIC ${flag.key}=true — ${flag.consequence}`);
   }
 
-  if (result.isProduction && (result.missing.length > 0 || result.insecure.length > 0)) {
+  for (const t of result.thirdPartyMissing) {
+    const line =
+      `[preflight] ${result.isProduction ? 'MISSING ' : 'absent  '} ${t.name} - operator action required: ` +
+      `set one of ${t.any.join(' / ')}; until then ${t.absent}`;
+    if (result.isProduction) console.error(line);
+    else console.log(line);
+  }
+
+  if (result.isProduction && (result.missing.length > 0 || result.insecure.length > 0 || result.changed.length > 0)) {
     const names = [
       ...result.missing.map((s) => s.key),
+      ...result.changed.map((s) => `${s.key} (changed)`),
       ...result.insecure.map((i) => `${i.spec.key} (placeholder)`),
     ];
     throw new Error(
       `[preflight] FATAL: ${names.length} required secret(s) unusable in production: ${names.join(', ')}. ` +
-        'Generate each with `openssl rand -hex 32` and set it in the environment. ' +
+        'Absent keys are generated on boot unless BOOTSTRAP_SECRETS=off or the secrets KMS is the in-memory mock; ' +
+        'otherwise generate each with `openssl rand -hex 32` and set it in the environment. ' +
         'See docs/setup/required-settings-matrix.md — note these are NOT safely rotatable once data exists.',
     );
   }

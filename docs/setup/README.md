@@ -25,11 +25,19 @@ scale-out workers.
 > passing local test run does not prove a working deployment. Work through
 > [required-settings-matrix.md](./required-settings-matrix.md) before declaring an install
 > healthy.
+>
+> **Secrets are generated for you.** At `NODE_ENV=production` the gateway generates every
+> platform secret that has no external counterparty (`JWT_SECRET`, `API_KEY_PEPPER`, `CAPABILITY_TOKEN_SIGNING_KEY`, `SOURCE_RECORD_*`, `EVIDENCE_LEGAL_EXPORT_SIGNING_KEY`, `NOTIFICATION_*` and `PRINCIPAL_TOKEN_WRAP_KEY`) on first boot, seals it
+> under the secrets KMS and reads it back on every restart. You supply one root —
+> `SECRETS_MASTER_KEY` or a cloud KMS / HSM — plus the database, `ADMIN_OPS_TOKEN` and your
+> third-party accounts. The boot log prints every setting as present / generated / MISSING
+> in one block.
 
 ## Documents
 
 | Doc | Audience | Use it to… |
 |-----|----------|-----------|
+| [on-premise-install.md](./on-premise-install.md) | On-prem licensees, DevOps | Install from an empty host to a **verified** install: the one root you supply, the secrets generated for you, the third-party matrix, and the checks to run yourself |
 | [required-settings-matrix.md](./required-settings-matrix.md) | DevOps, on-prem licensees | Every secret, synthetic flag and third-party service — which you generate, which you must supply, and what breaks if absent. **Read before any deployed install** |
 | [dev-environment.md](./dev-environment.md) | Developers | Run the full stack locally on Windows/macOS/Linux |
 | [sdk-api-access.md](./sdk-api-access.md) | Developers integrating **another project** | Issue a tenant-scoped API key, pick its scopes, and point your app at ProjexCloud (local or cloud) |

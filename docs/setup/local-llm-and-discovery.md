@@ -119,6 +119,12 @@ deployments that must not call cloud LLMs (`FR-ONP-5/8`):
 Cloud (non-sovereign) deployments skip this entirely and use the configured
 cloud provider keys via `sdk-ai-gateway`.
 
+The boot preflight checks only the cloud provider variables (`ANTHROPIC_API_KEY`,
+`OPENAI_API_KEY`, `GEMINI_API_KEY`), so an air-gapped install that uses a registered local
+model will still show `LLM provider` as `MISSING` at boot. That line is expected there.
+There is no `OLLAMA_*` environment variable. The registration in `onprem.local_llm_model`
+*is* the configuration.
+
 ## 6. So, did the Docker setup miss anything?
 
 No model server was missing — discovery is in-process. What this update adds:
