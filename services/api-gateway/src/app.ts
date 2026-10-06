@@ -6,7 +6,7 @@ import { initPool } from '@projexlight/db-runtime';
 import { closeRedis, initRedis } from '@projexlight/redis-runtime';
 import { closeKafka, initKafka, publishMessage } from '@projexlight/kafka-runtime';
 import { randomUUID } from 'crypto';
-import { closeClickHouse, initClickHouse, insert as chInsert, pingClickHouse, describeError } from '@projexlight/clickhouse-runtime';
+import { closeClickHouse, initClickHouse, insert as chInsert, query as chQuery, pingClickHouse, describeError } from '@projexlight/clickhouse-runtime';
 import { runMigrations } from '@projexlight/migration-runner';
 import { runSettingsPreflight } from './boot/settingsPreflight';
 import {
@@ -181,6 +181,8 @@ import {
   pushInvoiceToStripe,
   registerStripeForInvoicePush,
   onStripeInvoicePaid,
+  registerUsageReader,
+  ClickHouseUsageReader,
 } from '@projexlight/sdk-billing';
 import { dataService } from '@projexlight/db-runtime';
 import {
@@ -4996,6 +4998,12 @@ const start = async (): Promise<void> => {
             (err as Error).message,
           );
         }
+
+        // TK-3235 — billing reads usage from ClickHouse meter.usage_event, the only store that
+        // keeps the app / BU / persona / encounter dimensions showback splits by (FR-BIL-5).
+        // Without it invoices and showback fall back to the day ledger: sku -> units, no splits.
+        registerUsageReader(new ClickHouseUsageReader(chQuery));
+        console.log('[api-gateway] billing usage reader: ClickHouse meter.usage_event');
 
         // VA·E10 (TK-4520) — voice analytics: call facts on every call end, turn metrics from
         // the runtime's Kafka topic, and a p95 latency-regression check that opens incidents.

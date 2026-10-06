@@ -30,8 +30,9 @@ export {
 export {
   registerUsageReader,
   getUsageReader,
+  ClickHouseUsageReader,
 } from './services/usageReader';
-export type { UsageReader } from './services/usageReader';
+export type { UsageReader, ClickHouseQuery } from './services/usageReader';
 export { applyFreeTier } from './services/freeTierEngine';
 export {
   generateInvoicePdf,

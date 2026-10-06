@@ -56,12 +56,15 @@ export async function readLiveMeter(input: LiveMeterInput): Promise<LiveMeterRes
     subtotal += applied.amount;
   }
 
-  // Lag computed as: now - max(occurred_at). In synthetic mode that's
-  // effectively zero; production reports Redis-counter age. usage_event is a
-  // ClickHouse-only table — guard so the Postgres deploy doesn't 500 on a
-  // missing relation.
+  // Lag = now - the newest metered event this period. The ClickHouse reader knows it;
+  // usage_event is otherwise a ClickHouse-only table — guard so the Postgres deploy
+  // doesn't 500 on a missing relation.
   let lag_ms = 0;
-  if (await tableExists('meter', 'usage_event')) {
+  const reader = getUsageReader();
+  if (reader.lastEventAt) {
+    const last = await reader.lastEventAt({ tenant_id: input.tenant_id, since: period_start });
+    lag_ms = last ? Math.max(0, now.getTime() - last.getTime()) : 0;
+  } else if (await tableExists('meter', 'usage_event')) {
     const lagRow = await dataService.one<{ lag_ms: number | null }>(
       `SELECT EXTRACT(EPOCH FROM (now() - MAX(occurred_at)))::bigint * 1000 AS lag_ms
          FROM meter.usage_event

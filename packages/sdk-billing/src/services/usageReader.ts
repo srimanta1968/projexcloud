@@ -18,6 +18,8 @@ export interface UsageReader {
     period_start: string;
     period_end: string;
   }): Promise<UsageBucket[]>;
+  /** Time of the tenant's newest metered event since `since` (live-meter lag); null when unknown. */
+  lastEventAt?(args: { tenant_id: string; since: string }): Promise<Date | null>;
 }
 
 class PostgresUsageReader implements UsageReader {
@@ -97,6 +99,87 @@ export async function tableExists(schema: string, table: string): Promise<boolea
     [schema, table],
   );
   return row?.exists ?? false;
+}
+
+/** Parameterised ClickHouse query, as `@projexlight/clickhouse-runtime` `query` exposes it. */
+export type ClickHouseQuery = <T>(sql: string, params?: Record<string, unknown>) => Promise<T[]>;
+
+/** Raw meter.usage_event rows are kept 90 days (TTL); older periods only exist in the day ledger. */
+const RAW_RETENTION_DAYS = 90;
+
+/**
+ * Reads ClickHouse `meter.usage_event` — the only store that keeps the per-event app, BU,
+ * persona, encounter and actor dimensions (the Postgres day ledger keeps sku -> units alone),
+ * so invoice line items and showback (FR-BIL-5) can split by them. persona_kind is not on the
+ * event; it is resolved from persona.persona. Periods older than the raw retention, no raw
+ * events, or a ClickHouse failure fall back to the Postgres reader rather than billing zero.
+ */
+export class ClickHouseUsageReader implements UsageReader {
+  constructor(private readonly ch: ClickHouseQuery, private readonly fallback: UsageReader = new PostgresUsageReader()) {}
+
+  async readUsage(args: { tenant_id: string; period_start: string; period_end: string }): Promise<UsageBucket[]> {
+    const oldest = new Date(Date.now() - RAW_RETENTION_DAYS * 86_400_000).toISOString().slice(0, 10);
+    if (args.period_start < oldest) return this.fallback.readUsage(args);
+    let rows: Array<{ sku: string; app_id: string; bu_id: string; persona_id: string; encounter_id: string; actor_kind: string; units: string | number }>;
+    try {
+      rows = await this.ch(
+        `SELECT sku, app_id, bu_id, persona_id, encounter_id, actor_kind, toString(sum(units)) AS units
+           FROM meter.usage_event
+          WHERE tenant_id = {tenant_id:String}
+            AND occurred_at >= toDateTime64({start:String}, 3, 'UTC')
+            AND occurred_at <  toDateTime64({end:String}, 3, 'UTC') + INTERVAL 1 DAY
+          GROUP BY sku, app_id, bu_id, persona_id, encounter_id, actor_kind`,
+        { tenant_id: args.tenant_id, start: `${args.period_start} 00:00:00`, end: `${args.period_end} 00:00:00` },
+      );
+    } catch {
+      return this.fallback.readUsage(args);
+    }
+    // No raw events (e.g. a deploy whose collector only writes the ledger): the ledger still bills.
+    if (rows.length === 0) return this.fallback.readUsage(args);
+    const kinds = await personaKinds([...new Set(rows.map((r) => r.persona_id).filter(Boolean))]);
+    // Re-aggregate once persona_id is collapsed to its kind.
+    const out = new Map<string, UsageBucket>();
+    for (const r of rows) {
+      const b: UsageBucket = {
+        sku: r.sku,
+        app_id: r.app_id || null,
+        bu_id: r.bu_id || null,
+        persona_kind: (r.persona_id && kinds.get(r.persona_id)) || null,
+        encounter_id: r.encounter_id || null,
+        actor_kind: (r.actor_kind || null) as UsageBucket['actor_kind'],
+        units: 0,
+        vendor_cost: 0,
+      };
+      const key = [b.sku, b.app_id, b.bu_id, b.persona_kind, b.encounter_id, b.actor_kind].join('|');
+      const prev = out.get(key) ?? b;
+      prev.units += Number(r.units);
+      out.set(key, prev);
+    }
+    return [...out.values()];
+  }
+
+  async lastEventAt(args: { tenant_id: string; since: string }): Promise<Date | null> {
+    try {
+      const [r] = await this.ch<{ n: string; last: string }>(
+        `SELECT toString(count()) AS n, toString(max(occurred_at)) AS last FROM meter.usage_event
+          WHERE tenant_id = {tenant_id:String} AND occurred_at >= toDateTime64({since:String}, 3, 'UTC')`,
+        { tenant_id: args.tenant_id, since: `${args.since} 00:00:00` },
+      );
+      return r && Number(r.n) > 0 ? new Date(`${r.last.replace(' ', 'T')}Z`) : null;
+    } catch {
+      return null;
+    }
+  }
+}
+
+async function personaKinds(ids: string[]): Promise<Map<string, string>> {
+  const uuids = ids.filter((id) => /^[0-9a-f-]{36}$/i.test(id));
+  if (uuids.length === 0 || !(await tableExists('persona', 'persona'))) return new Map();
+  const rows = await dataService.rows<{ persona_id: string; kind: string }>(
+    `SELECT persona_id::text, kind FROM persona.persona WHERE persona_id = ANY($1::uuid[])`,
+    [uuids],
+  );
+  return new Map(rows.map((r) => [r.persona_id, r.kind]));
 }
 
 let activeReader: UsageReader = new PostgresUsageReader();
