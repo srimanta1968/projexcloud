@@ -30,7 +30,24 @@
         "initiator_persona_id": "{{cache:auth.signup-tenant.response.data.userId}}",
         "reason": "Customer dispute - high value refund"
       },
-      "expectedStatus": 201
+      "expectedStatus": 201,
+      "capturesResponse": true
+    },
+    {
+      "name": "A second refund request, still pending when the request-level decide runs",
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "payload": {
+        "tenant_id": "{{cache:auth.signup-tenant.response.data.tenant_id}}",
+        "route_id": "{{cache:approvals.routes.create.response.data.route.route_id}}",
+        "subject_kind": "payment.refund",
+        "subject_id": "{{dynamic:slug}}",
+        "initiator_persona_id": "{{cache:auth.signup-tenant.response.data.userId}}",
+        "reason": "Customer dispute - high value refund"
+      },
+      "expectedStatus": 201,
+      "captureAs": "pending"
     }
   ],
   "expectedResponse": {

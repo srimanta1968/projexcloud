@@ -23,6 +23,9 @@
     "POST /api/voice-agent/agents",
     "POST /api/voice-agent/agents/:agent_id/versions"
   ],
+  "captureResponse": {
+    "voice-agent.agents.versions.eval-runs.start.response.data.eval_run.eval_run_id": "data.eval_run.eval_run_id"
+  },
   "priority": 157,
   "description": "Tenant route (Bearer JWT). Queues a simulated-caller run against the version; a voice-runtime worker claims it, plays each scenario as a simulated caller over loopback media (no phone line, no LiveKit room) and records the outcome — an evaluation run scores the version on task success, latency and barge-in and records pass or fail (c1171be1-c7ce-4c6d-acbc-98ffe825bc53#AC1). mode: sandbox — fake providers (loopback telephony, scripted STT, scripted agent LLM, silent TTS), no provider keys needed, the agent's real app tools are called (693c5fa2-ec40-4c78-92e5-ce5fa8e3c05e#AC1); a sandbox run NEVER unlocks publish and fake providers run only on the harness's own test calls, never a real one (693c5fa2-ec40-4c78-92e5-ce5fa8e3c05e#AC2). mode: evaluation (default) — the tenant's real LLM keys and tools, gates publish. Body: mode, scenarios (1-10; each: name, turns [{ say, interrupt?, agent? (sandbox only: reply, tool_calls [{ name, args }], args may reference an earlier result as {{tool:<name>.<path>}}) }] or caller { persona, goal } + max_turns for an LLM-driven caller (evaluation only), expect { tools_called, tools_not_called, transfer, says_any, says_none }), suite. Omitted scenarios: the default suite for the mode. 202 { eval_run: { eval_run_id, mode, status: queued, scenarios, ... } }. Errors: bad mode or scenarios 400; unknown agent/version 404; the version's stack profile is not active 409; no/invalid token 401.",
   "fieldEnums": {

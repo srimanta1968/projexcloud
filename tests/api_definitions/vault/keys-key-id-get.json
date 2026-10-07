@@ -8,11 +8,23 @@
   "expectedStatus": 404,
   "dependsOn": [
     "POST /api/auth/signup-tenant",
-    "POST /api/vault/keys"
+    "POST /api/vault/keys",
+    "POST /admin/vault/keys"
   ],
   "testability": "auto",
   "captureResponse": {},
   "testCases": [
+    {
+      "name": "Read the run tenant's own tenant-tier key",
+      "capturesResponse": true,
+      "headers": {
+        "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
+      },
+      "pathParams": {
+        "key_id": "{{cache:vault.keys.create.response.data.key_id}}"
+      },
+      "expectedStatus": 200
+    },
     {
       "name": "A root-tier key is NOT visible to a tenant token",
       "capturesResponse": true,
@@ -20,7 +32,7 @@
         "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}"
       },
       "pathParams": {
-        "key_id": "{{cache:vault.keys.create.response.data.key_id}}"
+        "key_id": "{{cache:admin.vault.keys.create.response.data.key_id}}"
       },
       "expectedStatus": 404
     },
@@ -47,7 +59,7 @@
       "expectedStatus": 401
     }
   ],
-  "description": "Reads ONE vault key, and only if it belongs to the calling tenant. Returns metadata only \u2014 vault.key holds no key material. The tenant predicate is part of the SQL (getKeyForTenant), so the ownership check cannot be skipped by a caller that forgets it. A key belonging to another tenant answers 404, never 403: a 403 would confirm the id EXISTS somewhere, which is precisely what a caller enumerating ids wants, so absence and denial are made indistinguishable. WHY THE PRIMARY CASE IS A 404 AND NOT A 200. The only producer for this endpoint, POST /api/vault/keys, creates a ROOT-tier key, and root/app/pool rows carry tenant_id NULL because they wrap every tenant \u2014 so a tenant token deliberately cannot see them, and chaining that id and expecting 200 is unsatisfiable by construction. Reaching a 200 needs a TENANT-tier key, which requires two POSTs to this same endpoint in order (root, then tenant with parent_key_id), and one definition per METHOD+ENDPOINT cannot express that \u2014 the constraint recorded in TK-4137. So the case asserts the isolation instead, which is the property actually worth pinning: a root key is invisible to a tenant, and is indistinguishable from a key that does not exist. Flip the first case to 200 once a tenant-tier key id is reachable from cache. Edge cases: a shredded key still reads back for its owner, showing state 'shredded' with shredded_at set and kms_ref NULL, because the row is the audit trail of the erasure; a non-UUID key_id raises 22P02 from the ::uuid cast and surfaces as 500 rather than 400.",
+  "description": "Reads ONE vault key, and only if it belongs to the calling tenant. Returns metadata only \u2014 vault.key holds no key material. The tenant predicate is part of the SQL (getKeyForTenant), so the ownership check cannot be skipped by a caller that forgets it. A key belonging to another tenant answers 404, never 403: a 403 would confirm the id EXISTS somewhere, which is precisely what a caller enumerating ids wants, so absence and denial are made indistinguishable. The primary case reads the run tenant's own tenant-tier key (issued by POST /api/vault/keys under the operator's root from POST /admin/vault/keys) and expects 200. The isolation case passes that operator ROOT key: root/app/pool rows carry tenant_id NULL because they wrap every tenant, so a tenant token cannot see them and the answer is 404, indistinguishable from a key that does not exist. Edge cases: a shredded key still reads back for its owner, showing state 'shredded' with shredded_at set and kms_ref NULL, because the row is the audit trail of the erasure; a non-UUID key_id raises 22P02 from the ::uuid cast and surfaces as 500 rather than 400.",
   "errorCases": [
     {
       "status": 401,

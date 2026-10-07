@@ -13,6 +13,9 @@
   "dependsOn": [
     "POST /api/auth/signup-tenant"
   ],
+  "captureResponse": {
+    "vault.byok.bindings.create.response.data.binding_id": "data.binding_id"
+  },
   "priority": 30,
   "description": "Tenant route (Bearer JWT): the tenant comes from the token, and only that tenant's binding and keys are ever touched. The tenant portal used to drive BYOK through the /admin routes with the platform ADMIN_OPS_TOKEN for a tenant fixed in its environment (TK-4184). Body: provider (aws-kms | gcp-kms | hsm-pkcs11), customer_kms_key_arn, tenant_key_id? (must be the tenant's own tenant-tier key; defaults to it, created on demand), siem_forwarder_endpoint?. 201 { data: binding }. Errors: bad provider/arn 400; tenant_key_id not the tenant's 404; a CMK already bound 409; no token 401.",
   "testCases": [

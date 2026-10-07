@@ -2691,6 +2691,11 @@ const start = async (): Promise<void> => {
           error: 'tenant_id, provider, customer_kms_key_arn, tenant_key_id, operator_id all required',
         });
       }
+      // Same pre-check as the tenant route: without it the one-binding-per-tenant
+      // unique index surfaced as a 500 carrying the raw constraint name.
+      if (await getByokBindingForTenant(b.tenant_id)) {
+        return reply.code(409).send({ success: false, error: 'Conflict', details: ['a CMK is already bound for this tenant; revoke it first'] });
+      }
       try {
         const binding = await bindCmk({
           tenant_id: b.tenant_id,
