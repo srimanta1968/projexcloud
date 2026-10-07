@@ -1,0 +1,53 @@
+{
+  "name": "GET /api/consents/:receipt_id - Is the consent this was captured under still valid",
+  "endpoint": "/api/consents/:receipt_id",
+  "method": "GET",
+  "sdk": "sdk-consent",
+  "sourceFile": "packages/sdk-consent/src/server/routes.ts",
+  "requiresAuth": true,
+  "expectedStatus": 200,
+  "taskId": "db06df31-c398-46f4-843e-cc1cbbf741fd",
+  "sprintId": "8ef1d09e-dd8e-4daf-8d03-54dcd9f812f8",
+  "testability": "auto",
+  "priority": 55,
+  "dependsOn": ["POST /api/auth/register", "POST /api/auth/signup-tenant", "POST /api/consents/purposes", "POST /api/consents"],
+  "description": "The state of ONE receipt by id, the AUDIT question: is the specific consent a recording or an export was captured under still good? POST /api/consents/check asks a different, POLICY question (is there any active consent for the four-tuple), and the two come apart when a basis is revoked and a new consent granted later. The tenant comes from the token and is applied in SQL. 200 { success, data: { receipt_id, person_id, purpose_id, processor, jurisdiction, app_id, granted_at, expires_at, revoked_at, active, revoked, expired } }, where active is true only when not revoked and not expired. Errors: 404 for a receipt in another tenant, an unknown id or a non-uuid (never 403, and never 500 for a malformed id, because a distinguishable answer would itself disclose that the receipt exists); 403 for a token without a tenant; 401 for no token.",
+  "testCases": [
+    {
+      "name": "Read the state of the receipt just granted",
+      "headers": { "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}" },
+      "pathParams": { "receipt_id": "{{cache:consents.create.response.data.receipt.receipt_id}}" },
+      "expectedStatus": 200,
+      "expectedResponse": { "success": true, "data": { "receipt_id": "string", "purpose_id": "string", "active": "boolean", "revoked": "boolean", "expired": "boolean" } }
+    },
+    {
+      "name": "404 - unknown receipt id",
+      "testType": "negative",
+      "coversErrorCase": "404|NotFound",
+      "headers": { "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}" },
+      "pathParams": { "receipt_id": "{{dynamic:uuid}}" },
+      "expectedStatus": 404
+    },
+    {
+      "name": "404 (not 500) - a non-uuid id never reaches the database",
+      "testType": "negative",
+      "coversErrorCase": "404|NotFound",
+      "headers": { "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}" },
+      "pathParams": { "receipt_id": "{{static:not-a-receipt}}" },
+      "expectedStatus": 404
+    },
+    {
+      "name": "401 - no token",
+      "testType": "negative",
+      "coversErrorCase": "401|Unauthorized",
+      "headers": {},
+      "pathParams": { "receipt_id": "{{cache:consents.create.response.data.receipt.receipt_id}}" },
+      "expectedStatus": 401
+    }
+  ],
+  "errorCases": [
+    { "status": 404, "code": "NotFound", "message": "Receipt not found", "when": "unknown id, non-uuid id, or a receipt in another tenant" },
+    { "status": 403, "code": "Forbidden", "message": "This token carries no tenant, so no receipt scope can be derived", "when": "token without a tenant" },
+    { "status": 401, "code": "Unauthorized", "message": "authentication required", "when": "missing token" }
+  ]
+}

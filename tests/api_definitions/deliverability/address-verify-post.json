@@ -1,0 +1,56 @@
+{
+  "name": "POST /api/deliverability/address/verify - Can this address receive mail at all",
+  "endpoint": "/api/deliverability/address/verify",
+  "method": "POST",
+  "sdk": "sdk-deliverability",
+  "sourceFile": "packages/sdk-deliverability/src/server/routes.ts",
+  "requiresAuth": true,
+  "expectedStatus": 200,
+  "taskId": "db06df31-c398-46f4-843e-cc1cbbf741fd",
+  "sprintId": "8ef1d09e-dd8e-4daf-8d03-54dcd9f812f8",
+  "testability": "auto",
+  "priority": 10,
+  "dependsOn": ["POST /api/auth/signup-tenant"],
+  "fieldEnums": {
+    "verdict": ["deliverable", "undeliverable", "risky", "unknown"],
+    "code": ["OK", "SYNTAX_INVALID", "RESERVED_DOMAIN", "DOMAIN_NOT_FOUND", "NO_MAIL_EXCHANGER", "NULL_MX", "MAILBOX_NOT_FOUND", "PLACEHOLDER_ADDRESS", "DISPOSABLE_DOMAIN", "ROLE_ADDRESS", "LIKELY_TYPO", "CATCH_ALL_DOMAIN"]
+  },
+  "description": "Answers whether an address is REACHABLE: syntax, reserved/placeholder/disposable policy, and whether the domain publishes a mail exchanger. This is a different question from POST /api/deliverability/check, which asks whether a recipient is SUPPRESSED. It runs the same functions as the gateway's pre-send guard, so a portal verdict and a send cannot disagree. Body: address (string) or addresses (string[], at most 100), recheck? (skip the cache for a single address). It is not tenant-scoped, since an MX record is a fact about DNS rather than a tenant, but it needs a Bearer token because it performs outbound DNS on caller input. 200 { data: { results[] (input, address, domain, verdict, code, reason, checks, mail_exchangers, allowed, blocked_because), checked, deliverable, undeliverable, risky, unknown, would_block, policy } }. A bad address is a 200 with verdict undeliverable, not a 400. Errors: no address, or more than 100, 400; no token 401.",
+  "testCases": [
+    {
+      "name": "A malformed address is a 200 verdict, not a 400 (no DNS needed)",
+      "headers": { "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}" },
+      "payload": { "address": "{{static:not-an-email-address}}" },
+      "expectedStatus": 200,
+      "expectedResponse": { "data": { "results": "array", "checked": 1, "undeliverable": 1, "would_block": "number", "policy": "object" } }
+    },
+    {
+      "name": "Batch: one verdict per address supplied",
+      "headers": { "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}" },
+      "payload": { "addresses": ["{{dynamic:email}}", "{{static:also-not-an-address}}"] },
+      "expectedStatus": 200,
+      "expectedResponse": { "data": { "results": "array", "checked": 2 } }
+    },
+    {
+      "name": "400 - address or addresses is required",
+      "testType": "negative",
+      "coversErrorCase": "400|ValidationError",
+      "headers": { "Authorization": "Bearer {{cache:auth.signup-tenant.response.data.token}}" },
+      "payload": {},
+      "expectedStatus": 400
+    },
+    {
+      "name": "401 - no token",
+      "testType": "negative",
+      "coversErrorCase": "401|Unauthorized",
+      "headers": {},
+      "payload": { "address": "{{dynamic:email}}" },
+      "expectedStatus": 401
+    }
+  ],
+  "errorCases": [
+    { "status": 400, "code": "ValidationError", "message": "address (string) or addresses (string[]) is required", "when": "body has no address" },
+    { "status": 400, "code": "ValidationError", "message": "at most 100 addresses per call", "when": "more than 100 addresses" },
+    { "status": 401, "code": "Unauthorized", "message": "authentication required", "when": "missing token" }
+  ]
+}
